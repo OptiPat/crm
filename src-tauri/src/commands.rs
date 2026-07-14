@@ -2759,6 +2759,53 @@ pub fn update_placement_operation_status(
 }
 
 #[tauri::command]
+pub fn get_placement_operation(
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<crate::database::models::PlacementOperation, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_placement_operation_by_id(id)
+        .map_err(|e| format!("Opération partenaire introuvable: {}", e))
+}
+
+#[tauri::command]
+pub fn mark_placement_client_notified(db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .mark_placement_client_notified(id)
+        .map_err(|e| format!("Échec marquage notification client placement: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn reserve_placement_client_notification(
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<bool, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .reserve_placement_client_notification(id)
+        .map_err(|e| format!("Échec réservation notification client placement: {}", e))
+}
+
+#[tauri::command]
+pub fn release_placement_client_notification(
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .release_placement_client_notification(id)
+        .map_err(|e| format!("Échec annulation réservation notification client placement: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn get_placement_open_counts_by_pipe(
     db: State<'_, DbState>,
 ) -> Result<Vec<crate::database::models::PlacementPipeOpenCount>, String> {

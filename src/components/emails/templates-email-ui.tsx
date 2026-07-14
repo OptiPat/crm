@@ -19,6 +19,7 @@ import {
   getTemplateActivationPreviewHint,
   getTemplateRelanceBadgeLabel,
   getTemplatePipeRdvBadgeLabel,
+  getTemplatePlacementConformeBadgeLabel,
   getEphemeralCampaignBadgeLabel,
   getTemplateTriggerShortLabel,
   TEMPLATE_ACTIVATION_MODE_OPTIONS,
@@ -38,6 +39,7 @@ import {
   ArrowRight,
   AlertTriangle,
   CalendarClock,
+  CheckCircle2,
   ChevronDown,
   Copy,
   Mail,
@@ -243,6 +245,7 @@ export function TemplateActivationBadges({
   const triggerLabel = getTemplateTriggerShortLabel(template);
   const relanceLabel = getTemplateRelanceBadgeLabel(template);
   const pipeRdvLabel = getTemplatePipeRdvBadgeLabel(template);
+  const placementConformeLabel = getTemplatePlacementConformeBadgeLabel(template);
   const ephemeralLabel = getEphemeralCampaignBadgeLabel(template);
 
   return (
@@ -284,6 +287,12 @@ export function TemplateActivationBadges({
         <TemplateActivationBadge className="border-emerald-200 bg-emerald-50 text-emerald-900">
           <CalendarClock className="h-3 w-3 shrink-0" />
           {pipeRdvLabel}
+        </TemplateActivationBadge>
+      )}
+      {placementConformeLabel && (
+        <TemplateActivationBadge className="border-teal-200 bg-teal-50 text-teal-900">
+          <CheckCircle2 className="h-3 w-3 shrink-0" />
+          {placementConformeLabel}
         </TemplateActivationBadge>
       )}
       {flags.hasTutoiement && (

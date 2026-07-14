@@ -39,6 +39,10 @@ import {
   SAMPLE_PIPE_RDV_PREVIEW_VARS,
   templateUsesPipeRdvVariables,
 } from "@/lib/pipe/pipe-rdv-preview-vars";
+import {
+  SAMPLE_PLACEMENT_CONFORME_PREVIEW_VARS,
+  shouldUsePlacementConformePreview,
+} from "@/lib/placement/placement-conforme-preview-vars";
 import { isStelliumPerfTemplateNom } from "@/lib/emails/stellium-template-meta";
 import { filterLibraryTemplates } from "@/lib/emails/template-library";
 import type { ContactRegistre } from "@/lib/emails/template-email-formality";
@@ -194,6 +198,39 @@ export const PIPE_RDV_TEMPLATE_VARIABLES: {
   },
 ];
 
+/** Variables injectées à l'envoi client Box Placement (opération conforme). */
+export const PLACEMENT_CONFORME_TEMPLATE_VARIABLES: {
+  token: string;
+  key: string;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    token: "{{type_operation}}",
+    key: "type_operation",
+    label: "Type d'opération",
+    hint: "Arbitrage, Réinvestissement, Versement…",
+  },
+  {
+    token: "{{produit}}",
+    key: "produit",
+    label: "Produit",
+    hint: "Libellé produit Stellium (ex. Cristalliance Evoluvie)",
+  },
+  {
+    token: "{{libelle_stellium}}",
+    key: "libelle_stellium",
+    label: "Libellé Stellium",
+    hint: "Intitulé brut de l'opération dans le mail partenaire",
+  },
+  {
+    token: "{{date_operation}}",
+    key: "date_operation",
+    label: "Date de l'opération",
+    hint: "Date du mail Stellium reçu",
+  },
+];
+
 export function getAgendaVariableTokens(links: AgendaLink[]) {
   const tokens: { token: string; label: string; hint: string }[] = [
     {
@@ -285,18 +322,28 @@ export function renderTemplatePreview(
     extraVariables?: Record<string, string>;
     /** Envoi production : pas de données fictives SCPI/Stellium/Exceltis. */
     forSend?: boolean;
+    /** Trigger Box Placement actif (aperçu formulaire avant enregistrement). */
+    placementConformeTriggerEnabled?: boolean;
   }
 ): { subject: string; body: string; body_html: string | null } {
   const corpsHtmlStored =
     corpsHtmlOverride?.trim() || getTemplateCorpsHtml(templateVariables);
+  const usesPlacementConforme = shouldUsePlacementConformePreview(
+    sujet,
+    corps,
+    corpsHtmlStored,
+    templateVariables,
+    options?.placementConformeTriggerEnabled
+  );
   const usesScpiBulletin = templateUsesScpiBulletinVariables(
     sujet,
     corps,
     corpsHtmlStored
   );
   const usesStelliumPerf =
-    isStelliumPerfTemplateNom(options?.templateNom ?? "") ||
-    templateUsesStelliumPerfVariables(sujet, corps, corpsHtmlStored);
+    !usesPlacementConforme &&
+    (isStelliumPerfTemplateNom(options?.templateNom ?? "") ||
+      templateUsesStelliumPerfVariables(sujet, corps, corpsHtmlStored));
   const usesPipeRdv = templateUsesPipeRdvVariables(sujet, corps, corpsHtmlStored);
   const registre = options?.registre ?? "VOUS";
   const baseVars = {
@@ -311,6 +358,7 @@ export function renderTemplatePreview(
           ...SAMPLE_EXCELITIS_TEMPLATE_VARS,
           ...(usesScpiBulletin ? buildScpiBulletinPreviewVariables() : {}),
           ...(usesStelliumPerf ? buildStelliumPerfPreviewVariables() : {}),
+          ...(usesPlacementConforme ? SAMPLE_PLACEMENT_CONFORME_PREVIEW_VARS : {}),
           ...(usesPipeRdv ? SAMPLE_PIPE_RDV_PREVIEW_VARS : {}),
         },
     registre

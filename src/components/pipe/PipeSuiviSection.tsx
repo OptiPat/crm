@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { PipeSuiviQuickAdd } from "@/components/pipe/PipeSuiviQuickAdd";
+import { PipeSuiviStelliumActAdd } from "@/components/pipe/PipeSuiviStelliumActAdd";
 import { PipePlacementOperations } from "@/components/pipe/PipePlacementOperations";
 import { PipeStageBadge } from "@/components/pipe/PipeStageBadge";
 
@@ -36,11 +37,13 @@ export function PipeSuiviSection({
 
       <PipePlacementOperations pipeId={pipe.id} />
 
+      <PipeSuiviStelliumActAdd timeline={timeline} pipe={pipe} onAdded={onJournalAdded} />
+
       <div className="space-y-2">
         <p className="text-sm font-medium">Suites possibles</p>
         <p className="text-xs text-muted-foreground leading-snug">
-          Arbitrage et réinvestissement se journalisent ci-dessus, avec ou sans RDV préalable.
-          Un versement complémentaire ouvre une affaire rattachée à ce suivi.
+          Un versement complémentaire ouvre une affaire rattachée à ce suivi (suivi Stellium versement
+          automatique à la création).
         </p>
         <Button
           type="button"

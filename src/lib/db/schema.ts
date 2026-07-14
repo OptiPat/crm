@@ -486,6 +486,7 @@ export const placementOperations = sqliteTable("placement_operations", {
   emailReceivedAt: integer("email_received_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  clientNotifiedAt: integer("client_notified_at", { mode: "timestamp" }),
 });
 
 // ============================================

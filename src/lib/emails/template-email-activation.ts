@@ -9,6 +9,10 @@ import {
   pipeRdvTriggerBadgeLabel,
 } from "@/lib/emails/template-email-pipe-rdv";
 import {
+  parseTemplateEmailPlacementConformeTrigger,
+  placementConformeTriggerBadgeLabel,
+} from "@/lib/emails/template-email-placement-conforme";
+import {
   formatTemplateEmailTriggerScheduleBadge,
 } from "@/lib/emails/template-email-trigger-summary";
 import { formatRuleTreeBrief } from "@/lib/etiquettes/etiquette-card-summary";
@@ -45,6 +49,7 @@ export interface TemplateActivationFlags {
   hasEtiquetteLink: boolean;
   hasRelance: boolean;
   hasPipeRdv: boolean;
+  hasPlacementConforme: boolean;
   hasTutoiement: boolean;
   /** Au moins un canal de 1er envoi (déclencheur, étiquette ou Pipe RDV). */
   hasSendChannel: boolean;
@@ -92,14 +97,18 @@ export function getTemplateActivationFlags(
     isTemplateEmailRelanceEnabledForQueue(template.variables);
   const pipeRdvTrigger = parseTemplateEmailPipeRdvTrigger(template.variables);
   const hasPipeRdv = pipeRdvTrigger.enabled && pipeRdvTrigger.stages.length > 0;
+  const placementTrigger = parseTemplateEmailPlacementConformeTrigger(template.variables);
+  const hasPlacementConforme =
+    placementTrigger.enabled && placementTrigger.operation_types.length > 0;
   const hasTutoiement = template.tutoiement_template_id != null;
-  const hasSendChannel = hasTrigger || hasEtiquetteLink || hasPipeRdv;
+  const hasSendChannel = hasTrigger || hasEtiquetteLink || hasPipeRdv || hasPlacementConforme;
 
   return {
     hasTrigger,
     hasEtiquetteLink,
     hasRelance,
     hasPipeRdv,
+    hasPlacementConforme,
     hasTutoiement,
     hasSendChannel,
     isLibraryOnly: !hasSendChannel,
@@ -121,6 +130,12 @@ export function getTemplatePipeRdvBadgeLabel(
   template: Pick<TemplateEmail, "variables">
 ): string | null {
   return pipeRdvTriggerBadgeLabel(template.variables);
+}
+
+export function getTemplatePlacementConformeBadgeLabel(
+  template: Pick<TemplateEmail, "variables">
+): string | null {
+  return placementConformeTriggerBadgeLabel(template.variables);
 }
 
 export function getTemplateRelanceBadgeLabel(
@@ -216,6 +231,9 @@ export function getTemplateActivationPreviewHint(flags: TemplateActivationFlags)
   }
   if (flags.hasPipeRdv) {
     return "Actif pour les RDV Pipe — envoi à la planification / replanification depuis le CRM.";
+  }
+  if (flags.hasPlacementConforme) {
+    return "Actif pour Box Placement — envoi client quand une opération partenaire passe en conforme.";
   }
   return "Bibliothèque seule — activez un déclencheur ou liez une étiquette pour alimenter Suivi → Envois.";
 }

@@ -37,6 +37,8 @@ type TemplateEmailPreviewPanelProps = {
   tutoiement?: { sujet: string; corps: string; corpsHtml?: string | null } | null;
   /** Aperçu forcé tu/vous (sans contact réel). */
   previewRegistre?: ContactRegistre;
+  /** Trigger Box Placement actif (aperçu formulaire avant enregistrement). */
+  placementConformeTriggerEnabled?: boolean;
   label?: string;
   /** Bouton « M’envoyer un test » (compte OAuth Paramètres → Emails & envois → Connexion). */
   allowSendTest?: boolean;
@@ -53,6 +55,7 @@ export function TemplateEmailPreviewPanel({
   contact,
   tutoiement,
   previewRegistre,
+  placementConformeTriggerEnabled = false,
   label = "Aperçu (exemple)",
   allowSendTest = false,
 }: TemplateEmailPreviewPanelProps) {
@@ -109,7 +112,7 @@ export function TemplateEmailPreviewPanel({
         agendaLinkId,
         mergedVariables,
         effectiveHtml,
-        { templateNom, registre: previewRegistreEffective }
+        { templateNom, registre: previewRegistreEffective, placementConformeTriggerEnabled }
       ),
     [
       effective.sujet,
@@ -121,6 +124,7 @@ export function TemplateEmailPreviewPanel({
       effectiveHtml,
       templateNom,
       previewRegistreEffective,
+      placementConformeTriggerEnabled,
     ]
   );
 

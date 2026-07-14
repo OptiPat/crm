@@ -52,3 +52,50 @@ export function countOpenPlacementOperations(
   }
   return { pending, nonConforme };
 }
+
+export function placementOperationIsPipeTracked(
+  operation: Pick<PlacementOperation, "pipe_timeline_entry_id">
+): boolean {
+  return (
+    operation.pipe_timeline_entry_id != null && operation.pipe_timeline_entry_id > 0
+  );
+}
+
+export function placementConformeNeedsClientNotify(
+  operation: Pick<PlacementOperation, "status" | "client_notified_at">
+): boolean {
+  return (
+    operation.status === "CONFORME" &&
+    (operation.client_notified_at == null || operation.client_notified_at <= 0)
+  );
+}
+
+export function isPlacementRowVisibleInSuivi(
+  operation: Pick<
+    PlacementOperation,
+    "status" | "client_notified_at" | "pipe_timeline_entry_id"
+  >
+): boolean {
+  if (operation.status === "PENDING" || operation.status === "NON_CONFORME") {
+    return true;
+  }
+  return (
+    placementConformeNeedsClientNotify(operation) &&
+    placementOperationIsPipeTracked(operation)
+  );
+}
+
+export function countPlacementPendingClientNotify(
+  rows: Array<{
+    operation: Pick<
+      PlacementOperation,
+      "status" | "client_notified_at" | "pipe_timeline_entry_id"
+    >;
+  }>
+): number {
+  return rows.filter(
+    (row) =>
+      placementConformeNeedsClientNotify(row.operation) &&
+      placementOperationIsPipeTracked(row.operation)
+  ).length;
+}

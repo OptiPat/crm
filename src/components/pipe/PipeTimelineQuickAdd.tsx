@@ -18,13 +18,15 @@ import { buildPipeRdvCalendarContext } from "@/lib/pipe/pipe-rdv-calendar-contex
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { formatRdvEntryTitle } from "@/lib/pipe/pipe-rdv-stage";
 import {
+  PIPE_TIMELINE_QUICK_ADD_TYPES,
   PIPE_TIMELINE_TYPE_LABELS,
-  PIPE_TIMELINE_USER_TYPES,
   type PipeTimelineUserType,
 } from "@/lib/pipe/pipe-timeline-types";
+
+type PipeTimelineQuickAddType = (typeof PIPE_TIMELINE_QUICK_ADD_TYPES)[number];
 import { toast } from "sonner";
 
-const TYPE_ICONS: Record<PipeTimelineUserType, typeof Phone> = {
+const TYPE_ICONS: Record<PipeTimelineQuickAddType, typeof Phone> = {
   APPEL: Phone,
   RDV: Calendar,
   NOTE: FileText,
@@ -120,7 +122,7 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
       <p className="text-sm font-medium">Journal rapide</p>
 
       <div className="flex flex-wrap gap-1.5">
-        {PIPE_TIMELINE_USER_TYPES.map((type) => {
+        {PIPE_TIMELINE_QUICK_ADD_TYPES.map((type) => {
           const Icon = TYPE_ICONS[type];
           return (
             <Button

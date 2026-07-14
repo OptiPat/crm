@@ -69,9 +69,19 @@ import {
   type TemplateRelanceDraft,
 } from "@/components/emails/TemplateEmailRelancePanel";
 import {
+  TemplateEmailPlacementConformePanel,
+  type TemplatePlacementConformeDraft,
+} from "@/components/emails/TemplateEmailPlacementConformePanel";
+import {
   TemplateEmailPipeRdvPanel,
   type TemplatePipeRdvDraft,
 } from "@/components/emails/TemplateEmailPipeRdvPanel";
+import {
+  DEFAULT_PLACEMENT_CONFORME_TRIGGER,
+  findPlacementConformeOperationTypeOverlapError,
+  parseTemplateEmailPlacementConformeTrigger,
+  setTemplateEmailPlacementConformeTriggerInMeta,
+} from "@/lib/emails/template-email-placement-conforme";
 import {
   TemplateEmailTutoiementPanel,
   type TemplateTutoiementDraft,
@@ -126,6 +136,7 @@ import {
   EMAIL_TEMPLATE_CATEGORIES,
   EMAIL_TEMPLATE_VARIABLES,
   PIPE_RDV_TEMPLATE_VARIABLES,
+  PLACEMENT_CONFORME_TEMPLATE_VARIABLES,
   getAgendaVariableTokens,
   getTemplateCategoryMeta,
   normalizeAgendaLinks,
@@ -198,6 +209,7 @@ export function TemplateEmailForm({
     | "tutoiement"
     | "relance"
     | "pipe-rdv"
+    | "placement-conforme"
     | "declencheur"
     | "liaisons"
     | "audience"
@@ -242,6 +254,10 @@ export function TemplateEmailForm({
   const [pipeRdvReminderTuTemplateId, setPipeRdvReminderTuTemplateId] = useState<number | null>(
     null
   );
+  const [placementConformeDraft, setPlacementConformeDraft] =
+    useState<TemplatePlacementConformeDraft>({
+      trigger: { ...DEFAULT_PLACEMENT_CONFORME_TRIGGER },
+    });
   const [previewRegistre, setPreviewRegistre] = useState<"VOUS" | "TU">("VOUS");
   const [emailTrigger, setEmailTrigger] = useState<TemplateEmailTriggerConfig>(
     DEFAULT_TEMPLATE_EMAIL_TRIGGER
@@ -384,6 +400,9 @@ export function TemplateEmailForm({
     });
     setPipeRdvReminderTemplateId(pipeReminder.reminder_template_id);
     setPipeRdvReminderTuTemplateId(pipeReminder.reminder_tutoiement_template_id);
+    setPlacementConformeDraft({
+      trigger: parseTemplateEmailPlacementConformeTrigger(source.variables),
+    });
     if (pipeReminder.reminder_template_id) {
       void getTemplateEmailById(pipeReminder.reminder_template_id)
         .then((rem) => {
@@ -468,6 +487,9 @@ export function TemplateEmailForm({
     });
     setPipeRdvReminderTemplateId(null);
     setPipeRdvReminderTuTemplateId(null);
+    setPlacementConformeDraft({
+      trigger: { ...DEFAULT_PLACEMENT_CONFORME_TRIGGER },
+    });
     setPreviewRegistre("VOUS");
     setPreviewContactId("sample");
     setLinkedEtiquetteIds([]);
@@ -756,6 +778,30 @@ export function TemplateEmailForm({
       if (overlap) {
         toast.error(overlap);
         setFormTab("pipe-rdv");
+        rejectPendingEphemeralSave(new Error("validation"));
+        return;
+      }
+    }
+    if (
+      !isEphemeralMode &&
+      placementConformeDraft.trigger.enabled &&
+      placementConformeDraft.trigger.operation_types.length === 0
+    ) {
+      toast.error(
+        "Box Placement : sélectionnez au moins un type d'opération (onglet Box Placement)"
+      );
+      setFormTab("placement-conforme");
+      rejectPendingEphemeralSave(new Error("validation"));
+      return;
+    }
+    if (!isEphemeralMode && placementConformeDraft.trigger.enabled) {
+      const overlap = await findPlacementConformeOperationTypeOverlapError(
+        effectiveTemplateId,
+        placementConformeDraft.trigger.operation_types
+      );
+      if (overlap) {
+        toast.error(overlap);
+        setFormTab("placement-conforme");
         rejectPendingEphemeralSave(new Error("validation"));
         return;
       }
@@ -1064,6 +1110,12 @@ export function TemplateEmailForm({
               ? linkedPipeRdvReminderTuId
               : null,
         });
+        variables = setTemplateEmailPlacementConformeTriggerInMeta(variables, {
+          enabled: placementConformeDraft.trigger.enabled,
+          operation_types: placementConformeDraft.trigger.enabled
+            ? placementConformeDraft.trigger.operation_types
+            : [],
+        });
       }
       variables = stampStelliumPerfTemplateMeta(
         stampScpiBulletinTemplateMeta(variables, formData.nom),
@@ -1340,7 +1392,7 @@ export function TemplateEmailForm({
                 <TabsList
                   className={cn(
                     "mx-6 mt-4 grid w-auto shrink-0",
-                    isEphemeralMode ? "grid-cols-5" : "grid-cols-6"
+                    isEphemeralMode ? "grid-cols-5" : "grid-cols-7"
                   )}
                 >
                   <TabsTrigger value="message">Message</TabsTrigger>
@@ -1361,6 +1413,14 @@ export function TemplateEmailForm({
                       Pipe RDV
                       {pipeRdvDraft.trigger.enabled && (
                         <span className="ml-1.5 text-[10px] text-emerald-700">on</span>
+                      )}
+                    </TabsTrigger>
+                  )}
+                  {!isEphemeralMode && (
+                    <TabsTrigger value="placement-conforme">
+                      Box Placement
+                      {placementConformeDraft.trigger.enabled && (
+                        <span className="ml-1.5 text-[10px] text-teal-700">on</span>
                       )}
                     </TabsTrigger>
                   )}
@@ -1447,7 +1507,11 @@ export function TemplateEmailForm({
                         onMouseDownCapture={captureSelectionsBeforeVariableInsert}
                       >
                         <div className="flex flex-wrap gap-2 pt-2">
-                          {[...EMAIL_TEMPLATE_VARIABLES, ...PIPE_RDV_TEMPLATE_VARIABLES].map((v) => (
+                          {[
+                            ...EMAIL_TEMPLATE_VARIABLES,
+                            ...PIPE_RDV_TEMPLATE_VARIABLES,
+                            ...PLACEMENT_CONFORME_TEMPLATE_VARIABLES,
+                          ].map((v) => (
                             <span key={v.token} className="inline-flex gap-0.5">
                               <Badge
                                 variant="outline"
@@ -1608,6 +1672,7 @@ export function TemplateEmailForm({
                         contact={previewContact}
                         tutoiement={previewTutoiement}
                         previewRegistre={previewContact ? undefined : previewRegistre}
+                        placementConformeTriggerEnabled={placementConformeDraft.trigger.enabled}
                         allowSendTest
                       />
                     </div>
@@ -1652,6 +1717,18 @@ export function TemplateEmailForm({
                         onChange={handlePipeRdvDraftChange}
                         parentNom={formData.nom}
                         mainTutoiementEnabled={tutoiementDraft.enabled}
+                      />
+                    </TabsContent>
+                  )}
+
+                  {!isEphemeralMode && (
+                    <TabsContent
+                      value="placement-conforme"
+                      className="mt-0 data-[state=inactive]:hidden"
+                    >
+                      <TemplateEmailPlacementConformePanel
+                        draft={placementConformeDraft}
+                        onChange={setPlacementConformeDraft}
                       />
                     </TabsContent>
                   )}
@@ -1826,6 +1903,7 @@ export function TemplateEmailForm({
                 contact={previewContact}
                 tutoiement={previewTutoiement}
                 previewRegistre={previewContact ? undefined : previewRegistre}
+                placementConformeTriggerEnabled={placementConformeDraft.trigger.enabled}
                 label=""
                 allowSendTest
               />

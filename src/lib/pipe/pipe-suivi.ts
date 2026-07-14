@@ -15,7 +15,10 @@ export const PIPE_TYPE_SUIVI: PipeType = "ACTE_GESTION";
 /** Titre timeline d'un RDV de suivi (distinct de R1/R2/R3). */
 export const SUIVI_RDV_TITRE = "Suivi";
 
-/** Types journal affichés sur un pipe Suivi (RDV non requis pour les autres actes). */
+/** Types journal rapide sur un pipe Suivi (hors actes Stellium — menu dédié). */
+export const SUIVI_QUICK_ADD_TYPES = ["APPEL", "NOTE", "RDV"] as const satisfies readonly PipeTimelineUserType[];
+
+/** Types journal historiques / legacy (arbitrage, réinvestissement déclarés avant le menu Stellium). */
 export const SUIVI_TIMELINE_TYPES = [
   "APPEL",
   "ARBITRAGE",
@@ -25,6 +28,7 @@ export const SUIVI_TIMELINE_TYPES = [
 ] as const satisfies readonly PipeTimelineUserType[];
 
 export type SuiviTimelineType = (typeof SUIVI_TIMELINE_TYPES)[number];
+export type SuiviQuickAddType = (typeof SUIVI_QUICK_ADD_TYPES)[number];
 
 export function isSuiviPipeType(pipeType: string | null | undefined): boolean {
   return pipeType === PIPE_TYPE_SUIVI;

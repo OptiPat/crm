@@ -48,4 +48,21 @@ describe("renderTemplatePreview corpsHtmlOverride", () => {
     expect(vousPreview.body_html ?? vousPreview.body).toContain("Ce que vous avez versé");
     expect(vousPreview.body_html ?? vousPreview.body).not.toContain("_tu");
   });
+
+  it("aperçu Box Placement : libelle_stellium et produit sans collision Stellium perf", () => {
+    const preview = renderTemplatePreview(
+      "{{prenom}}, {{libelle_stellium}}",
+      "Opération {{libelle_stellium}} sur {{produit}}",
+      SAMPLE_PREVIEW_CONTACT,
+      null,
+      null,
+      null,
+      null,
+      { placementConformeTriggerEnabled: true }
+    );
+    expect(preview.subject).toContain("Arbitrage libre");
+    expect(preview.subject).not.toContain("{{libelle_stellium}}");
+    expect(preview.body).toContain("Cristalliance Evoluvie");
+    expect(preview.body).not.toContain("assurance-vie - Generali");
+  });
 });

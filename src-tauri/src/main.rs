@@ -303,6 +303,10 @@ fn main() {
             list_placement_operations,
             list_placement_operations_for_pipe,
             update_placement_operation_status,
+            get_placement_operation,
+            mark_placement_client_notified,
+            reserve_placement_client_notification,
+            release_placement_client_notification,
             get_placement_open_counts_by_pipe,
             // Settings
             get_setting,

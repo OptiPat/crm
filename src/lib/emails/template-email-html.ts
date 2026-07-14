@@ -55,6 +55,16 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Échappement HTML pour variables injectées dans un gabarit (envoi production). */
+export function escapeHtmlText(text: string): string {
+  return escapeHtml(text);
+}
+
+/** Neutralise retours ligne / séparateurs Unicode (injection en-têtes MIME dans le sujet). */
+export function sanitizeEmailHeaderValue(text: string): string {
+  return text.replace(/[\r\n\u0085\u2028\u2029]/g, " ").trim();
+}
+
 const GMAIL_LINE_STYLE = "line-height:1.5;margin:0;padding:0";
 const GMAIL_LIST_STYLE = "margin:0;padding-left:1.25em;line-height:1.5";
 const GMAIL_LIST_ITEM_STYLE = "margin:0;padding:0;line-height:1.5";

@@ -1,11 +1,5 @@
 import { useState } from "react";
-import {
-  Calendar,
-  FileText,
-  Phone,
-  Scale,
-  TrendingUp,
-} from "lucide-react";
+import { Calendar, FileText, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,22 +12,16 @@ import {
   unixToDatetimeLocalInput,
 } from "@/lib/pipe/pipe-timeline-types";
 import {
-  SUIVI_TIMELINE_TYPES,
+  SUIVI_QUICK_ADD_TYPES,
   suiviTimelineTypeLabel,
-  type SuiviTimelineType,
+  type SuiviQuickAddType,
 } from "@/lib/pipe/pipe-suivi";
 import { toast } from "sonner";
-import {
-  createPlacementOperation,
-  notifyPlacementOperationsChanged,
-} from "@/lib/api/tauri-box-placement";
 
-const TYPE_ICONS: Record<SuiviTimelineType, typeof Phone> = {
+const TYPE_ICONS: Record<SuiviQuickAddType, typeof Phone> = {
   APPEL: Phone,
   RDV: Calendar,
   NOTE: FileText,
-  ARBITRAGE: Scale,
-  REINVESTISSEMENT: TrendingUp,
 };
 
 interface PipeSuiviQuickAddProps {
@@ -52,18 +40,17 @@ interface PipeSuiviQuickAddProps {
     | "titre"
   >;
   onAdded?: () => void;
-  /** Ouvre le dialogue planification (comme Planifier R1). */
   onPlanSuiviRdv?: () => void;
 }
 
-export function PipeSuiviQuickAdd({ timeline, pipe, onAdded, onPlanSuiviRdv }: PipeSuiviQuickAddProps) {
-  const [addingType, setAddingType] = useState<SuiviTimelineType | null>(null);
+export function PipeSuiviQuickAdd({ timeline, onAdded, onPlanSuiviRdv }: PipeSuiviQuickAddProps) {
+  const [addingType, setAddingType] = useState<SuiviQuickAddType | null>(null);
   const [occurredAt, setOccurredAt] = useState(() => unixToDatetimeLocalInput());
   const [titre, setTitre] = useState("");
   const [contenu, setContenu] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const openAdd = (type: SuiviTimelineType) => {
+  const openAdd = (type: SuiviQuickAddType) => {
     if (type === "RDV") {
       onPlanSuiviRdv?.();
       return;
@@ -86,35 +73,13 @@ export function PipeSuiviQuickAdd({ timeline, pipe, onAdded, onPlanSuiviRdv }: P
     setSaving(true);
     try {
       const occurredAtUnix = datetimeLocalToUnix(occurredAt);
-
-      const entry = await timeline.addEntry({
+      await timeline.addEntry({
         entry_type: addingType,
         titre: titre.trim() || defaultTimelineEntryTitle(addingType),
         contenu: contenu.trim() || null,
         occurred_at: occurredAtUnix,
       });
       toast.success("Entrée ajoutée");
-
-      if (
-        (addingType === "ARBITRAGE" || addingType === "REINVESTISSEMENT") &&
-        pipe.contact_id
-      ) {
-        try {
-          await createPlacementOperation({
-            contact_id: pipe.contact_id,
-            pipe_id: pipe.id,
-            pipe_timeline_entry_id: entry.id,
-            operation_type: addingType,
-          });
-          notifyPlacementOperationsChanged();
-        } catch (trackErr) {
-          console.error(trackErr);
-          toast.warning(
-            "Entrée ajoutée, mais le suivi partenaire Stellium n'a pas pu être créé."
-          );
-        }
-      }
-
       cancelAdd();
       onAdded?.();
     } catch (err) {
@@ -129,13 +94,13 @@ export function PipeSuiviQuickAdd({ timeline, pipe, onAdded, onPlanSuiviRdv }: P
       <div>
         <p className="text-sm font-medium">Journal du suivi</p>
         <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-          Aucun acte n&apos;impose de RDV — commencez par un appel, un SMS (note), un arbitrage…
-          Le RDV de suivi reste disponible si vous l&apos;avez planifié.
+          Appel, note ou RDV de suivi. Les actes envoyés chez Stellium se déclarent dans la section
+          ci-dessous.
         </p>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        {SUIVI_TIMELINE_TYPES.map((type) => {
+        {SUIVI_QUICK_ADD_TYPES.map((type) => {
           const Icon = TYPE_ICONS[type];
           return (
             <Button
@@ -178,13 +143,9 @@ export function PipeSuiviQuickAdd({ timeline, pipe, onAdded, onPlanSuiviRdv }: P
             onChange={setContenu}
             rows={3}
             placeholder={
-              addingType === "ARBITRAGE"
-                ? "Support concerné, décision, prochaine étape…"
-                : addingType === "REINVESTISSEMENT"
-                  ? "Destination, montant, contexte…"
-                  : addingType === "NOTE"
-                    ? "SMS, compte-rendu, prochaine étape…"
-                    : "Compte-rendu, prochaine étape…"
+              addingType === "NOTE"
+                ? "SMS, compte-rendu, prochaine étape…"
+                : "Compte-rendu, prochaine étape…"
             }
           />
           <div className="flex justify-end gap-2">

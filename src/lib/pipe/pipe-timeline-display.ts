@@ -96,6 +96,18 @@ const USER_TYPE_STYLES: Record<PipeTimelineUserType, PipeTimelineEntryStyle> = {
     card: "border-emerald-200/60 bg-emerald-50/30 dark:border-emerald-900 dark:bg-emerald-950/20",
     dot: "bg-emerald-500 ring-emerald-200 dark:ring-emerald-900",
   },
+  VERSEMENT_PARTENAIRE: {
+    badge:
+      "bg-teal-100 text-teal-800 border-teal-200/80 dark:bg-teal-950 dark:text-teal-200 dark:border-teal-800",
+    card: "border-teal-200/60 bg-teal-50/30 dark:border-teal-900 dark:bg-teal-950/20",
+    dot: "bg-teal-500 ring-teal-200 dark:ring-teal-900",
+  },
+  SOUSCRIPTION_PARTENAIRE: {
+    badge:
+      "bg-indigo-100 text-indigo-800 border-indigo-200/80 dark:bg-indigo-950 dark:text-indigo-200 dark:border-indigo-800",
+    card: "border-indigo-200/60 bg-indigo-50/30 dark:border-indigo-900 dark:bg-indigo-950/20",
+    dot: "bg-indigo-500 ring-indigo-200 dark:ring-indigo-900",
+  },
 };
 
 const STAGE_DOTS: Record<PipeStage, string> = {

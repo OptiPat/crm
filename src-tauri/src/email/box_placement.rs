@@ -7,7 +7,8 @@ use super::response_sync::gmail_fetch_message_body_and_subject;
 use super::response_sync_outlook::outlook_fetch_message_body_and_subject;
 use crate::commands::DbState;
 use crate::database::placement_operations::{
-    map_stellium_label_to_operation_type, STATUS_CONFORME, STATUS_NON_CONFORME,
+    map_stellium_label_to_operation_type, placement_operation_eligible_for_client_email,
+    STATUS_CONFORME, STATUS_NON_CONFORME,
 };
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -37,7 +38,10 @@ pub struct BoxPlacementScanResult {
     pub updated: u32,
     pub created: u32,
     pub skipped: u32,
-    pub skipped_ambiguous: u32,
+    pub skipped_ambiguous_contacts: u32,
+    pub skipped_ambiguous_placements: u32,
+    /// Opérations passées en CONFORME lors de ce scan (candidats email client).
+    pub new_conforme_ids: Vec<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -406,9 +410,11 @@ pub fn scan_box_placement_emails(
 
     let scanned = all_ids.len() as u32;
     let mut updated = 0u32;
-    let mut created = 0u32;
+    let created = 0u32;
     let mut skipped = 0u32;
-    let mut skipped_ambiguous = 0u32;
+    let mut skipped_ambiguous_contacts = 0u32;
+    let mut skipped_ambiguous_placements = 0u32;
+    let mut new_conforme_ids: Vec<i64> = Vec::new();
 
     with_db(db_state, |db| {
         for message_id in all_ids {
@@ -440,7 +446,7 @@ pub fn scan_box_placement_emails(
                     .map_err(|e| e.to_string())?
                     .is_some()
                 {
-                    skipped_ambiguous += 1;
+                    skipped_ambiguous_contacts += 1;
                 }
                 continue;
             };
@@ -454,15 +460,32 @@ pub fn scan_box_placement_emails(
                 .find_latest_suivi_pipe_id_for_contact(contact_id)
                 .map_err(|e| e.to_string())?;
 
-            let had_open = db
+            let matched = db
                 .find_placement_for_email_match(
                     contact_id,
-                    operation_type,
+                    &parsed.stellium_label,
                     status,
+                    Some(&parsed.product_label),
+                    received_at,
                     pipe_id_hint,
                 )
-                .map_err(|e| e.to_string())?
-                .is_some();
+                .map_err(|e| e.to_string())?;
+
+            let Some(_matched_op) = matched else {
+                skipped += 1;
+                let open_count = db
+                    .count_open_placements_for_email_match(
+                        contact_id,
+                        &parsed.stellium_label,
+                        status,
+                        received_at,
+                    )
+                    .map_err(|e| e.to_string())?;
+                if open_count > 1 {
+                    skipped_ambiguous_placements += 1;
+                }
+                continue;
+            };
 
             let (_op, changed) = db
                 .apply_placement_email_update(
@@ -482,19 +505,25 @@ pub fn scan_box_placement_emails(
                 skipped += 1;
                 continue;
             }
-            if had_open {
-                updated += 1;
-            } else {
-                created += 1;
+            updated += 1;
+            if status == STATUS_CONFORME
+                && placement_operation_eligible_for_client_email(&_op)
+            {
+                new_conforme_ids.push(_op.id);
             }
         }
+
+        new_conforme_ids.sort_unstable();
+        new_conforme_ids.dedup();
 
         Ok(BoxPlacementScanResult {
             scanned,
             updated,
             created,
             skipped,
-            skipped_ambiguous,
+            skipped_ambiguous_contacts,
+            skipped_ambiguous_placements,
+            new_conforme_ids,
         })
     })
 }

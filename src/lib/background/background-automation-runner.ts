@@ -15,6 +15,7 @@ import {
   notifyPlacementOperationsChanged,
   scanBoxPlacementEmails,
 } from "@/lib/api/tauri-box-placement";
+import { notifyPlacementConformeClientsAfterScan } from "@/lib/placement/placement-conforme-notify";
 import { beginBackgroundActivity } from "@/lib/background-activity";
 import type { BackgroundAutomationJob } from "@/lib/background/background-automation-intervals";
 import {
@@ -276,6 +277,7 @@ async function runBoxPlacementJob(surface: AutomationSurface): Promise<void> {
     const boxResult = await scanBoxPlacementEmails();
     markAutomationJobRun("box_placement");
     notifyPlacementOperationsChanged();
+    await notifyPlacementConformeClientsAfterScan(boxResult.new_conforme_ids, { quiet: true });
     if (boxResult.created + boxResult.updated > 0) {
       await notifyAutomationEvent(
         "CRM W.Y.S — Box Placement",

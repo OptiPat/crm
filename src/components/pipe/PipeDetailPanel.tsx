@@ -27,6 +27,7 @@ import { PipeTypeBadge } from "@/components/pipe/PipeTypeBadge";
 import { PipeStageBadge } from "@/components/pipe/PipeStageBadge";
 import { PipeStageStepper } from "@/components/pipe/PipeStageStepper";
 import { PipeProspectionContactSection } from "@/components/pipe/PipeProspectionContactSection";
+import { PipeAffairePlacementSection } from "@/components/pipe/PipeAffairePlacementSection";
 import { PipeSuiviSection } from "@/components/pipe/PipeSuiviSection";
 import { PipeTimelineQuickAdd } from "@/components/pipe/PipeTimelineQuickAdd";
 import { isSuiviPipe } from "@/lib/pipe/pipe-suivi";
@@ -91,6 +92,8 @@ export function PipeDetailPanel({
     isPipeType(pipe.pipe_type) && pipe.pipe_type === "AFFAIRE" && pipe.contact_id > 0;
 
   const showSuiviSection = isSuiviPipe(pipe);
+  const showAffairePlacementSection =
+    isPipeType(pipe.pipe_type) && pipe.pipe_type === "AFFAIRE" && pipe.contact_id > 0;
 
   const prospectionRef = useRef<HTMLDivElement>(null);
 
@@ -259,11 +262,20 @@ export function PipeDetailPanel({
                 onPlanSuiviRdv={onPlanSuiviRdv}
               />
             ) : (
-              <PipeTimelineQuickAdd
-                timeline={timeline}
-                pipe={pipe}
-                onAdded={() => setActiveTab("historique")}
-              />
+              <>
+                {showAffairePlacementSection && (
+                  <PipeAffairePlacementSection
+                    pipe={pipe}
+                    timeline={timeline}
+                    onJournalAdded={() => setActiveTab("historique")}
+                  />
+                )}
+                <PipeTimelineQuickAdd
+                  timeline={timeline}
+                  pipe={pipe}
+                  onAdded={() => setActiveTab("historique")}
+                />
+              </>
             )}
           </TabsContent>
 

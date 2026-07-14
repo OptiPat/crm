@@ -5,7 +5,14 @@ export const PIPE_TIMELINE_USER_TYPES = [
   "PROPOSITION",
   "ARBITRAGE",
   "REINVESTISSEMENT",
+  "VERSEMENT_PARTENAIRE",
+  "SOUSCRIPTION_PARTENAIRE",
 ] as const;
+
+/** Journal rapide affaire / action — hors envoi partenaire (section dédiée). */
+export const PIPE_TIMELINE_QUICK_ADD_TYPES = PIPE_TIMELINE_USER_TYPES.filter(
+  (t) => t !== "VERSEMENT_PARTENAIRE" && t !== "SOUSCRIPTION_PARTENAIRE"
+);
 
 export type PipeTimelineUserType = (typeof PIPE_TIMELINE_USER_TYPES)[number];
 
@@ -18,6 +25,8 @@ export const PIPE_TIMELINE_TYPE_LABELS: Record<PipeTimelineType, string> = {
   PROPOSITION: "Proposition",
   ARBITRAGE: "Arbitrage",
   REINVESTISSEMENT: "Réinvestissement",
+  VERSEMENT_PARTENAIRE: "Versement partenaire",
+  SOUSCRIPTION_PARTENAIRE: "Souscription partenaire",
   CREATION: "Création",
   AVANCEMENT: "Avancement",
 };

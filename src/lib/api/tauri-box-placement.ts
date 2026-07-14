@@ -23,6 +23,7 @@ export interface PlacementOperation {
   email_received_at?: number | null;
   created_at: number;
   updated_at: number;
+  client_notified_at?: number | null;
 }
 
 export interface PlacementOperationWithContact {
@@ -44,7 +45,9 @@ export interface BoxPlacementScanResult {
   updated: number;
   created: number;
   skipped: number;
-  skipped_ambiguous?: number;
+  skipped_ambiguous_contacts?: number;
+  skipped_ambiguous_placements?: number;
+  new_conforme_ids?: number[];
 }
 
 export interface PlacementPipeOpenCount {
@@ -86,6 +89,7 @@ function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWi
     email_received_at,
     created_at,
     updated_at,
+    client_notified_at,
   } = raw;
   return {
     operation: {
@@ -102,6 +106,7 @@ function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWi
       email_received_at,
       created_at,
       updated_at,
+      client_notified_at,
     },
     contact_nom,
     contact_prenom,
@@ -135,6 +140,22 @@ export async function updatePlacementOperationStatus(
   status: PlacementOperationStatus
 ): Promise<PlacementOperation> {
   return invoke<PlacementOperation>("update_placement_operation_status", { id, status });
+}
+
+export async function getPlacementOperation(id: number): Promise<PlacementOperation> {
+  return invoke<PlacementOperation>("get_placement_operation", { id });
+}
+
+export async function markPlacementClientNotified(id: number): Promise<void> {
+  return invoke("mark_placement_client_notified", { id });
+}
+
+export async function reservePlacementClientNotification(id: number): Promise<boolean> {
+  return invoke<boolean>("reserve_placement_client_notification", { id });
+}
+
+export async function releasePlacementClientNotification(id: number): Promise<void> {
+  return invoke("release_placement_client_notification", { id });
 }
 
 export async function getPlacementOpenCountsByPipe(): Promise<PlacementPipeOpenCount[]> {

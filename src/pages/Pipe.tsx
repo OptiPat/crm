@@ -24,6 +24,7 @@ import {
 import { resolvePipeBoardStageDrop } from "@/lib/pipe/pipe-board-stage-actions";
 import { confirmDiscardPipeFormEdits } from "@/lib/pipe/pipe-form-dirty";
 import { buildVersementAffaireTitre } from "@/lib/pipe/pipe-suivi";
+import { trackVersementAffaireOnPipeCreate } from "@/lib/placement/pipe-placement-tracking";
 import { type PipeStage, type PipeType } from "@/lib/pipe/pipe-types";
 import { type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { PipeList } from "@/components/pipe/PipeList";
@@ -33,6 +34,7 @@ import { PipeFormPanel } from "@/components/pipe/PipeFormPanel";
 import { PipeDetailPanel } from "@/components/pipe/PipeDetailPanel";
 import { PipeStageAdvanceDialog } from "@/components/pipe/PipeStageAdvanceDialog";
 import { RdvPlanifierDialog } from "@/components/calendar/RdvPlanifierDialog";
+import { toast } from "sonner";
 import { usePipeStageAdvance } from "@/hooks/usePipeStageAdvance";
 import { cn } from "@/lib/utils";
 
@@ -257,10 +259,19 @@ export function Pipe() {
   };
 
   const handleSaved = (pipe: PipeRecord) => {
+    const wasCreate = panelMode === "create";
     setCreatePrefill(null);
     setSelectedPipe(pipe);
     setPanelMode("view");
     void loadPipes();
+    if (wasCreate) {
+      void trackVersementAffaireOnPipeCreate(pipe).catch((err) => {
+        console.error(err);
+        toast.warning(
+          "Affaire créée, mais le suivi versement Stellium n'a pas pu être initialisé."
+        );
+      });
+    }
   };
 
   const handleDeleted = () => {

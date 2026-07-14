@@ -1492,6 +1492,8 @@ pub struct PlacementOperation {
     pub email_received_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_notified_at: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

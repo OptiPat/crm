@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
+  Mail,
   RefreshCw,
   User,
 } from "lucide-react";
@@ -17,7 +18,15 @@ import {
   type PlacementOperationWithContact,
 } from "@/lib/api/tauri-box-placement";
 import {
+  notifyPlacementConformeClientAfterManualMark,
+  notifyPlacementConformeClientsAfterScan,
+  retryPlacementConformeClientEmail,
+} from "@/lib/placement/placement-conforme-notify";
+import {
   countOpenPlacementOperations,
+  countPlacementPendingClientNotify,
+  isPlacementRowVisibleInSuivi,
+  placementConformeNeedsClientNotify,
   placementOperationStatusAccent,
   placementOperationStatusLabel,
   placementOperationTypeLabel,
@@ -33,6 +42,7 @@ export function PlacementOperationsPanel({
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [resendingId, setResendingId] = useState<number | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -60,19 +70,24 @@ export function PlacementOperationsPanel({
     try {
       const result = await scanBoxPlacementEmails();
       notifyPlacementOperationsChanged();
-      const total = result.updated + result.created;
+      const total = result.updated;
       if (total > 0) {
-        toast.success(
-          `Box Placement : ${result.created} créée(s), ${result.updated} mise(s) à jour`
-        );
+        toast.success(`Box Placement : ${result.updated} opération(s) mise(s) à jour`);
       } else {
         toast.message("Box Placement : aucune nouvelle opération détectée");
       }
-      if ((result.skipped_ambiguous ?? 0) > 0) {
+      if ((result.skipped_ambiguous_contacts ?? 0) > 0) {
         toast.warning(
-          `${result.skipped_ambiguous} mail(s) ignoré(s) — homonymes contacts, rattachement manuel requis`
+          `${result.skipped_ambiguous_contacts} mail(s) ignoré(s) — homonymes contacts, rattachement manuel requis`
         );
       }
+      if ((result.skipped_ambiguous_placements ?? 0) > 0) {
+        toast.warning(
+          `${result.skipped_ambiguous_placements} mail(s) ignoré(s) — plusieurs opérations en attente pour ce client, précisez l'affaire ou le produit`
+        );
+      }
+      await notifyPlacementConformeClientsAfterScan(result.new_conforme_ids);
+      await reload();
     } catch (error) {
       toast.error(String(error));
     } finally {
@@ -83,9 +98,11 @@ export function PlacementOperationsPanel({
   const handleMarkConforme = async (id: number) => {
     setUpdatingId(id);
     try {
-      await updatePlacementOperationStatus(id, "CONFORME");
+      const operation = await updatePlacementOperationStatus(id, "CONFORME");
       notifyPlacementOperationsChanged();
       toast.success("Opération marquée conforme");
+      await notifyPlacementConformeClientAfterManualMark(operation);
+      await reload();
     } catch (error) {
       toast.error(String(error));
     } finally {
@@ -93,10 +110,22 @@ export function PlacementOperationsPanel({
     }
   };
 
+  const handleResendClientEmail = async (row: PlacementOperationWithContact) => {
+    setResendingId(row.operation.id);
+    try {
+      await retryPlacementConformeClientEmail(row.operation);
+      notifyPlacementOperationsChanged();
+      await reload();
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   const { pending, nonConforme } = countOpenPlacementOperations(rows);
-  const openRows = rows.filter(
-    (r) => r.operation.status === "PENDING" || r.operation.status === "NON_CONFORME"
-  );
+  const pendingNotify = countPlacementPendingClientNotify(rows);
+  const visibleRows = rows.filter((r) => isPlacementRowVisibleInSuivi(r.operation));
 
   return (
     <Card>
@@ -106,6 +135,7 @@ export function PlacementOperationsPanel({
           <CardDescription>
             Suivi des mails Stellium entrants — {pending} en attente
             {nonConforme > 0 ? `, ${nonConforme} non conforme(s)` : ""}
+            {pendingNotify > 0 ? `, ${pendingNotify} email(s) client à envoyer` : ""}
           </CardDescription>
         </div>
         <Button
@@ -123,77 +153,107 @@ export function PlacementOperationsPanel({
       <CardContent>
         {loading ? (
           <p className="text-sm text-muted-foreground">Chargement…</p>
-        ) : openRows.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Aucune opération en attente ou non conforme. Les arbitrages / réinvestissements
             journalisés sur un pipe Suivi créent une ligne « en attente partenaire ».
           </p>
         ) : (
           <ul className="space-y-2">
-            {openRows.map((row) => (
-              <li
-                key={row.operation.id}
-                className="flex flex-col gap-2 rounded-lg border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate">
-                    {placementOperationTypeLabel(row.operation.operation_type)} —{" "}
-                    {row.contact_prenom} {row.contact_nom}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {row.operation.product_label ||
-                      row.operation.stellium_label ||
-                      row.pipe_titre ||
-                      "Produit non renseigné"}
-                  </p>
-                  {row.operation.email_subject && row.operation.status === "NON_CONFORME" && (
-                    <p className="text-xs text-red-700/80 mt-0.5 truncate" title={row.operation.email_subject}>
-                      {row.operation.email_subject}
+            {visibleRows.map((row) => {
+              const needsNotify = placementConformeNeedsClientNotify(row.operation);
+              return (
+                <li
+                  key={row.operation.id}
+                  className="flex flex-col gap-2 rounded-lg border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium truncate">
+                      {placementOperationTypeLabel(row.operation.operation_type)} —{" "}
+                      {row.contact_prenom} {row.contact_nom}
                     </p>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                  {onOpenContact && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1 px-2 text-xs"
-                      onClick={() => onOpenContact(row.operation.contact_id)}
-                    >
-                      <User className="h-3 w-3" />
-                      Contact
-                    </Button>
-                  )}
-                  {(row.operation.status === "PENDING" ||
-                    row.operation.status === "NON_CONFORME") && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1 px-2 text-xs"
-                      disabled={updatingId === row.operation.id}
-                      onClick={() => void handleMarkConforme(row.operation.id)}
-                    >
-                      <CheckCircle2 className="h-3 w-3" />
-                      {row.operation.status === "NON_CONFORME" ? "Traiter" : "Marquer conforme"}
-                    </Button>
-                  )}
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${placementOperationStatusAccent(row.operation.status)}`}
-                  >
-                    {row.operation.status === "NON_CONFORME" ? (
-                      <AlertTriangle className="h-3 w-3" />
-                    ) : row.operation.status === "CONFORME" ? (
-                      <CheckCircle2 className="h-3 w-3" />
-                    ) : (
-                      <Clock className="h-3 w-3" />
+                    <p className="text-xs text-muted-foreground truncate">
+                      {row.operation.product_label ||
+                        row.operation.stellium_label ||
+                        row.pipe_titre ||
+                        "Produit non renseigné"}
+                    </p>
+                    {needsNotify && (
+                      <p className="text-xs text-amber-800 mt-0.5">
+                        Conforme — email client non envoyé
+                      </p>
                     )}
-                    {placementOperationStatusLabel(row.operation.status)}
-                  </span>
-                </div>
-              </li>
-            ))}
+                    {row.operation.email_subject && row.operation.status === "NON_CONFORME" && (
+                      <p
+                        className="text-xs text-red-700/80 mt-0.5 truncate"
+                        title={row.operation.email_subject}
+                      >
+                        {row.operation.email_subject}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                    {onOpenContact && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 px-2 text-xs"
+                        onClick={() => onOpenContact(row.operation.contact_id)}
+                      >
+                        <User className="h-3 w-3" />
+                        Contact
+                      </Button>
+                    )}
+                    {needsNotify && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1 px-2 text-xs border-amber-300 text-amber-900"
+                        disabled={resendingId === row.operation.id}
+                        onClick={() => void handleResendClientEmail(row)}
+                      >
+                        <Mail className="h-3 w-3" />
+                        Envoyer email client
+                      </Button>
+                    )}
+                    {(row.operation.status === "PENDING" ||
+                      row.operation.status === "NON_CONFORME") && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1 px-2 text-xs"
+                        disabled={updatingId === row.operation.id}
+                        onClick={() => void handleMarkConforme(row.operation.id)}
+                      >
+                        <CheckCircle2 className="h-3 w-3" />
+                        {row.operation.status === "NON_CONFORME" ? "Traiter" : "Marquer conforme"}
+                      </Button>
+                    )}
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${placementOperationStatusAccent(
+                        needsNotify ? "PENDING" : row.operation.status
+                      )}`}
+                    >
+                      {row.operation.status === "NON_CONFORME" ? (
+                        <AlertTriangle className="h-3 w-3" />
+                      ) : needsNotify ? (
+                        <Mail className="h-3 w-3" />
+                      ) : row.operation.status === "CONFORME" ? (
+                        <CheckCircle2 className="h-3 w-3" />
+                      ) : (
+                        <Clock className="h-3 w-3" />
+                      )}
+                      {needsNotify
+                        ? "Email client en attente"
+                        : placementOperationStatusLabel(row.operation.status)}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </CardContent>
