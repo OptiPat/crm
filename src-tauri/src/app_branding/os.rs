@@ -4,7 +4,9 @@ use super::AppBrandingManager;
 use image::{Rgba, RgbaImage};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(windows)]
+use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 use tauri::{AppHandle, Manager};
 

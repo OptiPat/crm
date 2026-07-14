@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getTemplateCategoryMeta } from "@/lib/emails/template-email-meta";
+import { getTemplateCategoryMeta, resolveTemplateEmailCategory } from "@/lib/emails/template-email-meta";
 import type { TemplateEmail } from "@/lib/api/tauri-templates-email";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Etiquette } from "@/lib/api/tauri-etiquettes";
@@ -475,6 +475,9 @@ export function TemplatePreviewContactControls({
   previewRegistre,
   onPreviewRegistreChange,
   showRegistreToggle,
+  previewSectionId,
+  onPreviewSectionIdChange,
+  previewSectionOptions,
 }: {
   contacts: Contact[];
   previewContactId: string;
@@ -482,7 +485,16 @@ export function TemplatePreviewContactControls({
   previewRegistre: ContactRegistre;
   onPreviewRegistreChange: (value: ContactRegistre) => void;
   showRegistreToggle: boolean;
+  previewSectionId?: string;
+  onPreviewSectionIdChange?: (value: string) => void;
+  previewSectionOptions?: { id: string; label: string }[];
 }) {
+  const showSectionSelect =
+    previewSectionOptions != null &&
+    previewSectionOptions.length > 1 &&
+    previewSectionId != null &&
+    onPreviewSectionIdChange != null;
+
   return (
     <div className="space-y-2">
       <div className="space-y-1.5">
@@ -514,6 +526,23 @@ export function TemplatePreviewContactControls({
             <SelectContent>
               <SelectItem value="VOUS">Vouvoiement</SelectItem>
               <SelectItem value="TU">Tutoiement</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      {showSectionSelect && (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Message</Label>
+          <Select value={previewSectionId} onValueChange={onPreviewSectionIdChange}>
+            <SelectTrigger className="h-9 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {previewSectionOptions.map((option) => (
+                <SelectItem key={option.id} value={option.id}>
+                  {option.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -559,8 +588,7 @@ export function TemplateCategoryFilters({
               : "border-border text-muted-foreground hover:bg-muted/50"
           )}
         >
-          {c.label}
-          {counts[c.id] != null && counts[c.id] > 0 ? ` (${counts[c.id]})` : ""}
+          {c.label} ({counts[c.id] ?? 0})
         </button>
       ))}
     </div>
@@ -586,7 +614,7 @@ export function TemplateListRow({
   onDuplicate: () => void;
   onDeleteRequest: () => void;
 }) {
-  const meta = getTemplateCategoryMeta(template.categorie);
+  const meta = getTemplateCategoryMeta(resolveTemplateEmailCategory(template));
   return (
     <div
       role="button"

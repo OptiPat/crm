@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { filterTemplatesEmail } from "@/lib/emails/filter-templates-email";
+import { resolveTemplateEmailCategory } from "@/lib/emails/template-email-meta";
 import type { TemplateEmail } from "@/lib/api/tauri-templates-email";
 
 const base: TemplateEmail = {
@@ -25,5 +26,18 @@ describe("filterTemplatesEmail", () => {
   it("filtre par recherche", () => {
     expect(filterTemplatesEmail([base], "IR", "all")).toHaveLength(1);
     expect(filterTemplatesEmail([base], "xyz", "all")).toHaveLength(0);
+  });
+
+  it("résout Éphémère depuis les variables et filtre par catégorie", () => {
+    const ephemeral = {
+      ...base,
+      id: 3,
+      nom: "Campagne test",
+      categorie: "AUTRE",
+      variables: JSON.stringify({ is_ephemeral: true, ephemeral_campaign: { status: "draft" } }),
+    };
+    expect(resolveTemplateEmailCategory(ephemeral)).toBe("EPHEMERE");
+    expect(filterTemplatesEmail([base, ephemeral], "", "EPHEMERE")).toHaveLength(1);
+    expect(filterTemplatesEmail([base, ephemeral], "", "AUTRE")).toHaveLength(0);
   });
 });

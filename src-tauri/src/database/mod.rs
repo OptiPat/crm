@@ -578,6 +578,8 @@ impl Database {
         self.migrate_placement_operations_table()?;
         self.migrate_pipe_rdv_scheduled_emails_table()?;
         self.migrate_purge_premature_etiquette_taches()?;
+        self.migrate_templates_email_rendez_vous_bulletins_categories()?;
+        self.migrate_templates_email_ephemere_category()?;
 
         Ok(())
     }

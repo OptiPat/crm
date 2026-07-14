@@ -158,9 +158,18 @@ export function isKnownStelliumBoxPlacementLabel(label: string): boolean {
 
 const VERSEMENTS_PROGRAMMES_GROUP_ID = "versements-programmes";
 
+/** Versement complémentaire : AV / PER / capi uniquement (pas de SCPI). */
+export function isSuiviVersementComplementaireAllowedForProduct(product: string): boolean {
+  return stelliumProductFamilyIdForProduct(product) !== "scpi";
+}
+
 function injectSuiviVersementComplementaire(
-  groups: readonly StelliumBoxPlacementLabelGroup[]
+  groups: readonly StelliumBoxPlacementLabelGroup[],
+  product: string
 ): readonly StelliumBoxPlacementLabelGroup[] {
+  if (!isSuiviVersementComplementaireAllowedForProduct(product)) {
+    return groups;
+  }
   const versementsGroup = groups.find((group) => group.id === VERSEMENTS_PROGRAMMES_GROUP_ID);
   if (versementsGroup) {
     return groups.map((group) =>
@@ -208,7 +217,7 @@ export function stelliumLabelGroupsForProduct(
         ? STELLIUM_BOX_PLACEMENT_LABEL_GROUPS.filter((group) => group.id === "scpi")
         : STELLIUM_BOX_PLACEMENT_LABEL_GROUPS.filter((group) => group.id !== "scpi");
   if (!options?.suivi) return base;
-  return injectSuiviVersementComplementaire(base);
+  return injectSuiviVersementComplementaire(base, product);
 }
 
 export function stelliumSuiviActLabelGroups(
@@ -235,7 +244,9 @@ export function isStelliumLabelAllowedForProduct(
   options?: { suivi?: boolean; affaire?: boolean }
 ): boolean {
   if (options?.affaire) return isStelliumLabelAllowedForAffaire(label);
-  if (options?.suivi && isVersementComplementaireActLabel(label)) return true;
+  if (options?.suivi && isVersementComplementaireActLabel(label)) {
+    return isSuiviVersementComplementaireAllowedForProduct(product);
+  }
   const normalized = normalizeStelliumBoxPlacementLabel(label);
   return stelliumLabelGroupsForProduct(product, options).some((group) =>
     group.items.some((item) => normalizeStelliumBoxPlacementLabel(item) === normalized)

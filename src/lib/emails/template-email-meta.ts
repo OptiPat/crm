@@ -48,12 +48,15 @@ import { filterLibraryTemplates } from "@/lib/emails/template-library";
 import type { ContactRegistre } from "@/lib/emails/template-email-formality";
 
 export type EmailTemplateCategory =
-  | "RELANCE"
-  | "SUIVI_ANNUEL"
-  | "FISCALITE"
   | "BIENVENUE"
+  | "SUIVI_ANNUEL"
+  | "RENDEZ_VOUS"
+  | "FISCALITE"
   | "ARBITRAGE"
+  | "BULLETINS"
   | "NEWSLETTER"
+  | "EPHEMERE"
+  | "RELANCE"
   | "AUTRE";
 
 export const EMAIL_TEMPLATE_CATEGORIES: {
@@ -61,12 +64,19 @@ export const EMAIL_TEMPLATE_CATEGORIES: {
   label: string;
   badgeClass: string;
 }[] = [
-  { id: "RELANCE", label: "Relance", badgeClass: "bg-orange-100 text-orange-800" },
-  { id: "SUIVI_ANNUEL", label: "Suivi annuel", badgeClass: "bg-blue-100 text-blue-800" },
-  { id: "FISCALITE", label: "Fiscalité", badgeClass: "bg-green-100 text-green-800" },
   { id: "BIENVENUE", label: "Bienvenue", badgeClass: "bg-yellow-100 text-yellow-800" },
+  { id: "SUIVI_ANNUEL", label: "Suivi annuel", badgeClass: "bg-blue-100 text-blue-800" },
+  {
+    id: "RENDEZ_VOUS",
+    label: "Rendez-vous / Pipe",
+    badgeClass: "bg-[#c43630]/12 text-[#c43630] ring-1 ring-[#c43630]/25",
+  },
+  { id: "FISCALITE", label: "Fiscalité", badgeClass: "bg-green-100 text-green-800" },
   { id: "ARBITRAGE", label: "Arbitrage", badgeClass: "bg-purple-100 text-purple-800" },
+  { id: "BULLETINS", label: "Bulletins SCPI", badgeClass: "bg-teal-100 text-teal-900 ring-1 ring-teal-200/70" },
   { id: "NEWSLETTER", label: "Newsletter", badgeClass: "bg-indigo-100 text-indigo-800" },
+  { id: "EPHEMERE", label: "Éphémère", badgeClass: "bg-fuchsia-100 text-fuchsia-900 ring-1 ring-fuchsia-200/70" },
+  { id: "RELANCE", label: "Relance", badgeClass: "bg-orange-100 text-orange-800" },
   { id: "AUTRE", label: "Autre", badgeClass: "bg-gray-100 text-gray-800" },
 ];
 
@@ -259,6 +269,15 @@ export const ETIQUETTE_NOM_TO_TEMPLATE_NOM: Record<string, string> = {
   "Alerte 69 ans": "Rappel assurance-vie 69 ans",
 };
 
+export function resolveTemplateEmailCategory(
+  template: Pick<TemplateEmail, "categorie" | "variables">
+): EmailTemplateCategory {
+  if (isEphemeralTemplate(template.variables)) return "EPHEMERE";
+  const cat = template.categorie as EmailTemplateCategory;
+  if (EMAIL_TEMPLATE_CATEGORIES.some((c) => c.id === cat)) return cat;
+  return "AUTRE";
+}
+
 export function getTemplateCategoryMeta(categorie: string) {
   return (
     EMAIL_TEMPLATE_CATEGORIES.find((c) => c.id === categorie) ?? {
@@ -421,7 +440,7 @@ export function duplicateTemplatePayload(source: TemplateEmail): {
     nom: `${source.nom} (copie)`,
     sujet: source.sujet,
     corps: source.corps,
-    categorie: source.categorie,
+    categorie: isEphemeralTemplate(source.variables) ? "EPHEMERE" : source.categorie,
     variables: isEphemeralTemplate(source.variables)
       ? stampNewEphemeralTemplateMeta(null)
       : source.variables,

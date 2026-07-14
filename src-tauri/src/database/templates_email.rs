@@ -5,7 +5,7 @@
 
 use rusqlite::{params, Result};
 
-/// Visibilité bibliothèque Modèles email : campagnes éphémères archivées et variantes liées (tu / relance).
+/// Visibilité bibliothèque Modèles email : éphémères archivées et variantes liées (tu / relance).
 const TEMPLATE_EMAIL_LIBRARY_VISIBLE_WHERE: &str = "
     NOT (
         COALESCE(json_extract(variables, '$.is_ephemeral'), 0) = 1
@@ -15,18 +15,25 @@ const TEMPLATE_EMAIL_LIBRARY_VISIBLE_WHERE: &str = "
         SELECT p.tutoiement_template_id FROM templates_email p
         WHERE p.tutoiement_template_id IS NOT NULL
           AND COALESCE(json_extract(p.variables, '$.is_ephemeral'), 0) = 1
-          AND COALESCE(json_extract(p.variables, '$.ephemeral_campaign.status'), '') = 'archived'
         UNION ALL
         SELECT p.relance_template_id FROM templates_email p
         WHERE p.relance_template_id IS NOT NULL
           AND COALESCE(json_extract(p.variables, '$.is_ephemeral'), 0) = 1
-          AND COALESCE(json_extract(p.variables, '$.ephemeral_campaign.status'), '') = 'archived'
         UNION ALL
         SELECT r.tutoiement_template_id FROM templates_email p
         INNER JOIN templates_email r ON r.id = p.relance_template_id
         WHERE r.tutoiement_template_id IS NOT NULL
           AND COALESCE(json_extract(p.variables, '$.is_ephemeral'), 0) = 1
-          AND COALESCE(json_extract(p.variables, '$.ephemeral_campaign.status'), '') = 'archived'
+        UNION ALL
+        SELECT tu.id FROM templates_email tu
+        INNER JOIN templates_email p
+          ON trim(p.nom) = trim(substr(tu.nom, 1, length(tu.nom) - 5))
+        WHERE tu.nom LIKE '% (tu)'
+          AND COALESCE(json_extract(p.variables, '$.is_ephemeral'), 0) = 1
+          AND NOT EXISTS (
+            SELECT 1 FROM templates_email linked
+            WHERE linked.tutoiement_template_id = tu.id
+          )
     )";
 
 impl super::Database {
@@ -257,7 +264,7 @@ impl super::Database {
                 nom: "Prise de rendez-vous suivi".into(),
                 sujet: "Prochain rendez-vous de suivi — {{prenom}}".into(),
                 corps: "Bonjour {{prenom}} {{nom}},\n\nVotre prochain rendez-vous de suivi approche. Réservez un créneau sur Google Agenda : {{lien_agenda}}\n\nÀ bientôt,\n{{cgp_prenom}} {{cgp_nom}}".into(),
-                categorie: "SUIVI_ANNUEL".into(),
+                categorie: "RENDEZ_VOUS".into(),
                 variables: None,
                 agenda_link_id: Some("suivi".into()),
                 relance_template_id: None,
@@ -347,5 +354,70 @@ Bien cordialement,\n\
             linked += updated;
         }
         Ok(linked)
+    }
+
+    /// Rattrapage catégories Rendez-vous / Pipe et Bulletins (une fois).
+    pub fn migrate_templates_email_rendez_vous_bulletins_categories(&self) -> Result<()> {
+        if self.get_setting("migration_templates_email_rendez_vous_bulletins_v1")?.is_some() {
+            return Ok(());
+        }
+
+        let rendez_vous = self.conn.execute(
+            "UPDATE templates_email SET categorie = 'RENDEZ_VOUS', updated_at = unixepoch()
+             WHERE categorie != 'RENDEZ_VOUS'
+               AND (
+                 nom = 'Prise de rendez-vous suivi'
+                 OR COALESCE(json_extract(variables, '$.pipe_rdv_trigger.enabled'), 0) = 1
+                 OR COALESCE(json_extract(variables, '$.pipe_rdv_trigger.enabled'), '') = 'true'
+               )",
+            [],
+        )?;
+
+        let bulletins = self.conn.execute(
+            "UPDATE templates_email SET categorie = 'BULLETINS', updated_at = unixepoch()
+             WHERE categorie != 'BULLETINS'
+               AND (
+                 nom IN ('Bulletin SCPI trimestriel', 'Bulletin SCPI trimestriel (tu)')
+                 OR COALESCE(json_extract(variables, '$.scpi_template_version'), 0) > 0
+                 OR sujet LIKE '%bulletin%SCPI%' COLLATE NOCASE
+                 OR sujet LIKE '%bulletins SCPI%' COLLATE NOCASE
+                 OR corps LIKE '%{{scpi_intro_%'
+                 OR corps LIKE '%{{bulletin_resume%'
+                 OR COALESCE(variables, '') LIKE '%scpi_template_version%'
+               )",
+            [],
+        )?;
+
+        self.set_setting("migration_templates_email_rendez_vous_bulletins_v1", "1")?;
+        if rendez_vous > 0 || bulletins > 0 {
+            println!(
+                "✅ Migration catégories modèles email : {} rendez-vous/pipe, {} bulletins",
+                rendez_vous, bulletins
+            );
+        }
+        Ok(())
+    }
+
+    /// Catégorie Éphémère pour les campagnes éphémères actives (une fois).
+    pub fn migrate_templates_email_ephemere_category(&self) -> Result<()> {
+        if self.get_setting("migration_templates_email_ephemere_category_v1")?.is_some() {
+            return Ok(());
+        }
+
+        let updated = self.conn.execute(
+            "UPDATE templates_email SET categorie = 'EPHEMERE', updated_at = unixepoch()
+             WHERE categorie != 'EPHEMERE'
+               AND COALESCE(json_extract(variables, '$.is_ephemeral'), 0) = 1",
+            [],
+        )?;
+
+        self.set_setting("migration_templates_email_ephemere_category_v1", "1")?;
+        if updated > 0 {
+            println!(
+                "✅ Migration catégories modèles email : {} campagne(s) éphémère(s)",
+                updated
+            );
+        }
+        Ok(())
     }
 }

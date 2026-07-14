@@ -1585,4 +1585,100 @@ mod tests {
             .contact_matches_ephemeral_audience(&contact, &audience, None)
             .unwrap());
     }
+
+    #[test]
+    fn ephemeral_active_and_orphan_tu_hidden_from_library_list() {
+        use crate::database::models::NewTemplateEmail;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let audience = ephemeral_audience_all_scpi(&["Epargne Pierre"]);
+        let parent_id = create_ephemeral_template(&db, &audience);
+        let parent = db.get_template_email_by_id(parent_id).unwrap();
+        db.update_template_email(
+            parent_id,
+            &NewTemplateEmail {
+                nom: "Arbitrage SCI VIA GENERATIONS".into(),
+                sujet: parent.sujet,
+                corps: parent.corps,
+                categorie: parent.categorie,
+                variables: parent.variables,
+                agenda_link_id: parent.agenda_link_id,
+                relance_template_id: parent.relance_template_id,
+                tutoiement_template_id: parent.tutoiement_template_id,
+            },
+        )
+        .unwrap();
+        let orphan_tu = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Arbitrage SCI VIA GENERATIONS (tu)".into(),
+                sujet: "Objet tu".into(),
+                corps: "Corps tu".into(),
+                categorie: "AUTRE".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+
+        let visible = db.get_all_templates_email().unwrap();
+        assert!(visible.iter().any(|t| t.id == parent_id));
+        assert!(visible.iter().all(|t| t.id != orphan_tu.id));
+    }
+
+    #[test]
+    fn ephemeral_orphan_sql_keeps_permanent_linked_tu_with_same_base_name() {
+        use crate::database::models::NewTemplateEmail;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let tu = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Arbitrage SCI VIA GENERATIONS (tu)".into(),
+                sujet: "Objet tu".into(),
+                corps: "Corps tu".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let permanent = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Arbitrage SCI VIA GENERATIONS".into(),
+                sujet: "Objet".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: Some(tu.id),
+            })
+            .unwrap();
+        let audience = ephemeral_audience_all_scpi(&["Epargne Pierre"]);
+        let ephemeral_id = create_ephemeral_template(&db, &audience);
+        let ephemeral = db.get_template_email_by_id(ephemeral_id).unwrap();
+        db.update_template_email(
+            ephemeral_id,
+            &NewTemplateEmail {
+                nom: "Arbitrage SCI VIA GENERATIONS".into(),
+                sujet: ephemeral.sujet,
+                corps: ephemeral.corps,
+                categorie: ephemeral.categorie,
+                variables: ephemeral.variables,
+                agenda_link_id: ephemeral.agenda_link_id,
+                relance_template_id: ephemeral.relance_template_id,
+                tutoiement_template_id: ephemeral.tutoiement_template_id,
+            },
+        )
+        .unwrap();
+
+        let visible = db.get_all_templates_email().unwrap();
+        assert!(visible.iter().any(|t| t.id == permanent.id));
+        assert!(visible.iter().any(|t| t.id == ephemeral_id));
+        assert!(
+            visible.iter().any(|t| t.id == tu.id),
+            "le tu permanent lié ne doit pas être masqué par l'heuristique orpheline éphémère"
+        );
+    }
 }

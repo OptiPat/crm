@@ -78,6 +78,14 @@ describe("stellium-box-placement-labels", () => {
     const versementsGroup = suiviGroups.find((group) => group.id === "versements-programmes");
     expect(versementsGroup?.label).toBe("Versements");
     expect(versementsGroup?.items[0]).toBe("Versement complémentaire");
+
+    const scpiSuiviGroups = stelliumSuiviActLabelGroups("Comète");
+    expect(scpiSuiviGroups).toHaveLength(1);
+    expect(scpiSuiviGroups[0]?.id).toBe("scpi");
+    expect(scpiSuiviGroups.flatMap((g) => g.items)).not.toContain("Versement complémentaire");
+    expect(
+      isStelliumLabelAllowedForProduct("Versement complémentaire", "Comète", { suivi: true })
+    ).toBe(false);
   });
 
   it("affaire classique : souscription seule", () => {

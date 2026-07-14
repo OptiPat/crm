@@ -189,6 +189,7 @@ import {
   mergeEphemeralCampaignForSave,
   parseEphemeralCampaignConfig,
   setEphemeralCampaignInMeta,
+  stampEphemeralAuxiliaryTemplateMeta,
   stampNewEphemeralTemplateMeta,
   type EphemeralCampaignConfig,
 } from "@/lib/emails/template-email-ephemeral";
@@ -540,7 +541,7 @@ export function TemplateEmailForm({
       nom: "",
       sujet: "",
       corps: "",
-      categorie: ephemeralDefaults ? "AUTRE" : "RELANCE",
+      categorie: ephemeralDefaults ? "EPHEMERE" : "RELANCE",
       variables: null,
       agenda_link_id: null,
       relance_template_id: null,
@@ -862,7 +863,7 @@ export function TemplateEmailForm({
     [formData.nom]
   );
 
-  const categoryPills = EMAIL_TEMPLATE_CATEGORIES.map((c) => ({
+  const categoryPills = EMAIL_TEMPLATE_CATEGORIES.filter((c) => c.id !== "EPHEMERE").map((c) => ({
     value: c.id,
     label: c.label,
   }));
@@ -1114,18 +1115,22 @@ export function TemplateEmailForm({
         const tuCorpsHtml = canonicalizeCorpsHtmlForSave(tuRawHtml);
         const tuPlain = htmlToPlainEmail(tuCorpsHtml);
         const tuNom = buildTutoiementTemplateNom(formData.nom);
+        let tuVariables = stampStelliumPerfTemplateMeta(
+          stampScpiBulletinTemplateMeta(
+            setTemplateCorpsHtmlInMeta(tutoiementVariables, tuCorpsHtml || null),
+            tuNom
+          ),
+          tuNom
+        );
+        if (isEphemeralMode) {
+          tuVariables = stampEphemeralAuxiliaryTemplateMeta(tuVariables);
+        }
         const tuPayload: NewTemplateEmail = {
           nom: tuNom,
           sujet: tutoiementDraft.sujet.trim(),
           corps: tuPlain,
           categorie: formData.categorie,
-          variables: stampStelliumPerfTemplateMeta(
-            stampScpiBulletinTemplateMeta(
-              setTemplateCorpsHtmlInMeta(tutoiementVariables, tuCorpsHtml || null),
-              tuNom
-            ),
-            tuNom
-          ),
+          variables: tuVariables,
           agenda_link_id: formData.agenda_link_id,
           relance_template_id: null,
           tutoiement_template_id: null,
@@ -1545,6 +1550,7 @@ export function TemplateEmailForm({
 
       const payload: NewTemplateEmail = {
         ...formData,
+        categorie: isEphemeralMode ? "EPHEMERE" : formData.categorie,
         corps: plainCorps,
         variables,
         relance_template_id: relanceDraft.enabled
@@ -1884,16 +1890,29 @@ export function TemplateEmailForm({
 
                     <div className="space-y-2">
                       <Label>Intention</Label>
-                      <CategoryTogglePills
-                        categories={categoryPills}
-                        selected={[formData.categorie]}
-                        single
-                        onToggle={(value) => setFormData({ ...formData, categorie: value })}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {getTemplateCategoryMeta(formData.categorie).label} — pour retrouver le
-                        modèle dans la bibliothèque.
-                      </p>
+                      {isEphemeralMode ? (
+                        <>
+                          <Badge className={getTemplateCategoryMeta("EPHEMERE").badgeClass}>
+                            Éphémère
+                          </Badge>
+                          <p className="text-xs text-muted-foreground">
+                            Attribué automatiquement aux campagnes éphémères.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <CategoryTogglePills
+                            categories={categoryPills}
+                            selected={[formData.categorie]}
+                            single
+                            onToggle={(value) => setFormData({ ...formData, categorie: value })}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            {getTemplateCategoryMeta(formData.categorie).label} — pour retrouver le
+                            modèle dans la bibliothèque.
+                          </p>
+                        </>
+                      )}
                     </div>
 
                     <div className="space-y-2">

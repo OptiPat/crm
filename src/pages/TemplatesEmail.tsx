@@ -46,7 +46,9 @@ import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import {
   duplicateTemplatePayload,
   EMAIL_TEMPLATE_CATEGORIES,
+  resolveTemplateEmailCategory,
 } from "@/lib/emails/template-email-meta";
+import { buildTemplateLinkedPreviewSections } from "@/lib/emails/template-linked-previews";
 import { copyTemplateEmailAttachments } from "@/lib/api/tauri-template-email-attachments";
 import {
   parseTemplateEmailAttachments,
@@ -102,6 +104,7 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [previewContactId, setPreviewContactId] = useState("sample");
   const [previewRegistre, setPreviewRegistre] = useState<ContactRegistre>("VOUS");
+  const [previewSectionId, setPreviewSectionId] = useState("main");
   const [deleteTarget, setDeleteTarget] = useState<TemplateEmail | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -197,9 +200,12 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
   );
 
   const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
+    const counts: Record<string, number> = Object.fromEntries(
+      EMAIL_TEMPLATE_CATEGORIES.map((c) => [c.id, 0])
+    );
     for (const t of libraryTemplates) {
-      counts[t.categorie] = (counts[t.categorie] ?? 0) + 1;
+      const cat = resolveTemplateEmailCategory(t);
+      counts[cat] = (counts[cat] ?? 0) + 1;
     }
     return counts;
   }, [libraryTemplates]);
@@ -262,8 +268,62 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
       sujet: tu.sujet,
       corps: tu.corps,
       corpsHtml: getTemplateCorpsHtml(tu.variables),
+      variables: tu.variables,
     };
   }, [previewTemplate, templates]);
+
+  const previewLinkedSections = useMemo(() => {
+    if (!previewTemplate || !previewActivationFlags) return [];
+    return buildTemplateLinkedPreviewSections(
+      previewTemplate,
+      templates,
+      previewActivationFlags
+    );
+  }, [previewTemplate, templates, previewActivationFlags]);
+
+  useEffect(() => {
+    setPreviewSectionId("main");
+  }, [previewId]);
+
+  const previewSectionOptions = useMemo(() => {
+    if (!previewTemplate) return [];
+    const main = {
+      id: "main",
+      label: "Message principal",
+      sujet: previewTemplate.sujet,
+      corps: previewTemplate.corps,
+      corpsHtml: getTemplateCorpsHtml(previewTemplate.variables),
+      templateVariables: previewTemplate.variables,
+      templateNom: previewTemplate.nom,
+      agendaLinkId: previewTemplate.agenda_link_id,
+      tutoiement: previewTutoiement,
+      allowSendTest: true,
+    };
+    if (previewLinkedSections.length === 0) return [main];
+    return [
+      main,
+      ...previewLinkedSections.map((section) => ({
+        id: section.id,
+        label: section.label,
+        sujet: section.sujet,
+        corps: section.corps,
+        corpsHtml: section.corpsHtml,
+        templateVariables: section.templateVariables,
+        templateNom: section.templateNom,
+        agendaLinkId: section.agendaLinkId,
+        tutoiement: section.tutoiement,
+        allowSendTest: false,
+      })),
+    ];
+  }, [previewTemplate, previewTutoiement, previewLinkedSections]);
+
+  const activePreviewSection = useMemo(
+    () =>
+      previewSectionOptions.find((option) => option.id === previewSectionId) ??
+      previewSectionOptions[0] ??
+      null,
+    [previewSectionOptions, previewSectionId]
+  );
 
   const activeFilterChips = useMemo(
     () =>
@@ -643,22 +703,28 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
                   onPreviewContactIdChange={setPreviewContactId}
                   previewRegistre={previewRegistre}
                   onPreviewRegistreChange={setPreviewRegistre}
-                  showRegistreToggle={!previewContact && previewTutoiement != null}
+                  showRegistreToggle={
+                    !previewContact && (activePreviewSection?.tutoiement ?? previewTutoiement) != null
+                  }
+                  previewSectionId={previewSectionId}
+                  onPreviewSectionIdChange={setPreviewSectionId}
+                  previewSectionOptions={previewSectionOptions}
                 />
-                <TemplateEmailPreviewPanel
-                  sujet={previewTemplate.sujet}
-                  corps={previewTemplate.corps}
-                  corpsHtml={getTemplateCorpsHtml(previewTemplate.variables)}
-                  templateNom={previewTemplate.nom}
-                  templateVariables={previewTemplate.variables}
-                  cgp={cgp}
-                  agendaLinkId={previewTemplate.agenda_link_id}
-                  contact={previewContact}
-                  tutoiement={previewTutoiement}
-                  previewRegistre={previewContact ? undefined : previewRegistre}
-                  label=""
-                  allowSendTest
-                />
+                {activePreviewSection && (
+                  <TemplateEmailPreviewPanel
+                    sujet={activePreviewSection.sujet}
+                    corps={activePreviewSection.corps}
+                    corpsHtml={activePreviewSection.corpsHtml}
+                    templateNom={activePreviewSection.templateNom}
+                    templateVariables={activePreviewSection.templateVariables}
+                    cgp={cgp}
+                    agendaLinkId={activePreviewSection.agendaLinkId}
+                    contact={previewContact}
+                    tutoiement={activePreviewSection.tutoiement}
+                    previewRegistre={previewContact ? undefined : previewRegistre}
+                    allowSendTest={activePreviewSection.allowSendTest}
+                  />
+                )}
               </TemplatePreviewActions>
             ) : (
               <p className="text-sm text-muted-foreground py-8 text-center">

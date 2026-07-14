@@ -1085,7 +1085,7 @@ impl Database {
                 nom: SCPI_BULLETIN_TEMPLATE_TU_NOM.into(),
                 sujet: "Tes bulletins SCPI — {{periode}}, {{prenom}}".into(),
                 corps: scpi_tu_corps_plain().into(),
-                categorie: "NEWSLETTER".into(),
+                categorie: "BULLETINS".into(),
                 variables: Some(scpi_template_variables_json(SCPI_TU_CORPS_HTML)),
                 agenda_link_id: None,
                 relance_template_id: None,
@@ -1097,7 +1097,7 @@ impl Database {
         if scpi_template_needs_upgrade(vous_vars.as_deref()) {
             self.conn.execute(
                 "UPDATE templates_email SET sujet = ?1, corps = ?2, variables = ?3,
-                    tutoiement_template_id = ?4, updated_at = unixepoch()
+                    tutoiement_template_id = ?4, categorie = 'BULLETINS', updated_at = unixepoch()
                  WHERE id = ?5",
                 params![
                     "Vos bulletins SCPI — {{periode}}, {{prenom}}",
@@ -1134,7 +1134,7 @@ impl Database {
             nom: SCPI_BULLETIN_TEMPLATE_TU_NOM.into(),
             sujet: "Tes bulletins SCPI — {{periode}}, {{prenom}}".into(),
             corps: scpi_tu_corps_plain().into(),
-            categorie: "NEWSLETTER".into(),
+            categorie: "BULLETINS".into(),
             variables: Some(scpi_template_variables_json(SCPI_TU_CORPS_HTML)),
             agenda_link_id: None,
             relance_template_id: None,
@@ -1145,7 +1145,7 @@ impl Database {
             nom: SCPI_BULLETIN_TEMPLATE_NOM.into(),
             sujet: "Vos bulletins SCPI — {{periode}}, {{prenom}}".into(),
             corps: scpi_vous_corps_plain().into(),
-            categorie: "NEWSLETTER".into(),
+            categorie: "BULLETINS".into(),
             variables: Some(scpi_template_variables_json(SCPI_VOUS_CORPS_HTML)),
             agenda_link_id: None,
             relance_template_id: None,

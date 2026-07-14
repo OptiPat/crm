@@ -78,6 +78,15 @@ describe("template-email-html", () => {
     expect(out).toContain("Suite.");
   });
 
+  it("canonicalize conserve une ligne vide avant une liste", () => {
+    const out = canonicalizeTemplateCorpsHtml(
+      "<div>vous trouverez en :</div><div><br></div><ul><li>Mon Document</li></ul>"
+    );
+    const blank = '<div style="line-height:1.5;margin:0;padding:0"><br></div>';
+    expect(out.indexOf("vous trouverez en :")).toBeLessThan(out.indexOf(blank));
+    expect(out.indexOf(blank)).toBeLessThan(out.indexOf("<ul"));
+  });
+
   it("sanitize retire script et garde le gras", () => {
     const out = sanitizeTemplateEmailHtml(
       '<p>OK</p><script>alert(1)</script><strong>X</strong><span style="color:red">Y</span>'

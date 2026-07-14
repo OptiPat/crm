@@ -115,7 +115,7 @@ valider la stratégie ;`;
     expect(countBlankLines(html)).toBe(3);
   });
 
-  it("compacte la ligne vide avant une liste ul, conserve celle après", () => {
+  it("conserve la ligne vide avant une liste ul, et celle après", () => {
     const withGaps =
       "<div>Intro</div><div><br></div>" +
       "<div><b>Ce sera l'occasion de :</b></div><div><br></div>" +
@@ -124,13 +124,17 @@ valider la stratégie ;`;
     const out = normalizeTemplateEmailHtmlLikeGmail(withGaps);
     expect(out).toContain("<ul");
     expect(out).toContain("Suite du message.");
-    // blank après Intro ; blank après la liste (aération avant le paragraphe suivant)
-    expect(countBlankLines(out)).toBe(2);
-    const listIdx = out.indexOf("</ul>");
+    expect(countBlankLines(out)).toBe(3);
+    const introIdx = out.indexOf("Intro");
+    const listIdx = out.indexOf("<ul");
+    expect(introIdx).toBeGreaterThan(-1);
+    expect(listIdx).toBeGreaterThan(introIdx);
+    expect(out.slice(introIdx, listIdx)).toMatch(
+      /<div style="line-height:1\.5;margin:0;padding:0"><br><\/div>/
+    );
+    const listEndIdx = out.indexOf("</ul>");
     const suiteIdx = out.indexOf("Suite du message.");
-    expect(listIdx).toBeGreaterThan(-1);
-    expect(suiteIdx).toBeGreaterThan(listIdx);
-    expect(out.slice(listIdx, suiteIdx)).toMatch(
+    expect(out.slice(listEndIdx, suiteIdx)).toMatch(
       /<div style="line-height:1\.5;margin:0;padding:0"><br><\/div>/
     );
   });

@@ -24,7 +24,12 @@ export function validateSuiviStelliumActInput(
 ): string | null {
   const actLabel = act.actLabel.trim();
   if (!actLabel) return "Acte Stellium requis.";
-  if (isVersementComplementaireActLabel(actLabel)) return null;
+  if (isVersementComplementaireActLabel(actLabel)) {
+    if (act.productLabel.trim() && !isStelliumLabelAllowedForProduct(actLabel, act.productLabel, { suivi: true })) {
+      return "Versement complémentaire non applicable aux SCPI.";
+    }
+    return null;
+  }
   const product = act.productLabel.trim();
   if (!product) return "Produit requis pour cet acte.";
   if (!isStelliumLabelAllowedForProduct(actLabel, product, { suivi: true })) {

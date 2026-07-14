@@ -1,4 +1,5 @@
 import type { TemplateEmail } from "@/lib/api/tauri-templates-email";
+import { resolveTemplateEmailCategory } from "@/lib/emails/template-email-meta";
 import { textMatchesSearch } from "@/lib/search-utils";
 
 export type TemplateCategoryFilter = "all" | string;
@@ -10,7 +11,7 @@ export function filterTemplatesEmail(
 ): TemplateEmail[] {
   let list = templates;
   if (category !== "all") {
-    list = list.filter((t) => t.categorie === category);
+    list = list.filter((t) => resolveTemplateEmailCategory(t) === category);
   }
   const q = query.trim();
   if (!q) return [...list].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));

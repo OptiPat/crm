@@ -109,40 +109,8 @@ function collapseConsecutiveGmailBlankLines(lines: string[]): string[] {
   return out;
 }
 
-function isGmailBlankLineEntry(line: string): boolean {
-  return line === gmailBlankLineHtml();
-}
-
-function isListBlockLine(line: string): boolean {
-  return /^<(ul|ol)\b/i.test(line.trim());
-}
-
-function isTextBlockLine(line: string): boolean {
-  const t = line.trim();
-  return t.startsWith('<div style="line-height:1.5') && !isGmailBlankLineEntry(t);
-}
-
-/** Retire une ligne vide Gmail entre un paragraphe d'intro et une liste (pas après la liste). */
-function compactBlankLinesBeforeLists(lines: string[]): string[] {
-  const out = [...lines];
-  let i = 0;
-  while (i < out.length) {
-    if (
-      i + 2 < out.length &&
-      isTextBlockLine(out[i]!) &&
-      isGmailBlankLineEntry(out[i + 1]!) &&
-      isListBlockLine(out[i + 2]!)
-    ) {
-      out.splice(i + 1, 1);
-      continue;
-    }
-    i += 1;
-  }
-  return out;
-}
-
 function finalizeGmailLineBlocks(lines: string[]): string[] {
-  return compactBlankLinesBeforeLists(collapseConsecutiveGmailBlankLines(lines));
+  return collapseConsecutiveGmailBlankLines(lines);
 }
 
 function flattenListItemInnerHtml(innerHtml: string): string {

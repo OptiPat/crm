@@ -4,8 +4,12 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
+#[cfg(windows)]
+use tauri::Emitter;
+
+#[cfg(windows)]
 pub const AUTOMATION_NOTIFICATION_ACTIVATED_EVENT: &str = "automation-notification-activated";
 const PENDING_FILE: &str = "pending_automation_notification.json";
 const PENDING_MAX_AGE_MS: u64 = 24 * 60 * 60 * 1000;
@@ -17,6 +21,7 @@ struct PendingAutomationNotification {
     activated: bool,
 }
 
+#[cfg(windows)]
 #[derive(Clone, Serialize)]
 struct AutomationToastActivatedPayload {
     nav: String,
@@ -36,6 +41,7 @@ fn pending_path(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| e.to_string())
 }
 
+#[cfg(windows)]
 fn write_pending(app: &AppHandle, nav: &str, activated: bool) -> Result<(), String> {
     let payload = PendingAutomationNotification {
         nav: nav.to_string(),
@@ -70,6 +76,7 @@ fn clear_pending(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(windows)]
 fn focus_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();

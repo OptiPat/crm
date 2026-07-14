@@ -19,6 +19,15 @@ describe("suivi-stellium-acts", () => {
     ).toBeNull();
   });
 
+  it("refuse versement complémentaire sur SCPI", () => {
+    expect(
+      validateSuiviStelliumActInput({
+        productLabel: "Comète",
+        actLabel: VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
+      })
+    ).toBe("Versement complémentaire non applicable aux SCPI.");
+  });
+
   it("exige produit pour un acte Stellium classique", () => {
     expect(
       validateSuiviStelliumActInput({

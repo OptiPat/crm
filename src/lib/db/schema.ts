@@ -444,10 +444,14 @@ export const templatesEmail = sqliteTable("templates_email", {
   
   categorie: text("categorie", {
     enum: [
-      "SUIVI_ANNUEL",
-      "ARBITRAGE",
-      "FISCALITE",
       "BIENVENUE",
+      "SUIVI_ANNUEL",
+      "RENDEZ_VOUS",
+      "FISCALITE",
+      "ARBITRAGE",
+      "BULLETINS",
+      "NEWSLETTER",
+      "EPHEMERE",
       "RELANCE",
       "AUTRE",
     ],

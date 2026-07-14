@@ -264,6 +264,17 @@ export function mergeEphemeralCampaignForSave(
   return local;
 }
 
+/** Variante tu / relance créée pour une campagne éphémère — masquée de la bibliothèque. */
+export function stampEphemeralAuxiliaryTemplateMeta(
+  variables: string | null | undefined
+): string {
+  return setEphemeralCampaignInMeta(
+    stampNewEphemeralTemplateMeta(variables),
+    { ...DEFAULT_EPHEMERAL_CAMPAIGN, status: "draft" },
+    { isEphemeral: true }
+  );
+}
+
 export function stampNewEphemeralTemplateMeta(variables: string | null | undefined): string {
   let meta = setEphemeralCampaignInMeta(
     variables,
