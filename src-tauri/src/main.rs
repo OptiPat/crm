@@ -173,6 +173,8 @@ fn main() {
             create_template_email,
             get_template_email_by_id,
             update_template_email,
+            get_template_email_action,
+            set_template_email_action,
             set_template_etiquette_links,
             get_etiquette_ids_for_template,
             delete_template_email,

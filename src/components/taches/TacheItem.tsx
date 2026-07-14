@@ -100,13 +100,19 @@ export function TacheItem({
             </Badge>
           )}
 
+          {tache.from_template_auto && (
+            <Badge variant="outline" className="h-5 text-[10px] px-1.5">
+              Modèle auto
+            </Badge>
+          )}
+
           {isActiveRecurrence(tache.recurrence) && (
             <Badge variant="outline" className="h-5 text-[10px] px-1.5 text-violet-700 border-violet-200">
               {formatRecurrenceLabel(tache.recurrence)}
             </Badge>
           )}
 
-          {!tache.from_etiquette_auto && showActions && (
+          {!tache.from_etiquette_auto && !tache.from_template_auto && showActions && (
             <Badge variant="outline" className="h-5 text-[10px] px-1.5 text-muted-foreground">
               Manuelle
             </Badge>

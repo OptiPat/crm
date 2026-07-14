@@ -52,6 +52,7 @@ pub mod taches;
 pub mod template_email_trigger;
 pub mod template_email_relance;
 pub mod template_email_queue;
+pub mod template_email_actions;
 pub mod ephemeral_email_campaigns;
 pub mod template_formality_sql;
 
@@ -580,6 +581,7 @@ impl Database {
         self.migrate_purge_premature_etiquette_taches()?;
         self.migrate_templates_email_rendez_vous_bulletins_categories()?;
         self.migrate_templates_email_ephemere_category()?;
+        self.migrate_template_email_actions()?;
 
         Ok(())
     }

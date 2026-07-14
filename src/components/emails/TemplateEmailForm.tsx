@@ -54,9 +54,15 @@ import {
   getTemplateEmailById,
   getEtiquetteIdsForTemplate,
   setTemplateEtiquetteLinks,
+  getTemplateEmailAction,
+  setTemplateEmailAction,
   type NewTemplateEmail,
   type TemplateEmail,
 } from "@/lib/api/tauri-templates-email";
+import type { TacheActionPriorite } from "@/lib/api/tauri-etiquettes";
+import { notifyTachesChanged } from "@/lib/taches/tache-events";
+import { validateEtiquetteTacheAction } from "@/lib/etiquettes/etiquette-form-validation";
+import { TemplateEmailTacheActionPanel } from "@/components/emails/TemplateEmailTacheActionPanel";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { stampScpiBulletinTemplateMeta } from "@/lib/emails/scpi-template-meta";
 import {
@@ -222,6 +228,7 @@ export function TemplateEmailForm({
     | "placement-conforme"
     | "declencheur"
     | "liaisons"
+    | "action"
     | "audience"
     | "destinataires";
   const [loading, setLoading] = useState(false);
@@ -288,6 +295,10 @@ export function TemplateEmailForm({
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [etiquettes, setEtiquettes] = useState<Etiquette[]>([]);
   const [linkedEtiquetteIds, setLinkedEtiquetteIds] = useState<number[]>([]);
+  const [tacheActif, setTacheActif] = useState(false);
+  const [tacheTitre, setTacheTitre] = useState("");
+  const [tachePriorite, setTachePriorite] = useState<TacheActionPriorite>("NORMALE");
+  const [tacheDelaiJours, setTacheDelaiJours] = useState(0);
   const [ephemeralCampaign, setEphemeralCampaign] = useState<EphemeralCampaignConfig>({
     ...DEFAULT_EPHEMERAL_CAMPAIGN,
   });
@@ -316,6 +327,7 @@ export function TemplateEmailForm({
   const editorSelectionRef = useRef<Range | null>(null);
   const [attachments, setAttachments] = useState<TemplateEmailAttachmentMeta[]>([]);
   const baselineAttachmentsRef = useRef<TemplateEmailAttachmentMeta[]>([]);
+  const hydrateActionRequestRef = useRef(0);
   const tutoiementAttachmentsState = useTemplateChildAttachments();
   const relanceAttachmentsState = useTemplateChildAttachments();
   const relanceTuAttachmentsState = useTemplateChildAttachments();
@@ -532,6 +544,25 @@ export function TemplateEmailForm({
         campaign: ephemeralCfg,
       })
     );
+    setTacheActif(false);
+    setTacheTitre("");
+    setTachePriorite("NORMALE");
+    setTacheDelaiJours(0);
+    const actionRequestId = ++hydrateActionRequestRef.current;
+    void getTemplateEmailAction(source.id)
+      .then((action) => {
+        if (actionRequestId !== hydrateActionRequestRef.current) return;
+        if (!action) return;
+        setTacheActif(action.tache_actif);
+        setTacheTitre(action.tache_titre ?? "");
+        setTachePriorite(
+          action.tache_priorite === "BASSE" || action.tache_priorite === "HAUTE"
+            ? action.tache_priorite
+            : "NORMALE"
+        );
+        setTacheDelaiJours(Math.max(0, action.tache_delai_jours));
+      })
+      .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate une fois ; états PJ enfants via méthodes stables du hook
   }, []);
 
@@ -597,6 +628,10 @@ export function TemplateEmailForm({
     setPreviewRegistre("VOUS");
     setPreviewContactId("sample");
     setLinkedEtiquetteIds([]);
+    setTacheActif(false);
+    setTacheTitre("");
+    setTachePriorite("NORMALE");
+    setTacheDelaiJours(0);
     setEphemeralCampaign({ ...DEFAULT_EPHEMERAL_CAMPAIGN });
     setEphemeralAudienceInvalid(false);
     setLastSavedEphemeralFingerprint(null);
@@ -958,6 +993,13 @@ export function TemplateEmailForm({
         "Box Placement : sélectionnez au moins un type d'opération (onglet Box Placement)"
       );
       setFormTab("placement-conforme");
+      rejectPendingEphemeralSave(new Error("validation"));
+      return;
+    }
+    const tacheError = validateEtiquetteTacheAction(tacheTitre, tacheActif);
+    if (tacheError) {
+      toast.error(tacheError.message);
+      setFormTab("action");
       rejectPendingEphemeralSave(new Error("validation"));
       return;
     }
@@ -1613,6 +1655,16 @@ export function TemplateEmailForm({
         await setTemplateEtiquetteLinks(templateId, linkedEtiquetteIds);
         notifyEtiquettesChanged();
       }
+      if (templateId != null) {
+        await setTemplateEmailAction({
+          template_id: templateId,
+          tache_actif: tacheActif,
+          tache_titre: tacheTitre.trim() || null,
+          tache_priorite: tachePriorite,
+          tache_delai_jours: tacheDelaiJours,
+        });
+        notifyTachesChanged();
+      }
       await onSuccess?.();
       if (isEphemeralMode) {
         if (saveIntentAtStart === "default") {
@@ -1784,7 +1836,7 @@ export function TemplateEmailForm({
         else handleRequestClose();
       }}
     >
-      <DialogContent className="max-w-6xl max-h-[92vh] flex flex-col gap-0 p-0 overflow-hidden">
+      <DialogContent className="max-w-[min(96vw,88rem)] max-h-[92vh] flex flex-col gap-0 p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-0 shrink-0">
           <DialogTitle>
             {template
@@ -1813,7 +1865,7 @@ export function TemplateEmailForm({
                 <TabsList
                   className={cn(
                     "mx-6 mt-4 grid w-auto shrink-0",
-                    isEphemeralMode ? "grid-cols-5" : "grid-cols-7"
+                    isEphemeralMode ? "grid-cols-6" : "grid-cols-8"
                   )}
                 >
                   <TabsTrigger value="message">Message</TabsTrigger>
@@ -1873,6 +1925,12 @@ export function TemplateEmailForm({
                       </TabsTrigger>
                     </>
                   )}
+                  <TabsTrigger value="action">
+                    Action
+                    {tacheActif && (
+                      <span className="ml-1.5 text-[10px] text-sky-700">on</span>
+                    )}
+                  </TabsTrigger>
                 </TabsList>
 
                 <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
@@ -2264,6 +2322,19 @@ export function TemplateEmailForm({
                         </p>
                       </div>
                     )}
+                  </TabsContent>
+
+                  <TabsContent value="action" className="mt-0 data-[state=inactive]:hidden">
+                    <TemplateEmailTacheActionPanel
+                      tacheActif={tacheActif}
+                      onTacheActifChange={setTacheActif}
+                      tacheTitre={tacheTitre}
+                      onTacheTitreChange={setTacheTitre}
+                      tachePriorite={tachePriorite}
+                      onTachePrioriteChange={setTachePriorite}
+                      tacheDelaiJours={tacheDelaiJours}
+                      onTacheDelaiJoursChange={setTacheDelaiJours}
+                    />
                   </TabsContent>
 
                   {isEphemeralMode && (

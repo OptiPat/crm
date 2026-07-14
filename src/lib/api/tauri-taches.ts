@@ -27,6 +27,8 @@ export interface Tache {
   contacts: TacheContactRef[];
   /** Créée automatiquement par une action étiquette. */
   from_etiquette_auto?: boolean;
+  /** Créée automatiquement par une action modèle email. */
+  from_template_auto?: boolean;
   /** Règle de récurrence (prochaine occurrence à la complétion). */
   recurrence?: TacheRecurrence | null;
 }

@@ -24,7 +24,8 @@ fn normalize_statut(value: Option<String>) -> String {
 impl super::Database {
     const TACHE_SELECT_COLS: &'static str = "id, titre, description, date_echeance, priorite,
                     statut, completed_at, created_at, updated_at, recurrence,
-                    EXISTS (SELECT 1 FROM contact_etiquettes ce WHERE ce.tache_id = taches.id) AS from_etiquette_auto";
+                    EXISTS (SELECT 1 FROM contact_etiquettes ce WHERE ce.tache_id = taches.id) AS from_etiquette_auto,
+                    EXISTS (SELECT 1 FROM contact_template_envois cte WHERE cte.tache_id = taches.id) AS from_template_auto";
 
     /// Toutes les tâches (page Tâches), chacune avec ses contacts liés.
     /// Tri : à faire d'abord, puis échéance la plus proche (sans date en dernier).
@@ -51,7 +52,8 @@ impl super::Database {
         let sql = format!(
             "SELECT t.id, t.titre, t.description, t.date_echeance, t.priorite,
                     t.statut, t.completed_at, t.created_at, t.updated_at, t.recurrence,
-                    EXISTS (SELECT 1 FROM contact_etiquettes ce WHERE ce.tache_id = t.id) AS from_etiquette_auto
+                    EXISTS (SELECT 1 FROM contact_etiquettes ce WHERE ce.tache_id = t.id) AS from_etiquette_auto,
+                    EXISTS (SELECT 1 FROM contact_template_envois cte WHERE cte.tache_id = t.id) AS from_template_auto
              FROM taches t
              JOIN tache_contacts tc ON tc.tache_id = t.id
              WHERE tc.contact_id = ?1
@@ -274,6 +276,7 @@ impl super::Database {
             recurrence: parse_recurrence_json(recurrence_raw.as_deref()),
             contacts: Vec::new(),
             from_etiquette_auto: row.get::<_, i64>(10)? != 0,
+            from_template_auto: row.get::<_, i64>(11)? != 0,
         })
     }
 

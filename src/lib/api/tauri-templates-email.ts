@@ -51,6 +51,24 @@ export async function deleteTemplateEmail(id: number): Promise<void> {
   notifyTemplatesEmailChanged();
 }
 
+export interface TemplateEmailAction {
+  template_id: number;
+  tache_actif: boolean;
+  tache_titre: string | null;
+  tache_priorite: "BASSE" | "NORMALE" | "HAUTE";
+  tache_delai_jours: number;
+}
+
+export async function getTemplateEmailAction(
+  templateId: number
+): Promise<TemplateEmailAction | null> {
+  return invoke<TemplateEmailAction | null>("get_template_email_action", { templateId });
+}
+
+export async function setTemplateEmailAction(action: TemplateEmailAction): Promise<void> {
+  await invoke<void>("set_template_email_action", { action });
+}
+
 export async function setTemplateEtiquetteLinks(
   templateId: number,
   etiquetteIds: number[]

@@ -700,6 +700,16 @@ pub struct NewEtiquette {
     pub rendement_cible: Option<String>,
 }
 
+/// Action automatique rattachée à un modèle email (déclenchée à l'envoi campagne).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TemplateEmailAction {
+    pub template_id: i64,
+    pub tache_actif: bool,
+    pub tache_titre: Option<String>,
+    pub tache_priorite: String,
+    pub tache_delai_jours: i64,
+}
+
 /// Action automatique rattachée à une étiquette (déclenchée à l'attribution AUTO).
 /// Aujourd'hui : créer une tâche. Conçue pour accueillir d'autres actions plus tard.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1039,6 +1049,9 @@ pub struct Tache {
     /// Créée automatiquement par une action étiquette (`contact_etiquettes.tache_id`).
     #[serde(default)]
     pub from_etiquette_auto: bool,
+    /// Créée automatiquement par une action modèle email (`contact_template_envois.tache_id`).
+    #[serde(default)]
+    pub from_template_auto: bool,
     /// Règle de récurrence (prochaine occurrence à la complétion).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recurrence: Option<super::tache_recurrence::TacheRecurrence>,

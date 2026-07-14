@@ -552,6 +552,12 @@ impl Database {
             mode,
         );
         let _ = self.try_auto_archive_ephemeral_campaign(template_id);
+        if let Err(e) = self.try_apply_template_email_tache_for_sent_row(row_id, now) {
+            eprintln!(
+                "⚠️ Tâche modèle email non créée après envoi (ligne {}): {}",
+                row_id, e
+            );
+        }
         Ok(())
     }
 

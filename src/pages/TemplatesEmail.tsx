@@ -656,7 +656,7 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
                 Aucun résultat — modifiez la recherche, l&apos;intention ou la synthèse.
               </p>
             ) : (
-              <div className="space-y-2 max-h-[min(65vh,640px)] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[min(80vh,840px)] overflow-y-auto pr-1">
                 {filtered.map((template) => (
                   <TemplateListRow
                     key={template.id}

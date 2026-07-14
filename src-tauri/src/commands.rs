@@ -9,7 +9,7 @@ use crate::database::{
         Alerte, AlerteWithContact, CategoryStats, CgpConfig, Contact, ContactEtiquette,
         ContactCustomField, ContactEtiquetteDetails, CustomFieldDef, CustomFieldValueInput,
         CustomFieldValueRow,
-        DashboardStats, Document, Etiquette, EtiquetteAction, EtiquetteWithCount, Famille,
+        DashboardStats, Document,         Etiquette, EtiquetteAction, EtiquetteWithCount, Famille,
         NewCustomFieldDef, UpdateCustomFieldDef,
         Foyer, Investissement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
         NomProduitSuggestion,
@@ -22,7 +22,7 @@ use crate::database::{
         Partenaire, Pipe, PipeTimelineEntry,
         PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, SetTacheStatutResult, Tache,
         ConversionClientStats, ConversionFilleulStats, DashboardStatContact, ActivityPeriodSummary,
-        TemplateEmail, YearlyActivityStats, EmailSendLogEntry, EtiquettePipelineBoard,
+        TemplateEmail, TemplateEmailAction, YearlyActivityStats, EmailSendLogEntry, EtiquettePipelineBoard,
         CalendarEventEntry, CalendarSyncResult,
     },
     Database,
@@ -809,6 +809,32 @@ pub fn update_template_email(
     database
         .update_template_email(id, &template)
         .map_err(|e| format!("Failed to update template: {}", e))
+}
+
+#[tauri::command]
+pub fn get_template_email_action(
+    db: State<'_, DbState>,
+    template_id: i64,
+) -> Result<Option<TemplateEmailAction>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_template_email_action(template_id)
+        .map_err(|e| format!("Failed to get template email action: {}", e))
+}
+
+#[tauri::command]
+pub fn set_template_email_action(
+    db: State<'_, DbState>,
+    action: TemplateEmailAction,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .set_template_email_action(&action)
+        .map_err(|e| format!("Failed to save template email action: {}", e))
 }
 
 #[derive(serde::Deserialize)]
