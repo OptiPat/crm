@@ -31,7 +31,6 @@ import {
 } from "@/lib/pipe/pipe-list-filters";
 import { resolvePipeBoardStageDrop } from "@/lib/pipe/pipe-board-stage-actions";
 import { confirmDiscardPipeFormEdits } from "@/lib/pipe/pipe-form-dirty";
-import { buildVersementAffaireTitre } from "@/lib/pipe/pipe-suivi";
 import { trackVersementAffaireOnPipeCreate } from "@/lib/placement/pipe-placement-tracking";
 import { type PipeStage, type PipeType } from "@/lib/pipe/pipe-types";
 import { type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
@@ -183,6 +182,9 @@ export function Pipe() {
   );
   const [dismissingPlacementId, setDismissingPlacementId] = useState<number | null>(null);
   const formIsDirtyRef = useRef(false);
+  const placementBoardLoadedRef = useRef(false);
+
+  const PIPE_RELOAD_DEBOUNCE_MS = 150;
 
   const handleFormDirtyChange = useCallback((isDirty: boolean) => {
     formIsDirtyRef.current = isDirty;
@@ -240,15 +242,17 @@ export function Pipe() {
     }
   }, []);
 
-  const loadPlacementBoardRows = useCallback(async () => {
-    setPlacementBoardLoading(true);
+  const loadPlacementBoardRows = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? placementBoardLoadedRef.current;
+    if (!silent) setPlacementBoardLoading(true);
     try {
       const rows = await listPlacementOperations();
       setPlacementBoardRows(filterPlacementRowsForBoard(rows));
+      placementBoardLoadedRef.current = true;
     } catch {
-      setPlacementBoardRows([]);
+      if (!placementBoardLoadedRef.current) setPlacementBoardRows([]);
     } finally {
-      setPlacementBoardLoading(false);
+      if (!silent) setPlacementBoardLoading(false);
     }
   }, []);
 
@@ -268,29 +272,46 @@ export function Pipe() {
 
   useEffect(() => {
     void loadPipes();
+
+    const debounceRef = { id: null as number | null };
+    const schedule = (fn: () => void) => {
+      if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
+      debounceRef.id = window.setTimeout(() => {
+        debounceRef.id = null;
+        fn();
+      }, PIPE_RELOAD_DEBOUNCE_MS);
+    };
+
     const unsubPipe = subscribePipeChanged(() => {
-      void loadPipes();
+      schedule(() => {
+        void loadPipes();
+      });
     });
     const unsubContacts = subscribeContactsChanged(() => {
-      void loadPipes();
+      schedule(() => {
+        void loadPipes();
+      });
     });
     const onPlacementChanged = () => {
-      void loadPlacementCounts();
-      if (boardTab === "actes") {
-        void loadPlacementBoardRows();
-      }
+      schedule(() => {
+        void loadPlacementCounts();
+        if (boardTab === "actes") {
+          void loadPlacementBoardRows({ silent: true });
+        }
+      });
     };
     window.addEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onPlacementChanged);
     return () => {
       unsubPipe();
       unsubContacts();
       window.removeEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onPlacementChanged);
+      if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
     };
   }, [loadPipes, loadPlacementCounts, boardTab, loadPlacementBoardRows]);
 
   useEffect(() => {
     if (viewMode === "board" && boardTab === "actes") {
-      void loadPlacementBoardRows();
+      void loadPlacementBoardRows({ silent: placementBoardLoadedRef.current });
     }
   }, [viewMode, boardTab, loadPlacementBoardRows]);
 
@@ -321,13 +342,6 @@ export function Pipe() {
     setPanelMode("create");
   };
 
-  const openCreateVersementAffaire = (suivi: PipeRecord) => {
-    openCreate("AFFAIRE", {
-      parentPipeId: suivi.id,
-      contactId: suivi.contact_id,
-      titre: buildVersementAffaireTitre(suivi),
-    });
-  };
 
   const openView = (pipe: PipeRecord) => {
     setSelectedPlacementOperationId(null);
@@ -365,7 +379,7 @@ export function Pipe() {
         setSelectedPipe(null);
         setPanelMode("empty");
       }
-      await loadPlacementBoardRows();
+      await loadPlacementBoardRows({ silent: true });
       toast.success("Opération retirée du tableau");
     } catch (err) {
       toast.error(String(err));
@@ -517,9 +531,11 @@ export function Pipe() {
           onEdit={openEdit}
           onDeleted={handleDeleted}
           onPlanRdv={(stage) => openRdvPlanifier(selectedPipe, stage)}
-          onPlanSuiviRdv={() => openRdvPlanifier(selectedPipe)}
-          onCreateVersementAffaire={() => openCreateVersementAffaire(selectedPipe)}
           onOpenChildAffaire={openView}
+          onOpenParentPipe={(parentId) => {
+            const parent = pipes.find((p) => p.id === parentId);
+            if (parent) openView(parent);
+          }}
           focusHistoriqueToken={focusHistoriqueToken}
         />
       )}

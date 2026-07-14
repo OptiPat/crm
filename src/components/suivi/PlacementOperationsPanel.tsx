@@ -7,7 +7,6 @@ import {
   RefreshCw,
   User,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -29,9 +28,9 @@ import {
   countPlacementPendingClientNotify,
   isPlacementRowVisibleInSuivi,
   placementConformeNeedsClientNotify,
+  placementOperationDisplayStatusAccent,
+  placementOperationDisplayStatusLabel,
   placementOperationIsUndeclared,
-  placementOperationStatusAccent,
-  placementOperationStatusLabel,
   placementOperationTypeLabel,
 } from "@/lib/placement/placement-operations-ui";
 import { toast } from "sonner";
@@ -191,11 +190,6 @@ export function PlacementOperationsPanel({
                         {placementOperationTypeLabel(row.operation.operation_type)} —{" "}
                         {row.contact_prenom} {row.contact_nom}
                       </p>
-                      {placementOperationIsUndeclared(row.operation) ? (
-                        <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
-                          Non déclaré
-                        </Badge>
-                      ) : null}
                     </div>
                     <p className="text-xs text-muted-foreground truncate">
                       {row.operation.product_label ||
@@ -270,8 +264,9 @@ export function PlacementOperationsPanel({
                       </Button>
                     )}
                     <span
-                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${placementOperationStatusAccent(
-                        needsNotify ? "PENDING" : row.operation.status
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${placementOperationDisplayStatusAccent(
+                        row.operation,
+                        { needsClientNotify: needsNotify }
                       )}`}
                     >
                       {row.operation.status === "NON_CONFORME" ? (
@@ -280,12 +275,12 @@ export function PlacementOperationsPanel({
                         <Mail className="h-3 w-3" />
                       ) : row.operation.status === "CONFORME" ? (
                         <CheckCircle2 className="h-3 w-3" />
-                      ) : (
+                      ) : placementOperationIsUndeclared(row.operation) ? null : (
                         <Clock className="h-3 w-3" />
                       )}
-                      {needsNotify
-                        ? "Email client en attente"
-                        : placementOperationStatusLabel(row.operation.status)}
+                      {placementOperationDisplayStatusLabel(row.operation, {
+                        needsClientNotify: needsNotify,
+                      })}
                     </span>
                   </div>
                 </li>

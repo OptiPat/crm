@@ -32,6 +32,7 @@ import {
   defaultPipeStage,
   defaultPipeTitreFromContact,
   defaultPipeTitreFromCouple,
+  isPipeFormCreateStage,
   isPipeFormDirectStage,
   isTerminalPipeStage,
   pipeTypeUsesStage,
@@ -43,15 +44,15 @@ import { isPipeRdvStage, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { defaultSuiviPipeTitre } from "@/lib/pipe/pipe-suivi";
 import { isPipeFormDirty, type PipeFormSnapshot } from "@/lib/pipe/pipe-form-dirty";
 import { PipeContactSelect } from "@/components/pipe/PipeContactSelect";
-import { StelliumPlacementActFields } from "@/components/pipe/StelliumPlacementActFields";
 import {
-  createPlacementOperation,
-  notifyPlacementOperationsChanged,
-} from "@/lib/api/tauri-box-placement";
+  createInitialSuiviStelliumActs,
+  SuiviStelliumActsForm,
+  type SuiviStelliumActRow,
+} from "@/components/pipe/SuiviStelliumActsForm";
 import {
-  isStelliumLabelAllowedForProduct,
-  placementOperationTypeFromStelliumLabel,
-} from "@/lib/placement/stellium-box-placement-labels";
+  applySuiviStelliumActsAfterPipeCreate,
+  validateSuiviStelliumActs,
+} from "@/lib/placement/suivi-stellium-acts";
 import { toast } from "sonner";
 
 const TYPE_ICONS = {
@@ -82,8 +83,6 @@ interface FormState {
   titre: string;
   stage: PipeStage | "";
   notes: string;
-  stelliumProductLabel: string;
-  stelliumActLabel: string;
 }
 
 function buildFormState(
@@ -104,8 +103,6 @@ function buildFormState(
           ? (pipe.stage as PipeStage)
           : "",
       notes: pipe.notes ?? "",
-      stelliumProductLabel: "",
-      stelliumActLabel: "",
     };
   }
   return {
@@ -116,8 +113,6 @@ function buildFormState(
     titre: options?.initialTitre ?? "",
     stage: defaultPipeStage(initialType) || "",
     notes: "",
-    stelliumProductLabel: "",
-    stelliumActLabel: "",
   };
 }
 
@@ -160,6 +155,9 @@ export function PipeFormPanel({
   const [form, setForm] = useState<FormState>(() =>
     buildFormState(pipe, initialType, defaultContactId, buildOptions)
   );
+  const [suiviStelliumActs, setSuiviStelliumActs] = useState<SuiviStelliumActRow[]>(() =>
+    createInitialSuiviStelliumActs()
+  );
   const [loading, setLoading] = useState(false);
   const contactHintRef = useRef<Contact | null>(null);
   const secondaryHintRef = useRef<Contact | null>(null);
@@ -174,6 +172,7 @@ export function PipeFormPanel({
   useEffect(() => {
     const next = buildFormState(pipe, initialType, defaultContactId, buildOptions);
     setForm(next);
+    setSuiviStelliumActs(createInitialSuiviStelliumActs());
     initialFormRef.current = next;
     contactHintRef.current = null;
     secondaryHintRef.current = null;
@@ -401,15 +400,10 @@ export function PipeFormPanel({
       return;
     }
     const isSuiviCreate = !pipe && form.pipeType === "ACTE_GESTION";
-    const stelliumProduct = form.stelliumProductLabel.trim();
-    const stelliumAct = form.stelliumActLabel.trim();
     if (isSuiviCreate) {
-      if (!stelliumProduct || !stelliumAct) {
-        toast.error("Produit et acte Stellium requis pour créer un suivi.");
-        return;
-      }
-      if (!isStelliumLabelAllowedForProduct(stelliumAct, stelliumProduct)) {
-        toast.error("Acte incompatible avec le produit sélectionné.");
+      const actsError = validateSuiviStelliumActs(suiviStelliumActs);
+      if (actsError) {
+        toast.error(actsError);
         return;
       }
     }
@@ -420,14 +414,13 @@ export function PipeFormPanel({
         ? await updatePipe(pipe.id, payload)
         : await createPipe(payload);
       if (isSuiviCreate) {
-        await createPlacementOperation({
-          contact_id: saved.contact_id,
-          pipe_id: saved.id,
-          operation_type: placementOperationTypeFromStelliumLabel(stelliumAct),
-          stellium_label: stelliumAct,
-          product_label: stelliumProduct,
-        });
-        notifyPlacementOperationsChanged();
+        await applySuiviStelliumActsAfterPipeCreate(
+          saved,
+          suiviStelliumActs.map((row) => ({
+            productLabel: row.productLabel,
+            actLabel: row.actLabel,
+          }))
+        );
       }
       toast.success(pipe ? "Enregistré" : "Pipe créé");
       onSuccess(saved);
@@ -575,22 +568,13 @@ export function PipeFormPanel({
         {!pipe && form.pipeType === "ACTE_GESTION" && (
           <div className="space-y-3 rounded-lg border bg-muted/15 p-4">
             <div>
-              <p className="text-sm font-medium">Acte Stellium</p>
+              <p className="text-sm font-medium">Actes Stellium</p>
               <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-                L&apos;acte est créé avec le suivi. Vous confirmerez l&apos;envoi chez Stellium
-                depuis la fiche (signature client, etc.).
+                Un ou plusieurs actes avec le suivi. Versement complémentaire ouvre une affaire
+                rattachée. Confirmez l&apos;envoi Stellium depuis la fiche une fois le dossier prêt.
               </p>
             </div>
-            <StelliumPlacementActFields
-              productLabel={form.stelliumProductLabel}
-              stelliumLabel={form.stelliumActLabel}
-              onProductChange={(stelliumProductLabel) =>
-                setForm((prev) => ({ ...prev, stelliumProductLabel }))
-              }
-              onStelliumLabelChange={(stelliumActLabel) =>
-                setForm((prev) => ({ ...prev, stelliumActLabel }))
-              }
-            />
+            <SuiviStelliumActsForm acts={suiviStelliumActs} onChange={setSuiviStelliumActs} />
           </div>
         )}
 
@@ -598,7 +582,9 @@ export function PipeFormPanel({
           <div className="space-y-2">
             <Label>{PIPE_STAGE_FIELD_LABEL} *</Label>
             <p className="text-xs text-muted-foreground -mt-1">
-              Où en est cette affaire dans le cycle commercial (uniquement pour les affaires).
+              {pipe
+                ? "Où en est cette affaire dans le cycle commercial (uniquement pour les affaires)."
+                : "Étape de départ — client déjà vu (R1/R2 faits) : choisissez R2 ou R3 directement."}
             </p>
             <div className="space-y-2">
               {PIPE_STAGES.map((stage) => {
@@ -612,9 +598,9 @@ export function PipeFormPanel({
                   !isCreate &&
                   isTerminalPipeStage(stage) &&
                   onRequestTerminalStage != null;
-                const disabledOnCreate = isCreate && stage !== "PROSPECTION";
+                const hiddenOnCreate = isCreate && !isPipeFormCreateStage(stage);
 
-                if (disabledOnCreate) return null;
+                if (hiddenOnCreate) return null;
 
                 const handleStageClick = () => {
                   if (rdvOnly) {
@@ -625,7 +611,7 @@ export function PipeFormPanel({
                     onRequestTerminalStage(stage, { isDirty: formIsDirty });
                     return;
                   }
-                  if (stage === "PROSPECTION" || (isCreate && isPipeFormDirectStage(stage))) {
+                  if (isCreate ? isPipeFormCreateStage(stage) : isPipeFormDirectStage(stage)) {
                     setForm((prev) => ({ ...prev, stage }));
                   }
                 };

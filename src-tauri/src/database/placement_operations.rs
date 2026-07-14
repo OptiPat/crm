@@ -949,33 +949,40 @@ impl super::Database {
 
     pub fn get_placement_open_counts_by_pipe(
         &self,
-    ) -> Result<std::collections::HashMap<i64, (u32, u32)>> {
+    ) -> Result<std::collections::HashMap<i64, (u32, u32, u32)>> {
         let mut stmt = self.conn.prepare(
-            "SELECT pipe_id, status, COUNT(*)
+            "SELECT pipe_id,
+                    SUM(CASE
+                          WHEN status = ?1
+                           AND (pipe_timeline_entry_id IS NULL OR pipe_timeline_entry_id <= 0)
+                          THEN 1 ELSE 0 END),
+                    SUM(CASE
+                          WHEN status = ?1
+                           AND pipe_timeline_entry_id IS NOT NULL
+                           AND pipe_timeline_entry_id > 0
+                          THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN status = ?2 THEN 1 ELSE 0 END)
              FROM placement_operations
              WHERE pipe_id IS NOT NULL
-               AND status IN (?1, ?2)
                AND (dismissed_at IS NULL OR dismissed_at <= 0)
-             GROUP BY pipe_id, status",
+             GROUP BY pipe_id",
         )?;
         let rows = stmt.query_map(
             params![STATUS_PENDING, STATUS_NON_CONFORME],
             |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(1)? as u32,
                     row.get::<_, i64>(2)? as u32,
+                    row.get::<_, i64>(3)? as u32,
                 ))
             },
         )?;
         let mut map = std::collections::HashMap::new();
         for row in rows {
-            let (pipe_id, status, count) = row?;
-            let entry = map.entry(pipe_id).or_insert((0u32, 0u32));
-            if status == STATUS_PENDING {
-                entry.0 = count;
-            } else if status == STATUS_NON_CONFORME {
-                entry.1 = count;
+            let (pipe_id, unsent, pending, non_conforme) = row?;
+            if unsent > 0 || pending > 0 || non_conforme > 0 {
+                map.insert(pipe_id, (unsent, pending, non_conforme));
             }
         }
         Ok(map)

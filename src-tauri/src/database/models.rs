@@ -1219,10 +1219,17 @@ pub struct PipeRdvReminderSchedule {
     pub send_at: i64,
     pub rdv_at: i64,
     pub rdv_end_at: i64,
+    /// `before` = rappel avant le RDV, `after` = suivi post-RDV.
+    #[serde(default = "default_pipe_rdv_schedule_kind")]
+    pub schedule_kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visio_link: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event_location: Option<String>,
+}
+
+fn default_pipe_rdv_schedule_kind() -> String {
+    "before".into()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1239,6 +1246,8 @@ pub struct PipeRdvReminderScheduleUpsert {
     pub send_at: i64,
     pub rdv_at: i64,
     pub rdv_end_at: i64,
+    #[serde(default = "default_pipe_rdv_schedule_kind")]
+    pub schedule_kind: String,
     pub visio_link: Option<String>,
     pub event_location: Option<String>,
 }
@@ -1518,6 +1527,9 @@ pub struct PlacementOperationWithContact {
 #[derive(serde::Serialize)]
 pub struct PlacementPipeOpenCount {
     pub pipe_id: i64,
+    /// Brouillon suivi : acte créé, date d'envoi pas encore confirmée.
+    pub unsent: u32,
+    /// Déclaré envoyé chez Stellium, en attente de réponse mail.
     pub pending: u32,
     pub non_conforme: u32,
 }

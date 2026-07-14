@@ -7,13 +7,58 @@ import {
 import {
   defaultPipeTitreFromContact,
   formatPipeContactLabel,
+  PIPE_STAGE_LABELS,
+  type PipeStage,
   type PipeType,
 } from "@/lib/pipe/pipe-types";
+import {
+  getPipeStageBadgeClasses,
+} from "@/lib/pipe/pipe-stage-colors";
 
 export const PIPE_TYPE_SUIVI: PipeType = "ACTE_GESTION";
 
 /** Titre timeline d'un RDV de suivi (distinct de R1/R2/R3). */
 export const SUIVI_RDV_TITRE = "Suivi";
+
+/** Option UI Suivi : ouvre une affaire enfant (pas un libellé mail Stellium). */
+export const VERSEMENT_COMPLEMENTAIRE_ACT_LABEL = "Versement complémentaire";
+
+export function isVersementComplementaireActLabel(label: string): boolean {
+  return label.trim() === VERSEMENT_COMPLEMENTAIRE_ACT_LABEL;
+}
+
+/** Affaire enfant d'un Suivi ouverte via versement complémentaire (CA sans cycle commercial). */
+export function isVersementComplementaireAffaire(
+  pipe: Pick<PipeRecord, "pipe_type" | "parent_pipe_id" | "titre">
+): boolean {
+  if (pipe.pipe_type !== "AFFAIRE") return false;
+  if (pipe.parent_pipe_id == null || pipe.parent_pipe_id <= 0) return false;
+  const titre = pipe.titre.trim();
+  return (
+    titre === VERSEMENT_COMPLEMENTAIRE_ACT_LABEL ||
+    titre.startsWith(`${VERSEMENT_COMPLEMENTAIRE_ACT_LABEL} —`)
+  );
+}
+
+export function defaultVersementComplementaireAffaireStage(): PipeStage {
+  return "PROSPECTION";
+}
+
+/** Libellé badge tant que l'affaire versement n'est pas « Gagnée » (mail client). */
+export const VERSEMENT_COMPLEMENTAIRE_AFFAIRE_STAGE_LABEL = "Versement en cours";
+
+export function formatVersementComplementaireAffaireStageLabel(
+  pipe: Pick<PipeRecord, "pipe_type" | "parent_pipe_id" | "titre" | "stage">
+): string | null {
+  if (!isVersementComplementaireAffaire(pipe)) return null;
+  if (pipe.stage === "GAGNEE") return PIPE_STAGE_LABELS.GAGNEE;
+  return VERSEMENT_COMPLEMENTAIRE_AFFAIRE_STAGE_LABEL;
+}
+
+export function versementComplementaireAffaireStageBadgeClasses(stage: PipeStage): string {
+  if (stage === "GAGNEE") return getPipeStageBadgeClasses("GAGNEE");
+  return getPipeStageBadgeClasses("R2");
+}
 
 /** Types journal rapide sur un pipe Suivi (hors actes Stellium — menu dédié). */
 export const SUIVI_QUICK_ADD_TYPES = ["APPEL", "NOTE", "RDV"] as const satisfies readonly PipeTimelineUserType[];

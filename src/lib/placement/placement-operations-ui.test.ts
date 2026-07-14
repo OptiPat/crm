@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   isPlacementRowVisibleInSuivi,
+  placementOperationDisplayStatusLabel,
+  placementOperationIsAwaitingPartner,
   placementOperationIsClosed,
   placementOperationIsDeclaredInWorkflow,
   placementOperationIsDetachedSuiviDraft,
@@ -125,6 +127,38 @@ describe("placement-operations-ui pipe tracking", () => {
   it("non déclaré = pas de journal timeline", () => {
     expect(placementOperationIsUndeclared({ pipe_timeline_entry_id: null })).toBe(true);
     expect(placementOperationIsUndeclared({ pipe_timeline_entry_id: 9 })).toBe(false);
+  });
+
+  it("en attente partenaire = PENDING avec journal timeline", () => {
+    expect(
+      placementOperationIsAwaitingPartner({
+        status: "PENDING",
+        pipe_timeline_entry_id: 9,
+      })
+    ).toBe(true);
+    expect(
+      placementOperationIsAwaitingPartner({
+        status: "PENDING",
+        pipe_timeline_entry_id: null,
+      })
+    ).toBe(false);
+  });
+
+  it("libellé affiché : non déclarée Box avant confirmation Stellium", () => {
+    expect(
+      placementOperationDisplayStatusLabel({
+        status: "PENDING",
+        pipe_timeline_entry_id: null,
+        client_notified_at: null,
+      })
+    ).toBe("Non déclarée Box");
+    expect(
+      placementOperationDisplayStatusLabel({
+        status: "PENDING",
+        pipe_timeline_entry_id: 5,
+        client_notified_at: null,
+      })
+    ).toBe("En attente partenaire");
   });
 
   it("clôturé = dismiss (sauf NC) ou conforme notifié", () => {

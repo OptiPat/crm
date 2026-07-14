@@ -108,6 +108,11 @@ export function isPipeBoardRdvDropTargetStage(stage: PipeStage): boolean {
   return stage === "R1" || stage === "R2" || stage === "R3";
 }
 
+/** Souscription partenaire Stellium sur affaire commerciale : uniquement à R3. */
+export function isClassicAffaireStelliumSouscriptionStage(stage: string | null | undefined): boolean {
+  return stage === "R3";
+}
+
 /** Colonnes kanban où le dépôt par glisser-déposer est autorisé. */
 export function isPipeBoardDropTargetStage(stage: PipeStage): boolean {
   return isManualPipeStageChangeAllowed(stage) || isPipeBoardRdvDropTargetStage(stage);
@@ -116,6 +121,11 @@ export function isPipeBoardDropTargetStage(stage: PipeStage): boolean {
 /** Étapes sélectionnables directement dans le formulaire (sans RDV). */
 export function isPipeFormDirectStage(stage: PipeStage): boolean {
   return stage === "PROSPECTION" || isTerminalPipeStage(stage);
+}
+
+/** Étapes choisissables à la création d'une affaire (sans planifier de RDV). */
+export function isPipeFormCreateStage(stage: PipeStage): boolean {
+  return stage === "PROSPECTION" || stage === "R1" || stage === "R2" || stage === "R3";
 }
 
 export function formatStageAdvancementMessage(stage: PipeStage): string {

@@ -12,9 +12,11 @@ import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
 import {
   pickTemplateContentForRegistre,
   pickTemplateCorpsHtmlForRegistre,
+  pickTemplateVariablesForRegistre,
 } from "@/lib/emails/template-email-formality";
 import { canonicalizeTemplateCorpsHtml } from "@/lib/emails/template-email-html";
 import { renderTemplatePreview } from "@/lib/emails/template-email-meta";
+import { buildSendEmailAttachmentsFromTemplate } from "@/lib/emails/template-email-attachments";
 import { resolvePipeRdvTemplateForStage } from "@/lib/emails/template-email-pipe-rdv";
 import {
   buildPipeRdvEmailExtraVariables,
@@ -111,13 +113,67 @@ export async function sendPipeRdvTemplatedEmailToContact(options: {
     }
   );
 
+  const attachmentVariables = pickTemplateVariablesForRegistre(
+    options.principal.variables,
+    options.tutoiement?.variables,
+    registre,
+    options.tutoiement != null
+  );
+
   await sendEmail({
     to_email: options.contact.email!.trim(),
     to_name: `${options.contact.prenom} ${options.contact.nom}`.trim(),
     subject: preview.subject,
     body: preview.body,
     body_html: preview.body_html,
+    attachments: buildSendEmailAttachmentsFromTemplate(attachmentVariables),
   });
+}
+
+/** Planifie rappel avant et suivi après RDV (sans envoi immédiat). */
+export async function resyncPipeRdvScheduledEmails(options: {
+  pipe: Pick<
+    PipeRecord,
+    | "id"
+    | "contact_id"
+    | "secondary_contact_id"
+  >;
+  rdvStage: PipeRdvStage;
+  pipeTimelineEntryId: number;
+  startAtUnix: number;
+  endAtUnix: number;
+  visioLink?: string | null;
+  eventLocation?: string | null;
+  visio?: RdvVisioOptions;
+  physicalAddress?: string | null;
+  notifyOnError?: boolean;
+}): Promise<boolean> {
+  const template = await resolvePipeRdvTemplateForStage(options.rdvStage);
+  if (!template) {
+    return true;
+  }
+
+  try {
+    await syncPipeRdvReminderSchedules({
+      pipeTimelineEntryId: options.pipeTimelineEntryId,
+      pipe: options.pipe,
+      template,
+      startAtUnix: options.startAtUnix,
+      endAtUnix: options.endAtUnix,
+      visioLink: options.visioLink,
+      eventLocation: options.eventLocation,
+      visio: options.visio,
+      physicalAddress: options.physicalAddress,
+    });
+    return true;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn("Planification emails planifiés RDV Pipe:", e);
+    if (options.notifyOnError !== false) {
+      toast.warning(`Emails planifiés RDV (rappel / suivi) non enregistrés : ${msg}`);
+    }
+    return false;
+  }
 }
 
 /** Envoie le modèle Pipe RDV pour l'étape (création et replanification) + planifie le rappel. */
@@ -146,21 +202,17 @@ export async function maybeSendPipeRdvConfirmationEmail(options: {
     return { sent: 0, errors: [] };
   }
 
-  try {
-    await syncPipeRdvReminderSchedules({
-      pipeTimelineEntryId: options.pipeTimelineEntryId,
-      pipe: options.pipe,
-      template,
-      startAtUnix: options.startAtUnix,
-      endAtUnix: options.endAtUnix,
-      visioLink: options.visioLink,
-      eventLocation: options.eventLocation,
-      visio: options.visio,
-      physicalAddress: options.physicalAddress,
-    });
-  } catch (e) {
-    console.warn("Planification rappel RDV Pipe:", e);
-  }
+  await resyncPipeRdvScheduledEmails({
+    pipe: options.pipe,
+    rdvStage: options.rdvStage,
+    pipeTimelineEntryId: options.pipeTimelineEntryId,
+    startAtUnix: options.startAtUnix,
+    endAtUnix: options.endAtUnix,
+    visioLink: options.visioLink,
+    eventLocation: options.eventLocation,
+    visio: options.visio,
+    physicalAddress: options.physicalAddress,
+  });
 
   const emailStatus = await getEmailConnectionStatus();
   if (!emailStatus.connected) {

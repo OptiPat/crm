@@ -142,7 +142,7 @@ impl super::Database {
         let revert_stage = resolve_stage_after_rdv_cancellation(&pipe.stage, &entry, &entries);
 
         self.mark_calendar_event_cancelled(google_event_id)?;
-        let _ = self.cancel_pipe_rdv_reminder_schedules(timeline_entry_id);
+        let _ = self.cancel_pipe_rdv_reminder_schedules(timeline_entry_id, None);
         self.create_pipe_timeline_entry(NewPipeTimelineEntry {
             pipe_id: entry.pipe_id,
             entry_type: TIMELINE_NOTE.into(),
@@ -182,7 +182,7 @@ impl super::Database {
             return Ok(false);
         }
 
-        let _ = self.cancel_pipe_rdv_reminder_schedules(timeline_entry_id);
+        let _ = self.cancel_pipe_rdv_reminder_schedules(timeline_entry_id, None);
 
         self.create_pipe_timeline_entry(NewPipeTimelineEntry {
             pipe_id: entry.pipe_id,

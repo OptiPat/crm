@@ -58,6 +58,8 @@ interface PipeTimelineAddFormProps {
   rdvStageReadOnly?: boolean;
   contactId?: number;
   onRdvSubmit?: (payload: PipeRdvSubmitPayload) => Promise<void>;
+  /** RDV de suivi : pas d'étape R1/R2/R3, libellés adaptés. */
+  suiviRdv?: boolean;
   onCancel: () => void;
   onSubmit: (e: FormEvent) => void;
   submitLabel?: string;
@@ -78,12 +80,14 @@ export function PipeTimelineAddForm({
   rdvStageReadOnly = false,
   contactId = 0,
   onRdvSubmit,
+  suiviRdv = false,
   onCancel,
   onSubmit,
   submitLabel = "Ajouter",
 }: PipeTimelineAddFormProps) {
   const isRdv = type === "RDV";
   const rdvLocation = useRdvVisioLocation(contactId > 0 ? contactId : undefined, isRdv);
+  const showAffaireRdvStage = isRdv && !suiviRdv;
 
   const handleFormSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -115,7 +119,8 @@ export function PipeTimelineAddForm({
   return (
     <form onSubmit={handleFormSubmit} className="rounded-lg border bg-muted/20 p-4 space-y-3">
       <p className="text-sm font-medium">
-        Nouvelle entrée — {PIPE_TIMELINE_TYPE_LABELS[type]}
+        Nouvelle entrée —{" "}
+        {suiviRdv && isRdv ? "RDV de suivi" : PIPE_TIMELINE_TYPE_LABELS[type]}
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-2">
@@ -126,7 +131,7 @@ export function PipeTimelineAddForm({
             onChange={(e) => onOccurredAtChange(e.target.value)}
           />
         </div>
-        {isRdv ? (
+        {showAffaireRdvStage ? (
           <div className="space-y-2">
             <Label>Type de RDV</Label>
             {rdvStageReadOnly ? (
@@ -149,15 +154,15 @@ export function PipeTimelineAddForm({
               </Select>
             )}
           </div>
-        ) : (
+        ) : !isRdv ? (
           <div className="space-y-2">
             <Label>Titre</Label>
             <Input value={titre} onChange={(e) => onTitreChange(e.target.value)} />
           </div>
-        )}
+        ) : null}
       </div>
-      {isRdv && (
-        <p className="text-[11px] text-muted-foreground leading-snug">
+      {showAffaireRdvStage && (
+        <p className="text-xs text-muted-foreground leading-snug">
           L&apos;affaire passera à l&apos;étape choisie le jour du RDV (ou tout de suite si la date
           est déjà passée).
         </p>

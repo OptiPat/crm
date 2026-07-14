@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, FileText, Phone, Scale, Send, TrendingUp } from "lucide-react";
+import { Calendar, FileText, Phone, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   createEmptyTimelineAddState,
@@ -31,8 +31,6 @@ const TYPE_ICONS: Record<PipeTimelineQuickAddType, typeof Phone> = {
   RDV: Calendar,
   NOTE: FileText,
   PROPOSITION: Send,
-  ARBITRAGE: Scale,
-  REINVESTISSEMENT: TrendingUp,
 };
 
 interface PipeTimelineQuickAddProps {
@@ -119,7 +117,13 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
 
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium">Journal rapide</p>
+      <div>
+        <p className="text-sm font-medium">Journal rapide</p>
+        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+          Appel, note, proposition ou RDV commercial. Les envois chez Stellium se déclarent dans la
+          section ci-dessus.
+        </p>
+      </div>
 
       <div className="flex flex-wrap gap-1.5">
         {PIPE_TIMELINE_QUICK_ADD_TYPES.map((type) => {

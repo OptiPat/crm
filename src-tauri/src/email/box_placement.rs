@@ -86,7 +86,9 @@ pub fn parse_operation_line(line: &str) -> Option<(String, String, String)> {
 
 pub fn detect_box_placement_kind(subject: &str, body: &str) -> Option<BoxPlacementKind> {
     let subject_norm = normalize_text(subject);
-    if subject_norm.starts_with("box placement - non-conformite a traiter - ") {
+    if subject_norm.starts_with("box placement - non-conformite a traiter - ")
+        || subject_norm.starts_with("box placement - instance partenaire a traiter - ")
+    {
         return Some(BoxPlacementKind::NonConforme);
     }
     if subject_norm.starts_with("box placement - envoi dossier d'operation - ") {
@@ -94,7 +96,9 @@ pub fn detect_box_placement_kind(subject: &str, body: &str) -> Option<BoxPlaceme
     }
 
     let body_norm = normalize_text(body);
-    if body_norm.contains("non-conformite pour l'operation suivante :") {
+    if body_norm.contains("non-conformite pour l'operation suivante :")
+        || body_norm.contains("situation d'instance pour l'operation suivante :")
+    {
         return Some(BoxPlacementKind::NonConforme);
     }
     if body_norm.contains("operation suivante :")
@@ -106,13 +110,17 @@ pub fn detect_box_placement_kind(subject: &str, body: &str) -> Option<BoxPlaceme
 }
 
 fn extract_operation_line(body: &str, kind: BoxPlacementKind) -> Option<String> {
-    let marker_substr = match kind {
-        BoxPlacementKind::Conforme => "operation suivante",
-        BoxPlacementKind::NonConforme => "non-conformite pour l'operation suivante",
+    let marker_substrs: &[&str] = match kind {
+        BoxPlacementKind::Conforme => &["operation suivante"],
+        BoxPlacementKind::NonConforme => &[
+            "non-conformite pour l'operation suivante",
+            "situation d'instance pour l'operation suivante",
+        ],
     };
     let lines: Vec<&str> = body.lines().map(str::trim).collect();
     for (i, line) in lines.iter().enumerate() {
-        if !normalize_text(line).contains(marker_substr) {
+        let line_norm = normalize_text(line);
+        if !marker_substrs.iter().any(|m| line_norm.contains(m)) {
             continue;
         }
         for next in lines.iter().skip(i + 1) {
@@ -130,11 +138,14 @@ fn extract_operation_line(body: &str, kind: BoxPlacementKind) -> Option<String> 
 
 fn parse_contact_from_subject(subject: &str, kind: BoxPlacementKind) -> Option<(String, String)> {
     let subject_norm = normalize_text(subject);
-    let expected_tail = match kind {
-        BoxPlacementKind::Conforme => "envoi dossier d'operation - ",
-        BoxPlacementKind::NonConforme => "non-conformite a traiter - ",
+    let ok = match kind {
+        BoxPlacementKind::Conforme => subject_norm.contains("envoi dossier d'operation - "),
+        BoxPlacementKind::NonConforme => {
+            subject_norm.contains("non-conformite a traiter - ")
+                || subject_norm.contains("instance partenaire a traiter - ")
+        }
     };
-    if !subject_norm.contains(expected_tail) {
+    if !ok {
         return None;
     }
     let parts: Vec<&str> = subject.split(" - ").map(str::trim).collect();
@@ -543,5 +554,17 @@ mod tests {
         assert_eq!(parsed.contact_prenom, "Jean");
         assert_eq!(parsed.stellium_label, "Arbitrage libre");
         assert_eq!(parsed.product_label, "Cristalliance Evoluvie");
+    }
+
+    #[test]
+    fn parse_instance_partenaire_email_as_non_conforme() {
+        const SUBJECT: &str = "Box placement - Instance partenaire à traiter - ROCHIAS Tony";
+        const BODY: &str = "Bonjour,\n\nNous vous remercions de prendre connaissance de la situation d'instance pour l'opération suivante :\n\nSouscription - Corum Origin CIF - ROCHIAS Tony\n\nBien cordialement,\nL'équipe Stellium";
+        let parsed = parse_box_placement_email(SUBJECT, BODY).unwrap();
+        assert_eq!(parsed.kind, BoxPlacementKind::NonConforme);
+        assert_eq!(parsed.contact_nom, "ROCHIAS");
+        assert_eq!(parsed.contact_prenom, "Tony");
+        assert_eq!(parsed.stellium_label, "Souscription");
+        assert_eq!(parsed.product_label, "Corum Origin CIF");
     }
 }

@@ -4,13 +4,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DictationTextarea } from "@/components/ui/dictation-textarea";
+import {
+  createEmptyTimelineAddState,
+  datetimeLocalToUnix,
+  defaultTimelineEntryTitle,
+  PipeTimelineAddForm,
+  type PipeRdvSubmitPayload,
+} from "@/components/pipe/PipeTimelineAddForm";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import {
-  datetimeLocalToUnix,
-  defaultTimelineEntryTitle,
-  unixToDatetimeLocalInput,
-} from "@/lib/pipe/pipe-timeline-types";
+  addPipeSuiviRdvEntry,
+  toastAfterSuiviRdvSave,
+} from "@/lib/pipe/pipe-rdv-entry-actions";
+import { unixToDatetimeLocalInput } from "@/lib/pipe/pipe-timeline-types";
 import {
   SUIVI_QUICK_ADD_TYPES,
   suiviTimelineTypeLabel,
@@ -40,10 +47,13 @@ interface PipeSuiviQuickAddProps {
     | "titre"
   >;
   onAdded?: () => void;
-  onPlanSuiviRdv?: () => void;
 }
 
-export function PipeSuiviQuickAdd({ timeline, onAdded, onPlanSuiviRdv }: PipeSuiviQuickAddProps) {
+export function PipeSuiviQuickAdd({
+  timeline,
+  pipe,
+  onAdded,
+}: PipeSuiviQuickAddProps) {
   const [addingType, setAddingType] = useState<SuiviQuickAddType | null>(null);
   const [occurredAt, setOccurredAt] = useState(() => unixToDatetimeLocalInput());
   const [titre, setTitre] = useState("");
@@ -51,13 +61,10 @@ export function PipeSuiviQuickAdd({ timeline, onAdded, onPlanSuiviRdv }: PipeSui
   const [saving, setSaving] = useState(false);
 
   const openAdd = (type: SuiviQuickAddType) => {
-    if (type === "RDV") {
-      onPlanSuiviRdv?.();
-      return;
-    }
+    const state = createEmptyTimelineAddState(type);
     setAddingType(type);
-    setOccurredAt(unixToDatetimeLocalInput());
-    setTitre(defaultTimelineEntryTitle(type));
+    setOccurredAt(state.occurredAt);
+    setTitre(state.titre);
     setContenu("");
   };
 
@@ -69,7 +76,7 @@ export function PipeSuiviQuickAdd({ timeline, onAdded, onPlanSuiviRdv }: PipeSui
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!addingType) return;
+    if (!addingType || addingType === "RDV") return;
     setSaving(true);
     try {
       const occurredAtUnix = datetimeLocalToUnix(occurredAt);
@@ -80,6 +87,28 @@ export function PipeSuiviQuickAdd({ timeline, onAdded, onPlanSuiviRdv }: PipeSui
         occurred_at: occurredAtUnix,
       });
       toast.success("Entrée ajoutée");
+      cancelAdd();
+      onAdded?.();
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSuiviRdvSubmit = async (payload: PipeRdvSubmitPayload) => {
+    if (pipe.contact_id <= 0) return;
+    setSaving(true);
+    try {
+      const result = await addPipeSuiviRdvEntry({
+        timeline,
+        pipe,
+        occurredAtUnix: payload.occurredAtUnix,
+        contenu: payload.contenu,
+        visio: payload.visio,
+        physicalAddress: payload.physicalAddress,
+      });
+      toastAfterSuiviRdvSave(result.calendar);
       cancelAdd();
       onAdded?.();
     } catch (err) {
@@ -118,8 +147,28 @@ export function PipeSuiviQuickAdd({ timeline, onAdded, onPlanSuiviRdv }: PipeSui
         })}
       </div>
 
-      {addingType && (
-        <form onSubmit={(e) => void handleSubmit(e)} className="rounded-lg border bg-muted/20 p-4 space-y-3">
+      {addingType === "RDV" ? (
+        <PipeTimelineAddForm
+          type="RDV"
+          occurredAt={occurredAt}
+          titre={titre}
+          contenu={contenu}
+          pipe={pipe}
+          contactId={pipe.contact_id}
+          saving={saving}
+          suiviRdv
+          onOccurredAtChange={setOccurredAt}
+          onTitreChange={setTitre}
+          onContenuChange={setContenu}
+          onRdvSubmit={(payload) => handleSuiviRdvSubmit(payload)}
+          onCancel={cancelAdd}
+          onSubmit={(e) => e.preventDefault()}
+        />
+      ) : addingType ? (
+        <form
+          onSubmit={(e) => void handleSubmit(e)}
+          className="rounded-lg border bg-muted/20 p-4 space-y-3"
+        >
           <p className="text-sm font-medium">
             Nouvelle entrée — {suiviTimelineTypeLabel(addingType)}
           </p>
@@ -157,7 +206,7 @@ export function PipeSuiviQuickAdd({ timeline, onAdded, onPlanSuiviRdv }: PipeSui
             </Button>
           </div>
         </form>
-      )}
+      ) : null}
     </div>
   );
 }

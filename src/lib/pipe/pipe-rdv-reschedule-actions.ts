@@ -6,10 +6,12 @@ import type {
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
 import { sendPipeRdvConfirmationAfterCalendar, syncGoogleCalendarForPipeRdv } from "@/lib/calendar/rdv-planifier";
+import { getPipeRdvCalendarEventForTimeline } from "@/lib/api/tauri-calendar";
 import type { PipeRdvCalendarSyncResult } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { resolvePipeRdvGoogleEventId } from "@/lib/api/tauri-calendar";
 import { buildPipeRdvCalendarContext, warnPipeRdvMissingAttendeeEmails } from "@/lib/pipe/pipe-rdv-calendar-context";
 import { pipeRdvCalendarEndAt, formatPipeRdvCalendarContactLabel } from "@/lib/pipe/pipe-rdv-google-calendar";
+import { resyncPipeRdvScheduledEmails } from "@/lib/pipe/pipe-rdv-confirmation-email";
 import { buildRdvRescheduledTimelinePayload } from "@/lib/pipe/pipe-rdv-delete";
 import {
   applyRdvStageOnSave,
@@ -57,6 +59,12 @@ export async function executePipeRdvReschedule(options: {
   const previousOccurredAt = options.entry.occurred_at;
   const dateChanged = previousOccurredAt !== options.newOccurredAtUnix;
   const endAtUnix = options.endAtUnix ?? pipeRdvCalendarEndAt(options.newOccurredAtUnix);
+  const calendarSnapshot = await getPipeRdvCalendarEventForTimeline(options.entry.id).catch(
+    () => null
+  );
+  const previousEndAtUnix =
+    calendarSnapshot?.end_at ?? pipeRdvCalendarEndAt(previousOccurredAt);
+  const endChanged = endAtUnix !== previousEndAtUnix;
   const nextContenu =
     options.contenu !== undefined
       ? options.contenu?.trim() || null
@@ -117,6 +125,18 @@ export async function executePipeRdvReschedule(options: {
       calendar,
       startAtUnix: options.newOccurredAtUnix,
       endAtUnix,
+      visio: options.visio,
+      physicalAddress: options.physicalAddress,
+    });
+  } else if (endChanged) {
+    await resyncPipeRdvScheduledEmails({
+      pipe: options.pipe,
+      rdvStage: options.rdvStage,
+      pipeTimelineEntryId: options.entry.id,
+      startAtUnix: options.newOccurredAtUnix,
+      endAtUnix,
+      visioLink: calendar?.synced ? calendar.visioLink : undefined,
+      eventLocation: calendar?.synced ? calendar.eventLocation : undefined,
       visio: options.visio,
       physicalAddress: options.physicalAddress,
     });

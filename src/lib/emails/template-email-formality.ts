@@ -57,6 +57,22 @@ export function pickTemplateCorpsHtmlForRegistre(
   return getTemplateCorpsHtml(vars) ?? null;
 }
 
+/**
+ * Variables (PJ incluses) de la variante effective selon le registre.
+ * Si une variante tu existe, on n'hérite pas des PJ du modèle principal.
+ */
+export function pickTemplateVariablesForRegistre(
+  principalVariables: string | null | undefined,
+  tutoiementVariables: string | null | undefined,
+  registre: string | null | undefined,
+  hasTutoiementVariant = false
+): string | null | undefined {
+  if (isContactTu(registre) && hasTutoiementVariant) {
+    return tutoiementVariables ?? null;
+  }
+  return principalVariables;
+}
+
 export function contactRegistreLabel(registre: string | null | undefined): string {
   return isContactTu(registre) ? "Tutoiement" : "Vouvoiement";
 }

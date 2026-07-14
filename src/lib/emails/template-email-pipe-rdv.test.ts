@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  computePipeRdvFollowUpSendAt,
   computePipeRdvReminderSendAt,
+  formatPipeRdvFollowUpScheduleSummary,
   formatPipeRdvReminderScheduleSummary,
   findPipeRdvTemplatesForStage,
   parseTemplateEmailPipeRdvTrigger,
@@ -64,6 +66,31 @@ describe("template-email-pipe-rdv", () => {
     );
     expect(cfg.enabled).toBe(true);
     expect(cfg.stages).toEqual(["R1"]);
+  });
+
+  it("computePipeRdvFollowUpSendAt ajoute delai_heures après la fin du RDV", () => {
+    const rdvEnd = Math.floor(Date.now() / 1000) + 7 * 86400;
+    expect(computePipeRdvFollowUpSendAt(rdvEnd, { delai_heures: 24, envoi_heure: null })).toBe(
+      rdvEnd + 86400
+    );
+  });
+
+  it("formatPipeRdvFollowUpScheduleSummary", () => {
+    expect(formatPipeRdvFollowUpScheduleSummary({ delai_heures: 48, envoi_heure: null })).toBe(
+      "2 j après le RDV"
+    );
+  });
+
+  it("pipeRdvTriggerBadgeLabel avec rappel et suivi", () => {
+    expect(
+      pipeRdvTriggerBadgeLabel(
+        JSON.stringify({
+          pipe_rdv_trigger: { enabled: true, stages: ["R1"] },
+          pipe_rdv_reminder: { enabled: true, delai_heures: 24 },
+          pipe_rdv_follow_up: { enabled: true, delai_heures: 24 },
+        })
+      )
+    ).toBe("Pipe RDV R1 + rappel + suivi");
   });
 
   it("pipeRdvTriggerBadgeLabel", () => {

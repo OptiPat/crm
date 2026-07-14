@@ -13,6 +13,8 @@ export type ParsedBoxPlacementEmail = {
 
 const CONFORME_SUBJECT_PREFIX = "box placement - envoi dossier d'opération - ";
 const NON_CONFORME_SUBJECT_PREFIX = "box placement - non-conformité à traiter - ";
+const INSTANCE_PARTENAIRE_SUBJECT_PREFIX =
+  "box placement - instance partenaire à traiter - ";
 
 const CONFORME_BODY_MARKERS = [
   "opération suivante :",
@@ -23,7 +25,16 @@ const CONFORME_BODY_MARKERS = [
 const NON_CONFORME_BODY_MARKERS = [
   "non-conformité pour l'opération suivante :",
   "non-conformite pour l'operation suivante :",
+  "situation d'instance pour l'opération suivante :",
+  "situation d'instance pour l'operation suivante :",
 ];
+
+const NON_CONFORME_SUBJECT_CONTACT_TAILS = [
+  "non-conformité à traiter - ",
+  "non-conformite a traiter - ",
+  "instance partenaire à traiter - ",
+  "instance partenaire a traiter - ",
+] as const;
 
 function normalizeText(value: string): string {
   return value
@@ -90,7 +101,12 @@ export function detectBoxPlacementKind(
   body: string
 ): BoxPlacementEmailKind | null {
   const subjectNorm = normalizeText(subject);
-  if (subjectNorm.startsWith(NON_CONFORME_SUBJECT_PREFIX)) return "NON_CONFORME";
+  if (
+    subjectNorm.startsWith(NON_CONFORME_SUBJECT_PREFIX) ||
+    subjectNorm.startsWith(INSTANCE_PARTENAIRE_SUBJECT_PREFIX)
+  ) {
+    return "NON_CONFORME";
+  }
   if (subjectNorm.startsWith(CONFORME_SUBJECT_PREFIX)) return "CONFORME";
 
   const bodyNorm = normalizeText(body);
@@ -108,11 +124,13 @@ export function parseContactFromBoxPlacementSubject(
   kind: BoxPlacementEmailKind
 ): { nom: string; prenom: string } | null {
   const subjectNorm = normalizeText(subject);
-  const expectedTail =
-    kind === "CONFORME"
-      ? "envoi dossier d'operation - "
-      : "non-conformite a traiter - ";
-  if (!subjectNorm.includes(expectedTail)) return null;
+  if (kind === "CONFORME") {
+    if (!subjectNorm.includes("envoi dossier d'operation - ")) return null;
+  } else if (
+    !NON_CONFORME_SUBJECT_CONTACT_TAILS.some((tail) => subjectNorm.includes(normalizeText(tail)))
+  ) {
+    return null;
+  }
   const parts = subject.split(" - ").map((p) => p.trim());
   if (parts.length < 3) return null;
   return parseBoxPlacementContactName(parts[parts.length - 1]!);

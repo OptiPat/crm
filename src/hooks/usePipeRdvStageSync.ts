@@ -1,18 +1,21 @@
 import { useEffect, useRef } from "react";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
+import { isVersementComplementaireAffaire } from "@/lib/pipe/pipe-suivi";
 import { applyDueRdvStageAdvance } from "@/lib/pipe/pipe-rdv-stage";
 
 /** Applique les passages d'étape dus via RDV planifiés (jour J ou passé). */
 export function usePipeRdvStageSync(
-  pipe: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null,
+  pipe: Pick<PipeRecord, "id" | "stage" | "pipe_type" | "parent_pipe_id" | "titre"> | null,
   entries: PipeTimelineEntryRecord[],
   loading: boolean
 ) {
   const lastAppliedKey = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!pipe || loading || pipe.pipe_type !== "AFFAIRE") return;
+    if (!pipe || loading || pipe.pipe_type !== "AFFAIRE" || isVersementComplementaireAffaire(pipe)) {
+      return;
+    }
 
     const due = entries
       .filter((e) => e.entry_type === "RDV")

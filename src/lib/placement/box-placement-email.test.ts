@@ -78,4 +78,26 @@ describe("parseBoxPlacementEmail", () => {
       productLabel: "Cristalliance Evoluvie",
     });
   });
+
+  it("parse un mail instance partenaire à traiter (non conforme)", () => {
+    const parsed = parseBoxPlacementEmail(
+      "Box placement - Instance partenaire à traiter - ROCHIAS Tony",
+      `Bonjour,
+
+Nous vous remercions de prendre connaissance de la situation d'instance pour l'opération suivante :
+
+Souscription - Corum Origin CIF - ROCHIAS Tony
+
+Bien cordialement,
+L'équipe Stellium`
+    );
+    expect(parsed).toMatchObject({
+      kind: "NON_CONFORME",
+      contactNom: "ROCHIAS",
+      contactPrenom: "Tony",
+      stelliumLabel: "Souscription",
+      productLabel: "Corum Origin CIF",
+    });
+    expect(mapStelliumLabelToOperationType(parsed!.stelliumLabel)).toBe("SOUSCRIPTION");
+  });
 });

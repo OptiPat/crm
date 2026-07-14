@@ -20,6 +20,7 @@ import { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { usePipeRdvStageSync } from "@/hooks/usePipeRdvStageSync";
 import {
   formatPipeParticipantsLabel,
+  isClassicAffaireStelliumSouscriptionStage,
   isPipeType,
   pipeTypeUsesStage,
 } from "@/lib/pipe/pipe-types";
@@ -27,11 +28,12 @@ import { PipeTypeBadge } from "@/components/pipe/PipeTypeBadge";
 import { PipeStageBadge } from "@/components/pipe/PipeStageBadge";
 import { PipeStageStepper } from "@/components/pipe/PipeStageStepper";
 import { PipeProspectionContactSection } from "@/components/pipe/PipeProspectionContactSection";
-import { PipeAffairePlacementSection } from "@/components/pipe/PipeAffairePlacementSection";
+import { PipeSuiviStelliumActAdd } from "@/components/pipe/PipeSuiviStelliumActAdd";
 import { PipeSuiviSection } from "@/components/pipe/PipeSuiviSection";
 import { PipeSuiviPlacementAvancement } from "@/components/pipe/PipeSuiviPlacementAvancement";
 import { PipeTimelineQuickAdd } from "@/components/pipe/PipeTimelineQuickAdd";
-import { isSuiviPipe } from "@/lib/pipe/pipe-suivi";
+import { isSuiviPipe, isVersementComplementaireAffaire } from "@/lib/pipe/pipe-suivi";
+import { PipeSuiviQuickAdd } from "@/components/pipe/PipeSuiviQuickAdd";
 import { PipeTimelineHistory } from "@/components/pipe/PipeTimelineHistory";
 import { useGlobalContactDetailSheet } from "@/components/layout/ContactDetailSheetProvider";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
@@ -43,9 +45,8 @@ interface PipeDetailPanelProps {
   onEdit: () => void;
   onDeleted: () => void;
   onPlanRdv?: (stage: PipeRdvStage) => void;
-  onPlanSuiviRdv?: () => void;
-  onCreateVersementAffaire?: () => void;
   onOpenChildAffaire?: (pipe: PipeRecord) => void;
+  onOpenParentPipe?: (parentId: number) => void;
   focusHistoriqueToken?: number;
 }
 
@@ -55,9 +56,8 @@ export function PipeDetailPanel({
   onEdit,
   onDeleted,
   onPlanRdv,
-  onPlanSuiviRdv,
-  onCreateVersementAffaire,
   onOpenChildAffaire,
+  onOpenParentPipe,
   focusHistoriqueToken = 0,
 }: PipeDetailPanelProps) {
   const { openContactWithTab } = useGlobalContactDetailSheet();
@@ -86,15 +86,27 @@ export function PipeDetailPanel({
     }
   };
 
+  const isVersementAffaire = isVersementComplementaireAffaire(pipe);
+
   const showStageStepper =
-    isPipeType(pipe.pipe_type) && pipeTypeUsesStage(pipe.pipe_type) && pipe.stage;
+    isPipeType(pipe.pipe_type) &&
+    pipeTypeUsesStage(pipe.pipe_type) &&
+    pipe.stage &&
+    !isVersementAffaire;
 
   const showProspectionFields =
-    isPipeType(pipe.pipe_type) && pipe.pipe_type === "AFFAIRE" && pipe.contact_id > 0;
+    isPipeType(pipe.pipe_type) &&
+    pipe.pipe_type === "AFFAIRE" &&
+    pipe.contact_id > 0 &&
+    !isVersementAffaire;
 
   const showSuiviSection = isSuiviPipe(pipe);
   const showAffairePlacementSection =
     isPipeType(pipe.pipe_type) && pipe.pipe_type === "AFFAIRE" && pipe.contact_id > 0;
+  const showClassicAffaireStelliumSouscription =
+    showAffairePlacementSection &&
+    !isVersementAffaire &&
+    isClassicAffaireStelliumSouscriptionStage(pipe.stage);
 
   const prospectionRef = useRef<HTMLDivElement>(null);
 
@@ -158,12 +170,30 @@ export function PipeDetailPanel({
           <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <PipeTypeBadge pipeType={pipe.pipe_type} />
-              {pipe.stage ? <PipeStageBadge stage={pipe.stage} /> : null}
+              {pipe.stage ? <PipeStageBadge stage={pipe.stage} pipe={pipe} /> : null}
             </div>
             <h2 className="text-lg font-semibold leading-tight">{pipe.titre}</h2>
             <p className="text-sm text-muted-foreground">
               {formatPipeParticipantsLabel(pipe)}
-              {pipe.parent_titre ? ` · rattaché à ${pipe.parent_titre}` : ""}
+              {pipe.parent_titre && pipe.parent_pipe_id ? (
+                <>
+                  {" · rattaché à "}
+                  {onOpenParentPipe ? (
+                    <button
+                      type="button"
+                      className="text-primary underline-offset-2 hover:underline"
+                      onClick={() => {
+                        const parentId = pipe.parent_pipe_id;
+                        if (parentId != null && parentId > 0) onOpenParentPipe(parentId);
+                      }}
+                    >
+                      {pipe.parent_titre}
+                    </button>
+                  ) : (
+                    pipe.parent_titre
+                  )}
+                </>
+              ) : null}
             </p>
             {pipe.contact_id > 0 && (
               <div className="flex flex-wrap items-center gap-2">
@@ -252,7 +282,15 @@ export function PipeDetailPanel({
               </div>
             )}
 
-            {showSuiviSection && onCreateVersementAffaire && onOpenChildAffaire ? (
+            {isVersementAffaire ? (
+              <p className="text-xs text-muted-foreground leading-snug">
+                Versement complémentaire : suivi partenaire et chiffre d&apos;affaires. L&apos;affaire
+                passe à <span className="font-medium text-foreground">Gagnée</span> après le mail
+                client (étape 6).
+              </p>
+            ) : null}
+
+            {showSuiviSection && onOpenChildAffaire ? (
               <>
                 <PipeSuiviPlacementAvancement pipeId={pipe.id} />
                 <PipeSuiviSection
@@ -260,23 +298,37 @@ export function PipeDetailPanel({
                 childAffaires={childAffaires}
                 timeline={timeline}
                 onJournalAdded={() => setActiveTab("historique")}
-                onCreateVersementAffaire={onCreateVersementAffaire}
                 onOpenChildAffaire={onOpenChildAffaire}
-                onPlanSuiviRdv={onPlanSuiviRdv}
               />
+              </>
+            ) : isVersementAffaire ? (
+              <>
+                <PipeSuiviPlacementAvancement pipeId={pipe.id} />
+                <PipeSuiviQuickAdd
+                  timeline={timeline}
+                  pipe={pipe}
+                  onAdded={() => setActiveTab("historique")}
+                />
+                <PipeSuiviStelliumActAdd
+                  pipe={pipe}
+                  timeline={timeline}
+                  variant="affaire"
+                  onAdded={() => setActiveTab("historique")}
+                />
               </>
             ) : (
               <>
                 {showAffairePlacementSection && (
                   <PipeSuiviPlacementAvancement pipeId={pipe.id} />
                 )}
-                {showAffairePlacementSection && (
-                  <PipeAffairePlacementSection
+                {showClassicAffaireStelliumSouscription ? (
+                  <PipeSuiviStelliumActAdd
                     pipe={pipe}
                     timeline={timeline}
-                    onJournalAdded={() => setActiveTab("historique")}
+                    variant="affaire"
+                    onAdded={() => setActiveTab("historique")}
                   />
-                )}
+                ) : null}
                 <PipeTimelineQuickAdd
                   timeline={timeline}
                   pipe={pipe}

@@ -287,7 +287,10 @@ export function PipeTimelinePhaseEntryRow({
           pipe={pipe}
           timeline={timeline}
           onClose={() => setRdvOutcomeOpen(false)}
-          onReschedule={startEdit}
+          onReschedule={() => {
+            setRdvOutcomeOpen(false);
+            startEdit();
+          }}
         />
       )}
     </>

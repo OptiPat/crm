@@ -1,5 +1,9 @@
 import type { PlacementOperationType } from "@/lib/api/tauri-box-placement";
 import { stelliumProductFamilyIdForProduct } from "@/lib/placement/stellium-box-placement-products";
+import {
+  isVersementComplementaireActLabel,
+  VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
+} from "@/lib/pipe/pipe-suivi";
 
 /** Libellé exact tel qu'affiché dans les mails Stellium Box Placement. */
 export type StelliumBoxPlacementLabel = string;
@@ -105,6 +109,15 @@ export const STELLIUM_BOX_PLACEMENT_LABEL_GROUPS: readonly StelliumBoxPlacementL
 export const STELLIUM_BOX_PLACEMENT_LABELS: readonly StelliumBoxPlacementLabel[] =
   STELLIUM_BOX_PLACEMENT_LABEL_GROUPS.flatMap((g) => g.items);
 
+/** Affaire commerciale classique : seule la souscription partenaire (pas d'actes de gestion). */
+export const AFFAIRE_STELLIUM_SOUSCRIPTION_LABEL = "Souscription";
+
+const AFFAIRE_STELLIUM_ACT_LABEL_GROUP: StelliumBoxPlacementLabelGroup = {
+  id: "souscription",
+  label: "Souscription",
+  items: [AFFAIRE_STELLIUM_SOUSCRIPTION_LABEL],
+};
+
 export function normalizeStelliumBoxPlacementLabel(value: string): string {
   return value
     .trim()
@@ -143,21 +156,88 @@ export function isKnownStelliumBoxPlacementLabel(label: string): boolean {
   );
 }
 
-/** Actes proposés selon la famille du produit (SCPI vs assurance-vie / PER / capi). */
-export function stelliumLabelGroupsForProduct(
-  product: string
+const VERSEMENTS_PROGRAMMES_GROUP_ID = "versements-programmes";
+
+function injectSuiviVersementComplementaire(
+  groups: readonly StelliumBoxPlacementLabelGroup[]
 ): readonly StelliumBoxPlacementLabelGroup[] {
-  const family = stelliumProductFamilyIdForProduct(product);
-  if (!family) return [];
-  if (family === "scpi") {
-    return STELLIUM_BOX_PLACEMENT_LABEL_GROUPS.filter((group) => group.id === "scpi");
+  const versementsGroup = groups.find((group) => group.id === VERSEMENTS_PROGRAMMES_GROUP_ID);
+  if (versementsGroup) {
+    return groups.map((group) =>
+      group.id === VERSEMENTS_PROGRAMMES_GROUP_ID
+        ? {
+            ...group,
+            label: "Versements",
+            items: [
+              VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
+              ...group.items.filter((item) => item !== VERSEMENT_COMPLEMENTAIRE_ACT_LABEL),
+            ],
+          }
+        : group
+    );
   }
-  return STELLIUM_BOX_PLACEMENT_LABEL_GROUPS.filter((group) => group.id !== "scpi");
+  if (groups.length === 0) {
+    return [
+      {
+        id: VERSEMENTS_PROGRAMMES_GROUP_ID,
+        label: "Versements",
+        items: [VERSEMENT_COMPLEMENTAIRE_ACT_LABEL],
+      },
+    ];
+  }
+  return [
+    {
+      id: VERSEMENTS_PROGRAMMES_GROUP_ID,
+      label: "Versements",
+      items: [VERSEMENT_COMPLEMENTAIRE_ACT_LABEL],
+    },
+    ...groups,
+  ];
 }
 
-export function isStelliumLabelAllowedForProduct(label: string, product: string): boolean {
+/** Actes proposés selon la famille du produit (SCPI vs assurance-vie / PER / capi). */
+export function stelliumLabelGroupsForProduct(
+  product: string,
+  options?: { suivi?: boolean }
+): readonly StelliumBoxPlacementLabelGroup[] {
+  const family = stelliumProductFamilyIdForProduct(product);
+  const base =
+    !family
+      ? []
+      : family === "scpi"
+        ? STELLIUM_BOX_PLACEMENT_LABEL_GROUPS.filter((group) => group.id === "scpi")
+        : STELLIUM_BOX_PLACEMENT_LABEL_GROUPS.filter((group) => group.id !== "scpi");
+  if (!options?.suivi) return base;
+  return injectSuiviVersementComplementaire(base);
+}
+
+export function stelliumSuiviActLabelGroups(
+  product: string
+): readonly StelliumBoxPlacementLabelGroup[] {
+  return stelliumLabelGroupsForProduct(product, { suivi: true });
+}
+
+/** Affaire commerciale (hors Suivi gestion) : souscription uniquement. */
+export function stelliumAffaireActLabelGroups(): readonly StelliumBoxPlacementLabelGroup[] {
+  return [AFFAIRE_STELLIUM_ACT_LABEL_GROUP];
+}
+
+export function isStelliumLabelAllowedForAffaire(label: string): boolean {
+  return (
+    normalizeStelliumBoxPlacementLabel(label) ===
+    normalizeStelliumBoxPlacementLabel(AFFAIRE_STELLIUM_SOUSCRIPTION_LABEL)
+  );
+}
+
+export function isStelliumLabelAllowedForProduct(
+  label: string,
+  product: string,
+  options?: { suivi?: boolean; affaire?: boolean }
+): boolean {
+  if (options?.affaire) return isStelliumLabelAllowedForAffaire(label);
+  if (options?.suivi && isVersementComplementaireActLabel(label)) return true;
   const normalized = normalizeStelliumBoxPlacementLabel(label);
-  return stelliumLabelGroupsForProduct(product).some((group) =>
+  return stelliumLabelGroupsForProduct(product, options).some((group) =>
     group.items.some((item) => normalizeStelliumBoxPlacementLabel(item) === normalized)
   );
 }

@@ -1,4 +1,5 @@
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
+import { isVersementComplementaireAffaire } from "@/lib/pipe/pipe-suivi";
 import { isPipeStage, isPipeType, PIPE_STAGES, pipeTypeUsesStage, type PipeStage } from "@/lib/pipe/pipe-types";
 
 export const PIPE_VIEW_MODE_KEY = "crm:pipe-view-mode";
@@ -45,13 +46,14 @@ export function savePipeViewMode(mode: PipeViewMode): void {
   }
 }
 
-/** Affaires éligibles au tableau kanban (avancement valide). */
+/** Affaires éligibles au tableau kanban (avancement valide, hors versements complémentaires rattachés à un Suivi). */
 export function filterAffairesForBoard(pipes: PipeRecord[]): PipeRecord[] {
   return pipes.filter(
     (p) =>
       isPipeType(p.pipe_type) &&
       pipeTypeUsesStage(p.pipe_type) &&
-      isPipeStage(p.stage)
+      isPipeStage(p.stage) &&
+      !isVersementComplementaireAffaire(p)
   );
 }
 

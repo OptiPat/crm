@@ -3,6 +3,7 @@ import { sendEmail } from "@/lib/api/tauri-email";
 import { logEmailSendError } from "@/lib/api/tauri-email-send-log";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import {
+  getPlacementOperation,
   releasePlacementClientNotification,
   reservePlacementClientNotification,
   type PlacementOperation,
@@ -20,6 +21,7 @@ import {
 import { canonicalizeTemplateCorpsHtml, sanitizeEmailHeaderValue } from "@/lib/emails/template-email-html";
 import { renderTemplatePreview } from "@/lib/emails/template-email-meta";
 import { buildPlacementConformeEmailExtraVariablesForSend } from "@/lib/placement/placement-conforme-email-vars";
+import { maybeAdvanceVersementAffaireToGagneeAfterClientMail } from "@/lib/placement/pipe-placement-tracking";
 import { placementOperationIsPipeTracked } from "@/lib/placement/placement-operations-ui";
 import { toast } from "sonner";
 
@@ -126,6 +128,8 @@ export async function maybeSendPlacementConformeEmailForOperation(
         contactId: operation.contact_id,
         operation,
       });
+      const updated = await getPlacementOperation(operation.id);
+      await maybeAdvanceVersementAffaireToGagneeAfterClientMail(updated);
       return "sent";
     } catch (sendError) {
       await releasePlacementClientNotification(operation.id).catch(() => undefined);

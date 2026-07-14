@@ -55,6 +55,9 @@ export interface BoxPlacementScanResult {
 
 export interface PlacementPipeOpenCount {
   pipe_id: number;
+  /** Brouillon : acte créé, envoi Stellium pas encore confirmé. */
+  unsent: number;
+  /** Déclaré envoyé, en attente réponse partenaire. */
   pending: number;
   non_conforme: number;
 }

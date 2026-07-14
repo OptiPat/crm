@@ -98,6 +98,7 @@ import {
 } from "@/lib/emails/template-email-attachments";
 import { TemplateEmailAttachmentsPanel } from "@/components/emails/TemplateEmailAttachmentsPanel";
 import { removeTemplateEmailAttachment } from "@/lib/api/tauri-template-email-attachments";
+import { useTemplateChildAttachments } from "@/hooks/useTemplateChildAttachments";
 import {
   buildRelanceTemplateNom,
   DEFAULT_EMAIL_RELANCE_FALLBACK_DELAI_JOURS,
@@ -108,7 +109,13 @@ import {
   TEMPLATE_EMAIL_RELANCE_KEY,
 } from "@/lib/emails/template-email-relance";
 import {
+  buildPipeRdvFollowUpTemplateNom,
   buildPipeRdvReminderTemplateNom,
+  DEFAULT_PIPE_RDV_FOLLOW_UP,
+  DEFAULT_PIPE_RDV_FOLLOW_UP_CORPS_HTML,
+  DEFAULT_PIPE_RDV_FOLLOW_UP_CORPS_HTML_TU,
+  DEFAULT_PIPE_RDV_FOLLOW_UP_SUJET,
+  DEFAULT_PIPE_RDV_FOLLOW_UP_SUJET_TU,
   DEFAULT_PIPE_RDV_REMINDER,
   DEFAULT_PIPE_RDV_REMINDER_CORPS_HTML,
   DEFAULT_PIPE_RDV_REMINDER_CORPS_HTML_TU,
@@ -116,8 +123,10 @@ import {
   DEFAULT_PIPE_RDV_REMINDER_SUJET_TU,
   DEFAULT_PIPE_RDV_TRIGGER,
   findPipeRdvStageOverlapError,
+  parseTemplateEmailPipeRdvFollowUp,
   parseTemplateEmailPipeRdvReminder,
   parseTemplateEmailPipeRdvTrigger,
+  setTemplateEmailPipeRdvFollowUpInMeta,
   setTemplateEmailPipeRdvReminderInMeta,
   setTemplateEmailPipeRdvTriggerInMeta,
 } from "@/lib/emails/template-email-pipe-rdv";
@@ -243,15 +252,26 @@ export function TemplateEmailForm({
   const [pipeRdvDraft, setPipeRdvDraft] = useState<TemplatePipeRdvDraft>({
     trigger: { ...DEFAULT_PIPE_RDV_TRIGGER },
     reminder: { ...DEFAULT_PIPE_RDV_REMINDER },
+    followUp: { ...DEFAULT_PIPE_RDV_FOLLOW_UP },
     reminderSujet: "",
     reminderCorpsHtml: "",
     reminderTuSujet: "",
     reminderTuCorpsHtml: "",
+    followUpSujet: "",
+    followUpCorpsHtml: "",
+    followUpTuSujet: "",
+    followUpTuCorpsHtml: "",
   });
   const [pipeRdvReminderTemplateId, setPipeRdvReminderTemplateId] = useState<number | null>(
     null
   );
   const [pipeRdvReminderTuTemplateId, setPipeRdvReminderTuTemplateId] = useState<number | null>(
+    null
+  );
+  const [pipeRdvFollowUpTemplateId, setPipeRdvFollowUpTemplateId] = useState<number | null>(
+    null
+  );
+  const [pipeRdvFollowUpTuTemplateId, setPipeRdvFollowUpTuTemplateId] = useState<number | null>(
     null
   );
   const [placementConformeDraft, setPlacementConformeDraft] =
@@ -295,6 +315,13 @@ export function TemplateEmailForm({
   const editorSelectionRef = useRef<Range | null>(null);
   const [attachments, setAttachments] = useState<TemplateEmailAttachmentMeta[]>([]);
   const baselineAttachmentsRef = useRef<TemplateEmailAttachmentMeta[]>([]);
+  const tutoiementAttachmentsState = useTemplateChildAttachments();
+  const relanceAttachmentsState = useTemplateChildAttachments();
+  const relanceTuAttachmentsState = useTemplateChildAttachments();
+  const pipeReminderAttachmentsState = useTemplateChildAttachments();
+  const pipeReminderTuAttachmentsState = useTemplateChildAttachments();
+  const pipeFollowUpAttachmentsState = useTemplateChildAttachments();
+  const pipeFollowUpTuAttachmentsState = useTemplateChildAttachments();
   const [formData, setFormData] = useState<NewTemplateEmail>({
     nom: "",
     sujet: "",
@@ -325,6 +352,7 @@ export function TemplateEmailForm({
     setRelanceTemplateId(source.relance_template_id);
     setTutoiementTemplateId(source.tutoiement_template_id ?? null);
     setTutoiementVariables(null);
+    tutoiementAttachmentsState.reset();
     const hasTu = source.tutoiement_template_id != null;
     setTutoiementDraft({
       enabled: hasTu,
@@ -336,6 +364,7 @@ export function TemplateEmailForm({
         .then((tu) => {
           const tuHtml = getTemplateCorpsHtml(tu.variables);
           setTutoiementVariables(tu.variables);
+          tutoiementAttachmentsState.hydrate(tu.variables);
           setTutoiementDraft({
             enabled: true,
             sujet: tu.sujet,
@@ -360,6 +389,10 @@ export function TemplateEmailForm({
       envoiHeure: relanceCfg.envoi_heure ?? DEFAULT_TEMPLATE_EMAIL_RELANCE.envoi_heure ?? "18:30",
       envoiJours: relanceJoursFromConfig(relanceCfg.envoi_jours_semaine),
     });
+    if (!hasDedicated) {
+      relanceAttachmentsState.reset();
+      relanceTuAttachmentsState.reset();
+    }
     if (hasDedicated && source.relance_template_id) {
       void getTemplateEmailById(source.relance_template_id)
         .then((rel) => {
@@ -369,6 +402,7 @@ export function TemplateEmailForm({
             sujet: rel.sujet,
             corpsHtml: relHtml ?? plainTextToTemplateHtml(rel.corps),
           }));
+          relanceAttachmentsState.hydrate(rel.variables);
           const relTuId = rel.tutoiement_template_id ?? null;
           setRelanceTuTemplateId(relTuId);
           if (relTuId != null) {
@@ -380,29 +414,47 @@ export function TemplateEmailForm({
                   sujet: relTu.sujet,
                   corpsHtml: relTuHtml ?? plainTextToTemplateHtml(relTu.corps),
                 });
+                relanceTuAttachmentsState.hydrate(relTu.variables);
               })
               .catch(() => undefined);
           } else {
             setRelanceTuDraft({ enabled: false, sujet: "", corpsHtml: "" });
+            relanceTuAttachmentsState.reset();
           }
         })
         .catch(() => undefined);
     }
     const pipeTrigger = parseTemplateEmailPipeRdvTrigger(source.variables);
     const pipeReminder = parseTemplateEmailPipeRdvReminder(source.variables);
+    const pipeFollowUp = parseTemplateEmailPipeRdvFollowUp(source.variables);
     setPipeRdvDraft({
       trigger: pipeTrigger,
       reminder: pipeReminder,
+      followUp: pipeFollowUp,
       reminderSujet: "",
       reminderCorpsHtml: "",
       reminderTuSujet: "",
       reminderTuCorpsHtml: "",
+      followUpSujet: "",
+      followUpCorpsHtml: "",
+      followUpTuSujet: "",
+      followUpTuCorpsHtml: "",
     });
     setPipeRdvReminderTemplateId(pipeReminder.reminder_template_id);
     setPipeRdvReminderTuTemplateId(pipeReminder.reminder_tutoiement_template_id);
+    setPipeRdvFollowUpTemplateId(pipeFollowUp.follow_up_template_id);
+    setPipeRdvFollowUpTuTemplateId(pipeFollowUp.follow_up_tutoiement_template_id);
     setPlacementConformeDraft({
       trigger: parseTemplateEmailPlacementConformeTrigger(source.variables),
     });
+    if (!pipeReminder.reminder_template_id) {
+      pipeReminderAttachmentsState.reset();
+      pipeReminderTuAttachmentsState.reset();
+    }
+    if (!pipeFollowUp.follow_up_template_id) {
+      pipeFollowUpAttachmentsState.reset();
+      pipeFollowUpTuAttachmentsState.reset();
+    }
     if (pipeReminder.reminder_template_id) {
       void getTemplateEmailById(pipeReminder.reminder_template_id)
         .then((rem) => {
@@ -412,6 +464,7 @@ export function TemplateEmailForm({
             reminderSujet: rem.sujet,
             reminderCorpsHtml: remHtml ?? plainTextToTemplateHtml(rem.corps),
           }));
+          pipeReminderAttachmentsState.hydrate(rem.variables);
           const remTuId = rem.tutoiement_template_id ?? null;
           setPipeRdvReminderTuTemplateId(remTuId);
           if (remTuId != null) {
@@ -423,8 +476,42 @@ export function TemplateEmailForm({
                   reminderTuSujet: remTu.sujet,
                   reminderTuCorpsHtml: remTuHtml ?? plainTextToTemplateHtml(remTu.corps),
                 }));
+                pipeReminderTuAttachmentsState.hydrate(remTu.variables);
               })
               .catch(() => undefined);
+          } else {
+            pipeReminderTuAttachmentsState.reset();
+          }
+        })
+        .catch(() => undefined);
+    }
+    if (pipeFollowUp.follow_up_template_id) {
+      void getTemplateEmailById(pipeFollowUp.follow_up_template_id)
+        .then((followUp) => {
+          const followUpHtml = getTemplateCorpsHtml(followUp.variables);
+          setPipeRdvDraft((prev) => ({
+            ...prev,
+            followUpSujet: followUp.sujet,
+            followUpCorpsHtml: followUpHtml ?? plainTextToTemplateHtml(followUp.corps),
+          }));
+          pipeFollowUpAttachmentsState.hydrate(followUp.variables);
+          const followUpTuId = followUp.tutoiement_template_id ?? null;
+          setPipeRdvFollowUpTuTemplateId(followUpTuId);
+          if (followUpTuId != null) {
+            void getTemplateEmailById(followUpTuId)
+              .then((followUpTu) => {
+                const followUpTuHtml = getTemplateCorpsHtml(followUpTu.variables);
+                setPipeRdvDraft((prev) => ({
+                  ...prev,
+                  followUpTuSujet: followUpTu.sujet,
+                  followUpTuCorpsHtml:
+                    followUpTuHtml ?? plainTextToTemplateHtml(followUpTu.corps),
+                }));
+                pipeFollowUpTuAttachmentsState.hydrate(followUpTu.variables);
+              })
+              .catch(() => undefined);
+          } else {
+            pipeFollowUpTuAttachmentsState.reset();
           }
         })
         .catch(() => undefined);
@@ -444,6 +531,7 @@ export function TemplateEmailForm({
         campaign: ephemeralCfg,
       })
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate une fois ; états PJ enfants via méthodes stables du hook
   }, []);
 
   const resetCreateForm = useCallback(() => {
@@ -460,6 +548,14 @@ export function TemplateEmailForm({
     });
     setCorpsHtml("");
     setAttachments([]);
+    baselineAttachmentsRef.current = [];
+    tutoiementAttachmentsState.reset();
+    relanceAttachmentsState.reset();
+    relanceTuAttachmentsState.reset();
+    pipeReminderAttachmentsState.reset();
+    pipeReminderTuAttachmentsState.reset();
+    pipeFollowUpAttachmentsState.reset();
+    pipeFollowUpTuAttachmentsState.reset();
     setEmailTrigger(DEFAULT_TEMPLATE_EMAIL_TRIGGER);
     setRelanceDraft({
       enabled: false,
@@ -480,13 +576,20 @@ export function TemplateEmailForm({
     setPipeRdvDraft({
       trigger: { ...DEFAULT_PIPE_RDV_TRIGGER },
       reminder: { ...DEFAULT_PIPE_RDV_REMINDER },
+      followUp: { ...DEFAULT_PIPE_RDV_FOLLOW_UP },
       reminderSujet: "",
       reminderCorpsHtml: "",
       reminderTuSujet: "",
       reminderTuCorpsHtml: "",
+      followUpSujet: "",
+      followUpCorpsHtml: "",
+      followUpTuSujet: "",
+      followUpTuCorpsHtml: "",
     });
     setPipeRdvReminderTemplateId(null);
     setPipeRdvReminderTuTemplateId(null);
+    setPipeRdvFollowUpTemplateId(null);
+    setPipeRdvFollowUpTuTemplateId(null);
     setPlacementConformeDraft({
       trigger: { ...DEFAULT_PLACEMENT_CONFORME_TRIGGER },
     });
@@ -497,6 +600,7 @@ export function TemplateEmailForm({
     setEphemeralAudienceInvalid(false);
     setLastSavedEphemeralFingerprint(null);
     setConfirmAbandonOnClose(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset initial ; PJ enfants via méthodes stables du hook
   }, [isEphemeralMode]);
 
   useEffect(() => {
@@ -555,24 +659,37 @@ export function TemplateEmailForm({
   const previewTutoiement = useMemo(() => {
     if (!tutoiementDraft.enabled) return null;
     const plain = htmlToPlainEmail(tutoiementDraft.corpsHtml);
+    const tuTemplateId = tutoiementTemplateId ?? 0;
+    const variables =
+      tuTemplateId > 0
+        ? tutoiementAttachmentsState.mergeIntoVariables(tutoiementVariables, tuTemplateId)
+        : tutoiementVariables;
     return {
       sujet: tutoiementDraft.sujet,
       corps: plain || formData.corps,
       corpsHtml: tutoiementDraft.corpsHtml,
+      variables,
     };
-  }, [tutoiementDraft, formData.corps]);
+  }, [
+    tutoiementDraft,
+    formData.corps,
+    tutoiementVariables,
+    tutoiementTemplateId,
+    tutoiementAttachmentsState,
+  ]);
 
   const handlePipeRdvDraftChange = useCallback(
     (next: TemplatePipeRdvDraft) => {
       setPipeRdvDraft((prev) => {
+        let updated = next;
         if (
           prev.reminder.use_same_message &&
           !next.reminder.use_same_message &&
           !next.reminderSujet.trim() &&
           !htmlToPlainEmail(next.reminderCorpsHtml).trim()
         ) {
-          return {
-            ...next,
+          updated = {
+            ...updated,
             reminderSujet: DEFAULT_PIPE_RDV_REMINDER_SUJET,
             reminderCorpsHtml: DEFAULT_PIPE_RDV_REMINDER_CORPS_HTML,
             reminderTuSujet: next.reminderTuSujet.trim()
@@ -583,7 +700,25 @@ export function TemplateEmailForm({
               : DEFAULT_PIPE_RDV_REMINDER_CORPS_HTML_TU,
           };
         }
-        return next;
+        if (
+          prev.followUp.use_same_message &&
+          !next.followUp.use_same_message &&
+          !next.followUpSujet.trim() &&
+          !htmlToPlainEmail(next.followUpCorpsHtml).trim()
+        ) {
+          updated = {
+            ...updated,
+            followUpSujet: DEFAULT_PIPE_RDV_FOLLOW_UP_SUJET,
+            followUpCorpsHtml: DEFAULT_PIPE_RDV_FOLLOW_UP_CORPS_HTML,
+            followUpTuSujet: next.followUpTuSujet.trim()
+              ? next.followUpTuSujet
+              : DEFAULT_PIPE_RDV_FOLLOW_UP_SUJET_TU,
+            followUpTuCorpsHtml: htmlToPlainEmail(next.followUpTuCorpsHtml).trim()
+              ? next.followUpTuCorpsHtml
+              : DEFAULT_PIPE_RDV_FOLLOW_UP_CORPS_HTML_TU,
+          };
+        }
+        return updated;
       });
     },
     []
@@ -592,6 +727,12 @@ export function TemplateEmailForm({
   const pipeRdvReminderTuFilled = useCallback((draft: TemplatePipeRdvDraft) => {
     return Boolean(
       draft.reminderTuSujet.trim() || htmlToPlainEmail(draft.reminderTuCorpsHtml).trim()
+    );
+  }, []);
+
+  const pipeRdvFollowUpTuFilled = useCallback((draft: TemplatePipeRdvDraft) => {
+    return Boolean(
+      draft.followUpTuSujet.trim() || htmlToPlainEmail(draft.followUpTuCorpsHtml).trim()
     );
   }, []);
 
@@ -657,9 +798,34 @@ export function TemplateEmailForm({
         )
       );
     }
+    tutoiementAttachmentsState.discardOrphans(tutoiementTemplateId);
+    relanceAttachmentsState.discardOrphans(relanceTemplateId);
+    relanceTuAttachmentsState.discardOrphans(relanceTuTemplateId);
+    pipeReminderAttachmentsState.discardOrphans(pipeRdvReminderTemplateId);
+    pipeReminderTuAttachmentsState.discardOrphans(pipeRdvReminderTuTemplateId);
+    pipeFollowUpAttachmentsState.discardOrphans(pipeRdvFollowUpTemplateId);
+    pipeFollowUpTuAttachmentsState.discardOrphans(pipeRdvFollowUpTuTemplateId);
     rejectPendingEphemeralSave(new Error("closed"));
     onOpenChange(false);
-  }, [onOpenChange, effectiveTemplateId, attachments]);
+  }, [
+    onOpenChange,
+    effectiveTemplateId,
+    attachments,
+    tutoiementTemplateId,
+    relanceTemplateId,
+    relanceTuTemplateId,
+    pipeRdvReminderTemplateId,
+    pipeRdvReminderTuTemplateId,
+    pipeRdvFollowUpTemplateId,
+    pipeRdvFollowUpTuTemplateId,
+    tutoiementAttachmentsState,
+    relanceAttachmentsState,
+    relanceTuAttachmentsState,
+    pipeReminderAttachmentsState,
+    pipeReminderTuAttachmentsState,
+    pipeFollowUpAttachmentsState,
+    pipeFollowUpTuAttachmentsState,
+  ]);
 
   const handleRequestClose = useCallback(() => {
     if (shouldConfirmAbandonEphemeral()) {
@@ -841,6 +1007,41 @@ export function TemplateEmailForm({
         }
       }
     }
+    if (
+      !isEphemeralMode &&
+      pipeRdvDraft.trigger.enabled &&
+      pipeRdvDraft.followUp.enabled &&
+      !pipeRdvDraft.followUp.use_same_message
+    ) {
+      const followUpPlain = htmlToPlainEmail(pipeRdvDraft.followUpCorpsHtml);
+      if (!pipeRdvDraft.followUpSujet.trim() || !followUpPlain) {
+        toast.error("Suivi RDV : renseignez l'objet et le message (onglet Pipe RDV)");
+        setFormTab("pipe-rdv");
+        rejectPendingEphemeralSave(new Error("validation"));
+        return;
+      }
+      if (tutoiementDraft.enabled) {
+        const followUpTuPlain = htmlToPlainEmail(pipeRdvDraft.followUpTuCorpsHtml);
+        if (!pipeRdvDraft.followUpTuSujet.trim() || !followUpTuPlain) {
+          toast.error(
+            "Suivi RDV : renseignez aussi l'objet et le message tutoiement (onglet Pipe RDV)"
+          );
+          setFormTab("pipe-rdv");
+          rejectPendingEphemeralSave(new Error("validation"));
+          return;
+        }
+      } else if (pipeRdvFollowUpTuFilled(pipeRdvDraft)) {
+        const followUpTuPlain = htmlToPlainEmail(pipeRdvDraft.followUpTuCorpsHtml);
+        if (!pipeRdvDraft.followUpTuSujet.trim() || !followUpTuPlain) {
+          toast.error(
+            "Suivi RDV : complétez objet et message tutoiement, ou videz la variante tu"
+          );
+          setFormTab("pipe-rdv");
+          rejectPendingEphemeralSave(new Error("validation"));
+          return;
+        }
+      }
+    }
     if (emailTrigger.enabled && emailTrigger.condition_type === "TYPE_PRODUIT") {
       const cfg = parseConditionConfig<ConditionTypeProduit>(emailTrigger.condition_config);
       const { types, nomsProduit } = parseTypeProduitConditionConfig(cfg);
@@ -930,13 +1131,37 @@ export function TemplateEmailForm({
           tutoiement_template_id: null,
         };
         if (linkedTuId != null) {
-          await updateTemplateEmail(linkedTuId, tuPayload);
+          await updateTemplateEmail(linkedTuId, {
+            ...tuPayload,
+            variables: tutoiementAttachmentsState.mergeIntoVariables(
+              tuPayload.variables,
+              linkedTuId
+            ),
+          });
         } else {
           const createdTu = await createTemplateEmail(tuPayload);
           linkedTuId = createdTu.id;
+          const tuVariablesWithAttachments = tutoiementAttachmentsState.mergeIntoVariables(
+            tuPayload.variables,
+            linkedTuId
+          );
+          if (tuVariablesWithAttachments !== tuPayload.variables) {
+            await updateTemplateEmail(linkedTuId, {
+              ...tuPayload,
+              variables: tuVariablesWithAttachments,
+            });
+          }
         }
+        await tutoiementAttachmentsState.removeDeletedOnSave(linkedTuId);
+        tutoiementAttachmentsState.commitBaseline();
+        setTutoiementTemplateId(linkedTuId);
         setTutoiementDraft((prev) => ({ ...prev, corpsHtml: tuCorpsHtml }));
-        setTutoiementVariables(tuPayload.variables ?? null);
+        setTutoiementVariables(
+          tutoiementAttachmentsState.mergeIntoVariables(
+            setTemplateCorpsHtmlInMeta(tutoiementVariables, tuCorpsHtml || null),
+            linkedTuId
+          )
+        );
       }
 
       let linkedRelanceId = relanceTemplateId;
@@ -959,11 +1184,30 @@ export function TemplateEmailForm({
             tutoiement_template_id: null,
           };
           if (linkedRelanceTuId != null) {
-            await updateTemplateEmail(linkedRelanceTuId, relTuPayload);
+            await updateTemplateEmail(linkedRelanceTuId, {
+              ...relTuPayload,
+              variables: relanceTuAttachmentsState.mergeIntoVariables(
+                relTuPayload.variables,
+                linkedRelanceTuId
+              ),
+            });
           } else {
             const createdRelTu = await createTemplateEmail(relTuPayload);
             linkedRelanceTuId = createdRelTu.id;
+            const relTuVariablesWithAttachments = relanceTuAttachmentsState.mergeIntoVariables(
+              relTuPayload.variables,
+              linkedRelanceTuId
+            );
+            if (relTuVariablesWithAttachments !== relTuPayload.variables) {
+              await updateTemplateEmail(linkedRelanceTuId, {
+                ...relTuPayload,
+                variables: relTuVariablesWithAttachments,
+              });
+            }
           }
+          await relanceTuAttachmentsState.removeDeletedOnSave(linkedRelanceTuId);
+          relanceTuAttachmentsState.commitBaseline();
+          setRelanceTuTemplateId(linkedRelanceTuId);
         }
         const relPayload: NewTemplateEmail = {
           nom: relNom,
@@ -976,11 +1220,30 @@ export function TemplateEmailForm({
           tutoiement_template_id: tutoiementDraft.enabled ? linkedRelanceTuId : null,
         };
         if (linkedRelanceId != null) {
-          await updateTemplateEmail(linkedRelanceId, relPayload);
+          await updateTemplateEmail(linkedRelanceId, {
+            ...relPayload,
+            variables: relanceAttachmentsState.mergeIntoVariables(
+              relPayload.variables,
+              linkedRelanceId
+            ),
+          });
         } else {
           const createdRel = await createTemplateEmail(relPayload);
           linkedRelanceId = createdRel.id;
+          const relVariablesWithAttachments = relanceAttachmentsState.mergeIntoVariables(
+            relPayload.variables,
+            linkedRelanceId
+          );
+          if (relVariablesWithAttachments !== relPayload.variables) {
+            await updateTemplateEmail(linkedRelanceId, {
+              ...relPayload,
+              variables: relVariablesWithAttachments,
+            });
+          }
         }
+        await relanceAttachmentsState.removeDeletedOnSave(linkedRelanceId);
+        relanceAttachmentsState.commitBaseline();
+        setRelanceTemplateId(linkedRelanceId);
       }
 
       let linkedPipeRdvReminderId = pipeRdvReminderTemplateId;
@@ -1010,13 +1273,34 @@ export function TemplateEmailForm({
             tutoiement_template_id: null,
           };
           if (linkedPipeRdvReminderTuId != null) {
-            await updateTemplateEmail(linkedPipeRdvReminderTuId, remTuPayload);
+            await updateTemplateEmail(linkedPipeRdvReminderTuId, {
+              ...remTuPayload,
+              variables: pipeReminderTuAttachmentsState.mergeIntoVariables(
+                remTuPayload.variables,
+                linkedPipeRdvReminderTuId
+              ),
+            });
           } else if (remTuPlain) {
             const createdRemTu = await createTemplateEmail(remTuPayload);
             linkedPipeRdvReminderTuId = createdRemTu.id;
+            const remTuVariablesWithAttachments = pipeReminderTuAttachmentsState.mergeIntoVariables(
+              remTuPayload.variables,
+              linkedPipeRdvReminderTuId
+            );
+            if (remTuVariablesWithAttachments !== remTuPayload.variables) {
+              await updateTemplateEmail(linkedPipeRdvReminderTuId, {
+                ...remTuPayload,
+                variables: remTuVariablesWithAttachments,
+              });
+            }
+          }
+          if (linkedPipeRdvReminderTuId != null) {
+            await pipeReminderTuAttachmentsState.removeDeletedOnSave(linkedPipeRdvReminderTuId);
+            pipeReminderTuAttachmentsState.commitBaseline();
           }
         } else if (linkedPipeRdvReminderTuId != null) {
           linkedPipeRdvReminderTuId = null;
+          pipeReminderTuAttachmentsState.reset();
         }
         const remPayload: NewTemplateEmail = {
           nom: remNom,
@@ -1029,13 +1313,126 @@ export function TemplateEmailForm({
           tutoiement_template_id: linkedPipeRdvReminderTuId,
         };
         if (linkedPipeRdvReminderId != null) {
-          await updateTemplateEmail(linkedPipeRdvReminderId, remPayload);
+          await updateTemplateEmail(linkedPipeRdvReminderId, {
+            ...remPayload,
+            variables: pipeReminderAttachmentsState.mergeIntoVariables(
+              remPayload.variables,
+              linkedPipeRdvReminderId
+            ),
+          });
         } else {
           const createdRem = await createTemplateEmail(remPayload);
           linkedPipeRdvReminderId = createdRem.id;
+          const remVariablesWithAttachments = pipeReminderAttachmentsState.mergeIntoVariables(
+            remPayload.variables,
+            linkedPipeRdvReminderId
+          );
+          if (remVariablesWithAttachments !== remPayload.variables) {
+            await updateTemplateEmail(linkedPipeRdvReminderId, {
+              ...remPayload,
+              variables: remVariablesWithAttachments,
+            });
+          }
         }
+        await pipeReminderAttachmentsState.removeDeletedOnSave(linkedPipeRdvReminderId);
+        pipeReminderAttachmentsState.commitBaseline();
         setPipeRdvReminderTemplateId(linkedPipeRdvReminderId);
         setPipeRdvReminderTuTemplateId(linkedPipeRdvReminderTuId);
+      }
+
+      let linkedPipeRdvFollowUpId = pipeRdvFollowUpTemplateId;
+      let linkedPipeRdvFollowUpTuId = pipeRdvFollowUpTuTemplateId;
+      if (
+        !isEphemeralMode &&
+        pipeRdvDraft.trigger.enabled &&
+        pipeRdvDraft.followUp.enabled &&
+        !pipeRdvDraft.followUp.use_same_message
+      ) {
+        const followUpCorpsHtml = canonicalizeCorpsHtmlForSave(pipeRdvDraft.followUpCorpsHtml);
+        const followUpPlain = htmlToPlainEmail(followUpCorpsHtml);
+        const followUpNom = buildPipeRdvFollowUpTemplateNom(formData.nom);
+        const shouldSaveFollowUpTu =
+          tutoiementDraft.enabled || pipeRdvFollowUpTuFilled(pipeRdvDraft);
+        if (shouldSaveFollowUpTu) {
+          const followUpTuCorpsHtml = canonicalizeCorpsHtmlForSave(pipeRdvDraft.followUpTuCorpsHtml);
+          const followUpTuPlain = htmlToPlainEmail(followUpTuCorpsHtml);
+          const followUpTuPayload: NewTemplateEmail = {
+            nom: buildTutoiementTemplateNom(followUpNom),
+            sujet: pipeRdvDraft.followUpTuSujet.trim(),
+            corps: followUpTuPlain,
+            categorie: "RELANCE",
+            variables: setTemplateCorpsHtmlInMeta(null, followUpTuCorpsHtml || null),
+            agenda_link_id: formData.agenda_link_id,
+            relance_template_id: null,
+            tutoiement_template_id: null,
+          };
+          if (linkedPipeRdvFollowUpTuId != null) {
+            await updateTemplateEmail(linkedPipeRdvFollowUpTuId, {
+              ...followUpTuPayload,
+              variables: pipeFollowUpTuAttachmentsState.mergeIntoVariables(
+                followUpTuPayload.variables,
+                linkedPipeRdvFollowUpTuId
+              ),
+            });
+          } else if (followUpTuPlain) {
+            const createdFollowUpTu = await createTemplateEmail(followUpTuPayload);
+            linkedPipeRdvFollowUpTuId = createdFollowUpTu.id;
+            const followUpTuVariablesWithAttachments =
+              pipeFollowUpTuAttachmentsState.mergeIntoVariables(
+                followUpTuPayload.variables,
+                linkedPipeRdvFollowUpTuId
+              );
+            if (followUpTuVariablesWithAttachments !== followUpTuPayload.variables) {
+              await updateTemplateEmail(linkedPipeRdvFollowUpTuId, {
+                ...followUpTuPayload,
+                variables: followUpTuVariablesWithAttachments,
+              });
+            }
+          }
+          if (linkedPipeRdvFollowUpTuId != null) {
+            await pipeFollowUpTuAttachmentsState.removeDeletedOnSave(linkedPipeRdvFollowUpTuId);
+            pipeFollowUpTuAttachmentsState.commitBaseline();
+          }
+        } else if (linkedPipeRdvFollowUpTuId != null) {
+          linkedPipeRdvFollowUpTuId = null;
+          pipeFollowUpTuAttachmentsState.reset();
+        }
+        const followUpPayload: NewTemplateEmail = {
+          nom: followUpNom,
+          sujet: pipeRdvDraft.followUpSujet.trim(),
+          corps: followUpPlain,
+          categorie: "RELANCE",
+          variables: setTemplateCorpsHtmlInMeta(null, followUpCorpsHtml || null),
+          agenda_link_id: formData.agenda_link_id,
+          relance_template_id: null,
+          tutoiement_template_id: linkedPipeRdvFollowUpTuId,
+        };
+        if (linkedPipeRdvFollowUpId != null) {
+          await updateTemplateEmail(linkedPipeRdvFollowUpId, {
+            ...followUpPayload,
+            variables: pipeFollowUpAttachmentsState.mergeIntoVariables(
+              followUpPayload.variables,
+              linkedPipeRdvFollowUpId
+            ),
+          });
+        } else {
+          const createdFollowUp = await createTemplateEmail(followUpPayload);
+          linkedPipeRdvFollowUpId = createdFollowUp.id;
+          const followUpVariablesWithAttachments = pipeFollowUpAttachmentsState.mergeIntoVariables(
+            followUpPayload.variables,
+            linkedPipeRdvFollowUpId
+          );
+          if (followUpVariablesWithAttachments !== followUpPayload.variables) {
+            await updateTemplateEmail(linkedPipeRdvFollowUpId, {
+              ...followUpPayload,
+              variables: followUpVariablesWithAttachments,
+            });
+          }
+        }
+        await pipeFollowUpAttachmentsState.removeDeletedOnSave(linkedPipeRdvFollowUpId);
+        pipeFollowUpAttachmentsState.commitBaseline();
+        setPipeRdvFollowUpTemplateId(linkedPipeRdvFollowUpId);
+        setPipeRdvFollowUpTuTemplateId(linkedPipeRdvFollowUpTuId);
       }
 
       let variables = setTemplateCorpsHtmlInMeta(formData.variables, corpsHtmlForSave || null);
@@ -1108,6 +1505,24 @@ export function TemplateEmailForm({
             pipeRdvDraft.reminder.enabled &&
             !pipeRdvDraft.reminder.use_same_message
               ? linkedPipeRdvReminderTuId
+              : null,
+        });
+        variables = setTemplateEmailPipeRdvFollowUpInMeta(variables, {
+          enabled: pipeRdvDraft.trigger.enabled && pipeRdvDraft.followUp.enabled,
+          delai_heures: pipeRdvDraft.followUp.delai_heures,
+          envoi_heure: pipeRdvDraft.followUp.envoi_heure,
+          use_same_message: pipeRdvDraft.followUp.use_same_message,
+          follow_up_template_id:
+            pipeRdvDraft.trigger.enabled &&
+            pipeRdvDraft.followUp.enabled &&
+            !pipeRdvDraft.followUp.use_same_message
+              ? linkedPipeRdvFollowUpId
+              : null,
+          follow_up_tutoiement_template_id:
+            pipeRdvDraft.trigger.enabled &&
+            pipeRdvDraft.followUp.enabled &&
+            !pipeRdvDraft.followUp.use_same_message
+              ? linkedPipeRdvFollowUpTuId
               : null,
         });
         variables = setTemplateEmailPlacementConformeTriggerInMeta(variables, {
@@ -1685,6 +2100,10 @@ export function TemplateEmailForm({
                       onCorpsHtmlChange={applyTuCorpsHtml}
                       editorElementRef={tuRichEditorRef}
                       parentNom={formData.nom}
+                      templateId={tutoiementTemplateId}
+                      attachments={tutoiementAttachmentsState.attachments}
+                      onAttachmentsChange={tutoiementAttachmentsState.setAttachments}
+                      attachmentsDisabled={loading}
                     />
                   </TabsContent>
 
@@ -1707,6 +2126,13 @@ export function TemplateEmailForm({
                       mainTutoiementEnabled={tutoiementDraft.enabled}
                       tutoiementDraft={relanceTuDraft}
                       onTutoiementChange={setRelanceTuDraft}
+                      relanceTemplateId={relanceTemplateId}
+                      relanceAttachments={relanceAttachmentsState.attachments}
+                      onRelanceAttachmentsChange={relanceAttachmentsState.setAttachments}
+                      relanceTuTemplateId={relanceTuTemplateId}
+                      relanceTuAttachments={relanceTuAttachmentsState.attachments}
+                      onRelanceTuAttachmentsChange={relanceTuAttachmentsState.setAttachments}
+                      attachmentsDisabled={loading}
                     />
                   </TabsContent>
 
@@ -1717,6 +2143,19 @@ export function TemplateEmailForm({
                         onChange={handlePipeRdvDraftChange}
                         parentNom={formData.nom}
                         mainTutoiementEnabled={tutoiementDraft.enabled}
+                        reminderTemplateId={pipeRdvReminderTemplateId}
+                        reminderAttachments={pipeReminderAttachmentsState.attachments}
+                        onReminderAttachmentsChange={pipeReminderAttachmentsState.setAttachments}
+                        reminderTuTemplateId={pipeRdvReminderTuTemplateId}
+                        reminderTuAttachments={pipeReminderTuAttachmentsState.attachments}
+                        onReminderTuAttachmentsChange={pipeReminderTuAttachmentsState.setAttachments}
+                        followUpTemplateId={pipeRdvFollowUpTemplateId}
+                        followUpAttachments={pipeFollowUpAttachmentsState.attachments}
+                        onFollowUpAttachmentsChange={pipeFollowUpAttachmentsState.setAttachments}
+                        followUpTuTemplateId={pipeRdvFollowUpTuTemplateId}
+                        followUpTuAttachments={pipeFollowUpTuAttachmentsState.attachments}
+                        onFollowUpTuAttachmentsChange={pipeFollowUpTuAttachmentsState.setAttachments}
+                        attachmentsDisabled={loading}
                       />
                     </TabsContent>
                   )}

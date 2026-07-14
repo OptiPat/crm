@@ -23,6 +23,18 @@ function stepState(
 }
 
 describe("placement-operation-stepper", () => {
+  it("brouillon suivi : étape 1 active, pas En attente partenaire", () => {
+    const steps = getPlacementOperationStepperSteps({
+      ...base,
+      status: "PENDING",
+      pipe_id: 3,
+      pipe_timeline_entry_id: null,
+      dismissed_at: null,
+    });
+    expect(stepState(steps, "declare")).toBe("active");
+    expect(stepState(steps, "waiting")).toBe("pending");
+  });
+
   it("toujours 6 étapes dont En attente partenaire", () => {
     const steps = getPlacementOperationStepperSteps({ ...base, status: "PENDING" });
     expect(steps).toHaveLength(6);
@@ -37,6 +49,22 @@ describe("placement-operation-stepper", () => {
     const declare = steps.find((s) => s.id === "declare");
     expect(declare?.label).toBe("Arbitrage libre");
     expect(declare?.sublabel).toBe("Cristalliance Avenir");
+  });
+
+  it("versement complémentaire : étape 1 = libellé acte (+ produit)", () => {
+    const steps = getPlacementOperationStepperSteps({
+      ...base,
+      status: "PENDING",
+      stellium_label: "Versement complémentaire",
+      product_label: "Cristalliance Avenir",
+      pipe_timeline_entry_id: null,
+      pipe_id: 10,
+      dismissed_at: null,
+    });
+    const declare = steps.find((s) => s.id === "declare");
+    expect(declare?.label).toBe("Versement complémentaire");
+    expect(declare?.sublabel).toBe("Cristalliance Avenir");
+    expect(declare?.state).toBe("active");
   });
 
   it("chemin direct : 6 étapes, Validé partenaire à l’étape 5", () => {
@@ -100,6 +128,15 @@ describe("placement-operation-stepper", () => {
   });
 
   it("colonne tableau = dernière étape active du stepper", () => {
+    expect(
+      getPlacementBoardActiveStepId({
+        ...base,
+        status: "PENDING",
+        pipe_id: 3,
+        pipe_timeline_entry_id: null,
+        dismissed_at: null,
+      })
+    ).toBe("declare");
     expect(
       getPlacementBoardActiveStepId({
         ...base,

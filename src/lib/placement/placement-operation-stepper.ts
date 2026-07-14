@@ -52,8 +52,28 @@ export function getPlacementOperationStepperSteps(
     | "client_notified_at"
     | "email_received_at"
     | "pipe_timeline_entry_id"
+    | "pipe_id"
+    | "dismissed_at"
   >
 ): PlacementStepperStep[] {
+  const declare = declareLabels(operation);
+
+  if (placementOperationIsSuiviDraft(operation)) {
+    return [
+      {
+        id: "declare",
+        label: declare.label,
+        sublabel: declare.sublabel,
+        state: "active",
+      },
+      { id: "waiting", label: "En attente partenaire", state: "pending" },
+      { id: "first_response", label: "Réponse partenaire", state: "pending" },
+      { id: "conforme_after_nc", label: "Conforme", state: "pending" },
+      { id: "partner_fin", label: "Validé partenaire", state: "pending" },
+      { id: "client_mail", label: "Mail client", state: "pending" },
+    ];
+  }
+
   const status = operation.status;
   const hadNonConforme = ts(operation.non_conforme_at);
   const partnerResent = ts(operation.partner_resent_at);
@@ -117,8 +137,6 @@ export function getPlacementOperationStepperSteps(
       ? "done"
       : "pending";
 
-  const declare = declareLabels(operation);
-
   return [
     {
       id: "declare",
@@ -177,6 +195,7 @@ export type PlacementBoardStepInput = Pick<
   | "client_notified_at"
   | "email_received_at"
   | "pipe_timeline_entry_id"
+  | "pipe_id"
   | "dismissed_at"
 >;
 

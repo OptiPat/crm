@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeStelliumBoxPlacementLabel,
   placementOperationTypeFromStelliumLabel,
+  stelliumAffaireActLabelGroups,
   stelliumBoxPlacementLabelsMatch,
   stelliumLabelGroupsForProduct,
+  stelliumSuiviActLabelGroups,
   isStelliumLabelAllowedForProduct,
+  isStelliumLabelAllowedForAffaire,
   STELLIUM_BOX_PLACEMENT_LABELS,
 } from "@/lib/placement/stellium-box-placement-labels";
 
@@ -71,5 +74,23 @@ describe("stellium-box-placement-labels", () => {
     expect(isStelliumLabelAllowedForProduct("Cession de parts", "Cristalliance Avenir")).toBe(
       false
     );
+    const suiviGroups = stelliumSuiviActLabelGroups("Cristalliance Avenir");
+    const versementsGroup = suiviGroups.find((group) => group.id === "versements-programmes");
+    expect(versementsGroup?.label).toBe("Versements");
+    expect(versementsGroup?.items[0]).toBe("Versement complémentaire");
+  });
+
+  it("affaire classique : souscription seule", () => {
+    expect(stelliumAffaireActLabelGroups()).toEqual([
+      { id: "souscription", label: "Souscription", items: ["Souscription"] },
+    ]);
+    expect(isStelliumLabelAllowedForAffaire("Souscription")).toBe(true);
+    expect(isStelliumLabelAllowedForAffaire("Arbitrage libre")).toBe(false);
+    expect(
+      isStelliumLabelAllowedForProduct("Souscription", "Cristalliance Avenir", { affaire: true })
+    ).toBe(true);
+    expect(
+      isStelliumLabelAllowedForProduct("Arbitrage libre", "Cristalliance Avenir", { affaire: true })
+    ).toBe(false);
   });
 });

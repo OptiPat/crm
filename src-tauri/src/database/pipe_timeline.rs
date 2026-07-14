@@ -283,7 +283,7 @@ impl super::Database {
             ));
         }
         if entry_type == TIMELINE_RDV {
-            let _ = self.cancel_pipe_rdv_reminder_schedules(id);
+            let _ = self.cancel_pipe_rdv_reminder_schedules(id, None);
         }
         let deleted = self
             .conn

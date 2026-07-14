@@ -1,5 +1,4 @@
-import { Briefcase, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ChevronRight } from "lucide-react";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { PipeSuiviQuickAdd } from "@/components/pipe/PipeSuiviQuickAdd";
@@ -11,9 +10,7 @@ interface PipeSuiviSectionProps {
   childAffaires: PipeRecord[];
   timeline: ReturnType<typeof usePipeTimeline>;
   onJournalAdded?: () => void;
-  onCreateVersementAffaire: () => void;
   onOpenChildAffaire: (pipe: PipeRecord) => void;
-  onPlanSuiviRdv?: () => void;
 }
 
 export function PipeSuiviSection({
@@ -21,9 +18,7 @@ export function PipeSuiviSection({
   childAffaires,
   timeline,
   onJournalAdded,
-  onCreateVersementAffaire,
   onOpenChildAffaire,
-  onPlanSuiviRdv,
 }: PipeSuiviSectionProps) {
   return (
     <div className="space-y-6">
@@ -31,28 +26,9 @@ export function PipeSuiviSection({
         timeline={timeline}
         pipe={pipe}
         onAdded={onJournalAdded}
-        onPlanSuiviRdv={onPlanSuiviRdv}
       />
 
       <PipeSuiviStelliumActAdd timeline={timeline} pipe={pipe} onAdded={onJournalAdded} />
-
-      <div className="space-y-2">
-        <p className="text-sm font-medium">Suites possibles</p>
-        <p className="text-xs text-muted-foreground leading-snug">
-          Un versement complémentaire ouvre une affaire rattachée à ce suivi (suivi Stellium versement
-          automatique à la création).
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={onCreateVersementAffaire}
-        >
-          <Briefcase className="h-3.5 w-3.5" />
-          Versement complémentaire
-        </Button>
-      </div>
 
       {childAffaires.length > 0 && (
         <div className="space-y-2">
@@ -68,7 +44,7 @@ export function PipeSuiviSection({
                   <span className="min-w-0 truncate font-medium">{child.titre}</span>
                   <span className="flex shrink-0 items-center gap-1.5">
                     {child.stage ? (
-                      <PipeStageBadge stage={child.stage} />
+                      <PipeStageBadge stage={child.stage} pipe={child} />
                     ) : (
                       <span className="text-xs text-muted-foreground">Affaire</span>
                     )}

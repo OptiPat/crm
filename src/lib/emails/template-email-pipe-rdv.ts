@@ -9,6 +9,9 @@ import {
 
 export const PIPE_RDV_TRIGGER_KEY = "pipe_rdv_trigger";
 export const PIPE_RDV_REMINDER_KEY = "pipe_rdv_reminder";
+export const PIPE_RDV_FOLLOW_UP_KEY = "pipe_rdv_follow_up";
+
+export type PipeRdvScheduleKind = "before" | "after";
 
 export interface TemplateEmailPipeRdvTriggerConfig {
   /** Envoi immédiat à la planification / replanification d'un RDV Pipe. */
@@ -16,19 +19,28 @@ export interface TemplateEmailPipeRdvTriggerConfig {
   stages: PipeRdvStage[];
 }
 
-export interface TemplateEmailPipeRdvReminderConfig {
-  /** Rappel automatique avant le RDV (ex. 24 h). */
+export interface TemplateEmailPipeRdvDelayedEmailConfig {
   enabled: boolean;
-  /** Heures avant le début du RDV. */
+  /** Heures avant (rappel) ou après (suivi) le RDV. */
   delai_heures: number;
   /** Heure d'envoi ce jour-là (optionnel, ex. 09:00). */
   envoi_heure: string | null;
   /** Même contenu que le message principal. */
   use_same_message: boolean;
+}
+
+export interface TemplateEmailPipeRdvReminderConfig extends TemplateEmailPipeRdvDelayedEmailConfig {
   /** Modèle enfant dédié (si use_same_message = false). */
   reminder_template_id: number | null;
   /** Variante tu du rappel. */
   reminder_tutoiement_template_id: number | null;
+}
+
+export interface TemplateEmailPipeRdvFollowUpConfig extends TemplateEmailPipeRdvDelayedEmailConfig {
+  /** Modèle enfant dédié (si use_same_message = false). */
+  follow_up_template_id: number | null;
+  /** Variante tu du suivi. */
+  follow_up_tutoiement_template_id: number | null;
 }
 
 export const DEFAULT_PIPE_RDV_TRIGGER: TemplateEmailPipeRdvTriggerConfig = {
@@ -45,13 +57,30 @@ export const DEFAULT_PIPE_RDV_REMINDER: TemplateEmailPipeRdvReminderConfig = {
   reminder_tutoiement_template_id: null,
 };
 
+export const DEFAULT_PIPE_RDV_FOLLOW_UP: TemplateEmailPipeRdvFollowUpConfig = {
+  enabled: false,
+  delai_heures: 24,
+  envoi_heure: null,
+  use_same_message: true,
+  follow_up_template_id: null,
+  follow_up_tutoiement_template_id: null,
+};
+
 const REMINDER_NOM_PREFIX = "Rappel RDV — ";
+const FOLLOW_UP_NOM_PREFIX = "Suivi RDV — ";
 
 export function buildPipeRdvReminderTemplateNom(parentNom: string): string {
   const trimmed = parentNom.trim();
   if (!trimmed) return "Rappel RDV";
   if (trimmed.startsWith(REMINDER_NOM_PREFIX)) return trimmed;
   return `${REMINDER_NOM_PREFIX}${trimmed}`;
+}
+
+export function buildPipeRdvFollowUpTemplateNom(parentNom: string): string {
+  const trimmed = parentNom.trim();
+  if (!trimmed) return "Suivi RDV";
+  if (trimmed.startsWith(FOLLOW_UP_NOM_PREFIX)) return trimmed;
+  return `${FOLLOW_UP_NOM_PREFIX}${trimmed}`;
 }
 
 function parseStages(raw: unknown): PipeRdvStage[] {
@@ -109,6 +138,38 @@ export function parseTemplateEmailPipeRdvReminder(
   };
 }
 
+export function parseTemplateEmailPipeRdvFollowUp(
+  variables: string | null | undefined
+): TemplateEmailPipeRdvFollowUpConfig {
+  const meta = parseTemplateEmailMeta(variables);
+  const raw = meta[PIPE_RDV_FOLLOW_UP_KEY];
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ...DEFAULT_PIPE_RDV_FOLLOW_UP };
+  }
+  const o = raw as Record<string, unknown>;
+  return {
+    enabled: o.enabled === true,
+    delai_heures:
+      typeof o.delai_heures === "number" && o.delai_heures > 0
+        ? Math.round(o.delai_heures)
+        : DEFAULT_PIPE_RDV_FOLLOW_UP.delai_heures,
+    envoi_heure:
+      typeof o.envoi_heure === "string" && o.envoi_heure.trim()
+        ? o.envoi_heure.trim()
+        : null,
+    use_same_message: o.use_same_message !== false,
+    follow_up_template_id:
+      typeof o.follow_up_template_id === "number" && o.follow_up_template_id > 0
+        ? o.follow_up_template_id
+        : null,
+    follow_up_tutoiement_template_id:
+      typeof o.follow_up_tutoiement_template_id === "number" &&
+      o.follow_up_tutoiement_template_id > 0
+        ? o.follow_up_tutoiement_template_id
+        : null,
+  };
+}
+
 export function setTemplateEmailPipeRdvTriggerInMeta(
   variables: string | null | undefined,
   trigger: TemplateEmailPipeRdvTriggerConfig
@@ -145,16 +206,60 @@ export function setTemplateEmailPipeRdvReminderInMeta(
   return Object.keys(meta).length === 0 ? null : JSON.stringify(meta);
 }
 
+export function setTemplateEmailPipeRdvFollowUpInMeta(
+  variables: string | null | undefined,
+  followUp: TemplateEmailPipeRdvFollowUpConfig
+): string | null {
+  const meta = parseTemplateEmailMeta(variables);
+  if (!followUp.enabled) {
+    delete meta[PIPE_RDV_FOLLOW_UP_KEY];
+  } else {
+    meta[PIPE_RDV_FOLLOW_UP_KEY] = {
+      enabled: true,
+      delai_heures: followUp.delai_heures,
+      envoi_heure: followUp.envoi_heure,
+      use_same_message: followUp.use_same_message,
+      follow_up_template_id: followUp.follow_up_template_id,
+      follow_up_tutoiement_template_id: followUp.follow_up_tutoiement_template_id,
+    };
+  }
+  return Object.keys(meta).length === 0 ? null : JSON.stringify(meta);
+}
+
+function formatPipeRdvDelayedScheduleSummary(
+  timing: PipeRdvScheduleKind,
+  config: Pick<TemplateEmailPipeRdvDelayedEmailConfig, "delai_heures" | "envoi_heure">
+): string {
+  const h = config.delai_heures;
+  const timingLabel = timing === "before" ? "avant le RDV" : "après le RDV";
+  const delaiPart =
+    h >= 24 && h % 24 === 0 ? `${h / 24} j ${timingLabel}` : `${h} h ${timingLabel}`;
+  const heure = config.envoi_heure?.trim();
+  return heure ? `${delaiPart}, vers ${heure}` : delaiPart;
+}
+
 export function formatPipeRdvReminderScheduleSummary(
   reminder: Pick<TemplateEmailPipeRdvReminderConfig, "delai_heures" | "envoi_heure">
 ): string {
-  const h = reminder.delai_heures;
-  const delaiPart =
-    h >= 24 && h % 24 === 0
-      ? `${h / 24} j avant le RDV`
-      : `${h} h avant le RDV`;
-  const heure = reminder.envoi_heure?.trim();
-  return heure ? `${delaiPart}, vers ${heure}` : delaiPart;
+  return formatPipeRdvDelayedScheduleSummary("before", reminder);
+}
+
+export function formatPipeRdvFollowUpScheduleSummary(
+  followUp: Pick<TemplateEmailPipeRdvFollowUpConfig, "delai_heures" | "envoi_heure">
+): string {
+  return formatPipeRdvDelayedScheduleSummary("after", followUp);
+}
+
+function applyPipeRdvEnvoiHeure(sendAtUnix: number, envoiHeure: string | null | undefined): number {
+  const heure = envoiHeure?.trim();
+  if (!heure) return sendAtUnix;
+  const parts = heure.split(":");
+  const hours = Number(parts[0]);
+  const minutes = Number(parts[1] ?? 0);
+  if (Number.isNaN(hours) || hours < 0 || hours > 23) return sendAtUnix;
+  const d = new Date(sendAtUnix * 1000);
+  d.setHours(hours, Number.isNaN(minutes) ? 0 : minutes, 0, 0);
+  return Math.floor(d.getTime() / 1000);
 }
 
 /** Calcule l'horodatage d'envoi du rappel ; null si trop tard ou invalide. */
@@ -163,22 +268,25 @@ export function computePipeRdvReminderSendAt(
   reminder: Pick<TemplateEmailPipeRdvReminderConfig, "delai_heures" | "envoi_heure">
 ): number | null {
   const delaiSec = reminder.delai_heures * 3600;
-  let sendAt = rdvStartAtUnix - delaiSec;
-
-  const heure = reminder.envoi_heure?.trim();
-  if (heure) {
-    const parts = heure.split(":");
-    const hours = Number(parts[0]);
-    const minutes = Number(parts[1] ?? 0);
-    if (!Number.isNaN(hours) && hours >= 0 && hours <= 23) {
-      const d = new Date(sendAt * 1000);
-      d.setHours(hours, Number.isNaN(minutes) ? 0 : minutes, 0, 0);
-      sendAt = Math.floor(d.getTime() / 1000);
-    }
-  }
+  let sendAt = applyPipeRdvEnvoiHeure(rdvStartAtUnix - delaiSec, reminder.envoi_heure);
 
   const now = Math.floor(Date.now() / 1000);
   if (sendAt <= now || sendAt >= rdvStartAtUnix) {
+    return null;
+  }
+  return sendAt;
+}
+
+/** Calcule l'horodatage d'envoi du suivi post-RDV ; null si trop tard ou invalide. */
+export function computePipeRdvFollowUpSendAt(
+  rdvEndAtUnix: number,
+  followUp: Pick<TemplateEmailPipeRdvFollowUpConfig, "delai_heures" | "envoi_heure">
+): number | null {
+  const delaiSec = followUp.delai_heures * 3600;
+  let sendAt = applyPipeRdvEnvoiHeure(rdvEndAtUnix + delaiSec, followUp.envoi_heure);
+
+  const now = Math.floor(Date.now() / 1000);
+  if (sendAt <= now || sendAt <= rdvEndAtUnix) {
     return null;
   }
   return sendAt;
@@ -247,9 +355,13 @@ export function pipeRdvTriggerBadgeLabel(
   const trigger = parseTemplateEmailPipeRdvTrigger(variables);
   if (!trigger.enabled || trigger.stages.length === 0) return null;
   const reminder = parseTemplateEmailPipeRdvReminder(variables);
+  const followUp = parseTemplateEmailPipeRdvFollowUp(variables);
   const stages = trigger.stages.join(", ");
-  if (reminder.enabled) {
-    return `Pipe RDV ${stages} + rappel`;
+  const extras: string[] = [];
+  if (reminder.enabled) extras.push("rappel");
+  if (followUp.enabled) extras.push("suivi");
+  if (extras.length > 0) {
+    return `Pipe RDV ${stages} + ${extras.join(" + ")}`;
   }
   return `Pipe RDV ${stages}`;
 }
@@ -314,6 +426,20 @@ export const DEFAULT_PIPE_RDV_REMINDER_SUJET_TU = DEFAULT_PIPE_RDV_REMINDER_SUJE
 export const DEFAULT_PIPE_RDV_REMINDER_CORPS_HTML_TU = [
   "<p>Bonjour {{prenom}},</p>",
   "<p>Je te rappelle notre rendez-vous prévu le <strong>{{date_rdv}}</strong> à <strong>{{heure_rdv}}</strong>.</p>",
+].join("");
+
+export const DEFAULT_PIPE_RDV_FOLLOW_UP_SUJET = "Suite à notre RDV du {{date_rdv}}";
+
+export const DEFAULT_PIPE_RDV_FOLLOW_UP_CORPS_HTML = [
+  "<p>Bonjour {{prenom}},</p>",
+  "<p>Merci pour notre échange du <strong>{{date_rdv}}</strong>.</p>",
+].join("");
+
+export const DEFAULT_PIPE_RDV_FOLLOW_UP_SUJET_TU = DEFAULT_PIPE_RDV_FOLLOW_UP_SUJET;
+
+export const DEFAULT_PIPE_RDV_FOLLOW_UP_CORPS_HTML_TU = [
+  "<p>Bonjour {{prenom}},</p>",
+  "<p>Merci pour notre échange du <strong>{{date_rdv}}</strong>.</p>",
 ].join("");
 
 /** Texte d'aide tu/vous commun confirmation et rappel Pipe RDV. */

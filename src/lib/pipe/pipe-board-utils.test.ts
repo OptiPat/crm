@@ -46,6 +46,18 @@ describe("pipe-board-utils", () => {
     expect(filterAffairesForBoard(pipes).map((p) => p.id)).toEqual([1]);
   });
 
+  it("exclut les versements complémentaires rattachés à un Suivi", () => {
+    const pipes = [
+      affaire(1, "PROSPECTION", 10),
+      {
+        ...affaire(2, "PROSPECTION", 20),
+        parent_pipe_id: 99,
+        titre: "Versement complémentaire — Jean DUPONT",
+      },
+    ];
+    expect(filterAffairesForBoard(pipes).map((p) => p.id)).toEqual([1]);
+  });
+
   it("regroupe par stage et trie par updated_at desc", () => {
     const groups = groupAffairesByStage([
       affaire(1, "R1", 100),

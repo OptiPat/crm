@@ -2,7 +2,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
+import { TemplateEmailAttachmentsPanel } from "@/components/emails/TemplateEmailAttachmentsPanel";
 import { buildTutoiementTemplateNom } from "@/lib/emails/template-email-formality";
+import type { TemplateEmailAttachmentMeta } from "@/lib/emails/template-email-attachments";
 import { Users } from "lucide-react";
 import type { RefObject } from "react";
 
@@ -18,6 +20,10 @@ type Props = {
   onCorpsHtmlChange: (html: string) => void;
   editorElementRef?: RefObject<HTMLDivElement | null>;
   parentNom: string;
+  templateId?: number | null;
+  attachments?: TemplateEmailAttachmentMeta[];
+  onAttachmentsChange?: (attachments: TemplateEmailAttachmentMeta[]) => void;
+  attachmentsDisabled?: boolean;
 };
 
 export function TemplateEmailTutoiementPanel({
@@ -26,6 +32,10 @@ export function TemplateEmailTutoiementPanel({
   onCorpsHtmlChange,
   editorElementRef,
   parentNom,
+  templateId = null,
+  attachments = [],
+  onAttachmentsChange,
+  attachmentsDisabled = false,
 }: Props) {
   const patch = (partial: Partial<TemplateTutoiementDraft>) =>
     onChange({ ...draft, ...partial });
@@ -82,6 +92,14 @@ export function TemplateEmailTutoiementPanel({
               placeholder="Rédigez la version tutoiement (ton, te, tiens…)"
             />
           </div>
+          {onAttachmentsChange && (
+            <TemplateEmailAttachmentsPanel
+              templateId={templateId}
+              attachments={attachments}
+              onChange={onAttachmentsChange}
+              disabled={attachmentsDisabled}
+            />
+          )}
         </div>
       )}
     </div>

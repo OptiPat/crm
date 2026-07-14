@@ -9,8 +9,10 @@ import {
   getPreviousLinearStage,
   isTerminalPipeStage,
   isManualPipeStageChangeAllowed,
+  isClassicAffaireStelliumSouscriptionStage,
   isPipeBoardDropTargetStage,
   isPipeBoardRdvDropTargetStage,
+  isPipeFormCreateStage,
   isPipeFormDirectStage,
   formatStageAdvancementMessage,
   defaultPipeTitreFromContact,
@@ -50,11 +52,17 @@ describe("pipe-types", () => {
     expect(isManualPipeStageChangeAllowed("GAGNEE")).toBe(true);
     expect(isManualPipeStageChangeAllowed("R1")).toBe(false);
     expect(isPipeBoardRdvDropTargetStage("R2")).toBe(true);
+    expect(isClassicAffaireStelliumSouscriptionStage("R3")).toBe(true);
+    expect(isClassicAffaireStelliumSouscriptionStage("R2")).toBe(false);
     expect(isPipeBoardRdvDropTargetStage("GAGNEE")).toBe(false);
     expect(isPipeBoardDropTargetStage("PERDUE_OU_EN_ATTENTE")).toBe(true);
     expect(isPipeBoardDropTargetStage("R2")).toBe(true);
     expect(isPipeFormDirectStage("PROSPECTION")).toBe(true);
     expect(isPipeFormDirectStage("R1")).toBe(false);
+    expect(isPipeFormCreateStage("PROSPECTION")).toBe(true);
+    expect(isPipeFormCreateStage("R2")).toBe(true);
+    expect(isPipeFormCreateStage("R3")).toBe(true);
+    expect(isPipeFormCreateStage("GAGNEE")).toBe(false);
     expect(formatStageAdvancementMessage("R1")).toBe("Avancement passé à R1");
   });
 

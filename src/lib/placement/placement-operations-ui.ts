@@ -9,6 +9,9 @@ const STATUS_LABELS: Record<PlacementOperationStatus, string> = {
   NON_CONFORME: "Non conforme",
 };
 
+/** Acte créé mais pas encore confirmé envoyé chez Stellium (brouillon pipe ou scan sans journal). */
+export const PLACEMENT_UNDECLARED_BOX_LABEL = "Non déclarée Box";
+
 const TYPE_LABELS: Record<string, string> = {
   ARBITRAGE: "Arbitrage",
   VERSEMENT: "Versement",
@@ -22,6 +25,51 @@ export function placementOperationStatusLabel(
 ): string {
   if (!status) return "—";
   return STATUS_LABELS[status as PlacementOperationStatus] ?? status;
+}
+
+/** PENDING avec envoi Stellium confirmé (journal timeline) — en attente de réponse partenaire. */
+export function placementOperationIsAwaitingPartner(
+  operation: Pick<PlacementOperation, "status" | "pipe_timeline_entry_id">
+): boolean {
+  return (
+    operation.status === "PENDING" && placementOperationIsPipeTracked(operation)
+  );
+}
+
+export function placementOperationDisplayStatusLabel(
+  operation: Pick<
+    PlacementOperation,
+    "status" | "pipe_timeline_entry_id" | "client_notified_at"
+  >,
+  options?: { needsClientNotify?: boolean }
+): string {
+  if (options?.needsClientNotify) return "Email client en attente";
+  if (
+    operation.status === "PENDING" &&
+    placementOperationIsUndeclared(operation)
+  ) {
+    return PLACEMENT_UNDECLARED_BOX_LABEL;
+  }
+  return placementOperationStatusLabel(operation.status);
+}
+
+export function placementOperationDisplayStatusAccent(
+  operation: Pick<
+    PlacementOperation,
+    "status" | "pipe_timeline_entry_id" | "client_notified_at"
+  >,
+  options?: { needsClientNotify?: boolean }
+): string {
+  if (options?.needsClientNotify) {
+    return "bg-amber-100 text-amber-900 border-amber-200";
+  }
+  if (
+    operation.status === "PENDING" &&
+    placementOperationIsUndeclared(operation)
+  ) {
+    return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-700";
+  }
+  return placementOperationStatusAccent(operation.status);
 }
 
 export function placementOperationTypeLabel(type: string | null | undefined): string {
@@ -69,7 +117,7 @@ export function countOpenPlacementOperations(
     ) {
       continue;
     }
-    if (row.operation.status === "PENDING") pending += 1;
+    if (placementOperationIsAwaitingPartner(row.operation)) pending += 1;
   }
   return { pending, nonConforme };
 }

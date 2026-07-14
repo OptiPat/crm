@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,34 +9,84 @@ import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { datetimeLocalToUnix, unixToDatetimeLocalInput } from "@/lib/pipe/pipe-timeline-types";
 import {
   createPlacementOperation,
+  dismissPlacementOperation,
   listPlacementOperationsForPipe,
   notifyPlacementOperationsChanged,
   PLACEMENT_OPERATIONS_CHANGED_EVENT,
   type PlacementOperation,
 } from "@/lib/api/tauri-box-placement";
 import {
+  AFFAIRE_STELLIUM_SOUSCRIPTION_LABEL,
   isStelliumLabelAllowedForProduct,
   placementOperationTypeFromStelliumLabel,
 } from "@/lib/placement/stellium-box-placement-labels";
 import { formatStelliumProductForDisplay } from "@/lib/placement/stellium-box-placement-products";
 import { placementOperationIsSuiviDraft } from "@/lib/placement/suivi-placement-draft";
+import {
+  createVersementAffaireFromSuivi,
+  validateSuiviStelliumActInput,
+} from "@/lib/placement/suivi-stellium-acts";
+import { isVersementComplementaireActLabel, isVersementComplementaireAffaire } from "@/lib/pipe/pipe-suivi";
 import { StelliumPlacementActFields } from "@/components/pipe/StelliumPlacementActFields";
 import { toast } from "sonner";
 
+type PipeStelliumActAddVariant = "suivi" | "affaire";
+
 interface PipeSuiviStelliumActAddProps {
   timeline: ReturnType<typeof usePipeTimeline>;
-  pipe: Pick<PipeRecord, "id" | "contact_id">;
+  pipe: Pick<
+    PipeRecord,
+    | "id"
+    | "pipe_type"
+    | "contact_id"
+    | "parent_pipe_id"
+    | "secondary_contact_id"
+    | "contact_prenom"
+    | "contact_nom"
+    | "titre"
+  >;
   onAdded?: () => void;
+  variant?: PipeStelliumActAddVariant;
 }
+
+const VARIANT_COPY: Record<
+  PipeStelliumActAddVariant,
+  { title: string; description: string; addButton: string; createSuccess: string }
+> = {
+  suivi: {
+    title: "Stellium — actes de gestion",
+    description:
+      "L'acte est créé avec le suivi. Quand le dossier part chez Stellium (après signature client, etc.), confirmez l'envoi pour passer en attente de réponse.",
+    addButton: "Autre acte Stellium",
+    createSuccess: "Acte ajouté — confirmez l'envoi Stellium quand le dossier part",
+  },
+  affaire: {
+    title: "Stellium — envoi partenaire",
+    description:
+      "Souscription partenaire : choisissez le produit. Quand le dossier part chez Stellium, confirmez l'envoi pour passer en attente de réponse.",
+    addButton: "Souscription partenaire",
+    createSuccess: "Souscription préparée — confirmez l'envoi Stellium quand le dossier part",
+  },
+};
 
 function formatDraftLabel(operation: PlacementOperation): string {
   const acte = operation.stellium_label?.trim();
   const produit = formatStelliumProductForDisplay(operation.product_label?.trim() ?? "");
+  if (acte && isVersementComplementaireActLabel(acte)) {
+    return produit ? `${acte} · ${produit}` : acte;
+  }
   if (acte && produit) return `${acte} · ${produit}`;
   return acte || produit || "Acte Stellium";
 }
 
-export function PipeSuiviStelliumActAdd({ timeline, pipe, onAdded }: PipeSuiviStelliumActAddProps) {
+export function PipeSuiviStelliumActAdd({
+  timeline,
+  pipe,
+  onAdded,
+  variant = "suivi",
+}: PipeSuiviStelliumActAddProps) {
+  const copy = VARIANT_COPY[variant];
+  const isVersementChild = variant === "affaire" && isVersementComplementaireAffaire(pipe);
   const [drafts, setDrafts] = useState<PlacementOperation[]>([]);
   const [loadingDrafts, setLoadingDrafts] = useState(true);
   const [openNew, setOpenNew] = useState(false);
@@ -45,6 +95,9 @@ export function PipeSuiviStelliumActAdd({ timeline, pipe, onAdded }: PipeSuiviSt
   const [draftOccurredAt, setDraftOccurredAt] = useState<Record<number, string>>({});
   const [draftContenu, setDraftContenu] = useState<Record<number, string>>({});
   const [savingId, setSavingId] = useState<number | "new" | null>(null);
+  const draftsLoadedRef = useRef(false);
+
+  const PLACEMENT_RELOAD_DEBOUNCE_MS = 150;
 
   const defaultOccurredAt = () => unixToDatetimeLocalInput();
 
@@ -66,28 +119,43 @@ export function PipeSuiviStelliumActAdd({ timeline, pipe, onAdded }: PipeSuiviSt
     });
   }, []);
 
-  const reloadDrafts = useCallback(async () => {
+  const reloadDrafts = useCallback(async (options?: { silent?: boolean }): Promise<PlacementOperation[]> => {
+    const silent = options?.silent ?? draftsLoadedRef.current;
+    if (!silent) setLoadingDrafts(true);
     try {
       const rows = await listPlacementOperationsForPipe(pipe.id);
       const nextDrafts = rows.filter(placementOperationIsSuiviDraft);
       setDrafts(nextDrafts);
       syncDraftFields(nextDrafts);
+      draftsLoadedRef.current = true;
+      return nextDrafts;
     } catch {
-      setDrafts([]);
-      setDraftOccurredAt({});
-      setDraftContenu({});
+      if (!draftsLoadedRef.current) {
+        setDrafts([]);
+        setDraftOccurredAt({});
+        setDraftContenu({});
+      }
+      return [];
     } finally {
-      setLoadingDrafts(false);
+      if (!silent) setLoadingDrafts(false);
     }
   }, [pipe.id, syncDraftFields]);
 
   useEffect(() => {
     void reloadDrafts();
+    const debounceRef = { id: null as number | null };
     const onChanged = () => {
-      void reloadDrafts();
+      if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
+      debounceRef.id = window.setTimeout(() => {
+        debounceRef.id = null;
+        void reloadDrafts({ silent: true });
+      }, PLACEMENT_RELOAD_DEBOUNCE_MS);
     };
     window.addEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onChanged);
-    return () => window.removeEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onChanged);
+    return () => {
+      window.removeEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onChanged);
+      if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
+    };
   }, [reloadDrafts]);
 
   const confirmStelliumSend = async (
@@ -95,29 +163,58 @@ export function PipeSuiviStelliumActAdd({ timeline, pipe, onAdded }: PipeSuiviSt
     options?: { occurredAt?: string; contenu?: string }
   ) => {
     const label = operation.stellium_label?.trim();
-    const product = operation.product_label?.trim();
-    if (!label || !product || pipe.contact_id <= 0) return;
+    const product = operation.product_label?.trim() ?? "";
+    if (!label || pipe.contact_id <= 0) return;
+
+    const versementComplementaire = isVersementComplementaireActLabel(label);
+    const versementFromSuivi = versementComplementaire && variant === "suivi";
+    const versementAffaireChild = versementComplementaire && isVersementChild;
+    if (!versementComplementaire && !product) return;
 
     setSavingId(operation.id);
     try {
       const occurredAtUnix = datetimeLocalToUnix(options?.occurredAt ?? unixToDatetimeLocalInput());
-      const entry = await timeline.addEntry({
-        entry_type: "NOTE",
-        titre: `${label} — ${product}`,
-        contenu: options?.contenu?.trim() || null,
-        occurred_at: occurredAtUnix,
-      });
-      await createPlacementOperation({
-        contact_id: pipe.contact_id,
-        pipe_id: pipe.id,
-        pipe_timeline_entry_id: entry.id,
-        operation_type: placementOperationTypeFromStelliumLabel(label),
-        stellium_label: label,
-        product_label: product,
-      });
-      notifyPlacementOperationsChanged();
-      toast.success("Envoi Stellium confirmé — en attente de réponse");
-      onAdded?.();
+      const journalTitre =
+        versementComplementaire && !product ? label : `${label} — ${product}`;
+      if (versementFromSuivi) {
+        await timeline.addEntry({
+          entry_type: "NOTE",
+          titre: journalTitre,
+          contenu: options?.contenu?.trim() || null,
+          occurred_at: occurredAtUnix,
+        });
+        await createVersementAffaireFromSuivi(pipe, {
+          productLabel: product || null,
+        });
+        await dismissPlacementOperation(operation.id);
+        notifyPlacementOperationsChanged();
+        toast.success("Affaire versement créée — suivi Stellium actif sur l'affaire");
+      } else {
+        const entry = await timeline.addEntry({
+          entry_type: "NOTE",
+          titre: journalTitre,
+          contenu: options?.contenu?.trim() || null,
+          occurred_at: occurredAtUnix,
+        });
+        await createPlacementOperation({
+          contact_id: pipe.contact_id,
+          pipe_id: pipe.id,
+          pipe_timeline_entry_id: entry.id,
+          operation_type: placementOperationTypeFromStelliumLabel(label),
+          stellium_label: label,
+          product_label: product || null,
+        });
+        notifyPlacementOperationsChanged();
+        toast.success(
+          versementAffaireChild
+            ? "Envoi Stellium confirmé — en attente de réponse partenaire"
+            : "Envoi Stellium confirmé — en attente de réponse"
+        );
+      }
+      const remainingDrafts = await reloadDrafts({ silent: true });
+      if (remainingDrafts.length === 0) {
+        onAdded?.();
+      }
     } catch (err) {
       console.error(err);
       toast.error(String(err));
@@ -130,9 +227,20 @@ export function PipeSuiviStelliumActAdd({ timeline, pipe, onAdded }: PipeSuiviSt
     e.preventDefault();
     const label = stelliumLabel.trim();
     const product = productLabel.trim();
-    if (!label || !product || pipe.contact_id <= 0) return;
-    if (!isStelliumLabelAllowedForProduct(label, product)) {
-      toast.error("Acte incompatible avec le produit sélectionné");
+    if (!label || pipe.contact_id <= 0) return;
+
+    const validationError =
+      variant === "suivi"
+        ? validateSuiviStelliumActInput({ productLabel: product, actLabel: label })
+        : variant === "affaire" && !isVersementChild
+          ? !product || !isStelliumLabelAllowedForProduct(label, product, { affaire: true })
+            ? "Produit requis pour la souscription partenaire."
+            : null
+          : !product || !isStelliumLabelAllowedForProduct(label, product)
+            ? "Produit et acte requis."
+            : null;
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
     setSavingId("new");
@@ -145,7 +253,8 @@ export function PipeSuiviStelliumActAdd({ timeline, pipe, onAdded }: PipeSuiviSt
         product_label: product,
       });
       notifyPlacementOperationsChanged();
-      toast.success("Acte ajouté — confirmez l'envoi Stellium quand le dossier part");
+      toast.success(copy.createSuccess);
+      await reloadDrafts({ silent: true });
       setOpenNew(false);
       setStelliumLabel("");
       setProductLabel("");
@@ -160,22 +269,36 @@ export function PipeSuiviStelliumActAdd({ timeline, pipe, onAdded }: PipeSuiviSt
   return (
     <div className="space-y-3 rounded-lg border bg-muted/15 p-4">
       <div>
-        <p className="text-sm font-medium">Stellium — actes de gestion</p>
-        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-          L&apos;acte est créé avec le suivi. Quand le dossier part chez Stellium (après signature
-          client, etc.), confirmez l&apos;envoi pour passer en attente de réponse.
-        </p>
+        <p className="text-sm font-medium">{copy.title}</p>
+        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{copy.description}</p>
+        {isVersementChild && (
+          <p className="text-xs text-muted-foreground mt-1 leading-snug">
+            Versement : suivi actif depuis la création de l&apos;affaire. Confirmez l&apos;envoi
+            chez Stellium pour passer en attente partenaire.
+          </p>
+        )}
       </div>
 
       {loadingDrafts ? (
         <p className="text-xs text-muted-foreground">Chargement…</p>
       ) : (
         <div className="space-y-3">
-          {drafts.map((draft) => (
+          {drafts.map((draft) => {
+            const versementDraft =
+              variant === "suivi" &&
+              isVersementComplementaireActLabel(draft.stellium_label?.trim() ?? "");
+            return (
             <div key={draft.id} className="rounded-md border bg-card p-3 space-y-3">
               <p className="text-sm font-medium">{formatDraftLabel(draft)}</p>
+              {versementDraft ? (
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Ouvre une affaire rattachée avec suivi Stellium versement à la création.
+                </p>
+              ) : null}
               <div className="space-y-2">
-                <Label>Date d&apos;envoi chez Stellium</Label>
+                <Label>
+                  {versementDraft ? "Date" : "Date d'envoi chez Stellium"}
+                </Label>
                 <Input
                   type="datetime-local"
                   value={draftOccurredAt[draft.id] ?? defaultOccurredAt()}
@@ -206,25 +329,37 @@ export function PipeSuiviStelliumActAdd({ timeline, pipe, onAdded }: PipeSuiviSt
                 }
               >
                 <Send className="h-3.5 w-3.5" />
-                {savingId === draft.id ? "Enregistrement…" : "Confirmer l'envoi Stellium"}
+                {savingId === draft.id
+                  ? "Enregistrement…"
+                  : versementDraft
+                    ? "Créer l'affaire versement"
+                    : "Confirmer l'envoi Stellium"}
               </Button>
             </div>
-          ))}
+            );
+          })}
 
-          {!openNew ? (
+          {!isVersementChild && !openNew ? (
             <Button
               type="button"
               variant="outline"
               size="sm"
               className="h-8 gap-1 text-xs"
-              onClick={() => setOpenNew(true)}
+              onClick={() => {
+                setOpenNew(true);
+                if (variant === "affaire") {
+                  setStelliumLabel(AFFAIRE_STELLIUM_SOUSCRIPTION_LABEL);
+                }
+              }}
             >
               <Plus className="h-3.5 w-3.5" />
-              Autre acte Stellium
+              {copy.addButton}
             </Button>
-          ) : (
+          ) : !isVersementChild ? (
             <form onSubmit={(e) => void handleCreateDraft(e)} className="space-y-3 rounded-md border p-3">
               <StelliumPlacementActFields
+                suivi={variant === "suivi"}
+                affaire={variant === "affaire"}
                 productLabel={productLabel}
                 stelliumLabel={stelliumLabel}
                 onProductChange={setProductLabel}
@@ -246,13 +381,19 @@ export function PipeSuiviStelliumActAdd({ timeline, pipe, onAdded }: PipeSuiviSt
                 <Button
                   type="submit"
                   size="sm"
-                  disabled={savingId === "new" || !stelliumLabel || !productLabel}
+                  disabled={
+                    savingId === "new" ||
+                    !stelliumLabel ||
+                    (variant === "affaire"
+                      ? !productLabel
+                      : !isVersementComplementaireActLabel(stelliumLabel) && !productLabel)
+                  }
                 >
                   {savingId === "new" ? "Enregistrement…" : "Ajouter l'acte"}
                 </Button>
               </div>
             </form>
-          )}
+          ) : null}
         </div>
       )}
     </div>

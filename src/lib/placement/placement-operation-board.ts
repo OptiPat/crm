@@ -3,7 +3,7 @@ import {
   getPlacementBoardActiveStepId,
   type PlacementStepperStepId,
 } from "@/lib/placement/placement-operation-stepper";
-import { placementOperationIsUndeclared, placementOperationIsDetachedSuiviDraft, placementOperationIsDeclaredInWorkflow } from "@/lib/placement/placement-operations-ui";
+import { placementOperationIsUndeclared, placementOperationIsDetachedSuiviDraft, placementOperationIsDeclaredInWorkflow, PLACEMENT_UNDECLARED_BOX_LABEL } from "@/lib/placement/placement-operations-ui";
 import { placementOperationIsSuiviDraft } from "@/lib/placement/suivi-placement-draft";
 import { formatStelliumProductForDisplay } from "@/lib/placement/stellium-box-placement-products";
 
@@ -180,7 +180,7 @@ export function placementBoardRowBadge(
 }
 
 export const PLACEMENT_BOARD_BADGE_LABELS: Record<PlacementBoardRowBadge, string> = {
-  awaiting_send: "Pas envoyé",
+  awaiting_send: PLACEMENT_UNDECLARED_BOX_LABEL,
   scan_orphan: "Non rattaché",
 };
 

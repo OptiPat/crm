@@ -37,11 +37,19 @@ export function PipeSuiviPlacementAvancement({ pipeId }: { pipeId: number }) {
 
   useEffect(() => {
     void reload();
+    const debounceRef = { id: null as number | null };
     const onChanged = () => {
-      void reload();
+      if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
+      debounceRef.id = window.setTimeout(() => {
+        debounceRef.id = null;
+        void reload();
+      }, 150);
     };
     window.addEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onChanged);
-    return () => window.removeEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onChanged);
+    return () => {
+      window.removeEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onChanged);
+      if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
+    };
   }, [reload]);
 
   const handlePartnerResent = async (operation: PlacementOperation) => {

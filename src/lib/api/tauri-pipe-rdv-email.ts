@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { PipeRdvScheduleKind } from "@/lib/emails/template-email-pipe-rdv";
 
 export interface PipeRdvReminderSchedule {
   id: number;
@@ -9,6 +10,7 @@ export interface PipeRdvReminderSchedule {
   send_at: number;
   rdv_at: number;
   rdv_end_at: number;
+  schedule_kind: PipeRdvScheduleKind;
   visio_link?: string | null;
   event_location?: string | null;
 }
@@ -20,6 +22,7 @@ export interface PipeRdvReminderScheduleUpsert {
   send_at: number;
   rdv_at: number;
   rdv_end_at: number;
+  schedule_kind: PipeRdvScheduleKind;
   visio_link?: string | null;
   event_location?: string | null;
 }
@@ -38,6 +41,7 @@ export async function replacePipeRdvReminderSchedules(input: {
         send_at: r.send_at,
         rdv_at: r.rdv_at,
         rdv_end_at: r.rdv_end_at,
+        schedule_kind: r.schedule_kind,
         visio_link: r.visio_link ?? null,
         event_location: r.event_location ?? null,
       })),
@@ -46,10 +50,12 @@ export async function replacePipeRdvReminderSchedules(input: {
 }
 
 export async function cancelPipeRdvReminderSchedules(
-  pipeTimelineEntryId: number
+  pipeTimelineEntryId: number,
+  scheduleKind?: PipeRdvScheduleKind
 ): Promise<number> {
   return invoke<number>("cancel_pipe_rdv_reminder_schedules", {
     pipeTimelineEntryId,
+    scheduleKind: scheduleKind ?? null,
   });
 }
 

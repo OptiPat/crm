@@ -7,6 +7,7 @@ import {
   isContactTu,
   normalizeContactRegistre,
   pickTemplateContentForRegistre,
+  pickTemplateVariablesForRegistre,
   type ContactRegistre,
 } from "@/lib/emails/template-email-formality";
 import {
@@ -34,7 +35,12 @@ type TemplateEmailPreviewPanelProps = {
   corpsHtml?: string | null;
   contact?: Pick<Contact, "prenom" | "nom" | "email" | "telephone" | "registre"> | null;
   /** Variante tutoiement liée (si activée). */
-  tutoiement?: { sujet: string; corps: string; corpsHtml?: string | null } | null;
+  tutoiement?: {
+    sujet: string;
+    corps: string;
+    corpsHtml?: string | null;
+    variables?: string | null;
+  } | null;
   /** Aperçu forcé tu/vous (sans contact réel). */
   previewRegistre?: ContactRegistre;
   /** Trigger Box Placement actif (aperçu formulaire avant enregistrement). */
@@ -79,9 +85,29 @@ export function TemplateEmailPreviewPanel({
     [templateVariables, corpsHtml]
   );
 
+  const useTuVariant = isContactTu(contact?.registre ?? previewRegistre);
+  const effectiveHtml =
+    useTuVariant && tutoiement?.corpsHtml?.trim() ? tutoiement.corpsHtml : corpsHtml;
+
+  const attachmentSourceVariables = useMemo(() => {
+    const picked = pickTemplateVariablesForRegistre(
+      templateVariables ?? null,
+      tutoiement?.variables ?? null,
+      contact?.registre ?? previewRegistre,
+      tutoiement != null
+    );
+    return setTemplateCorpsHtmlInMeta(picked ?? null, effectiveHtml?.trim() || null);
+  }, [
+    templateVariables,
+    tutoiement,
+    contact?.registre,
+    previewRegistre,
+    effectiveHtml,
+  ]);
+
   const previewAttachments = useMemo(
-    () => parseTemplateEmailAttachments(mergedVariables),
-    [mergedVariables]
+    () => parseTemplateEmailAttachments(attachmentSourceVariables),
+    [attachmentSourceVariables]
   );
 
   const effective = useMemo(
@@ -93,10 +119,6 @@ export function TemplateEmailPreviewPanel({
       ),
     [sujet, corps, tutoiement, contact?.registre, previewRegistre]
   );
-
-  const useTuVariant = isContactTu(contact?.registre ?? previewRegistre);
-  const effectiveHtml =
-    useTuVariant && tutoiement?.corpsHtml?.trim() ? tutoiement.corpsHtml : corpsHtml;
 
   const previewRegistreEffective: ContactRegistre = normalizeContactRegistre(
     contact?.registre ?? previewRegistre
@@ -135,15 +157,11 @@ export function TemplateEmailPreviewPanel({
     }
     setSendingTest(true);
     try {
-      const testVariables = setTemplateCorpsHtmlInMeta(
-        templateVariables,
-        effectiveHtml?.trim() || null
-      );
       const to = await sendTemplateTestToSelf({
         sujet: effective.sujet,
         corps: effective.corps,
         corpsHtml: effectiveHtml,
-        templateVariables: testVariables,
+        templateVariables: attachmentSourceVariables,
         agendaLinkId,
         cgp,
         contact: sample,

@@ -50,7 +50,7 @@ export function PipeList({
           >
             <div className="flex flex-wrap items-center gap-1.5 mb-1">
               <PipeTypeBadge pipeType={pipe.pipe_type} />
-              <PipeStageBadge stage={pipe.stage} />
+              <PipeStageBadge stage={pipe.stage} pipe={pipe} />
               <PipePlacementBadge counts={placementCountsByPipe[pipe.id]} />
             </div>
             <p className="font-medium text-sm truncate">{pipe.titre}</p>

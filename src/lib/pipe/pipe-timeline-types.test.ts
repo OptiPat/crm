@@ -3,6 +3,7 @@ import {
   datetimeLocalToUnix,
   defaultTimelineEntryTitle,
   isPipeTimelineUserType,
+  PIPE_TIMELINE_QUICK_ADD_TYPES,
   unixToDatetimeLocalInput,
 } from "./pipe-timeline-types";
 
@@ -19,5 +20,14 @@ describe("pipe-timeline-types", () => {
   it("convertit datetime local", () => {
     const ts = datetimeLocalToUnix("2026-07-11T10:30");
     expect(unixToDatetimeLocalInput(ts)).toBe("2026-07-11T10:30");
+  });
+
+  it("journal rapide affaire sans arbitrage ni réinvestissement", () => {
+    expect(PIPE_TIMELINE_QUICK_ADD_TYPES).toEqual([
+      "APPEL",
+      "RDV",
+      "NOTE",
+      "PROPOSITION",
+    ]);
   });
 });

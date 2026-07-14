@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
+import { TemplateEmailAttachmentsPanel } from "@/components/emails/TemplateEmailAttachmentsPanel";
 import {
   buildRelanceTemplateNom,
   formatTemplateRelanceScheduleSummary,
@@ -11,6 +12,7 @@ import {
 import type { EmailEnvoiJourCode } from "@/lib/emails/email-envoi-schedule";
 import type { TemplateTutoiementDraft } from "@/components/emails/TemplateEmailTutoiementPanel";
 import { buildTutoiementTemplateNom } from "@/lib/emails/template-email-formality";
+import type { TemplateEmailAttachmentMeta } from "@/lib/emails/template-email-attachments";
 import { MessageCircle, RotateCcw } from "lucide-react";
 
 export type TemplateRelanceDraft = {
@@ -35,6 +37,13 @@ type Props = {
   tutoiementDraft?: TemplateTutoiementDraft;
   onTutoiementChange?: (next: TemplateTutoiementDraft) => void;
   mainTutoiementEnabled?: boolean;
+  relanceTemplateId?: number | null;
+  relanceAttachments?: TemplateEmailAttachmentMeta[];
+  onRelanceAttachmentsChange?: (attachments: TemplateEmailAttachmentMeta[]) => void;
+  relanceTuTemplateId?: number | null;
+  relanceTuAttachments?: TemplateEmailAttachmentMeta[];
+  onRelanceTuAttachmentsChange?: (attachments: TemplateEmailAttachmentMeta[]) => void;
+  attachmentsDisabled?: boolean;
 };
 
 export function TemplateEmailRelancePanel({
@@ -45,6 +54,13 @@ export function TemplateEmailRelancePanel({
   tutoiementDraft,
   onTutoiementChange,
   mainTutoiementEnabled = false,
+  relanceTemplateId = null,
+  relanceAttachments = [],
+  onRelanceAttachmentsChange,
+  relanceTuTemplateId = null,
+  relanceTuAttachments = [],
+  onRelanceTuAttachmentsChange,
+  attachmentsDisabled = false,
 }: Props) {
   const patch = (partial: Partial<TemplateRelanceDraft>) =>
     onChange({ ...draft, ...partial });
@@ -199,6 +215,14 @@ export function TemplateEmailRelancePanel({
                   minHeight="160px"
                 />
               </div>
+              {onRelanceAttachmentsChange && (
+                <TemplateEmailAttachmentsPanel
+                  templateId={relanceTemplateId}
+                  attachments={relanceAttachments}
+                  onChange={onRelanceAttachmentsChange}
+                  disabled={attachmentsDisabled}
+                />
+              )}
 
               {mainTutoiementEnabled && tutoiementDraft && onTutoiementChange && (
                 <div className="space-y-3 rounded-lg border border-violet-200 bg-violet-50/50 p-3">
@@ -232,6 +256,14 @@ export function TemplateEmailRelancePanel({
                       minHeight="140px"
                     />
                   </div>
+                  {onRelanceTuAttachmentsChange && (
+                    <TemplateEmailAttachmentsPanel
+                      templateId={relanceTuTemplateId}
+                      attachments={relanceTuAttachments}
+                      onChange={onRelanceTuAttachmentsChange}
+                      disabled={attachmentsDisabled}
+                    />
+                  )}
                 </div>
               )}
             </div>

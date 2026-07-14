@@ -34,7 +34,7 @@ import {
 } from "@/lib/background/birthday-automation-notify";
 import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
 import { notifyNotesChanged } from "@/lib/notes/note-events";
-import { processDuePipeRdvReminders } from "@/lib/pipe/pipe-rdv-reminder-processor";
+import { processDuePipeRdvReminders, formatPipeRdvScheduledEmailTrayNotify } from "@/lib/pipe/pipe-rdv-reminder-processor";
 import { syncPipeGoogleRdvs } from "@/lib/api/tauri-calendar";
 import { handlePipeGoogleAgendaSyncResult } from "@/lib/pipe/pipe-rdv-google-sync-reminders";
 import { notifyPipeChanged } from "@/lib/pipe/pipe-events";
@@ -195,19 +195,17 @@ async function runPipeRdvJob(surface: AutomationSurface): Promise<number> {
 
   const result = await processDuePipeRdvReminders(10);
   markAutomationJobRun("pipe_rdv");
-  if (result.sent > 0 && tray) {
-    await notifyAutomationEvent(
-      "CRM W.Y.S — Rappel RDV Pipe",
-      result.sent === 1
-        ? "1 rappel email RDV envoyé."
-        : `${result.sent} rappels email RDV envoyés.`,
-      { tray: true, nav: { page: "pipe" } }
-    );
+  const notify = formatPipeRdvScheduledEmailTrayNotify(result);
+  if (notify && tray) {
+    await notifyAutomationEvent(notify.title, notify.body, {
+      tray: true,
+      nav: { page: "pipe" },
+    });
   }
   if (result.errors.length > 0) {
     notifyAutomationError(
       "pipe-rdv-reminder",
-      "CRM W.Y.S — Rappel RDV Pipe",
+      "CRM W.Y.S — Email RDV Pipe",
       result.errors[0] ?? "Échec d'envoi",
       { tray, nav: { page: "pipe" } }
     );

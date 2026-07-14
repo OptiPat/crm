@@ -2352,7 +2352,7 @@ pub fn mark_pipe_rdv_calendar_cancelled(
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .cancel_pipe_rdv_reminder_schedules(timeline_entry_id)
+        .cancel_pipe_rdv_reminder_schedules(timeline_entry_id, None)
         .map_err(|e| e.to_string())?;
     database
         .mark_pipe_rdv_calendar_cancelled(timeline_entry_id)
@@ -2378,6 +2378,7 @@ pub fn replace_pipe_rdv_reminder_schedules(
             send_at: r.send_at,
             rdv_at: r.rdv_at,
             rdv_end_at: r.rdv_end_at,
+            schedule_kind: r.schedule_kind,
             visio_link: r.visio_link,
             event_location: r.event_location,
         })
@@ -2391,11 +2392,15 @@ pub fn replace_pipe_rdv_reminder_schedules(
 pub fn cancel_pipe_rdv_reminder_schedules(
     db: State<'_, DbState>,
     pipe_timeline_entry_id: i64,
+    schedule_kind: Option<String>,
 ) -> Result<u32, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .cancel_pipe_rdv_reminder_schedules(pipe_timeline_entry_id)
+        .cancel_pipe_rdv_reminder_schedules(
+            pipe_timeline_entry_id,
+            schedule_kind.as_deref(),
+        )
         .map_err(|e| e.to_string())
 }
 
@@ -2840,9 +2845,10 @@ pub fn get_placement_open_counts_by_pipe(
         .map_err(|e| format!("Échec compteurs placement: {}", e))?;
     Ok(map
         .into_iter()
-        .map(|(pipe_id, (pending, non_conforme))| {
+        .map(|(pipe_id, (unsent, pending, non_conforme))| {
             crate::database::models::PlacementPipeOpenCount {
                 pipe_id,
+                unsent,
                 pending,
                 non_conforme,
             }

@@ -68,4 +68,19 @@ describe("pipe-list-filters", () => {
       hasActivePipeListFilters({ ...DEFAULT_PIPE_LIST_FILTERS, search: "x" })
     ).toBe(true);
   });
+
+  it("conserve les versements complémentaires dans la liste affaire", () => {
+    const versement = pipe({
+      id: 4,
+      titre: "Versement complémentaire — Jean DUPONT",
+      parent_pipe_id: 2,
+      stage: "PROSPECTION",
+    });
+    expect(
+      filterPipesForList([...rows, versement], {
+        ...DEFAULT_PIPE_LIST_FILTERS,
+        pipeType: "AFFAIRE",
+      }).map((p) => p.id)
+    ).toContain(4);
+  });
 });

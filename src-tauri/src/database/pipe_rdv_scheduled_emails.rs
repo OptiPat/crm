@@ -1,11 +1,24 @@
-//! Rappels email planifiés avant un RDV Pipe (file locale SQLite).
+//! Rappels et suivis email planifiés autour d'un RDV Pipe (file locale SQLite).
 
-use std::collections::HashSet;
+use std::collections::{HashSet};
 
 use rusqlite::{params, Result};
 
 use super::models::PipeRdvReminderSchedule;
 use super::pipe_timeline::TIMELINE_RDV;
+
+const SCHEDULE_KIND_BEFORE: &str = "before";
+const SCHEDULE_KIND_AFTER: &str = "after";
+
+fn normalize_pipe_rdv_schedule_kind(kind: &str) -> Result<&'static str> {
+    match kind {
+        SCHEDULE_KIND_BEFORE => Ok(SCHEDULE_KIND_BEFORE),
+        SCHEDULE_KIND_AFTER => Ok(SCHEDULE_KIND_AFTER),
+        _ => Err(rusqlite::Error::InvalidParameterName(
+            "Type de planification RDV Pipe invalide (before/after)".into(),
+        )),
+    }
+}
 
 impl super::Database {
     fn validate_pipe_rdv_reminder_schedules(
@@ -61,8 +74,50 @@ impl super::Database {
                     "Date d'envoi du rappel RDV Pipe invalide".into(),
                 ));
             }
+            normalize_pipe_rdv_schedule_kind(&row.schedule_kind)?;
             self.get_template_email_by_id(row.template_id)?;
         }
+        Ok(())
+    }
+
+    fn migrate_pipe_rdv_scheduled_emails_schedule_kind(&self) -> Result<()> {
+        if self.table_has_column("pipe_rdv_scheduled_emails", "schedule_kind")? {
+            return Ok(());
+        }
+        self.conn.execute_batch(
+            "CREATE TABLE pipe_rdv_scheduled_emails_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pipe_timeline_entry_id INTEGER NOT NULL,
+                pipe_id INTEGER NOT NULL,
+                contact_id INTEGER NOT NULL,
+                template_id INTEGER NOT NULL,
+                send_at INTEGER NOT NULL,
+                rdv_at INTEGER NOT NULL,
+                rdv_end_at INTEGER NOT NULL,
+                visio_link TEXT,
+                event_location TEXT,
+                sent_at INTEGER,
+                cancelled_at INTEGER,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+                schedule_kind TEXT NOT NULL DEFAULT 'before',
+                UNIQUE(pipe_timeline_entry_id, contact_id, schedule_kind)
+            );
+            INSERT INTO pipe_rdv_scheduled_emails_new (
+                id, pipe_timeline_entry_id, pipe_id, contact_id, template_id,
+                send_at, rdv_at, rdv_end_at, visio_link, event_location,
+                sent_at, cancelled_at, created_at, schedule_kind
+            )
+            SELECT
+                id, pipe_timeline_entry_id, pipe_id, contact_id, template_id,
+                send_at, rdv_at, rdv_end_at, visio_link, event_location,
+                sent_at, cancelled_at, created_at, 'before'
+            FROM pipe_rdv_scheduled_emails;
+            DROP TABLE pipe_rdv_scheduled_emails;
+            ALTER TABLE pipe_rdv_scheduled_emails_new RENAME TO pipe_rdv_scheduled_emails;
+            CREATE INDEX IF NOT EXISTS idx_pipe_rdv_sched_send
+             ON pipe_rdv_scheduled_emails(send_at)
+             WHERE sent_at IS NULL AND cancelled_at IS NULL;",
+        )?;
         Ok(())
     }
 
@@ -82,10 +137,12 @@ impl super::Database {
                 sent_at INTEGER,
                 cancelled_at INTEGER,
                 created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-                UNIQUE(pipe_timeline_entry_id, contact_id)
+                schedule_kind TEXT NOT NULL DEFAULT 'before',
+                UNIQUE(pipe_timeline_entry_id, contact_id, schedule_kind)
             )",
             [],
         )?;
+        self.migrate_pipe_rdv_scheduled_emails_schedule_kind()?;
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_pipe_rdv_sched_send
              ON pipe_rdv_scheduled_emails(send_at)
@@ -101,20 +158,30 @@ impl super::Database {
         rows: &[PipeRdvReminderSchedule],
     ) -> Result<()> {
         self.validate_pipe_rdv_reminder_schedules(pipe_timeline_entry_id, rows)?;
+        let kinds: HashSet<String> = rows
+            .iter()
+            .map(|row| normalize_pipe_rdv_schedule_kind(&row.schedule_kind).unwrap().to_string())
+            .collect();
         let tx = self.conn.unchecked_transaction()?;
-        tx.execute(
-            "UPDATE pipe_rdv_scheduled_emails
-             SET cancelled_at = strftime('%s','now')
-             WHERE pipe_timeline_entry_id = ?1 AND sent_at IS NULL AND cancelled_at IS NULL",
-            params![pipe_timeline_entry_id],
-        )?;
+        for kind in &kinds {
+            tx.execute(
+                "UPDATE pipe_rdv_scheduled_emails
+                 SET cancelled_at = strftime('%s','now')
+                 WHERE pipe_timeline_entry_id = ?1
+                   AND schedule_kind = ?2
+                   AND sent_at IS NULL
+                   AND cancelled_at IS NULL",
+                params![pipe_timeline_entry_id, kind],
+            )?;
+        }
         for row in rows {
+            let kind = normalize_pipe_rdv_schedule_kind(&row.schedule_kind)?;
             tx.execute(
                 "INSERT INTO pipe_rdv_scheduled_emails (
                     pipe_timeline_entry_id, pipe_id, contact_id, template_id,
-                    send_at, rdv_at, rdv_end_at, visio_link, event_location
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-                ON CONFLICT(pipe_timeline_entry_id, contact_id) DO UPDATE SET
+                    send_at, rdv_at, rdv_end_at, visio_link, event_location, schedule_kind
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                ON CONFLICT(pipe_timeline_entry_id, contact_id, schedule_kind) DO UPDATE SET
                     pipe_id = excluded.pipe_id,
                     template_id = excluded.template_id,
                     send_at = excluded.send_at,
@@ -125,7 +192,7 @@ impl super::Database {
                     sent_at = NULL,
                     cancelled_at = NULL,
                     created_at = strftime('%s','now')
-                WHERE sent_at IS NULL OR rdv_at != excluded.rdv_at",
+                WHERE sent_at IS NULL OR rdv_at != excluded.rdv_at OR rdv_end_at != excluded.rdv_end_at",
                 params![
                     row.pipe_timeline_entry_id,
                     row.pipe_id,
@@ -136,6 +203,7 @@ impl super::Database {
                     row.rdv_end_at,
                     row.visio_link,
                     row.event_location,
+                    kind,
                 ],
             )?;
         }
@@ -143,13 +211,31 @@ impl super::Database {
         Ok(())
     }
 
-    pub fn cancel_pipe_rdv_reminder_schedules(&self, pipe_timeline_entry_id: i64) -> Result<u32> {
-        Ok(self.conn.execute(
-            "UPDATE pipe_rdv_scheduled_emails
-             SET cancelled_at = strftime('%s','now')
-             WHERE pipe_timeline_entry_id = ?1 AND sent_at IS NULL AND cancelled_at IS NULL",
-            params![pipe_timeline_entry_id],
-        )? as u32)
+    pub fn cancel_pipe_rdv_reminder_schedules(
+        &self,
+        pipe_timeline_entry_id: i64,
+        schedule_kind: Option<&str>,
+    ) -> Result<u32> {
+        match schedule_kind {
+            Some(kind) => {
+                let kind = normalize_pipe_rdv_schedule_kind(kind)?;
+                Ok(self.conn.execute(
+                    "UPDATE pipe_rdv_scheduled_emails
+                     SET cancelled_at = strftime('%s','now')
+                     WHERE pipe_timeline_entry_id = ?1
+                       AND schedule_kind = ?2
+                       AND sent_at IS NULL
+                       AND cancelled_at IS NULL",
+                    params![pipe_timeline_entry_id, kind],
+                )? as u32)
+            }
+            None => Ok(self.conn.execute(
+                "UPDATE pipe_rdv_scheduled_emails
+                 SET cancelled_at = strftime('%s','now')
+                 WHERE pipe_timeline_entry_id = ?1 AND sent_at IS NULL AND cancelled_at IS NULL",
+                params![pipe_timeline_entry_id],
+            )? as u32),
+        }
     }
 
     pub fn cancel_pipe_rdv_reminders_for_pipe(&self, pipe_id: i64) -> Result<()> {
@@ -170,14 +256,19 @@ impl super::Database {
         self.conn.execute(
             "UPDATE pipe_rdv_scheduled_emails
              SET cancelled_at = strftime('%s','now')
-             WHERE sent_at IS NULL AND cancelled_at IS NULL AND rdv_at <= ?1",
+             WHERE sent_at IS NULL AND cancelled_at IS NULL
+               AND schedule_kind = 'before' AND rdv_at <= ?1",
             params![now],
         )?;
         let sql = "SELECT id, pipe_timeline_entry_id, pipe_id, contact_id, template_id,
-                          send_at, rdv_at, rdv_end_at, visio_link, event_location
+                          send_at, rdv_at, rdv_end_at, schedule_kind, visio_link, event_location
                    FROM pipe_rdv_scheduled_emails
                    WHERE sent_at IS NULL AND cancelled_at IS NULL
-                     AND send_at <= ?1 AND rdv_at > ?1
+                     AND send_at <= ?1
+                     AND (
+                       (schedule_kind = 'before' AND rdv_at > ?1)
+                       OR (schedule_kind = 'after' AND rdv_end_at <= ?1)
+                     )
                    ORDER BY send_at ASC
                    LIMIT ?2";
         let mut stmt = self.conn.prepare(sql)?;
@@ -191,8 +282,9 @@ impl super::Database {
                 send_at: row.get(5)?,
                 rdv_at: row.get(6)?,
                 rdv_end_at: row.get(7)?,
-                visio_link: row.get(8)?,
-                event_location: row.get(9)?,
+                schedule_kind: row.get(8)?,
+                visio_link: row.get(9)?,
+                event_location: row.get(10)?,
             })
         })?;
         rows.collect()
@@ -277,6 +369,7 @@ mod tests {
             send_at: 1_700_000_000,
             rdv_at: 1_700_086_400,
             rdv_end_at: 1_700_090_000,
+            schedule_kind: "before".into(),
             visio_link: Some("https://meet.google.com/abc".into()),
             event_location: None,
         };
@@ -314,6 +407,7 @@ mod tests {
             send_at: 1_600_000_000,
             rdv_at: 1_600_086_400,
             rdv_end_at: 1_600_090_000,
+            schedule_kind: "before".into(),
             visio_link: None,
             event_location: None,
         };
@@ -341,6 +435,7 @@ mod tests {
             send_at,
             rdv_at: 1_700_086_400,
             rdv_end_at: 1_700_090_000,
+            schedule_kind: "before".into(),
             visio_link: None,
             event_location: None,
         };
@@ -371,6 +466,7 @@ mod tests {
             send_at: 1_700_000_000,
             rdv_at: 1_700_086_400,
             rdv_end_at: 1_700_090_000,
+            schedule_kind: "before".into(),
             visio_link: None,
             event_location: None,
         };
@@ -387,6 +483,7 @@ mod tests {
             send_at: 1_710_000_000,
             rdv_at: 1_710_086_400,
             rdv_end_at: 1_710_090_000,
+            schedule_kind: "before".into(),
             visio_link: None,
             event_location: None,
         };
@@ -416,6 +513,7 @@ mod tests {
             send_at: 1_700_000_000,
             rdv_at: 1_700_086_400,
             rdv_end_at: 1_700_090_000,
+            schedule_kind: "before".into(),
             visio_link: None,
             event_location: None,
         };
@@ -426,6 +524,39 @@ mod tests {
             .list_due_pipe_rdv_reminder_schedules(1_700_100_000, 10)
             .expect("list");
         assert!(due.is_empty());
+    }
+
+    #[test]
+    fn pipe_rdv_follow_up_schedule_lists_after_rdv_end() {
+        let db = Database::open_in_memory_for_tests().expect("mem db");
+        db.migrate_pipe_rdv_scheduled_emails_table()
+            .expect("migrate");
+        let (pipe_id, timeline_id, contact_id, template_id) =
+            seed_pipe_rdv_reminder_fixture(&db);
+        let row = super::super::models::PipeRdvReminderSchedule {
+            id: 0,
+            pipe_timeline_entry_id: timeline_id,
+            pipe_id,
+            contact_id,
+            template_id,
+            send_at: 1_700_100_000,
+            rdv_at: 1_700_086_400,
+            rdv_end_at: 1_700_090_000,
+            schedule_kind: "after".into(),
+            visio_link: None,
+            event_location: None,
+        };
+        db.replace_pipe_rdv_reminder_schedules(timeline_id, &[row])
+            .expect("insert");
+        let too_early = db
+            .list_due_pipe_rdv_reminder_schedules(1_700_095_000, 10)
+            .expect("list early");
+        assert!(too_early.is_empty());
+        let due = db
+            .list_due_pipe_rdv_reminder_schedules(1_700_100_000, 10)
+            .expect("list due");
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].schedule_kind, "after");
     }
 
     #[test]
@@ -444,6 +575,7 @@ mod tests {
             send_at: 1_700_000_000,
             rdv_at: 1_700_086_400,
             rdv_end_at: 1_700_090_000,
+            schedule_kind: "before".into(),
             visio_link: None,
             event_location: None,
         };
