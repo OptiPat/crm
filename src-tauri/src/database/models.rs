@@ -1494,6 +1494,15 @@ pub struct PlacementOperation {
     pub updated_at: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_notified_at: Option<i64>,
+    /// Date du premier mail Stellium « non conforme » (parcours stepper).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub non_conforme_at: Option<i64>,
+    /// Date de renvoi du dossier corrigé chez Stellium (action CGP).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partner_resent_at: Option<i64>,
+    /// Retrait manuel du tableau / suivi actif (sans mail client).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dismissed_at: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

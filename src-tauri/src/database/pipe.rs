@@ -554,6 +554,7 @@ impl super::Database {
         }
         let tx = self.conn.unchecked_transaction()?;
         self.cancel_pipe_rdv_reminders_for_pipe(id)?;
+        self.dismiss_placement_operations_for_pipe(id)?;
         self.delete_pipe_timeline_for_pipe(id)?;
         let deleted = self.conn.execute("DELETE FROM pipes WHERE id = ?1", params![id])?;
         if deleted == 0 {

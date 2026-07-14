@@ -4,7 +4,6 @@ import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { PipeSuiviQuickAdd } from "@/components/pipe/PipeSuiviQuickAdd";
 import { PipeSuiviStelliumActAdd } from "@/components/pipe/PipeSuiviStelliumActAdd";
-import { PipePlacementOperations } from "@/components/pipe/PipePlacementOperations";
 import { PipeStageBadge } from "@/components/pipe/PipeStageBadge";
 
 interface PipeSuiviSectionProps {
@@ -34,8 +33,6 @@ export function PipeSuiviSection({
         onAdded={onJournalAdded}
         onPlanSuiviRdv={onPlanSuiviRdv}
       />
-
-      <PipePlacementOperations pipeId={pipe.id} />
 
       <PipeSuiviStelliumActAdd timeline={timeline} pipe={pipe} onAdded={onJournalAdded} />
 

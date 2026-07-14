@@ -3,6 +3,8 @@ import {
   normalizeStelliumBoxPlacementLabel,
   placementOperationTypeFromStelliumLabel,
   stelliumBoxPlacementLabelsMatch,
+  stelliumLabelGroupsForProduct,
+  isStelliumLabelAllowedForProduct,
   STELLIUM_BOX_PLACEMENT_LABELS,
 } from "@/lib/placement/stellium-box-placement-labels";
 
@@ -36,9 +38,38 @@ describe("stellium-box-placement-labels", () => {
     ).toBe("VERSEMENT");
   });
 
-  it("contient les libellés gestion fournis (hors SCPI)", () => {
+  it("contient les libellés gestion et SCPI", () => {
     expect(STELLIUM_BOX_PLACEMENT_LABELS).toContain("Arbitrage libre");
     expect(STELLIUM_BOX_PLACEMENT_LABELS).toContain("Modification administrative : RIB");
+    expect(STELLIUM_BOX_PLACEMENT_LABELS).toContain("Cession de parts");
+    expect(STELLIUM_BOX_PLACEMENT_LABELS).toContain(
+      "Modification administrative : adresse / nom / RIB"
+    );
+    expect(STELLIUM_BOX_PLACEMENT_LABELS).toContain(
+      "Réinvestissements des dividendes : Mise en place"
+    );
     expect(STELLIUM_BOX_PLACEMENT_LABELS).not.toContain("Versement complémentaire");
+  });
+
+  it("mappe réinvestissement dividendes SCPI", () => {
+    expect(
+      placementOperationTypeFromStelliumLabel("Réinvestissements des dividendes : Modification")
+    ).toBe("REINVESTISSEMENT");
+  });
+
+  it("filtre les actes selon le produit", () => {
+    const scpiGroups = stelliumLabelGroupsForProduct("Comète");
+    expect(scpiGroups).toHaveLength(1);
+    expect(scpiGroups[0]?.id).toBe("scpi");
+    expect(scpiGroups[0]?.items).toContain("Cession de parts");
+    expect(scpiGroups[0]?.items).not.toContain("Arbitrage libre");
+
+    const avGroups = stelliumLabelGroupsForProduct("Cristalliance Avenir");
+    expect(avGroups.some((g) => g.id === "arbitrages")).toBe(true);
+    expect(avGroups.some((g) => g.id === "scpi")).toBe(false);
+    expect(isStelliumLabelAllowedForProduct("Arbitrage libre", "Cristalliance Avenir")).toBe(true);
+    expect(isStelliumLabelAllowedForProduct("Cession de parts", "Cristalliance Avenir")).toBe(
+      false
+    );
   });
 });

@@ -6,7 +6,6 @@ import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { journalAffairePartenairePlacement } from "@/lib/placement/pipe-placement-tracking";
 import type { PlacementPartenaireJournalKind } from "@/lib/placement/pipe-placement-partenaire-types";
-import { PipePlacementOperations } from "@/components/pipe/PipePlacementOperations";
 import { toast } from "sonner";
 
 interface PipeAffairePlacementSectionProps {
@@ -75,8 +74,6 @@ export function PipeAffairePlacementSection({
           </p>
         )}
       </div>
-
-      <PipePlacementOperations pipeId={pipe.id} />
 
       <div className="flex flex-wrap gap-1.5">
         {!isVersementChild && (

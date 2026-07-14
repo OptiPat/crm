@@ -29,6 +29,7 @@ import { PipeStageStepper } from "@/components/pipe/PipeStageStepper";
 import { PipeProspectionContactSection } from "@/components/pipe/PipeProspectionContactSection";
 import { PipeAffairePlacementSection } from "@/components/pipe/PipeAffairePlacementSection";
 import { PipeSuiviSection } from "@/components/pipe/PipeSuiviSection";
+import { PipeSuiviPlacementAvancement } from "@/components/pipe/PipeSuiviPlacementAvancement";
 import { PipeTimelineQuickAdd } from "@/components/pipe/PipeTimelineQuickAdd";
 import { isSuiviPipe } from "@/lib/pipe/pipe-suivi";
 import { PipeTimelineHistory } from "@/components/pipe/PipeTimelineHistory";
@@ -252,7 +253,9 @@ export function PipeDetailPanel({
             )}
 
             {showSuiviSection && onCreateVersementAffaire && onOpenChildAffaire ? (
-              <PipeSuiviSection
+              <>
+                <PipeSuiviPlacementAvancement pipeId={pipe.id} />
+                <PipeSuiviSection
                 pipe={pipe}
                 childAffaires={childAffaires}
                 timeline={timeline}
@@ -261,8 +264,12 @@ export function PipeDetailPanel({
                 onOpenChildAffaire={onOpenChildAffaire}
                 onPlanSuiviRdv={onPlanSuiviRdv}
               />
+              </>
             ) : (
               <>
+                {showAffairePlacementSection && (
+                  <PipeSuiviPlacementAvancement pipeId={pipe.id} />
+                )}
                 {showAffairePlacementSection && (
                   <PipeAffairePlacementSection
                     pipe={pipe}

@@ -24,6 +24,9 @@ export interface PlacementOperation {
   created_at: number;
   updated_at: number;
   client_notified_at?: number | null;
+  non_conforme_at?: number | null;
+  partner_resent_at?: number | null;
+  dismissed_at?: number | null;
 }
 
 export interface PlacementOperationWithContact {
@@ -90,6 +93,9 @@ function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWi
     created_at,
     updated_at,
     client_notified_at,
+    non_conforme_at,
+    partner_resent_at,
+    dismissed_at,
   } = raw;
   return {
     operation: {
@@ -107,6 +113,9 @@ function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWi
       created_at,
       updated_at,
       client_notified_at,
+      non_conforme_at,
+      partner_resent_at,
+      dismissed_at,
     },
     contact_nom,
     contact_prenom,
@@ -144,6 +153,14 @@ export async function updatePlacementOperationStatus(
 
 export async function getPlacementOperation(id: number): Promise<PlacementOperation> {
   return invoke<PlacementOperation>("get_placement_operation", { id });
+}
+
+export async function markPlacementPartnerResent(id: number): Promise<PlacementOperation> {
+  return invoke<PlacementOperation>("mark_placement_partner_resent", { id });
+}
+
+export async function dismissPlacementOperation(id: number): Promise<PlacementOperation> {
+  return invoke<PlacementOperation>("dismiss_placement_operation", { id });
 }
 
 export async function markPlacementClientNotified(id: number): Promise<void> {

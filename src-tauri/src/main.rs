@@ -304,6 +304,8 @@ fn main() {
             list_placement_operations_for_pipe,
             update_placement_operation_status,
             get_placement_operation,
+            mark_placement_partner_resent,
+            dismiss_placement_operation,
             mark_placement_client_notified,
             reserve_placement_client_notification,
             release_placement_client_notification,

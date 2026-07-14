@@ -1,4 +1,5 @@
 import type { PlacementOperationType } from "@/lib/api/tauri-box-placement";
+import { stelliumProductFamilyIdForProduct } from "@/lib/placement/stellium-box-placement-products";
 
 /** Libellé exact tel qu'affiché dans les mails Stellium Box Placement. */
 export type StelliumBoxPlacementLabel = string;
@@ -10,7 +11,7 @@ export interface StelliumBoxPlacementLabelGroup {
 }
 
 /**
- * Catalogue Suivi / gestion (hors versement complémentaire affaire, hors SCPI — à compléter).
+ * Catalogue Suivi / gestion (hors versement complémentaire affaire).
  * Les libellés doivent correspondre exactement à la 1ʳᵉ partie de la ligne mail Stellium.
  */
 export const STELLIUM_BOX_PLACEMENT_LABEL_GROUPS: readonly StelliumBoxPlacementLabelGroup[] =
@@ -80,6 +81,25 @@ export const STELLIUM_BOX_PLACEMENT_LABEL_GROUPS: readonly StelliumBoxPlacementL
       label: "Autres actes",
       items: ["Ordre de remplacement", "Transfert entrant"],
     },
+    {
+      id: "scpi",
+      label: "SCPI",
+      items: [
+        "Cession de parts",
+        "Décès",
+        "Donation",
+        "Modification administrative : adresse / nom / RIB",
+        "Nantissement : Arrêt",
+        "Nantissement : Mise en place",
+        "Réinvestissements des dividendes : Arrêt",
+        "Réinvestissements des dividendes : Mise en place",
+        "Réinvestissements des dividendes : Modification",
+        "Retrait de parts",
+        "Versements programmés : Arrêt",
+        "Versements programmés : Mise en place",
+        "Versements programmés : Modification",
+      ],
+    },
   ] as const;
 
 export const STELLIUM_BOX_PLACEMENT_LABELS: readonly StelliumBoxPlacementLabel[] =
@@ -120,5 +140,24 @@ export function isKnownStelliumBoxPlacementLabel(label: string): boolean {
   const normalized = normalizeStelliumBoxPlacementLabel(label);
   return STELLIUM_BOX_PLACEMENT_LABELS.some(
     (item) => normalizeStelliumBoxPlacementLabel(item) === normalized
+  );
+}
+
+/** Actes proposés selon la famille du produit (SCPI vs assurance-vie / PER / capi). */
+export function stelliumLabelGroupsForProduct(
+  product: string
+): readonly StelliumBoxPlacementLabelGroup[] {
+  const family = stelliumProductFamilyIdForProduct(product);
+  if (!family) return [];
+  if (family === "scpi") {
+    return STELLIUM_BOX_PLACEMENT_LABEL_GROUPS.filter((group) => group.id === "scpi");
+  }
+  return STELLIUM_BOX_PLACEMENT_LABEL_GROUPS.filter((group) => group.id !== "scpi");
+}
+
+export function isStelliumLabelAllowedForProduct(label: string, product: string): boolean {
+  const normalized = normalizeStelliumBoxPlacementLabel(label);
+  return stelliumLabelGroupsForProduct(product).some((group) =>
+    group.items.some((item) => normalizeStelliumBoxPlacementLabel(item) === normalized)
   );
 }

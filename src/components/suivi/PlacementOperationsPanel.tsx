@@ -7,9 +7,11 @@ import {
   RefreshCw,
   User,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  dismissPlacementOperation,
   listPlacementOperations,
   notifyPlacementOperationsChanged,
   PLACEMENT_OPERATIONS_CHANGED_EVENT,
@@ -27,6 +29,7 @@ import {
   countPlacementPendingClientNotify,
   isPlacementRowVisibleInSuivi,
   placementConformeNeedsClientNotify,
+  placementOperationIsUndeclared,
   placementOperationStatusAccent,
   placementOperationStatusLabel,
   placementOperationTypeLabel,
@@ -43,6 +46,7 @@ export function PlacementOperationsPanel({
   const [scanning, setScanning] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [resendingId, setResendingId] = useState<number | null>(null);
+  const [dismissingId, setDismissingId] = useState<number | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -123,9 +127,23 @@ export function PlacementOperationsPanel({
     }
   };
 
-  const { pending, nonConforme } = countOpenPlacementOperations(rows);
-  const pendingNotify = countPlacementPendingClientNotify(rows);
+  const handleDismiss = async (id: number) => {
+    setDismissingId(id);
+    try {
+      await dismissPlacementOperation(id);
+      notifyPlacementOperationsChanged();
+      toast.success("Opération retirée du tableau");
+      await reload();
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setDismissingId(null);
+    }
+  };
+
   const visibleRows = rows.filter((r) => isPlacementRowVisibleInSuivi(r.operation));
+  const { pending, nonConforme } = countOpenPlacementOperations(visibleRows);
+  const pendingNotify = countPlacementPendingClientNotify(visibleRows);
 
   return (
     <Card>
@@ -168,10 +186,17 @@ export function PlacementOperationsPanel({
                   className="flex flex-col gap-2 rounded-lg border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">
-                      {placementOperationTypeLabel(row.operation.operation_type)} —{" "}
-                      {row.contact_prenom} {row.contact_nom}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="font-medium truncate">
+                        {placementOperationTypeLabel(row.operation.operation_type)} —{" "}
+                        {row.contact_prenom} {row.contact_nom}
+                      </p>
+                      {placementOperationIsUndeclared(row.operation) ? (
+                        <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
+                          Non déclaré
+                        </Badge>
+                      ) : null}
+                    </div>
                     <p className="text-xs text-muted-foreground truncate">
                       {row.operation.product_label ||
                         row.operation.stellium_label ||
@@ -230,6 +255,18 @@ export function PlacementOperationsPanel({
                       >
                         <CheckCircle2 className="h-3 w-3" />
                         {row.operation.status === "NON_CONFORME" ? "Traiter" : "Marquer conforme"}
+                      </Button>
+                    )}
+                    {row.operation.status === "PENDING" && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                        disabled={dismissingId === row.operation.id}
+                        onClick={() => void handleDismiss(row.operation.id)}
+                      >
+                        Retirer
                       </Button>
                     )}
                     <span

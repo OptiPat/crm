@@ -10,11 +10,18 @@ describe("buildAppNotificationsSummary", () => {
       sent: { count: 0 },
       alertes: { count: 1, focus_contact_id: 9 },
       taches_urgent: { count: 3 },
+      placement_non_conforme: { count: 2, focus_contact_id: null },
       stellium_signals: [],
     });
 
-    expect(summary.items).toHaveLength(4);
-    expect(summary.totalCount).toBe(7);
+    expect(summary.items).toHaveLength(5);
+    expect(summary.totalCount).toBe(9);
+    expect(summary.items.find((i) => i.id === "placement_non_conforme")).toMatchObject({
+      label: "Opérations partenaire non conformes",
+      count: 2,
+      suiviTab: "alertes",
+      severity: "urgent",
+    });
     expect(summary.items.find((i) => i.id === "taches_urgent")).toMatchObject({
       label: "Aujourd'hui / en retard",
       count: 3,
@@ -34,6 +41,7 @@ describe("buildAppNotificationsSummary", () => {
       sent: { count: 0 },
       alertes: { count: 0 },
       taches_urgent: { count: 0 },
+      placement_non_conforme: { count: 0 },
       stellium_signals: [],
     });
     expect(summary.items).toHaveLength(0);

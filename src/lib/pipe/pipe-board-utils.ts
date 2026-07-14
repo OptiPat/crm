@@ -5,6 +5,28 @@ export const PIPE_VIEW_MODE_KEY = "crm:pipe-view-mode";
 
 export type PipeViewMode = "board" | "list";
 
+export const PIPE_BOARD_TAB_KEY = "crm:pipe-board-tab";
+
+export type PipeBoardTab = "affaires" | "actes";
+
+export function loadPipeBoardTab(): PipeBoardTab {
+  try {
+    const raw = localStorage.getItem(PIPE_BOARD_TAB_KEY);
+    if (raw === "affaires" || raw === "actes") return raw;
+  } catch {
+    /* ignore */
+  }
+  return "affaires";
+}
+
+export function savePipeBoardTab(tab: PipeBoardTab): void {
+  try {
+    localStorage.setItem(PIPE_BOARD_TAB_KEY, tab);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function loadPipeViewMode(): PipeViewMode {
   try {
     const raw = localStorage.getItem(PIPE_VIEW_MODE_KEY);

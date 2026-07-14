@@ -17,6 +17,7 @@ pub struct AppNotificationsSummaryDto {
     pub sent: NotificationQueueBucket,
     pub alertes: NotificationQueueBucket,
     pub taches_urgent: NotificationQueueBucket,
+    pub placement_non_conforme: NotificationQueueBucket,
     pub stellium_signals: Vec<crate::email::stellium_exceltis::StelliumExceltisSignal>,
 }
 
@@ -67,6 +68,8 @@ impl super::Database {
         };
 
         let (taches_urgent_count, taches_urgent_focus) = self.count_taches_urgent_echeance()?;
+        let (placement_nc_count, placement_nc_focus) =
+            self.count_placement_non_conforme_with_focus()?;
 
         Ok(AppNotificationsSummaryDto {
             ready: self.queue_notification_bucket("ready")?,
@@ -80,6 +83,10 @@ impl super::Database {
             taches_urgent: NotificationQueueBucket {
                 count: taches_urgent_count,
                 focus_contact_id: taches_urgent_focus,
+            },
+            placement_non_conforme: NotificationQueueBucket {
+                count: placement_nc_count,
+                focus_contact_id: placement_nc_focus,
             },
             stellium_signals,
         })

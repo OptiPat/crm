@@ -13,6 +13,7 @@ export type AppNotificationKind =
   | "emails_sent"
   | "alertes_suivi"
   | "taches_urgent"
+  | "placement_non_conforme"
   | "exceltis_stellium"
   | "compta_month_end";
 
@@ -49,6 +50,7 @@ export type AppNotificationsSummaryDto = {
   sent: NotificationQueueBucketDto;
   alertes: NotificationQueueBucketDto;
   taches_urgent: NotificationQueueBucketDto;
+  placement_non_conforme: NotificationQueueBucketDto;
   stellium_signals: StelliumExceltisSignal[];
 };
 
@@ -109,6 +111,24 @@ export function buildAppNotificationsSummary(
       focusContactId:
         dto.taches_urgent.count === 1 && dto.taches_urgent.focus_contact_id != null
           ? dto.taches_urgent.focus_contact_id
+          : undefined,
+    });
+  }
+
+  if (dto.placement_non_conforme.count > 0) {
+    items.push({
+      id: "placement_non_conforme",
+      label:
+        dto.placement_non_conforme.count === 1
+          ? "Opération partenaire non conforme"
+          : "Opérations partenaire non conformes",
+      count: dto.placement_non_conforme.count,
+      severity: "urgent",
+      suiviTab: "alertes",
+      focusContactId:
+        dto.placement_non_conforme.count === 1 &&
+        dto.placement_non_conforme.focus_contact_id != null
+          ? dto.placement_non_conforme.focus_contact_id
           : undefined,
     });
   }

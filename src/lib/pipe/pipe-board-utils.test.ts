@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { filterAffairesForBoard, groupAffairesByStage } from "./pipe-board-utils";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import {
+  filterAffairesForBoard,
+  groupAffairesByStage,
+  loadPipeBoardTab,
+  savePipeBoardTab,
+} from "./pipe-board-utils";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 
 function affaire(id: number, stage: string, updated_at: number): PipeRecord {
@@ -17,6 +22,21 @@ function affaire(id: number, stage: string, updated_at: number): PipeRecord {
 }
 
 describe("pipe-board-utils", () => {
+  const storage = new Map<string, string>();
+
+  beforeEach(() => {
+    storage.clear();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        storage.set(key, value);
+      },
+      removeItem: (key: string) => {
+        storage.delete(key);
+      },
+    });
+  });
+
   it("filtre les affaires avec stage valide", () => {
     const pipes = [
       affaire(1, "R1", 10),
@@ -35,5 +55,12 @@ describe("pipe-board-utils", () => {
     expect(groups.R1.map((p) => p.id)).toEqual([2, 1]);
     expect(groups.R2.map((p) => p.id)).toEqual([3]);
     expect(groups.PROSPECTION).toEqual([]);
+  });
+
+  it("persiste l'onglet tableau affaires / actes", () => {
+    savePipeBoardTab("actes");
+    expect(loadPipeBoardTab()).toBe("actes");
+    savePipeBoardTab("affaires");
+    expect(loadPipeBoardTab()).toBe("affaires");
   });
 });

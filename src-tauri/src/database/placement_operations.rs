@@ -50,13 +50,20 @@ fn map_placement_row(row: &Row<'_>) -> Result<super::models::PlacementOperation>
         created_at: row.get(11)?,
         updated_at: row.get(12)?,
         client_notified_at: row.get(13)?,
+        non_conforme_at: row.get(14)?,
+        partner_resent_at: row.get(15)?,
+        dismissed_at: row.get(16)?,
     })
 }
 
 const PLACEMENT_SELECT: &str = "po.id, po.contact_id, po.pipe_id, po.pipe_timeline_entry_id,
     po.operation_type, po.product_label, po.stellium_label, po.status,
     po.gmail_message_id, po.email_subject, po.email_received_at, po.created_at, po.updated_at,
-    po.client_notified_at";
+    po.client_notified_at, po.non_conforme_at, po.partner_resent_at, po.dismissed_at";
+
+pub fn placement_operation_is_dismissed(op: &super::models::PlacementOperation) -> bool {
+    op.dismissed_at.map(|t| t > 0).unwrap_or(false)
+}
 
 pub fn normalize_stellium_label(value: &str) -> String {
     value
@@ -228,6 +235,27 @@ impl super::Database {
             )?;
             println!("✅ Migration: client_notified_at sur placement_operations");
         }
+        if !self.table_has_column("placement_operations", "non_conforme_at")? {
+            self.conn.execute(
+                "ALTER TABLE placement_operations ADD COLUMN non_conforme_at INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: non_conforme_at sur placement_operations");
+        }
+        if !self.table_has_column("placement_operations", "partner_resent_at")? {
+            self.conn.execute(
+                "ALTER TABLE placement_operations ADD COLUMN partner_resent_at INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: partner_resent_at sur placement_operations");
+        }
+        if !self.table_has_column("placement_operations", "dismissed_at")? {
+            self.conn.execute(
+                "ALTER TABLE placement_operations ADD COLUMN dismissed_at INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: dismissed_at sur placement_operations");
+        }
         Ok(())
     }
 
@@ -369,10 +397,13 @@ impl super::Database {
                     created_at: row.get(11)?,
                     updated_at: row.get(12)?,
                     client_notified_at: row.get(13)?,
+                    non_conforme_at: row.get(14)?,
+                    partner_resent_at: row.get(15)?,
+                    dismissed_at: row.get(16)?,
                 },
-                contact_nom: row.get(14)?,
-                contact_prenom: row.get(15)?,
-                pipe_titre: row.get(16)?,
+                contact_nom: row.get(17)?,
+                contact_prenom: row.get(18)?,
+                pipe_titre: row.get(19)?,
             })
         })?;
         let mut result = Vec::new();
@@ -481,6 +512,57 @@ impl super::Database {
             params![now, now, id],
         )?;
         Ok(updated > 0)
+    }
+
+    /// Marque le renvoi du dossier corrigé chez Stellium (parcours non conforme).
+    /// Retire l'opération du tableau et du suivi actif (sans envoi mail client).
+    /// Retire du workflow les actes encore liés à un pipe (ex. suppression du suivi).
+    pub fn dismiss_placement_operations_for_pipe(&self, pipe_id: i64) -> Result<u32> {
+        let now = now_unix();
+        let updated = self.conn.execute(
+            "UPDATE placement_operations SET dismissed_at = ?1, updated_at = ?1
+             WHERE pipe_id = ?2
+             AND (dismissed_at IS NULL OR dismissed_at <= 0)",
+            params![now, pipe_id],
+        )?;
+        Ok(updated as u32)
+    }
+
+    pub fn dismiss_placement_operation(
+        &self,
+        id: i64,
+    ) -> Result<super::models::PlacementOperation> {
+        let op = self.get_placement_operation_by_id(id)?;
+        if op.status == STATUS_NON_CONFORME {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "retrait impossible sur une opération non conforme — traiter ou marquer conforme".into(),
+            ));
+        }
+        if placement_operation_is_dismissed(&op) {
+            return Ok(op);
+        }
+        let now = now_unix();
+        self.conn.execute(
+            "UPDATE placement_operations SET dismissed_at = ?1, updated_at = ?2
+             WHERE id = ?3",
+            params![now, now, id],
+        )?;
+        self.get_placement_operation_by_id(id)
+    }
+
+    pub fn mark_placement_partner_resent(&self, id: i64) -> Result<super::models::PlacementOperation> {
+        let op = self.get_placement_operation_by_id(id)?;
+        if op.status != STATUS_NON_CONFORME {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "renvoi partenaire uniquement si non conforme".into(),
+            ));
+        }
+        let now = now_unix();
+        self.conn.execute(
+            "UPDATE placement_operations SET partner_resent_at = ?1, updated_at = ?2 WHERE id = ?3",
+            params![now, now, id],
+        )?;
+        self.get_placement_operation_by_id(id)
     }
 
     /// Réserve l'envoi client (atomique) avant sendEmail — évite les doubles envois concurrents.
@@ -606,7 +688,8 @@ impl super::Database {
         let sql = format!(
             "SELECT {PLACEMENT_SELECT}
              FROM placement_operations po
-             WHERE po.pipe_id = ?1 AND po.status = ?2{gmail_clause}
+             WHERE po.pipe_id = ?1 AND po.status = ?2
+               AND (po.dismissed_at IS NULL OR po.dismissed_at <= 0){gmail_clause}
              ORDER BY po.id DESC"
         );
         let mut stmt = self.conn.prepare(&sql)?;
@@ -823,7 +906,15 @@ impl super::Database {
 
     pub fn count_open_placement_operations(&self) -> Result<(u32, u32)> {
         let pending: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM placement_operations WHERE status = ?1",
+            "SELECT COUNT(*) FROM placement_operations
+             WHERE status = ?1
+               AND (dismissed_at IS NULL OR dismissed_at <= 0)
+               AND NOT (
+                 (pipe_id IS NULL OR pipe_id <= 0)
+                 AND (pipe_timeline_entry_id IS NULL OR pipe_timeline_entry_id <= 0)
+                 AND (email_received_at IS NULL OR email_received_at <= 0)
+                 AND (gmail_message_id IS NULL OR TRIM(gmail_message_id) = '')
+               )",
             params![STATUS_PENDING],
             |row| row.get(0),
         )?;
@@ -835,6 +926,27 @@ impl super::Database {
         Ok((pending as u32, non_conforme as u32))
     }
 
+    pub fn count_placement_non_conforme_with_focus(&self) -> Result<(u32, Option<i64>)> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM placement_operations WHERE status = ?1",
+            params![STATUS_NON_CONFORME],
+            |row| row.get(0),
+        )?;
+        let focus_contact_id = if count == 1 {
+            self.conn
+                .query_row(
+                    "SELECT contact_id FROM placement_operations WHERE status = ?1
+                     ORDER BY updated_at DESC, id DESC LIMIT 1",
+                    params![STATUS_NON_CONFORME],
+                    |row| row.get::<_, i64>(0),
+                )
+                .ok()
+        } else {
+            None
+        };
+        Ok((count as u32, focus_contact_id))
+    }
+
     pub fn get_placement_open_counts_by_pipe(
         &self,
     ) -> Result<std::collections::HashMap<i64, (u32, u32)>> {
@@ -843,6 +955,7 @@ impl super::Database {
              FROM placement_operations
              WHERE pipe_id IS NOT NULL
                AND status IN (?1, ?2)
+               AND (dismissed_at IS NULL OR dismissed_at <= 0)
              GROUP BY pipe_id, status",
         )?;
         let rows = stmt.query_map(
@@ -933,6 +1046,11 @@ impl super::Database {
                     email_subject = ?5,
                     email_received_at = ?6,
                     pipe_id = COALESCE(?7, pipe_id),
+                    non_conforme_at = CASE
+                        WHEN ?1 = 'NON_CONFORME' AND (non_conforme_at IS NULL OR non_conforme_at <= 0)
+                        THEN ?6
+                        ELSE non_conforme_at
+                    END,
                     updated_at = ?8
                  WHERE id = ?9",
                 params![
@@ -1033,6 +1151,98 @@ mod tests {
             )
             .unwrap_err();
         assert!(err.to_string().contains("aucune opération placement"));
+    }
+
+    #[test]
+    fn non_conforme_at_and_partner_resent_for_stepper() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        let contact = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let pending = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: None,
+                pipe_timeline_entry_id: None,
+                operation_type: OP_ARBITRAGE.into(),
+                product_label: Some("Cristalliance Avenir".into()),
+                stellium_label: Some("Arbitrage libre".into()),
+            })
+            .unwrap();
+        let received_at = email_received_after_operation(&pending);
+        let (updated, _) = db
+            .apply_placement_email_update(
+                contact_id,
+                OP_ARBITRAGE,
+                STATUS_NON_CONFORME,
+                Some("Arbitrage libre"),
+                Some("Cristalliance Avenir"),
+                "msg-nc",
+                Some("NC"),
+                received_at,
+                None,
+            )
+            .unwrap();
+        assert_eq!(updated.status, STATUS_NON_CONFORME);
+        assert_eq!(updated.non_conforme_at, Some(received_at));
+
+        let resent = db.mark_placement_partner_resent(updated.id).unwrap();
+        assert!(resent.partner_resent_at.unwrap() > 0);
+    }
+
+    #[test]
+    fn delete_pipe_dismisses_linked_placement_operations() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        db.migrate_pipes_table().unwrap();
+        let contact = db.create_contact(sample_contact("Alameda", "Luc")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let pipe = db
+            .create_pipe(super::super::models::NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
+                parent_pipe_id: None,
+                titre: "Suivi juillet".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+        let op = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(pipe.id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_ARBITRAGE.into(),
+                product_label: Some("Fipavie Ingénierie".into()),
+                stellium_label: Some("Rachats programmés : Mise en place".into()),
+            })
+            .unwrap();
+        db.delete_pipe(pipe.id).unwrap();
+        let refreshed = db.get_placement_operation_by_id(op.id).unwrap();
+        assert!(refreshed.dismissed_at.unwrap() > 0);
+    }
+
+    #[test]
+    fn dismiss_placement_operation_hides_from_active_workflow() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        let contact = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let pending = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: None,
+                pipe_timeline_entry_id: None,
+                operation_type: OP_ARBITRAGE.into(),
+                product_label: Some("Cristalliance Avenir".into()),
+                stellium_label: Some("Arbitrage libre".into()),
+            })
+            .unwrap();
+        let dismissed = db.dismiss_placement_operation(pending.id).unwrap();
+        assert!(dismissed.dismissed_at.unwrap() > 0);
+        let again = db.dismiss_placement_operation(pending.id).unwrap();
+        assert_eq!(again.dismissed_at, dismissed.dismissed_at);
     }
 
     #[test]

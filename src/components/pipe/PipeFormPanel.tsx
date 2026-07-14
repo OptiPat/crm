@@ -43,6 +43,15 @@ import { isPipeRdvStage, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { defaultSuiviPipeTitre } from "@/lib/pipe/pipe-suivi";
 import { isPipeFormDirty, type PipeFormSnapshot } from "@/lib/pipe/pipe-form-dirty";
 import { PipeContactSelect } from "@/components/pipe/PipeContactSelect";
+import { StelliumPlacementActFields } from "@/components/pipe/StelliumPlacementActFields";
+import {
+  createPlacementOperation,
+  notifyPlacementOperationsChanged,
+} from "@/lib/api/tauri-box-placement";
+import {
+  isStelliumLabelAllowedForProduct,
+  placementOperationTypeFromStelliumLabel,
+} from "@/lib/placement/stellium-box-placement-labels";
 import { toast } from "sonner";
 
 const TYPE_ICONS = {
@@ -73,6 +82,8 @@ interface FormState {
   titre: string;
   stage: PipeStage | "";
   notes: string;
+  stelliumProductLabel: string;
+  stelliumActLabel: string;
 }
 
 function buildFormState(
@@ -93,6 +104,8 @@ function buildFormState(
           ? (pipe.stage as PipeStage)
           : "",
       notes: pipe.notes ?? "",
+      stelliumProductLabel: "",
+      stelliumActLabel: "",
     };
   }
   return {
@@ -103,6 +116,8 @@ function buildFormState(
     titre: options?.initialTitre ?? "",
     stage: defaultPipeStage(initialType) || "",
     notes: "",
+    stelliumProductLabel: "",
+    stelliumActLabel: "",
   };
 }
 
@@ -385,12 +400,35 @@ export function PipeFormPanel({
       toast.error(error);
       return;
     }
+    const isSuiviCreate = !pipe && form.pipeType === "ACTE_GESTION";
+    const stelliumProduct = form.stelliumProductLabel.trim();
+    const stelliumAct = form.stelliumActLabel.trim();
+    if (isSuiviCreate) {
+      if (!stelliumProduct || !stelliumAct) {
+        toast.error("Produit et acte Stellium requis pour créer un suivi.");
+        return;
+      }
+      if (!isStelliumLabelAllowedForProduct(stelliumAct, stelliumProduct)) {
+        toast.error("Acte incompatible avec le produit sélectionné.");
+        return;
+      }
+    }
     setLoading(true);
     try {
       const payload = toPayload({ ...form, titre });
       const saved = pipe
         ? await updatePipe(pipe.id, payload)
         : await createPipe(payload);
+      if (isSuiviCreate) {
+        await createPlacementOperation({
+          contact_id: saved.contact_id,
+          pipe_id: saved.id,
+          operation_type: placementOperationTypeFromStelliumLabel(stelliumAct),
+          stellium_label: stelliumAct,
+          product_label: stelliumProduct,
+        });
+        notifyPlacementOperationsChanged();
+      }
       toast.success(pipe ? "Enregistré" : "Pipe créé");
       onSuccess(saved);
     } catch (err) {
@@ -533,6 +571,28 @@ export function PipeFormPanel({
             autoFocus
           />
         </div>
+
+        {!pipe && form.pipeType === "ACTE_GESTION" && (
+          <div className="space-y-3 rounded-lg border bg-muted/15 p-4">
+            <div>
+              <p className="text-sm font-medium">Acte Stellium</p>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                L&apos;acte est créé avec le suivi. Vous confirmerez l&apos;envoi chez Stellium
+                depuis la fiche (signature client, etc.).
+              </p>
+            </div>
+            <StelliumPlacementActFields
+              productLabel={form.stelliumProductLabel}
+              stelliumLabel={form.stelliumActLabel}
+              onProductChange={(stelliumProductLabel) =>
+                setForm((prev) => ({ ...prev, stelliumProductLabel }))
+              }
+              onStelliumLabelChange={(stelliumActLabel) =>
+                setForm((prev) => ({ ...prev, stelliumActLabel }))
+              }
+            />
+          </div>
+        )}
 
         {pipeTypeUsesStage(form.pipeType) && (
           <div className="space-y-2">

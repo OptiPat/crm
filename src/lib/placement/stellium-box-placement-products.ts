@@ -119,3 +119,22 @@ export function isKnownStelliumBoxPlacementProduct(product: string): boolean {
     (item) => normalizeStelliumBoxPlacementProduct(item) === normalized
   );
 }
+
+export type StelliumBoxPlacementProductFamilyId =
+  (typeof STELLIUM_BOX_PLACEMENT_PRODUCT_GROUPS)[number]["id"];
+
+export function stelliumProductFamilyIdForProduct(
+  product: string
+): StelliumBoxPlacementProductFamilyId | null {
+  const normalized = normalizeStelliumBoxPlacementProduct(product);
+  for (const group of STELLIUM_BOX_PLACEMENT_PRODUCT_GROUPS) {
+    if (
+      group.items.some(
+        (item) => normalizeStelliumBoxPlacementProduct(item) === normalized
+      )
+    ) {
+      return group.id;
+    }
+  }
+  return null;
+}

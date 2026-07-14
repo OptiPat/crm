@@ -25,6 +25,7 @@ import {
   subscribeEtiquettesChanged,
   subscribeRelationChanged,
 } from "@/lib/etiquettes/etiquette-events";
+import { PLACEMENT_OPERATIONS_CHANGED_EVENT } from "@/lib/api/tauri-box-placement";
 
 type AppNotificationsBarProps = {
   onPageChange: (page: string) => void;
@@ -133,6 +134,8 @@ export function AppNotificationsBar({
     const unsubContacts = subscribeContactsChanged(schedule);
     const unsubEtiquettes = subscribeEtiquettesChanged(schedule);
     const unsubRelation = subscribeRelationChanged(schedule);
+    const onPlacementChanged = () => schedule();
+    window.addEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onPlacementChanged);
 
     const onWake = () => {
       if (!document.hidden) void load({ silent: true });
@@ -146,6 +149,7 @@ export function AppNotificationsBar({
       unsubContacts();
       unsubEtiquettes();
       unsubRelation();
+      window.removeEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onPlacementChanged);
       document.removeEventListener("visibilitychange", onWake);
       window.removeEventListener("focus", onWake);
       if (debounceRef.id != null) window.clearTimeout(debounceRef.id);

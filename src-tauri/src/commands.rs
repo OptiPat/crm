@@ -2771,6 +2771,30 @@ pub fn get_placement_operation(
 }
 
 #[tauri::command]
+pub fn mark_placement_partner_resent(
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<crate::database::models::PlacementOperation, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .mark_placement_partner_resent(id)
+        .map_err(|e| format!("Échec marquage renvoi partenaire: {}", e))
+}
+
+#[tauri::command]
+pub fn dismiss_placement_operation(
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<crate::database::models::PlacementOperation, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .dismiss_placement_operation(id)
+        .map_err(|e| format!("Échec retrait opération partenaire: {}", e))
+}
+
+#[tauri::command]
 pub fn mark_placement_client_notified(db: State<'_, DbState>, id: i64) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
