@@ -13,6 +13,10 @@ import {
   type PipeRdvCalendarSyncResult,
 } from "@/lib/pipe/pipe-rdv-google-calendar";
 import {
+  formatPipeSuiviRdvGoogleCalendarTitle,
+  SUIVI_RDV_TITRE,
+} from "@/lib/pipe/pipe-suivi";
+import {
   applyRdvStageOnSave,
   formatRdvEntryTitle,
   type PipeRdvStage,
@@ -209,6 +213,57 @@ export async function planifyPipeRdv(options: {
     endAtUnix: options.endAtUnix,
     visio: options.visio,
     physicalAddress: options.physicalAddress,
+  });
+
+  return { calendar };
+}
+
+export async function planifyPipeSuiviRdv(options: {
+  pipe: Pick<
+    PipeRecord,
+    | "id"
+    | "stage"
+    | "pipe_type"
+    | "contact_id"
+    | "contact_prenom"
+    | "contact_nom"
+    | "secondary_contact_id"
+    | "secondary_contact_prenom"
+    | "secondary_contact_nom"
+    | "titre"
+  >;
+  startAtUnix: number;
+  endAtUnix: number;
+  contenu?: string | null;
+  visio?: RdvVisioOptions;
+  physicalAddress?: string | null;
+  calendarTitle?: string | null;
+}): Promise<{ calendar?: PipeRdvCalendarSyncResult }> {
+  const contactLabel = formatPipeRdvCalendarContactLabel(options.pipe);
+  const calendarCtx = buildPipeRdvCalendarContext(options.pipe);
+
+  await warnPipeRdvMissingAttendeeEmails(options.pipe);
+
+  const entry = await createPipeTimelineEntry({
+    pipe_id: options.pipe.id,
+    entry_type: "RDV",
+    titre: SUIVI_RDV_TITRE,
+    contenu: options.contenu?.trim() || null,
+    occurred_at: options.startAtUnix,
+  });
+
+  const calendar = await syncGoogleCalendarForPipeRdv({
+    contactId: options.pipe.contact_id,
+    contactLabel,
+    rdvStage: "R1",
+    startAtUnix: options.startAtUnix,
+    endAtUnix: options.endAtUnix,
+    pipeTimelineEntryId: entry.id,
+    visio: options.visio,
+    physicalAddress: options.physicalAddress,
+    calendarTitle:
+      options.calendarTitle?.trim() || formatPipeSuiviRdvGoogleCalendarTitle(contactLabel),
+    additionalAttendeeContactIds: calendarCtx?.additionalAttendeeContactIds,
   });
 
   return { calendar };

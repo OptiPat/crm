@@ -1,4 +1,5 @@
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
+import { isSuiviRdvEntry, formatSuiviRdvDisplayLabel } from "@/lib/pipe/pipe-suivi";
 import { formatRdvTimelineTraceBadge, parseRdvTimelineTraceNote } from "@/lib/pipe/pipe-rdv-delete";
 import { PIPE_STAGE_BOARD_COLORS } from "@/lib/pipe/pipe-stage-colors";
 import {
@@ -83,6 +84,18 @@ const USER_TYPE_STYLES: Record<PipeTimelineUserType, PipeTimelineEntryStyle> = {
     card: "border-violet-200/60 bg-violet-50/30 dark:border-violet-900 dark:bg-violet-950/20",
     dot: "bg-violet-500 ring-violet-200 dark:ring-violet-900",
   },
+  ARBITRAGE: {
+    badge:
+      "bg-amber-100 text-amber-900 border-amber-200/80 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-800",
+    card: "border-amber-200/60 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20",
+    dot: "bg-amber-500 ring-amber-200 dark:ring-amber-900",
+  },
+  REINVESTISSEMENT: {
+    badge:
+      "bg-emerald-100 text-emerald-800 border-emerald-200/80 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-800",
+    card: "border-emerald-200/60 bg-emerald-50/30 dark:border-emerald-900 dark:bg-emerald-950/20",
+    dot: "bg-emerald-500 ring-emerald-200 dark:ring-emerald-900",
+  },
 };
 
 const STAGE_DOTS: Record<PipeStage, string> = {
@@ -134,7 +147,9 @@ export function isPipeTimelineType(value: string): value is PipeTimelineType {
     value === "APPEL" ||
     value === "RDV" ||
     value === "NOTE" ||
-    value === "PROPOSITION"
+    value === "PROPOSITION" ||
+    value === "ARBITRAGE" ||
+    value === "REINVESTISSEMENT"
   );
 }
 
@@ -145,6 +160,10 @@ export function formatTimelineEntryBadgeLabel(
   if (entry.entry_type === "NOTE") {
     const traceBadge = formatRdvTimelineTraceBadge(entry.contenu);
     if (traceBadge) return traceBadge;
+  }
+
+  if (isSuiviRdvEntry(entry)) {
+    return formatSuiviRdvDisplayLabel();
   }
 
   const stage = timelineStageFromEntry(entry, context);
@@ -160,6 +179,7 @@ export function formatTimelineEntryTitre(
   entry: Pick<PipeTimelineEntryRecord, "entry_type" | "titre">
 ): string | null {
   if (isStageMilestoneEntry(entry.entry_type)) return null;
+  if (isSuiviRdvEntry(entry)) return null;
   const titre = entry.titre?.trim();
   if (!titre || titre === LEGACY_CREATION_TITLE) return null;
   return titre;

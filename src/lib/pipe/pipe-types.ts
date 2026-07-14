@@ -4,7 +4,7 @@ export type PipeType = (typeof PIPE_TYPES)[number];
 
 export const PIPE_TYPE_LABELS: Record<PipeType, string> = {
   AFFAIRE: "Affaire",
-  ACTE_GESTION: "Acte de gestion",
+  ACTE_GESTION: "Suivi",
   ACTION: "Action",
 };
 
@@ -40,7 +40,7 @@ export const PIPE_STAGE_DESCRIPTIONS: Record<PipeStage, string> = {
 
 export const PIPE_TYPE_DESCRIPTIONS: Record<PipeType, string> = {
   AFFAIRE: "Opportunité commerciale (produit, montant, closing).",
-  ACTE_GESTION: "Dossier cadre regroupant plusieurs actions ou affaires.",
+  ACTE_GESTION: "Une occasion de suivi client (RDV, arbitrage, versement…).",
   ACTION: "Étape ponctuelle : appel, relance, RDV…",
 };
 
@@ -86,6 +86,12 @@ export function getNextLinearStage(current: PipeStage): PipeLinearStage | null {
   const idx = getLinearStageIndex(current);
   if (idx < 0 || idx >= PIPE_LINEAR_STAGES.length - 1) return null;
   return PIPE_LINEAR_STAGES[idx + 1];
+}
+
+export function getPreviousLinearStage(current: PipeStage): PipeLinearStage | null {
+  const idx = getLinearStageIndex(current);
+  if (idx <= 0) return null;
+  return PIPE_LINEAR_STAGES[idx - 1];
 }
 
 export function isTerminalPipeStage(stage: PipeStage): boolean {

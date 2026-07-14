@@ -6,6 +6,7 @@ import {
   isPipeType,
   pipeTypeUsesStage,
   getNextLinearStage,
+  getPreviousLinearStage,
   isTerminalPipeStage,
   isManualPipeStageChangeAllowed,
   isPipeBoardDropTargetStage,
@@ -41,6 +42,9 @@ describe("pipe-types", () => {
     expect(getNextLinearStage("PROSPECTION")).toBe("R1");
     expect(getNextLinearStage("R3")).toBe("GAGNEE");
     expect(getNextLinearStage("GAGNEE")).toBeNull();
+    expect(getPreviousLinearStage("R2")).toBe("R1");
+    expect(getPreviousLinearStage("R1")).toBe("PROSPECTION");
+    expect(getPreviousLinearStage("PROSPECTION")).toBeNull();
     expect(isTerminalPipeStage("GAGNEE")).toBe(true);
     expect(isTerminalPipeStage("R2")).toBe(false);
     expect(isManualPipeStageChangeAllowed("GAGNEE")).toBe(true);

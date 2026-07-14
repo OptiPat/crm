@@ -13,6 +13,9 @@ import { PipeTimelineResumeRdvForm } from "@/components/pipe/PipeTimelineResumeR
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
+import { toastAfterPipeRdvReschedule } from "@/lib/pipe/pipe-rdv-entry-actions";
+import { applyPipeSuiviRdvReschedule } from "@/lib/pipe/pipe-rdv-reschedule-actions";
+import { isSuiviRdvEntry } from "@/lib/pipe/pipe-suivi";
 import { groupPipeTimelineByYearMonth } from "@/lib/pipe/pipe-timeline-groups";
 import {
   formatTimelineEntryBadgeLabel,
@@ -99,8 +102,13 @@ function TimelineEntryRow({
   const [saving, setSaving] = useState(false);
   const [rdvOutcomeOpen, setRdvOutcomeOpen] = useState(false);
   const [resumeRdvOpen, setResumeRdvOpen] = useState(false);
+  const [suiviRdvRescheduleOpen, setSuiviRdvRescheduleOpen] = useState(false);
+  const [suiviOccurredAt, setSuiviOccurredAt] = useState("");
+  const [suiviContenu, setSuiviContenu] = useState("");
+  const [suiviSaving, setSuiviSaving] = useState(false);
 
   const userType = entry.entry_type;
+  const suiviRdv = entry.entry_type === "RDV" && isSuiviRdvEntry(entry);
   const traceNote = isRdvTimelineTraceNote(entry);
   const traceMeta = traceNote ? parseRdvTimelineTraceNote(entry.contenu) : null;
   const activeRdvForTrace =
@@ -176,6 +184,43 @@ function TimelineEntryRow({
     } finally {
       setSaving(false);
     }
+  };
+
+  const saveSuiviRdvReschedule = async () => {
+    if (!suiviRdv) return;
+    setSuiviSaving(true);
+    try {
+      const occurredAtUnix = datetimeLocalToUnix(suiviOccurredAt);
+      const calendar = await applyPipeSuiviRdvReschedule({
+        timeline,
+        entry,
+        pipe,
+        newOccurredAtUnix: occurredAtUnix,
+        contenu: suiviContenu.trim() || null,
+      });
+      toastAfterPipeRdvReschedule(calendar);
+      setSuiviRdvRescheduleOpen(false);
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setSuiviSaving(false);
+    }
+  };
+
+  const startSuiviRdvReschedule = () => {
+    setSuiviOccurredAt(unixToDatetimeLocalInput(entry.occurred_at));
+    setSuiviContenu(entry.contenu ?? "");
+    setSuiviRdvRescheduleOpen(true);
+  };
+
+  const cancelSuiviRdvReschedule = () => {
+    setSuiviRdvRescheduleOpen(false);
+    setSuiviOccurredAt("");
+    setSuiviContenu("");
+  };
+
+  const handleSuiviRdvDelete = () => {
+    setRdvOutcomeOpen(true);
   };
 
   return (
@@ -333,6 +378,49 @@ function TimelineEntryRow({
                     Aucune note pour cette étape.
                   </p>
                 ) : null}
+                {suiviRdvRescheduleOpen && suiviRdv ? (
+                  <div className="space-y-2 mt-2">
+                    <div className="space-y-1">
+                      <Label htmlFor={`suivi-rdv-date-${entry.id}`} className="text-xs">
+                        Nouvelle date et heure
+                      </Label>
+                      <Input
+                        id={`suivi-rdv-date-${entry.id}`}
+                        type="datetime-local"
+                        value={suiviOccurredAt}
+                        onChange={(e) => setSuiviOccurredAt(e.target.value)}
+                        disabled={suiviSaving}
+                      />
+                    </div>
+                    <DictationTextarea
+                      label="Détail"
+                      value={suiviContenu}
+                      onChange={setSuiviContenu}
+                      rows={3}
+                      placeholder="Compte-rendu, prochaine étape…"
+                      disabled={suiviSaving}
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={cancelSuiviRdvReschedule}
+                        disabled={suiviSaving}
+                      >
+                        Annuler
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => void saveSuiviRdvReschedule()}
+                        disabled={suiviSaving}
+                      >
+                        {suiviSaving ? "Enregistrement…" : "Enregistrer"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
                 {showNoRdvHint ? (
                   <p className="text-xs text-muted-foreground italic mt-2 rounded-md border border-dashed px-3 py-2">
                     Aucun RDV enregistré pour cette étape.
@@ -405,7 +493,7 @@ function TimelineEntryRow({
                 <Pencil className="h-4 w-4 text-muted-foreground" />
               </Button>
             )}
-            {onDelete && !editing && (
+            {onDelete && !editing && !suiviRdv && (
               <Button
                 type="button"
                 variant="ghost"
@@ -413,6 +501,18 @@ function TimelineEntryRow({
                 className="h-8 w-8"
                 aria-label="Supprimer l'entrée"
                 onClick={onDelete}
+              >
+                <Trash2 className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            )}
+            {suiviRdv && !editing && !suiviRdvRescheduleOpen && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                aria-label="Annuler ou reporter le RDV de suivi"
+                onClick={handleSuiviRdvDelete}
               >
                 <Trash2 className="h-4 w-4 text-muted-foreground" />
               </Button>
@@ -439,6 +539,19 @@ function TimelineEntryRow({
           timeline={timeline}
           onClose={() => setRdvOutcomeOpen(false)}
           onReschedule={() => setRdvOutcomeOpen(false)}
+        />
+      ) : null}
+      {suiviRdv ? (
+        <PipeRdvOutcomeDialog
+          open={rdvOutcomeOpen}
+          entry={entry}
+          pipe={pipe}
+          timeline={timeline}
+          onClose={() => setRdvOutcomeOpen(false)}
+          onReschedule={() => {
+            setRdvOutcomeOpen(false);
+            startSuiviRdvReschedule();
+          }}
         />
       ) : null}
     </li>

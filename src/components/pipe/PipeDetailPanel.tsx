@@ -27,7 +27,9 @@ import { PipeTypeBadge } from "@/components/pipe/PipeTypeBadge";
 import { PipeStageBadge } from "@/components/pipe/PipeStageBadge";
 import { PipeStageStepper } from "@/components/pipe/PipeStageStepper";
 import { PipeProspectionContactSection } from "@/components/pipe/PipeProspectionContactSection";
+import { PipeSuiviSection } from "@/components/pipe/PipeSuiviSection";
 import { PipeTimelineQuickAdd } from "@/components/pipe/PipeTimelineQuickAdd";
+import { isSuiviPipe } from "@/lib/pipe/pipe-suivi";
 import { PipeTimelineHistory } from "@/components/pipe/PipeTimelineHistory";
 import { useGlobalContactDetailSheet } from "@/components/layout/ContactDetailSheetProvider";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
@@ -35,16 +37,26 @@ import { toast } from "sonner";
 
 interface PipeDetailPanelProps {
   pipe: PipeRecord;
+  childAffaires?: PipeRecord[];
   onEdit: () => void;
   onDeleted: () => void;
   onPlanRdv?: (stage: PipeRdvStage) => void;
+  onPlanSuiviRdv?: () => void;
+  onCreateVersementAffaire?: () => void;
+  onOpenChildAffaire?: (pipe: PipeRecord) => void;
+  focusHistoriqueToken?: number;
 }
 
 export function PipeDetailPanel({
   pipe,
+  childAffaires = [],
   onEdit,
   onDeleted,
   onPlanRdv,
+  onPlanSuiviRdv,
+  onCreateVersementAffaire,
+  onOpenChildAffaire,
+  focusHistoriqueToken = 0,
 }: PipeDetailPanelProps) {
   const { openContactWithTab } = useGlobalContactDetailSheet();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -78,12 +90,19 @@ export function PipeDetailPanel({
   const showProspectionFields =
     isPipeType(pipe.pipe_type) && pipe.pipe_type === "AFFAIRE" && pipe.contact_id > 0;
 
+  const showSuiviSection = isSuiviPipe(pipe);
+
   const prospectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setActiveTab("suivi");
     setFocusProspectionToken(0);
   }, [pipe.id]);
+
+  useEffect(() => {
+    if (!focusHistoriqueToken) return;
+    setActiveTab("historique");
+  }, [focusHistoriqueToken]);
 
   useEffect(() => {
     if (pipe.contact_id <= 0) {
@@ -135,7 +154,7 @@ export function PipeDetailPanel({
           <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <PipeTypeBadge pipeType={pipe.pipe_type} />
-              <PipeStageBadge stage={pipe.stage} />
+              {pipe.stage ? <PipeStageBadge stage={pipe.stage} /> : null}
             </div>
             <h2 className="text-lg font-semibold leading-tight">{pipe.titre}</h2>
             <p className="text-sm text-muted-foreground">
@@ -229,7 +248,23 @@ export function PipeDetailPanel({
               </div>
             )}
 
-            <PipeTimelineQuickAdd timeline={timeline} pipe={pipe} onAdded={() => setActiveTab("historique")} />
+            {showSuiviSection && onCreateVersementAffaire && onOpenChildAffaire ? (
+              <PipeSuiviSection
+                pipe={pipe}
+                childAffaires={childAffaires}
+                timeline={timeline}
+                onJournalAdded={() => setActiveTab("historique")}
+                onCreateVersementAffaire={onCreateVersementAffaire}
+                onOpenChildAffaire={onOpenChildAffaire}
+                onPlanSuiviRdv={onPlanSuiviRdv}
+              />
+            ) : (
+              <PipeTimelineQuickAdd
+                timeline={timeline}
+                pipe={pipe}
+                onAdded={() => setActiveTab("historique")}
+              />
+            )}
           </TabsContent>
 
           <TabsContent

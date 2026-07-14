@@ -1,7 +1,9 @@
 export const RDV_DURATION_PRESETS = [
   { id: "30", label: "30 min", minutes: 30 },
+  { id: "45", label: "45 min", minutes: 45 },
   { id: "60", label: "1 h", minutes: 60 },
   { id: "90", label: "1 h 30", minutes: 90 },
+  { id: "120", label: "2 h", minutes: 120 },
 ] as const;
 
 export type RdvDurationPresetId = (typeof RDV_DURATION_PRESETS)[number]["id"];

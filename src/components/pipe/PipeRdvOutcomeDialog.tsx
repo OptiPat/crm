@@ -19,8 +19,10 @@ import {
   applyRdvCancelled,
   toastAfterRdvCancelled,
 } from "@/lib/pipe/pipe-rdv-delete-actions";
-import { canRevertPipeToProspection } from "@/lib/pipe/pipe-rdv-delete";
+import { resolveStageAfterRdvCancellation } from "@/lib/pipe/pipe-rdv-delete";
 import { formatRdvEntryDisplayLabel } from "@/lib/pipe/pipe-rdv-stage";
+import { formatSuiviRdvDisplayLabel, isSuiviRdvEntry } from "@/lib/pipe/pipe-suivi";
+import { PIPE_STAGE_LABELS } from "@/lib/pipe/pipe-types";
 import { formatTimelineOccurredAt } from "@/lib/pipe/pipe-timeline-types";
 import { toast } from "sonner";
 
@@ -75,12 +77,14 @@ export function PipeRdvOutcomeDialog({
   if (!liveEntry) return null;
 
   const hasGoogleLink = Boolean(resolvedGoogleEventId);
-  const rdvLabel = formatRdvEntryDisplayLabel(liveEntry) ?? "RDV";
+  const rdvLabel = isSuiviRdvEntry(liveEntry)
+    ? formatSuiviRdvDisplayLabel()
+    : (formatRdvEntryDisplayLabel(liveEntry) ?? "RDV");
   const occurredLabel = formatTimelineOccurredAt(liveEntry.occurred_at);
-  const willRevertToProspection =
-    pipe?.pipe_type === "AFFAIRE" &&
-    pipe.stage !== "PROSPECTION" &&
-    canRevertPipeToProspection(pipe.stage);
+  const revertStage =
+    pipe && liveEntry
+      ? resolveStageAfterRdvCancellation(pipe.stage, liveEntry, timeline.entries)
+      : null;
 
   const handleCancelled = async () => {
     setSaving(true);
@@ -142,9 +146,10 @@ export function PipeRdvOutcomeDialog({
           </div>
         )}
 
-        {willRevertToProspection && (
+        {revertStage && (
           <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2">
-            L&apos;annulation remettra l&apos;affaire en prospection.
+            L&apos;annulation ramènera l&apos;avancement à{" "}
+            {PIPE_STAGE_LABELS[revertStage]}.
           </p>
         )}
 

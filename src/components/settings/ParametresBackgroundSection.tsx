@@ -148,8 +148,8 @@ export function ParametresBackgroundSection() {
             />
             <AutomationToggle
               id="pref-bg-stellium"
-              label="Scan Stellium Exceltis"
-              description="Détection remboursements (~1 h)."
+              label="Scan Stellium (Exceltis + Box Placement)"
+              description="Détection mails Stellium entrants (~1 h, Gmail ou Outlook)."
               checked={prefs.background_stellium_scan}
               disabled={automationsDisabled}
               onCheckedChange={(checked) => void patch({ background_stellium_scan: checked })}
@@ -200,7 +200,8 @@ export function ParametresBackgroundSection() {
               Envoie une notification système pour vérifier les permissions Windows / macOS.
               Sous Windows 10, vérifiez ensuite Paramètres → Actions et notifications → CRM W.Y.S.
               En développement (<code className="text-[11px]">dev.ps1</code>), l&apos;expéditeur peut
-              apparaître sous Windows PowerShell.
+              apparaître sous Windows PowerShell. Les anniversaires et le point du jour partent en
+              bannière Windows lorsque le CRM est fermé dans le tray (✕).
             </p>
           </div>
           <Button

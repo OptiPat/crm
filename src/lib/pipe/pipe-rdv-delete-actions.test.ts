@@ -91,7 +91,7 @@ describe("executeRdvCancellation", () => {
     expect(resolvePipeRdvGoogleEventId).not.toHaveBeenCalled();
   });
 
-  it("annule le RDV et remet en prospection si stage intermédiaire", async () => {
+  it("annule le RDV R1 et remet en prospection si affaire en R1", async () => {
     const result = await executeRdvCancellation({
       pipe: { id: 1, stage: "R1", pipe_type: "AFFAIRE" },
       entry: {
@@ -105,12 +105,56 @@ describe("executeRdvCancellation", () => {
         google_event_id: "evt-1",
       },
       cancelGoogle: false,
+      allEntries: [
+        {
+          id: 10,
+          pipe_id: 1,
+          entry_type: "RDV",
+          titre: "R1",
+          contenu: null,
+          occurred_at: 1_700_000_000,
+          created_at: 1,
+        },
+      ],
       addEntry,
       removeEntry,
     });
 
     expect(removeEntry).toHaveBeenCalledWith(10);
     expect(setPipeStage).toHaveBeenCalledWith(1, "PROSPECTION", { notes: null });
-    expect(result.revertedToProspection).toBe(true);
+    expect(result.revertedStage).toBe("PROSPECTION");
+  });
+
+  it("annule le RDV R2 et recule en R1 si affaire en R2", async () => {
+    const result = await executeRdvCancellation({
+      pipe: { id: 1, stage: "R2", pipe_type: "AFFAIRE" },
+      entry: {
+        id: 11,
+        pipe_id: 1,
+        entry_type: "RDV",
+        titre: "R2",
+        contenu: null,
+        occurred_at: 1_700_000_000,
+        created_at: 1,
+        google_event_id: null,
+      },
+      cancelGoogle: false,
+      allEntries: [
+        {
+          id: 11,
+          pipe_id: 1,
+          entry_type: "RDV",
+          titre: "R2",
+          contenu: null,
+          occurred_at: 1_700_000_000,
+          created_at: 1,
+        },
+      ],
+      addEntry,
+      removeEntry,
+    });
+
+    expect(setPipeStage).toHaveBeenCalledWith(1, "R1", { notes: null });
+    expect(result.revertedStage).toBe("R1");
   });
 });

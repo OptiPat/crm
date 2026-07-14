@@ -11,6 +11,7 @@ import {
   shouldRunAutomationJobWithCooldown,
 } from "@/lib/background/background-automation-state";
 import { runBackgroundAutomationCycle } from "@/lib/background/background-automation-runner";
+import { isCrmWindowVisible } from "@/lib/background/crm-window-visibility";
 
 /**
  * Automatisations fenêtre visible : sync Gmail/Agenda, Stellium, notes, rappels RDV, anniversaires.
@@ -22,63 +23,87 @@ export function useBackgroundSync(enabled = true): void {
     let wakeTimer: number | null = null;
 
     const onWake = () => {
-      if (document.hidden) return;
-      if (wakeTimer != null) globalThis.clearTimeout(wakeTimer);
-      wakeTimer = globalThis.setTimeout(() => {
-        wakeTimer = null;
-        void runBackgroundAutomationCycle({
-          surface: "foreground",
-          force: true,
-        });
-      }, WAKE_DEBOUNCE_MS) as unknown as number;
+      void (async () => {
+        if (!(await isCrmWindowVisible())) return;
+        if (wakeTimer != null) globalThis.clearTimeout(wakeTimer);
+        wakeTimer = globalThis.setTimeout(() => {
+          wakeTimer = null;
+          void runBackgroundAutomationCycle({
+            surface: "foreground",
+            force: true,
+          });
+        }, WAKE_DEBOUNCE_MS) as unknown as number;
+      })();
     };
 
     const relationInterval = globalThis.setInterval(() => {
-      if (document.hidden) return;
-      if (automationJobCooldownRemainingMs("relation") > 0) return;
-      void runBackgroundAutomationCycle({
-        surface: "foreground",
-        jobs: { relation: true, pipe_rdv: true, stellium: false, notes: false, birthdays: false },
-      });
+      void (async () => {
+        if (!(await isCrmWindowVisible())) return;
+        if (automationJobCooldownRemainingMs("relation") > 0) return;
+        void runBackgroundAutomationCycle({
+          surface: "foreground",
+          jobs: { relation: true, pipe_rdv: true, stellium: false, box_placement: false, notes: false, birthdays: false },
+        });
+      })();
     }, RELATION_INTERVAL_MS);
 
     const stelliumInterval = globalThis.setInterval(() => {
-      if (document.hidden) return;
-      if (!shouldRunAutomationJobWithCooldown("stellium")) return;
-      void runBackgroundAutomationCycle({
-        surface: "foreground",
-        jobs: { relation: false, pipe_rdv: false, stellium: true, notes: false, birthdays: false },
-      });
+      void (async () => {
+        if (!(await isCrmWindowVisible())) return;
+        const stelliumDue = shouldRunAutomationJobWithCooldown("stellium");
+        const boxPlacementDue = shouldRunAutomationJobWithCooldown("box_placement");
+        if (!stelliumDue && !boxPlacementDue) return;
+        void runBackgroundAutomationCycle({
+          surface: "foreground",
+          jobs: {
+            relation: false,
+            pipe_rdv: false,
+            stellium: stelliumDue,
+            box_placement: boxPlacementDue,
+            notes: false,
+            birthdays: false,
+          },
+        });
+      })();
     }, STELLIUM_INTERVAL_MS);
 
     const notesInterval = globalThis.setInterval(() => {
-      if (document.hidden) return;
-      if (!shouldRunAutomationJobWithCooldown("notes")) return;
-      void runBackgroundAutomationCycle({
-        surface: "foreground",
-        jobs: { relation: false, pipe_rdv: false, stellium: false, notes: true, birthdays: false },
-      });
+      void (async () => {
+        if (!(await isCrmWindowVisible())) return;
+        if (!shouldRunAutomationJobWithCooldown("notes")) return;
+        void runBackgroundAutomationCycle({
+          surface: "foreground",
+          jobs: { relation: false, pipe_rdv: false, stellium: false, box_placement: false, notes: true, birthdays: false },
+        });
+      })();
     }, NOTES_INTERVAL_MS);
 
     const birthdaysInterval = globalThis.setInterval(() => {
-      if (document.hidden) return;
-      if (!shouldRunAutomationJobWithCooldown("birthdays")) return;
-      void runBackgroundAutomationCycle({
-        surface: "foreground",
-        jobs: {
-          relation: false,
-          pipe_rdv: false,
-          stellium: false,
-          notes: false,
-          birthdays: true,
-        },
-      });
+      void (async () => {
+        if (!(await isCrmWindowVisible())) return;
+        if (!shouldRunAutomationJobWithCooldown("birthdays")) return;
+        void runBackgroundAutomationCycle({
+          surface: "foreground",
+          jobs: {
+            relation: false,
+            pipe_rdv: false,
+            stellium: false,
+            box_placement: false,
+            notes: false,
+            birthdays: true,
+          },
+        });
+      })();
     }, BIRTHDAY_INTERVAL_MS);
 
     document.addEventListener("visibilitychange", onWake);
     window.addEventListener("focus", onWake);
 
-    void runBackgroundAutomationCycle({ surface: "foreground", force: true });
+    void (async () => {
+      if (await isCrmWindowVisible()) {
+        void runBackgroundAutomationCycle({ surface: "foreground", force: true });
+      }
+    })();
 
     return () => {
       document.removeEventListener("visibilitychange", onWake);

@@ -35,6 +35,8 @@ pub struct TrayDigestSnapshotDto {
     pub alertes_count: u32,
     pub taches_urgent_count: u32,
     pub emails_ready_count: u32,
+    pub placement_pending_count: u32,
+    pub placement_non_conforme_count: u32,
 }
 
 impl super::Database {
@@ -117,12 +119,16 @@ impl super::Database {
         let alertes_count = self.count_alertes_non_traitees()? as u32;
         let (taches_urgent_count, _) = self.count_taches_urgent_echeance()?;
         let emails_ready_count = self.queue_notification_bucket("ready")?.count;
+        let (placement_pending_count, placement_non_conforme_count) =
+            self.count_open_placement_operations()?;
 
         Ok(TrayDigestSnapshotDto {
             pipe_rdvs_within_2h,
             alertes_count,
             taches_urgent_count,
             emails_ready_count,
+            placement_pending_count,
+            placement_non_conforme_count,
         })
     }
 }

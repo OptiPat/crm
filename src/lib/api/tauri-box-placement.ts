@@ -1,0 +1,142 @@
+import { invoke } from "@tauri-apps/api/core";
+
+export type PlacementOperationStatus = "PENDING" | "CONFORME" | "NON_CONFORME";
+
+export type PlacementOperationType =
+  | "ARBITRAGE"
+  | "VERSEMENT"
+  | "REINVESTISSEMENT"
+  | "SOUSCRIPTION"
+  | "AUTRE";
+
+export interface PlacementOperation {
+  id: number;
+  contact_id: number;
+  pipe_id?: number | null;
+  pipe_timeline_entry_id?: number | null;
+  operation_type: PlacementOperationType | string;
+  product_label?: string | null;
+  stellium_label?: string | null;
+  status: PlacementOperationStatus | string;
+  gmail_message_id?: string | null;
+  email_subject?: string | null;
+  email_received_at?: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface PlacementOperationWithContact {
+  operation: PlacementOperation;
+  contact_nom: string;
+  contact_prenom: string;
+  pipe_titre?: string | null;
+}
+
+/** Réponse plate depuis Rust (champs aplatis). */
+export type PlacementOperationRow = PlacementOperation & {
+  contact_nom: string;
+  contact_prenom: string;
+  pipe_titre?: string | null;
+};
+
+export interface BoxPlacementScanResult {
+  scanned: number;
+  updated: number;
+  created: number;
+  skipped: number;
+  skipped_ambiguous?: number;
+}
+
+export interface PlacementPipeOpenCount {
+  pipe_id: number;
+  pending: number;
+  non_conforme: number;
+}
+
+export interface NewPlacementOperationInput {
+  contact_id: number;
+  pipe_id?: number | null;
+  pipe_timeline_entry_id?: number | null;
+  operation_type: string;
+  product_label?: string | null;
+  stellium_label?: string | null;
+}
+
+export const PLACEMENT_OPERATIONS_CHANGED_EVENT = "placement-operations-changed";
+
+export function notifyPlacementOperationsChanged(): void {
+  window.dispatchEvent(new CustomEvent(PLACEMENT_OPERATIONS_CHANGED_EVENT));
+}
+
+function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWithContact {
+  const {
+    contact_nom,
+    contact_prenom,
+    pipe_titre,
+    id,
+    contact_id,
+    pipe_id,
+    pipe_timeline_entry_id,
+    operation_type,
+    product_label,
+    stellium_label,
+    status,
+    gmail_message_id,
+    email_subject,
+    email_received_at,
+    created_at,
+    updated_at,
+  } = raw;
+  return {
+    operation: {
+      id,
+      contact_id,
+      pipe_id,
+      pipe_timeline_entry_id,
+      operation_type,
+      product_label,
+      stellium_label,
+      status,
+      gmail_message_id,
+      email_subject,
+      email_received_at,
+      created_at,
+      updated_at,
+    },
+    contact_nom,
+    contact_prenom,
+    pipe_titre,
+  };
+}
+
+export async function scanBoxPlacementEmails(): Promise<BoxPlacementScanResult> {
+  return invoke<BoxPlacementScanResult>("scan_box_placement_emails");
+}
+
+export async function createPlacementOperation(
+  input: NewPlacementOperationInput
+): Promise<PlacementOperation> {
+  return invoke<PlacementOperation>("create_placement_operation", { input });
+}
+
+export async function listPlacementOperations(): Promise<PlacementOperationWithContact[]> {
+  const raw = await invoke<PlacementOperationRow[]>("list_placement_operations");
+  return raw.map(normalizePlacementRow);
+}
+
+export async function listPlacementOperationsForPipe(
+  pipeId: number
+): Promise<PlacementOperation[]> {
+  return invoke<PlacementOperation[]>("list_placement_operations_for_pipe", { pipeId });
+}
+
+export async function updatePlacementOperationStatus(
+  id: number,
+  status: PlacementOperationStatus
+): Promise<PlacementOperation> {
+  return invoke<PlacementOperation>("update_placement_operation_status", { id, status });
+}
+
+export async function getPlacementOpenCountsByPipe(): Promise<PlacementPipeOpenCount[]> {
+  return invoke<PlacementPipeOpenCount[]>("get_placement_open_counts_by_pipe");
+}

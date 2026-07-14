@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Briefcase, ClipboardList, LayoutGrid, List, PhoneCall } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listPipes, type PipeRecord } from "@/lib/api/tauri-pipe";
+import {
+  getPlacementOpenCountsByPipe,
+  PLACEMENT_OPERATIONS_CHANGED_EVENT,
+  type PlacementPipeOpenCount,
+} from "@/lib/api/tauri-box-placement";
 import { subscribePipeChanged } from "@/lib/pipe/pipe-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
@@ -18,6 +23,7 @@ import {
 } from "@/lib/pipe/pipe-list-filters";
 import { resolvePipeBoardStageDrop } from "@/lib/pipe/pipe-board-stage-actions";
 import { confirmDiscardPipeFormEdits } from "@/lib/pipe/pipe-form-dirty";
+import { buildVersementAffaireTitre } from "@/lib/pipe/pipe-suivi";
 import { type PipeStage, type PipeType } from "@/lib/pipe/pipe-types";
 import { type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { PipeList } from "@/components/pipe/PipeList";
@@ -53,7 +59,7 @@ function PipeCreateButtons({ onCreate }: { onCreate: (type: PipeType) => void })
         onClick={() => onCreate("ACTE_GESTION")}
       >
         <ClipboardList className="h-3.5 w-3.5" />
-        Acte
+        Suivi
       </Button>
       <Button
         type="button"
@@ -111,9 +117,18 @@ export function Pipe() {
   const [panelMode, setPanelMode] = useState<PanelMode>("empty");
   const [selectedPipe, setSelectedPipe] = useState<PipeRecord | null>(null);
   const [createType, setCreateType] = useState<PipeType>("AFFAIRE");
+  const [createPrefill, setCreatePrefill] = useState<{
+    parentPipeId?: number;
+    contactId?: number;
+    titre?: string;
+  } | null>(null);
   const [rdvPlanifierOpen, setRdvPlanifierOpen] = useState(false);
   const [rdvPlanifierPipe, setRdvPlanifierPipe] = useState<PipeRecord | null>(null);
   const [rdvPlanifierStage, setRdvPlanifierStage] = useState<PipeRdvStage | undefined>();
+  const [focusHistoriqueToken, setFocusHistoriqueToken] = useState(0);
+  const [placementCountsByPipe, setPlacementCountsByPipe] = useState<
+    Record<number, PlacementPipeOpenCount>
+  >({});
   const formIsDirtyRef = useRef(false);
 
   const handleFormDirtyChange = useCallback((isDirty: boolean) => {
@@ -159,18 +174,32 @@ export function Pipe() {
     []
   );
 
+  const loadPlacementCounts = useCallback(async () => {
+    try {
+      const rows = await getPlacementOpenCountsByPipe();
+      const map: Record<number, PlacementPipeOpenCount> = {};
+      for (const row of rows) {
+        map[row.pipe_id] = row;
+      }
+      setPlacementCountsByPipe(map);
+    } catch {
+      setPlacementCountsByPipe({});
+    }
+  }, []);
+
   const loadPipes = useCallback(async () => {
     try {
       setError(null);
       const rows = await listPipes();
       setPipes(rows);
       setSelectedPipe((prev) => (prev ? rows.find((p) => p.id === prev.id) ?? null : null));
+      await loadPlacementCounts();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadPlacementCounts]);
 
   useEffect(() => {
     void loadPipes();
@@ -180,21 +209,42 @@ export function Pipe() {
     const unsubContacts = subscribeContactsChanged(() => {
       void loadPipes();
     });
+    const onPlacementChanged = () => {
+      void loadPlacementCounts();
+    };
+    window.addEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onPlacementChanged);
     return () => {
       unsubPipe();
       unsubContacts();
+      window.removeEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onPlacementChanged);
     };
-  }, [loadPipes]);
+  }, [loadPipes, loadPlacementCounts]);
 
   const setViewModePersisted = (mode: PipeViewMode) => {
     setViewMode(mode);
     savePipeViewMode(mode);
   };
 
-  const openCreate = (type: PipeType) => {
+  const childAffaires = useMemo(() => {
+    if (!selectedPipe) return [];
+    return pipes.filter(
+      (p) => p.parent_pipe_id === selectedPipe.id && p.pipe_type === "AFFAIRE"
+    );
+  }, [pipes, selectedPipe]);
+
+  const openCreate = (type: PipeType, prefill?: typeof createPrefill) => {
     setCreateType(type);
+    setCreatePrefill(prefill ?? null);
     setSelectedPipe(null);
     setPanelMode("create");
+  };
+
+  const openCreateVersementAffaire = (suivi: PipeRecord) => {
+    openCreate("AFFAIRE", {
+      parentPipeId: suivi.id,
+      contactId: suivi.contact_id,
+      titre: buildVersementAffaireTitre(suivi),
+    });
   };
 
   const openView = (pipe: PipeRecord) => {
@@ -207,6 +257,7 @@ export function Pipe() {
   };
 
   const handleSaved = (pipe: PipeRecord) => {
+    setCreatePrefill(null);
     setSelectedPipe(pipe);
     setPanelMode("view");
     void loadPipes();
@@ -219,6 +270,7 @@ export function Pipe() {
   };
 
   const cancelPanel = () => {
+    setCreatePrefill(null);
     if (selectedPipe) {
       setPanelMode("view");
     } else {
@@ -276,17 +328,24 @@ export function Pipe() {
           <Briefcase className="h-10 w-10 text-muted-foreground/50 mb-4" />
           <p className="text-sm font-medium">Sélectionnez un pipe ou créez-en un</p>
           <p className="text-sm text-muted-foreground mt-2 max-w-sm">
-            Affaires, actes de gestion et actions — tous liés à un contact.
+            Affaires, suivis et actions — tous liés à un contact.
           </p>
         </div>
       )}
 
       {(panelMode === "create" || panelMode === "edit") && (
         <PipeFormPanel
-          key={panelMode === "edit" ? `edit-${selectedPipe?.id}` : `create-${createType}`}
+          key={
+            panelMode === "edit"
+              ? `edit-${selectedPipe?.id}`
+              : `create-${createType}-${createPrefill?.parentPipeId ?? "solo"}`
+          }
           pipe={panelMode === "edit" ? selectedPipe : null}
           allPipes={pipes}
           initialType={panelMode === "edit" ? undefined : createType}
+          defaultContactId={createPrefill?.contactId}
+          initialParentPipeId={createPrefill?.parentPipeId ?? null}
+          initialTitre={createPrefill?.titre}
           onRequestRdvStage={
             panelMode === "edit" && selectedPipe ? handleRequestRdvStageFromForm : undefined
           }
@@ -304,9 +363,14 @@ export function Pipe() {
       {panelMode === "view" && selectedPipe && (
         <PipeDetailPanel
           pipe={selectedPipe}
+          childAffaires={childAffaires}
           onEdit={openEdit}
           onDeleted={handleDeleted}
           onPlanRdv={(stage) => openRdvPlanifier(selectedPipe, stage)}
+          onPlanSuiviRdv={() => openRdvPlanifier(selectedPipe)}
+          onCreateVersementAffaire={() => openCreateVersementAffaire(selectedPipe)}
+          onOpenChildAffaire={openView}
+          focusHistoriqueToken={focusHistoriqueToken}
         />
       )}
     </>
@@ -375,6 +439,7 @@ export function Pipe() {
                   pipes={filteredListPipes}
                   selectedId={selectedPipe?.id ?? null}
                   onSelect={openView}
+                  placementCountsByPipe={placementCountsByPipe}
                 />
               )}
             </div>
@@ -408,6 +473,9 @@ export function Pipe() {
           }}
           onCreated={() => {
             void loadPipes();
+            if (rdvPlanifierPipe?.pipe_type === "ACTE_GESTION") {
+              setFocusHistoriqueToken((t) => t + 1);
+            }
           }}
         />
       )}

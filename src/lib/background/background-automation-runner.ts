@@ -11,6 +11,10 @@ import {
   notifyStelliumExceltisChanged,
   scanStelliumExceltisEmails,
 } from "@/lib/api/tauri-stellium-exceltis";
+import {
+  notifyPlacementOperationsChanged,
+  scanBoxPlacementEmails,
+} from "@/lib/api/tauri-box-placement";
 import { beginBackgroundActivity } from "@/lib/background-activity";
 import type { BackgroundAutomationJob } from "@/lib/background/background-automation-intervals";
 import {
@@ -39,6 +43,7 @@ import {
   loadTrayDigestNotifyState,
   persistTrayDigestNotifyState,
 } from "@/lib/background/tray-digest-notify";
+import { isCrmWindowHidden } from "@/lib/background/crm-window-visibility";
 
 export type AutomationSurface = "foreground" | "tray";
 
@@ -63,6 +68,7 @@ function jobEnabledInTray(
     case "relation":
       return prefs.background_relation_sync;
     case "stellium":
+    case "box_placement":
       return prefs.background_stellium_scan;
     case "notes":
       return prefs.background_notes_sync;
@@ -208,15 +214,27 @@ async function runPipeRdvJob(surface: AutomationSurface): Promise<number> {
   return result.sent;
 }
 
-async function runStelliumJob(surface: AutomationSurface): Promise<void> {
+async function isMailProviderReady(): Promise<boolean> {
+  const status = await getEmailConnectionStatus();
+  return (
+    status.connected &&
+    (status.provider === "google" || status.provider === "microsoft")
+  );
+}
+
+function isBenignMailSetupError(msg: string): boolean {
+  return (
+    msg.includes("Aucun compte") ||
+    msg.includes("connectez Google") ||
+    msg.includes("nécessite")
+  );
+}
+
+async function runStelliumExceltisJob(surface: AutomationSurface): Promise<void> {
   const tray = isTray(surface);
   const endActivity = beginBackgroundActivity("stellium-scan");
   try {
-    const status = await getEmailConnectionStatus();
-    const mailReady =
-      status.connected &&
-      (status.provider === "google" || status.provider === "microsoft");
-    if (!mailReady) {
+    if (!(await isMailProviderReady())) {
       markAutomationJobRun("stellium");
       return;
     }
@@ -234,16 +252,46 @@ async function runStelliumJob(surface: AutomationSurface): Promise<void> {
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    if (
-      !msg.includes("Aucun compte") &&
-      !msg.includes("connectez Google") &&
-      !msg.includes("nécessite")
-    ) {
+    if (!isBenignMailSetupError(msg)) {
       notifyAutomationError(
         "stellium-scan",
         "CRM W.Y.S — Stellium Exceltis",
         msg,
         { tray, nav: { page: "suivi", tab: "etiquettes" } }
+      );
+    }
+  } finally {
+    endActivity();
+  }
+}
+
+async function runBoxPlacementJob(surface: AutomationSurface): Promise<void> {
+  const tray = isTray(surface);
+  const endActivity = beginBackgroundActivity("stellium-scan");
+  try {
+    if (!(await isMailProviderReady())) {
+      markAutomationJobRun("box_placement");
+      return;
+    }
+    const boxResult = await scanBoxPlacementEmails();
+    markAutomationJobRun("box_placement");
+    notifyPlacementOperationsChanged();
+    if (boxResult.created + boxResult.updated > 0) {
+      await notifyAutomationEvent(
+        "CRM W.Y.S — Box Placement",
+        `${boxResult.created + boxResult.updated} opération(s) partenaire mise(s) à jour.`,
+        { tray, nav: { page: "suivi", tab: "alertes" } }
+      );
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (!isBenignMailSetupError(msg)) {
+      console.warn("Box Placement scan:", msg);
+      notifyAutomationError(
+        "stellium-scan",
+        "CRM W.Y.S — Box Placement",
+        msg,
+        { tray, nav: { page: "suivi", tab: "alertes" } }
       );
     }
   } finally {
@@ -265,8 +313,15 @@ async function runNotesJob(): Promise<void> {
 }
 
 async function runBirthdaysJob(surface: AutomationSurface): Promise<void> {
-  markAutomationJobRun("birthdays");
   if (birthdayNotificationsAlreadySentToday()) return;
+
+  const windowHidden = await isCrmWindowHidden();
+  if (!isTray(surface) && !windowHidden) {
+    // Fenêtre ouverte : ne pas consommer la notif du jour (toast in-app invisible au tray).
+    return;
+  }
+
+  markAutomationJobRun("birthdays");
 
   try {
     const contacts = await listBirthdaysToday();
@@ -276,7 +331,7 @@ async function runBirthdaysJob(surface: AutomationSurface): Promise<void> {
     if (!payload) return;
 
     const sent = await notifyAutomationEvent(payload.title, payload.body, {
-      tray: document.hidden,
+      tray: true,
       nav: { page: "contacts" },
     });
     if (sent) markBirthdayNotificationsSentToday();
@@ -299,7 +354,6 @@ async function runTrayDigestJob(
 
   try {
     const snapshot = await getTrayDigestSnapshot();
-    markAutomationJobRun("tray_digest");
 
     const digestSnapshot = skipImminentRdv
       ? { ...snapshot, pipe_rdvs_within_2h: [] }
@@ -312,6 +366,8 @@ async function runTrayDigestJob(
       notifiedRdvIds: state.notifiedRdvIds,
     });
     if (!decision.shouldSend) return;
+
+    markAutomationJobRun("tray_digest");
 
     const sent = await notifyAutomationEvent(decision.title, decision.body, {
       tray: true,
@@ -372,7 +428,10 @@ async function runBackgroundAutomationCycleInner(
     pipeRdvRemindersSent = await runPipeRdvJob(options.surface);
   }
   if (shouldRunJob("stellium", prefs, options)) {
-    await runStelliumJob(options.surface);
+    await runStelliumExceltisJob(options.surface);
+  }
+  if (shouldRunJob("box_placement", prefs, options)) {
+    await runBoxPlacementJob(options.surface);
   }
   if (shouldRunJob("notes", prefs, options)) {
     await runNotesJob();
@@ -387,15 +446,34 @@ async function runBackgroundAutomationCycleInner(
 
 /** Sync tray immédiate après déverrouillage (autostart minimisé). */
 export function runBackgroundAutomationAfterUnlock(): void {
-  if (typeof document !== "undefined" && !document.hidden) return;
-  void runBackgroundAutomationCycle({ surface: "tray", force: true });
+  void (async () => {
+    if (!(await isCrmWindowHidden())) return;
+    void runBackgroundAutomationCycle({ surface: "tray", force: true });
+  })();
+}
+
+/** Cycle tray si la fenêtre est cachée (tick timer ou passage en tray). */
+export async function runTrayAutomationCycleIfHidden(
+  options: { force?: boolean } = {}
+): Promise<void> {
+  if (!(await isCrmWindowHidden())) return;
+  await runBackgroundAutomationCycle({ surface: "tray", force: options.force });
 }
 
 /** Exécute les automatisations dues (une file à la fois). */
 export function runBackgroundAutomationCycle(
   options: BackgroundAutomationCycleOptions
 ): Promise<void> {
-  if (cycleInFlight) return cycleInFlight;
+  if (cycleInFlight) {
+    if (!options.force) return cycleInFlight;
+    const chained = cycleInFlight.finally(() =>
+      runBackgroundAutomationCycleInner(options)
+    );
+    cycleInFlight = chained.finally(() => {
+      cycleInFlight = null;
+    });
+    return chained;
+  }
   cycleInFlight = runBackgroundAutomationCycleInner(options).finally(() => {
     cycleInFlight = null;
   });

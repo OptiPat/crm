@@ -15,7 +15,7 @@ const RDV_NOTIFIED_KEY = "crm_tray_digest_rdv_notified";
 export const TRAY_DIGEST_MIN_INTERVAL_MS = 2 * 60 * 60_000;
 
 export type TrayDigestLine = {
-  kind: "rdv" | "alertes" | "taches" | "emails";
+  kind: "rdv" | "alertes" | "taches" | "emails" | "placement";
   text: string;
 };
 
@@ -79,6 +79,30 @@ export function buildTrayDigestLines(
           ? "1 email prêt dans Suivi"
           : `${snapshot.emails_ready_count} emails prêts dans Suivi`,
     });
+  }
+  const placementOpen =
+    (snapshot.placement_pending_count ?? 0) +
+    (snapshot.placement_non_conforme_count ?? 0);
+  if (placementOpen > 0) {
+    const nonConforme = snapshot.placement_non_conforme_count ?? 0;
+    const pending = snapshot.placement_pending_count ?? 0;
+    if (nonConforme > 0) {
+      lines.push({
+        kind: "placement",
+        text:
+          nonConforme === 1
+            ? "1 opération partenaire non conforme"
+            : `${nonConforme} opérations partenaire non conformes`,
+      });
+    } else if (pending > 0) {
+      lines.push({
+        kind: "placement",
+        text:
+          pending === 1
+            ? "1 opération partenaire en attente"
+            : `${pending} opérations partenaire en attente`,
+      });
+    }
   }
 
   return lines;

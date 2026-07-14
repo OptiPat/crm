@@ -3,6 +3,8 @@ import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import { formatPipeParticipantsLabel } from "@/lib/pipe/pipe-types";
 import { PipeTypeBadge } from "@/components/pipe/PipeTypeBadge";
 import { PipeStageBadge } from "@/components/pipe/PipeStageBadge";
+import { PipePlacementBadge } from "@/components/pipe/PipePlacementBadge";
+import type { PlacementPipeOpenCount } from "@/lib/api/tauri-box-placement";
 
 function formatUpdatedAt(ts: number): string {
   return new Date(ts * 1000).toLocaleDateString("fr-FR", {
@@ -15,9 +17,15 @@ interface PipeListProps {
   pipes: PipeRecord[];
   selectedId: number | null;
   onSelect: (pipe: PipeRecord) => void;
+  placementCountsByPipe?: Record<number, PlacementPipeOpenCount>;
 }
 
-export function PipeList({ pipes, selectedId, onSelect }: PipeListProps) {
+export function PipeList({
+  pipes,
+  selectedId,
+  onSelect,
+  placementCountsByPipe = {},
+}: PipeListProps) {
   if (pipes.length === 0) {
     return (
       <div className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -43,6 +51,7 @@ export function PipeList({ pipes, selectedId, onSelect }: PipeListProps) {
             <div className="flex flex-wrap items-center gap-1.5 mb-1">
               <PipeTypeBadge pipeType={pipe.pipe_type} />
               <PipeStageBadge stage={pipe.stage} />
+              <PipePlacementBadge counts={placementCountsByPipe[pipe.id]} />
             </div>
             <p className="font-medium text-sm truncate">{pipe.titre}</p>
             <p className="text-xs text-muted-foreground mt-0.5 truncate">

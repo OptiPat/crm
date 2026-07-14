@@ -13,9 +13,16 @@ import {
   pipeRdvCalendarEndAt,
 } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { rdvStageFromEntryTitre, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+import {
+  executePipeRdvReschedule,
+  executePipeSuiviRdvReschedule,
+} from "@/lib/pipe/pipe-rdv-reschedule-actions";
 import { executeRdvCancellation } from "@/lib/pipe/pipe-rdv-delete-actions";
-import { executePipeRdvReschedule } from "@/lib/pipe/pipe-rdv-reschedule-actions";
-import { PIPE_STAGE_LABELS } from "@/lib/pipe/pipe-types";
+import {
+  formatSuiviRdvDisplayLabel,
+  isSuiviRdvEntry,
+} from "@/lib/pipe/pipe-suivi";
+import { PIPE_STAGE_LABELS, type PipeStage } from "@/lib/pipe/pipe-types";
 import { notifyPipeChanged } from "@/lib/pipe/pipe-events";
 
 export async function loadAgendaPipeRdvContext(
@@ -40,10 +47,23 @@ export async function reschedulePipeRdvFromAgenda(options: {
   endAtUnix: number;
   calendarTitle: string;
 }): Promise<PipeRdvCalendarSyncResult | undefined> {
-  const calendarTitle = formatPipeRdvGoogleCalendarTitle(
-    options.rdvStage,
-    formatPipeRdvCalendarContactLabel(options.pipe)
-  );
+  const contactLabel = formatPipeRdvCalendarContactLabel(options.pipe);
+
+  if (isSuiviRdvEntry(options.entry)) {
+    const calendar = await executePipeSuiviRdvReschedule({
+      entry: options.entry,
+      pipe: options.pipe,
+      newOccurredAtUnix: options.startAtUnix,
+      endAtUnix: options.endAtUnix,
+      updateEntry: (id, input) => updatePipeTimelineEntry(id, input),
+      addEntry: (input) =>
+        createPipeTimelineEntry({ ...input, pipe_id: options.entry.pipe_id }),
+    });
+    notifyPipeChanged();
+    return calendar;
+  }
+
+  const calendarTitle = formatPipeRdvGoogleCalendarTitle(options.rdvStage, contactLabel);
 
   const calendar = await executePipeRdvReschedule({
     entry: options.entry,
@@ -66,9 +86,13 @@ export async function cancelPipeRdvFromAgenda(options: {
   entry: PipeTimelineEntryRecord;
   note?: string | null;
   cancelGoogle: boolean;
-}): Promise<{ revertedToProspection: boolean; googleCancelled: boolean; rdvLabel: string }> {
+}): Promise<{ revertedStage: PipeStage | null; googleCancelled: boolean; rdvLabel: string }> {
   const rdvStage = rdvStageFromEntryTitre(options.entry.titre);
-  const rdvLabel = rdvStage ? `RDV ${PIPE_STAGE_LABELS[rdvStage]}` : "RDV";
+  const rdvLabel = isSuiviRdvEntry(options.entry)
+    ? formatSuiviRdvDisplayLabel()
+    : rdvStage
+      ? `RDV ${PIPE_STAGE_LABELS[rdvStage]}`
+      : "RDV";
 
   const result = await executeRdvCancellation({
     pipe: options.pipe,

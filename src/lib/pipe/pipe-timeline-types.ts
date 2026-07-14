@@ -1,4 +1,11 @@
-export const PIPE_TIMELINE_USER_TYPES = ["APPEL", "RDV", "NOTE", "PROPOSITION"] as const;
+export const PIPE_TIMELINE_USER_TYPES = [
+  "APPEL",
+  "RDV",
+  "NOTE",
+  "PROPOSITION",
+  "ARBITRAGE",
+  "REINVESTISSEMENT",
+] as const;
 
 export type PipeTimelineUserType = (typeof PIPE_TIMELINE_USER_TYPES)[number];
 
@@ -9,6 +16,8 @@ export const PIPE_TIMELINE_TYPE_LABELS: Record<PipeTimelineType, string> = {
   RDV: "RDV",
   NOTE: "Note",
   PROPOSITION: "Proposition",
+  ARBITRAGE: "Arbitrage",
+  REINVESTISSEMENT: "Réinvestissement",
   CREATION: "Création",
   AVANCEMENT: "Avancement",
 };

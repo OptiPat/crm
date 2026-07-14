@@ -3,14 +3,16 @@ import type {
   NewPipeTimelineEntryInput,
   PipeTimelineEntryRecord,
 } from "@/lib/api/tauri-pipe-timeline";
+import { listPipeTimelineEntries } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import {
   buildRdvCancelledTimelinePayload,
-  canRevertPipeToProspection,
+  resolveStageAfterRdvCancellation,
 } from "@/lib/pipe/pipe-rdv-delete";
 import { markPipeRdvCalendarCancelled, resolvePipeRdvGoogleEventId } from "@/lib/api/tauri-calendar";
 import { cancelLinkedGoogleRdv } from "@/lib/calendar/rdv-planifier";
-import { PIPE_STAGE_LABELS } from "@/lib/pipe/pipe-types";
+import { rdvStageFromEntryTitre } from "@/lib/pipe/pipe-rdv-stage";
+import { PIPE_STAGE_LABELS, type PipeStage } from "@/lib/pipe/pipe-types";
 
 type TimelineEntryWriter = (
   input: Omit<NewPipeTimelineEntryInput, "pipe_id">
@@ -24,9 +26,10 @@ export async function executeRdvCancellation(options: {
   note?: string | null;
   /** Retire l'événement Google Agenda lié (défaut : oui). */
   cancelGoogle?: boolean;
+  allEntries?: PipeTimelineEntryRecord[];
   addEntry: TimelineEntryWriter;
   removeEntry: TimelineEntryRemover;
-}): Promise<{ revertedToProspection: boolean; googleCancelled: boolean }> {
+}): Promise<{ revertedStage: PipeStage | null; googleCancelled: boolean }> {
   const { titre, contenu } = buildRdvCancelledTimelinePayload(options.entry, options.note);
   const now = Math.floor(Date.now() / 1000);
 
@@ -41,6 +44,21 @@ export async function executeRdvCancellation(options: {
     }
   }
 
+  const pipe = options.pipe;
+  let revertStage: PipeStage | null = null;
+  if (pipe?.pipe_type === "AFFAIRE") {
+    const rdvStage = rdvStageFromEntryTitre(options.entry.titre);
+    if (rdvStage && pipe.stage === rdvStage) {
+      const entries =
+        options.allEntries ?? (await listPipeTimelineEntries(pipe.id));
+      revertStage = resolveStageAfterRdvCancellation(
+        pipe.stage,
+        options.entry,
+        entries
+      );
+    }
+  }
+
   await options.addEntry({
     entry_type: "NOTE",
     titre,
@@ -50,17 +68,12 @@ export async function executeRdvCancellation(options: {
   await markPipeRdvCalendarCancelled(options.entry.id);
   await options.removeEntry(options.entry.id);
 
-  const pipe = options.pipe;
-  if (
-    pipe?.pipe_type === "AFFAIRE" &&
-    pipe.stage !== "PROSPECTION" &&
-    canRevertPipeToProspection(pipe.stage)
-  ) {
-    await setPipeStage(pipe.id, "PROSPECTION", { notes: null });
-    return { revertedToProspection: true, googleCancelled };
+  if (revertStage) {
+    await setPipeStage(pipe!.id, revertStage, { notes: null });
+    return { revertedStage: revertStage, googleCancelled };
   }
 
-  return { revertedToProspection: false, googleCancelled };
+  return { revertedStage: null, googleCancelled };
 }
 
 export async function applyRdvCancelled(options: {
@@ -69,12 +82,13 @@ export async function applyRdvCancelled(options: {
   entry: PipeTimelineEntryRecord;
   note?: string | null;
   cancelGoogle?: boolean;
-}): Promise<{ revertedToProspection: boolean; googleCancelled: boolean }> {
+}): Promise<{ revertedStage: PipeStage | null; googleCancelled: boolean }> {
   return executeRdvCancellation({
     pipe: options.pipe,
     entry: options.entry,
     note: options.note,
     cancelGoogle: options.cancelGoogle,
+    allEntries: options.timeline.entries,
     addEntry: (input) => options.timeline.addEntry(input),
     removeEntry: (id) => options.timeline.removeEntry(id),
   });
@@ -82,10 +96,10 @@ export async function applyRdvCancelled(options: {
 
 export function toastAfterRdvCancelled(
   rdvLabel: string,
-  result: { revertedToProspection: boolean }
+  result: { revertedStage: PipeStage | null }
 ): string {
-  if (result.revertedToProspection) {
-    return `${rdvLabel} annulé — affaire remise en ${PIPE_STAGE_LABELS.PROSPECTION}`;
+  if (result.revertedStage) {
+    return `${rdvLabel} annulé — avancement : ${PIPE_STAGE_LABELS[result.revertedStage]}`;
   }
   return `${rdvLabel} annulé`;
 }

@@ -12,6 +12,7 @@ export const WAKE_DEBOUNCE_MS = 300;
 export type BackgroundAutomationJob =
   | "relation"
   | "stellium"
+  | "box_placement"
   | "notes"
   | "pipe_rdv"
   | "birthdays"
@@ -20,6 +21,7 @@ export type BackgroundAutomationJob =
 export const JOB_INTERVAL_MS: Record<BackgroundAutomationJob, number> = {
   relation: RELATION_INTERVAL_MS,
   stellium: STELLIUM_INTERVAL_MS,
+  box_placement: STELLIUM_INTERVAL_MS,
   notes: NOTES_INTERVAL_MS,
   pipe_rdv: RELATION_INTERVAL_MS,
   birthdays: BIRTHDAY_INTERVAL_MS,
@@ -29,6 +31,7 @@ export const JOB_INTERVAL_MS: Record<BackgroundAutomationJob, number> = {
 export const JOB_COOLDOWN_MS: Partial<Record<BackgroundAutomationJob, number>> = {
   relation: RELATION_COOLDOWN_MS,
   stellium: STELLIUM_COOLDOWN_MS,
+  box_placement: STELLIUM_COOLDOWN_MS,
   notes: NOTES_COOLDOWN_MS,
   birthdays: BIRTHDAY_COOLDOWN_MS,
 };

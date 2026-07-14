@@ -10,6 +10,7 @@ import {
 } from "@/lib/api/tauri-alertes";
 import { getAlertesWithContacts, type AlerteWithContact } from "@/lib/api/tauri-dashboard";
 import { SuiviPageHeader } from "@/components/suivi/SuiviPageHeader";
+import { PlacementOperationsPanel } from "@/components/suivi/PlacementOperationsPanel";
 import { SuiviAlertesTab } from "@/components/suivi/SuiviAlertesTab";
 import { SuiviEtiquetteContactRow } from "@/components/suivi/SuiviEtiquetteContactRow";
 import { SuiviSegmentsTab } from "@/components/suivi/SuiviSegmentsTab";
@@ -462,7 +463,8 @@ export function Suivi({ currentPage, onNavigate }: SuiviProps) {
       />
 
       <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as SuiviMainTab)}>
-        <TabsContent value="alertes" className="mt-4">
+        <TabsContent value="alertes" className="mt-4 space-y-4">
+          <PlacementOperationsPanel onOpenContact={openSuiviContactSheet} />
           <SuiviAlertesTab
             alertes={alertes}
             loading={loading}

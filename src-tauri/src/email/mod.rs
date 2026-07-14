@@ -15,4 +15,5 @@ pub mod google_api_errors;
 pub mod google_calendar_probe;
 pub mod calendar_ops;
 pub mod stellium_exceltis;
+pub mod box_placement;
 pub mod oauth_store;

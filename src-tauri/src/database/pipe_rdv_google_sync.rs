@@ -1,7 +1,10 @@
 //! Annulation / report Pipe depuis Google Agenda (miroir des actions CRM).
 
 use super::models::NewPipeTimelineEntry;
-use super::pipe::{PIPE_STAGE_R1, PIPE_STAGE_R2, PIPE_STAGE_R3, PIPE_TYPE_AFFAIRE};
+use super::pipe::{
+    PIPE_STAGE_GAGNEE, PIPE_STAGE_PROSPECTION, PIPE_STAGE_R1, PIPE_STAGE_R2, PIPE_STAGE_R3,
+    PIPE_TYPE_AFFAIRE,
+};
 use super::pipe_timeline::{TIMELINE_NOTE, TIMELINE_RDV};
 
 const FR_MONTHS: [&str; 12] = [
@@ -66,12 +69,65 @@ pub(crate) fn build_rdv_rescheduled_contenu(
     )
 }
 
-fn can_revert_pipe_to_prospection(stage: &str) -> bool {
-    matches!(stage, PIPE_STAGE_R1 | PIPE_STAGE_R2 | PIPE_STAGE_R3)
+const PIPE_LINEAR_STAGES: &[&str] = &[
+    PIPE_STAGE_PROSPECTION,
+    PIPE_STAGE_R1,
+    PIPE_STAGE_R2,
+    PIPE_STAGE_R3,
+    PIPE_STAGE_GAGNEE,
+];
+
+fn previous_linear_stage(stage: &str) -> Option<&'static str> {
+    let idx = PIPE_LINEAR_STAGES.iter().position(|s| *s == stage)?;
+    if idx == 0 {
+        return None;
+    }
+    Some(PIPE_LINEAR_STAGES[idx - 1])
+}
+
+fn rdv_stage_from_entry_titre(titre: Option<&str>) -> Option<&'static str> {
+    match titre.map(str::trim) {
+        Some(PIPE_STAGE_R1) => Some(PIPE_STAGE_R1),
+        Some(PIPE_STAGE_R2) => Some(PIPE_STAGE_R2),
+        Some(PIPE_STAGE_R3) => Some(PIPE_STAGE_R3),
+        _ => None,
+    }
+}
+
+fn is_last_rdv_for_stage(
+    entries: &[super::models::PipeTimelineEntry],
+    entry: &super::models::PipeTimelineEntry,
+) -> bool {
+    let Some(rdv_stage) = rdv_stage_from_entry_titre(entry.titre.as_deref()) else {
+        return false;
+    };
+    if entry.entry_type != TIMELINE_RDV {
+        return false;
+    }
+    !entries.iter().any(|e| {
+        e.entry_type == TIMELINE_RDV
+            && e.id != entry.id
+            && rdv_stage_from_entry_titre(e.titre.as_deref()) == Some(rdv_stage)
+    })
+}
+
+fn resolve_stage_after_rdv_cancellation(
+    pipe_stage: &str,
+    cancelled_entry: &super::models::PipeTimelineEntry,
+    entries: &[super::models::PipeTimelineEntry],
+) -> Option<&'static str> {
+    let rdv_stage = rdv_stage_from_entry_titre(cancelled_entry.titre.as_deref())?;
+    if pipe_stage != rdv_stage {
+        return None;
+    }
+    if !is_last_rdv_for_stage(entries, cancelled_entry) {
+        return None;
+    }
+    previous_linear_stage(pipe_stage)
 }
 
 impl super::Database {
-    /// Annulation complète d'un RDV Pipe détectée côté Google (trace + suppression + retour prospection).
+    /// Annulation complète d'un RDV Pipe détectée côté Google (trace + suppression + recul d'étape).
     pub fn apply_pipe_rdv_cancelled_from_google(
         &self,
         timeline_entry_id: i64,
@@ -82,6 +138,8 @@ impl super::Database {
             return Ok(false);
         }
         let pipe = self.get_pipe_by_id(entry.pipe_id)?;
+        let entries = self.list_pipe_timeline_entries(entry.pipe_id)?;
+        let revert_stage = resolve_stage_after_rdv_cancellation(&pipe.stage, &entry, &entries);
 
         self.mark_calendar_event_cancelled(google_event_id)?;
         let _ = self.cancel_pipe_rdv_reminder_schedules(timeline_entry_id);
@@ -94,12 +152,11 @@ impl super::Database {
         })?;
         self.delete_pipe_timeline_entry(timeline_entry_id)?;
 
-        if pipe.pipe_type == PIPE_TYPE_AFFAIRE
-            && pipe.stage != super::pipe::PIPE_STAGE_PROSPECTION
-            && can_revert_pipe_to_prospection(&pipe.stage)
-        {
-            self.set_pipe_stage(entry.pipe_id, super::pipe::PIPE_STAGE_PROSPECTION, None, None)?;
-            return Ok(true);
+        if pipe.pipe_type == PIPE_TYPE_AFFAIRE {
+            if let Some(stage) = revert_stage {
+                self.set_pipe_stage(entry.pipe_id, stage, None, None)?;
+                return Ok(true);
+            }
         }
         Ok(false)
     }
@@ -249,7 +306,7 @@ impl super::Database {
 mod tests {
     use super::*;
     use crate::database::models::{NewContact, NewPipe, NewPipeTimelineEntry};
-    use crate::database::pipe::{PIPE_STAGE_PROSPECTION, PIPE_STAGE_R1};
+    use crate::database::pipe::{PIPE_STAGE_PROSPECTION, PIPE_STAGE_R1, PIPE_STAGE_R2};
     use crate::database::Database;
 
     fn seed_affaire_with_r1_rdv(db: &Database) -> (i64, i64) {
@@ -322,6 +379,30 @@ mod tests {
                 .iter()
                 .any(|e| e.contenu.as_deref() == Some("RDV R1 annulé"))
         );
+    }
+
+    #[test]
+    fn google_cancel_r2_reverts_to_r1() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let (pipe_id, rdv_id) = seed_affaire_with_r1_rdv(&db);
+        db.set_pipe_stage(pipe_id, PIPE_STAGE_R2, None, None)
+            .unwrap();
+        let rdv_r2 = db
+            .create_pipe_timeline_entry(NewPipeTimelineEntry {
+                pipe_id,
+                entry_type: TIMELINE_RDV.into(),
+                titre: Some(PIPE_STAGE_R2.into()),
+                contenu: None,
+                occurred_at: Some(2_000_000),
+            })
+            .unwrap();
+
+        let reverted = db
+            .apply_pipe_rdv_cancelled_from_google(rdv_r2.id, "g-ev-r2")
+            .unwrap();
+        assert!(reverted);
+        assert_eq!(db.get_pipe_by_id(pipe_id).unwrap().stage, PIPE_STAGE_R1);
+        assert!(db.get_pipe_timeline_entry(rdv_id).is_ok());
     }
 
     #[test]

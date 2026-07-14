@@ -6,7 +6,7 @@ import {
   isLastRdvForStage,
   parseRdvTimelineTraceNote,
   phaseHasRdvActivityForStage,
-  shouldHighlightRevertToProspection,
+  resolveStageAfterRdvCancellation,
   stageHasRdvCancellationTrace,
   canResumeRdvFromCancelledTrace,
 } from "@/lib/pipe/pipe-rdv-delete";
@@ -30,10 +30,21 @@ describe("pipe-rdv-delete", () => {
     expect(isLastRdvForStage(rdv2, [rdv1, rdv2])).toBe(false);
   });
 
-  it("propose le retour prospection si dernier RDV et affaire en R1", () => {
+  it("recule d'une étape si dernier RDV et affaire à la même étape", () => {
     const rdv = mkRdv(1, "R1");
-    expect(shouldHighlightRevertToProspection(rdv, [rdv], "R1")).toBe(true);
-    expect(shouldHighlightRevertToProspection(rdv, [rdv, mkRdv(2, "R1")], "R1")).toBe(false);
+    expect(resolveStageAfterRdvCancellation("R1", rdv, [rdv])).toBe("PROSPECTION");
+    expect(resolveStageAfterRdvCancellation("R1", rdv, [rdv, mkRdv(2, "R1")])).toBeNull();
+
+    const rdvR2 = mkRdv(3, "R2");
+    expect(resolveStageAfterRdvCancellation("R2", rdvR2, [rdvR2])).toBe("R1");
+
+    const rdvR3 = mkRdv(4, "R3");
+    expect(resolveStageAfterRdvCancellation("R3", rdvR3, [rdvR3])).toBe("R2");
+  });
+
+  it("ne recule pas si l'affaire est déjà au-delà de l'étape annulée", () => {
+    const rdv = mkRdv(1, "R1");
+    expect(resolveStageAfterRdvCancellation("R2", rdv, [rdv])).toBeNull();
   });
 
   it("détecte l'absence de RDV dans une phase", () => {

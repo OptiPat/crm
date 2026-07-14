@@ -31,6 +31,41 @@ impl super::Database {
     }
 
     /// Recherche légère (id + nom + prénom seulement — pas de CONTACT_SELECT complet).
+    /// Retourne `None` si aucun match ou si plusieurs homonymes.
+    pub fn find_contact_id_by_name_if_unique(
+        &self,
+        nom: &str,
+        prenom: &str,
+    ) -> Result<Option<i64>> {
+        use crate::contact_name::names_match;
+
+        if nom.trim().is_empty() || prenom.trim().is_empty() {
+            return Ok(None);
+        }
+
+        let mut stmt = self.conn.prepare(
+            "SELECT id, nom, prenom FROM contacts ORDER BY id ASC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        let mut matched: Option<i64> = None;
+        for row in rows {
+            let (id, row_nom, row_prenom) = row?;
+            if names_match(nom, prenom, &row_nom, &row_prenom) {
+                if matched.is_some() {
+                    return Ok(None);
+                }
+                matched = Some(id);
+            }
+        }
+        Ok(matched)
+    }
+
     pub(crate) fn find_contact_id_by_name(&self, nom: &str, prenom: &str) -> Result<Option<i64>> {
         use crate::contact_name::names_match;
 
@@ -95,6 +130,16 @@ mod tests {
             statut_suivi: Some("ACTIF".into()),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn find_contact_id_by_name_if_unique_rejects_homonyms() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+
+        let resolved = db.find_contact_id_by_name_if_unique("Dupont", "Jean").unwrap();
+        assert_eq!(resolved, None);
     }
 
     #[test]

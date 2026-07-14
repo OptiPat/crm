@@ -2695,6 +2695,90 @@ pub fn reset_stellium_exceltis_dismissed(db: State<'_, DbState>) -> Result<(), S
     crate::email::stellium_exceltis::reset_stellium_exceltis_dismissed(&db)
 }
 
+// ========== BOX PLACEMENT (opérations partenaire) ==========
+
+#[tauri::command]
+pub async fn scan_box_placement_emails(
+    app_handle: tauri::AppHandle,
+) -> Result<crate::email::box_placement::BoxPlacementScanResult, String> {
+    let app = app_handle.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app.state::<DbState>();
+        crate::email::box_placement::scan_box_placement_emails(&app, db.inner())
+    })
+    .await
+    .map_err(|e| format!("Scan Box Placement interrompu: {}", e))?
+}
+
+#[tauri::command]
+pub fn create_placement_operation(
+    db: State<'_, DbState>,
+    input: crate::database::models::NewPlacementOperation,
+) -> Result<crate::database::models::PlacementOperation, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .create_placement_operation(input)
+        .map_err(|e| format!("Échec création opération partenaire: {}", e))
+}
+
+#[tauri::command]
+pub fn list_placement_operations(
+    db: State<'_, DbState>,
+) -> Result<Vec<crate::database::models::PlacementOperationWithContact>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .list_placement_operations_with_contacts()
+        .map_err(|e| format!("Échec liste opérations partenaire: {}", e))
+}
+
+#[tauri::command]
+pub fn list_placement_operations_for_pipe(
+    db: State<'_, DbState>,
+    pipe_id: i64,
+) -> Result<Vec<crate::database::models::PlacementOperation>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .list_placement_operations_for_pipe(pipe_id)
+        .map_err(|e| format!("Échec liste opérations pipe: {}", e))
+}
+
+#[tauri::command]
+pub fn update_placement_operation_status(
+    db: State<'_, DbState>,
+    id: i64,
+    status: String,
+) -> Result<crate::database::models::PlacementOperation, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .update_placement_operation_status(id, &status)
+        .map_err(|e| format!("Échec mise à jour statut opération: {}", e))
+}
+
+#[tauri::command]
+pub fn get_placement_open_counts_by_pipe(
+    db: State<'_, DbState>,
+) -> Result<Vec<crate::database::models::PlacementPipeOpenCount>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let map = database
+        .get_placement_open_counts_by_pipe()
+        .map_err(|e| format!("Échec compteurs placement: {}", e))?;
+    Ok(map
+        .into_iter()
+        .map(|(pipe_id, (pending, non_conforme))| {
+            crate::database::models::PlacementPipeOpenCount {
+                pipe_id,
+                pending,
+                non_conforme,
+            }
+        })
+        .collect())
+}
+
 // ========== SETTINGS ==========
 
 #[tauri::command]

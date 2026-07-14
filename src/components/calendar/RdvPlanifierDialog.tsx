@@ -35,6 +35,7 @@ import {
 import { findNextFreeSlot, loadGoogleEventsForHorizon } from "@/lib/calendar/agenda-free-slot";
 import {
   planifyPipeRdv,
+  planifyPipeSuiviRdv,
   planifyStandaloneGoogleRdv,
 } from "@/lib/calendar/rdv-planifier";
 import { useRdvVisioLocation } from "@/hooks/useRdvVisioLocation";
@@ -45,7 +46,11 @@ import {
 } from "@/lib/pipe/pipe-rdv-stage";
 import { isPipeType } from "@/lib/pipe/pipe-types";
 import { formatPipeRdvCalendarContactLabel, formatPipeRdvGoogleCalendarTitle } from "@/lib/pipe/pipe-rdv-google-calendar";
-import { toastPipeRdvOutcome } from "@/lib/pipe/pipe-rdv-entry-actions";
+import { toastPipeRdvOutcome, toastAfterSuiviRdvSave } from "@/lib/pipe/pipe-rdv-entry-actions";
+import {
+  formatPipeSuiviRdvGoogleCalendarTitle,
+  isSuiviPipe,
+} from "@/lib/pipe/pipe-suivi";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { toast } from "sonner";
 
@@ -213,14 +218,20 @@ export function RdvPlanifierDialog({
     return selectedPipe && isPipeType(selectedPipe.pipe_type) ? selectedPipe : null;
   }, [context, pipes, selectedPipe]);
 
+  const isSuiviPipeContext = pipeForPlanify != null && isSuiviPipe(pipeForPlanify);
+
   const pipeContactLabel = pipeForPlanify
     ? formatPipeRdvCalendarContactLabel(pipeForPlanify)
     : contactLabel;
 
   useEffect(() => {
     if (!open || titleEdited || !pipeForPlanify || !pipeContactLabel) return;
+    if (isSuiviPipeContext) {
+      setTitle(formatPipeSuiviRdvGoogleCalendarTitle(pipeContactLabel));
+      return;
+    }
     setTitle(formatPipeRdvGoogleCalendarTitle(rdvStage, pipeContactLabel));
-  }, [open, pipeForPlanify, rdvStage, pipeContactLabel, titleEdited]);
+  }, [open, pipeForPlanify, rdvStage, pipeContactLabel, titleEdited, isSuiviPipeContext]);
 
   const handleStartChange = (value: string) => {
     setStart(value);
@@ -278,7 +289,18 @@ export function RdvPlanifierDialog({
     setSubmitting(true);
     try {
       await rdvLocation.persistContactAddress();
-      if (pipeForPlanify) {
+      if (isSuiviPipeContext && pipeForPlanify) {
+        const result = await planifyPipeSuiviRdv({
+          pipe: pipeForPlanify,
+          startAtUnix: startAt,
+          endAtUnix: endAt,
+          contenu: contenu.trim() || null,
+          visio,
+          physicalAddress,
+          calendarTitle: title.trim() || null,
+        });
+        toastAfterSuiviRdvSave(result.calendar);
+      } else if (pipeForPlanify) {
         const result = await planifyPipeRdv({
           pipe: pipeForPlanify,
           rdvStage,
@@ -324,11 +346,15 @@ export function RdvPlanifierDialog({
     <Dialog open={open} onOpenChange={(o) => !submitting && onOpenChange(o)}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Planifier un RDV</DialogTitle>
+          <DialogTitle>
+            {isSuiviPipeContext ? "Planifier un RDV de suivi" : "Planifier un RDV"}
+          </DialogTitle>
           <DialogDescription>
-            {pipeForPlanify
-              ? `Affaire « ${pipeForPlanify.titre} » — journal Pipe + Google Agenda si connecté.`
-              : "Google Agenda si connecté. Liez une affaire Pipe pour suivre le funnel."}
+            {isSuiviPipeContext && pipeForPlanify
+              ? `Suivi « ${pipeForPlanify.titre} » — journal Pipe + Google Agenda si connecté.`
+              : pipeForPlanify
+                ? `Affaire « ${pipeForPlanify.titre} » — journal Pipe + Google Agenda si connecté.`
+                : "Google Agenda si connecté. Liez une affaire Pipe pour suivre le funnel."}
           </DialogDescription>
         </DialogHeader>
 
@@ -375,7 +401,7 @@ export function RdvPlanifierDialog({
             </div>
           )}
 
-          {pipeForPlanify && (
+          {pipeForPlanify && !isSuiviPipeContext && (
             <div className="space-y-2">
               <Label>Type de RDV</Label>
               <Select value={rdvStage} onValueChange={(v) => setRdvStage(v as PipeRdvStage)}>
@@ -403,9 +429,11 @@ export function RdvPlanifierDialog({
                 setTitle(e.target.value);
               }}
               placeholder={
-                pipeForPlanify && pipeContactLabel
-                  ? formatPipeRdvGoogleCalendarTitle(rdvStage, pipeContactLabel)
-                  : `RDV — ${contactLabel || "…"}`
+                isSuiviPipeContext && pipeContactLabel
+                  ? formatPipeSuiviRdvGoogleCalendarTitle(pipeContactLabel)
+                  : pipeForPlanify && pipeContactLabel
+                    ? formatPipeRdvGoogleCalendarTitle(rdvStage, pipeContactLabel)
+                    : `RDV — ${contactLabel || "…"}`
               }
             />
           </div>

@@ -6,6 +6,8 @@ pub const TIMELINE_APPEL: &str = "APPEL";
 pub const TIMELINE_RDV: &str = "RDV";
 pub const TIMELINE_NOTE: &str = "NOTE";
 pub const TIMELINE_PROPOSITION: &str = "PROPOSITION";
+pub const TIMELINE_ARBITRAGE: &str = "ARBITRAGE";
+pub const TIMELINE_REINVESTISSEMENT: &str = "REINVESTISSEMENT";
 pub const TIMELINE_CREATION: &str = "CREATION";
 pub const TIMELINE_AVANCEMENT: &str = "AVANCEMENT";
 
@@ -14,6 +16,8 @@ const USER_TIMELINE_TYPES: &[&str] = &[
     TIMELINE_RDV,
     TIMELINE_NOTE,
     TIMELINE_PROPOSITION,
+    TIMELINE_ARBITRAGE,
+    TIMELINE_REINVESTISSEMENT,
 ];
 
 fn now_unix() -> i64 {

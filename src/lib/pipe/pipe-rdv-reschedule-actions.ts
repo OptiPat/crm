@@ -16,6 +16,10 @@ import {
   formatRdvEntryTitle,
   type PipeRdvStage,
 } from "@/lib/pipe/pipe-rdv-stage";
+import {
+  formatPipeSuiviRdvGoogleCalendarTitle,
+  SUIVI_RDV_TITRE,
+} from "@/lib/pipe/pipe-suivi";
 import type { UpdatePipeTimelineEntryInput } from "@/lib/api/tauri-pipe-timeline";
 
 type TimelineEntryWriter = (
@@ -119,6 +123,99 @@ export async function executePipeRdvReschedule(options: {
   }
 
   return calendar;
+}
+
+export async function executePipeSuiviRdvReschedule(options: {
+  entry: PipeTimelineEntryRecord;
+  pipe: Pick<
+    PipeRecord,
+    "id" | "stage" | "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom"
+  > &
+    Partial<
+      Pick<
+        PipeRecord,
+        "secondary_contact_id" | "secondary_contact_prenom" | "secondary_contact_nom" | "titre"
+      >
+    >;
+  newOccurredAtUnix: number;
+  endAtUnix?: number;
+  contenu?: string | null;
+  userNote?: string | null;
+  updateEntry: TimelineEntryUpdater;
+  addEntry: TimelineEntryWriter;
+}): Promise<PipeRdvCalendarSyncResult | undefined> {
+  const previousOccurredAt = options.entry.occurred_at;
+  const dateChanged = previousOccurredAt !== options.newOccurredAtUnix;
+  const endAtUnix = options.endAtUnix ?? pipeRdvCalendarEndAt(options.newOccurredAtUnix);
+  const nextContenu =
+    options.contenu !== undefined
+      ? options.contenu?.trim() || null
+      : options.entry.contenu?.trim() || null;
+
+  const calendarCtx = buildPipeRdvCalendarContext(options.pipe);
+  const contactLabel = formatPipeRdvCalendarContactLabel(options.pipe);
+
+  await warnPipeRdvMissingAttendeeEmails(options.pipe);
+
+  await options.updateEntry(options.entry.id, {
+    titre: SUIVI_RDV_TITRE,
+    contenu: nextContenu,
+    occurred_at: options.newOccurredAtUnix,
+  });
+
+  if (dateChanged) {
+    const { titre, contenu } = buildRdvRescheduledTimelinePayload(
+      { entry_type: "RDV", titre: SUIVI_RDV_TITRE },
+      previousOccurredAt,
+      options.newOccurredAtUnix,
+      options.userNote
+    );
+    await options.addEntry({
+      entry_type: "NOTE",
+      titre,
+      contenu,
+      occurred_at: Math.floor(Date.now() / 1000),
+    });
+  }
+
+  return syncGoogleCalendarForPipeRdv({
+    contactId: options.pipe.contact_id,
+    contactLabel,
+    rdvStage: "R1",
+    startAtUnix: options.newOccurredAtUnix,
+    endAtUnix,
+    pipeTimelineEntryId: options.entry.id,
+    existingGoogleEventId:
+      options.entry.google_event_id?.trim() ||
+      (await resolvePipeRdvGoogleEventId(options.entry.id)),
+    calendarTitle: formatPipeSuiviRdvGoogleCalendarTitle(contactLabel),
+    additionalAttendeeContactIds: calendarCtx?.additionalAttendeeContactIds,
+  });
+}
+
+export async function applyPipeSuiviRdvReschedule(options: {
+  timeline: ReturnType<typeof usePipeTimeline>;
+  entry: PipeTimelineEntryRecord;
+  pipe: Pick<
+    PipeRecord,
+    "id" | "stage" | "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom"
+  > &
+    Partial<
+      Pick<
+        PipeRecord,
+        "secondary_contact_id" | "secondary_contact_prenom" | "secondary_contact_nom" | "titre"
+      >
+    >;
+  newOccurredAtUnix: number;
+  endAtUnix?: number;
+  contenu?: string | null;
+  userNote?: string | null;
+}): Promise<PipeRdvCalendarSyncResult | undefined> {
+  return executePipeSuiviRdvReschedule({
+    ...options,
+    updateEntry: (id, input) => options.timeline.updateEntry(id, input),
+    addEntry: (input) => options.timeline.addEntry(input),
+  });
 }
 
 export async function applyPipeRdvReschedule(options: {

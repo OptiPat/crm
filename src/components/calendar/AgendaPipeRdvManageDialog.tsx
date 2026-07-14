@@ -41,11 +41,12 @@ import {
 import { toastAfterRdvCancelled } from "@/lib/pipe/pipe-rdv-delete-actions";
 import { toastAfterPipeRdvReschedule } from "@/lib/pipe/pipe-rdv-entry-actions";
 import { formatPipeRdvCalendarContactLabel, formatPipeRdvGoogleCalendarTitle } from "@/lib/pipe/pipe-rdv-google-calendar";
+import { formatRdvEntryDisplayLabel, rdvStageFromEntryTitre, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import {
-  formatRdvEntryDisplayLabel,
-  rdvStageFromEntryTitre,
-  type PipeRdvStage,
-} from "@/lib/pipe/pipe-rdv-stage";
+  formatPipeSuiviRdvGoogleCalendarTitle,
+  formatSuiviRdvDisplayLabel,
+  isSuiviRdvEntry,
+} from "@/lib/pipe/pipe-suivi";
 import { toast } from "sonner";
 
 interface AgendaPipeRdvManageDialogProps {
@@ -101,9 +102,13 @@ export function AgendaPipeRdvManageDialog({
 
   if (!event) return null;
 
+  const isSuiviRdv = entry != null && isSuiviRdvEntry(entry);
   const rdvStage: PipeRdvStage = rdvStageFromEntryTitre(entry?.titre) ?? "R1";
+  const contactLabel = pipe ? formatPipeRdvCalendarContactLabel(pipe) : "";
   const calendarTitle = pipe
-    ? formatPipeRdvGoogleCalendarTitle(rdvStage, formatPipeRdvCalendarContactLabel(pipe))
+    ? isSuiviRdv
+      ? formatPipeSuiviRdvGoogleCalendarTitle(contactLabel)
+      : formatPipeRdvGoogleCalendarTitle(rdvStage, contactLabel)
     : event.title;
   const hasGoogleLink = Boolean(entry?.google_event_id?.trim() || event.google_event_id);
 
@@ -166,7 +171,11 @@ export function AgendaPipeRdvManageDialog({
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {entry ? (formatRdvEntryDisplayLabel(entry) ?? "RDV Pipe") : "RDV Pipe"}
+            {entry
+              ? isSuiviRdvEntry(entry)
+                ? formatSuiviRdvDisplayLabel()
+                : (formatRdvEntryDisplayLabel(entry) ?? "RDV Pipe")
+              : "RDV Pipe"}
           </DialogTitle>
           <DialogDescription>
             {pipe ? `Affaire « ${pipe.titre} » — lié au journal Pipe.` : "Chargement…"}

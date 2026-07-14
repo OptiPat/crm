@@ -1468,3 +1468,59 @@ pub struct UpdatePipe {
     pub stage: Option<String>,
     pub notes: Option<String>,
 }
+
+/// Opération partenaire Stellium Box Placement (suivi mail entrant).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PlacementOperation {
+    pub id: i64,
+    pub contact_id: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pipe_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pipe_timeline_entry_id: Option<i64>,
+    pub operation_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub product_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stellium_label: Option<String>,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gmail_message_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email_subject: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email_received_at: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PlacementOperationWithContact {
+    #[serde(flatten)]
+    pub operation: PlacementOperation,
+    pub contact_nom: String,
+    pub contact_prenom: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pipe_titre: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+pub struct PlacementPipeOpenCount {
+    pub pipe_id: i64,
+    pub pending: u32,
+    pub non_conforme: u32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NewPlacementOperation {
+    pub contact_id: i64,
+    #[serde(default)]
+    pub pipe_id: Option<i64>,
+    #[serde(default)]
+    pub pipe_timeline_entry_id: Option<i64>,
+    pub operation_type: String,
+    #[serde(default)]
+    pub product_label: Option<String>,
+    #[serde(default)]
+    pub stellium_label: Option<String>,
+}

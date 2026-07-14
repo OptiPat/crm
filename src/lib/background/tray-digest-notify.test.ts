@@ -21,6 +21,8 @@ function emptySnapshot(overrides: Partial<TrayDigestSnapshot> = {}): TrayDigestS
     alertes_count: 0,
     taches_urgent_count: 0,
     emails_ready_count: 0,
+    placement_pending_count: 0,
+    placement_non_conforme_count: 0,
     ...overrides,
   };
 }

@@ -48,6 +48,7 @@ export function parseAutomationNotificationTarget(
 const DIGEST_NAV_PRIORITY: TrayDigestLine["kind"][] = [
   "rdv",
   "alertes",
+  "placement",
   "taches",
   "emails",
 ];
@@ -61,6 +62,8 @@ export function resolveTrayDigestNavTarget(
       case "rdv":
         return { page: "agenda" };
       case "alertes":
+        return { page: "suivi", tab: "alertes" };
+      case "placement":
         return { page: "suivi", tab: "alertes" };
       case "taches":
         return { page: "taches" };

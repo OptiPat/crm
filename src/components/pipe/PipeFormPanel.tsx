@@ -40,6 +40,7 @@ import {
   type PipeType,
 } from "@/lib/pipe/pipe-types";
 import { isPipeRdvStage, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+import { defaultSuiviPipeTitre } from "@/lib/pipe/pipe-suivi";
 import { isPipeFormDirty, type PipeFormSnapshot } from "@/lib/pipe/pipe-form-dirty";
 import { PipeContactSelect } from "@/components/pipe/PipeContactSelect";
 import { toast } from "sonner";
@@ -55,6 +56,8 @@ interface PipeFormPanelProps {
   allPipes: PipeRecord[];
   initialType?: PipeType;
   defaultContactId?: number;
+  initialParentPipeId?: number | null;
+  initialTitre?: string;
   onRequestRdvStage?: (stage: PipeRdvStage, options: { isDirty: boolean }) => void;
   onRequestTerminalStage?: (stage: PipeStage, options: { isDirty: boolean }) => void;
   onDirtyChange?: (isDirty: boolean) => void;
@@ -75,7 +78,8 @@ interface FormState {
 function buildFormState(
   pipe: PipeRecord | null | undefined,
   initialType: PipeType,
-  defaultContactId?: number
+  defaultContactId?: number,
+  options?: { initialParentPipeId?: number | null; initialTitre?: string }
 ): FormState {
   if (pipe) {
     return {
@@ -95,8 +99,8 @@ function buildFormState(
     contactId: defaultContactId ?? 0,
     secondaryContactId: 0,
     pipeType: initialType,
-    parentPipeId: null,
-    titre: "",
+    parentPipeId: options?.initialParentPipeId ?? null,
+    titre: options?.initialTitre ?? "",
     stage: defaultPipeStage(initialType) || "",
     notes: "",
   };
@@ -124,6 +128,8 @@ export function PipeFormPanel({
   allPipes,
   initialType = "AFFAIRE",
   defaultContactId,
+  initialParentPipeId = null,
+  initialTitre,
   onRequestRdvStage,
   onRequestTerminalStage,
   onDirtyChange,
@@ -131,8 +137,13 @@ export function PipeFormPanel({
   onCancel,
 }: PipeFormPanelProps) {
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const buildOptions = useMemo(
+    () => ({ initialParentPipeId, initialTitre }),
+    [initialParentPipeId, initialTitre]
+  );
+
   const [form, setForm] = useState<FormState>(() =>
-    buildFormState(pipe, initialType, defaultContactId)
+    buildFormState(pipe, initialType, defaultContactId, buildOptions)
   );
   const [loading, setLoading] = useState(false);
   const contactHintRef = useRef<Contact | null>(null);
@@ -141,17 +152,19 @@ export function PipeFormPanel({
   /** Contact pour lequel l'utilisateur a retiré le co-contact foyer (évite le re-remplissage auto). */
   const foyerCoContactDismissedRef = useRef<number | null>(null);
 
-  const initialFormRef = useRef<PipeFormSnapshot>(buildFormState(pipe, initialType, defaultContactId));
+  const initialFormRef = useRef<PipeFormSnapshot>(
+    buildFormState(pipe, initialType, defaultContactId, buildOptions)
+  );
 
   useEffect(() => {
-    const next = buildFormState(pipe, initialType, defaultContactId);
+    const next = buildFormState(pipe, initialType, defaultContactId, buildOptions);
     setForm(next);
     initialFormRef.current = next;
     contactHintRef.current = null;
     secondaryHintRef.current = null;
-    titreEditedRef.current = false;
+    titreEditedRef.current = Boolean(buildOptions.initialTitre?.trim());
     foyerCoContactDismissedRef.current = null;
-  }, [pipe, initialType, defaultContactId]);
+  }, [pipe, initialType, defaultContactId, buildOptions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -219,6 +232,13 @@ export function PipeFormPanel({
     return defaultPipeTitreFromCouple(primary, secondary);
   };
 
+  const suggestTitreForContact = (contact: Contact, state: FormState) => {
+    if (state.pipeType === "ACTE_GESTION") {
+      return defaultSuiviPipeTitre(contact);
+    }
+    return defaultPipeTitreFromContact(contact);
+  };
+
   const handleContactCreated = (contact: Contact) => {
     if (!contact.id) {
       toast.error("Contact créé sans identifiant — réessayez.");
@@ -232,8 +252,8 @@ export function PipeFormPanel({
     setForm((prev) => ({
       ...prev,
       contactId: contact.id,
-      parentPipeId: null,
-      titre: titreEditedRef.current ? prev.titre : defaultPipeTitreFromContact(contact),
+      parentPipeId: prev.parentPipeId,
+      titre: titreEditedRef.current ? prev.titre : suggestTitreForContact(contact, prev),
     }));
   };
 
@@ -249,13 +269,15 @@ export function PipeFormPanel({
         ...prev,
         contactId,
         secondaryContactId,
-        parentPipeId: null,
+        parentPipeId: prev.parentPipeId,
       };
       return {
         ...next,
         titre: titreEditedRef.current
           ? prev.titre
-          : resolveCoupleTitre({ ...next, contactId, secondaryContactId }),
+          : prev.pipeType === "ACTE_GESTION" && contact
+            ? defaultSuiviPipeTitre(contact)
+            : resolveCoupleTitre({ ...next, contactId, secondaryContactId }),
       };
     });
   };
@@ -505,7 +527,7 @@ export function PipeFormPanel({
                 : form.pipeType === "ACTION"
                   ? "Ex. Appel de prise de contact"
                   : form.pipeType === "ACTE_GESTION"
-                    ? "Ex. Dossier Dupont 2026"
+                    ? "Ex. Dupont Jean — suivi mai 2026"
                     : "Ex. SCPI Corum 50 k€"
             }
             autoFocus

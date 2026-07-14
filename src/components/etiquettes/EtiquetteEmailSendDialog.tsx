@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
 import { CgpEmailSignaturePreview } from "@/components/emails/CgpEmailSignaturePreview";
+import { EmailAttachmentsPreviewList } from "@/components/emails/EmailAttachmentsPreviewList";
 import { CheckCircle2 } from "lucide-react";
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
@@ -249,6 +250,10 @@ export function EtiquetteEmailSendDialog({
               </p>
             ) : null}
           </div>
+
+          {item ? (
+            <EmailAttachmentsPreviewList variables={item.template_variables} />
+          ) : null}
 
           <CgpEmailSignaturePreview
             html={cgpConfig?.email_signature_html}

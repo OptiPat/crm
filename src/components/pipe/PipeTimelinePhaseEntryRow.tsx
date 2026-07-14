@@ -10,8 +10,12 @@ import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { toastAfterRdvSave, toastAfterPipeRdvReschedule } from "@/lib/pipe/pipe-rdv-entry-actions";
-import { applyPipeRdvReschedule } from "@/lib/pipe/pipe-rdv-reschedule-actions";
+import {
+  applyPipeRdvReschedule,
+  applyPipeSuiviRdvReschedule,
+} from "@/lib/pipe/pipe-rdv-reschedule-actions";
 import { isRdvTimelineTraceNote } from "@/lib/pipe/pipe-rdv-delete";
+import { isSuiviRdvEntry } from "@/lib/pipe/pipe-suivi";
 import {
   applyRdvStageOnSave,
   formatRdvEntryDisplayLabel,
@@ -98,6 +102,41 @@ export function PipeTimelinePhaseEntryRow({
     setSaving(true);
     try {
       const occurredAtUnix = datetimeLocalToUnix(occurredAt);
+      const suiviRdv = userType === "RDV" && isSuiviRdvEntry(entry);
+
+      if (suiviRdv && pipe?.contact_id != null && pipe.contact_id > 0) {
+        if (occurredAtUnix !== entry.occurred_at) {
+          const calendar = await applyPipeSuiviRdvReschedule({
+            timeline,
+            entry,
+            pipe: {
+              id: pipe.id,
+              stage: pipe.stage,
+              pipe_type: pipe.pipe_type,
+              contact_id: pipe.contact_id,
+              contact_prenom: pipe.contact_prenom ?? "",
+              contact_nom: pipe.contact_nom ?? "",
+              secondary_contact_id: pipe.secondary_contact_id,
+              secondary_contact_prenom: pipe.secondary_contact_prenom,
+              secondary_contact_nom: pipe.secondary_contact_nom,
+              titre: pipe.titre,
+            },
+            newOccurredAtUnix: occurredAtUnix,
+            contenu: contenu.trim() || null,
+          });
+          toastAfterPipeRdvReschedule(calendar);
+        } else {
+          await timeline.updateEntry(entry.id, {
+            titre: entry.titre,
+            contenu: contenu.trim() || null,
+            occurred_at: occurredAtUnix,
+          });
+          toast.success("Entrée mise à jour");
+        }
+        setEditing(false);
+        return;
+      }
+
       const nextTitre =
         userType === "RDV" ? formatRdvEntryTitle(rdvStage) : titre.trim() || null;
 

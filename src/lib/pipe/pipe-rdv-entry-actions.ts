@@ -7,6 +7,10 @@ import { sendPipeRdvConfirmationAfterCalendar, syncGoogleCalendarForPipeRdv } fr
 import type { PipeRdvCalendarSyncResult } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { formatPipeRdvCalendarContactLabel, pipeRdvCalendarEndAt } from "@/lib/pipe/pipe-rdv-google-calendar";
 import {
+  formatPipeSuiviRdvGoogleCalendarTitle,
+  SUIVI_RDV_TITRE,
+} from "@/lib/pipe/pipe-suivi";
+import {
   applyRdvStageOnSave,
   formatRdvEntryTitle,
   type PipeRdvStage,
@@ -150,6 +154,65 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
   }
 
   return { ...stageResult, calendar };
+}
+
+export type PipeSuiviRdvSaveResult = {
+  calendar?: PipeRdvCalendarSyncResult;
+};
+
+export async function addPipeSuiviRdvEntry(options: {
+  timeline: ReturnType<typeof usePipeTimeline>;
+  pipe: Pick<
+    PipeRecord,
+    | "id"
+    | "stage"
+    | "pipe_type"
+    | "contact_id"
+    | "contact_prenom"
+    | "contact_nom"
+    | "secondary_contact_id"
+    | "secondary_contact_prenom"
+    | "secondary_contact_nom"
+  >;
+  occurredAtUnix: number;
+  contenu: string | null;
+  endAtUnix?: number;
+  visio?: RdvVisioOptions;
+  physicalAddress?: string | null;
+}): Promise<PipeSuiviRdvSaveResult> {
+  const entry = await options.timeline.addEntry({
+    entry_type: "RDV",
+    titre: SUIVI_RDV_TITRE,
+    contenu: options.contenu,
+    occurred_at: options.occurredAtUnix,
+  });
+
+  const endAtUnix = options.endAtUnix ?? pipeRdvCalendarEndAt(options.occurredAtUnix);
+  const contactLabel = formatPipeRdvCalendarContactLabel(options.pipe);
+
+  const calendar = await syncGoogleCalendarForPipeRdv({
+    contactId: options.pipe.contact_id,
+    contactLabel,
+    /** Requis par l'API ; le titre agenda réel passe par calendarTitle. */
+    rdvStage: "R1",
+    startAtUnix: options.occurredAtUnix,
+    endAtUnix,
+    pipeTimelineEntryId: entry.id,
+    calendarTitle: formatPipeSuiviRdvGoogleCalendarTitle(contactLabel),
+    visio: options.visio,
+    physicalAddress: options.physicalAddress,
+    additionalAttendeeContactIds:
+      options.pipe.secondary_contact_id != null && options.pipe.secondary_contact_id > 0
+        ? [options.pipe.secondary_contact_id]
+        : undefined,
+  });
+
+  return { calendar };
+}
+
+export function toastAfterSuiviRdvSave(calendar?: PipeRdvCalendarSyncResult): void {
+  const level = calendarToastLevel(calendar);
+  toastPipeRdvOutcome("RDV de suivi enregistré", calendar, level);
 }
 
 export function toastAfterPipeRdvReschedule(

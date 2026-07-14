@@ -13,6 +13,8 @@ export type TrayDigestSnapshot = {
   alertes_count: number;
   taches_urgent_count: number;
   emails_ready_count: number;
+  placement_pending_count: number;
+  placement_non_conforme_count: number;
 };
 
 export async function getTrayDigestSnapshot(): Promise<TrayDigestSnapshot> {

@@ -7,7 +7,11 @@ import {
   type PipeRdvStage,
 } from "@/lib/pipe/pipe-rdv-stage";
 import { formatTimelineOccurredAt } from "@/lib/pipe/pipe-timeline-types";
-import { getLinearStageIndex, isPipeStage, type PipeStage } from "@/lib/pipe/pipe-types";
+import {
+  getPreviousLinearStage,
+  isPipeStage,
+  type PipeStage,
+} from "@/lib/pipe/pipe-types";
 
 export type RdvTimelineTraceKind = "cancelled" | "rescheduled";
 
@@ -38,21 +42,17 @@ export function isLastRdvForStage(
   return listRdvEntriesForStage(entries, rdvStage, entry.id).length === 0;
 }
 
-export function canRevertPipeToProspection(pipeStage: string): boolean {
-  if (!isPipeStage(pipeStage)) return false;
-  const idx = getLinearStageIndex(pipeStage);
-  const r1Idx = getLinearStageIndex("R1");
-  const r3Idx = getLinearStageIndex("R3");
-  return idx >= r1Idx && idx <= r3Idx;
-}
-
-export function shouldHighlightRevertToProspection(
-  entry: PipeTimelineEntryRecord,
-  entries: PipeTimelineEntryRecord[],
-  pipeStage: string
-): boolean {
-  if (!canRevertPipeToProspection(pipeStage)) return false;
-  return isLastRdvForStage(entry, entries);
+/** Étape cible après annulation du dernier RDV de l'étape courante (ex. R2 → R1). */
+export function resolveStageAfterRdvCancellation(
+  pipeStage: string,
+  cancelledEntry: PipeTimelineEntryRecord,
+  entries: PipeTimelineEntryRecord[]
+): PipeStage | null {
+  if (!isPipeStage(pipeStage)) return null;
+  const rdvStage = rdvStageFromEntryTitre(cancelledEntry.titre);
+  if (!rdvStage || pipeStage !== rdvStage) return null;
+  if (!isLastRdvForStage(cancelledEntry, entries)) return null;
+  return getPreviousLinearStage(pipeStage);
 }
 
 export function buildRdvCancelledTimelinePayload(
@@ -143,7 +143,7 @@ export function phaseHasRdvActivityForStage(
   });
 }
 
-/** Notes pour le jalon d'étape (retour prospection). */
+/** Notes pour le jalon d'étape après annulation RDV. */
 export function formatRdvCancellationStageNotes(
   entry: Pick<PipeTimelineEntryRecord, "entry_type" | "titre">,
   userNote?: string | null

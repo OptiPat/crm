@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, FileText, Phone, Send } from "lucide-react";
+import { Calendar, FileText, Phone, Scale, Send, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   createEmptyTimelineAddState,
@@ -24,12 +24,14 @@ import {
 } from "@/lib/pipe/pipe-timeline-types";
 import { toast } from "sonner";
 
-const TYPE_ICONS = {
+const TYPE_ICONS: Record<PipeTimelineUserType, typeof Phone> = {
   APPEL: Phone,
   RDV: Calendar,
   NOTE: FileText,
   PROPOSITION: Send,
-} as const;
+  ARBITRAGE: Scale,
+  REINVESTISSEMENT: TrendingUp,
+};
 
 interface PipeTimelineQuickAddProps {
   timeline: ReturnType<typeof usePipeTimeline>;

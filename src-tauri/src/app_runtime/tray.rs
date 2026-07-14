@@ -1,7 +1,7 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, WebviewWindow,
+    AppHandle, Emitter, Manager, WebviewWindow,
 };
 
 use super::prefs::{load_runtime_prefs, save_runtime_prefs, AppRuntimePrefs};
@@ -9,6 +9,13 @@ use super::shutdown::request_force_quit;
 
 const MENU_OPEN_ID: &str = "tray-open";
 const MENU_QUIT_ID: &str = "tray-quit";
+
+/// Émis côté frontend quand la fenêtre principale passe en arrière-plan (tray / --minimized).
+pub const MAIN_WINDOW_BACKGROUND_EVENT: &str = "main-window-background";
+
+fn emit_main_window_background(app: &AppHandle) {
+    let _ = app.emit(MAIN_WINDOW_BACKGROUND_EVENT, ());
+}
 
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let open_i = MenuItem::with_id(app, MENU_OPEN_ID, "Ouvrir CRM W.Y.S", true, None::<&str>)?;
@@ -72,6 +79,7 @@ fn attach_close_to_tray_handler(app: &AppHandle, window: WebviewWindow) {
                 api.prevent_close();
                 if let Some(w) = app_handle.get_webview_window("main") {
                     let _ = w.hide();
+                    emit_main_window_background(&app_handle);
                 }
             } else {
                 quit_app_fully(&app_handle);
@@ -99,6 +107,7 @@ pub fn hide_main_window_if_minimized_arg(app: &AppHandle) {
     }
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
+        emit_main_window_background(app);
     }
 }
 

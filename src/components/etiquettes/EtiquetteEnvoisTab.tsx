@@ -56,6 +56,7 @@ import {
   renderEtiquetteEmailPreview,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { EtiquetteEmailSendDialog } from "@/components/etiquettes/EtiquetteEmailSendDialog";
+import { EmailAttachmentsPreviewList } from "@/components/emails/EmailAttachmentsPreviewList";
 import { EtiquetteEmailReplyDialog } from "@/components/etiquettes/EtiquetteEmailReplyDialog";
 import { ContactRegistreBadge } from "@/components/contacts/ContactRegistreSwitch";
 import {
@@ -990,6 +991,10 @@ export function EtiquetteEnvoisTab({
                     <p className="text-xs text-muted-foreground truncate">
                       Objet : {preview.subject}
                     </p>
+                    <EmailAttachmentsPreviewList
+                      variables={item.template_variables}
+                      compact
+                    />
                     {isScpiBulletinQueueItem(item) ? (
                       <ScpiReadyDigestAccordion item={item} />
                     ) : null}

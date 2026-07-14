@@ -298,6 +298,12 @@ fn main() {
             get_stellium_exceltis_signals,
             dismiss_stellium_exceltis_signal,
             reset_stellium_exceltis_dismissed,
+            scan_box_placement_emails,
+            create_placement_operation,
+            list_placement_operations,
+            list_placement_operations_for_pipe,
+            update_placement_operation_status,
+            get_placement_open_counts_by_pipe,
             // Settings
             get_setting,
             set_setting,

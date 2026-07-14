@@ -464,6 +464,31 @@ export const templatesEmail = sqliteTable("templates_email", {
 });
 
 // ============================================
+// PLACEMENT OPERATIONS (Box Placement Stellium)
+// ============================================
+export const placementOperations = sqliteTable("placement_operations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  contactId: integer("contact_id")
+    .references(() => contacts.id, { onDelete: "cascade" })
+    .notNull(),
+  pipeId: integer("pipe_id"),
+  pipeTimelineEntryId: integer("pipe_timeline_entry_id"),
+  operationType: text("operation_type").notNull(),
+  productLabel: text("product_label"),
+  stelliumLabel: text("stellium_label"),
+  status: text("status", {
+    enum: ["PENDING", "CONFORME", "NON_CONFORME"],
+  })
+    .notNull()
+    .default("PENDING"),
+  gmailMessageId: text("gmail_message_id"),
+  emailSubject: text("email_subject"),
+  emailReceivedAt: integer("email_received_at", { mode: "timestamp" }),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+// ============================================
 // ALERTES
 // ============================================
 export const alertes = sqliteTable("alertes", {
@@ -579,6 +604,9 @@ export type NewTemplateEmail = typeof templatesEmail.$inferInsert;
 
 export type Alerte = typeof alertes.$inferSelect;
 export type NewAlerte = typeof alertes.$inferInsert;
+
+export type PlacementOperation = typeof placementOperations.$inferSelect;
+export type NewPlacementOperation = typeof placementOperations.$inferInsert;
 
 export type Parametre = typeof parametres.$inferSelect;
 export type NewParametre = typeof parametres.$inferInsert;
