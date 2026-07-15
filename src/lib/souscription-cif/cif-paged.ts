@@ -21,10 +21,9 @@ export type RenderCifPagedOptions = {
   /**
    * Limite les styles injectés par Paged.js au média écran.
    *
-   * Indispensable pour l'aperçu : Paged.js insère une règle `@page` globale ;
-   * sans ce cadrage, elle s'appliquerait aussi à l'impression des documents à
-   * pages figées (lettre de mission, convention RTO) et casserait leur mise en page.
-   * Le portail d'impression, lui, doit garder les styles actifs au média print.
+   * Indispensable pour l'aperçu écran : Paged.js insère une règle `@page` globale ;
+   * sans ce cadrage, elle interférerait avec l'impression (`window.print`) des autres
+   * portails. Le portail d'impression CIF, lui, garde les styles actifs au média print.
    */
   scopeToScreen?: boolean;
 };

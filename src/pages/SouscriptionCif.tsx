@@ -4,7 +4,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
 import { CifDocumentPrintPortal } from "@/components/souscription-cif/CifDocumentPrintPortal";
 import { CifPagedDocumentPreview } from "@/components/souscription-cif/CifPagedDocumentPreview";
-import { ScpiLettreMissionPreview } from "@/components/souscription-cif/ScpiLettreMissionPreview";
 import { SouscriptionCifDossierForm } from "@/components/souscription-cif/SouscriptionCifDossierForm";
 import { useCifPrintExport } from "@/hooks/use-cif-print-export";
 import {
@@ -711,7 +710,7 @@ export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProp
               </div>
 
               <TabsContent value="lettre-mission" className="mt-3 space-y-3">
-                <ScpiLettreMissionPreview
+                <CifPagedDocumentPreview
                   preview={lettreMissionPreview}
                   documentLabel={DOCUMENT_LABELS["lettre-mission"]}
                   resetKey={`${selectedContactId}-${productType}-lettre-mission`}
@@ -721,7 +720,7 @@ export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProp
 
               {cifProductHasConventionRto(productType) && (
                 <TabsContent value="convention-rto" className="mt-3 space-y-3">
-                  <ScpiLettreMissionPreview
+                  <CifPagedDocumentPreview
                     preview={conventionRtoPreview}
                     documentLabel={DOCUMENT_LABELS["convention-rto"]}
                     resetKey={`${selectedContactId}-${productType}-convention-rto`}

@@ -1,6 +1,9 @@
 import { CifPreviewSegments } from "@/components/souscription-cif/CifPreviewSegments";
 import type { SouscriptionPreviewSegment } from "@/lib/souscription-cif/render-template";
-import { splitRmRecapRowsAtAnalyse } from "@/lib/souscription-cif/rm-recap-table-split";
+import {
+  chunkRmRecapRowsForPaged,
+  type RmRecapPagedChunk,
+} from "@/lib/souscription-cif/rm-recap-table-split";
 import { cn } from "@/lib/utils";
 
 export type RmRecapTableRow = {
@@ -31,9 +34,9 @@ export function RmRecapTable({
   className,
   onMissingVariableClick,
 }: RmRecapTableProps) {
-  const { before, analyse, after } = splitRmRecapRowsAtAnalyse(rows);
+  const chunks = chunkRmRecapRowsForPaged(rows);
 
-  if (!analyse) {
+  if (chunks.length === 1 && chunks[0]?.kind === "table") {
     return (
       <RecapTablePart
         rows={rows}
@@ -46,19 +49,75 @@ export function RmRecapTable({
 
   return (
     <div className={cn("cif-rm-recap-table-group mt-[4mm]", className)}>
-      <RecapTablePart
-        rows={before}
-        header={header}
-        continuesBelow
-        onMissingVariableClick={onMissingVariableClick}
-      />
-      <RmRecapAnalyseRow row={analyse} onMissingVariableClick={onMissingVariableClick} />
-      <RecapTablePart
-        rows={after}
-        continuesFromAnalyse
-        onMissingVariableClick={onMissingVariableClick}
-      />
+      {header && <RmRecapTableHeader title={header} />}
+      {chunks.map((chunk, index) => (
+        <RmRecapChunkView
+          key={chunkKey(chunk, index)}
+          chunk={chunk}
+          continuesFromAbove={index > 0 || Boolean(header)}
+          continuesBelow={index < chunks.length - 1}
+          onMissingVariableClick={onMissingVariableClick}
+        />
+      ))}
     </div>
+  );
+}
+
+function RmRecapTableHeader({ title }: { title: string }) {
+  return (
+    <table className={recapTableClass}>
+      <colgroup>
+        <col className="w-[28%]" />
+        <col className="w-[72%]" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th
+            colSpan={2}
+            className="border border-neutral-400 bg-neutral-100 px-1.5 py-1.5 w-full text-center font-semibold [text-align-last:center]"
+          >
+            {title}
+          </th>
+        </tr>
+      </thead>
+    </table>
+  );
+}
+
+function chunkKey(chunk: RmRecapPagedChunk<RmRecapTableRow>, index: number): string {
+  if (chunk.kind === "isolated") return `isolated-${chunk.row.title}`;
+  return `table-${chunk.rows.map((r) => r.title).join("|") || index}`;
+}
+
+function RmRecapChunkView({
+  chunk,
+  continuesFromAbove,
+  continuesBelow,
+  onMissingVariableClick,
+}: {
+  chunk: RmRecapPagedChunk<RmRecapTableRow>;
+  continuesFromAbove: boolean;
+  continuesBelow: boolean;
+  onMissingVariableClick?: (key: string) => void;
+}) {
+  if (chunk.kind === "isolated") {
+    return (
+      <RmRecapIsolatedRow
+        row={chunk.row}
+        continuesFromAbove={continuesFromAbove}
+        continuesBelow={continuesBelow}
+        onMissingVariableClick={onMissingVariableClick}
+      />
+    );
+  }
+
+  return (
+    <RecapTablePart
+      rows={chunk.rows}
+      continuesFromAbove={continuesFromAbove}
+      continuesBelow={continuesBelow}
+      onMissingVariableClick={onMissingVariableClick}
+    />
   );
 }
 
@@ -66,14 +125,14 @@ function RecapTablePart({
   rows,
   header,
   className,
-  continuesFromAnalyse = false,
+  continuesFromAbove = false,
   continuesBelow = false,
   onMissingVariableClick,
 }: {
   rows: RmRecapTableRow[];
   header?: string;
   className?: string;
-  continuesFromAnalyse?: boolean;
+  continuesFromAbove?: boolean;
   continuesBelow?: boolean;
   onMissingVariableClick?: (key: string) => void;
 }) {
@@ -84,7 +143,7 @@ function RecapTablePart({
       className={cn(
         recapTableClass,
         continuesBelow && "cif-rm-recap-table-continued-below",
-        continuesFromAnalyse && "cif-rm-recap-table-continued-above",
+        continuesFromAbove && "cif-rm-recap-table-continued-above",
         className
       )}
     >
@@ -110,7 +169,7 @@ function RecapTablePart({
             <th
               className={cn(
                 recapTitleCellClass,
-                continuesFromAnalyse && index === 0 && "border-t-0"
+                continuesFromAbove && index === 0 && "border-t-0"
               )}
             >
               {row.title}
@@ -118,7 +177,7 @@ function RecapTablePart({
             <td
               className={cn(
                 recapContentCellClass,
-                continuesFromAnalyse && index === 0 && "border-t-0"
+                continuesFromAbove && index === 0 && "border-t-0"
               )}
             >
               <CifPreviewSegments
@@ -133,31 +192,40 @@ function RecapTablePart({
   );
 }
 
-/**
- * Ligne « Analyse » — mini-table isolée (hors grand tableau récap).
- *
- * Paged.js supprime parfois une `<tr>` au milieu d'un grand `<table>` ; ici une
- * table d'une seule ligne évite ça. La grille CSS décale le verbatim dans la
- * colonne titre au saut de page — une cellule `<td>` fragmente correctement.
- */
-function RmRecapAnalyseRow({
+/** Ligne longue — mini-table isolée (export PDF Paged.js). */
+function RmRecapIsolatedRow({
   row,
+  continuesFromAbove,
+  continuesBelow,
   onMissingVariableClick,
 }: {
   row: RmRecapTableRow;
+  continuesFromAbove: boolean;
+  continuesBelow: boolean;
   onMissingVariableClick?: (key: string) => void;
 }) {
   return (
-    <table className={cn(recapTableClass, "cif-rm-recap-analyse-table")}>
+    <table
+      className={cn(
+        recapTableClass,
+        "cif-rm-recap-isolated-table",
+        continuesBelow && "cif-rm-recap-table-continued-below",
+        continuesFromAbove && "cif-rm-recap-table-continued-above"
+      )}
+    >
       <colgroup>
         <col className="w-[28%]" />
         <col className="w-[72%]" />
       </colgroup>
       <tbody>
-        <tr className="cif-rm-recap-analyse-row">
-          <th className={cn(recapTitleCellClass, "border-t-0 align-top")}>{row.title}</th>
-          <td className={cn(recapContentCellClass, "border-t-0 align-top p-0")}>
-            <div className="cif-rm-recap-analyse-body px-1.5 py-1.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+        <tr className="cif-rm-recap-isolated-row">
+          <th
+            className={cn(recapTitleCellClass, continuesFromAbove && "border-t-0", "align-top")}
+          >
+            {row.title}
+          </th>
+          <td className={cn(recapContentCellClass, continuesFromAbove && "border-t-0", "align-top p-0")}>
+            <div className="cif-rm-recap-isolated-body px-1.5 py-1.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
               <CifPreviewSegments
                 segments={row.contentSegments}
                 onMissingVariableClick={onMissingVariableClick}

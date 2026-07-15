@@ -78,19 +78,19 @@ export function buildCifPagedCss(): string {
   break-inside: auto;
 }
 
-/* Ligne « Analyse » — mini-table isolée (évite la perte de <tr> + décalage grille au saut de page). */
-.cif-rm-recap-analyse-table {
+/* Lignes récap longues — mini-table isolée (perte de <tr> ou décalage colonne au saut de page). */
+.cif-rm-recap-isolated-table {
   break-inside: auto;
 }
-.cif-rm-recap-analyse-row th {
+.cif-rm-recap-isolated-row th {
   break-inside: avoid;
   vertical-align: top;
 }
-.cif-rm-recap-analyse-row td {
+.cif-rm-recap-isolated-row td {
   break-inside: auto;
   vertical-align: top;
 }
-.cif-rm-recap-analyse-body {
+.cif-rm-recap-isolated-body {
   break-inside: auto;
   orphans: 2;
   widows: 2;

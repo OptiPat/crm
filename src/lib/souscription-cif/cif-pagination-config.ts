@@ -2,6 +2,8 @@ import type { SouscriptionCifDocumentId } from "@/lib/souscription-cif/souscript
 
 /** Documents paginés nativement (flux continu + Paged.js) plutôt qu'à pages figées. */
 const PAGINATED_DOCUMENTS: ReadonlySet<SouscriptionCifDocumentId> = new Set([
+  "lettre-mission",
+  "convention-rto",
   "rapport-mission",
   "annexes-rapport",
 ]);
