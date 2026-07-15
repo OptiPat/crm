@@ -1,5 +1,6 @@
 import { Calendar, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import {
   getNextLinearStage,
   isPipeStage,
@@ -9,26 +10,25 @@ import {
   PIPE_STAGE_LABELS,
 } from "@/lib/pipe/pipe-types";
 import { isPipeRdvStage, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+import { getPipeCommercialStepperStepState } from "@/lib/pipe/pipe-stage-stepper";
 import { cn } from "@/lib/utils";
 
 interface PipeStageStepperProps {
   currentStage: string;
+  timelineEntries?: PipeTimelineEntryRecord[];
   onViewProspection?: () => void;
   onPlanRdv?: (stage: PipeRdvStage) => void;
 }
 
 export function PipeStageStepper({
   currentStage,
+  timelineEntries = [],
   onViewProspection,
   onPlanRdv,
 }: PipeStageStepperProps) {
   if (!isPipeStage(currentStage)) return null;
 
   const stage = currentStage;
-
-  const linearIndex = PIPE_LINEAR_STAGES.indexOf(
-    stage as (typeof PIPE_LINEAR_STAGES)[number]
-  );
 
   const nextStage = getNextLinearStage(stage);
   const nextRdvStage =
@@ -51,8 +51,9 @@ export function PipeStageStepper({
       <div className="overflow-x-auto pb-1">
         <div className="flex min-w-max items-center gap-1" aria-label="Étapes commerciales">
           {PIPE_LINEAR_STAGES.map((step, index) => {
-            const done = linearIndex >= 0 && index < linearIndex;
-            const active = step === stage;
+            const stepState = getPipeCommercialStepperStepState(step, stage, timelineEntries);
+            const done = stepState === "done";
+            const active = stepState === "active";
             const isProspection = step === "PROSPECTION";
             const isRdvStep = isPipeRdvStage(step);
 

@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   Workflow,
   Sparkles,
+  Euro,
 } from "lucide-react";
 import type { SettingsSectionId } from "@/lib/settings/parametres-completion";
 
@@ -63,6 +64,12 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
         label: "Profil",
         description: "Identité et coordonnées",
         icon: User,
+      },
+      {
+        id: "remuneration",
+        label: "Rémunération",
+        description: "TPC et statut CIF",
+        icon: Euro,
       },
     ],
   },

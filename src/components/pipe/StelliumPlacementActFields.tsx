@@ -60,6 +60,8 @@ export interface StelliumPlacementActFieldsProps {
   suivi?: boolean;
   /** Affaire commerciale : souscription partenaire uniquement. */
   affaire?: boolean;
+  /** Affaire versement : acte fixe, seuls produit + montant sont saisis. */
+  versementInit?: boolean;
 }
 
 export function StelliumPlacementActFields({
@@ -70,6 +72,7 @@ export function StelliumPlacementActFields({
   disabled = false,
   suivi = false,
   affaire = false,
+  versementInit = false,
 }: StelliumPlacementActFieldsProps) {
   const versementComplementaire = isVersementComplementaireActLabel(stelliumLabel);
   const labelGroups = useMemo(() => {
@@ -118,6 +121,11 @@ export function StelliumPlacementActFields({
           </SelectContent>
         </Select>
       </div>
+      {versementInit ? (
+        <p className="text-[11px] text-muted-foreground leading-snug">
+          Acte : {stelliumLabel || "Versement complémentaire"}
+        </p>
+      ) : (
       <div className="space-y-2">
         <Label>{actFieldLabel}</Label>
         <Select
@@ -150,6 +158,7 @@ export function StelliumPlacementActFields({
           </p>
         ) : null}
       </div>
+      )}
     </>
   );
 }

@@ -22,6 +22,7 @@ import { canonicalizeTemplateCorpsHtml, sanitizeEmailHeaderValue } from "@/lib/e
 import { renderTemplatePreview } from "@/lib/emails/template-email-meta";
 import { buildPlacementConformeEmailExtraVariablesForSend } from "@/lib/placement/placement-conforme-email-vars";
 import { maybeAdvanceVersementAffaireToGagneeAfterClientMail } from "@/lib/placement/pipe-placement-tracking";
+import { journalPlacementClientEmailSent } from "@/lib/placement/placement-journal";
 import { placementOperationIsPipeTracked } from "@/lib/placement/placement-operations-ui";
 import { toast } from "sonner";
 
@@ -129,6 +130,7 @@ export async function maybeSendPlacementConformeEmailForOperation(
         operation,
       });
       const updated = await getPlacementOperation(operation.id);
+      await journalPlacementClientEmailSent(updated).catch(() => undefined);
       await maybeAdvanceVersementAffaireToGagneeAfterClientMail(updated);
       return "sent";
     } catch (sendError) {

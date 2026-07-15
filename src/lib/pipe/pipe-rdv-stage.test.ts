@@ -4,7 +4,9 @@ import {
   applyDueRdvStageAdvance,
   applyRdvStageOnSave,
   formatRdvEntryDisplayLabel,
+  isPipeRdvStageCompleted,
   isRdvStageAdvanceDue,
+  isRdvTimelineEntryCompleted,
   pickDueRdvStageAdvanceTarget,
   rdvStageFromEntryTitre,
 } from "@/lib/pipe/pipe-rdv-stage";
@@ -57,6 +59,29 @@ describe("pipe-rdv-stage", () => {
     const ts = Math.floor(new Date(2026, 6, 20, 15, 0).getTime() / 1000);
     const target = pickDueRdvStageAdvanceTarget("PROSPECTION", [mkRdv(1, "R1", ts)]);
     expect(target).toBeNull();
+  });
+
+  it("considère le RDV terminé après la fin du créneau (1 h)", () => {
+    const start = Math.floor(new Date(2026, 6, 15, 8, 0).getTime() / 1000);
+    const during = new Date(2026, 6, 15, 8, 30);
+    const after = new Date(2026, 6, 15, 9, 30);
+    expect(isRdvTimelineEntryCompleted(mkRdv(1, "R1", start), during)).toBe(false);
+    expect(isRdvTimelineEntryCompleted(mkRdv(1, "R1", start), after)).toBe(true);
+  });
+
+  it("marque R1 complété dans le stepper si dernier RDV R1 terminé", () => {
+    const start = Math.floor(new Date(2026, 6, 15, 8, 0).getTime() / 1000);
+    const now = new Date(2026, 6, 15, 9, 30);
+    expect(isPipeRdvStageCompleted("R1", [mkRdv(1, "R1", start)], now)).toBe(true);
+  });
+
+  it("ignore un RDV R1 reporté dans le futur", () => {
+    const past = Math.floor(new Date(2026, 6, 10, 8, 0).getTime() / 1000);
+    const future = Math.floor(new Date(2026, 6, 20, 8, 0).getTime() / 1000);
+    const now = new Date(2026, 6, 15, 10, 0);
+    expect(isPipeRdvStageCompleted("R1", [mkRdv(1, "R1", past), mkRdv(2, "R1", future)], now)).toBe(
+      false
+    );
   });
 });
 

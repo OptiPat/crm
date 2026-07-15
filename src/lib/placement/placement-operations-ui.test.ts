@@ -161,14 +161,14 @@ describe("placement-operations-ui pipe tracking", () => {
     ).toBe("En attente partenaire");
   });
 
-  it("clôturé = dismiss (sauf NC) ou conforme notifié", () => {
+  it("clôturé = dismiss uniquement (sauf NC)", () => {
     expect(
       placementOperationIsClosed({
         status: "CONFORME",
         client_notified_at: 50,
         dismissed_at: null,
       })
-    ).toBe(true);
+    ).toBe(false);
     expect(
       placementOperationIsClosed({
         status: "PENDING",

@@ -178,11 +178,7 @@ export function placementOperationIsClosed(
   operation: Pick<PlacementOperation, "status" | "client_notified_at" | "dismissed_at">
 ): boolean {
   if (operation.status === "NON_CONFORME") return false;
-  if (placementOperationIsDismissed(operation)) return true;
-  if (operation.status === "CONFORME") {
-    return operation.client_notified_at != null && operation.client_notified_at > 0;
-  }
-  return false;
+  return placementOperationIsDismissed(operation);
 }
 
 export function placementConformeNeedsClientNotify(

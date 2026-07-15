@@ -8,12 +8,12 @@ export type PipeViewMode = "board" | "list";
 
 export const PIPE_BOARD_TAB_KEY = "crm:pipe-board-tab";
 
-export type PipeBoardTab = "affaires" | "actes";
+export type PipeBoardTab = "affaires" | "actes" | "remuneration";
 
 export function loadPipeBoardTab(): PipeBoardTab {
   try {
     const raw = localStorage.getItem(PIPE_BOARD_TAB_KEY);
-    if (raw === "affaires" || raw === "actes") return raw;
+    if (raw === "affaires" || raw === "actes" || raw === "remuneration") return raw;
   } catch {
     /* ignore */
   }

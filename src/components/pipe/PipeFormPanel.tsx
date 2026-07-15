@@ -53,6 +53,7 @@ import {
   applySuiviStelliumActsAfterPipeCreate,
   validateSuiviStelliumActs,
 } from "@/lib/placement/suivi-stellium-acts";
+import { parseMontantEurosToCentimes } from "@/lib/pipe/placement-montant";
 import { toast } from "sonner";
 
 const TYPE_ICONS = {
@@ -419,6 +420,7 @@ export function PipeFormPanel({
           suiviStelliumActs.map((row) => ({
             productLabel: row.productLabel,
             actLabel: row.actLabel,
+            montantCentimes: parseMontantEurosToCentimes(row.montantEuros),
           }))
         );
       }

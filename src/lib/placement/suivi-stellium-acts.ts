@@ -17,6 +17,7 @@ import {
 export interface SuiviStelliumActInput {
   productLabel: string;
   actLabel: string;
+  montantCentimes?: number | null;
 }
 
 export function validateSuiviStelliumActInput(
@@ -27,6 +28,9 @@ export function validateSuiviStelliumActInput(
   if (isVersementComplementaireActLabel(actLabel)) {
     if (act.productLabel.trim() && !isStelliumLabelAllowedForProduct(actLabel, act.productLabel, { suivi: true })) {
       return "Versement complémentaire non applicable aux SCPI.";
+    }
+    if (!act.montantCentimes || act.montantCentimes <= 0) {
+      return "Montant souscrit requis pour le versement complémentaire.";
     }
     return null;
   }
@@ -55,7 +59,7 @@ export type SuiviVersementAffaireSource = Pick<
 
 export async function createVersementAffaireFromSuivi(
   suivi: SuiviVersementAffaireSource,
-  options?: { productLabel?: string | null }
+  options?: { productLabel?: string | null; montantCentimes?: number | null }
 ): Promise<PipeRecord> {
   const child = await createPipe({
     contact_id: suivi.contact_id,
@@ -83,6 +87,7 @@ export async function applySuiviStelliumActsAfterPipeCreate(
       versementAffaires.push(
         await createVersementAffaireFromSuivi(suivi, {
           productLabel: act.productLabel.trim() || null,
+          montantCentimes: act.montantCentimes ?? null,
         })
       );
       continue;

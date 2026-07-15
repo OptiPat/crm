@@ -492,6 +492,10 @@ export const placementOperations = sqliteTable("placement_operations", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
   clientNotifiedAt: integer("client_notified_at", { mode: "timestamp" }),
   dismissedAt: integer("dismissed_at", { mode: "timestamp" }),
+  montantCentimes: integer("montant_centimes"),
+  typeProduit: text("type_produit"),
+  investissementId: integer("investissement_id"),
+  pvManual: real("pv_manual"),
 });
 
 // ============================================

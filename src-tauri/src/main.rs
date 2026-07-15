@@ -306,6 +306,8 @@ fn main() {
             list_placement_operations_for_pipe,
             update_placement_operation_status,
             get_placement_operation,
+            list_pipe_remuneration_rows,
+            update_placement_operation_pv_manual,
             mark_placement_partner_resent,
             dismiss_placement_operation,
             mark_placement_client_notified,

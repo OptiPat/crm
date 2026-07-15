@@ -26,9 +26,15 @@ import {
   createVersementAffaireFromSuivi,
   validateSuiviStelliumActInput,
 } from "@/lib/placement/suivi-stellium-acts";
-import { isVersementComplementaireActLabel, isVersementComplementaireAffaire } from "@/lib/pipe/pipe-suivi";
+import { isVersementComplementaireActLabel, isVersementComplementaireAffaire, VERSEMENT_COMPLEMENTAIRE_ACT_LABEL } from "@/lib/pipe/pipe-suivi";
 import { StelliumPlacementActFields } from "@/components/pipe/StelliumPlacementActFields";
+import { PlacementMontantField } from "@/components/pipe/PlacementMontantField";
 import { toast } from "sonner";
+import {
+  parseMontantEurosToCentimes,
+  placementOperationRequiresMontant,
+} from "@/lib/pipe/placement-montant";
+import { inferTypeProduitFromStelliumProductLabel } from "@/lib/pipe/remuneration-type-produit";
 
 type PipeStelliumActAddVariant = "suivi" | "affaire";
 
@@ -92,10 +98,25 @@ export function PipeSuiviStelliumActAdd({
   const [openNew, setOpenNew] = useState(false);
   const [stelliumLabel, setStelliumLabel] = useState("");
   const [productLabel, setProductLabel] = useState("");
+  const [montantEuros, setMontantEuros] = useState("");
   const [draftOccurredAt, setDraftOccurredAt] = useState<Record<number, string>>({});
   const [draftContenu, setDraftContenu] = useState<Record<number, string>>({});
   const [savingId, setSavingId] = useState<number | "new" | null>(null);
   const draftsLoadedRef = useRef(false);
+
+  const newActNeedsMontant = placementOperationRequiresMontant({
+    operationType: placementOperationTypeFromStelliumLabel(stelliumLabel.trim() || "AUTRE"),
+    stelliumLabel,
+    pipeType: pipe.pipe_type,
+  });
+
+  const buildRemunerationPayload = (product: string, montantRaw: string) => {
+    const montant_centimes = parseMontantEurosToCentimes(montantRaw);
+    const type_produit = product
+      ? inferTypeProduitFromStelliumProductLabel(product)
+      : undefined;
+    return { montant_centimes, type_produit };
+  };
 
   const PLACEMENT_RELOAD_DEBOUNCE_MS = 150;
 
@@ -158,6 +179,16 @@ export function PipeSuiviStelliumActAdd({
     };
   }, [reloadDrafts]);
 
+  const showVersementInit =
+    isVersementChild && !loadingDrafts && drafts.length === 0;
+
+  useEffect(() => {
+    if (showVersementInit) {
+      setOpenNew(true);
+      setStelliumLabel(VERSEMENT_COMPLEMENTAIRE_ACT_LABEL);
+    }
+  }, [showVersementInit]);
+
   const confirmStelliumSend = async (
     operation: PlacementOperation,
     options?: { occurredAt?: string; contenu?: string }
@@ -185,6 +216,7 @@ export function PipeSuiviStelliumActAdd({
         });
         await createVersementAffaireFromSuivi(pipe, {
           productLabel: product || null,
+          montantCentimes: operation.montant_centimes ?? null,
         });
         await dismissPlacementOperation(operation.id);
         notifyPlacementOperationsChanged();
@@ -231,26 +263,43 @@ export function PipeSuiviStelliumActAdd({
 
     const validationError =
       variant === "suivi"
-        ? validateSuiviStelliumActInput({ productLabel: product, actLabel: label })
+        ? validateSuiviStelliumActInput({
+            productLabel: product,
+            actLabel: label,
+            montantCentimes: parseMontantEurosToCentimes(montantEuros),
+          })
         : variant === "affaire" && !isVersementChild
           ? !product || !isStelliumLabelAllowedForProduct(label, product, { affaire: true })
             ? "Produit requis pour la souscription partenaire."
-            : null
+            : !parseMontantEurosToCentimes(montantEuros)
+              ? "Montant souscrit requis."
+              : null
+          : isVersementChild
+            ? !product
+              ? "Produit requis pour le versement complémentaire."
+              : !parseMontantEurosToCentimes(montantEuros)
+                ? "Montant souscrit requis."
+                : null
           : !product || !isStelliumLabelAllowedForProduct(label, product)
             ? "Produit et acte requis."
-            : null;
+            : !parseMontantEurosToCentimes(montantEuros)
+              ? "Montant souscrit requis."
+              : null;
     if (validationError) {
       toast.error(validationError);
       return;
     }
     setSavingId("new");
     try {
+      const remuneration = buildRemunerationPayload(product, montantEuros);
       await createPlacementOperation({
         contact_id: pipe.contact_id,
         pipe_id: pipe.id,
         operation_type: placementOperationTypeFromStelliumLabel(label),
         stellium_label: label,
         product_label: product,
+        montant_centimes: remuneration.montant_centimes,
+        type_produit: remuneration.type_produit,
       });
       notifyPlacementOperationsChanged();
       toast.success(copy.createSuccess);
@@ -258,6 +307,7 @@ export function PipeSuiviStelliumActAdd({
       setOpenNew(false);
       setStelliumLabel("");
       setProductLabel("");
+      setMontantEuros("");
     } catch (err) {
       console.error(err);
       toast.error(String(err));
@@ -273,8 +323,9 @@ export function PipeSuiviStelliumActAdd({
         <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{copy.description}</p>
         {isVersementChild && (
           <p className="text-xs text-muted-foreground mt-1 leading-snug">
-            Versement : suivi actif depuis la création de l&apos;affaire. Confirmez l&apos;envoi
-            chez Stellium pour passer en attente partenaire.
+            {showVersementInit
+              ? "Renseignez le produit et le montant pour activer le suivi Stellium, puis confirmez l'envoi partenaire."
+              : "Versement : confirmez l'envoi chez Stellium pour passer en attente partenaire."}
           </p>
         )}
       </div>
@@ -355,7 +406,7 @@ export function PipeSuiviStelliumActAdd({
               <Plus className="h-3.5 w-3.5" />
               {copy.addButton}
             </Button>
-          ) : !isVersementChild ? (
+          ) : openNew || showVersementInit ? (
             <form onSubmit={(e) => void handleCreateDraft(e)} className="space-y-3 rounded-md border p-3">
               <StelliumPlacementActFields
                 suivi={variant === "suivi"}
@@ -364,7 +415,11 @@ export function PipeSuiviStelliumActAdd({
                 stelliumLabel={stelliumLabel}
                 onProductChange={setProductLabel}
                 onStelliumLabelChange={setStelliumLabel}
+                versementInit={showVersementInit}
               />
+              {newActNeedsMontant || showVersementInit ? (
+                <PlacementMontantField value={montantEuros} onChange={setMontantEuros} />
+              ) : null}
               <div className="flex justify-end gap-2">
                 <Button
                   type="button"
@@ -372,8 +427,9 @@ export function PipeSuiviStelliumActAdd({
                   size="sm"
                   onClick={() => {
                     setOpenNew(false);
-                    setStelliumLabel("");
+                    setStelliumLabel(showVersementInit ? VERSEMENT_COMPLEMENTAIRE_ACT_LABEL : "");
                     setProductLabel("");
+                    setMontantEuros("");
                   }}
                 >
                   Annuler
@@ -384,12 +440,14 @@ export function PipeSuiviStelliumActAdd({
                   disabled={
                     savingId === "new" ||
                     !stelliumLabel ||
-                    (variant === "affaire"
-                      ? !productLabel
-                      : !isVersementComplementaireActLabel(stelliumLabel) && !productLabel)
+                    (showVersementInit
+                      ? !productLabel || !parseMontantEurosToCentimes(montantEuros)
+                      : variant === "affaire"
+                        ? !productLabel
+                        : !isVersementComplementaireActLabel(stelliumLabel) && !productLabel)
                   }
                 >
-                  {savingId === "new" ? "Enregistrement…" : "Ajouter l'acte"}
+                  {savingId === "new" ? "Enregistrement…" : showVersementInit ? "Activer le suivi" : "Ajouter l'acte"}
                 </Button>
               </div>
             </form>

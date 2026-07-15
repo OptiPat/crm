@@ -2802,6 +2802,30 @@ pub fn get_placement_operation(
 }
 
 #[tauri::command]
+pub fn list_pipe_remuneration_rows(
+    db: State<'_, DbState>,
+) -> Result<Vec<crate::database::models::PipeRemunerationRow>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .list_pipe_remuneration_rows()
+        .map_err(|e| format!("Échec liste rémunération pipe: {}", e))
+}
+
+#[tauri::command]
+pub fn update_placement_operation_pv_manual(
+    db: State<'_, DbState>,
+    id: i64,
+    pv_manual: Option<f64>,
+) -> Result<crate::database::models::PlacementOperation, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .update_placement_operation_pv_manual(id, pv_manual)
+        .map_err(|e| format!("Échec mise à jour PV: {}", e))
+}
+
+#[tauri::command]
 pub fn mark_placement_partner_resent(
     db: State<'_, DbState>,
     id: i64,

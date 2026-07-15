@@ -82,6 +82,9 @@ fn latest_r1_rdv_day_start(entries: &[super::models::PipeTimelineEntry]) -> Opti
 impl super::Database {
     pub(crate) fn sync_contact_dates_from_pipe(&self, pipe_id: i64) -> Result<()> {
         let pipe = self.get_pipe_by_id(pipe_id)?;
+        if pipe.pipe_type != PIPE_TYPE_AFFAIRE {
+            return Ok(());
+        }
         self.sync_contact_dates_for_contact(pipe.contact_id)?;
         if let Some(secondary_id) = pipe.secondary_contact_id.filter(|id| *id > 0) {
             if secondary_id != pipe.contact_id {
@@ -165,13 +168,32 @@ impl super::Database {
 
         Ok(())
     }
+
+    /// Recalcule les dates prospection uniquement si le contact a au moins un pipe Affaire.
+    pub(crate) fn sync_contact_dates_for_contact_from_affaire(
+        &self,
+        contact_id: i64,
+    ) -> Result<()> {
+        if contact_id <= 0 {
+            return Ok(());
+        }
+        let affaire_count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM pipes WHERE pipe_type = ?2 AND (contact_id = ?1 OR secondary_contact_id = ?1)",
+            params![contact_id, PIPE_TYPE_AFFAIRE],
+            |row| row.get(0),
+        )?;
+        if affaire_count == 0 {
+            return Ok(());
+        }
+        self.sync_contact_dates_for_contact(contact_id)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::database::models::{NewContact, NewPipe, NewPipeTimelineEntry};
-    use crate::database::pipe::{PIPE_STAGE_R1, PIPE_TYPE_AFFAIRE};
+    use crate::database::pipe::{PIPE_STAGE_R1, PIPE_TYPE_ACTE_GESTION, PIPE_TYPE_AFFAIRE};
     use crate::database::Database;
 
     fn seed_contact(db: &Database) -> i64 {
@@ -543,5 +565,85 @@ mod tests {
         .unwrap();
 
         assert_eq!(db.get_contact_by_id(contact_b).unwrap().date_r1, Some(ts));
+    }
+
+    #[test]
+    fn suivi_timeline_entry_does_not_clear_contact_prospection_dates() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        let ts = 1_735_689_600_i64;
+        let now = chrono::Utc::now().timestamp();
+        db.conn
+            .execute(
+                "UPDATE contacts SET date_dernier_contact = ?1, date_r1 = ?1, updated_at = ?2 WHERE id = ?3",
+                params![ts, now, contact_id],
+            )
+            .unwrap();
+
+        let pipe_id = db
+            .create_pipe(NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
+                parent_pipe_id: None,
+                titre: "Suivi test".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap()
+            .id;
+        let creation_ts = db
+            .list_pipe_timeline_entries(pipe_id)
+            .unwrap()
+            .into_iter()
+            .find(|e| e.entry_type == TIMELINE_CREATION)
+            .expect("creation")
+            .occurred_at;
+
+        db.create_pipe_timeline_entry(NewPipeTimelineEntry {
+            pipe_id,
+            entry_type: TIMELINE_APPEL.into(),
+            titre: Some("Appel suivi".into()),
+            contenu: Some("OK".into()),
+            occurred_at: Some(creation_ts + 3_600),
+        })
+        .unwrap();
+
+        let contact = db.get_contact_by_id(contact_id).unwrap();
+        assert_eq!(contact.date_dernier_contact, Some(ts));
+        assert_eq!(contact.date_r1, Some(ts));
+    }
+
+    #[test]
+    fn delete_suivi_pipe_does_not_clear_contact_prospection_dates() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        let ts = 1_735_689_600_i64;
+        let now = chrono::Utc::now().timestamp();
+        db.conn
+            .execute(
+                "UPDATE contacts SET date_dernier_contact = ?1, date_r1 = ?1, updated_at = ?2 WHERE id = ?3",
+                params![ts, now, contact_id],
+            )
+            .unwrap();
+
+        let pipe_id = db
+            .create_pipe(NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
+                parent_pipe_id: None,
+                titre: "Suivi test".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap()
+            .id;
+
+        db.delete_pipe(pipe_id).unwrap();
+
+        let contact = db.get_contact_by_id(contact_id).unwrap();
+        assert_eq!(contact.date_dernier_contact, Some(ts));
+        assert_eq!(contact.date_r1, Some(ts));
     }
 }

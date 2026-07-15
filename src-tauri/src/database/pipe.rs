@@ -533,6 +533,9 @@ impl super::Database {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
         self.insert_avancement_timeline_entry(id, new_stage, notes, milestone_occurred_at)?;
+        if new_stage == PIPE_STAGE_GAGNEE {
+            self.maybe_create_investissement_from_gagnee_affaire(id, milestone_occurred_at)?;
+        }
         tx.commit()?;
         self.sync_contact_dates_from_pipe(id)?;
         self.get_pipe_by_id(id)
@@ -561,9 +564,11 @@ impl super::Database {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
         tx.commit()?;
-        self.sync_contact_dates_for_contact(contact_id)?;
-        if let Some(sec) = secondary_contact_id.filter(|id| *id > 0 && *id != contact_id) {
-            self.sync_contact_dates_for_contact(sec)?;
+        if pipe.pipe_type == PIPE_TYPE_AFFAIRE {
+            self.sync_contact_dates_for_contact(contact_id)?;
+            if let Some(sec) = secondary_contact_id.filter(|id| *id > 0 && *id != contact_id) {
+                self.sync_contact_dates_for_contact(sec)?;
+            }
         }
         Ok(())
     }

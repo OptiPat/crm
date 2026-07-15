@@ -69,10 +69,12 @@ describe("pipe-board-utils", () => {
     expect(groups.PROSPECTION).toEqual([]);
   });
 
-  it("persiste l'onglet tableau affaires / actes", () => {
+  it("persiste l'onglet tableau affaires / actes / rémunération", () => {
     savePipeBoardTab("actes");
     expect(loadPipeBoardTab()).toBe("actes");
     savePipeBoardTab("affaires");
     expect(loadPipeBoardTab()).toBe("affaires");
+    savePipeBoardTab("remuneration");
+    expect(loadPipeBoardTab()).toBe("remuneration");
   });
 });

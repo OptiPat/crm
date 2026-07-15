@@ -1,7 +1,66 @@
 //! Suivi des opérations partenaire Stellium Box Placement.
 
 use rusqlite::{params, OptionalExtension, Result, Row};
-use crate::database::pipe::PIPE_TYPE_ACTE_GESTION;
+use super::pipe::{PIPE_TYPE_AFFAIRE, PIPE_TYPE_ACTE_GESTION};
+
+pub fn placement_operation_requires_montant(
+    operation_type: &str,
+    stellium_label: Option<&str>,
+    pipe_type: Option<&str>,
+) -> bool {
+    let op = operation_type.trim().to_uppercase();
+    let label = stellium_label.unwrap_or("").trim();
+    let pipe = pipe_type.unwrap_or("").trim();
+    if op == OP_SOUSCRIPTION && pipe == PIPE_TYPE_AFFAIRE {
+        return true;
+    }
+    if op == OP_VERSEMENT {
+        if pipe == PIPE_TYPE_AFFAIRE {
+            return true;
+        }
+        if pipe == PIPE_TYPE_ACTE_GESTION && label == "Versement complémentaire" {
+            return true;
+        }
+    }
+    false
+}
+
+fn merge_placement_remuneration_fields_on_existing(
+    conn: &rusqlite::Connection,
+    existing_id: i64,
+    input: &super::models::NewPlacementOperation,
+) -> Result<()> {
+    let mut sets: Vec<&str> = Vec::new();
+    let now = now_unix();
+    if input.montant_centimes.filter(|m| *m > 0).is_some() {
+        sets.push("montant_centimes");
+    }
+    if input
+        .type_produit
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false)
+    {
+        sets.push("type_produit");
+    }
+    if sets.is_empty() {
+        return Ok(());
+    }
+    let sql = format!(
+        "UPDATE placement_operations SET montant_centimes = COALESCE(?1, montant_centimes),
+         type_produit = COALESCE(?2, type_produit), updated_at = ?3 WHERE id = ?4"
+    );
+    conn.execute(
+        &sql,
+        params![
+            input.montant_centimes,
+            input.type_produit,
+            now,
+            existing_id
+        ],
+    )?;
+    Ok(())
+}
 
 pub const STATUS_PENDING: &str = "PENDING";
 pub const STATUS_CONFORME: &str = "CONFORME";
@@ -53,13 +112,18 @@ fn map_placement_row(row: &Row<'_>) -> Result<super::models::PlacementOperation>
         non_conforme_at: row.get(14)?,
         partner_resent_at: row.get(15)?,
         dismissed_at: row.get(16)?,
+        montant_centimes: row.get(17)?,
+        type_produit: row.get(18)?,
+        investissement_id: row.get(19)?,
+        pv_manual: row.get(20)?,
     })
 }
 
 const PLACEMENT_SELECT: &str = "po.id, po.contact_id, po.pipe_id, po.pipe_timeline_entry_id,
     po.operation_type, po.product_label, po.stellium_label, po.status,
     po.gmail_message_id, po.email_subject, po.email_received_at, po.created_at, po.updated_at,
-    po.client_notified_at, po.non_conforme_at, po.partner_resent_at, po.dismissed_at";
+    po.client_notified_at, po.non_conforme_at, po.partner_resent_at, po.dismissed_at,
+    po.montant_centimes, po.type_produit, po.investissement_id, po.pv_manual";
 
 pub fn placement_operation_is_dismissed(op: &super::models::PlacementOperation) -> bool {
     op.dismissed_at.map(|t| t > 0).unwrap_or(false)
@@ -256,6 +320,34 @@ impl super::Database {
             )?;
             println!("✅ Migration: dismissed_at sur placement_operations");
         }
+        if !self.table_has_column("placement_operations", "montant_centimes")? {
+            self.conn.execute(
+                "ALTER TABLE placement_operations ADD COLUMN montant_centimes INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: montant_centimes sur placement_operations");
+        }
+        if !self.table_has_column("placement_operations", "type_produit")? {
+            self.conn.execute(
+                "ALTER TABLE placement_operations ADD COLUMN type_produit TEXT",
+                [],
+            )?;
+            println!("✅ Migration: type_produit sur placement_operations");
+        }
+        if !self.table_has_column("placement_operations", "investissement_id")? {
+            self.conn.execute(
+                "ALTER TABLE placement_operations ADD COLUMN investissement_id INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: investissement_id sur placement_operations");
+        }
+        if !self.table_has_column("placement_operations", "pv_manual")? {
+            self.conn.execute(
+                "ALTER TABLE placement_operations ADD COLUMN pv_manual REAL",
+                [],
+            )?;
+            println!("✅ Migration: pv_manual sur placement_operations");
+        }
         Ok(())
     }
 
@@ -273,22 +365,70 @@ impl super::Database {
                 "operation_type invalide".into(),
             ));
         }
-        if let Some(pipe_id) = input.pipe_id {
-            if pipe_id > 0 {
-                let existing = if let Some(label) = input
+
+        let mut pipe_type: Option<String> = None;
+        let mut existing_pending: Option<super::models::PlacementOperation> = None;
+        if let Some(pipe_id) = input.pipe_id.filter(|id| *id > 0) {
+            pipe_type = Some(self.get_pipe_by_id(pipe_id)?.pipe_type);
+            existing_pending = if let Some(label) = input
+                .stellium_label
+                .as_ref()
+                .filter(|s| !s.trim().is_empty())
+            {
+                self.find_pending_placement_for_pipe_label(
+                    pipe_id,
+                    label,
+                    input.product_label.as_deref(),
+                )?
+            } else {
+                self.find_pending_placement_for_pipe(pipe_id, &input.operation_type)?
+            };
+        }
+        let requires_montant = placement_operation_requires_montant(
+            &input.operation_type,
+            input.stellium_label.as_deref(),
+            pipe_type.as_deref(),
+        );
+        let has_montant = input.montant_centimes.filter(|m| *m > 0).is_some()
+            || existing_pending
+                .as_ref()
+                .and_then(|op| op.montant_centimes)
+                .filter(|m| *m > 0)
+                .is_some();
+        if requires_montant && !has_montant {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "montant souscrit requis pour cette opération".into(),
+            ));
+        }
+
+        let mut existing_to_link = existing_pending;
+        if existing_to_link.is_none() {
+            if let (Some(pipe_id), Some(_)) = (
+                input.pipe_id.filter(|id| *id > 0),
+                input.pipe_timeline_entry_id.filter(|id| *id > 0),
+            ) {
+                if let Some(label) = input
                     .stellium_label
                     .as_ref()
                     .filter(|s| !s.trim().is_empty())
                 {
-                    self.find_pending_placement_for_pipe_label(
+                    existing_to_link = self.find_placement_for_workflow_journal_link(
                         pipe_id,
                         label,
                         input.product_label.as_deref(),
-                    )?
-                } else {
-                    self.find_pending_placement_for_pipe(pipe_id, &input.operation_type)?
-                };
-                if let Some(existing) = existing {
+                    )?;
+                }
+            }
+        }
+
+        if let Some(pipe_id) = input.pipe_id {
+            if pipe_id > 0 {
+                if let Some(existing) = existing_to_link {
+                    merge_placement_remuneration_fields_on_existing(
+                        &self.conn,
+                        existing.id,
+                        &input,
+                    )?;
                     if let Some(entry_id) = input.pipe_timeline_entry_id.filter(|id| *id > 0) {
                         if existing.pipe_timeline_entry_id != Some(entry_id) {
                             let now = now_unix();
@@ -298,10 +438,12 @@ impl super::Database {
                                  WHERE id = ?3",
                                 params![entry_id, now, existing.id],
                             )?;
+                            self.maybe_create_investissement_from_gagnee_affaire(pipe_id, None)?;
                             return self.get_placement_operation_by_id(existing.id);
                         }
                     }
-                    return Ok(existing);
+                    self.maybe_create_investissement_from_gagnee_affaire(pipe_id, None)?;
+                    return self.get_placement_operation_by_id(existing.id);
                 }
             }
         }
@@ -309,8 +451,9 @@ impl super::Database {
         self.conn.execute(
             "INSERT INTO placement_operations (
                 contact_id, pipe_id, pipe_timeline_entry_id, operation_type,
-                product_label, stellium_label, status, created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                product_label, stellium_label, status, created_at, updated_at,
+                montant_centimes, type_produit
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 input.contact_id,
                 input.pipe_id,
@@ -321,9 +464,14 @@ impl super::Database {
                 STATUS_PENDING,
                 now,
                 now,
+                input.montant_centimes,
+                input.type_produit,
             ],
         )?;
         let id = self.conn.last_insert_rowid();
+        if let Some(pipe_id) = input.pipe_id.filter(|id| *id > 0) {
+            self.maybe_create_investissement_from_gagnee_affaire(pipe_id, None)?;
+        }
         self.get_placement_operation_by_id(id)
     }
 
@@ -381,29 +529,12 @@ impl super::Database {
                po.id DESC"
         ))?;
         let rows = stmt.query_map([], |row| {
+            let operation = map_placement_row(row)?;
             Ok(super::models::PlacementOperationWithContact {
-                operation: super::models::PlacementOperation {
-                    id: row.get(0)?,
-                    contact_id: row.get(1)?,
-                    pipe_id: row.get(2)?,
-                    pipe_timeline_entry_id: row.get(3)?,
-                    operation_type: row.get(4)?,
-                    product_label: row.get(5)?,
-                    stellium_label: row.get(6)?,
-                    status: row.get(7)?,
-                    gmail_message_id: row.get(8)?,
-                    email_subject: row.get(9)?,
-                    email_received_at: row.get(10)?,
-                    created_at: row.get(11)?,
-                    updated_at: row.get(12)?,
-                    client_notified_at: row.get(13)?,
-                    non_conforme_at: row.get(14)?,
-                    partner_resent_at: row.get(15)?,
-                    dismissed_at: row.get(16)?,
-                },
-                contact_nom: row.get(17)?,
-                contact_prenom: row.get(18)?,
-                pipe_titre: row.get(19)?,
+                operation,
+                contact_nom: row.get(21)?,
+                contact_prenom: row.get(22)?,
+                pipe_titre: row.get(23)?,
             })
         })?;
         let mut result = Vec::new();
@@ -423,6 +554,80 @@ impl super::Database {
         let pool = pool_candidates_for_stellium_label(pending, stellium_label);
         let pool = Self::filter_pool_by_declared_product(pool, product_label);
         Ok(pool.into_iter().next())
+    }
+
+    /// Opération déjà répondue par Stellium mais sans journal d'envoi CRM (course mail / confirmation).
+    fn find_placement_for_workflow_journal_link(
+        &self,
+        pipe_id: i64,
+        stellium_label: &str,
+        product_label: Option<&str>,
+    ) -> Result<Option<super::models::PlacementOperation>> {
+        let mut candidates = Vec::new();
+        for status in [STATUS_CONFORME, STATUS_NON_CONFORME] {
+            candidates.extend(self.list_placements_for_pipe_and_status(pipe_id, status, false)?);
+        }
+        let pool = pool_candidates_for_stellium_label(candidates, stellium_label);
+        let pool = Self::filter_pool_by_declared_product(pool, product_label);
+        let pool: Vec<_> = pool
+            .into_iter()
+            .filter(|op| {
+                !placement_operation_is_dismissed(op)
+                    && !op.pipe_timeline_entry_id.map(|id| id > 0).unwrap_or(false)
+            })
+            .collect();
+        Ok(pool.into_iter().next())
+    }
+
+    fn journal_placement_partner_email_response(
+        &self,
+        op: &super::models::PlacementOperation,
+        status: &str,
+        email_received_at: i64,
+        email_subject: Option<&str>,
+    ) -> Result<()> {
+        let pipe_id = match op.pipe_id.filter(|id| *id > 0) {
+            Some(id) => id,
+            None => return Ok(()),
+        };
+        let titre = match status {
+            STATUS_CONFORME => "Réponse Stellium — Conforme",
+            STATUS_NON_CONFORME => "Réponse Stellium — Non conforme",
+            _ => return Ok(()),
+        };
+        let mut contenu_parts: Vec<String> = Vec::new();
+        if let Some(acte) = op
+            .stellium_label
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
+            contenu_parts.push(acte.to_string());
+        }
+        if let Some(produit) = op
+            .product_label
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
+            contenu_parts.push(produit.to_string());
+        }
+        if let Some(subj) = email_subject.map(str::trim).filter(|s| !s.is_empty()) {
+            contenu_parts.push(subj.to_string());
+        }
+        let contenu = if contenu_parts.is_empty() {
+            None
+        } else {
+            Some(contenu_parts.join("\n"))
+        };
+        self.create_pipe_timeline_entry(super::models::NewPipeTimelineEntry {
+            pipe_id,
+            entry_type: "NOTE".into(),
+            titre: Some(titre.into()),
+            contenu,
+            occurred_at: Some(email_received_at),
+        })?;
+        Ok(())
     }
 
     fn find_pending_placement_for_pipe(
@@ -1072,7 +1277,14 @@ impl super::Database {
                     op.id,
                 ],
             )?;
-            return Ok((self.get_placement_operation_by_id(op.id)?, true));
+            let updated = self.get_placement_operation_by_id(op.id)?;
+            self.journal_placement_partner_email_response(
+                &updated,
+                status,
+                email_received_at,
+                email_subject,
+            )?;
+            return Ok((updated, true));
         }
 
         Err(rusqlite::Error::InvalidParameterName(
@@ -1091,8 +1303,7 @@ mod tests {
             categorie: "CLIENT".into(),
             nom: nom.into(),
             prenom: prenom.into(),
-            statut_suivi: Some("ACTIF".into()),
-            ..Default::default()
+            statut_suivi: Some("ACTIF".into()),                ..Default::default()
         }
     }
 
@@ -1173,7 +1384,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_ARBITRAGE.into(),
                 product_label: Some("Cristalliance Avenir".into()),
-                stellium_label: Some("Arbitrage libre".into()),
+                stellium_label: Some("Arbitrage libre".into()),                ..Default::default()
             })
             .unwrap();
         let received_at = email_received_after_operation(&pending);
@@ -1222,7 +1433,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_ARBITRAGE.into(),
                 product_label: Some("Fipavie Ingénierie".into()),
-                stellium_label: Some("Rachats programmés : Mise en place".into()),
+                stellium_label: Some("Rachats programmés : Mise en place".into()),                ..Default::default()
             })
             .unwrap();
         db.delete_pipe(pipe.id).unwrap();
@@ -1243,7 +1454,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_ARBITRAGE.into(),
                 product_label: Some("Cristalliance Avenir".into()),
-                stellium_label: Some("Arbitrage libre".into()),
+                stellium_label: Some("Arbitrage libre".into()),                ..Default::default()
             })
             .unwrap();
         let dismissed = db.dismiss_placement_operation(pending.id).unwrap();
@@ -1286,8 +1497,8 @@ mod tests {
                     pipe_timeline_entry_id: Some(entry.id),
                     operation_type: OP_ARBITRAGE.into(),
                     product_label: None,
-                    stellium_label: None,
-                })
+                    stellium_label: None,                ..Default::default()
+            })
                 .unwrap()
                 .id,
                 STATUS_CONFORME,
@@ -1298,6 +1509,54 @@ mod tests {
         assert!(!db.reserve_placement_client_notification(op.id).unwrap());
         assert!(db.release_placement_client_notification(op.id).unwrap());
         assert!(db.reserve_placement_client_notification(op.id).unwrap());
+    }
+
+    #[test]
+    fn create_pending_souscription_without_montant_reuses_existing_draft() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        db.migrate_pipes_table().unwrap();
+        let contact = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let affaire = db
+            .create_pipe(super::super::models::NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Affaire test".into(),
+                stage: Some("R3".into()),
+                notes: None,
+            })
+            .unwrap();
+
+        let draft = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(affaire.id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_SOUSCRIPTION.into(),
+                product_label: Some("Corum Origin".into()),
+                stellium_label: Some("Souscription".into()),
+                montant_centimes: Some(5_000_000),
+                type_produit: Some("SCPI".into()),
+            })
+            .unwrap();
+
+        let confirmed = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(affaire.id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_SOUSCRIPTION.into(),
+                product_label: Some("Corum Origin".into()),
+                stellium_label: Some("Souscription".into()),
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert_eq!(confirmed.id, draft.id);
+        assert_eq!(confirmed.montant_centimes, Some(5_000_000));
     }
 
     #[test]
@@ -1314,7 +1573,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_ARBITRAGE.into(),
                 product_label: None,
-                stellium_label: None,
+                stellium_label: None,                ..Default::default()
             })
             .unwrap();
         assert_eq!(pending.status, STATUS_PENDING);
@@ -1336,6 +1595,138 @@ mod tests {
         assert_eq!(updated.id, pending.id);
         assert_eq!(updated.status, STATUS_CONFORME);
         assert_eq!(updated.gmail_message_id.as_deref(), Some("msg-1"));
+    }
+
+    #[test]
+    fn apply_email_update_journals_partner_response_on_pipe() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        db.migrate_pipes_table().unwrap();
+        db.migrate_pipe_timeline_table().unwrap();
+        let contact = db.create_contact(sample_contact("Gillodes", "Lea")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let pipe = db
+            .create_pipe(super::super::models::NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
+                parent_pipe_id: None,
+                titre: "Suivi juillet".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+        let pending = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(pipe.id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_ARBITRAGE.into(),
+                product_label: Some("Cristalliance Evoluvie".into()),
+                stellium_label: Some("Arbitrage libre".into()),
+                ..Default::default()
+            })
+            .unwrap();
+        let received_at = email_received_after_operation(&pending);
+
+        let (_, changed) = db
+            .apply_placement_email_update(
+                contact_id,
+                OP_ARBITRAGE,
+                STATUS_CONFORME,
+                Some("Arbitrage libre"),
+                Some("Cristalliance Evoluvie"),
+                "msg-lea",
+                Some("Box placement - Envoi dossier"),
+                received_at,
+                Some(pipe.id),
+            )
+            .unwrap();
+        assert!(changed);
+
+        let notes: Vec<_> = db
+            .list_pipe_timeline_entries(pipe.id)
+            .unwrap()
+            .into_iter()
+            .filter(|e| e.entry_type == "NOTE")
+            .collect();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(
+            notes[0].titre.as_deref(),
+            Some("Réponse Stellium — Conforme")
+        );
+    }
+
+    #[test]
+    fn create_links_journal_on_conforme_after_stellium_email() {
+        use super::super::models::NewPipeTimelineEntry;
+
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        db.migrate_pipes_table().unwrap();
+        db.migrate_pipe_timeline_table().unwrap();
+        let contact = db.create_contact(sample_contact("Gillodes", "Lea")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let pipe = db
+            .create_pipe(super::super::models::NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
+                parent_pipe_id: None,
+                titre: "Suivi juillet".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+        let draft = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(pipe.id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_ARBITRAGE.into(),
+                product_label: Some("Cristalliance Evoluvie".into()),
+                stellium_label: Some("Arbitrage libre".into()),
+                ..Default::default()
+            })
+            .unwrap();
+        let received_at = email_received_after_operation(&draft);
+        db.apply_placement_email_update(
+            contact_id,
+            OP_ARBITRAGE,
+            STATUS_CONFORME,
+            Some("Arbitrage libre"),
+            Some("Cristalliance Evoluvie"),
+            "msg-lea-2",
+            Some("subject"),
+            received_at,
+            Some(pipe.id),
+        )
+        .unwrap();
+
+        let journal = db
+            .create_pipe_timeline_entry(NewPipeTimelineEntry {
+                pipe_id: pipe.id,
+                entry_type: "NOTE".into(),
+                titre: Some("Arbitrage libre — Cristalliance Evoluvie".into()),
+                contenu: None,
+                occurred_at: Some(received_at + 30),
+            })
+            .unwrap();
+        let linked = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(pipe.id),
+                pipe_timeline_entry_id: Some(journal.id),
+                operation_type: OP_ARBITRAGE.into(),
+                product_label: Some("Cristalliance Evoluvie".into()),
+                stellium_label: Some("Arbitrage libre".into()),
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert_eq!(linked.id, draft.id);
+        assert_eq!(linked.status, STATUS_CONFORME);
+        assert_eq!(linked.pipe_timeline_entry_id, Some(journal.id));
     }
 
     #[test]
@@ -1386,7 +1777,7 @@ mod tests {
                 pipe_timeline_entry_id: Some(entry1.id),
                 operation_type: OP_ARBITRAGE.into(),
                 product_label: None,
-                stellium_label: None,
+                stellium_label: None,                ..Default::default()
             })
             .unwrap();
         assert_eq!(first.pipe_timeline_entry_id, Some(entry1.id));
@@ -1398,7 +1789,7 @@ mod tests {
                 pipe_timeline_entry_id: Some(entry2.id),
                 operation_type: OP_ARBITRAGE.into(),
                 product_label: None,
-                stellium_label: None,
+                stellium_label: None,                ..Default::default()
             })
             .unwrap();
         assert_eq!(second.id, first.id);
@@ -1419,7 +1810,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_ARBITRAGE.into(),
                 product_label: None,
-                stellium_label: None,
+                stellium_label: None,                ..Default::default()
             })
             .unwrap();
 
@@ -1486,8 +1877,9 @@ mod tests {
             pipe_timeline_entry_id: Some(1),
             operation_type: OP_SOUSCRIPTION.into(),
             product_label: None,
-            stellium_label: None,
-        })
+            montant_centimes: Some(50_000_00),
+            stellium_label: None,                ..Default::default()
+            })
         .unwrap();
         db.create_placement_operation(super::super::models::NewPlacementOperation {
             contact_id,
@@ -1495,8 +1887,9 @@ mod tests {
             pipe_timeline_entry_id: Some(2),
             operation_type: OP_SOUSCRIPTION.into(),
             product_label: None,
-            stellium_label: None,
-        })
+            montant_centimes: Some(60_000_00),
+            stellium_label: None,                ..Default::default()
+            })
         .unwrap();
 
         let email_at = now_unix();
@@ -1527,7 +1920,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_ARBITRAGE.into(),
                 product_label: None,
-                stellium_label: Some("Arbitrage libre".into()),
+                stellium_label: Some("Arbitrage libre".into()),                ..Default::default()
             })
             .unwrap();
         let rib = db
@@ -1537,7 +1930,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_AUTRE.into(),
                 product_label: None,
-                stellium_label: Some("Modification administrative : RIB".into()),
+                stellium_label: Some("Modification administrative : RIB".into()),                ..Default::default()
             })
             .unwrap();
 
@@ -1580,7 +1973,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_ARBITRAGE.into(),
                 product_label: None,
-                stellium_label: Some("Arbitrage libre".into()),
+                stellium_label: Some("Arbitrage libre".into()),                ..Default::default()
             })
             .unwrap();
         let wrong = only_arbitrage_db
@@ -1643,7 +2036,7 @@ mod tests {
                 pipe_timeline_entry_id: Some(entry1.id),
                 operation_type: OP_ARBITRAGE.into(),
                 product_label: None,
-                stellium_label: Some("Arbitrage libre".into()),
+                stellium_label: Some("Arbitrage libre".into()),                ..Default::default()
             })
             .unwrap();
         let arbitrage_again = db
@@ -1653,7 +2046,7 @@ mod tests {
                 pipe_timeline_entry_id: Some(entry1.id),
                 operation_type: OP_ARBITRAGE.into(),
                 product_label: None,
-                stellium_label: Some("Arbitrage libre".into()),
+                stellium_label: Some("Arbitrage libre".into()),                ..Default::default()
             })
             .unwrap();
         assert_eq!(arbitrage_again.id, arbitrage.id);
@@ -1665,7 +2058,7 @@ mod tests {
                 pipe_timeline_entry_id: Some(entry2.id),
                 operation_type: OP_AUTRE.into(),
                 product_label: None,
-                stellium_label: Some("Modification administrative : RIB".into()),
+                stellium_label: Some("Modification administrative : RIB".into()),                ..Default::default()
             })
             .unwrap();
         assert_ne!(rib.id, arbitrage.id);
@@ -1697,7 +2090,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_VERSEMENT.into(),
                 product_label: Some("Cristalliance EvoluPER".into()),
-                stellium_label: Some("Versements programmés : Modification".into()),
+                stellium_label: Some("Versements programmés : Modification".into()),                ..Default::default()
             })
             .unwrap();
         let vp_avenir = db
@@ -1707,7 +2100,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_VERSEMENT.into(),
                 product_label: Some("Cristalliance Avenir".into()),
-                stellium_label: Some("Versements programmés : Modification".into()),
+                stellium_label: Some("Versements programmés : Modification".into()),                ..Default::default()
             })
             .unwrap();
         assert_ne!(vp_evoluper.id, vp_avenir.id);
@@ -1719,7 +2112,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_VERSEMENT.into(),
                 product_label: Some("Cristalliance Avenir".into()),
-                stellium_label: Some("Versements programmés : Modification".into()),
+                stellium_label: Some("Versements programmés : Modification".into()),                ..Default::default()
             })
             .unwrap();
         assert_eq!(vp_avenir_again.id, vp_avenir.id);
@@ -1739,7 +2132,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_VERSEMENT.into(),
                 product_label: Some("Cristalliance Avenir".into()),
-                stellium_label: Some("Versements programmés : Modification".into()),
+                stellium_label: Some("Versements programmés : Modification".into()),                ..Default::default()
             })
             .unwrap();
         let second = db
@@ -1749,7 +2142,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_VERSEMENT.into(),
                 product_label: Some("Cristalliance Avenir".into()),
-                stellium_label: Some("Versements programmés : Modification".into()),
+                stellium_label: Some("Versements programmés : Modification".into()),                ..Default::default()
             })
             .unwrap();
         assert_ne!(first.id, second.id);
@@ -1794,7 +2187,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_VERSEMENT.into(),
                 product_label: Some("Cristalliance EvoluPER".into()),
-                stellium_label: Some("Versements programmés : Modification".into()),
+                stellium_label: Some("Versements programmés : Modification".into()),                ..Default::default()
             })
             .unwrap();
         db.create_placement_operation(super::super::models::NewPlacementOperation {
@@ -1803,8 +2196,8 @@ mod tests {
             pipe_timeline_entry_id: None,
             operation_type: OP_VERSEMENT.into(),
             product_label: Some("Cristalliance Avenir".into()),
-            stellium_label: Some("Versements programmés : Modification".into()),
-        })
+            stellium_label: Some("Versements programmés : Modification".into()),                ..Default::default()
+            })
         .unwrap();
 
         let wrong = db
@@ -1860,8 +2253,9 @@ mod tests {
             pipe_timeline_entry_id: Some(1),
             operation_type: OP_SOUSCRIPTION.into(),
             product_label: Some("Produit Alpha".into()),
-            stellium_label: None,
-        })
+            montant_centimes: Some(50_000_00),
+            stellium_label: None,                ..Default::default()
+            })
         .unwrap();
         let target = db
             .create_placement_operation(super::super::models::NewPlacementOperation {
@@ -1870,7 +2264,8 @@ mod tests {
                 pipe_timeline_entry_id: Some(2),
                 operation_type: OP_SOUSCRIPTION.into(),
                 product_label: Some("Produit Beta".into()),
-                stellium_label: None,
+                montant_centimes: Some(60_000_00),
+                stellium_label: None,                ..Default::default()
             })
             .unwrap();
 
@@ -1925,7 +2320,7 @@ mod tests {
                 pipe_timeline_entry_id: None,
                 operation_type: OP_ARBITRAGE.into(),
                 product_label: None,
-                stellium_label: None,
+                stellium_label: None,                ..Default::default()
             })
             .unwrap();
 
@@ -1962,8 +2357,8 @@ mod tests {
                     pipe_timeline_entry_id: None,
                     operation_type: OP_ARBITRAGE.into(),
                     product_label: Some("AV Generali".into()),
-                    stellium_label: None,
-                })
+                    stellium_label: None,                ..Default::default()
+            })
                 .unwrap()
                 .id,
                 STATUS_CONFORME,
@@ -2031,7 +2426,7 @@ mod tests {
                 pipe_timeline_entry_id: Some(entry.id),
                 operation_type: OP_ARBITRAGE.into(),
                 product_label: None,
-                stellium_label: None,
+                stellium_label: None,                ..Default::default()
             })
             .unwrap();
         assert!(!placement_operation_eligible_for_client_email(&from_pipe));
@@ -2043,5 +2438,41 @@ mod tests {
 
         conforme.pipe_timeline_entry_id = None;
         assert!(!placement_operation_eligible_for_client_email(&conforme));
+    }
+
+    #[test]
+    fn create_souscription_affaire_without_montant_is_rejected() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        db.migrate_pipes_table().unwrap();
+        let contact = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let affaire = db
+            .create_pipe(super::super::models::NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Affaire sans montant".into(),
+                stage: Some("R3".into()),
+                notes: None,
+            })
+            .unwrap();
+
+        let err = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(affaire.id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_SOUSCRIPTION.into(),
+                product_label: Some("Corum Origin".into()),
+                stellium_label: Some("Souscription".into()),
+                montant_centimes: None,
+                type_produit: None,
+            })
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("montant souscrit requis"));
     }
 }

@@ -12,6 +12,7 @@ export type SettingsSectionId =
   | "email-stellium"
   | "newsletter"
   | "suivi"
+  | "remuneration"
   | "comptabilite"
   | "integrations"
   | "champs"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Briefcase, ClipboardList, LayoutGrid, List, PhoneCall } from "lucide-react";
+import { Briefcase, ClipboardList, LayoutGrid, List, PhoneCall, Euro } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listPipes, type PipeRecord } from "@/lib/api/tauri-pipe";
 import {
@@ -38,6 +38,7 @@ import { PipeList } from "@/components/pipe/PipeList";
 import { PipeListToolbar } from "@/components/pipe/PipeListToolbar";
 import { PipeBoard } from "@/components/pipe/PipeBoard";
 import { PipePlacementBoard } from "@/components/pipe/PipePlacementBoard";
+import { PipeRemunerationBoard } from "@/components/pipe/PipeRemunerationBoard";
 import { PipeFormPanel } from "@/components/pipe/PipeFormPanel";
 import { PipeDetailPanel } from "@/components/pipe/PipeDetailPanel";
 import { PipeStageAdvanceDialog } from "@/components/pipe/PipeStageAdvanceDialog";
@@ -146,6 +147,16 @@ function PipeBoardTabToggle({
       >
         <ClipboardList className="h-3.5 w-3.5" />
         Suivi gestion
+      </Button>
+      <Button
+        type="button"
+        variant={tab === "remuneration" ? "secondary" : "ghost"}
+        size="sm"
+        className="h-8 gap-1.5 px-3"
+        onClick={() => onChange("remuneration")}
+      >
+        <Euro className="h-3.5 w-3.5" />
+        Rémunération
       </Button>
     </div>
   );
@@ -410,7 +421,7 @@ export function Pipe() {
       void trackVersementAffaireOnPipeCreate(pipe).catch((err) => {
         console.error(err);
         toast.warning(
-          "Affaire créée, mais le suivi versement Stellium n'a pas pu être initialisé."
+          "Affaire créée, mais le suivi versement Stellium n'a pas pu être initialisé. Renseignez le montant sur l'affaire."
         );
       });
     }
@@ -580,6 +591,10 @@ export function Pipe() {
                 onDismiss={handleDismissPlacementOperation}
                 dismissingOperationId={dismissingPlacementId}
               />
+            ) : boardTab === "remuneration" ? (
+              <div className="p-4 overflow-auto">
+                <PipeRemunerationBoard />
+              </div>
             ) : (
               <PipeBoard
                 affaires={affaires}

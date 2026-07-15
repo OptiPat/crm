@@ -58,8 +58,8 @@ export function PipePlacementBoard({
       <div className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
         <p className="text-sm font-medium">Aucun acte partenaire en cours</p>
         <p className="text-sm text-muted-foreground mt-2 max-w-md">
-          Les opérations Stellium déclarées sur un suivi apparaissent ici jusqu&apos;à
-          l&apos;envoi du mail client ou un retrait manuel.
+          Les opérations Stellium déclarées sur un suivi apparaissent ici jusqu&apos;à un retrait
+          manuel (y compris après le mail client).
         </p>
       </div>
     );

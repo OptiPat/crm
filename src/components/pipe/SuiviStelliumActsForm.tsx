@@ -1,12 +1,14 @@
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StelliumPlacementActFields } from "@/components/pipe/StelliumPlacementActFields";
+import { PlacementMontantField } from "@/components/pipe/PlacementMontantField";
 import { isVersementComplementaireActLabel } from "@/lib/pipe/pipe-suivi";
 
 export interface SuiviStelliumActRow {
   key: string;
   productLabel: string;
   actLabel: string;
+  montantEuros: string;
 }
 
 function newActRow(): SuiviStelliumActRow {
@@ -14,6 +16,7 @@ function newActRow(): SuiviStelliumActRow {
     key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     productLabel: "",
     actLabel: "",
+    montantEuros: "",
   };
 }
 
@@ -28,7 +31,7 @@ interface SuiviStelliumActsFormProps {
 }
 
 export function SuiviStelliumActsForm({ acts, onChange, disabled = false }: SuiviStelliumActsFormProps) {
-  const updateAct = (key: string, patch: Partial<Pick<SuiviStelliumActRow, "productLabel" | "actLabel">>) => {
+  const updateAct = (key: string, patch: Partial<Pick<SuiviStelliumActRow, "productLabel" | "actLabel" | "montantEuros">>) => {
     onChange(
       acts.map((row) => (row.key === key ? { ...row, ...patch } : row))
     );
@@ -74,6 +77,13 @@ export function SuiviStelliumActsForm({ acts, onChange, disabled = false }: Suiv
             onStelliumLabelChange={(actLabel) => updateAct(row.key, { actLabel })}
             disabled={disabled}
           />
+          {isVersementComplementaireActLabel(row.actLabel) ? (
+            <PlacementMontantField
+              value={row.montantEuros}
+              onChange={(montantEuros) => updateAct(row.key, { montantEuros })}
+              disabled={disabled}
+            />
+          ) : null}
         </div>
       ))}
       <Button

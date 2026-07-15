@@ -63,7 +63,7 @@ describe("trackVersementAffaireOnPipeCreate", () => {
     vi.clearAllMocks();
   });
 
-  it("crée un brouillon VERSEMENT avec libellé versement complémentaire", async () => {
+  it("crée un brouillon VERSEMENT avec montant", async () => {
     vi.mocked(getPipeById).mockResolvedValue({
       ...versementChild,
       id: 5,
@@ -71,17 +71,37 @@ describe("trackVersementAffaireOnPipeCreate", () => {
       parent_pipe_id: null,
     });
 
-    await trackVersementAffaireOnPipeCreate(versementChild, {
+    const tracked = await trackVersementAffaireOnPipeCreate(versementChild, {
       productLabel: "Cristalliance Avenir",
+      montantCentimes: 50_000_00,
     });
 
+    expect(tracked).toBe(true);
     expect(createPlacementOperation).toHaveBeenCalledWith({
       contact_id: 1,
       pipe_id: 10,
       operation_type: "VERSEMENT",
       stellium_label: VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
       product_label: "Cristalliance Avenir",
+      montant_centimes: 50_000_00,
+      type_produit: "ASSURANCE_VIE",
     });
+  });
+
+  it("ignore sans montant (UI versement enfant)", async () => {
+    vi.mocked(getPipeById).mockResolvedValue({
+      ...versementChild,
+      id: 5,
+      pipe_type: "ACTE_GESTION",
+      parent_pipe_id: null,
+    });
+
+    const tracked = await trackVersementAffaireOnPipeCreate(versementChild, {
+      productLabel: "Cristalliance Avenir",
+    });
+
+    expect(tracked).toBe(false);
+    expect(createPlacementOperation).not.toHaveBeenCalled();
   });
 
   it("ne crée rien si le parent est une affaire", async () => {

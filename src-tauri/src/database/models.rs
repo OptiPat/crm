@@ -1525,6 +1525,16 @@ pub struct PlacementOperation {
     /// Retrait manuel du tableau / suivi actif (sans mail client).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dismissed_at: Option<i64>,
+    /// Montant souscrit (centimes) — saisi à la déclaration souscription / versement.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub montant_centimes: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub type_produit: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub investissement_id: Option<i64>,
+    /// PV manuel (immo) — saisi dans l'onglet Rémunération.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pv_manual: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1559,4 +1569,45 @@ pub struct NewPlacementOperation {
     pub product_label: Option<String>,
     #[serde(default)]
     pub stellium_label: Option<String>,
+    #[serde(default)]
+    pub montant_centimes: Option<i64>,
+    #[serde(default)]
+    pub type_produit: Option<String>,
+}
+
+impl Default for NewPlacementOperation {
+    fn default() -> Self {
+        Self {
+            contact_id: 0,
+            pipe_id: None,
+            pipe_timeline_entry_id: None,
+            operation_type: String::new(),
+            product_label: None,
+            stellium_label: None,
+            montant_centimes: None,
+            type_produit: None,
+        }
+    }
+}
+
+/// Ligne onglet Rémunération (affaire gagnée + placement).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PipeRemunerationRow {
+    pub pipe_id: i64,
+    pub pipe_titre: String,
+    pub contact_id: i64,
+    pub contact_prenom: Option<String>,
+    pub contact_nom: Option<String>,
+    pub placement_operation_id: i64,
+    pub montant_centimes: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub type_produit: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pv_manual: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub product_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub investissement_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub date_souscription: Option<i64>,
 }

@@ -49,6 +49,7 @@ import {
   resolveContactFiscal,
 } from "@/lib/foyers/foyer-fiscal-sync";
 import { ContactFoyerRelationsBlock, type ContactFoyerRelationsActions } from "@/components/contacts/ContactFoyerRelationsBlock";
+import { FoyerProspectionDatesApplyButton } from "@/components/contacts/FoyerProspectionDatesApplyButton";
 import { ContactFormParrainageSection } from "@/components/contacts/ContactFormParrainageSection";
 import { FilleulRankFormFields } from "@/components/organisation/FilleulRankFormFields";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
@@ -726,6 +727,24 @@ export function ContactForm({
   const isClientStatut = formData.categorie === "CLIENT";
   const isPrescripteurForm = createContext === "prescripteurs" && !isEdit;
 
+  const foyerProspectionApplyButton =
+    isEdit &&
+    contact?.id &&
+    (isClientActif(formData.categorie) ||
+      formData.categorie === "PROSPECT_CLIENT" ||
+      formData.categorie === "SUSPECT_CLIENT") ? (
+      <FoyerProspectionDatesApplyButton
+        compact
+        contactId={contact.id}
+        foyerId={contact.foyer_id ?? formData.foyer_id}
+        foyerMembers={foyerContext.members}
+        dates={{
+          date_r1: formData.date_r1,
+          date_dernier_contact: formData.date_dernier_contact,
+        }}
+      />
+    ) : null;
+
   const editSections = useMemo(() => {
     const baseKeys = isPrescripteurForm
       ? CONTACT_FORM_PRESCRIPTEUR_SECTION_KEYS
@@ -1329,6 +1348,11 @@ export function ContactForm({
                     value={formData.date_dernier_contact}
                     onChange={(v) => setFormData((prev) => ({ ...prev, date_dernier_contact: v }))}
                   />
+                  {foyerProspectionApplyButton && (
+                    <div className="col-span-2 flex justify-end border-t border-dashed pt-2">
+                      {foyerProspectionApplyButton}
+                    </div>
+                  )}
                   <DateFieldWithShortcuts
                     id="date_prochain_suivi"
                     label="Prochain suivi (client)"

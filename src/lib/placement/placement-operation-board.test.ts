@@ -102,7 +102,7 @@ describe("placement-operation-board", () => {
     ).toBe("client_mail");
   });
 
-  it("CONFORME notifié → hors board", () => {
+  it("CONFORME notifié → colonne mail client jusqu'au retrait", () => {
     expect(
       getPlacementBoardColumn({
         ...base,
@@ -110,7 +110,7 @@ describe("placement-operation-board", () => {
         client_notified_at: 100,
         email_received_at: 100,
       })
-    ).toBeNull();
+    ).toBe("client_mail");
   });
 
   it("6 colonnes dans le groupement", () => {

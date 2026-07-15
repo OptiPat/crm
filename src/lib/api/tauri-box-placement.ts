@@ -27,6 +27,10 @@ export interface PlacementOperation {
   non_conforme_at?: number | null;
   partner_resent_at?: number | null;
   dismissed_at?: number | null;
+  montant_centimes?: number | null;
+  type_produit?: string | null;
+  investissement_id?: number | null;
+  pv_manual?: number | null;
 }
 
 export interface PlacementOperationWithContact {
@@ -69,6 +73,8 @@ export interface NewPlacementOperationInput {
   operation_type: string;
   product_label?: string | null;
   stellium_label?: string | null;
+  montant_centimes?: number | null;
+  type_produit?: string | null;
 }
 
 export const PLACEMENT_OPERATIONS_CHANGED_EVENT = "placement-operations-changed";
@@ -99,6 +105,10 @@ function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWi
     non_conforme_at,
     partner_resent_at,
     dismissed_at,
+    montant_centimes,
+    type_produit,
+    investissement_id,
+    pv_manual,
   } = raw;
   return {
     operation: {
@@ -119,6 +129,10 @@ function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWi
       non_conforme_at,
       partner_resent_at,
       dismissed_at,
+      montant_centimes,
+      type_produit,
+      investissement_id,
+      pv_manual,
     },
     contact_nom,
     contact_prenom,
@@ -145,6 +159,18 @@ export async function listPlacementOperationsForPipe(
   pipeId: number
 ): Promise<PlacementOperation[]> {
   return invoke<PlacementOperation[]>("list_placement_operations_for_pipe", { pipeId });
+}
+
+export async function updatePlacementOperationPvManual(
+  id: number,
+  pvManual: number | null
+): Promise<PlacementOperation> {
+  const op = await invoke<PlacementOperation>("update_placement_operation_pv_manual", {
+    id,
+    pv_manual: pvManual,
+  });
+  notifyPlacementOperationsChanged();
+  return op;
 }
 
 export async function updatePlacementOperationStatus(

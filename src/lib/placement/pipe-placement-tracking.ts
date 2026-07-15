@@ -16,6 +16,7 @@ import {
   VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
 } from "@/lib/pipe/pipe-suivi";
 import { datetimeLocalToUnix, unixToDatetimeLocalInput } from "@/lib/pipe/pipe-timeline-types";
+import { inferTypeProduitFromStelliumProductLabel } from "@/lib/pipe/remuneration-type-produit";
 
 export async function createPlacementFromPipeJournal(options: {
   contactId: number;
@@ -53,21 +54,32 @@ export function shouldTrackVersementAffaireOnPipeCreate(
 /** Brouillon VERSEMENT sur l'affaire enfant (étape 1 du stepper — confirmé via Stellium). */
 export async function trackVersementAffaireOnPipeCreate(
   pipe: PipeRecord,
-  options?: { productLabel?: string | null }
-): Promise<void> {
-  if (!pipe.parent_pipe_id || pipe.parent_pipe_id <= 0) return;
+  options?: { productLabel?: string | null; montantCentimes?: number | null }
+): Promise<boolean> {
+  if (!pipe.parent_pipe_id || pipe.parent_pipe_id <= 0) return false;
   const parent = await getPipeById(pipe.parent_pipe_id);
   if (!shouldTrackVersementAffaireOnPipeCreate(pipe, parent.pipe_type)) {
-    return;
+    return false;
   }
+  const montantCentimes = options?.montantCentimes;
+  if (!montantCentimes || montantCentimes <= 0) {
+    return false;
+  }
+  const productLabel = options?.productLabel?.trim() || null;
+  const typeProduit = productLabel
+    ? inferTypeProduitFromStelliumProductLabel(productLabel)
+    : null;
   await createPlacementOperation({
     contact_id: pipe.contact_id,
     pipe_id: pipe.id,
     operation_type: "VERSEMENT",
     stellium_label: VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
-    product_label: options?.productLabel?.trim() || null,
+    product_label: productLabel,
+    montant_centimes: montantCentimes,
+    type_produit: typeProduit,
   });
   notifyPlacementOperationsChanged();
+  return true;
 }
 
 /** Affaire versement : Gagnée uniquement après mail client (étape 6). */

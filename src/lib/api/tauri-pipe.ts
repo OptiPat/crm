@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifyPipeChanged } from "@/lib/pipe/pipe-events";
+import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import type { PipeStage, PipeType } from "@/lib/pipe/pipe-types";
 
 export interface PipeRecord {
@@ -69,5 +70,8 @@ export async function setPipeStage(
     milestone_occurred_at: options?.milestoneOccurredAt ?? null,
   });
   notifyPipeChanged();
+  if (stage === "GAGNEE") {
+    notifyInvestissementsChanged();
+  }
   return pipe;
 }

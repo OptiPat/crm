@@ -17,6 +17,8 @@ import { type Contact as ContactRecord } from "@/lib/api/tauri-contacts";
 import { type Foyer } from "@/lib/api/tauri-foyers";
 import { resolveContactFiscal, type FiscalFields } from "@/lib/foyers/foyer-fiscal-sync";
 import { ContactFoyerRelationsBlock, type ContactFoyerRelationsActions } from "@/components/contacts/ContactFoyerRelationsBlock";
+import { FoyerProspectionDatesApplyButton } from "@/components/contacts/FoyerProspectionDatesApplyButton";
+import { prospectionDatesFromContact } from "@/lib/foyers/foyer-prospection-dates-sync";
 import {
   syncContactGoogle,
   googleContactSyncToastMessage,
@@ -236,6 +238,7 @@ export function ContactDetailSyntheseTab({
     clientLabel ||
     filleulLabel ||
     contact.statut_suivi ||
+    contact.date_r1 ||
     contact.date_dernier_contact ||
     contact.date_prochain_suivi ||
     (!filleulReseauInscrit && contact.date_dernier_contact_filleul) ||
@@ -583,6 +586,17 @@ export function ContactDetailSyntheseTab({
                 {formatStatutSuiviLabel(contact.statut_suivi)}
               </div>
             )}
+            {contact.date_r1 && (
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <span className="text-muted-foreground text-sm">Premier RDV (R1) : </span>
+                  <span className="font-medium text-emerald-700">
+                    {formatCalendarDateFr(contact.date_r1)}
+                  </span>
+                </div>
+              </div>
+            )}
             {contact.date_dernier_contact && (
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -593,6 +607,18 @@ export function ContactDetailSyntheseTab({
                   </span>
                 </div>
               </div>
+            )}
+            {contact.id != null &&
+              (isClientActif(contact.categorie) ||
+                contact.categorie === "PROSPECT_CLIENT" ||
+                contact.categorie === "SUSPECT_CLIENT") && (
+              <FoyerProspectionDatesApplyButton
+                contactId={contact.id}
+                foyerId={contact.foyer_id}
+                foyerMembers={foyerMembers}
+                dates={prospectionDatesFromContact(contact)}
+                onApplied={onContactUpdated}
+              />
             )}
             {contact.date_prochain_suivi && (
               <div className="flex items-center gap-2">

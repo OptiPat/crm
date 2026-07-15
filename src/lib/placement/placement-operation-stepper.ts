@@ -231,7 +231,7 @@ export function getPlacementBoardActiveStepId(
   }
   if (lastActive) return lastActive;
 
-  if (operation.status === "CONFORME" && !ts(operation.client_notified_at)) {
+  if (operation.status === "CONFORME") {
     return "client_mail";
   }
 

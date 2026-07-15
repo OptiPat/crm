@@ -158,5 +158,13 @@ describe("placement-operation-stepper", () => {
         email_received_at: 900,
       })
     ).toBe("client_mail");
+    expect(
+      getPlacementBoardActiveStepId({
+        ...base,
+        status: "CONFORME",
+        email_received_at: 900,
+        client_notified_at: 1200,
+      })
+    ).toBe("client_mail");
   });
 });

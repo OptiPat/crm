@@ -1,5 +1,6 @@
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import { setPipeStage, type PipeRecord } from "@/lib/api/tauri-pipe";
+import { PIPE_RDV_CALENDAR_DURATION_SEC } from "@/lib/pipe/pipe-rdv-google-calendar";
 import {
   isPipeStage,
   PIPE_LINEAR_STAGES,
@@ -57,6 +58,45 @@ export function isRdvStageAdvanceDue(
 ): boolean {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   return localDayStartFromUnix(occurredAtUnix) <= todayStart;
+}
+
+export function rdvTimelineEntryEndAtUnix(occurredAtUnix: number): number {
+  return occurredAtUnix + PIPE_RDV_CALENDAR_DURATION_SEC;
+}
+
+/** RDV commercial terminé (fin de créneau agenda, durée par défaut 1 h). */
+export function isRdvTimelineEntryCompleted(
+  entry: Pick<PipeTimelineEntryRecord, "entry_type" | "titre" | "occurred_at">,
+  now: Date = new Date()
+): boolean {
+  if (entry.entry_type !== "RDV") return false;
+  if (!rdvStageFromEntryTitre(entry.titre)) return false;
+  const nowUnix = Math.floor(now.getTime() / 1000);
+  return rdvTimelineEntryEndAtUnix(entry.occurred_at) <= nowUnix;
+}
+
+export function latestRdvEntryForStage(
+  entries: PipeTimelineEntryRecord[],
+  rdvStage: PipeRdvStage
+): PipeTimelineEntryRecord | null {
+  let best: PipeTimelineEntryRecord | null = null;
+  for (const entry of entries) {
+    if (entry.entry_type !== "RDV") continue;
+    if (rdvStageFromEntryTitre(entry.titre) !== rdvStage) continue;
+    if (!best || entry.occurred_at > best.occurred_at) best = entry;
+  }
+  return best;
+}
+
+/** Étape R1/R2/R3 considérée comme faite dans le stepper (dernier RDV de l'étape terminé). */
+export function isPipeRdvStageCompleted(
+  rdvStage: PipeRdvStage,
+  entries: PipeTimelineEntryRecord[],
+  now: Date = new Date()
+): boolean {
+  const latest = latestRdvEntryForStage(entries, rdvStage);
+  if (!latest) return false;
+  return isRdvTimelineEntryCompleted(latest, now);
 }
 
 export function formatRdvScheduledAdvanceDate(occurredAtUnix: number): string {

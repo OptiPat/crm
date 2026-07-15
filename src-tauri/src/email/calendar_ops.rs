@@ -499,7 +499,7 @@ fn sync_pipe_rdv_from_google_week(
     }
 
     for contact_id in contact_ids_to_sync {
-        let _ = db.sync_contact_dates_for_contact(contact_id);
+        let _ = db.sync_contact_dates_for_contact_from_affaire(contact_id);
     }
 
     Ok(AgendaGooglePipeSyncResult {
@@ -595,7 +595,7 @@ pub fn sync_all_pipe_linked_google_rdvs(
     }
 
     for contact_id in contact_ids_to_sync {
-        let _ = db.sync_contact_dates_for_contact(contact_id);
+        let _ = db.sync_contact_dates_for_contact_from_affaire(contact_id);
     }
 
     Ok(AgendaGooglePipeSyncResult {

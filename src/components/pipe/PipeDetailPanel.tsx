@@ -271,6 +271,7 @@ export function PipeDetailPanel({
             {showStageStepper && (
               <PipeStageStepper
                 currentStage={pipe.stage}
+                timelineEntries={timeline.entries}
                 onViewProspection={handleViewProspection}
                 onPlanRdv={onPlanRdv}
               />

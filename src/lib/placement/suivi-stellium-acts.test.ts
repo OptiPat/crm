@@ -10,11 +10,18 @@ import {
 } from "./suivi-stellium-acts";
 
 describe("suivi-stellium-acts", () => {
-  it("accepte versement complémentaire sans produit", () => {
+  it("exige montant pour versement complémentaire", () => {
     expect(
       validateSuiviStelliumActInput({
         productLabel: "",
         actLabel: VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
+      })
+    ).toBe("Montant souscrit requis pour le versement complémentaire.");
+    expect(
+      validateSuiviStelliumActInput({
+        productLabel: "",
+        actLabel: VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
+        montantCentimes: 1_000_000,
       })
     ).toBeNull();
   });
