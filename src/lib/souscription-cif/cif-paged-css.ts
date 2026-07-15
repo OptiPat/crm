@@ -78,6 +78,24 @@ export function buildCifPagedCss(): string {
   break-inside: auto;
 }
 
+/* Ligne « Analyse » — mini-table isolée (évite la perte de <tr> + décalage grille au saut de page). */
+.cif-rm-recap-analyse-table {
+  break-inside: auto;
+}
+.cif-rm-recap-analyse-row th {
+  break-inside: avoid;
+  vertical-align: top;
+}
+.cif-rm-recap-analyse-row td {
+  break-inside: auto;
+  vertical-align: top;
+}
+.cif-rm-recap-analyse-body {
+  break-inside: auto;
+  orphans: 2;
+  widows: 2;
+}
+
 /* Le bloc signatures reste groupé (jamais coupé entre conseiller et client). */
 .cif-signature-block {
   break-inside: avoid;
