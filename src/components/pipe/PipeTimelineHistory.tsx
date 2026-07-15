@@ -1,50 +1,46 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Calendar, FileText, Pencil, Phone, Send, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DictationTextarea } from "@/components/ui/dictation-textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { listPlacementOperationsForPipe } from "@/lib/api/tauri-box-placement";
 import { PipeTimelinePhaseEntryRow } from "@/components/pipe/PipeTimelinePhaseEntryRow";
 import { PipeProspectionMilestoneEditor } from "@/components/pipe/PipeProspectionMilestoneEditor";
 import { PipeProspectionMilestoneReadSummary } from "@/components/pipe/PipeProspectionMilestoneReadSummary";
 import { PipeRdvOutcomeDialog } from "@/components/pipe/PipeRdvOutcomeDialog";
 import { PipeTimelineResumeRdvForm } from "@/components/pipe/PipeTimelineResumeRdvForm";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
+import {
+  listPlacementOperationsForPipe,
+  PLACEMENT_OPERATIONS_CHANGED_EVENT,
+} from "@/lib/api/tauri-box-placement";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { toastAfterPipeRdvReschedule } from "@/lib/pipe/pipe-rdv-entry-actions";
 import { applyPipeSuiviRdvReschedule } from "@/lib/pipe/pipe-rdv-reschedule-actions";
-import { isSuiviRdvEntry } from "@/lib/pipe/pipe-suivi";
+import { isSuiviRdvEntry, PIPE_TYPE_SUIVI } from "@/lib/pipe/pipe-suivi";
 import { groupPipeTimelineByYearMonth } from "@/lib/pipe/pipe-timeline-groups";
 import {
+  buildSuiviPlacementTimelineHints,
   formatTimelineEntryBadgeLabel,
   formatTimelineEntryContenu,
   formatTimelineEntryTitre,
   getPipeTimelineEntryStyle,
   isPipeTimelineSystemEntry,
   isStageMilestoneEntry,
-  timelineStageFromEntry,
   type PipeTimelineDisplayContext,
+  type SuiviPlacementTimelineHints,
 } from "@/lib/pipe/pipe-timeline-display";
-import { getMilestoneDurationLabel } from "@/lib/pipe/pipe-timeline-duration";
+import { buildFlatTimelineDurationLabels } from "@/lib/pipe/pipe-timeline-duration";
+import { isFlatTimelineUserEntry } from "@/lib/pipe/pipe-timeline-flat";
 import {
-  getSuiviDurationLabel,
-  getSuiviTimelineAnchors,
-} from "@/lib/pipe/pipe-suivi-timeline-duration";
-import { isSuiviPipe } from "@/lib/pipe/pipe-suivi";
-import {
-  milestoneStageExpectsRdv,
-  phaseHasRdvActivityForStage,
-  stageHasRdvCancellationTrace,
   canResumeRdvFromCancelledTrace,
   isRdvTimelineTraceNote,
   listRdvEntriesForStage,
   parseRdvTimelineTraceNote,
 } from "@/lib/pipe/pipe-rdv-delete";
 import {
-  getAllStagePhaseUserEntryIds,
   getCanonicalStageMilestones,
   getPhaseUserEntriesForMilestone,
   getVisiblePipeTimelineEntries,
@@ -68,7 +64,6 @@ interface PipeTimelineHistoryProps {
     "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom" | "titre" | "id" | "stage"
   >;
   focusProspectionToken?: number;
-  placementTimelineEntryIds?: ReadonlySet<number>;
 }
 
 function TimelineEntryRow({
@@ -84,7 +79,7 @@ function TimelineEntryRow({
   isLast,
   prospectionMilestoneRef,
   highlightProspection,
-  suiviDurationLabel,
+  flatDurationLabel,
 }: {
   entry: PipeTimelineEntryRecord;
   allEntries: PipeTimelineEntryRecord[];
@@ -101,7 +96,7 @@ function TimelineEntryRow({
   isLast: boolean;
   prospectionMilestoneRef?: React.RefObject<HTMLLIElement | null>;
   highlightProspection?: boolean;
-  suiviDurationLabel?: string | null;
+  flatDurationLabel?: string | null;
 }) {
   const milestone = isStageMilestoneEntry(entry.entry_type);
   const prospectionMilestone = isProspectionMilestoneEntry(entry, context);
@@ -136,14 +131,9 @@ function TimelineEntryRow({
   const displayTitre = formatTimelineEntryTitre(entry);
   const displayContenu = formatTimelineEntryContenu(entry);
   const style = getPipeTimelineEntryStyle(entry, context);
-  const durationLabel = suiviDurationLabel ?? getMilestoneDurationLabel(entry, allEntries, context);
-  const milestoneStage = timelineStageFromEntry(entry, context);
-  const showNoRdvHint =
-    milestone &&
-    !prospectionMilestone &&
-    milestoneStageExpectsRdv(milestoneStage) &&
-    !phaseHasRdvActivityForStage(phaseEntries, milestoneStage) &&
-    !stageHasRdvCancellationTrace(allEntries, milestoneStage);
+  const durationLabel = flatDurationLabel ?? null;
+  const hideEmptyMilestoneNote =
+    entry.entry_type === "CREATION" && pipe.pipe_type === PIPE_TYPE_SUIVI;
 
   const startEdit = () => {
     setDraftNotes(entry.contenu ?? "");
@@ -369,12 +359,7 @@ function TimelineEntryRow({
                     Aucune note pour cette étape.
                   </p>
                 )}
-                <PipeProspectionMilestoneReadSummary
-                  contactId={contactId}
-                  phaseEntries={phaseEntries}
-                  pipe={pipe}
-                  timeline={timeline}
-                />
+                <PipeProspectionMilestoneReadSummary contactId={contactId} />
               </>
             ) : (
               <>
@@ -382,7 +367,7 @@ function TimelineEntryRow({
                   <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
                     {displayContenu}
                   </p>
-                ) : milestone ? (
+                ) : milestone && !hideEmptyMilestoneNote ? (
                   <p className="text-xs text-muted-foreground italic">
                     Aucune note pour cette étape.
                   </p>
@@ -429,23 +414,6 @@ function TimelineEntryRow({
                       </Button>
                     </div>
                   </div>
-                ) : null}
-                {showNoRdvHint ? (
-                  <p className="text-xs text-muted-foreground italic mt-2 rounded-md border border-dashed px-3 py-2">
-                    Aucun RDV enregistré pour cette étape.
-                  </p>
-                ) : null}
-                {milestone && !prospectionMilestone && phaseEntries.length > 0 ? (
-                  <ul className="space-y-2 m-0 list-none p-0 mt-2">
-                    {phaseEntries.map((phaseEntry) => (
-                      <PipeTimelinePhaseEntryRow
-                        key={phaseEntry.id}
-                        entry={phaseEntry}
-                        pipe={pipe}
-                        timeline={timeline}
-                      />
-                    ))}
-                  </ul>
                 ) : null}
               </>
             )}
@@ -571,51 +539,44 @@ export function PipeTimelineHistory({
   timeline,
   pipe,
   focusProspectionToken = 0,
-  placementTimelineEntryIds,
 }: PipeTimelineHistoryProps) {
   const { entries, loading, removeEntry, updateMilestoneNotes } = timeline;
   const prospectionMilestoneRef = useRef<HTMLLIElement>(null);
   const [highlightProspection, setHighlightProspection] = useState(false);
-  const [loadedPlacementEntryIds, setLoadedPlacementEntryIds] = useState<Set<number>>(
-    () => new Set()
+  const [suiviPlacementHints, setSuiviPlacementHints] = useState<SuiviPlacementTimelineHints>(
+    () => buildSuiviPlacementTimelineHints([])
   );
-  const context: PipeTimelineDisplayContext = {
-    pipeType: pipe.pipe_type,
-  };
-  const stageMilestones = getCanonicalStageMilestones(entries, context);
-  const nestedPhaseEntryIds = getAllStagePhaseUserEntryIds(entries, context);
-
-  const isSuivi = isSuiviPipe(pipe);
+  const stageMilestones = getCanonicalStageMilestones(entries, { pipeType: pipe.pipe_type });
+  const visibleEntries = getVisiblePipeTimelineEntries(entries, { pipeType: pipe.pipe_type });
+  const context = useMemo(
+    (): PipeTimelineDisplayContext => ({
+      pipeType: pipe.pipe_type,
+      timelineEntries: visibleEntries,
+      suiviPlacementHints:
+        pipe.pipe_type === PIPE_TYPE_SUIVI ? suiviPlacementHints : undefined,
+    }),
+    [pipe.pipe_type, visibleEntries, suiviPlacementHints]
+  );
+  const flatDurationLabels = buildFlatTimelineDurationLabels(visibleEntries, context);
 
   useEffect(() => {
-    if (!isSuivi) {
-      setLoadedPlacementEntryIds(new Set());
+    if (pipe.pipe_type !== PIPE_TYPE_SUIVI) {
+      setSuiviPlacementHints(buildSuiviPlacementTimelineHints([]));
       return;
     }
-    let cancelled = false;
-    void listPlacementOperationsForPipe(pipe.id).then((rows) => {
-      if (cancelled) return;
-      const ids = new Set<number>();
-      for (const row of rows) {
-        if (row.pipe_timeline_entry_id != null && row.pipe_timeline_entry_id > 0) {
-          ids.add(row.pipe_timeline_entry_id);
-        }
+    const reload = async () => {
+      try {
+        const ops = await listPlacementOperationsForPipe(pipe.id);
+        setSuiviPlacementHints(buildSuiviPlacementTimelineHints(ops));
+      } catch {
+        setSuiviPlacementHints(buildSuiviPlacementTimelineHints([]));
       }
-      setLoadedPlacementEntryIds(ids);
-    });
-    return () => {
-      cancelled = true;
     };
-  }, [isSuivi, pipe.id, entries.length]);
-
-  const suiviPlacementEntryIds = placementTimelineEntryIds ?? loadedPlacementEntryIds;
-  const suiviAnchors = isSuivi
-    ? getSuiviTimelineAnchors(entries, suiviPlacementEntryIds)
-    : [];
-
-  const visibleEntries = getVisiblePipeTimelineEntries(entries, context).filter(
-    (entry) => !nestedPhaseEntryIds.has(entry.id)
-  );
+    void reload();
+    const onChanged = () => void reload();
+    window.addEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onChanged);
+  }, [pipe.id, pipe.pipe_type]);
 
   useEffect(() => {
     if (!focusProspectionToken) return;
@@ -682,41 +643,59 @@ export function PipeTimelineHistory({
             <div key={monthGroup.key} className="space-y-3">
               <h4 className="text-sm font-medium text-foreground/90">{monthGroup.label}</h4>
               <ol className="m-0 list-none p-0">
-                {monthGroup.items.map((entry, index) => (
-                  <TimelineEntryRow
-                    key={entry.id}
-                    entry={entry}
-                    allEntries={entries}
-                    context={context}
-                    pipe={pipe}
-                    contactId={pipe.contact_id}
-                    phaseEntries={
-                      isStageMilestoneEntry(entry.entry_type)
-                        ? getPhaseUserEntriesForMilestone(entry, stageMilestones, entries)
-                        : []
-                    }
-                    timeline={timeline}
-                    prospectionMilestoneRef={prospectionMilestoneRef}
-                    highlightProspection={highlightProspection}
-                    suiviDurationLabel={
-                      isSuivi ? getSuiviDurationLabel(entry, suiviAnchors) : null
-                    }
-                    isLast={index === monthGroup.items.length - 1}
-                    onSaveMilestoneNotes={
-                      isStageMilestoneEntry(entry.entry_type)
-                        ? async (contenu) => {
-                            await updateMilestoneNotes(entry.id, contenu);
-                          }
-                        : undefined
-                    }
-                    onDelete={
-                      isPipeTimelineSystemEntry(entry.entry_type) ||
-                      isRdvTimelineTraceNote(entry)
-                        ? undefined
-                        : () => void handleDelete(entry)
-                    }
-                  />
-                ))}
+                {monthGroup.items.map((entry, index) => {
+                  const durationLabel = flatDurationLabels.get(entry.id) ?? null;
+                  const isLast = index === monthGroup.items.length - 1;
+
+                  if (isFlatTimelineUserEntry(entry)) {
+                    return (
+                      <PipeTimelinePhaseEntryRow
+                        key={entry.id}
+                        variant="timeline"
+                        entry={entry}
+                        pipe={pipe}
+                        timeline={timeline}
+                        durationLabel={durationLabel}
+                        isLast={isLast}
+                        context={context}
+                      />
+                    );
+                  }
+
+                  return (
+                    <TimelineEntryRow
+                      key={entry.id}
+                      entry={entry}
+                      allEntries={entries}
+                      context={context}
+                      pipe={pipe}
+                      contactId={pipe.contact_id}
+                      phaseEntries={
+                        isStageMilestoneEntry(entry.entry_type)
+                          ? getPhaseUserEntriesForMilestone(entry, stageMilestones, entries)
+                          : []
+                      }
+                      timeline={timeline}
+                      prospectionMilestoneRef={prospectionMilestoneRef}
+                      highlightProspection={highlightProspection}
+                      flatDurationLabel={durationLabel}
+                      isLast={isLast}
+                      onSaveMilestoneNotes={
+                        isStageMilestoneEntry(entry.entry_type)
+                          ? async (contenu) => {
+                              await updateMilestoneNotes(entry.id, contenu);
+                            }
+                          : undefined
+                      }
+                      onDelete={
+                        isPipeTimelineSystemEntry(entry.entry_type) ||
+                        isRdvTimelineTraceNote(entry)
+                          ? undefined
+                          : () => void handleDelete(entry)
+                      }
+                    />
+                  );
+                })}
               </ol>
             </div>
           ))}

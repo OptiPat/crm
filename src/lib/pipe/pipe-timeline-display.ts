@@ -1,7 +1,20 @@
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
-import { isSuiviRdvEntry, formatSuiviRdvDisplayLabel } from "@/lib/pipe/pipe-suivi";
+import {
+  isSuiviRdvEntry,
+  formatSuiviRdvDisplayLabel,
+  PIPE_TYPE_SUIVI,
+} from "@/lib/pipe/pipe-suivi";
+import { formatRdvEntryDisplayLabel, rdvStageFromEntryTitre } from "@/lib/pipe/pipe-rdv-stage";
 import { formatRdvTimelineTraceBadge, parseRdvTimelineTraceNote } from "@/lib/pipe/pipe-rdv-delete";
 import { PIPE_STAGE_BOARD_COLORS } from "@/lib/pipe/pipe-stage-colors";
+import {
+  getCanonicalStageMilestones,
+  resolveUserEntryMilestoneId,
+} from "@/lib/pipe/pipe-stage-phase";
+import {
+  PLACEMENT_BOARD_COLUMN_COLORS,
+  type PlacementBoardColumn,
+} from "@/lib/placement/placement-operation-board";
 import {
   isPipeStage,
   PIPE_STAGE_LABELS,
@@ -18,8 +31,104 @@ const ADVANCEMENT_TITLE_PREFIX = "Avancement passé à ";
 const LEGACY_CREATION_TITLE = "Pipe créé";
 export const PIPE_TIMELINE_PROSPECTION_STAGE: PipeStage = "PROSPECTION";
 
+export interface SuiviPlacementTimelineHints {
+  journalEntryIds: ReadonlySet<number>;
+  actJournalTitres: ReadonlySet<string>;
+}
+
 export interface PipeTimelineDisplayContext {
   pipeType?: string;
+  timelineEntries?: PipeTimelineEntryRecord[];
+  suiviPlacementHints?: SuiviPlacementTimelineHints;
+}
+
+export function buildSuiviPlacementTimelineHints(
+  operations: ReadonlyArray<{
+    pipe_timeline_entry_id?: number | null;
+    stellium_label?: string | null;
+    product_label?: string | null;
+  }>
+): SuiviPlacementTimelineHints {
+  const journalEntryIds = new Set<number>();
+  const actJournalTitres = new Set<string>();
+
+  for (const op of operations) {
+    const entryId = op.pipe_timeline_entry_id;
+    if (entryId != null && entryId > 0) {
+      journalEntryIds.add(entryId);
+    }
+    const acte = op.stellium_label?.trim();
+    if (!acte) continue;
+    const produit = op.product_label?.trim();
+    actJournalTitres.add(produit ? `${acte} — ${produit}` : acte);
+  }
+
+  return { journalEntryIds, actJournalTitres };
+}
+
+function isSuiviActJournalEntry(
+  entry: Pick<PipeTimelineEntryRecord, "id" | "titre">,
+  hints?: SuiviPlacementTimelineHints
+): boolean {
+  const titre = entry.titre?.trim() ?? "";
+  if (!titre) return false;
+  if (hints?.journalEntryIds.has(entry.id)) return true;
+  return hints?.actJournalTitres.has(titre) ?? false;
+}
+
+function pipeStageTimelineStyle(stage: PipeStage): PipeTimelineEntryStyle {
+  const colors = PIPE_STAGE_BOARD_COLORS[stage];
+  return {
+    badge: colors.badge,
+    card: `${colors.column} border`,
+    dot: colors.dot,
+  };
+}
+
+function placementColumnTimelineStyle(column: PlacementBoardColumn): PipeTimelineEntryStyle {
+  const colors = PLACEMENT_BOARD_COLUMN_COLORS[column];
+  return {
+    badge: colors.badge,
+    card: `${colors.column} border`,
+    dot: colors.dot,
+  };
+}
+
+/** Colonne tableau Stellium alignée sur une entrée timeline suivi. */
+export function resolveSuiviTimelinePlacementColumn(
+  entry: Pick<PipeTimelineEntryRecord, "id" | "entry_type" | "titre">,
+  hints?: SuiviPlacementTimelineHints
+): PlacementBoardColumn | null {
+  if (entry.entry_type === "CREATION") return "declare";
+
+  const titre = entry.titre?.trim() ?? "";
+  if (titre === "Mail client Box Placement envoyé") return "client_mail";
+  if (titre.startsWith("Réponse Stellium —")) return "first_response";
+  if (isSuiviActJournalEntry(entry, hints)) return "declare";
+
+  return null;
+}
+
+function resolveAffaireTimelineStage(
+  entry: PipeTimelineEntryRecord,
+  context?: PipeTimelineDisplayContext
+): PipeStage | null {
+  if (context?.pipeType !== "AFFAIRE") return null;
+
+  const trace = parseRdvTimelineTraceNote(entry.contenu);
+  if (trace) return trace.stage;
+
+  if (entry.entry_type === "RDV") {
+    const rdvStage = rdvStageFromEntryTitre(entry.titre);
+    if (rdvStage) return rdvStage;
+  }
+
+  if (!context.timelineEntries?.length) return null;
+
+  const milestones = getCanonicalStageMilestones(context.timelineEntries, context);
+  const milestoneId = resolveUserEntryMilestoneId(entry, milestones, context.timelineEntries);
+  if (!milestoneId) return null;
+  return milestones.find((m) => m.entry.id === milestoneId)?.stage ?? null;
 }
 
 export function advancementStageFromTimelineEntry(
@@ -110,31 +219,33 @@ const USER_TYPE_STYLES: Record<PipeTimelineUserType, PipeTimelineEntryStyle> = {
   },
 };
 
-const STAGE_DOTS: Record<PipeStage, string> = {
-  PROSPECTION: "bg-slate-400 dark:bg-slate-500",
-  R1: "bg-sky-500",
-  R2: "bg-blue-500",
-  R3: "bg-violet-500",
-  GAGNEE: "bg-emerald-500",
-  PERDUE_OU_EN_ATTENTE: "bg-amber-500",
-};
-
 export function getPipeTimelineEntryStyle(
-  entry: Pick<PipeTimelineEntryRecord, "entry_type" | "titre" | "contenu">,
+  entry: Pick<PipeTimelineEntryRecord, "id" | "entry_type" | "titre" | "contenu" | "occurred_at">,
   context?: PipeTimelineDisplayContext
 ): PipeTimelineEntryStyle {
   if (entry.entry_type === "NOTE" && parseRdvTimelineTraceNote(entry.contenu)) {
-    return USER_TYPE_STYLES.RDV;
+    const trace = parseRdvTimelineTraceNote(entry.contenu);
+    if (trace) return pipeStageTimelineStyle(trace.stage);
   }
 
-  const stage = timelineStageFromEntry(entry, context);
-  if (stage) {
-    const colors = PIPE_STAGE_BOARD_COLORS[stage];
-    return {
-      badge: colors.badge,
-      card: `${colors.column} border`,
-      dot: STAGE_DOTS[stage],
-    };
+  if (context?.pipeType === PIPE_TYPE_SUIVI) {
+    const placementColumn = resolveSuiviTimelinePlacementColumn(
+      entry,
+      context.suiviPlacementHints
+    );
+    if (placementColumn) return placementColumnTimelineStyle(placementColumn);
+    return placementColumnTimelineStyle("declare");
+  }
+
+  const milestoneStage = timelineStageFromEntry(entry, context);
+  if (milestoneStage) return pipeStageTimelineStyle(milestoneStage);
+
+  if (context?.pipeType === "AFFAIRE") {
+    const affaireStage = resolveAffaireTimelineStage(
+      entry as PipeTimelineEntryRecord,
+      context
+    );
+    if (affaireStage) return pipeStageTimelineStyle(affaireStage);
   }
 
   if (entry.entry_type in USER_TYPE_STYLES) {
@@ -172,14 +283,30 @@ export function formatTimelineEntryBadgeLabel(
   if (entry.entry_type === "NOTE") {
     const traceBadge = formatRdvTimelineTraceBadge(entry.contenu);
     if (traceBadge) return traceBadge;
+    const noteTitre = entry.titre?.trim();
+    if (noteTitre) return noteTitre;
+  }
+
+  if (entry.entry_type === "CREATION" && context?.pipeType === PIPE_TYPE_SUIVI) {
+    return "Création du suivi";
   }
 
   if (isSuiviRdvEntry(entry)) {
     return formatSuiviRdvDisplayLabel();
   }
 
+  const rdvLabel = formatRdvEntryDisplayLabel(entry);
+  if (rdvLabel) return rdvLabel;
+
   const stage = timelineStageFromEntry(entry, context);
-  if (stage) return PIPE_STAGE_LABELS[stage];
+  if (stage) {
+    if (entry.entry_type === "AVANCEMENT") {
+      return stage === "PROSPECTION"
+        ? PIPE_STAGE_LABELS.PROSPECTION
+        : `Passage ${PIPE_STAGE_LABELS[stage]}`;
+    }
+    return PIPE_STAGE_LABELS[stage];
+  }
   return (
     PIPE_TIMELINE_TYPE_LABELS[entry.entry_type as keyof typeof PIPE_TIMELINE_TYPE_LABELS] ??
     entry.entry_type
@@ -192,6 +319,7 @@ export function formatTimelineEntryTitre(
 ): string | null {
   if (isStageMilestoneEntry(entry.entry_type)) return null;
   if (isSuiviRdvEntry(entry)) return null;
+  if (entry.entry_type === "NOTE" && entry.titre?.trim()) return null;
   const titre = entry.titre?.trim();
   if (!titre || titre === LEGACY_CREATION_TITLE) return null;
   return titre;

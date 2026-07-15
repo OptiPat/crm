@@ -273,7 +273,7 @@ export function RdvPlanifierDialog({
       toast.error("L'heure de fin doit être après le début.");
       return;
     }
-    if (contactId <= 0) {
+    if (effectiveContactId <= 0) {
       toast.error("Choisissez un contact.");
       return;
     }
@@ -318,7 +318,7 @@ export function RdvPlanifierDialog({
         );
       } else {
         await planifyStandaloneGoogleRdv({
-          contactId,
+          contactId: effectiveContactId,
           contactLabel,
           title: title.trim() || `RDV — ${contactLabel}`,
           startAtUnix: startAt,
@@ -338,6 +338,15 @@ export function RdvPlanifierDialog({
       setSubmitting(false);
     }
   };
+
+  const agendaPipeDraft = useMemo(() => {
+    if (context.kind !== "pipe") return null;
+    return {
+      pipe: context.pipe,
+      rdvStage: context.rdvStage ?? rdvStage,
+      contenu: contenu.trim() || null,
+    };
+  }, [context, rdvStage, contenu]);
 
   const showPipeLink = context.kind === "agenda" || context.kind === "linked";
   const showContactPick = context.kind === "agenda";
@@ -499,7 +508,11 @@ export function RdvPlanifierDialog({
             />
           )}
 
-          <AgendaRdvConflicts occurredAt={start} endAt={end} />
+          <AgendaRdvConflicts
+            occurredAt={start}
+            endAt={end}
+            pipeDraft={agendaPipeDraft}
+          />
         </div>
 
         <DialogFooter>

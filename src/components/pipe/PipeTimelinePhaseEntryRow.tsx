@@ -15,7 +15,13 @@ import {
   applyPipeSuiviRdvReschedule,
 } from "@/lib/pipe/pipe-rdv-reschedule-actions";
 import { isRdvTimelineTraceNote } from "@/lib/pipe/pipe-rdv-delete";
-import { isSuiviRdvEntry } from "@/lib/pipe/pipe-suivi";
+import { isSuiviRdvEntry, formatSuiviRdvDisplayLabel } from "@/lib/pipe/pipe-suivi";
+import {
+  formatTimelineEntryBadgeLabel,
+  formatTimelineEntryTitre,
+  getPipeTimelineEntryStyle,
+  type PipeTimelineDisplayContext,
+} from "@/lib/pipe/pipe-timeline-display";
 import {
   applyRdvStageOnSave,
   formatRdvEntryDisplayLabel,
@@ -29,6 +35,7 @@ import {
   unixToDatetimeLocalInput,
   type PipeTimelineUserType,
 } from "@/lib/pipe/pipe-timeline-types";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 const TYPE_ICONS = {
@@ -57,6 +64,11 @@ interface PipeTimelinePhaseEntryRowProps {
     | null;
   timeline: ReturnType<typeof usePipeTimeline>;
   disabled?: boolean;
+  /** nested = sous-jalon (éditeur prospection) ; timeline = point chronologique autonome */
+  variant?: "nested" | "timeline";
+  durationLabel?: string | null;
+  isLast?: boolean;
+  context?: PipeTimelineDisplayContext;
 }
 
 export function PipeTimelinePhaseEntryRow({
@@ -64,6 +76,10 @@ export function PipeTimelinePhaseEntryRow({
   pipe,
   timeline,
   disabled = false,
+  variant = "nested",
+  durationLabel = null,
+  isLast = true,
+  context,
 }: PipeTimelinePhaseEntryRowProps) {
   const [editing, setEditing] = useState(false);
   const [rdvOutcomeOpen, setRdvOutcomeOpen] = useState(false);
@@ -76,16 +92,27 @@ export function PipeTimelinePhaseEntryRow({
   const [saving, setSaving] = useState(false);
 
   const liveEntry = timeline.entries.find((e) => e.id === entry.id) ?? entry;
-
   const userType = liveEntry.entry_type as PipeTimelineUserType;
   const Icon =
     entry.entry_type in TYPE_ICONS
       ? TYPE_ICONS[entry.entry_type as keyof typeof TYPE_ICONS]
       : null;
   const typeLabel =
-    entry.entry_type === "RDV"
-      ? (formatRdvEntryDisplayLabel(entry) ?? "RDV")
-      : (PIPE_TIMELINE_TYPE_LABELS[userType] ?? entry.entry_type);
+    variant === "timeline"
+      ? formatTimelineEntryBadgeLabel(entry, context)
+      : entry.entry_type === "RDV"
+        ? isSuiviRdvEntry(entry)
+          ? formatSuiviRdvDisplayLabel()
+          : (formatRdvEntryDisplayLabel(entry) ?? "RDV")
+        : (PIPE_TIMELINE_TYPE_LABELS[userType] ?? entry.entry_type);
+  const displayTitre =
+    variant === "timeline"
+      ? formatTimelineEntryTitre(entry)
+      : entry.entry_type !== "RDV" && entry.titre?.trim()
+        ? entry.titre.trim()
+        : null;
+  const timelineStyle =
+    variant === "timeline" ? getPipeTimelineEntryStyle(entry, context) : null;
 
   const startEdit = () => {
     setOccurredAt(unixToDatetimeLocalInput(entry.occurred_at));
@@ -183,7 +210,6 @@ export function PipeTimelinePhaseEntryRow({
           occurredAt: occurredAtUnix,
           notes: contenu.trim() || null,
         });
-
         toastAfterRdvSave(rdvStage, result, "Entrée mise à jour");
       } else {
         toast.success("Entrée mise à jour");
@@ -213,27 +239,128 @@ export function PipeTimelinePhaseEntryRow({
     }
   };
 
-  if (editing) {
-    return (
-      <li className="list-none">
-        <PipeTimelineAddForm
-          type={userType}
-          occurredAt={occurredAt}
-          titre={titre}
-          contenu={contenu}
-          rdvStage={rdvStage}
-          pipe={pipe}
-          saving={saving}
-          onOccurredAtChange={setOccurredAt}
-          onTitreChange={setTitre}
-          onContenuChange={setContenu}
-          onRdvStageChange={setRdvStage}
-          onCancel={cancelEdit}
-          onSubmit={(e) => void saveEdit(e)}
-          submitLabel="Enregistrer"
+  const actionButtons = (
+    <div className="flex shrink-0 gap-0.5">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={variant === "timeline" ? "h-8 w-8" : "h-7 w-7"}
+        aria-label="Modifier"
+        onClick={startEdit}
+        disabled={disabled}
+      >
+        <Pencil
+          className={cn(
+            "text-muted-foreground",
+            variant === "timeline" ? "h-4 w-4" : "h-3.5 w-3.5"
+          )}
         />
-      </li>
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={variant === "timeline" ? "h-8 w-8" : "h-7 w-7"}
+        aria-label="Supprimer"
+        onClick={() => void handleDelete()}
+        disabled={disabled || isRdvTimelineTraceNote(entry)}
+      >
+        <Trash2
+          className={cn(
+            "text-muted-foreground",
+            variant === "timeline" ? "h-4 w-4" : "h-3.5 w-3.5"
+          )}
+        />
+      </Button>
+    </div>
+  );
+
+  const entryContent = (
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          {Icon && <Icon className="h-3 w-3 shrink-0" />}
+          <span className={variant === "timeline" ? "font-normal" : "font-medium text-foreground/80"}>
+            {typeLabel}
+          </span>
+          <time>{formatTimelineOccurredAt(entry.occurred_at)}</time>
+        </div>
+        {displayTitre && (
+          <p className="text-sm font-medium leading-snug">{displayTitre}</p>
+        )}
+        {entry.contenu?.trim() && (
+          <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+            {entry.contenu.trim()}
+          </p>
+        )}
+      </div>
+      {actionButtons}
+    </div>
+  );
+
+  const editForm = (
+    <PipeTimelineAddForm
+      type={userType}
+      occurredAt={occurredAt}
+      titre={titre}
+      contenu={contenu}
+      rdvStage={rdvStage}
+      pipe={pipe}
+      saving={saving}
+      onOccurredAtChange={setOccurredAt}
+      onTitreChange={setTitre}
+      onContenuChange={setContenu}
+      onRdvStageChange={setRdvStage}
+      onCancel={cancelEdit}
+      onSubmit={(e) => void saveEdit(e)}
+      submitLabel="Enregistrer"
+    />
+  );
+
+  const rdvDialog =
+    liveEntry.entry_type === "RDV" ? (
+      <PipeRdvOutcomeDialog
+        open={rdvOutcomeOpen}
+        entry={liveEntry}
+        pipe={pipe}
+        timeline={timeline}
+        onClose={() => setRdvOutcomeOpen(false)}
+        onReschedule={() => {
+          setRdvOutcomeOpen(false);
+          startEdit();
+        }}
+      />
+    ) : null;
+
+  if (variant === "timeline" && timelineStyle) {
+    return (
+      <>
+        <li className={cn("relative pl-6", !isLast && "pb-6")}>
+          {!isLast && (
+            <span className="absolute left-[0.4375rem] top-3 bottom-0 w-px bg-border" aria-hidden />
+          )}
+          <span
+            className={cn(
+              "absolute left-0 top-1.5 h-3.5 w-3.5 rounded-full ring-4 ring-background",
+              timelineStyle.dot
+            )}
+            aria-hidden
+          />
+          <article className={cn("rounded-lg border p-3 shadow-sm", timelineStyle.card)}>
+            {durationLabel ? (
+              <p className="mb-2 text-[11px] font-medium text-muted-foreground">{durationLabel}</p>
+            ) : null}
+            {editing ? editForm : entryContent}
+          </article>
+        </li>
+        {rdvDialog}
+      </>
     );
+  }
+
+  if (editing) {
+    return <li className="list-none">{editForm}</li>;
   }
 
   return (
@@ -254,45 +381,9 @@ export function PipeTimelinePhaseEntryRow({
             </p>
           )}
         </div>
-        <div className="flex shrink-0 gap-0.5">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            aria-label="Modifier"
-            onClick={startEdit}
-            disabled={disabled}
-          >
-            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            aria-label="Supprimer"
-            onClick={() => void handleDelete()}
-            disabled={disabled || isRdvTimelineTraceNote(entry)}
-          >
-            <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-          </Button>
-        </div>
+        {actionButtons}
       </li>
-
-      {liveEntry.entry_type === "RDV" && (
-        <PipeRdvOutcomeDialog
-          open={rdvOutcomeOpen}
-          entry={liveEntry}
-          pipe={pipe}
-          timeline={timeline}
-          onClose={() => setRdvOutcomeOpen(false)}
-          onReschedule={() => {
-            setRdvOutcomeOpen(false);
-            startEdit();
-          }}
-        />
-      )}
+      {rdvDialog}
     </>
   );
 }

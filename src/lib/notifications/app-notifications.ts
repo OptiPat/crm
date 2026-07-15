@@ -154,7 +154,53 @@ export function buildAppNotificationsSummary(
   return { items, totalCount };
 }
 
-export async function fetchAppNotificationsSummary(): Promise<AppNotificationsSummary> {
-  const dto = await invoke<AppNotificationsSummaryDto>("get_app_notifications_summary");
-  return buildAppNotificationsSummary(dto);
+/** Durée de réutilisation du dernier résumé (rafraîchissements événementiels silencieux). */
+export const APP_NOTIFICATIONS_CACHE_TTL_MS = 30_000;
+
+let cachedSummary: AppNotificationsSummary | null = null;
+let cachedAt = 0;
+let fetchInFlight: Promise<AppNotificationsSummary> | null = null;
+
+export function invalidateAppNotificationsSummaryCache(): void {
+  cachedSummary = null;
+  cachedAt = 0;
+}
+
+function fetchFreshSummary(): Promise<AppNotificationsSummary> {
+  const promise = invoke<AppNotificationsSummaryDto>("get_app_notifications_summary")
+    .then((dto) => {
+      const summary = buildAppNotificationsSummary(dto);
+      cachedSummary = summary;
+      cachedAt = Date.now();
+      return summary;
+    })
+    .finally(() => {
+      if (fetchInFlight === promise) {
+        fetchInFlight = null;
+      }
+    });
+  fetchInFlight = promise;
+  return promise;
+}
+
+export async function fetchAppNotificationsSummary(options?: {
+  force?: boolean;
+}): Promise<AppNotificationsSummary> {
+  const force = options?.force ?? false;
+  const now = Date.now();
+  if (
+    !force &&
+    cachedSummary != null &&
+    now - cachedAt < APP_NOTIFICATIONS_CACHE_TTL_MS
+  ) {
+    return cachedSummary;
+  }
+
+  if (fetchInFlight != null) {
+    if (!force) return fetchInFlight;
+    await fetchInFlight.catch(() => undefined);
+    invalidateAppNotificationsSummaryCache();
+  }
+
+  return fetchFreshSummary();
 }

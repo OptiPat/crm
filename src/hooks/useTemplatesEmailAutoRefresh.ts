@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { subscribeTemplatesEmailChanged } from "@/lib/emails/template-events";
-import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { subscribeEtiquettesChangedDebounced } from "@/lib/etiquettes/etiquette-events";
 
 const DEBOUNCE_MS = 120;
 
@@ -33,7 +33,7 @@ export function useTemplatesEmailAutoRefresh(handlers: TemplatesEmailAutoRefresh
     };
 
     const unsubTemplates = subscribeTemplatesEmailChanged(scheduleTemplates);
-    const unsubEtiquettes = subscribeEtiquettesChanged(scheduleLinks);
+    const unsubEtiquettes = subscribeEtiquettesChangedDebounced(scheduleLinks);
 
     const onWake = () => {
       if (document.hidden) return;

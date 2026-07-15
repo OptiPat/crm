@@ -1,23 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { PipeTimelinePhaseEntryRow } from "@/components/pipe/PipeTimelinePhaseEntryRow";
 import { getContactById, type Contact } from "@/lib/api/tauri-contacts";
-import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
-import type { PipeRecord } from "@/lib/api/tauri-pipe";
-import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { formatPrescripteurLabel } from "@/lib/pipe/pipe-prospection-prefill";
 
 interface PipeProspectionMilestoneReadSummaryProps {
   contactId: number;
-  phaseEntries: PipeTimelineEntryRecord[];
-  pipe?: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null;
-  timeline?: ReturnType<typeof usePipeTimeline>;
 }
 
 export function PipeProspectionMilestoneReadSummary({
   contactId,
-  phaseEntries,
-  pipe,
-  timeline,
 }: PipeProspectionMilestoneReadSummaryProps) {
   const [contact, setContact] = useState<Contact | null>(null);
   const [prescripteur, setPrescripteur] = useState<Contact | null>(null);
@@ -74,20 +64,6 @@ export function PipeProspectionMilestoneReadSummary({
           )}
         </dl>
       )}
-
-      {phaseEntries.length > 0 &&
-        (timeline ? (
-          <ul className="space-y-2 m-0 list-none p-0">
-            {phaseEntries.map((entry) => (
-              <PipeTimelinePhaseEntryRow
-                key={entry.id}
-                entry={entry}
-                pipe={pipe}
-                timeline={timeline}
-              />
-            ))}
-          </ul>
-        ) : null)}
     </div>
   );
 }

@@ -42,15 +42,15 @@ export function groupPipeTimelineByYearMonth(
   }
 
   return [...byYear.entries()]
-    .sort(([a], [b]) => b - a)
+    .sort(([a], [b]) => a - b)
     .map(([year, monthsMap]) => ({
       year,
       months: [...monthsMap.entries()]
-        .sort(([a], [b]) => b - a)
+        .sort(([a], [b]) => a - b)
         .map(([month, monthItems]) => ({
           key: `${year}-${month + 1}`,
           label: MONTH_LABELS[month] ?? `Mois ${month + 1}`,
-          items: monthItems.sort((a, b) => b.occurred_at - a.occurred_at),
+          items: monthItems.sort((a, b) => a.occurred_at - b.occurred_at || a.id - b.id),
         })),
     }));
 }

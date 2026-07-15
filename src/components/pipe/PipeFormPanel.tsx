@@ -13,7 +13,10 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { getAllContacts, getContactById, getContactsByFoyer, type Contact } from "@/lib/api/tauri-contacts";
-import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import {
+  subscribeContactsChanged,
+  type ContactsChangedDetail,
+} from "@/lib/contacts/contact-events";
 import {
   createPipe,
   updatePipe,
@@ -183,18 +186,64 @@ export function PipeFormPanel({
 
   useEffect(() => {
     let cancelled = false;
-    const loadContacts = () => {
+    let debounceId: number | null = null;
+
+    const loadContactsFull = () => {
       void getAllContacts()
         .then((list) => {
           if (!cancelled) setContacts(list);
         })
         .catch(console.error);
     };
-    loadContacts();
-    const unsub = subscribeContactsChanged(() => loadContacts());
+
+    const scheduleFullReload = () => {
+      if (debounceId != null) window.clearTimeout(debounceId);
+      debounceId = window.setTimeout(() => {
+        debounceId = null;
+        loadContactsFull();
+      }, 300);
+    };
+
+    const applyContactsChanged = (detail: ContactsChangedDetail) => {
+      if (detail.patchedContact?.id != null) {
+        const patched = detail.patchedContact;
+        setContacts((prev) => {
+          const idx = prev.findIndex((c) => c.id === patched.id);
+          if (idx < 0) {
+            scheduleFullReload();
+            return prev;
+          }
+          const next = [...prev];
+          next[idx] = patched;
+          return next;
+        });
+        return;
+      }
+      if (detail.removedContactId != null) {
+        const removedId = detail.removedContactId;
+        setContacts((prev) => prev.filter((c) => c.id !== removedId));
+        setForm((prev) => {
+          if (prev.contactId !== removedId && prev.secondaryContactId !== removedId) {
+            return prev;
+          }
+          return {
+            ...prev,
+            contactId: prev.contactId === removedId ? 0 : prev.contactId,
+            secondaryContactId:
+              prev.secondaryContactId === removedId ? 0 : prev.secondaryContactId,
+          };
+        });
+        return;
+      }
+      scheduleFullReload();
+    };
+
+    loadContactsFull();
+    const unsub = subscribeContactsChanged(applyContactsChanged);
     return () => {
       cancelled = true;
       unsub();
+      if (debounceId != null) window.clearTimeout(debounceId);
     };
   }, []);
 

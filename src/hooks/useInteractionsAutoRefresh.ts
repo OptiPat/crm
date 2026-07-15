@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { subscribeInteractionsChanged } from "@/lib/interactions/interaction-events";
 import {
-  subscribeEtiquettesChanged,
+  subscribeEtiquettesChangedDebounced,
   subscribeRelationChanged,
 } from "@/lib/etiquettes/etiquette-events";
 
@@ -26,7 +26,7 @@ export function useInteractionsAutoRefresh(
 
     const unsubInteractions = subscribeInteractionsChanged(schedule);
     const unsubRelation = subscribeRelationChanged(schedule);
-    const unsubEtiquettes = subscribeEtiquettesChanged(schedule);
+    const unsubEtiquettes = subscribeEtiquettesChangedDebounced(schedule);
 
     const onWake = () => {
       if (!document.hidden) void onRefreshRef.current();

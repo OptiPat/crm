@@ -22,7 +22,7 @@ import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
 import { subscribeTachesChanged } from "@/lib/taches/tache-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
-  subscribeEtiquettesChanged,
+  subscribeEtiquettesChangedDebounced,
   subscribeRelationChanged,
 } from "@/lib/etiquettes/etiquette-events";
 import { PLACEMENT_OPERATIONS_CHANGED_EVENT } from "@/lib/api/tauri-box-placement";
@@ -88,11 +88,12 @@ export function AppNotificationsBar({
     }
   }, []);
 
-  const load = useCallback(async (options?: { silent?: boolean }) => {
+  const load = useCallback(async (options?: { silent?: boolean; force?: boolean }) => {
     const silent = options?.silent ?? false;
+    const force = options?.force ?? !silent;
     if (!silent) setLoading(true);
     try {
-      const summary = await fetchAppNotificationsSummary();
+      const summary = await fetchAppNotificationsSummary({ force });
       setItems(summary.items);
       setTotalCount(summary.totalCount);
       await loadComptaReminder();
@@ -113,7 +114,7 @@ export function AppNotificationsBar({
   }, [load]);
 
   useEffect(() => {
-    const onStellium = () => void load({ silent: true });
+    const onStellium = () => void load({ silent: true, force: true });
     window.addEventListener(STELLIUM_EXCELTIS_CHANGED_EVENT, onStellium);
     return () =>
       window.removeEventListener(STELLIUM_EXCELTIS_CHANGED_EVENT, onStellium);
@@ -125,20 +126,20 @@ export function AppNotificationsBar({
       if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
       debounceRef.id = window.setTimeout(() => {
         debounceRef.id = null;
-        void load({ silent: true });
+        void load({ silent: true, force: true });
       }, 120);
     };
 
     const unsubAlertes = subscribeAlertesChanged(schedule);
     const unsubTaches = subscribeTachesChanged(schedule);
     const unsubContacts = subscribeContactsChanged(schedule);
-    const unsubEtiquettes = subscribeEtiquettesChanged(schedule);
+    const unsubEtiquettes = subscribeEtiquettesChangedDebounced(schedule);
     const unsubRelation = subscribeRelationChanged(schedule);
     const onPlacementChanged = () => schedule();
     window.addEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onPlacementChanged);
 
     const onWake = () => {
-      if (!document.hidden) void load({ silent: true });
+      if (!document.hidden) void load({ silent: true, force: true });
     };
     document.addEventListener("visibilitychange", onWake);
     window.addEventListener("focus", onWake);
@@ -246,7 +247,7 @@ export function AppNotificationsBar({
                           item.stelliumMessageId!
                         );
                         notifyStelliumExceltisChanged();
-                        await load({ silent: true });
+                        await load({ silent: true, force: true });
                       } catch (error) {
                         console.error("Dismiss Stellium:", error);
                       }

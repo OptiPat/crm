@@ -31,7 +31,7 @@ import { genererAlertesAutomatiques } from "@/lib/api/tauri-alertes";
 import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
-import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { subscribeEtiquettesChangedDebounced } from "@/lib/etiquettes/etiquette-events";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import {
   activityBucketGranularity,
@@ -139,7 +139,7 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
     const unsubContacts = subscribeContactsChanged(schedule);
     const unsubInvestissements = subscribeInvestissementsChanged(schedule);
     const unsubAlertes = subscribeAlertesChanged(schedule);
-    const unsubEtiquettes = subscribeEtiquettesChanged(schedule);
+    const unsubEtiquettes = subscribeEtiquettesChangedDebounced(schedule);
     const onWake = () => {
       if (document.hidden) return;
       if (wakeDebounceRef.id != null) window.clearTimeout(wakeDebounceRef.id);

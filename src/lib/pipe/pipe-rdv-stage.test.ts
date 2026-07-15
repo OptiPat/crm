@@ -36,8 +36,9 @@ describe("pipe-rdv-stage", () => {
     expect(rdvStageFromEntryTitre("Appel")).toBeNull();
   });
 
-  it("formate l'affichage RDV R1", () => {
-    expect(formatRdvEntryDisplayLabel({ entry_type: "RDV", titre: "R2" })).toBe("RDV R2");
+  it("formate l'affichage RDV planifié", () => {
+    expect(formatRdvEntryDisplayLabel({ entry_type: "RDV", titre: "R2" })).toBe("R2 planifié");
+    expect(formatRdvEntryDisplayLabel({ entry_type: "RDV", titre: "R1" })).toBe("R1 planifié");
   });
 
   it("considère échu à partir du jour calendaire du RDV", () => {

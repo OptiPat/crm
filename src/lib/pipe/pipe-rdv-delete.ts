@@ -88,7 +88,7 @@ export function parseRdvTimelineTraceNote(
   contenu: string | null | undefined
 ): RdvTimelineTraceNote | null {
   const text = contenu?.trim() ?? "";
-  const match = text.match(/^RDV (R[123]) (annulé|reporté)/);
+  const match = text.match(/^(?:RDV )?(R[123])(?: planifié)? (annulé|reporté)/);
   if (!match) return null;
   const stage = match[1];
   if (!isPipeRdvStage(stage)) return null;
@@ -126,8 +126,8 @@ export function canResumeRdvFromCancelledTrace(
 export function formatRdvTimelineTraceBadge(contenu: string | null | undefined): string | null {
   const trace = parseRdvTimelineTraceNote(contenu);
   if (!trace) return null;
-  const label = formatRdvStageLabel(trace.stage);
-  return trace.kind === "cancelled" ? `RDV ${label} · Annulé` : `RDV ${label} · Reporté`;
+  const label = `${formatRdvStageLabel(trace.stage)} planifié`;
+  return trace.kind === "cancelled" ? `${label} · Annulé` : `${label} · Reporté`;
 }
 
 export function phaseHasRdvActivityForStage(

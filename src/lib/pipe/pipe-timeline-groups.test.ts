@@ -15,19 +15,21 @@ function entry(id: number, occurredAt: number): PipeTimelineEntryRecord {
 }
 
 describe("groupPipeTimelineByYearMonth", () => {
-  it("regroupe par année et mois, du plus récent au plus ancien", () => {
+  it("regroupe par année et mois, du plus ancien au plus récent", () => {
     const jan = Math.floor(new Date("2026-01-15T10:00:00").getTime() / 1000);
     const jul = Math.floor(new Date("2026-07-10T10:00:00").getTime() / 1000);
+    const julLate = Math.floor(new Date("2026-07-20T10:00:00").getTime() / 1000);
     const old = Math.floor(new Date("2025-12-01T10:00:00").getTime() / 1000);
 
     const groups = groupPipeTimelineByYearMonth([
       entry(1, jan),
-      entry(2, jul),
-      entry(3, old),
+      entry(2, julLate),
+      entry(3, jul),
+      entry(4, old),
     ]);
 
-    expect(groups.map((g) => g.year)).toEqual([2026, 2025]);
-    expect(groups[0].months.map((m) => m.label)).toEqual(["Juillet", "Janvier"]);
-    expect(groups[0].months[0].items.map((e) => e.id)).toEqual([2]);
+    expect(groups.map((g) => g.year)).toEqual([2025, 2026]);
+    expect(groups[1].months.map((m) => m.label)).toEqual(["Janvier", "Juillet"]);
+    expect(groups[1].months[1].items.map((e) => e.id)).toEqual([3, 2]);
   });
 });

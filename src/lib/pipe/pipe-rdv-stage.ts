@@ -36,9 +36,9 @@ export function formatRdvEntryDisplayLabel(
 ): string | null {
   if (entry.entry_type !== "RDV") return null;
   const stage = rdvStageFromEntryTitre(entry.titre);
-  if (stage) return `RDV ${formatRdvStageLabel(stage)}`;
+  if (stage) return `${formatRdvStageLabel(stage)} planifié`;
   const titre = entry.titre?.trim();
-  return titre ? `RDV · ${titre}` : "RDV";
+  return titre ? `${titre} planifié` : "RDV planifié";
 }
 
 function linearStageIndex(stage: string): number {

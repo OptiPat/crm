@@ -35,7 +35,7 @@ import { getAllEtiquettes, getAllContactEtiquettesDetails, type ContactEtiquette
 import { getAllSegments, getContactsMatchingSegment, type Segment } from "@/lib/api/tauri-segments";
 import { groupEtiquettesByContactId } from "@/lib/etiquettes/etiquette-condition-labels";
 import { buildEtiquettesPourFiltre } from "@/lib/etiquettes/etiquettes-filter";
-import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { subscribeEtiquettesChangedDebounced } from "@/lib/etiquettes/etiquette-events";
 import { buildFoyerFlatRows } from "@/lib/foyers/foyer-list-rows";
 import { VirtualizedContactList } from "@/components/contacts/VirtualizedContactList";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
@@ -509,7 +509,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
   }, [reloadEtiquettesAttributions]);
 
   useEffect(() => {
-    return subscribeEtiquettesChanged(() => {
+    return subscribeEtiquettesChangedDebounced(() => {
       void reloadEtiquettesAttributions();
     });
   }, [reloadEtiquettesAttributions]);

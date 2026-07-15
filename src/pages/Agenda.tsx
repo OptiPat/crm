@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, ExternalLink, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgendaWeekView } from "@/components/calendar/AgendaWeekView";
@@ -12,7 +12,9 @@ import {
   consumeAgendaNavigationHighlight,
   consumeAgendaNavigationWeekStart,
   consumeAgendaRdvPipeDraft,
+  peekAgendaRdvPipeDraft,
   subscribeAgendaNavigationWeek,
+  type AgendaRdvPipeDraft,
 } from "@/lib/navigation/agenda-navigation";
 import {
   formatAgendaWeekRange,
@@ -61,12 +63,42 @@ export function Agenda({ onNavigate }: AgendaProps) {
     endAt?: number;
   }>({});
 
+  const openPlanifierFromPipeDraft = useCallback(
+    (draft: AgendaRdvPipeDraft, startAt: number, endAt: number) => {
+      setPlanifierContext({
+        kind: "pipe",
+        pipe: draft.pipe,
+        rdvStage: draft.rdvStage,
+        contenu: draft.contenu,
+      });
+      setSlotDefaults({ startAt, endAt });
+      setPlanifierOpen(true);
+      consumeAgendaRdvPipeDraft();
+    },
+    []
+  );
+
+  useEffect(() => {
+    const draft = peekAgendaRdvPipeDraft();
+    if (draft && initialHighlight) {
+      openPlanifierFromPipeDraft(
+        draft,
+        initialHighlight.startAt,
+        initialHighlight.endAt
+      );
+    }
+  }, [initialHighlight, openPlanifierFromPipeDraft]);
+
   useEffect(() => {
     return subscribeAgendaNavigationWeek(({ weekStartAt: targetWeek, highlight }) => {
       goToWeek(targetWeek);
       setNavHighlight(highlight ?? null);
+      const draft = peekAgendaRdvPipeDraft();
+      if (draft && highlight) {
+        openPlanifierFromPipeDraft(draft, highlight.startAt, highlight.endAt);
+      }
     });
-  }, [goToWeek]);
+  }, [goToWeek, openPlanifierFromPipeDraft]);
 
   useEffect(() => {
     if (!lastSync) return;

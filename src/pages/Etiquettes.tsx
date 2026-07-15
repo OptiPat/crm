@@ -63,7 +63,7 @@ import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import { countUniqueTaggedContacts } from "@/lib/etiquettes/etiquettes-unique-count";
 import {
   notifyEtiquettesChanged,
-  subscribeEtiquettesChanged,
+  subscribeEtiquettesChangedDebounced,
 } from "@/lib/etiquettes/etiquette-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -238,7 +238,7 @@ export function Etiquettes({ onNavigate }: { onNavigate?: (page: string) => void
   }, [loading, etiquettes]);
 
   useEffect(() => {
-    return subscribeEtiquettesChanged(() => {
+    return subscribeEtiquettesChangedDebounced(() => {
       void refreshEtiquetteCounts();
     });
   }, [refreshEtiquetteCounts]);

@@ -92,16 +92,24 @@ describe("pipe-rdv-delete", () => {
     const rdv = mkRdv(1, "R1");
     expect(buildRdvRescheduledTimelinePayload(rdv, 100, 200, "Client indisponible")).toEqual({
       titre: null,
-      contenu: expect.stringContaining("RDV R1 reporté"),
+      contenu: expect.stringContaining("R1 planifié reporté"),
     });
   });
 
-  it("parse les notes de trace RDV", () => {
+  it("parse les notes de trace RDV (ancien et nouveau libellé)", () => {
     expect(parseRdvTimelineTraceNote("RDV R2 annulé : motif")).toEqual({
       stage: "R2",
       kind: "cancelled",
     });
+    expect(parseRdvTimelineTraceNote("R2 planifié annulé : motif")).toEqual({
+      stage: "R2",
+      kind: "cancelled",
+    });
     expect(parseRdvTimelineTraceNote("RDV R3 reporté : était le x → y")).toEqual({
+      stage: "R3",
+      kind: "rescheduled",
+    });
+    expect(parseRdvTimelineTraceNote("R3 planifié reporté : était le x → y")).toEqual({
       stage: "R3",
       kind: "rescheduled",
     });
@@ -111,7 +119,7 @@ describe("pipe-rdv-delete", () => {
     const rdv = mkRdv(1, "R1");
     expect(buildRdvCancelledTimelinePayload(rdv, "Test 2.")).toEqual({
       titre: null,
-      contenu: "RDV R1 annulé : Test 2.",
+      contenu: "R1 planifié annulé : Test 2.",
     });
   });
 
@@ -119,7 +127,7 @@ describe("pipe-rdv-delete", () => {
     const rdv = mkRdv(1, "R1");
     expect(buildRdvCancelledTimelinePayload(rdv, null)).toEqual({
       titre: null,
-      contenu: "RDV R1 annulé",
+      contenu: "R1 planifié annulé",
     });
   });
 

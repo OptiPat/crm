@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
-  subscribeEtiquettesChanged,
+  subscribeEtiquettesChangedDebounced,
   subscribeRelationChangedDebounced,
 } from "@/lib/etiquettes/etiquette-events";
 
@@ -53,7 +53,7 @@ export function useSuiviAutoRefresh(handlers: SuiviAutoRefreshHandlers): void {
 
     const unsubContacts = subscribeContactsChanged(() => scheduleAlertRefresh(true));
     const unsubAlertes = subscribeAlertesChanged(() => scheduleAlertRefresh(false));
-    const unsubEtiquettes = subscribeEtiquettesChanged(() => {
+    const unsubEtiquettes = subscribeEtiquettesChangedDebounced(() => {
       void handlersRef.current.onRefreshEtiquettes();
     });
     const unsubRelation = subscribeRelationChangedDebounced(() => {

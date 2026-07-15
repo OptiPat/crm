@@ -5,6 +5,33 @@ import {
   type PipeTimelineDisplayContext,
 } from "@/lib/pipe/pipe-timeline-display";
 
+export function compareTimelineEntriesChronologically(
+  a: PipeTimelineEntryRecord,
+  b: PipeTimelineEntryRecord
+): number {
+  return a.occurred_at - b.occurred_at || a.id - b.id;
+}
+
+/** Durées entre entrées consécutives (timeline plate, plus ancien → plus récent). */
+export function buildFlatTimelineDurationLabels(
+  entries: PipeTimelineEntryRecord[],
+  context?: PipeTimelineDisplayContext
+): Map<number, string> {
+  const ordered = [...entries].sort(compareTimelineEntriesChronologically);
+  const labels = new Map<number, string>();
+
+  for (let index = 1; index < ordered.length; index += 1) {
+    const previous = ordered[index - 1];
+    const current = ordered[index];
+    const duration = formatTimelineStepDuration(previous.occurred_at, current.occurred_at);
+    if (!duration) continue;
+    const previousLabel = formatTimelineEntryBadgeLabel(previous, context).toLowerCase();
+    labels.set(current.id, `${duration} depuis ${previousLabel}`);
+  }
+
+  return labels;
+}
+
 export function formatTimelineStepDuration(fromTs: number, toTs: number): string | null {
   const seconds = Math.max(0, toTs - fromTs);
   if (seconds === 0) return null;

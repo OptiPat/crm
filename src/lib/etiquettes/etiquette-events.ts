@@ -40,6 +40,30 @@ export function subscribeEtiquettesChanged(handler: () => void): () => void {
   return () => window.removeEventListener(ETIQUETTES_CHANGED_EVENT, handler);
 }
 
+export const ETIQUETTES_DEBOUNCE_MS = 300;
+
+/** Même bus étiquettes, regroupé sur 300 ms pour limiter les rafales SQLite. */
+export function subscribeEtiquettesChangedDebounced(
+  handler: () => void,
+  debounceMs = ETIQUETTES_DEBOUNCE_MS
+): () => void {
+  let timeout: number | null = null;
+
+  const unsub = subscribeEtiquettesChanged(() => {
+    if (timeout != null) window.clearTimeout(timeout);
+    timeout = window.setTimeout(() => {
+      timeout = null;
+      handler();
+    }, debounceMs);
+  });
+
+  return () => {
+    if (timeout != null) window.clearTimeout(timeout);
+    timeout = null;
+    unsub();
+  };
+}
+
 export function subscribeRelationChanged(
   handler: (detail: RelationChangedDetail) => void
 ): () => void {
@@ -81,7 +105,7 @@ export function subscribeRelationChangedDebounced(
   let timeout: number | null = null;
   let pending: RelationChangedDetail | null = null;
 
-  return subscribeRelationChanged((detail) => {
+  const unsub = subscribeRelationChanged((detail) => {
     pending = mergeRelationChangedDetails(pending, detail);
     if (timeout != null) window.clearTimeout(timeout);
     timeout = window.setTimeout(() => {
@@ -91,4 +115,11 @@ export function subscribeRelationChangedDebounced(
       handler(snapshot);
     }, debounceMs);
   });
+
+  return () => {
+    if (timeout != null) window.clearTimeout(timeout);
+    timeout = null;
+    pending = null;
+    unsub();
+  };
 }

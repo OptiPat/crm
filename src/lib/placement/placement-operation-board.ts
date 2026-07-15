@@ -44,6 +44,7 @@ export interface PlacementBoardColumnColors {
   header: string;
   title: string;
   badge: string;
+  dot: string;
 }
 
 export const PLACEMENT_BOARD_COLUMN_COLORS: Record<PlacementBoardColumn, PlacementBoardColumnColors> =
@@ -55,6 +56,7 @@ export const PLACEMENT_BOARD_COLUMN_COLORS: Record<PlacementBoardColumn, Placeme
       title: "text-slate-800 dark:text-slate-200",
       badge:
         "bg-slate-100 text-slate-800 border border-slate-200/80 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-700",
+      dot: "bg-slate-500 ring-slate-200 dark:ring-slate-800",
     },
     waiting: {
       column:
@@ -64,6 +66,7 @@ export const PLACEMENT_BOARD_COLUMN_COLORS: Record<PlacementBoardColumn, Placeme
       title: "text-amber-900 dark:text-amber-200",
       badge:
         "bg-amber-100 text-amber-900 border border-amber-200/80 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-800",
+      dot: "bg-amber-500 ring-amber-200 dark:ring-amber-900",
     },
     first_response: {
       column: "border-sky-200/70 bg-sky-50/40 dark:border-sky-900 dark:bg-sky-950/25",
@@ -72,6 +75,7 @@ export const PLACEMENT_BOARD_COLUMN_COLORS: Record<PlacementBoardColumn, Placeme
       title: "text-sky-900 dark:text-sky-200",
       badge:
         "bg-sky-100 text-sky-900 border border-sky-200/80 dark:bg-sky-950 dark:text-sky-200 dark:border-sky-800",
+      dot: "bg-sky-500 ring-sky-200 dark:ring-sky-900",
     },
     conforme_after_nc: {
       column:
@@ -81,6 +85,7 @@ export const PLACEMENT_BOARD_COLUMN_COLORS: Record<PlacementBoardColumn, Placeme
       title: "text-teal-900 dark:text-teal-200",
       badge:
         "bg-teal-100 text-teal-900 border border-teal-200/80 dark:bg-teal-950 dark:text-teal-200 dark:border-teal-800",
+      dot: "bg-teal-500 ring-teal-200 dark:ring-teal-900",
     },
     partner_fin: {
       column:
@@ -90,6 +95,7 @@ export const PLACEMENT_BOARD_COLUMN_COLORS: Record<PlacementBoardColumn, Placeme
       title: "text-violet-900 dark:text-violet-200",
       badge:
         "bg-violet-100 text-violet-900 border border-violet-200/80 dark:bg-violet-950 dark:text-violet-200 dark:border-violet-800",
+      dot: "bg-violet-500 ring-violet-200 dark:ring-violet-900",
     },
     client_mail: {
       column:
@@ -99,6 +105,7 @@ export const PLACEMENT_BOARD_COLUMN_COLORS: Record<PlacementBoardColumn, Placeme
       title: "text-emerald-800 dark:text-emerald-300",
       badge:
         "bg-emerald-100 text-emerald-800 border border-emerald-200/80 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-800",
+      dot: "bg-emerald-500 ring-emerald-200 dark:ring-emerald-900",
     },
   };
 

@@ -109,7 +109,7 @@ import { navigateToPartenaires } from "@/lib/navigation/partenaires-navigation";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
-import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { subscribeEtiquettesChangedDebounced } from "@/lib/etiquettes/etiquette-events";
 
 interface ContactDetailProps {
   open: boolean;
@@ -691,7 +691,7 @@ export function ContactDetail({
       subscribeContactsChanged(syncOpenContactFromServer),
       subscribeFoyersChanged(syncOpenContactFromServer),
       subscribeInvestissementsChanged(syncInvestissementsOnly),
-      subscribeEtiquettesChanged(() => {
+      subscribeEtiquettesChangedDebounced(() => {
         void loadEtiquettes();
       }),
     ];
