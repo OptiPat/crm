@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
 import {
   DEFAULT_APP_RUNTIME_PREFS,
@@ -10,6 +17,17 @@ import {
   saveAppRuntimePrefs,
   type AppRuntimePrefs,
 } from "@/lib/api/tauri-app-runtime";
+import {
+  formatAutomationJobStat,
+  getAutomationJobStats,
+} from "@/lib/background/background-automation-stats";
+import {
+  BOX_PLACEMENT_INTERVAL_OPTIONS_MIN,
+  MAIL_SCAN_INTERVAL_OPTIONS_MIN,
+  RELATION_INTERVAL_OPTIONS_MIN,
+  formatMailScanIntervalLabel,
+  formatRelationIntervalLabel,
+} from "@/lib/background/background-automation-intervals";
 import { testDesktopAutomationNotification } from "@/lib/background/background-automation-notify";
 import { Bell, Monitor, Power } from "lucide-react";
 import { toast } from "sonner";
@@ -49,14 +67,25 @@ function AutomationToggle({
 
 export function ParametresBackgroundSection() {
   const [prefs, setPrefs] = useState<AppRuntimePrefs>(DEFAULT_APP_RUNTIME_PREFS);
+  const prefsRef = useRef<AppRuntimePrefs>(DEFAULT_APP_RUNTIME_PREFS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingNotif, setTestingNotif] = useState(false);
+  const [jobStats, setJobStats] = useState(() => getAutomationJobStats());
+
+  useEffect(() => {
+    const refreshStats = () => setJobStats(getAutomationJobStats());
+    refreshStats();
+    const id = window.setInterval(refreshStats, 10_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     void (async () => {
       try {
-        setPrefs(await getAppRuntimePrefs());
+        const loaded = await getAppRuntimePrefs();
+        prefsRef.current = loaded;
+        setPrefs(loaded);
       } catch (e) {
         console.warn("Prefs arrière-plan:", e);
       } finally {
@@ -66,21 +95,24 @@ export function ParametresBackgroundSection() {
   }, []);
 
   const patch = useCallback(async (partial: Partial<AppRuntimePrefs>) => {
-    let nextSnapshot: AppRuntimePrefs | null = null;
-    setPrefs((prev) => {
-      nextSnapshot = { ...prev, ...partial };
-      return nextSnapshot;
-    });
-    if (!nextSnapshot) return;
+    const previous = prefsRef.current;
+    const nextSnapshot = { ...previous, ...partial };
+    prefsRef.current = nextSnapshot;
+    setPrefs(nextSnapshot);
     setSaving(true);
     try {
-      await saveAppRuntimePrefs(nextSnapshot);
+      const saved = await saveAppRuntimePrefs(nextSnapshot);
+      prefsRef.current = saved;
+      setPrefs(saved);
     } catch (e) {
       toast.error(String(e));
       try {
-        setPrefs(await getAppRuntimePrefs());
+        const loaded = await getAppRuntimePrefs();
+        prefsRef.current = loaded;
+        setPrefs(loaded);
       } catch {
-        /* ignore reload failure */
+        prefsRef.current = previous;
+        setPrefs(previous);
       }
     } finally {
       setSaving(false);
@@ -89,23 +121,126 @@ export function ParametresBackgroundSection() {
 
   const automationsDisabled = loading || saving || !prefs.background_automations;
 
+  const relationStat = formatAutomationJobStat(jobStats.relation);
+  const stelliumStat = formatAutomationJobStat(jobStats.stellium);
+  const boxPlacementStat = formatAutomationJobStat(jobStats.box_placement);
+
   return (
     <SettingsPanel
       title="Arrière-plan & automatisations"
-      description="Le CRM peut rester actif dans le tray pour sync mail, Stellium, notes et rappels — sans envoi automatique des étiquettes."
+      description="Le CRM peut rester actif dans le tray pour sync mail, Stellium, Box Placement et rappels — sans envoi automatique des étiquettes."
     >
       <div className="space-y-4">
         <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-4">
           <Monitor className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
           <p className="text-sm text-muted-foreground">
             Fermer la fenêtre avec la croix cache le CRM dans la zone de notification (icône tray).
-            Les événements importants déclenchent une notification bureau (Windows / macOS).
+            Au retour sur le CRM, les syncs automatiques ne se relancent que si l&apos;intervalle
+            choisi est écoulé (pas de scan complet à chaque re-clic).
             Utilisez <span className="font-medium">Quitter</span> ci-dessous ou le menu tray pour arrêter
             complètement l&apos;application.
           </p>
         </div>
 
         <div className="space-y-3">
+          <AutomationToggle
+            id="pref-foreground-automations"
+            label="Sync auto fenêtre ouverte"
+            description="Timers et retour focus (désactivable en RDV ; le tray reste indépendant)."
+            checked={prefs.foreground_automations}
+            disabled={loading || saving}
+            onCheckedChange={(checked) => void patch({ foreground_automations: checked })}
+          />
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-lg border px-4 py-3 space-y-2">
+              <Label htmlFor="pref-relation-interval" className="text-sm font-medium">
+                Sync mail & agenda (fenêtre ouverte)
+              </Label>
+              <Select
+                value={String(prefs.relation_interval_minutes)}
+                disabled={loading || saving}
+                onValueChange={(value) =>
+                  void patch({ relation_interval_minutes: Number(value) })
+                }
+              >
+                <SelectTrigger id="pref-relation-interval">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RELATION_INTERVAL_OPTIONS_MIN.map((mins) => (
+                    <SelectItem key={mins} value={String(mins)}>
+                      {formatRelationIntervalLabel(mins)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {relationStat ? (
+                <p className="text-xs text-muted-foreground">Dernière sync : {relationStat}</p>
+              ) : null}
+            </div>
+
+            <div className="rounded-lg border px-4 py-3 space-y-2">
+              <Label htmlFor="pref-stellium-interval" className="text-sm font-medium">
+                Scan Stellium Exceltis
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Mails remboursements (marketplacement@stellium.fr).
+              </p>
+              <Select
+                value={String(prefs.stellium_interval_minutes)}
+                disabled={loading || saving}
+                onValueChange={(value) =>
+                  void patch({ stellium_interval_minutes: Number(value) })
+                }
+              >
+                <SelectTrigger id="pref-stellium-interval">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MAIL_SCAN_INTERVAL_OPTIONS_MIN.map((mins) => (
+                    <SelectItem key={mins} value={String(mins)}>
+                      {formatMailScanIntervalLabel(mins)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {stelliumStat ? (
+                <p className="text-xs text-muted-foreground">Dernier scan : {stelliumStat}</p>
+              ) : null}
+            </div>
+
+            <div className="rounded-lg border px-4 py-3 space-y-2 sm:col-span-2 lg:col-span-1">
+              <Label htmlFor="pref-box-interval" className="text-sm font-medium">
+                Scan Box Placement
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Conformité / instance partenaire (no-reply@stellium.fr).
+              </p>
+              <Select
+                value={String(prefs.box_placement_interval_minutes)}
+                disabled={loading || saving}
+                onValueChange={(value) =>
+                  void patch({ box_placement_interval_minutes: Number(value) })
+                }
+              >
+                <SelectTrigger id="pref-box-interval">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BOX_PLACEMENT_INTERVAL_OPTIONS_MIN.map((mins) => (
+                    <SelectItem key={mins} value={String(mins)}>
+                      {formatMailScanIntervalLabel(mins)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {boxPlacementStat ? (
+                <p className="text-xs text-muted-foreground">Dernier scan : {boxPlacementStat}</p>
+              ) : null}
+            </div>
+          </div>
+
           <AutomationToggle
             id="pref-close-tray"
             label="Fermer = rester en arrière-plan"
@@ -127,7 +262,7 @@ export function ParametresBackgroundSection() {
           <AutomationToggle
             id="pref-bg-master"
             label="Automatisations en arrière-plan"
-              description="Sync mail/agenda, Stellium, notes, rappels RDV, anniversaires, point du jour (tray uniquement)."
+              description="Sync mail/agenda, Stellium, rappels RDV, anniversaires, point du jour (tray uniquement)."
             checked={prefs.background_automations}
             disabled={loading || saving}
             onCheckedChange={(checked) => void patch({ background_automations: checked })}
@@ -135,37 +270,39 @@ export function ParametresBackgroundSection() {
 
           <div className="ml-2 pl-3 border-l space-y-3">
             <p className="text-xs text-muted-foreground px-1">
-              Ci-dessous : tâches actives quand la fenêtre est cachée (tray). La fenêtre
-              ouverte continue de synchroniser normalement.
+              Ci-dessous : tâches actives quand la fenêtre est cachée (tray). Les intervalles
+              ci-dessus s&apos;appliquent aussi au tray (respect des délais, pas de forçage au focus).
             </p>
             <AutomationToggle
               id="pref-bg-relation"
               label="Sync mail & agenda"
-              description="Réponses campagnes, RDV Google (3 min)."
+              description="Réponses campagnes, RDV Google (intervalle configurable)."
               checked={prefs.background_relation_sync}
               disabled={automationsDisabled}
               onCheckedChange={(checked) => void patch({ background_relation_sync: checked })}
             />
             <AutomationToggle
               id="pref-bg-stellium"
-              label="Scan Stellium (Exceltis + Box Placement)"
-              description="Détection mails Stellium entrants (~1 h, Gmail ou Outlook)."
+              label="Scan Stellium Exceltis"
+              description="Remboursements millésimes (Gmail ou Outlook ; inactif en mode Manuel uniquement)."
               checked={prefs.background_stellium_scan}
               disabled={automationsDisabled}
               onCheckedChange={(checked) => void patch({ background_stellium_scan: checked })}
             />
             <AutomationToggle
-              id="pref-bg-notes"
-              label="Notes partagées"
-              description="Synchronisation (~5 min)."
-              checked={prefs.background_notes_sync}
+              id="pref-bg-box"
+              label="Scan Box Placement"
+              description="Conformité / instance partenaire (inactif en mode Manuel uniquement)."
+              checked={prefs.background_box_placement_scan}
               disabled={automationsDisabled}
-              onCheckedChange={(checked) => void patch({ background_notes_sync: checked })}
+              onCheckedChange={(checked) =>
+                void patch({ background_box_placement_scan: checked })
+              }
             />
             <AutomationToggle
               id="pref-bg-rdv"
               label="Rappels RDV Pipe"
-              description="Emails de rappel planifiés (3 min)."
+              description="Même intervalle que sync mail & agenda."
               checked={prefs.background_pipe_rdv_reminders}
               disabled={automationsDisabled}
               onCheckedChange={(checked) =>

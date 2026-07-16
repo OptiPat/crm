@@ -104,7 +104,7 @@ export function StelliumExceltisSettingsPanel() {
   return (
     <SettingsPanel
       title="Exceltis — mails Stellium"
-      description="Détection automatique des emails Stellium (remboursements effectués ou annoncés à venir). Scan auto toutes les heures si la boîte mail est connectée."
+      description="Détection automatique des emails Stellium (remboursements effectués ou annoncés à venir). Fréquence configurable dans Arrière-plan & automatisations."
     >
       <div className="flex flex-wrap gap-2">
         <Button

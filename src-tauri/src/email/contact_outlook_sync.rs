@@ -166,9 +166,12 @@ pub fn sync_contact_outlook_history(
     app: &AppHandle,
     db_state: &DbState,
     contact_id: i64,
+    lightweight: bool,
 ) -> Result<ContactGmailSyncResult, String> {
     let contact_email = with_db(db_state, |db| {
-        let contact = db.get_contact_by_id(contact_id).map_err(|e| e.to_string())?;
+        let contact = db
+            .get_contact_by_id(contact_id)
+            .map_err(|e| e.to_string())?;
         contact
             .email
             .as_deref()
@@ -201,6 +204,8 @@ pub fn sync_contact_outlook_history(
     let incremental = backfill_complete;
     let pages_per_call = if incremental {
         INCREMENTAL_PAGES_PER_CALL
+    } else if lightweight {
+        1
     } else {
         BACKFILL_PAGES_PER_CALL
     };
@@ -220,9 +225,7 @@ pub fn sync_contact_outlook_history(
         incremental,
         complete: false,
     };
-    let mut next_link: Option<String> = sync_state
-        .as_ref()
-        .and_then(|s| s.list_page_token.clone());
+    let mut next_link: Option<String> = sync_state.as_ref().and_then(|s| s.list_page_token.clone());
     let mut max_sent_at: i64 = sync_state
         .as_ref()
         .and_then(|s| s.last_message_sent_at)
@@ -247,12 +250,7 @@ pub fn sync_contact_outlook_history(
         }
         refresh_connection_if_needed(app, &mut conn)?;
         let token = conn.access_token.clone();
-        let (messages, next) = list_graph_messages(
-            &client,
-            &token,
-            &search,
-            next_link.as_deref(),
-        )?;
+        let (messages, next) = list_graph_messages(&client, &token, &search, next_link.as_deref())?;
         pages_done += 1;
         for msg in messages {
             result.scanned += 1;

@@ -1507,7 +1507,7 @@ export function EtiquetteEnvoisTab({
             <TabsContent value="followup" className="mt-4 space-y-3">
               <p className="text-xs text-muted-foreground">
                 Délai et horaire définis sur chaque modèle (Templates → onglet Relance). Google
-                connecté : détection mail + Agenda automatique en arrière-plan (toutes les 3 min).
+                connecté : détection mail + Agenda automatique en arrière-plan (intervalle Paramètres).
               </p>
               {followup.length > 0 && (
                 <EtiquetteEnvoisSelectionBar

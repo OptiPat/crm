@@ -1,61 +1,61 @@
 use rusqlite::{params, Connection, Result};
 use tauri::{AppHandle, Manager};
 
-pub mod email_schedule;
-pub mod etiquette_rule_ast;
-pub mod etiquette_actions;
-pub mod etiquette_assignments;
-pub mod etiquette_email;
-pub mod etiquettes;
-pub mod etiquettes_auto_engine;
-pub mod etiquette_fiscal;
 pub mod alertes;
+pub mod birthdays;
+pub mod calendar_events;
+pub mod compta;
 pub mod contact_row;
 pub mod contacts;
-pub mod compta;
 pub mod custom_fields;
 pub mod dashboard_stats;
 pub mod documents;
-pub mod exchange_history;
+pub mod email_schedule;
 pub mod email_send_log;
-pub mod google_contact_name_dismissals;
+pub mod ephemeral_email_campaigns;
+pub mod etiquette_actions;
+pub mod etiquette_assignments;
+pub mod etiquette_email;
+pub mod etiquette_fiscal;
 pub mod etiquette_pipeline;
-pub mod calendar_events;
+pub mod etiquette_rule_ast;
+pub mod etiquettes;
+pub mod etiquettes_auto_engine;
+pub mod exchange_history;
 pub mod familles;
 pub mod filleuls;
 pub mod foyers;
+pub mod google_contact_name_dismissals;
 pub mod interactions;
 pub mod investissement_produit_match;
 pub mod investissements;
-pub mod type_produit_condition;
-pub mod partenaires;
-pub mod pipe;
-pub mod pipe_contact_sync;
-pub mod pipe_remuneration;
-pub mod pipe_rdv_google_sync;
-pub mod pipe_rdv_scheduled_emails;
-pub mod pipe_timeline;
-pub mod placement_operations;
-pub mod settings;
-pub mod templates_email;
 pub mod models;
 pub mod newsletter_ops;
 pub mod notes;
 pub mod notifications_summary;
-pub mod birthdays;
+pub mod operations;
+pub mod partenaires;
+pub mod pipe;
+pub mod pipe_contact_sync;
+pub mod pipe_rdv_google_sync;
+pub mod pipe_rdv_scheduled_emails;
+pub mod pipe_remuneration;
+pub mod pipe_timeline;
+pub mod placement_operations;
 pub mod scpi_campaigns;
+pub mod segments;
+pub mod settings;
 pub mod stellium_perf_campaigns;
 pub mod stellium_perf_dashboard;
-pub mod operations;
-pub mod segments;
 pub mod tache_recurrence;
 pub mod taches;
-pub mod template_email_trigger;
-pub mod template_email_relance;
-pub mod template_email_queue;
 pub mod template_email_actions;
-pub mod ephemeral_email_campaigns;
+pub mod template_email_queue;
+pub mod template_email_relance;
+pub mod template_email_trigger;
 pub mod template_formality_sql;
+pub mod templates_email;
+pub mod type_produit_condition;
 
 pub struct Database {
     conn: Connection,
@@ -106,17 +106,6 @@ impl Database {
 
         crate::licensing::refresh_write_gate(&db);
 
-        Ok(db)
-    }
-
-    /// Ouverture secondaire (API locale n8n) — sans migrations (déjà appliquées au déverrouillage).
-    pub fn open_at_path(db_path: &std::path::Path) -> Result<Self> {
-        let conn = Connection::open(db_path)?;
-        conn.execute("PRAGMA foreign_keys = ON", [])?;
-        conn.busy_timeout(std::time::Duration::from_secs(10))?;
-        crate::licensing::install_authorizer(&conn);
-        let db = Database { conn };
-        crate::licensing::refresh_write_gate(&db);
         Ok(db)
     }
 
@@ -589,7 +578,10 @@ impl Database {
 
     /// Retire les tâches prématurées, corrige les échéances, rattrape les manquantes (une fois).
     fn migrate_purge_premature_etiquette_taches(&self) -> Result<()> {
-        if self.get_setting("migration_etiquette_tache_reconcile_v1")?.is_some() {
+        if self
+            .get_setting("migration_etiquette_tache_reconcile_v1")?
+            .is_some()
+        {
             return Ok(());
         }
         let (purged, fixed, backfilled) = self.reconcile_all_etiquette_tache_actions()?;
@@ -704,7 +696,9 @@ impl Database {
             return Ok(());
         }
         if self.table_has_column("documents", "connaissances_financieres")? {
-            println!("🔄 Migration : renommage connaissances_financieres → experience_investissement...");
+            println!(
+                "🔄 Migration : renommage connaissances_financieres → experience_investissement..."
+            );
             self.conn.execute(
                 "ALTER TABLE documents RENAME COLUMN connaissances_financieres TO experience_investissement",
                 [],
@@ -723,7 +717,10 @@ impl Database {
 
     /// Ancienne échelle profil 1–7 → nouvelle échelle QPI 1–5 (réglementaire).
     fn migrate_contacts_profil_risque_echelle_5(&self) -> Result<()> {
-        if self.get_setting("migration_profil_risque_echelle_5_v1")?.is_some() {
+        if self
+            .get_setting("migration_profil_risque_echelle_5_v1")?
+            .is_some()
+        {
             return Ok(());
         }
         if !self.table_has_column("contacts", "profil_risque_sri")? {
@@ -921,9 +918,7 @@ impl Database {
             .conn
             .prepare("SELECT id, notes, date_inscription_filleul FROM contacts WHERE notes LIKE '%Date inscription:%'")?;
         let rows: Vec<(i64, Option<String>, Option<i64>)> = stmt
-            .query_map([], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-            })?
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
             .filter_map(|r| r.ok())
             .collect();
 
@@ -958,10 +953,8 @@ impl Database {
 
     /// Titres et qualifications réseau filleul (Organisation).
     fn migrate_add_filleul_rank_fields(&self) -> Result<()> {
-        let columns: [(&str, &str); 2] = [
-            ("filleul_titre", "TEXT"),
-            ("filleul_qualification", "TEXT"),
-        ];
+        let columns: [(&str, &str); 2] =
+            [("filleul_titre", "TEXT"), ("filleul_qualification", "TEXT")];
         let mut added = false;
         for (name, sql_type) in columns {
             if self.table_has_column("contacts", name)? {
@@ -988,10 +981,8 @@ impl Database {
             return Ok(());
         }
         println!("🔄 Migration : volume filleul...");
-        self.conn.execute(
-            "ALTER TABLE contacts ADD COLUMN filleul_volume REAL",
-            [],
-        )?;
+        self.conn
+            .execute("ALTER TABLE contacts ADD COLUMN filleul_volume REAL", [])?;
         println!("✅ Migration volume filleul appliquée");
         Ok(())
     }
@@ -1096,10 +1087,8 @@ impl Database {
 
     fn migrate_etiquette_rendement_cible(&self) -> Result<()> {
         if !self.table_has_column("etiquettes", "rendement_cible")? {
-            self.conn.execute(
-                "ALTER TABLE etiquettes ADD COLUMN rendement_cible TEXT",
-                [],
-            )?;
+            self.conn
+                .execute("ALTER TABLE etiquettes ADD COLUMN rendement_cible TEXT", [])?;
             println!("✅ Migration: rendement_cible sur etiquettes");
         }
         Ok(())
@@ -1137,10 +1126,8 @@ impl Database {
             )?;
         }
         if !self.table_has_column("calendar_events", "visio_link")? {
-            self.conn.execute(
-                "ALTER TABLE calendar_events ADD COLUMN visio_link TEXT",
-                [],
-            )?;
+            self.conn
+                .execute("ALTER TABLE calendar_events ADD COLUMN visio_link TEXT", [])?;
         }
         if !self.table_has_column("calendar_events", "event_location")? {
             self.conn.execute(
@@ -1541,10 +1528,8 @@ impl Database {
 
     fn migrate_alertes_traitee_at(&self) -> Result<()> {
         if !self.table_has_column("alertes", "traitee_at")? {
-            self.conn.execute(
-                "ALTER TABLE alertes ADD COLUMN traitee_at INTEGER",
-                [],
-            )?;
+            self.conn
+                .execute("ALTER TABLE alertes ADD COLUMN traitee_at INTEGER", [])?;
             println!("✅ Migration: colonne traitee_at sur alertes");
         }
         // KPI Suivi « traitées cette semaine » : reprise des lignes déjà clôturées.
@@ -1590,17 +1575,18 @@ impl Database {
             [],
         )?;
         if migrated > 0 {
-            println!("✅ Migration: {} liaison(s) tâche↔contact reprises", migrated);
+            println!(
+                "✅ Migration: {} liaison(s) tâche↔contact reprises",
+                migrated
+            );
         }
         Ok(())
     }
 
     fn migrate_taches_recurrence(&self) -> Result<()> {
         if !self.table_has_column("taches", "recurrence")? {
-            self.conn.execute(
-                "ALTER TABLE taches ADD COLUMN recurrence TEXT",
-                [],
-            )?;
+            self.conn
+                .execute("ALTER TABLE taches ADD COLUMN recurrence TEXT", [])?;
             println!("✅ Migration: colonne recurrence sur taches");
         }
         Ok(())
@@ -1641,11 +1627,10 @@ impl Database {
 
     fn migrate_add_newsletter_desinscrit(&self) -> Result<()> {
         if !self.table_has_column("contacts", "newsletter_desinscrit_at")? {
-            self.conn
-                .execute(
-                    "ALTER TABLE contacts ADD COLUMN newsletter_desinscrit_at INTEGER",
-                    [],
-                )?;
+            self.conn.execute(
+                "ALTER TABLE contacts ADD COLUMN newsletter_desinscrit_at INTEGER",
+                [],
+            )?;
             println!("✅ Migration: colonne newsletter_desinscrit_at sur contacts");
         }
         if !self.table_has_column("contacts", "newsletter_desinscrit_note")? {
@@ -1849,15 +1834,22 @@ impl Database {
 
     /// Migration : champs Stellium sur relevés d'encours (versements nets, perf €).
     fn migrate_stellium_fields_on_valorisations(&self) -> Result<()> {
-        if !self.table_has_column("investissement_valorisations", "stellium_versements_nets_centimes")?
-        {
+        if !self.table_has_column(
+            "investissement_valorisations",
+            "stellium_versements_nets_centimes",
+        )? {
             self.conn.execute(
                 "ALTER TABLE investissement_valorisations ADD COLUMN stellium_versements_nets_centimes INTEGER",
                 [],
             )?;
-            println!("✅ Migration: stellium_versements_nets_centimes sur investissement_valorisations");
+            println!(
+                "✅ Migration: stellium_versements_nets_centimes sur investissement_valorisations"
+            );
         }
-        if !self.table_has_column("investissement_valorisations", "stellium_perf_euro_centimes")? {
+        if !self.table_has_column(
+            "investissement_valorisations",
+            "stellium_perf_euro_centimes",
+        )? {
             self.conn.execute(
                 "ALTER TABLE investissement_valorisations ADD COLUMN stellium_perf_euro_centimes INTEGER",
                 [],
@@ -1950,7 +1942,9 @@ impl Database {
                 "ALTER TABLE investissements ADD COLUMN prevoyance_versement_mensuel INTEGER",
                 [],
             )?;
-            println!("✅ Migration appliquée : colonne prevoyance_versement_mensuel sur investissements");
+            println!(
+                "✅ Migration appliquée : colonne prevoyance_versement_mensuel sur investissements"
+            );
             // Reprise des anciennes fiches PREVOYANCE stockées par erreur en VP.
             self.conn.execute(
                 "UPDATE investissements

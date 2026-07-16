@@ -1,30 +1,32 @@
 import { describe, expect, it } from "vitest";
 import {
-  NOTES_COOLDOWN_MS,
-  NOTES_INTERVAL_MS,
   RELATION_COOLDOWN_MS,
   RELATION_INTERVAL_MS,
   STELLIUM_COOLDOWN_MS,
   STELLIUM_INTERVAL_MS,
   BIRTHDAY_COOLDOWN_MS,
   BIRTHDAY_INTERVAL_MS,
+  WAKE_MIN_INTERVAL_MS,
+  FOREGROUND_POLL_MS,
 } from "@/hooks/useBackgroundSync";
 
 describe("useBackgroundSync timing", () => {
-  it("Stellium : intervalle et cooldown à 1 h", () => {
-    const oneHour = 60 * 60_000;
-    expect(STELLIUM_INTERVAL_MS).toBe(oneHour);
-    expect(STELLIUM_COOLDOWN_MS).toBe(oneHour);
+  it("Stellium : intervalle par défaut 15 min, cooldown focus 90 s", () => {
+    expect(STELLIUM_INTERVAL_MS).toBe(15 * 60_000);
+    expect(STELLIUM_COOLDOWN_MS).toBe(90_000);
   });
 
-  it("Relation : intervalle 3 min, cooldown focus 90 s", () => {
-    expect(RELATION_INTERVAL_MS).toBe(3 * 60_000);
+  it("Relation : intervalle 15 min par défaut, cooldown focus 90 s", () => {
+    expect(RELATION_INTERVAL_MS).toBe(15 * 60_000);
     expect(RELATION_COOLDOWN_MS).toBe(90_000);
   });
 
-  it("Notes : intervalle 5 min, cooldown 4 min", () => {
-    expect(NOTES_INTERVAL_MS).toBe(5 * 60_000);
-    expect(NOTES_COOLDOWN_MS).toBe(4 * 60_000);
+  it("Wake : debounce court, minimum 60 s entre cycles focus", () => {
+    expect(WAKE_MIN_INTERVAL_MS).toBe(60_000);
+  });
+
+  it("Foreground : tick unique 60 s pour le prochain groupe dû", () => {
+    expect(FOREGROUND_POLL_MS).toBe(60_000);
   });
 
   it("Anniversaires : intervalle et cooldown", () => {

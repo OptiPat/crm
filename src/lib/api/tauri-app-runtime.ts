@@ -1,15 +1,32 @@
 import { invoke } from "@tauri-apps/api/core";
+import {
+  normalizeBoxPlacementIntervalMinutes,
+  normalizeRelationIntervalMinutes,
+  normalizeStelliumIntervalMinutes,
+} from "@/lib/background/background-automation-intervals";
 
 export interface AppRuntimePrefs {
   close_to_tray: boolean;
   launch_at_startup: boolean;
   background_automations: boolean;
   background_relation_sync: boolean;
+  /** Scan Stellium Exceltis (remboursements) en tray. */
   background_stellium_scan: boolean;
+  /** Scan Box Placement en tray. */
+  background_box_placement_scan: boolean;
+  /** @deprecated sync notes tray retirée — conservé pour lecture runtime_prefs.json */
   background_notes_sync: boolean;
   background_pipe_rdv_reminders: boolean;
   background_birthday_notifications: boolean;
   background_tray_digest: boolean;
+  /** Sync auto quand la fenêtre CRM est visible (timers + retour focus). */
+  foreground_automations: boolean;
+  /** Intervalle sync mail campagnes / pipe RDV (minutes). */
+  relation_interval_minutes: number;
+  /** Intervalle scan Stellium Exceltis (minutes). 0 = manuel uniquement. */
+  stellium_interval_minutes: number;
+  /** Intervalle scan Box Placement (minutes). 0 = manuel uniquement. */
+  box_placement_interval_minutes: number;
 }
 
 export const DEFAULT_APP_RUNTIME_PREFS: AppRuntimePrefs = {
@@ -18,10 +35,15 @@ export const DEFAULT_APP_RUNTIME_PREFS: AppRuntimePrefs = {
   background_automations: true,
   background_relation_sync: true,
   background_stellium_scan: true,
-  background_notes_sync: true,
+  background_box_placement_scan: true,
+  background_notes_sync: false,
   background_pipe_rdv_reminders: true,
   background_birthday_notifications: true,
   background_tray_digest: true,
+  foreground_automations: true,
+  relation_interval_minutes: 15,
+  stellium_interval_minutes: 15,
+  box_placement_interval_minutes: 15,
 };
 
 type LegacyAppRuntimePrefs = Partial<AppRuntimePrefs> & {
@@ -36,6 +58,24 @@ export function normalizeAppRuntimePrefs(partial: LegacyAppRuntimePrefs): AppRun
   ) {
     merged.background_birthday_notifications = partial.background_birthday_telegram;
   }
+  if (partial.background_box_placement_scan === undefined) {
+    merged.background_box_placement_scan = merged.background_stellium_scan;
+  }
+  merged.relation_interval_minutes = normalizeRelationIntervalMinutes(
+    merged.relation_interval_minutes
+  );
+  merged.stellium_interval_minutes = normalizeStelliumIntervalMinutes(
+    merged.stellium_interval_minutes
+  );
+  if (partial.box_placement_interval_minutes === undefined) {
+    merged.box_placement_interval_minutes = normalizeBoxPlacementIntervalMinutes(
+      merged.stellium_interval_minutes
+    );
+  } else {
+    merged.box_placement_interval_minutes = normalizeBoxPlacementIntervalMinutes(
+      merged.box_placement_interval_minutes
+    );
+  }
   return merged;
 }
 
@@ -44,7 +84,7 @@ export function trayAutomationTickEnabled(prefs: AppRuntimePrefs): boolean {
   return (
     prefs.background_relation_sync ||
     prefs.background_stellium_scan ||
-    prefs.background_notes_sync ||
+    prefs.background_box_placement_scan ||
     prefs.background_pipe_rdv_reminders ||
     prefs.background_birthday_notifications ||
     prefs.background_tray_digest
@@ -57,8 +97,12 @@ export async function getAppRuntimePrefs(): Promise<AppRuntimePrefs> {
   );
 }
 
-export async function saveAppRuntimePrefs(prefs: AppRuntimePrefs): Promise<void> {
-  await invoke<void>("save_app_runtime_prefs", { prefs });
+export async function saveAppRuntimePrefs(
+  prefs: AppRuntimePrefs
+): Promise<AppRuntimePrefs> {
+  return normalizeAppRuntimePrefs(
+    await invoke<LegacyAppRuntimePrefs>("save_app_runtime_prefs", { prefs })
+  );
 }
 
 export async function quitAppFully(): Promise<void> {

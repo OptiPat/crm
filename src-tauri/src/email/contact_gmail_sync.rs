@@ -126,10 +126,7 @@ pub(crate) fn emit_progress(app: &AppHandle, progress: &ContactMailSyncProgress)
 }
 
 fn parse_internal_date_sec(internal_date: &str) -> Option<i64> {
-    internal_date
-        .parse::<i64>()
-        .ok()
-        .map(|ms| ms / 1000)
+    internal_date.parse::<i64>().ok().map(|ms| ms / 1000)
 }
 
 fn header_value<'a>(headers: Option<&'a [GmailHeader]>, name: &str) -> String {
@@ -144,10 +141,7 @@ fn header_value<'a>(headers: Option<&'a [GmailHeader]>, name: &str) -> String {
 
 fn gmail_after_unix(unix: i64) -> String {
     use chrono::{TimeZone, Utc};
-    let dt = Utc
-        .timestamp_opt(unix, 0)
-        .single()
-        .unwrap_or_else(Utc::now);
+    let dt = Utc.timestamp_opt(unix, 0).single().unwrap_or_else(Utc::now);
     dt.format("%Y/%m/%d").to_string()
 }
 
@@ -162,9 +156,8 @@ fn quote_email_for_query(email: &str) -> String {
 
 pub fn gmail_query_for_contact(contact_email: &str, after_ts: Option<i64>) -> String {
     let quoted = quote_email_for_query(contact_email);
-    let base = format!(
-        "(from:{quoted} OR to:{quoted} OR cc:{quoted}) newer_than:5y -in:spam -in:trash"
-    );
+    let base =
+        format!("(from:{quoted} OR to:{quoted} OR cc:{quoted}) newer_than:5y -in:spam -in:trash");
     match after_ts {
         Some(ts) if ts > 0 => format!("{base} after:{}", gmail_after_unix(ts)),
         _ => base,
@@ -379,10 +372,7 @@ pub(crate) fn list_message_ids(
         return Err(format!("Gmail liste: {}", res.text().unwrap_or_default()));
     }
     let list: GmailListResponse = res.json().map_err(|e| e.to_string())?;
-    Ok((
-        list.messages.unwrap_or_default(),
-        list.next_page_token,
-    ))
+    Ok((list.messages.unwrap_or_default(), list.next_page_token))
 }
 
 pub(crate) fn with_db<T>(
@@ -399,6 +389,7 @@ pub fn sync_contact_mail_history(
     app: &AppHandle,
     db_state: &DbState,
     contact_id: i64,
+    lightweight: bool,
 ) -> Result<ContactGmailSyncResult, String> {
     let store = EmailOAuthStore::load(app)?;
     let provider = store
@@ -408,19 +399,25 @@ pub fn sync_contact_mail_history(
         .unwrap_or_default();
     if provider == "microsoft" {
         return crate::email::contact_outlook_sync::sync_contact_outlook_history(
-            app, db_state, contact_id,
+            app,
+            db_state,
+            contact_id,
+            lightweight,
         );
     }
-    sync_contact_gmail_history_google(app, db_state, contact_id)
+    sync_contact_gmail_history_google(app, db_state, contact_id, lightweight)
 }
 
 fn sync_contact_gmail_history_google(
     app: &AppHandle,
     db_state: &DbState,
     contact_id: i64,
+    lightweight: bool,
 ) -> Result<ContactGmailSyncResult, String> {
     let contact_email = with_db(db_state, |db| {
-        let contact = db.get_contact_by_id(contact_id).map_err(|e| e.to_string())?;
+        let contact = db
+            .get_contact_by_id(contact_id)
+            .map_err(|e| e.to_string())?;
         contact
             .email
             .as_deref()
@@ -436,9 +433,7 @@ fn sync_contact_gmail_history_google(
         .clone()
         .ok_or("Connectez Google dans Paramètres → Emails & envois → Connexion pour synchroniser l'historique.")?;
     if conn.provider != "google" {
-        return Err(
-            "La synchronisation nécessite un compte Google connecté (Gmail).".into(),
-        );
+        return Err("La synchronisation nécessite un compte Google connecté (Gmail).".into());
     }
     refresh_connection_if_needed(app, &mut conn)?;
     let mailbox_email = conn.email.trim().to_lowercase();
@@ -463,6 +458,8 @@ fn sync_contact_gmail_history_google(
     };
     let pages_per_call = if incremental {
         INCREMENTAL_PAGES_PER_CALL
+    } else if lightweight {
+        1
     } else {
         BACKFILL_PAGES_PER_CALL
     };
@@ -482,9 +479,8 @@ fn sync_contact_gmail_history_google(
         incremental,
         complete: false,
     };
-    let mut page_token: Option<String> = sync_state
-        .as_ref()
-        .and_then(|s| s.list_page_token.clone());
+    let mut page_token: Option<String> =
+        sync_state.as_ref().and_then(|s| s.list_page_token.clone());
     let mut max_sent_at: i64 = sync_state
         .as_ref()
         .and_then(|s| s.last_message_sent_at)
@@ -509,12 +505,7 @@ fn sync_contact_gmail_history_google(
         }
         refresh_connection_if_needed(app, &mut conn)?;
         let token = conn.access_token.clone();
-        let (ids, next) = list_message_ids(
-            &client,
-            &token,
-            &q,
-            page_token.as_deref(),
-        )?;
+        let (ids, next) = list_message_ids(&client, &token, &q, page_token.as_deref())?;
         pages_done += 1;
         for item in ids {
             result.scanned += 1;
@@ -554,9 +545,7 @@ fn sync_contact_gmail_history_google(
                     if attachments_json_needs_refresh(existing.as_deref()) {
                         thread::sleep(Duration::from_millis(METADATA_DELAY_MS));
                         if let Ok(meta) = fetch_message_metadata(&client, &token, &item.id) {
-                            if let Some(att) =
-                                attachments_from_payload(meta.payload.as_ref())
-                            {
+                            if let Some(att) = attachments_from_payload(meta.payload.as_ref()) {
                                 let _ = with_db(db_state, |db| {
                                     db.update_contact_gmail_message_attachments(row_id, &att)
                                         .map_err(|e| e.to_string())
@@ -689,9 +678,12 @@ pub fn attachments_json_needs_refresh(json: Option<&str>) -> bool {
         return true;
     };
     list.is_empty()
-        || list
-            .iter()
-            .all(|a| a.attachment_id.as_ref().map(|x| x.trim().is_empty()).unwrap_or(true))
+        || list.iter().all(|a| {
+            a.attachment_id
+                .as_ref()
+                .map(|x| x.trim().is_empty())
+                .unwrap_or(true)
+        })
 }
 
 pub fn fetch_contact_gmail_message_body(

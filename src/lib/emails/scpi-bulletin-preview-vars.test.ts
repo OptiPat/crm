@@ -18,7 +18,7 @@ describe("scpi bulletin preview vars", () => {
     expect(templateUsesScpiBulletinVariables("Bonjour {{prenom}}")).toBe(false);
   });
 
-  it("parse campaign_variables n8n", () => {
+  it("parse campaign_variables", () => {
     const vars = parseScpiCampaignVariables(
       JSON.stringify({
         periode: "T1 2026",

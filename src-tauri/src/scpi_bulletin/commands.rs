@@ -1,8 +1,19 @@
 use super::pipeline::{prepare_processed_scpi_bulletin_batch, process_scpi_bulletin_pdfs};
 use crate::commands::DbState;
-use crate::database::scpi_campaigns::PrepareScpiCampaignResult;
+use crate::database::scpi_campaigns::{PrepareScpiCampaignResult, ScpiCampaignDashboard};
 use crate::newsletter::store::NewsletterStore;
 use tauri::{AppHandle, Manager, State};
+
+#[tauri::command]
+pub fn get_scpi_campaign_dashboard_cmd(
+    db: State<'_, DbState>,
+) -> Result<ScpiCampaignDashboard, String> {
+    let db_guard = db.lock().map_err(|_| "Base non accessible.")?;
+    let database = db_guard.as_ref().ok_or("Base non initialisée")?;
+    database
+        .get_scpi_campaign_dashboard()
+        .map_err(|e| e.to_string())
+}
 
 #[tauri::command]
 pub async fn prepare_scpi_bulletins_from_pdfs_cmd(

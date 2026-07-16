@@ -47,6 +47,9 @@ import {
 } from "@/lib/api/tauri-contact-gmail";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { getSetting } from "@/lib/api/tauri-settings";
+import { getRelationIntervalMs } from "@/lib/background/background-automation-intervals";
+import { isBackgroundAutomationCycleInFlight } from "@/lib/background/background-automation-runner";
+import { getAppRuntimePrefs } from "@/lib/api/tauri-app-runtime";
 import { ContactRelationTimelineRow } from "@/components/interactions/ContactRelationTimelineRow";
 import { groupRelationTimelineByYearMonth } from "@/lib/interactions/relation-timeline-groups";
 import { InteractionForm } from "./InteractionForm";
@@ -68,8 +71,7 @@ interface ContactInteractionsPanelProps {
   onNestedFormOpenChange?: (open: boolean) => void;
 }
 
-/** Délai mini entre deux sync mail auto pour un même contact. */
-const AUTO_RESYNC_MS = 15 * 60 * 1000;
+/** Délai mini entre deux sync mail auto pour un même contact (aligné sur l'intervalle relation). */
 
 const FILTER_LABELS: { id: RelationTimelineFilter; label: string }[] = [
   { id: "all", label: "Tout" },
@@ -275,7 +277,10 @@ export function ContactInteractionsPanel({
   }, [contactId]);
 
   const runMailSync = useCallback(
-    async (untilComplete: boolean) => {
+    async (
+      untilComplete: boolean,
+      options?: { quiet?: boolean; lightweight?: boolean }
+    ) => {
       if (syncLockRef.current) return;
       if (!contactEmail?.trim()) {
         toast.error("Ajoutez une adresse email au contact.");
@@ -286,23 +291,28 @@ export function ContactInteractionsPanel({
         return;
       }
       syncLockRef.current = true;
-      setSyncing(true);
-      setSyncProgress({
-        contactId,
-        scanned: 0,
-        imported: 0,
-        skipped: 0,
-        phase: "listing",
-        done: false,
-        error: null,
-      });
+      const quiet = options?.quiet ?? false;
+      if (!quiet) {
+        setSyncing(true);
+        setSyncProgress({
+          contactId,
+          scanned: 0,
+          imported: 0,
+          skipped: 0,
+          phase: "listing",
+          done: false,
+          error: null,
+        });
+      }
       try {
         let totalImported = 0;
         let rounds = 0;
         let complete = false;
         const maxRounds = untilComplete ? 80 : 1;
         while (rounds < maxRounds && !complete) {
-          const result = await syncContactGmailMessages(contactId);
+          const result = await syncContactGmailMessages(contactId, {
+            lightweight: options?.lightweight ?? !untilComplete,
+          });
           totalImported += result.imported;
           complete = result.complete;
           rounds += 1;
@@ -312,6 +322,7 @@ export function ContactInteractionsPanel({
           await new Promise((r) => setTimeout(r, 500));
         }
         await load();
+        if (quiet) return;
         if (totalImported === 0 && complete) {
           toast.info("Boîte mail à jour (5 dernières années).");
         } else if (totalImported > 0) {
@@ -324,10 +335,10 @@ export function ContactInteractionsPanel({
           toast.info("Import en pause — relancez Sync Gmail ou rouvrez l’onglet Relation.");
         }
       } catch (error) {
-        toast.error(String(error));
+        if (!quiet) toast.error(String(error));
       } finally {
         syncLockRef.current = false;
-        setSyncing(false);
+        if (!quiet) setSyncing(false);
       }
     },
     [contactId, contactEmail, mailConnected, load]
@@ -336,13 +347,54 @@ export function ContactInteractionsPanel({
   useEffect(() => {
     if (!relationTabActive || !contactEmail?.trim() || !mailConnected) return;
     let cancelled = false;
+    const AUTOMATION_WAIT_MS = 120_000;
+    const AUTOMATION_RETRY_MS = 30_000;
+    const STEP_MS = 500;
+
+    const waitCancellable = async (durationMs: number) => {
+      let waited = 0;
+      while (!cancelled && waited < durationMs) {
+        await new Promise((r) => setTimeout(r, STEP_MS));
+        waited += STEP_MS;
+      }
+    };
+    const waitUntilSyncSlotAvailable = async (maxMs: number) => {
+      let waited = 0;
+      while (
+        !cancelled &&
+        (isBackgroundAutomationCycleInFlight() || syncLockRef.current) &&
+        waited < maxMs
+      ) {
+        await waitCancellable(STEP_MS);
+        waited += STEP_MS;
+      }
+    };
+
     void (async () => {
-      const auto = await getSetting(SETTING_CONTACT_MAIL_AUTO_SYNC);
-      if (cancelled || auto !== "1") return;
-      const last = lastAutoSyncRef.current.get(contactId) ?? 0;
-      if (Date.now() - last < AUTO_RESYNC_MS) return;
-      lastAutoSyncRef.current.set(contactId, Date.now());
-      await runMailSync(false);
+      try {
+        const auto = await getSetting(SETTING_CONTACT_MAIL_AUTO_SYNC);
+        if (cancelled || auto !== "1") return;
+        const prefs = await getAppRuntimePrefs();
+        const autoResyncMs = getRelationIntervalMs(prefs);
+        const last = lastAutoSyncRef.current.get(contactId) ?? 0;
+        if (Date.now() - last < autoResyncMs) return;
+
+        while (!cancelled && (isBackgroundAutomationCycleInFlight() || syncLockRef.current)) {
+          await waitUntilSyncSlotAvailable(AUTOMATION_WAIT_MS);
+          if (cancelled) return;
+          if (isBackgroundAutomationCycleInFlight() || syncLockRef.current) {
+            await waitCancellable(AUTOMATION_RETRY_MS);
+          }
+        }
+        if (cancelled) return;
+
+        await runMailSync(false, { quiet: true, lightweight: true });
+        if (!cancelled) {
+          lastAutoSyncRef.current.set(contactId, Date.now());
+        }
+      } catch (error) {
+        console.warn("Sync auto relation contact:", error);
+      }
     })();
     return () => {
       cancelled = true;

@@ -9,7 +9,10 @@ pub fn get_app_runtime_prefs(app: AppHandle) -> Result<AppRuntimePrefs, String> 
 }
 
 #[tauri::command]
-pub fn save_app_runtime_prefs(app: AppHandle, prefs: AppRuntimePrefs) -> Result<(), String> {
+pub fn save_app_runtime_prefs(
+    app: AppHandle,
+    prefs: AppRuntimePrefs,
+) -> Result<AppRuntimePrefs, String> {
     save_prefs_and_sync(&app, prefs)
 }
 

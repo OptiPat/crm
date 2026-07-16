@@ -111,7 +111,19 @@ pub fn hide_main_window_if_minimized_arg(app: &AppHandle) {
     }
 }
 
-pub fn save_prefs_and_sync(app: &AppHandle, prefs: AppRuntimePrefs) -> Result<(), String> {
+pub fn save_prefs_and_sync(
+    app: &AppHandle,
+    mut prefs: AppRuntimePrefs,
+) -> Result<AppRuntimePrefs, String> {
+    prefs.normalize_intervals();
+    if super::prefs::is_dev_executable() {
+        prefs.launch_at_startup = false;
+    }
     save_runtime_prefs(app, &prefs)?;
-    sync_autostart_from_prefs(app, &prefs)
+    if super::prefs::is_dev_executable() {
+        super::prefs::cleanup_dev_autostart_entry(app);
+        return Ok(prefs);
+    }
+    sync_autostart_from_prefs(app, &prefs)?;
+    Ok(prefs)
 }

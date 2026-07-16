@@ -23,7 +23,7 @@ export function useBackgroundAutomationListener(enabled = true): void {
     });
 
     void listen(MAIN_WINDOW_BACKGROUND_EVENT, () => {
-      void runTrayAutomationCycleIfHidden({ force: true });
+      void runTrayAutomationCycleIfHidden();
     }).then((fn) => {
       if (cancelled) fn();
       else unlistenBackground = fn;
@@ -31,7 +31,7 @@ export function useBackgroundAutomationListener(enabled = true): void {
 
     const onDocumentHidden = () => {
       if (document.hidden) {
-        void runTrayAutomationCycleIfHidden({ force: true });
+        void runTrayAutomationCycleIfHidden();
       }
     };
     document.addEventListener("visibilitychange", onDocumentHidden);

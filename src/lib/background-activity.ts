@@ -1,16 +1,16 @@
 export type BackgroundActivityKind =
   | "relation-sync"
   | "stellium-scan"
+  | "box-placement-scan"
   | "etiquettes-recalc"
-  | "newsletter-send"
-  | "notes-sync";
+  | "newsletter-send";
 
 const LABELS: Record<BackgroundActivityKind, string> = {
   "relation-sync": "Synchronisation Gmail / Agenda…",
-  "stellium-scan": "Scan Stellium…",
+  "stellium-scan": "Scan Stellium Exceltis…",
+  "box-placement-scan": "Scan Box Placement…",
   "etiquettes-recalc": "Recalcul des étiquettes…",
   "newsletter-send": "Envoi newsletter en cours…",
-  "notes-sync": "Synchronisation des notes partagées…",
 };
 
 type Listener = (active: BackgroundActivityKind[]) => void;

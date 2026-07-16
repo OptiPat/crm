@@ -1,29 +1,25 @@
 use crate::database::{
     compta::{
         ComptaBilanData, ComptaConfig, ComptaDepense, ComptaDeplacement, ComptaEncaissement,
-        NewComptaDepense,
-        NewComptaDeplacement, NewComptaEncaissement,
+        NewComptaDepense, NewComptaDeplacement, NewComptaEncaissement,
     },
     contacts::UpdateContactFieldPresence,
     models::{
-        Alerte, AlerteWithContact, CategoryStats, CgpConfig, Contact, ContactEtiquette,
-        ContactCustomField, ContactEtiquetteDetails, CustomFieldDef, CustomFieldValueInput,
-        CustomFieldValueRow,
-        DashboardStats, Document,         Etiquette, EtiquetteAction, EtiquetteWithCount, Famille,
-        NewCustomFieldDef, UpdateCustomFieldDef,
-        Foyer, Investissement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
-        NomProduitSuggestion,
-        NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInvestissement, NewInvestissementValorisation,
-        NewInvestissementVersement, NewPartenaire, CloseInvestissementPayload,
-        ExchangeHistoryEntry, Interaction, InteractionWithContact, InvestissementValorisation,
-        InvestissementVersement, NewInteraction,
-        NewTemplateEmail, NewSegment, NewTache, NewPipe, NewPipeTimelineEntry,
-        UpdatePipeTimelineEntry, UpdatePipe,
-        Partenaire, Pipe, PipeTimelineEntry,
-        PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, SetTacheStatutResult, Tache,
-        ConversionClientStats, ConversionFilleulStats, DashboardStatContact, ActivityPeriodSummary,
-        TemplateEmail, TemplateEmailAction, YearlyActivityStats, EmailSendLogEntry, EtiquettePipelineBoard,
-        CalendarEventEntry, CalendarSyncResult,
+        ActivityPeriodSummary, Alerte, AlerteWithContact, CalendarEventEntry, CalendarSyncResult,
+        CategoryStats, CgpConfig, CloseInvestissementPayload, Contact, ContactCustomField,
+        ContactEtiquette, ContactEtiquetteDetails, ConversionClientStats, ConversionFilleulStats,
+        CustomFieldDef, CustomFieldValueInput, CustomFieldValueRow, DashboardStatContact,
+        DashboardStats, Document, EmailSendLogEntry, Etiquette, EtiquetteAction,
+        EtiquettePipelineBoard, EtiquetteWithCount, ExchangeHistoryEntry, Famille, Foyer,
+        Interaction, InteractionWithContact, Investissement, InvestissementValorisation,
+        InvestissementVersement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
+        NewCustomFieldDef, NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInteraction,
+        NewInvestissement, NewInvestissementValorisation, NewInvestissementVersement,
+        NewPartenaire, NewPipe, NewPipeTimelineEntry, NewSegment, NewTache, NewTemplateEmail,
+        NomProduitSuggestion, Partenaire, Pipe, PipeTimelineEntry, PipelineStats, ProductStats,
+        Segment, SegmentWithCount, SetTacheStatutResult, Setting, Tache, TemplateEmail,
+        TemplateEmailAction, UpdateCustomFieldDef, UpdatePipe, UpdatePipeTimelineEntry,
+        YearlyActivityStats,
     },
     Database,
 };
@@ -150,18 +146,20 @@ pub fn update_contact(
     contact: serde_json::Value,
     skip_post_save_hooks: Option<bool>,
 ) -> Result<Contact, String> {
-    let field_presence = contact.as_object().map_or(
-        UpdateContactFieldPresence::default(),
-        |fields| UpdateContactFieldPresence {
-            birthday: fields.contains_key("date_naissance"),
-            filleul_titre: fields.contains_key("filleul_titre"),
-            filleul_qualification: fields.contains_key("filleul_qualification"),
-            filleul_volume: fields.contains_key("filleul_volume"),
-            filleul_volume_manager: fields.contains_key("filleul_volume_manager"),
-        },
-    );
-    let contact: NewContact = serde_json::from_value(contact)
-        .map_err(|e| format!("Payload contact invalide : {e}"))?;
+    let field_presence =
+        contact
+            .as_object()
+            .map_or(UpdateContactFieldPresence::default(), |fields| {
+                UpdateContactFieldPresence {
+                    birthday: fields.contains_key("date_naissance"),
+                    filleul_titre: fields.contains_key("filleul_titre"),
+                    filleul_qualification: fields.contains_key("filleul_qualification"),
+                    filleul_volume: fields.contains_key("filleul_volume"),
+                    filleul_volume_manager: fields.contains_key("filleul_volume_manager"),
+                }
+            });
+    let contact: NewContact =
+        serde_json::from_value(contact).map_err(|e| format!("Payload contact invalide : {e}"))?;
 
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -437,11 +435,7 @@ pub fn create_pipe(db: State<'_, DbState>, new_pipe: NewPipe) -> Result<Pipe, St
 }
 
 #[tauri::command]
-pub fn update_pipe(
-    db: State<'_, DbState>,
-    id: i64,
-    update: UpdatePipe,
-) -> Result<Pipe, String> {
+pub fn update_pipe(db: State<'_, DbState>, id: i64, update: UpdatePipe) -> Result<Pipe, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
@@ -692,8 +686,9 @@ pub fn create_document(
         .app_data_dir()
         .map_err(|e| format!("App data introuvable : {e}"))?;
     let source = std::path::Path::new(&new_document.chemin_fichier);
-    let (stored_path, size) = crate::documents_storage::ensure_document_stored(&app_data_dir, source)
-        .map_err(|e| format!("Impossible de stocker le document : {e}"))?;
+    let (stored_path, size) =
+        crate::documents_storage::ensure_document_stored(&app_data_dir, source)
+            .map_err(|e| format!("Impossible de stocker le document : {e}"))?;
     new_document.chemin_fichier = stored_path.to_string_lossy().into_owned();
     new_document.taille_fichier = size as i64;
 
@@ -730,7 +725,11 @@ pub fn update_document(
 }
 
 #[tauri::command]
-pub fn delete_document(app: tauri::AppHandle, db: State<'_, DbState>, id: i64) -> Result<(), String> {
+pub fn delete_document(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<(), String> {
     let app_data_dir = app
         .path()
         .app_data_dir()
@@ -753,9 +752,10 @@ pub fn delete_document(app: tauri::AppHandle, db: State<'_, DbState>, id: i64) -
             .map_err(|e| format!("Failed to delete document: {}", e))?;
     }
 
-    if let Err(e) =
-        crate::documents_storage::delete_managed_document_file(&app_data_dir, std::path::Path::new(&chemin_fichier))
-    {
+    if let Err(e) = crate::documents_storage::delete_managed_document_file(
+        &app_data_dir,
+        std::path::Path::new(&chemin_fichier),
+    ) {
         eprintln!("⚠️ Suppression fichier document : {e}");
     }
 
@@ -868,7 +868,11 @@ pub fn get_etiquette_ids_for_template(
 }
 
 #[tauri::command]
-pub fn delete_template_email(app: AppHandle, db: State<'_, DbState>, id: i64) -> Result<(), String> {
+pub fn delete_template_email(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<(), String> {
     let app_data = app
         .path()
         .app_data_dir()
@@ -896,9 +900,10 @@ pub fn import_template_email_attachment_cmd(
     let tpl = database
         .get_template_email_by_id(template_id)
         .map_err(|_| format!("Modèle email {template_id} introuvable."))?;
-    let existing_count =
-        crate::template_email_attachments::parse_attachments_from_variables(tpl.variables.as_deref())
-            .len();
+    let existing_count = crate::template_email_attachments::parse_attachments_from_variables(
+        tpl.variables.as_deref(),
+    )
+    .len();
 
     let app_data = app
         .path()
@@ -945,8 +950,9 @@ pub fn copy_template_email_attachments_cmd(
     let tpl = database
         .get_template_email_by_id(from_template_id)
         .map_err(|_| format!("Modèle source {from_template_id} introuvable."))?;
-    let source_records =
-        crate::template_email_attachments::parse_attachments_from_variables(tpl.variables.as_deref());
+    let source_records = crate::template_email_attachments::parse_attachments_from_variables(
+        tpl.variables.as_deref(),
+    );
 
     let app_data = app
         .path()
@@ -1105,10 +1111,7 @@ pub fn snooze_alerte(db: State<'_, DbState>, id: i64, days: i64) -> Result<(), S
 }
 
 #[tauri::command]
-pub fn count_alertes_traitees_depuis(
-    db: State<'_, DbState>,
-    since_ts: i64,
-) -> Result<i64, String> {
+pub fn count_alertes_traitees_depuis(db: State<'_, DbState>, since_ts: i64) -> Result<i64, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
@@ -1169,11 +1172,7 @@ pub fn get_yearly_activity_stats(
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .get_yearly_activity_stats(
-            period_start,
-            period_end,
-            bucket.as_deref(),
-        )
+        .get_yearly_activity_stats(period_start, period_end, bucket.as_deref())
         .map_err(|e| format!("Failed to get yearly activity stats: {}", e))
 }
 
@@ -1275,12 +1274,7 @@ pub fn get_activity_bucket_contacts(
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .get_activity_bucket_contacts(
-            period_start,
-            period_end,
-            &bucket_key,
-            bucket.as_deref(),
-        )
+        .get_activity_bucket_contacts(period_start, period_end, &bucket_key, bucket.as_deref())
         .map_err(|e| format!("Failed to get activity bucket contacts: {}", e))
 }
 
@@ -1452,11 +1446,8 @@ pub fn update_investissement(
         .update_investissement(id, &investissement)
         .map_err(|e| format!("Failed to update investissement: {}", e))?;
     if !skip_post_save_hooks.unwrap_or(false) {
-        let _ = database.sync_auto_etiquettes_after_investissement(
-            inv.contact_id,
-            inv.foyer_id,
-            None,
-        );
+        let _ =
+            database.sync_auto_etiquettes_after_investissement(inv.contact_id, inv.foyer_id, None);
     }
     Ok(inv)
 }
@@ -1471,7 +1462,8 @@ pub fn delete_investissement(db: State<'_, DbState>, id: i64) -> Result<(), Stri
         .delete_investissement(id)
         .map_err(|e| format!("Failed to delete investissement: {}", e))?;
     if let Some(inv) = inv {
-        let _ = database.sync_auto_etiquettes_after_investissement(inv.contact_id, inv.foyer_id, None);
+        let _ =
+            database.sync_auto_etiquettes_after_investissement(inv.contact_id, inv.foyer_id, None);
     }
     Ok(())
 }
@@ -1564,10 +1556,7 @@ pub fn discover_stellium_perf_campaign_prepare_input(
 #[tauri::command]
 pub fn get_stellium_perf_campaign_dashboard_cmd(
     db: State<'_, DbState>,
-) -> Result<
-    crate::database::stellium_perf_dashboard::StelliumPerfCampaignDashboard,
-    String,
-> {
+) -> Result<crate::database::stellium_perf_dashboard::StelliumPerfCampaignDashboard, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
@@ -1588,10 +1577,7 @@ pub fn prepare_stellium_perf_campaign(
 }
 
 #[tauri::command]
-pub fn delete_investissement_valorisation(
-    db: State<'_, DbState>,
-    id: i64,
-) -> Result<(), String> {
+pub fn delete_investissement_valorisation(db: State<'_, DbState>, id: i64) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
@@ -1646,10 +1632,7 @@ pub fn create_investissement_versement(
 }
 
 #[tauri::command]
-pub fn delete_investissement_versement(
-    db: State<'_, DbState>,
-    id: i64,
-) -> Result<(), String> {
+pub fn delete_investissement_versement(db: State<'_, DbState>, id: i64) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
@@ -1770,10 +1753,7 @@ pub fn get_etiquette_action(
 }
 
 #[tauri::command]
-pub fn set_etiquette_action(
-    db: State<'_, DbState>,
-    action: EtiquetteAction,
-) -> Result<(), String> {
+pub fn set_etiquette_action(db: State<'_, DbState>, action: EtiquetteAction) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
@@ -1953,7 +1933,9 @@ pub fn get_all_segments(db: State<'_, DbState>) -> Result<Vec<Segment>, String> 
 }
 
 #[tauri::command]
-pub fn get_all_segments_with_count(db: State<'_, DbState>) -> Result<Vec<SegmentWithCount>, String> {
+pub fn get_all_segments_with_count(
+    db: State<'_, DbState>,
+) -> Result<Vec<SegmentWithCount>, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
@@ -2166,8 +2148,8 @@ pub fn log_email_send_error(
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    let etiquette_id = contact_etiquette_id
-        .and_then(|ce_id| database.etiquette_id_for_contact_etiquette(ce_id));
+    let etiquette_id =
+        contact_etiquette_id.and_then(|ce_id| database.etiquette_id_for_contact_etiquette(ce_id));
     database
         .insert_email_send_log(
             contact_id,
@@ -2318,9 +2300,7 @@ pub fn cancel_calendar_rdv(
 }
 
 #[tauri::command]
-pub async fn sync_calendar_rdv(
-    app_handle: tauri::AppHandle,
-) -> Result<CalendarSyncResult, String> {
+pub async fn sync_calendar_rdv(app_handle: tauri::AppHandle) -> Result<CalendarSyncResult, String> {
     let app = app_handle.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let db = app.state::<DbState>();
@@ -2423,10 +2403,7 @@ pub fn cancel_pipe_rdv_reminder_schedules(
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .cancel_pipe_rdv_reminder_schedules(
-            pipe_timeline_entry_id,
-            schedule_kind.as_deref(),
-        )
+        .cancel_pipe_rdv_reminder_schedules(pipe_timeline_entry_id, schedule_kind.as_deref())
         .map_err(|e| e.to_string())
 }
 
@@ -2523,7 +2500,13 @@ pub async fn sync_email_campaign_responses(
         crate::email::response_sync::sync_email_campaign_responses(
             &app,
             pending,
-            |contact_etiquette_id, response_type, body, gmail_msg, subject, rdv_at, queue_row_kind| {
+            |contact_etiquette_id,
+             response_type,
+             body,
+             gmail_msg,
+             subject,
+             rdv_at,
+             queue_row_kind| {
                 let db_guard = db_state.inner().lock().unwrap();
                 let database = db_guard.as_ref().ok_or("Database not initialized")?;
                 database
@@ -2613,10 +2596,7 @@ pub fn dismiss_email_campaign_followup(
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .dismiss_email_campaign_followup(
-            contact_etiquette_id,
-            queue_row_kind.as_deref(),
-        )
+        .dismiss_email_campaign_followup(contact_etiquette_id, queue_row_kind.as_deref())
         .map_err(|e| format!("Failed to dismiss followup: {}", e))
 }
 
@@ -2655,10 +2635,7 @@ pub fn dismiss_cancelled_pending_email_campaign(
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .dismiss_cancelled_pending_email_campaign(
-            contact_etiquette_id,
-            queue_row_kind.as_deref(),
-        )
+        .dismiss_cancelled_pending_email_campaign(contact_etiquette_id, queue_row_kind.as_deref())
         .map_err(|e| format!("Failed to dismiss cancelled pending email: {}", e))
 }
 
@@ -2880,7 +2857,12 @@ pub fn release_placement_client_notification(
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
         .release_placement_client_notification(id)
-        .map_err(|e| format!("Échec annulation réservation notification client placement: {}", e))?;
+        .map_err(|e| {
+            format!(
+                "Échec annulation réservation notification client placement: {}",
+                e
+            )
+        })?;
     Ok(())
 }
 
@@ -3161,11 +3143,18 @@ pub fn delete_interaction(db: State<'_, DbState>, id: i64) -> Result<(), String>
 pub async fn sync_contact_gmail_messages(
     app_handle: tauri::AppHandle,
     contact_id: i64,
+    lightweight: Option<bool>,
 ) -> Result<crate::email::contact_gmail_sync::ContactGmailSyncResult, String> {
     let app = app_handle.clone();
+    let lightweight = lightweight.unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move || {
         let db = app.state::<DbState>();
-        crate::email::contact_gmail_sync::sync_contact_mail_history(&app, db.inner(), contact_id)
+        crate::email::contact_gmail_sync::sync_contact_mail_history(
+            &app,
+            db.inner(),
+            contact_id,
+            lightweight,
+        )
     })
     .await
     .map_err(|e| format!("Sync interrompu: {}", e))?

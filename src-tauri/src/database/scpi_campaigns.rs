@@ -15,7 +15,7 @@ pub const SCPI_BULLETIN_TEMPLATE_TU_NOM: &str = "Bulletin SCPI trimestriel (tu)"
 pub struct ScpiBulletinInput {
     pub nom_produit: String,
     pub summary_markdown: String,
-    /// Nom de fichier PDF source (n8n) — secours si le titre Mistral est ambigu.
+    /// Nom de fichier PDF source — secours si le titre Mistral est ambigu.
     #[serde(default)]
     pub fichier_source: Option<String>,
 }
@@ -82,10 +82,8 @@ fn infer_produit_from_summary(summary: &str) -> Option<String> {
         if let Some(rest) = t.strip_prefix("1.") {
             t = rest.trim();
         }
-        let name = if let Some(dash_idx) = t
-            .find('–')
-            .or_else(|| t.find('—'))
-            .or_else(|| t.find('-'))
+        let name = if let Some(dash_idx) =
+            t.find('–').or_else(|| t.find('—')).or_else(|| t.find('-'))
         {
             t[..dash_idx].trim()
         } else {
@@ -100,7 +98,18 @@ fn infer_produit_from_summary(summary: &str) -> Option<String> {
 }
 
 const FICHIER_SKIP_TOKENS: &[&str] = &[
-    "bti", "bulletin", "trimestre", "trim", "scpi", "t1", "t2", "t3", "t4", "1er", "2e", "3e",
+    "bti",
+    "bulletin",
+    "trimestre",
+    "trim",
+    "scpi",
+    "t1",
+    "t2",
+    "t3",
+    "t4",
+    "1er",
+    "2e",
+    "3e",
     "4e",
 ];
 
@@ -115,18 +124,12 @@ fn is_skipped_fichier_token(part: &str) -> bool {
     {
         return true;
     }
-    lower.len() == 4
-        && lower.starts_with("20")
-        && lower.chars().all(|c| c.is_ascii_digit())
+    lower.len() == 4 && lower.starts_with("20") && lower.chars().all(|c| c.is_ascii_digit())
 }
 
 /// Extrait le nom SCPI depuis le nom de fichier PDF (ex. « BTI Transitions Europe T1 2026.pdf »).
 fn infer_produit_from_fichier(fichier: &str) -> Option<String> {
-    let base = fichier
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or(fichier)
-        .trim();
+    let base = fichier.rsplit(['/', '\\']).next().unwrap_or(fichier).trim();
     let base = base
         .strip_suffix(".pdf")
         .or_else(|| base.strip_suffix(".PDF"))
@@ -136,9 +139,7 @@ fn infer_produit_from_fichier(fichier: &str) -> Option<String> {
         return None;
     }
     let kept: Vec<&str> = base
-        .split(|c: char| {
-            c.is_whitespace() || c == '_' || c == '-' || c == '–' || c == '—'
-        })
+        .split(|c: char| c.is_whitespace() || c == '_' || c == '-' || c == '–' || c == '—')
         .filter(|s| !s.is_empty())
         .filter(|part| !is_skipped_fichier_token(part))
         .collect();
@@ -229,13 +230,7 @@ fn preprocess_mistral_bulletin_line(line: &str) -> Option<String> {
     if t.is_empty() {
         return Some(String::new());
     }
-    if t == "-"
-        || t == "–"
-        || t == "—"
-        || t == "**"
-        || t == "*"
-        || t == "***"
-    {
+    if t == "-" || t == "–" || t == "—" || t == "**" || t == "*" || t == "***" {
         return None;
     }
     if let Some(stripped) = t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")) {
@@ -308,7 +303,24 @@ fn prefer_product_title_line(candidate: &str, current: &str) -> bool {
     }
     let accent_count = |s: &str| {
         s.chars()
-            .filter(|ch| matches!(ch, 'à' | 'â' | 'ä' | 'é' | 'è' | 'ê' | 'ë' | 'ï' | 'î' | 'ô' | 'ù' | 'û' | 'ü' | 'ç'))
+            .filter(|ch| {
+                matches!(
+                    ch,
+                    'à' | 'â'
+                        | 'ä'
+                        | 'é'
+                        | 'è'
+                        | 'ê'
+                        | 'ë'
+                        | 'ï'
+                        | 'î'
+                        | 'ô'
+                        | 'ù'
+                        | 'û'
+                        | 'ü'
+                        | 'ç'
+                )
+            })
             .count()
     };
     let c_accents = accent_count(c);
@@ -650,7 +662,11 @@ fn fix_glued_year_subsection(line: &str) -> String {
 
 /// Mistral/OCR : année « 2026 » répartie sur plusieurs lignes (2 / 0 / 2 / 6).
 fn collapse_vertical_year_lines(text: &str) -> String {
-    let lines: Vec<String> = text.replace("\r\n", "\n").lines().map(String::from).collect();
+    let lines: Vec<String> = text
+        .replace("\r\n", "\n")
+        .lines()
+        .map(String::from)
+        .collect();
     let mut out: Vec<String> = Vec::new();
     let mut i = 0usize;
     while i < lines.len() {
@@ -949,7 +965,11 @@ fn scpi_template_needs_upgrade(variables: Option<&str>) -> bool {
         return false;
     }
     let corps_html = parsed.get("corps_html").and_then(|v| v.as_str());
-    if corps_html.map(str::trim).filter(|s| !s.is_empty()).is_none() {
+    if corps_html
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_none()
+    {
         return true;
     }
     parsed
@@ -975,15 +995,8 @@ fn scpi_tu_corps_plain() -> &'static str {
 Résumé informatif — se référer aux bulletins officiels. Ce texte ne constitue pas un conseil en investissement."
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ScpiProductsListResponse {
-    pub count: usize,
-    pub products: Vec<String>,
-}
-
 impl Database {
-    /// Noms SCPI distincts en portefeuille (matching campagnes n8n ↔ investissements).
+    /// Noms SCPI distincts en portefeuille pour le rapprochement des bulletins.
     pub fn list_scpi_product_names(&self) -> Result<Vec<String>> {
         let mut stmt = self.conn.prepare(
             "SELECT DISTINCT TRIM(nom_produit) FROM investissements
@@ -1239,7 +1252,7 @@ impl Database {
             if sent != 0 {
                 return Ok("already_sent");
             }
-            // n8n prepare = rafraîchissement campagne trimestre : remet en file même
+            // Un nouveau traitement trimestriel remet en file même
             // après Retiré ou « Ne plus proposer » (comme un nouveau cycle de préparation).
             self.conn.execute(
                 "UPDATE contact_template_envois SET
@@ -1321,8 +1334,7 @@ impl Database {
             }
             contacts_matched += 1;
 
-            let campaign_variables =
-                build_scpi_campaign_variables_json(&matched, periode, now);
+            let campaign_variables = build_scpi_campaign_variables_json(&matched, periode, now);
 
             let has_email = email
                 .as_deref()
@@ -1694,7 +1706,8 @@ mod tests {
                 bulletins[0].clone(),
                 ScpiBulletinInput {
                     nom_produit: "Transitions Europe".into(),
-                    summary_markdown: "Transitions Europe – T1 2026\n\n1. Chiffres clés\nCollecte : 147 M€".into(),
+                    summary_markdown:
+                        "Transitions Europe – T1 2026\n\n1. Chiffres clés\nCollecte : 147 M€".into(),
                     fichier_source: None,
                 },
             ],
@@ -1798,13 +1811,15 @@ mod tests {
         let bulletins = vec![
             ScpiBulletinInput {
                 nom_produit: "Comète".into(),
-                summary_markdown: "1. Comète – T1 2026\n\n2. Chiffres clés\n- Collecte : 132 M€".into(),
+                summary_markdown: "1. Comète – T1 2026\n\n2. Chiffres clés\n- Collecte : 132 M€"
+                    .into(),
                 fichier_source: None,
             },
             ScpiBulletinInput {
                 nom_produit: "Transitions Europe".into(),
                 summary_markdown:
-                    "## Europe\n\n1. Europe – T1 2026\n\n2. Chiffres clés\n- Collecte : 147 M€".into(),
+                    "## Europe\n\n1. Europe – T1 2026\n\n2. Chiffres clés\n- Collecte : 147 M€"
+                        .into(),
                 fichier_source: None,
             },
         ];
@@ -1835,10 +1850,7 @@ mod tests {
         };
         assert_eq!(bulletin_match_key(&bulletin), "Transitions Europe");
 
-        let noms = vec![
-            "Transitions Europe".into(),
-            "Epargne Pierre Europe".into(),
-        ];
+        let noms = vec!["Transitions Europe".into(), "Epargne Pierre Europe".into()];
         assert_eq!(
             pick_display_produit_nom(&noms, &bulletin_match_key(&bulletin)),
             "Transitions Europe"
@@ -2158,7 +2170,7 @@ mod tests {
     }
 
     #[test]
-    fn prepare_campaign_restores_retired_or_dismissed_on_n8n_rerun() {
+    fn prepare_campaign_restores_retired_or_dismissed_on_new_run() {
         use crate::database::models::{NewContact, NewInvestissement};
 
         let db = mem_db();
@@ -2217,7 +2229,10 @@ mod tests {
         db.dismiss_cancelled_pending_email_campaign(row_id, Some("template"))
             .unwrap();
         assert!(db.get_etiquette_email_queue("ready").unwrap().is_empty());
-        assert!(db.get_etiquette_email_queue("cancelled").unwrap().is_empty());
+        assert!(db
+            .get_etiquette_email_queue("cancelled")
+            .unwrap()
+            .is_empty());
 
         db.prepare_scpi_bulletin_campaign(PrepareScpiCampaignInput {
             periode: "T1 2026".into(),
@@ -2232,7 +2247,11 @@ mod tests {
         let ready = db.get_etiquette_email_queue("ready").unwrap();
         assert_eq!(ready.len(), 1);
         assert_eq!(ready[0].contact_id, cid);
-        assert!(ready[0].campaign_variables.as_deref().unwrap_or("").contains("V2 trimestre"));
+        assert!(ready[0]
+            .campaign_variables
+            .as_deref()
+            .unwrap_or("")
+            .contains("V2 trimestre"));
     }
 
     #[test]
@@ -2571,7 +2590,10 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert!(vars.contains(&format!("\"digest_version\":{}", SCPI_CAMPAIGN_DIGEST_VERSION)));
+        assert!(vars.contains(&format!(
+            "\"digest_version\":{}",
+            SCPI_CAMPAIGN_DIGEST_VERSION
+        )));
         assert!(vars.contains("\"prepared_at\":"));
 
         let dash = db.get_scpi_campaign_dashboard().unwrap();

@@ -53,7 +53,7 @@ type PendingAction =
   | { type: "cancel" }
   | { type: "create" };
 
-export function NotesSharedPanel() {
+export function NotesSharedPanel({ isActive = true }: { isActive?: boolean }) {
   const [notes, setNotes] = useState<SharedNote[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -115,6 +115,11 @@ export function NotesSharedPanel() {
   useEffect(() => {
     void loadLocal();
   }, [loadLocal]);
+
+  useEffect(() => {
+    if (!isActive) return;
+    void syncRemote(false);
+  }, [isActive, syncRemote]);
 
   useEffect(() => {
     return subscribeNotesChanged(() => {

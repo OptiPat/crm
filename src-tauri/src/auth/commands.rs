@@ -8,9 +8,8 @@ pub type AuthState = Mutex<Option<AuthManager>>;
 
 const MIN_PASSWORD_LEN: usize = 8;
 
-/// Arrête l'API locale n8n et libère la connexion SQLite (verrou d'accès).
+/// Libère la connexion SQLite (verrou d'accès).
 fn close_database(db: &State<'_, DbState>) {
-    crate::local_api::stop();
     *db.lock().unwrap() = None;
 }
 
@@ -26,14 +25,9 @@ fn open_database(
         eprintln!("❌ open_database: échec ouverture base : {e}");
         format!("Échec d'ouverture de la base : {e}")
     })?;
-    if let Err(e) = crate::local_api::start_for_app(app, &database) {
-        eprintln!("⚠️ API locale n8n : {e}");
-    }
     let installed_at = {
         let guard = auth.lock().unwrap();
-        guard
-            .as_ref()
-            .and_then(|manager| manager.created_at().ok())
+        guard.as_ref().and_then(|manager| manager.created_at().ok())
     };
     if let Err(e) = crate::licensing::ensure_on_database_open(app, &database, installed_at) {
         eprintln!("⚠️ Licence : {e}");

@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { syncSharedNotes } from "@/lib/api/tauri-notes";
 import { listBirthdaysToday } from "@/lib/api/tauri-birthday-telegram";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import {
@@ -19,9 +18,18 @@ import { notifyPlacementConformeClientsAfterScan } from "@/lib/placement/placeme
 import { beginBackgroundActivity } from "@/lib/background-activity";
 import type { BackgroundAutomationJob } from "@/lib/background/background-automation-intervals";
 import {
+  MAIL_UNAVAILABLE_RETRY_MS,
+  boxPlacementAutoScanEnabled,
+  getJobIntervalMs,
+  stelliumAutoScanEnabled,
+} from "@/lib/background/background-automation-intervals";
+import {
+  automationJobAttemptCooldownRemainingMs,
+  markAutomationJobAttempt,
   markAutomationJobRun,
   shouldRunAutomationJob,
 } from "@/lib/background/background-automation-state";
+import { recordAutomationJobStat } from "@/lib/background/background-automation-stats";
 import {
   notifyAutomationError,
   notifyAutomationEvent,
@@ -33,7 +41,6 @@ import {
   markBirthdayNotificationsSentToday,
 } from "@/lib/background/birthday-automation-notify";
 import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
-import { notifyNotesChanged } from "@/lib/notes/note-events";
 import { processDuePipeRdvReminders, formatPipeRdvScheduledEmailTrayNotify } from "@/lib/pipe/pipe-rdv-reminder-processor";
 import { syncPipeGoogleRdvs } from "@/lib/api/tauri-calendar";
 import { handlePipeGoogleAgendaSyncResult } from "@/lib/pipe/pipe-rdv-google-sync-reminders";
@@ -55,6 +62,80 @@ export type BackgroundAutomationCycleOptions = {
 };
 
 let cycleInFlight: Promise<void> | null = null;
+let pendingCycleOptions: BackgroundAutomationCycleOptions[] = [];
+
+function mergeCycleJobs(
+  a?: Partial<Record<BackgroundAutomationJob, boolean>>,
+  b?: Partial<Record<BackgroundAutomationJob, boolean>>
+): Partial<Record<BackgroundAutomationJob, boolean>> | undefined {
+  // `jobs` absent signifie cycle complet : il doit rester complet.
+  if (!a || !b) return undefined;
+  const merged: Partial<Record<BackgroundAutomationJob, boolean>> = {};
+  const jobs = new Set([
+    ...(Object.keys(a) as BackgroundAutomationJob[]),
+    ...(Object.keys(b) as BackgroundAutomationJob[]),
+  ]);
+  for (const job of jobs) {
+    merged[job] = a[job] === true || b[job] === true;
+  }
+  return merged;
+}
+
+export function mergeAutomationCycleOptionsForTests(
+  a: BackgroundAutomationCycleOptions,
+  b: BackgroundAutomationCycleOptions
+): BackgroundAutomationCycleOptions | null {
+  if (a.surface !== b.surface) return null;
+  return {
+    surface: a.surface,
+    force: a.force || b.force,
+    jobs: mergeCycleJobs(a.jobs, b.jobs),
+  };
+}
+
+function enqueuePendingCycle(options: BackgroundAutomationCycleOptions): void {
+  const index = pendingCycleOptions.findIndex(
+    (pending) => pending.surface === options.surface
+  );
+  if (index >= 0) {
+    pendingCycleOptions[index] =
+      mergeAutomationCycleOptionsForTests(pendingCycleOptions[index], options) ?? options;
+  } else if (options.force) {
+    pendingCycleOptions.unshift(options);
+  } else {
+    pendingCycleOptions.push(options);
+  }
+}
+
+function drainPendingCycle(): void {
+  const next = pendingCycleOptions.shift();
+  if (next) void runBackgroundAutomationCycle(next);
+}
+
+export function isBackgroundAutomationCycleInFlight(): boolean {
+  return cycleInFlight != null || pendingCycleOptions.length > 0;
+}
+
+/** Attend une période réellement idle (évite la course avec un cycle qui démarre juste après). */
+export async function waitForBackgroundAutomationCycleIdle(
+  maxMs = 600_000,
+  settleMs = 1_000
+): Promise<boolean> {
+  const step = 500;
+  let waited = 0;
+  let idleFor = 0;
+  while (waited < maxMs) {
+    await new Promise((resolve) => setTimeout(resolve, step));
+    waited += step;
+    if (isBackgroundAutomationCycleInFlight()) {
+      idleFor = 0;
+    } else {
+      idleFor += step;
+      if (idleFor >= settleMs) return true;
+    }
+  }
+  return false;
+}
 
 function isTray(surface: AutomationSurface): boolean {
   return surface === "tray";
@@ -69,10 +150,9 @@ function jobEnabledInTray(
     case "relation":
       return prefs.background_relation_sync;
     case "stellium":
-    case "box_placement":
       return prefs.background_stellium_scan;
-    case "notes":
-      return prefs.background_notes_sync;
+    case "box_placement":
+      return prefs.background_box_placement_scan;
     case "pipe_rdv":
       return prefs.background_pipe_rdv_reminders;
     case "birthdays":
@@ -88,19 +168,51 @@ function shouldRunJob(
   options: BackgroundAutomationCycleOptions
 ): boolean {
   if (options.jobs?.[job] === false) return false;
+  if (!isTray(options.surface) && !prefs.foreground_automations) return false;
+  if (job === "stellium" && !stelliumAutoScanEnabled(prefs)) {
+    return false;
+  }
+  if (job === "box_placement" && !boxPlacementAutoScanEnabled(prefs)) {
+    return false;
+  }
+  if (
+    !options.force &&
+    (job === "relation" || job === "stellium" || job === "box_placement") &&
+    automationJobAttemptCooldownRemainingMs(job, MAIL_UNAVAILABLE_RETRY_MS) > 0
+  ) {
+    return false;
+  }
+  const intervalMs = getJobIntervalMs(prefs, job);
   if (options.jobs?.[job] === true) {
-    return shouldRunAutomationJob(job, { force: options.force });
+    return shouldRunAutomationJob(job, {
+      force: options.force,
+      minIntervalMs: intervalMs,
+    });
   }
   if (isTray(options.surface) && !jobEnabledInTray(prefs, job)) return false;
-  return shouldRunAutomationJob(job, { force: options.force });
+  return shouldRunAutomationJob(job, {
+    force: options.force,
+    minIntervalMs: intervalMs,
+  });
 }
 
 async function runRelationJob(surface: AutomationSurface): Promise<void> {
   const tray = isTray(surface);
   const endActivity = beginBackgroundActivity("relation-sync");
+  const startedAt = Date.now();
   try {
     const result = await runRelationAutoSync();
-    markAutomationJobRun("relation");
+    if (result.skipped) {
+      markAutomationJobAttempt("relation");
+    } else {
+      markAutomationJobRun("relation");
+    }
+    recordAutomationJobStat("relation", {
+      durationMs: Date.now() - startedAt,
+      detail: result.skipped
+        ? "Boîte mail non connectée"
+        : `${result.mail_detected} réponse(s), sync campagnes`,
+    });
     if (!result.skipped && result.errors.length > 0) {
       console.warn("Sync relation:", result.errors.join(" ; "));
     }
@@ -232,13 +344,22 @@ function isBenignMailSetupError(msg: string): boolean {
 async function runStelliumExceltisJob(surface: AutomationSurface): Promise<void> {
   const tray = isTray(surface);
   const endActivity = beginBackgroundActivity("stellium-scan");
+  const startedAt = Date.now();
   try {
     if (!(await isMailProviderReady())) {
-      markAutomationJobRun("stellium");
+      markAutomationJobAttempt("stellium");
+      recordAutomationJobStat("stellium", {
+        durationMs: Date.now() - startedAt,
+        detail: "Ignoré : boîte mail non connectée",
+      });
       return;
     }
     const result = await scanStelliumExceltisEmails();
     markAutomationJobRun("stellium");
+    recordAutomationJobStat("stellium", {
+      durationMs: Date.now() - startedAt,
+      detail: `${result.scanned} mail(s) listé(s), ${result.new_signals} nouveau(x) signal(aux)`,
+    });
     notifyStelliumExceltisChanged();
     if (result.new_signals > 0) {
       const label =
@@ -250,6 +371,7 @@ async function runStelliumExceltisJob(surface: AutomationSurface): Promise<void>
       );
     }
   } catch (error) {
+    markAutomationJobAttempt("stellium");
     const msg = error instanceof Error ? error.message : String(error);
     if (!isBenignMailSetupError(msg)) {
       notifyAutomationError(
@@ -266,14 +388,23 @@ async function runStelliumExceltisJob(surface: AutomationSurface): Promise<void>
 
 async function runBoxPlacementJob(surface: AutomationSurface): Promise<void> {
   const tray = isTray(surface);
-  const endActivity = beginBackgroundActivity("stellium-scan");
+  const endActivity = beginBackgroundActivity("box-placement-scan");
+  const startedAt = Date.now();
   try {
     if (!(await isMailProviderReady())) {
-      markAutomationJobRun("box_placement");
+      markAutomationJobAttempt("box_placement");
+      recordAutomationJobStat("box_placement", {
+        durationMs: Date.now() - startedAt,
+        detail: "Ignoré : boîte mail non connectée",
+      });
       return;
     }
     const boxResult = await scanBoxPlacementEmails();
     markAutomationJobRun("box_placement");
+    recordAutomationJobStat("box_placement", {
+      durationMs: Date.now() - startedAt,
+      detail: `${boxResult.scanned} mail(s), ${boxResult.created + boxResult.updated} opération(s)`,
+    });
     notifyPlacementOperationsChanged();
     await notifyPlacementConformeClientsAfterScan(boxResult.new_conforme_ids, { quiet: true });
     if (boxResult.created + boxResult.updated > 0) {
@@ -284,11 +415,12 @@ async function runBoxPlacementJob(surface: AutomationSurface): Promise<void> {
       );
     }
   } catch (error) {
+    markAutomationJobAttempt("box_placement");
     const msg = error instanceof Error ? error.message : String(error);
     if (!isBenignMailSetupError(msg)) {
       console.warn("Box Placement scan:", msg);
       notifyAutomationError(
-        "stellium-scan",
+        "box-placement-scan",
         "CRM W.Y.S — Box Placement",
         msg,
         { tray, nav: { page: "suivi", tab: "alertes" } }
@@ -299,25 +431,13 @@ async function runBoxPlacementJob(surface: AutomationSurface): Promise<void> {
   }
 }
 
-async function runNotesJob(): Promise<void> {
-  const endActivity = beginBackgroundActivity("notes-sync");
-  try {
-    await syncSharedNotes();
-    markAutomationJobRun("notes");
-    notifyNotesChanged();
-  } catch (error) {
-    console.warn("Sync notes partagées:", error);
-  } finally {
-    endActivity();
-  }
-}
-
 async function runBirthdaysJob(surface: AutomationSurface): Promise<void> {
   if (birthdayNotificationsAlreadySentToday()) return;
 
   const windowHidden = await isCrmWindowHidden();
   if (!isTray(surface) && !windowHidden) {
-    // Fenêtre ouverte : ne pas consommer la notif du jour (toast in-app invisible au tray).
+    // Fenêtre ouverte : backoff foreground uniquement ; le tray reste immédiatement éligible.
+    markAutomationJobAttempt("birthdays");
     return;
   }
 
@@ -433,9 +553,6 @@ async function runBackgroundAutomationCycleInner(
   if (shouldRunJob("box_placement", prefs, options)) {
     await runBoxPlacementJob(options.surface);
   }
-  if (shouldRunJob("notes", prefs, options)) {
-    await runNotesJob();
-  }
   if (shouldRunJob("birthdays", prefs, options)) {
     await runBirthdaysJob(options.surface);
   }
@@ -445,11 +562,9 @@ async function runBackgroundAutomationCycleInner(
 }
 
 /** Sync tray immédiate après déverrouillage (autostart minimisé). */
-export function runBackgroundAutomationAfterUnlock(): void {
-  void (async () => {
-    if (!(await isCrmWindowHidden())) return;
-    void runBackgroundAutomationCycle({ surface: "tray", force: true });
-  })();
+export async function runBackgroundAutomationAfterUnlock(): Promise<void> {
+  if (!(await isCrmWindowHidden())) return;
+  await runBackgroundAutomationCycle({ surface: "tray" });
 }
 
 /** Cycle tray si la fenêtre est cachée (tick timer ou passage en tray). */
@@ -465,17 +580,16 @@ export function runBackgroundAutomationCycle(
   options: BackgroundAutomationCycleOptions
 ): Promise<void> {
   if (cycleInFlight) {
-    if (!options.force) return cycleInFlight;
-    const chained = cycleInFlight.finally(() =>
-      runBackgroundAutomationCycleInner(options)
-    );
-    cycleInFlight = chained.finally(() => {
-      cycleInFlight = null;
-    });
-    return chained;
+    enqueuePendingCycle(options);
+    return cycleInFlight;
   }
-  cycleInFlight = runBackgroundAutomationCycleInner(options).finally(() => {
-    cycleInFlight = null;
-  });
+  cycleInFlight = runBackgroundAutomationCycleInner(options)
+    .catch((error) => {
+      console.warn("Cycle d'automatisation interrompu:", error);
+    })
+    .finally(() => {
+      cycleInFlight = null;
+      drainPendingCycle();
+    });
   return cycleInFlight;
 }

@@ -38,8 +38,4 @@ Le CRM aligne chaque bulletin sur le **nom SCPI le plus long** présent en porte
 | Déjà envoyé ce trimestre | Normal : pas de doublon même période |
 | Enfant foyer | SCPI **foyer commun** : pas d'envoi ; SCPI **perso** : oui |
 
-## API locale (optionnel — anniversaires n8n)
-
-**Paramètres → Intégrations** : API HTTP locale (anniversaires, intégrations externes). Les bulletins SCPI ne passent **plus** par n8n.
-
 Modèle email : **Bulletin SCPI trimestriel** (+ variante tu). Variables injectées : `{{periode}}`, `{{scpi_intro_tu}}`, `{{bulletin_resume_html}}`, etc.

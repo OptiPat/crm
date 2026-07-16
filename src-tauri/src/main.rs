@@ -1,68 +1,66 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod app_runtime;
 mod app_branding;
+mod app_runtime;
 mod auth;
 mod automation_toast;
-mod birthday_notifications;
 mod backup;
 mod backup_sidecar;
+mod birthday_notifications;
 mod commands;
 mod compta;
-mod documents_storage;
 mod contact_name;
 mod database;
+mod documents_storage;
 mod email;
 mod export_archive;
 mod licensing;
-mod local_api;
-mod notes;
 mod newsletter;
+mod notes;
 mod scpi_bulletin;
 mod system_commands;
 mod template_email_attachments;
 
-use app_runtime::{
-    apply_startup_launch_prefs, focus_main_window, get_app_runtime_prefs,
-    guard_dev_autostart_boot, hide_main_window_if_minimized_arg, is_force_quit_requested,
-    load_runtime_prefs,
-    focus_main_window_cmd, quit_app_fully_cmd, save_app_runtime_prefs, setup_tray, start_background_automation_worker,
-};
-use automation_toast::{send_automation_desktop_toast_cmd, take_pending_automation_notification_nav_cmd};
 use app_branding::commands::{apply_app_branding_os, get_app_branding, save_app_branding};
+use app_runtime::{
+    apply_startup_launch_prefs, focus_main_window, focus_main_window_cmd, get_app_runtime_prefs,
+    guard_dev_autostart_boot, hide_main_window_if_minimized_arg, is_force_quit_requested,
+    load_runtime_prefs, quit_app_fully_cmd, save_app_runtime_prefs, setup_tray,
+    start_background_automation_worker,
+};
 use auth::commands::*;
 use auth::AuthManager;
+use automation_toast::{
+    send_automation_desktop_toast_cmd, take_pending_automation_notification_nav_cmd,
+};
+use birthday_notifications::{
+    generate_birthday_message_draft_cmd, get_birthday_builtin_bodies_cmd,
+    get_birthday_message_settings_cmd, get_birthday_telegram_settings_cmd,
+    list_birthdays_today_cmd, run_birthday_telegram_if_due_cmd, save_birthday_message_settings_cmd,
+    save_birthday_telegram_settings_cmd, send_birthday_telegram_reminders_now_cmd,
+    test_birthday_telegram_cmd,
+};
 use commands::*;
 use compta::commands::{
-    compute_compta_driving_distance_km, browse_compta_drive, download_compta_drive_file, import_compta_calendar_trip,
-    import_compta_drive_depense, reset_compta_distance_cache, scan_compta_calendar_month,
-    scan_compta_drive_month,
+    browse_compta_drive, compute_compta_driving_distance_km, download_compta_drive_file,
+    import_compta_calendar_trip, import_compta_drive_depense, reset_compta_distance_cache,
+    scan_compta_calendar_month, scan_compta_drive_month,
 };
 use database::Database;
 use email::commands::*;
 use email::oauth_commands::*;
-use birthday_notifications::{
-    generate_birthday_message_draft_cmd, get_birthday_builtin_bodies_cmd, get_birthday_message_settings_cmd, get_birthday_telegram_settings_cmd, list_birthdays_today_cmd,
-    run_birthday_telegram_if_due_cmd, save_birthday_message_settings_cmd, save_birthday_telegram_settings_cmd,
-    send_birthday_telegram_reminders_now_cmd, test_birthday_telegram_cmd,
-};
 use licensing::{
     activate_license_cmd, get_license_status_cmd, needs_license_activation_cmd,
     start_license_trial_cmd,
 };
+use newsletter::*;
 use notes::{
     add_shared_note_contribution_cmd, create_personal_note_cmd, create_shared_note_cmd,
     delete_personal_note_cmd, delete_shared_note_cmd, get_all_personal_notes_cmd,
-    get_shared_notes_cmd, sync_shared_notes_cmd, update_personal_note_cmd,
-    update_shared_note_cmd,
+    get_shared_notes_cmd, sync_shared_notes_cmd, update_personal_note_cmd, update_shared_note_cmd,
 };
-use local_api::{
-    get_local_api_settings_cmd, get_scpi_campaign_dashboard_cmd, regenerate_local_api_token_cmd,
-    save_local_api_settings_cmd,
-};
-use scpi_bulletin::prepare_scpi_bulletins_from_pdfs_cmd;
-use newsletter::*;
+use scpi_bulletin::{get_scpi_campaign_dashboard_cmd, prepare_scpi_bulletins_from_pdfs_cmd};
 use std::sync::Mutex;
 use system_commands::*;
 use tauri::Manager;
@@ -319,9 +317,6 @@ fn main() {
             set_setting,
             delete_setting,
             get_all_settings,
-            get_local_api_settings_cmd,
-            save_local_api_settings_cmd,
-            regenerate_local_api_token_cmd,
             get_birthday_telegram_settings_cmd,
             save_birthday_telegram_settings_cmd,
             list_birthdays_today_cmd,

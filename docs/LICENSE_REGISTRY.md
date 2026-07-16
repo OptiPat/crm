@@ -10,8 +10,7 @@ sans exposer de secrets Google dans le dépôt public.
 | **API Google Sheets + compte de service** | Il faudrait embarquer une clé JSON dans l'exe → extractible |
 | **Apps Script (webhook)** | Seule l'URL publique est dans l'app ; le token de validation reste côté Google |
 
-**n8n n'est pas nécessaire** ici : Apps Script tient dans le Sheet et suffit pour
-enregistrer les activations.
+Apps Script tient dans le Sheet et suffit pour enregistrer les activations.
 
 ## 1. Créer le Google Sheet
 

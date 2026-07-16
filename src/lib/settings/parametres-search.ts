@@ -85,12 +85,6 @@ export const PARAMETRES_SEARCH_INDEX: ParametresSearchItem[] = [
     section: "suivi",
   },
   {
-    id: "api-locale",
-    label: "API locale (n8n, anniversaires)",
-    keywords: ["api", "locale", "n8n", "token", "port", "webhook"],
-    section: "integrations",
-  },
-  {
     id: "telegram",
     label: "Anniversaires Telegram",
     keywords: ["telegram", "anniversaire", "bot", "rappel"],

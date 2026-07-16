@@ -6,6 +6,7 @@ use super::oauth_store::EmailOAuthStore;
 use crate::commands::DbState;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::sync::Mutex;
 use tauri::AppHandle;
 
 const STATE_SETTING_KEY: &str = "stellium_exceltis_signals_v1";
@@ -25,6 +26,7 @@ const GMAIL_QUERY_RECENCY_DAYS: u32 = 400;
 const SCAN_MAX_MESSAGE_IDS: usize = 200;
 /// Après ce nombre d’échecs de parsing du millésime, le message est ignoré (comme dismiss).
 const PARSE_FAIL_MAX_ATTEMPTS: u32 = 3;
+static STELLIUM_SCAN_LOCK: Mutex<()> = Mutex::new(());
 
 const MOIS_FR: [&str; 12] = [
     "Janvier",
@@ -77,6 +79,72 @@ struct StelliumExceltisState {
     /// Tentatives de parsing millésime (message_id → compteur).
     #[serde(default, alias = "parseRetryByMessageId")]
     parse_retry_by_message_id: HashMap<String, u32>,
+    /// Erreurs réseau/API à retenter sans les compter comme échecs de parsing.
+    #[serde(default, alias = "fetchRetryMessageIds")]
+    fetch_retry_message_ids: Vec<String>,
+    /// Horodatage du dernier scan réussi (incrémental Gmail `after:`).
+    #[serde(default, alias = "lastScanAt")]
+    last_scan_at: Option<i64>,
+    /// Reprise pagination Gmail quand plus de 200 messages correspondent encore.
+    #[serde(default, alias = "listPageToken")]
+    list_page_token: Option<String>,
+    /// Provider auquel appartient le curseur (token Gmail ou nextLink Graph).
+    #[serde(default, alias = "listProvider")]
+    list_provider: Option<String>,
+    /// Provider du dernier scan, pour isoler les IDs de retry Gmail / Graph.
+    #[serde(default, alias = "scanProvider")]
+    scan_provider: Option<String>,
+}
+
+/// Décision pure sur le filigrane et la pagination Stellium.
+fn next_stellium_scan_state(
+    previous_last_scan_at: Option<i64>,
+    provider: &str,
+    list_exhausted: bool,
+    resume_page_token: Option<String>,
+    now_unix: i64,
+) -> (Option<i64>, Option<String>, Option<String>) {
+    if !list_exhausted {
+        return (
+            previous_last_scan_at,
+            resume_page_token,
+            Some(provider.to_string()),
+        );
+    }
+    (Some(now_unix), None, None)
+}
+
+fn stellium_scan_cursor(state: &StelliumExceltisState, provider: &str) -> Option<String> {
+    if stellium_provider_changed(state, provider) {
+        return None;
+    }
+    let provider_matches = state.list_provider.as_deref() == Some(provider)
+        || (state.list_provider.is_none() && provider == "google");
+    provider_matches
+        .then(|| state.list_page_token.clone())
+        .flatten()
+}
+
+fn stellium_provider_changed(state: &StelliumExceltisState, provider: &str) -> bool {
+    match state.scan_provider.as_deref() {
+        Some(previous) => previous != provider,
+        None => {
+            provider == "microsoft"
+                && (state.last_scan_at.is_some()
+                    || state.list_page_token.is_some()
+                    || !state.parse_retry_by_message_id.is_empty()
+                    || !state.fetch_retry_message_ids.is_empty())
+        }
+    }
+}
+
+fn stellium_scan_last_scan_at(
+    state: &StelliumExceltisState,
+    provider: &str,
+) -> Option<i64> {
+    (!stellium_provider_changed(state, provider))
+        .then_some(state.last_scan_at)
+        .flatten()
 }
 
 fn record_parse_failure(state: &mut StelliumExceltisState, message_id: &str) {
@@ -205,7 +273,11 @@ fn decode_q_encoding(data: &str) -> Option<Vec<u8>> {
                 }
             }
         }
-        bytes.push(if chars[i] == '_' { b' ' } else { chars[i] as u8 });
+        bytes.push(if chars[i] == '_' {
+            b' '
+        } else {
+            chars[i] as u8
+        });
         i += 1;
     }
     Some(bytes)
@@ -226,8 +298,7 @@ fn subject_looks_like_exceltis_remboursement(subject: &str) -> bool {
 /// Mails « Informations complémentaires … » : pas de déclenchement campagne.
 fn is_complementaires_subject(subject: &str) -> bool {
     let lower = subject.to_lowercase();
-    lower.contains("informations complementaires")
-        || lower.contains("informations complémentaires")
+    lower.contains("informations complementaires") || lower.contains("informations complémentaires")
 }
 
 /// Newsletter « Bonne nouvelle … remboursements à venir » (plusieurs millésimes possibles).
@@ -500,11 +571,7 @@ fn parse_exceltis_key_from_text(text: &str) -> Option<ExceltisEtiquetteKey> {
             parse_exceltis_gamme_from_text(fragment)
         })
         .or_else(|| parse_exceltis_gamme_from_text(text));
-    Some(ExceltisEtiquetteKey {
-        gamme,
-        month,
-        year,
-    })
+    Some(ExceltisEtiquetteKey { gamme, month, year })
 }
 
 fn millesime_label_from_key(key: &ExceltisEtiquetteKey) -> String {
@@ -525,7 +592,9 @@ fn exceltis_keys_match(a: &ExceltisEtiquetteKey, b: &ExceltisEtiquetteKey) -> bo
 }
 
 /// Clé effective d'un signal : le sujet complète la gamme si `etiquette_nom` est legacy.
-fn effective_exceltis_key_from_signal(signal: &StelliumExceltisSignal) -> Option<ExceltisEtiquetteKey> {
+fn effective_exceltis_key_from_signal(
+    signal: &StelliumExceltisSignal,
+) -> Option<ExceltisEtiquetteKey> {
     let from_subject = parse_exceltis_key_from_text(&signal.subject);
     let from_nom = parse_exceltis_key_from_text(&signal.etiquette_nom);
     match (from_nom, from_subject) {
@@ -549,14 +618,11 @@ fn find_etiquette_id_by_exceltis_key(
     db: &crate::database::Database,
     key: &ExceltisEtiquetteKey,
 ) -> Option<i64> {
-    db.get_all_etiquettes()
-        .ok()?
-        .into_iter()
-        .find_map(|e| {
-            parse_exceltis_key_from_text(&e.nom)
-                .filter(|candidate| exceltis_keys_match(candidate, key))
-                .map(|_| e.id)
-        })
+    db.get_all_etiquettes().ok()?.into_iter().find_map(|e| {
+        parse_exceltis_key_from_text(&e.nom)
+            .filter(|candidate| exceltis_keys_match(candidate, key))
+            .map(|_| e.id)
+    })
 }
 
 fn resolve_etiquette_id_for_exceltis_key(
@@ -600,7 +666,10 @@ pub fn stellium_signal_received_at_for_etiquette(
     let mut best: Option<i64> = state.etiquette_trigger_at.get(&etiquette_id).copied();
     for signal in &state.signals {
         let matches_id = signal.etiquette_id == Some(etiquette_id);
-        let matches_key = match (etiquette_key.as_ref(), effective_exceltis_key_from_signal(signal)) {
+        let matches_key = match (
+            etiquette_key.as_ref(),
+            effective_exceltis_key_from_signal(signal),
+        ) {
             (Some(ek), Some(sk)) => exceltis_keys_match(ek, &sk),
             _ => false,
         };
@@ -706,11 +775,7 @@ fn parse_remboursement_blocks_from_text(text: &str) -> Vec<ExceltisEtiquetteKey>
                 push_unique_exceltis_key(
                     &mut keys,
                     &mut seen,
-                    ExceltisEtiquetteKey {
-                        gamme,
-                        month,
-                        year,
-                    },
+                    ExceltisEtiquetteKey { gamme, month, year },
                 );
             }
         }
@@ -774,7 +839,11 @@ pub fn parse_millesime_from_text(text: &str) -> Option<(u32, u32)> {
         if !surface.contains("exceltis") {
             return None;
         }
-        find_millesime_after_pos(&surface, 0, MILLESIME_MAX_GAP_FROM_EXCELTIS.saturating_mul(2))
+        find_millesime_after_pos(
+            &surface,
+            0,
+            MILLESIME_MAX_GAP_FROM_EXCELTIS.saturating_mul(2),
+        )
     })
 }
 
@@ -806,10 +875,31 @@ pub fn parse_operation_from_date(text: &str) -> Option<String> {
     Some(format!("{day} {} {year}", MOIS_FR[month as usize - 1]))
 }
 
-fn gmail_stellium_query() -> String {
-    format!(
+fn gmail_stellium_query(after_unix: Option<i64>) -> String {
+    let base = format!(
         "from:{GMAIL_FROM} (subject:\"Remboursement Exceltis\" OR subject:\"Remboursements Exceltis\") -subject:\"Informations complémentaires\" newer_than:{GMAIL_QUERY_RECENCY_DAYS}d -in:spam -in:trash"
-    )
+    );
+    match after_unix.and_then(format_gmail_after_date) {
+        Some(after) => format!("{base} {after}"),
+        None => base,
+    }
+}
+
+fn format_gmail_after_date(unix: i64) -> Option<String> {
+    (unix > 0).then(|| format!("after:{}", unix.saturating_sub(60)))
+}
+
+fn known_stellium_message_ids(state: &StelliumExceltisState) -> HashSet<String> {
+    let mut ids = HashSet::new();
+    for signal in &state.signals {
+        ids.insert(signal.gmail_message_id.clone());
+    }
+    for id in &state.dismissed_message_ids {
+        ids.insert(id.clone());
+    }
+    // Ne pas inclure parse_retry_by_message_id : ces messages doivent rester
+    // listés / fetchés jusqu'à 3 échecs puis dismiss.
+    ids
 }
 
 fn graph_stellium_search() -> String {
@@ -855,11 +945,13 @@ struct GraphStelliumEmailAddress {
 fn list_graph_stellium_message_ids(
     client: &reqwest::blocking::Client,
     token: &str,
-) -> Result<Vec<String>, String> {
+    start_next_link: Option<&str>,
+) -> Result<(Vec<String>, bool, Option<String>), String> {
     let search = graph_stellium_search();
     let cutoff = stellium_recency_cutoff_unix();
     let mut all_ids: Vec<String> = Vec::new();
-    let mut next_link: Option<String> = None;
+    let mut next_link = start_next_link.map(str::to_string);
+    let mut first_request = true;
     loop {
         let res = if let Some(ref url) = next_link {
             client.get(url).bearer_auth(token).send()
@@ -876,10 +968,18 @@ fn list_graph_stellium_message_ids(
                 .send()
         }
         .map_err(|e| e.to_string())?;
-        if !res.status().is_success() {
-            return Err(format!("Outlook Stellium: {}", res.text().unwrap_or_default()));
+        if !res.status().is_success() && first_request && start_next_link.is_some() {
+            return list_graph_stellium_message_ids(client, token, None);
         }
+        if !res.status().is_success() {
+            return Err(format!(
+                "Outlook Stellium: {}",
+                res.text().unwrap_or_default()
+            ));
+        }
+        first_request = false;
         let list: GraphStelliumMessageList = res.json().map_err(|e| e.to_string())?;
+        let page_next_link = list.next_link;
         for msg in list.value {
             if is_complementaires_subject(msg.subject.as_deref().unwrap_or("")) {
                 continue;
@@ -894,16 +994,15 @@ fn list_graph_stellium_message_ids(
                 continue;
             }
             all_ids.push(msg.id);
-            if all_ids.len() >= SCAN_MAX_MESSAGE_IDS {
-                return Ok(all_ids);
-            }
         }
-        next_link = list.next_link;
-        if next_link.is_none() {
-            break;
+        if page_next_link.is_none() {
+            return Ok((all_ids, true, None));
         }
+        if all_ids.len() >= SCAN_MAX_MESSAGE_IDS {
+            return Ok((all_ids, false, page_next_link));
+        }
+        next_link = page_next_link;
     }
-    Ok(all_ids)
 }
 
 fn fetch_graph_message_meta(
@@ -920,7 +1019,10 @@ fn fetch_graph_message_meta(
         .send()
         .map_err(|e| e.to_string())?;
     if !res.status().is_success() {
-        return Err(format!("Outlook message: {}", res.text().unwrap_or_default()));
+        return Err(format!(
+            "Outlook message: {}",
+            res.text().unwrap_or_default()
+        ));
     }
     let msg: GraphStelliumMessage = res.json().map_err(|e| e.to_string())?;
     let subject = msg.subject.unwrap_or_default();
@@ -1060,9 +1162,8 @@ fn resolve_signals_from_message(
     if is_complementaires_subject(&subject) {
         return vec![];
     }
-    let operation_from_label = parse_operation_from_date(
-        body_only.filter(|b| !b.is_empty()).unwrap_or(parse_text),
-    );
+    let operation_from_label =
+        parse_operation_from_date(body_only.filter(|b| !b.is_empty()).unwrap_or(parse_text));
     keys_for_stellium_message(&subject, parse_text, body_only)
         .into_iter()
         .filter_map(|key| {
@@ -1135,9 +1236,9 @@ fn sanitize_stellium_state(state: &mut StelliumExceltisState) -> bool {
 /// Supprime les signaux déjà enregistrés pour un message Gmail avant mise à jour.
 fn remove_signals_for_message(state: &mut StelliumExceltisState, message_id: &str) {
     let prefix = format!("{message_id}::");
-    state.signals.retain(|s| {
-        s.gmail_message_id != message_id && !s.gmail_message_id.starts_with(&prefix)
-    });
+    state
+        .signals
+        .retain(|s| s.gmail_message_id != message_id && !s.gmail_message_id.starts_with(&prefix));
 }
 
 fn visible_stellium_signals(state: &StelliumExceltisState) -> Vec<StelliumExceltisSignal> {
@@ -1158,15 +1259,14 @@ fn visible_stellium_signals(state: &StelliumExceltisState) -> Vec<StelliumExcelt
         .collect()
 }
 
-pub fn get_stellium_exceltis_signals(db_state: &DbState) -> Result<Vec<StelliumExceltisSignal>, String> {
+pub fn get_stellium_exceltis_signals(
+    db_state: &DbState,
+) -> Result<Vec<StelliumExceltisSignal>, String> {
     with_db(db_state, |db| {
         let mut state = load_state(db)?;
         let mut changed = sanitize_stellium_state(&mut state);
         for signal in &mut state.signals {
-            let before = (
-                signal.millesime_label.clone(),
-                signal.etiquette_nom.clone(),
-            );
+            let before = (signal.millesime_label.clone(), signal.etiquette_nom.clone());
             repair_signal_metadata(signal);
             refresh_signal_counts(db, signal);
             if before != (signal.millesime_label.clone(), signal.etiquette_nom.clone()) {
@@ -1206,6 +1306,7 @@ pub fn reset_stellium_exceltis_dismissed(db_state: &DbState) -> Result<(), Strin
         let mut state = load_state(db)?;
         state.dismissed_message_ids.clear();
         state.parse_retry_by_message_id.clear();
+        state.fetch_retry_message_ids.clear();
         save_state(db, &state)
     })
 }
@@ -1227,23 +1328,13 @@ fn fetch_stellium_message_keys(
     message_id: &str,
     dismissed: &HashSet<String>,
     provider: &str,
-) -> Option<StelliumFetchedMessage> {
+) -> Result<Option<StelliumFetchedMessage>, String> {
     let (subject, from, received_at, snippet) = if provider == "microsoft" {
-        match fetch_graph_message_meta(client, access_token, message_id) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Stellium meta {message_id}: {e}");
-                return None;
-            }
-        }
+        fetch_graph_message_meta(client, access_token, message_id)
+            .map_err(|e| format!("Stellium meta {message_id}: {e}"))?
     } else {
-        let meta = match fetch_message_meta(client, access_token, message_id) {
-            Ok(m) => m,
-            Err(e) => {
-                eprintln!("Stellium meta {message_id}: {e}");
-                return None;
-            }
-        };
+        let meta = fetch_message_meta(client, access_token, message_id)
+            .map_err(|e| format!("Stellium meta {message_id}: {e}"))?;
         let headers = meta.payload.as_ref().and_then(|p| p.headers.as_deref());
         let subject = header_value(headers, "Subject");
         let from = header_value(headers, "From").to_lowercase();
@@ -1256,10 +1347,10 @@ fn fetch_stellium_message_keys(
         (subject, from, received_at, snippet)
     };
     if subject.is_empty() {
-        return None;
+        return Ok(None);
     }
     if is_complementaires_subject(&subject) {
-        return Some(StelliumFetchedMessage {
+        return Ok(Some(StelliumFetchedMessage {
             message_id: message_id.to_string(),
             subject,
             received_at: 0,
@@ -1267,13 +1358,13 @@ fn fetch_stellium_message_keys(
             operation_from_label: None,
             remboursement_unparsed: false,
             mark_dismissed: true,
-        });
+        }));
     }
     if dismissed.contains(message_id) && !subject_looks_like_exceltis_remboursement(&subject) {
-        return None;
+        return Ok(None);
     }
     if !from.contains("stellium") && !from.contains(GMAIL_FROM) {
-        return None;
+        return Ok(None);
     }
 
     let mut parse_text = build_parse_text(&subject, &snippet, None);
@@ -1282,15 +1373,18 @@ fn fetch_stellium_message_keys(
     let mut keys = keys_for_stellium_message(&subject, &parse_text, None);
     if keys.is_empty() {
         let full = if provider == "microsoft" {
-            super::response_sync_outlook::outlook_fetch_message_body_and_subject(
+            let (body, _) = super::response_sync_outlook::outlook_fetch_message_body_and_subject(
                 client,
                 access_token,
                 message_id,
             )
-            .ok()
-            .map(|(body, _)| body)
+            .map_err(|e| format!("Stellium body {message_id}: {e}"))?;
+            Some(body)
         } else {
-            super::response_sync::gmail_fetch_message_body(client, access_token, message_id).ok()
+            Some(
+                super::response_sync::gmail_fetch_message_body(client, access_token, message_id)
+                    .map_err(|e| format!("Stellium body {message_id}: {e}"))?,
+            )
         };
         if let Some(full) = full.filter(|b| !b.is_empty()) {
             body_owned = Some(full);
@@ -1304,17 +1398,15 @@ fn fetch_stellium_message_keys(
         }
     }
 
-    let operation_from_label = parse_operation_from_date(
-        body_ref.filter(|b| !b.is_empty()).unwrap_or(&parse_text),
-    );
+    let operation_from_label =
+        parse_operation_from_date(body_ref.filter(|b| !b.is_empty()).unwrap_or(&parse_text));
 
     let remboursement_unparsed =
         keys.is_empty() && subject_looks_like_exceltis_remboursement(&subject);
-    let mark_dismissed = keys.is_empty()
-        && !remboursement_unparsed
-        && !dismissed.contains(message_id);
+    let mark_dismissed =
+        keys.is_empty() && !remboursement_unparsed && !dismissed.contains(message_id);
 
-    Some(StelliumFetchedMessage {
+    Ok(Some(StelliumFetchedMessage {
         message_id: message_id.to_string(),
         subject,
         received_at,
@@ -1322,13 +1414,16 @@ fn fetch_stellium_message_keys(
         operation_from_label,
         remboursement_unparsed,
         mark_dismissed,
-    })
+    }))
 }
 
 pub fn scan_stellium_exceltis_emails(
     app: &AppHandle,
     db_state: &DbState,
 ) -> Result<StelliumExceltisScanResult, String> {
+    let _scan_guard = STELLIUM_SCAN_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let store = EmailOAuthStore::load(app)?;
     let conn = store
         .connection
@@ -1347,53 +1442,131 @@ pub fn scan_stellium_exceltis_emails(
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())?;
+    let scan_started_at = chrono::Utc::now().timestamp();
 
-    let all_ids = if provider == "microsoft" {
-        list_graph_stellium_message_ids(&client, &access_token)?
-    } else {
-        let q = gmail_stellium_query();
-        let mut page_token: Option<String> = None;
-        let mut ids: Vec<String> = Vec::new();
-        loop {
-            let (batch, next) = list_message_ids(
-                &client,
-                &access_token,
-                &q,
-                page_token.as_deref(),
-            )?;
-            for m in batch {
-                ids.push(m.id);
-            }
-            if next.is_none() || ids.len() >= SCAN_MAX_MESSAGE_IDS {
-                break;
-            }
-            page_token = next;
-        }
-        ids
-    };
-
-    let scanned = all_ids.len() as u32;
-
-    let dismissed: HashSet<String> = with_db(db_state, |db| {
+    let (scan_state, known_ids, dismissed) = with_db(db_state, |db| {
         let state = load_state(db)?;
-        Ok(state
-            .dismissed_message_ids
-            .iter()
-            .cloned()
-            .collect::<HashSet<_>>())
+        Ok((
+            state.clone(),
+            known_stellium_message_ids(&state),
+            state
+                .dismissed_message_ids
+                .iter()
+                .cloned()
+                .collect::<HashSet<_>>(),
+        ))
     })?;
 
-    let fetched: Vec<StelliumFetchedMessage> = all_ids
-        .iter()
-        .filter_map(|message_id| {
-            fetch_stellium_message_keys(&client, &access_token, message_id, &dismissed, &provider)
-        })
-        .collect();
+    let provider_changed = stellium_provider_changed(&scan_state, &provider);
+    let start_cursor = stellium_scan_cursor(&scan_state, &provider);
+    let (mut all_ids, list_exhausted, resume_page_token) = if provider == "microsoft" {
+        let (ids, exhausted, next_link) =
+            list_graph_stellium_message_ids(&client, &access_token, start_cursor.as_deref())?;
+        (
+            ids.into_iter()
+                .filter(|id| !known_ids.contains(id))
+                .collect::<Vec<_>>(),
+            exhausted,
+            next_link,
+        )
+    } else {
+        let q = gmail_stellium_query(stellium_scan_last_scan_at(&scan_state, &provider));
+        let mut page_token = start_cursor;
+        let mut ids: Vec<String> = Vec::new();
+        let mut resume_page_token: Option<String> = None;
+        let mut restarted_after_cursor_error = false;
+        let list_exhausted = loop {
+            let (batch, next) =
+                match list_message_ids(&client, &access_token, &q, page_token.as_deref()) {
+                    Ok(page) => page,
+                    Err(_) if page_token.is_some() && !restarted_after_cursor_error => {
+                        ids.clear();
+                        page_token = None;
+                        restarted_after_cursor_error = true;
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                };
+            for m in batch {
+                if !known_ids.contains(&m.id) {
+                    ids.push(m.id);
+                }
+            }
+            if next.is_none() {
+                break true;
+            }
+            if ids.len() >= SCAN_MAX_MESSAGE_IDS {
+                resume_page_token = next;
+                break false;
+            }
+            page_token = next;
+        };
+        (ids, list_exhausted, resume_page_token)
+    };
+
+    let mut seen_ids: HashSet<String> = all_ids.iter().cloned().collect();
+    if !provider_changed {
+        for message_id in scan_state.parse_retry_by_message_id.keys() {
+            if seen_ids.insert(message_id.clone()) {
+                all_ids.push(message_id.clone());
+            }
+        }
+        for message_id in &scan_state.fetch_retry_message_ids {
+            if seen_ids.insert(message_id.clone()) {
+                all_ids.push(message_id.clone());
+            }
+        }
+    }
+    let scanned = all_ids.len() as u32;
+
+    let mut fetched: Vec<StelliumFetchedMessage> = Vec::new();
+    let mut fetch_retry_message_ids: HashSet<String> = if provider_changed {
+        HashSet::new()
+    } else {
+        scan_state
+            .fetch_retry_message_ids
+            .iter()
+            .cloned()
+            .collect()
+    };
+    for message_id in &all_ids {
+        match fetch_stellium_message_keys(
+            &client,
+            &access_token,
+            message_id,
+            &dismissed,
+            &provider,
+        ) {
+            Ok(Some(item)) => {
+                fetch_retry_message_ids.remove(message_id);
+                fetched.push(item);
+            }
+            Ok(None) => {
+                fetch_retry_message_ids.remove(message_id);
+            }
+            Err(error) => {
+                eprintln!("Stellium fetch {message_id}: {error}");
+                fetch_retry_message_ids.insert(message_id.clone());
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(
+            super::contact_gmail_sync::METADATA_DELAY_MS,
+        ));
+    }
 
     let mut new_signals = 0u32;
 
     with_db(db_state, |db| {
         let mut state = load_state(db)?;
+        if state
+            .scan_provider
+            .as_deref()
+            .is_some_and(|previous| previous != provider)
+        {
+            state.parse_retry_by_message_id.clear();
+            state.fetch_retry_message_ids.clear();
+        }
+        state.scan_provider = Some(provider.clone());
         sanitize_stellium_state(&mut state);
         let dismissed: HashSet<String> = state.dismissed_message_ids.iter().cloned().collect();
 
@@ -1440,13 +1613,9 @@ pub fn scan_stellium_exceltis_emails(
                     }
                 }
             } else if item.remboursement_unparsed {
-                eprintln!(
-                    "Stellium Exceltis: sujet non parsé — {:?}",
-                    item.subject
-                );
+                eprintln!("Stellium Exceltis: sujet non parsé — {:?}", item.subject);
                 record_parse_failure(&mut state, &item.message_id);
-            } else if item.mark_dismissed
-                && !state.dismissed_message_ids.contains(&item.message_id)
+            } else if item.mark_dismissed && !state.dismissed_message_ids.contains(&item.message_id)
             {
                 state.dismissed_message_ids.push(item.message_id);
             }
@@ -1456,6 +1625,20 @@ pub fn scan_stellium_exceltis_emails(
         for signal in &mut state.signals {
             refresh_signal_counts(db, signal);
         }
+
+        let (next_scan_at, next_page_token, next_provider) = next_stellium_scan_state(
+            state.last_scan_at,
+            &provider,
+            list_exhausted,
+            resume_page_token,
+            scan_started_at,
+        );
+        state.last_scan_at = next_scan_at;
+        state.list_page_token = next_page_token;
+        state.list_provider = next_provider;
+        let mut next_fetch_retries: Vec<String> = fetch_retry_message_ids.into_iter().collect();
+        next_fetch_retries.sort();
+        state.fetch_retry_message_ids = next_fetch_retries;
 
         if let Ok(etiquettes) = db.get_all_etiquettes() {
             for etiquette in etiquettes {
@@ -1477,6 +1660,90 @@ pub fn scan_stellium_exceltis_emails(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn known_stellium_ids_exclude_parse_retry_for_refetch() {
+        let mut state = StelliumExceltisState::default();
+        state
+            .parse_retry_by_message_id
+            .insert("msg-retry".into(), 1);
+        state.dismissed_message_ids.push("msg-done".into());
+        let known = known_stellium_message_ids(&state);
+        assert!(!known.contains("msg-retry"));
+        assert!(known.contains("msg-done"));
+    }
+
+    #[test]
+    fn stellium_fetch_retries_survive_state_roundtrip() {
+        let state = StelliumExceltisState {
+            fetch_retry_message_ids: vec!["msg-network".into()],
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&state).unwrap();
+        let parsed: StelliumExceltisState = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.fetch_retry_message_ids, vec!["msg-network"]);
+    }
+
+    #[test]
+    fn gmail_stellium_query_adds_precise_after_clause_when_scan_watermark_set() {
+        let ts = chrono::Utc
+            .with_ymd_and_hms(2026, 3, 15, 10, 0, 0)
+            .unwrap()
+            .timestamp();
+        let q = gmail_stellium_query(Some(ts));
+        assert!(q.contains(&format!("after:{}", ts - 60)));
+        assert!(q.contains("from:marketplacement@stellium.fr"));
+    }
+
+    #[test]
+    fn stellium_watermark_holds_when_list_not_exhausted() {
+        let (scan_at, page_token, provider) =
+            next_stellium_scan_state(None, "google", false, Some("page-2".into()), 1000);
+        assert_eq!(scan_at, None);
+        assert_eq!(page_token.as_deref(), Some("page-2"));
+        assert_eq!(provider.as_deref(), Some("google"));
+    }
+
+    #[test]
+    fn stellium_watermark_advances_when_fully_processed() {
+        let (scan_at, page_token, provider) =
+            next_stellium_scan_state(None, "microsoft", true, None, 3000);
+        assert_eq!(scan_at, Some(3000));
+        assert!(page_token.is_none());
+        assert!(provider.is_none());
+    }
+
+    #[test]
+    fn stellium_cursor_is_scoped_to_provider() {
+        let state = StelliumExceltisState {
+            last_scan_at: Some(1000),
+            list_page_token: Some("gmail-token".into()),
+            list_provider: Some("google".into()),
+            scan_provider: Some("google".into()),
+            fetch_retry_message_ids: vec!["gmail-retry".into()],
+            ..Default::default()
+        };
+        assert_eq!(
+            stellium_scan_cursor(&state, "google").as_deref(),
+            Some("gmail-token")
+        );
+        assert!(stellium_scan_cursor(&state, "microsoft").is_none());
+        assert!(stellium_scan_last_scan_at(&state, "microsoft").is_none());
+        assert!(stellium_provider_changed(&state, "microsoft"));
+    }
+
+    #[test]
+    fn stellium_legacy_google_state_restarts_when_switching_to_microsoft() {
+        let mut state = StelliumExceltisState {
+            last_scan_at: Some(1000),
+            ..Default::default()
+        };
+        state.parse_retry_by_message_id.insert("gmail-retry".into(), 1);
+        assert!(stellium_provider_changed(&state, "microsoft"));
+        assert!(stellium_scan_cursor(&state, "microsoft").is_none());
+        assert!(stellium_scan_last_scan_at(&state, "microsoft").is_none());
+    }
 
     #[test]
     fn is_exceltis_etiquette_nom_matches_prefix() {
@@ -1484,7 +1751,9 @@ mod tests {
         assert!(is_exceltis_etiquette_nom("Exceltis — Août 2026"));
         assert!(is_exceltis_etiquette_nom("Exceltis Rendement - Août 2026"));
         assert!(!is_exceltis_etiquette_nom("Suivi > 1 an"));
-        assert!(!is_exceltis_etiquette_nom("Exceltis — remboursement et arbitrage"));
+        assert!(!is_exceltis_etiquette_nom(
+            "Exceltis — remboursement et arbitrage"
+        ));
     }
 
     #[test]
@@ -1589,14 +1858,8 @@ Exceltis Rendement Août 2026 est désormais accessible sur votre Extranet Place
         let keys = parse_remboursement_blocks_from_text(body);
         assert_eq!(keys.len(), 2);
         let db = crate::database::Database::open_in_memory_for_tests().unwrap();
-        let signals = resolve_signals_from_message(
-            &db,
-            "msg".into(),
-            subject.into(),
-            subject,
-            Some(body),
-            0,
-        );
+        let signals =
+            resolve_signals_from_message(&db, "msg".into(), subject.into(), subject, Some(body), 0);
         assert_eq!(signals.len(), 2);
     }
 
@@ -1623,15 +1886,13 @@ Exceltis Rendement Août 2026 est désormais accessible sur votre Extranet Place
         let keys = parse_remboursement_blocks_from_text(body);
         assert_eq!(keys.len(), 2, "keys = {keys:?}");
         assert!(
-            keys.iter().any(|k| k.gamme.as_deref() == Some("Rendement")
-                && k.month == 5
-                && k.year == 2025),
+            keys.iter()
+                .any(|k| k.gamme.as_deref() == Some("Rendement") && k.month == 5 && k.year == 2025),
             "Rendement Mai 2025 manquant : {keys:?}"
         );
         assert!(
-            keys.iter().any(|k| k.gamme.as_deref() == Some("Sérénité")
-                && k.month == 5
-                && k.year == 2024),
+            keys.iter()
+                .any(|k| k.gamme.as_deref() == Some("Sérénité") && k.month == 5 && k.year == 2024),
             "Sérénité Mai 2024 manquant : {keys:?}"
         );
         let db = crate::database::Database::open_in_memory_for_tests().unwrap();
@@ -1656,8 +1917,14 @@ Exceltis Rendement Août 2026 est désormais accessible sur votre Extranet Place
         );
         let keys = parse_remboursement_blocks_from_text(&body);
         assert_eq!(keys.len(), 2, "keys = {keys:?}");
-        assert!(keys.iter().any(|k| k.month == 5 && k.year == 2025), "{keys:?}");
-        assert!(keys.iter().any(|k| k.month == 5 && k.year == 2024), "{keys:?}");
+        assert!(
+            keys.iter().any(|k| k.month == 5 && k.year == 2025),
+            "{keys:?}"
+        );
+        assert!(
+            keys.iter().any(|k| k.month == 5 && k.year == 2024),
+            "{keys:?}"
+        );
     }
 
     #[test]
@@ -1746,15 +2013,16 @@ Fermeture imminente d'Exceltis Rendement Juin 2026"#;
             0,
         );
         assert_eq!(signals.len(), 2);
-        assert!(signals.iter().all(|s| {
-            s.millesime_label == "Mai 2025" || s.millesime_label == "Mai 2024"
-        }));
+        assert!(signals
+            .iter()
+            .all(|s| { s.millesime_label == "Mai 2025" || s.millesime_label == "Mai 2024" }));
     }
 
     #[test]
     fn direct_remboursement_uses_subject_only() {
         let subject = "Remboursement Exceltis Rendement Février 2025";
-        let body = "Exceltis Rendement Août 2026 est désormais accessible sur votre Extranet Placement";
+        let body =
+            "Exceltis Rendement Août 2026 est désormais accessible sur votre Extranet Placement";
         let parse_text = format!("{subject}\n{body}");
         let db = crate::database::Database::open_in_memory_for_tests().unwrap();
         let signals = resolve_signals_from_message(

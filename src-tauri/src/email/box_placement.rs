@@ -11,11 +11,105 @@ use crate::database::placement_operations::{
     STATUS_CONFORME, STATUS_NON_CONFORME,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::sync::Mutex;
 use tauri::AppHandle;
 
 const GMAIL_FROM: &str = "no-reply@stellium.fr";
 const GMAIL_QUERY_RECENCY_DAYS: u32 = 120;
 const SCAN_MAX_MESSAGE_IDS: usize = 100;
+const BOX_SCAN_STATE_KEY: &str = "box_placement_scan_v1";
+static BOX_SCAN_LOCK: Mutex<()> = Mutex::new(());
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct BoxPlacementScanState {
+    #[serde(default, alias = "lastScanAt")]
+    last_scan_at: Option<i64>,
+    /// Mail(s) non appliqué(s) ou liste Gmail tronquée — ne pas avancer le filigrane `after:`.
+    #[serde(default, alias = "pendingRetryable")]
+    pending_retryable: bool,
+    /// Reprise pagination Gmail quand plus de 100 messages correspondent encore.
+    #[serde(default, alias = "listPageToken")]
+    list_page_token: Option<String>,
+    /// Provider auquel appartient le curseur (token Gmail ou nextLink Graph).
+    #[serde(default, alias = "listProvider")]
+    list_provider: Option<String>,
+    /// Messages à retenter explicitement, indépendamment du filigrane de liste.
+    #[serde(default, alias = "retryMessageIds")]
+    retry_message_ids: Vec<String>,
+    /// Provider du dernier scan, pour ne jamais rejouer un ID Gmail dans Graph (ou inversement).
+    #[serde(default, alias = "scanProvider")]
+    scan_provider: Option<String>,
+}
+
+/// Décision pure sur le filigrane et la pagination Box Placement.
+fn next_box_scan_state(
+    previous: &BoxPlacementScanState,
+    provider: &str,
+    list_exhausted: bool,
+    resume_page_token: Option<String>,
+    mut retry_message_ids: Vec<String>,
+    now_unix: i64,
+) -> BoxPlacementScanState {
+    retry_message_ids.sort();
+    retry_message_ids.dedup();
+    if !list_exhausted {
+        return BoxPlacementScanState {
+            last_scan_at: previous.last_scan_at,
+            pending_retryable: !retry_message_ids.is_empty(),
+            list_page_token: resume_page_token,
+            list_provider: Some(provider.to_string()),
+            retry_message_ids,
+            scan_provider: Some(provider.to_string()),
+        };
+    }
+    BoxPlacementScanState {
+        last_scan_at: Some(now_unix),
+        pending_retryable: !retry_message_ids.is_empty(),
+        list_page_token: None,
+        list_provider: None,
+        retry_message_ids,
+        scan_provider: Some(provider.to_string()),
+    }
+}
+
+fn box_scan_cursor(state: &BoxPlacementScanState, provider: &str) -> Option<String> {
+    // Les anciens états ne stockaient pas les IDs en retry : repartir du début
+    // évite d'abandonner un mail d'une page déjà parcourue.
+    if state.pending_retryable && state.retry_message_ids.is_empty() {
+        return None;
+    }
+    let provider_matches = state.list_provider.as_deref() == Some(provider)
+        || (state.list_provider.is_none() && provider == "google");
+    provider_matches
+        .then(|| state.list_page_token.clone())
+        .flatten()
+}
+
+fn box_scan_resume(
+    state: &BoxPlacementScanState,
+    provider: &str,
+) -> (Option<i64>, Option<String>, Vec<String>) {
+    let provider_changed = match state.scan_provider.as_deref() {
+        Some(previous) => previous != provider,
+        None => {
+            provider == "microsoft"
+                && (state.last_scan_at.is_some()
+                    || state.list_page_token.is_some()
+                    || !state.retry_message_ids.is_empty())
+        }
+    };
+    if provider_changed {
+        // Les IDs et filigranes sont propres au compte/provider. Un scan complet
+        // redécouvre les éventuels retries quand l'utilisateur change de boîte.
+        return (None, None, Vec::new());
+    }
+    (
+        state.last_scan_at,
+        box_scan_cursor(state, provider),
+        state.retry_message_ids.clone(),
+    )
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BoxPlacementKind {
@@ -74,7 +168,11 @@ pub fn parse_investor_name(full: &str) -> Option<(String, String)> {
 }
 
 pub fn parse_operation_line(line: &str) -> Option<(String, String, String)> {
-    let parts: Vec<&str> = line.split(" - ").map(str::trim).filter(|p| !p.is_empty()).collect();
+    let parts: Vec<&str> = line
+        .split(" - ")
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect();
     if parts.len() < 3 {
         return None;
     }
@@ -172,10 +270,38 @@ pub fn parse_box_placement_email(subject: &str, body: &str) -> Option<ParsedBoxP
     })
 }
 
-fn gmail_box_placement_query() -> String {
-    format!(
+fn gmail_box_placement_query(after_unix: Option<i64>) -> String {
+    let base = format!(
         "from:{GMAIL_FROM} subject:\"Box placement\" newer_than:{GMAIL_QUERY_RECENCY_DAYS}d -in:spam -in:trash"
-    )
+    );
+    match after_unix.and_then(format_gmail_after_date) {
+        Some(after) => format!("{base} {after}"),
+        None => base,
+    }
+}
+
+fn format_gmail_after_date(unix: i64) -> Option<String> {
+    (unix > 0).then(|| format!("after:{}", unix.saturating_sub(60)))
+}
+
+fn load_box_scan_state(db: &crate::database::Database) -> Result<BoxPlacementScanState, String> {
+    match db
+        .get_setting(BOX_SCAN_STATE_KEY)
+        .map_err(|e| e.to_string())?
+    {
+        Some(raw) => serde_json::from_str(&raw)
+            .map_err(|e| format!("État scan Box Placement invalide : {e}")),
+        None => Ok(BoxPlacementScanState::default()),
+    }
+}
+
+fn save_box_scan_state(
+    db: &crate::database::Database,
+    state: &BoxPlacementScanState,
+) -> Result<(), String> {
+    let json = serde_json::to_string(state).map_err(|e| e.to_string())?;
+    db.set_setting(BOX_SCAN_STATE_KEY, &json)
+        .map_err(|e| e.to_string())
 }
 
 fn parse_internal_date_sec(internal_date: &str) -> i64 {
@@ -258,11 +384,13 @@ struct FetchedBoxPlacementMessage {
 fn list_graph_box_placement_message_ids(
     client: &reqwest::blocking::Client,
     token: &str,
-) -> Result<Vec<String>, String> {
+    start_next_link: Option<&str>,
+) -> Result<(Vec<String>, bool, Option<String>), String> {
     let search = graph_box_placement_search();
     let cutoff = box_placement_recency_cutoff_unix();
     let mut all_ids: Vec<String> = Vec::new();
-    let mut next_link: Option<String> = None;
+    let mut next_link = start_next_link.map(str::to_string);
+    let mut first_request = true;
     loop {
         let res = if let Some(ref url) = next_link {
             client.get(url).bearer_auth(token).send()
@@ -279,10 +407,18 @@ fn list_graph_box_placement_message_ids(
                 .send()
         }
         .map_err(|e| e.to_string())?;
-        if !res.status().is_success() {
-            return Err(format!("Outlook Box Placement: {}", res.text().unwrap_or_default()));
+        if !res.status().is_success() && first_request && start_next_link.is_some() {
+            return list_graph_box_placement_message_ids(client, token, None);
         }
+        if !res.status().is_success() {
+            return Err(format!(
+                "Outlook Box Placement: {}",
+                res.text().unwrap_or_default()
+            ));
+        }
+        first_request = false;
         let list: GraphBoxPlacementMessageList = res.json().map_err(|e| e.to_string())?;
+        let page_next_link = list.next_link;
         for msg in list.value {
             let from = msg
                 .from
@@ -308,16 +444,15 @@ fn list_graph_box_placement_message_ids(
                 continue;
             }
             all_ids.push(msg.id);
-            if all_ids.len() >= SCAN_MAX_MESSAGE_IDS {
-                return Ok(all_ids);
-            }
         }
-        next_link = list.next_link;
-        if next_link.is_none() {
-            break;
+        if page_next_link.is_none() {
+            return Ok((all_ids, true, None));
         }
+        if all_ids.len() >= SCAN_MAX_MESSAGE_IDS {
+            return Ok((all_ids, false, page_next_link));
+        }
+        next_link = page_next_link;
     }
-    Ok(all_ids)
 }
 
 fn outlook_fetch_message_received_at(
@@ -334,7 +469,10 @@ fn outlook_fetch_message_received_at(
         .send()
         .map_err(|e| e.to_string())?;
     if !res.status().is_success() {
-        return Err(format!("Outlook message: {}", res.text().unwrap_or_default()));
+        return Err(format!(
+            "Outlook message: {}",
+            res.text().unwrap_or_default()
+        ));
     }
     #[derive(Deserialize)]
     struct Meta {
@@ -379,13 +517,17 @@ pub fn scan_box_placement_emails(
     app: &AppHandle,
     db_state: &DbState,
 ) -> Result<BoxPlacementScanResult, String> {
+    let _scan_guard = BOX_SCAN_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let store = EmailOAuthStore::load(app)?;
     let conn = store.connection.as_ref().ok_or(
         "Aucun compte email connecté. Paramètres → Emails & envois → Connexion : connectez Google ou Microsoft.",
     )?;
     if conn.provider != "google" && conn.provider != "microsoft" {
         return Err(
-            "Le scan Box Placement nécessite Gmail ou Outlook connecté (no-reply@stellium.fr).".into(),
+            "Le scan Box Placement nécessite Gmail ou Outlook connecté (no-reply@stellium.fr)."
+                .into(),
         );
     }
 
@@ -398,52 +540,110 @@ pub fn scan_box_placement_emails(
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())?;
+    let scan_started_at = chrono::Utc::now().timestamp();
 
-    let all_ids = if provider == "microsoft" {
-        list_graph_box_placement_message_ids(&client, &access_token)?
+    let scan_state = with_db(db_state, |db| {
+        let state = load_box_scan_state(db)?;
+        Ok(state)
+    })?;
+
+    let (last_scan_at, start_cursor, retry_ids_for_provider) =
+        box_scan_resume(&scan_state, &provider);
+    let (mut all_ids, list_exhausted, resume_page_token) = if provider == "microsoft" {
+        list_graph_box_placement_message_ids(&client, &access_token, start_cursor.as_deref())?
     } else {
-        let q = gmail_box_placement_query();
-        let mut page_token: Option<String> = None;
+        let q = gmail_box_placement_query(last_scan_at);
+        let mut page_token = start_cursor;
         let mut ids: Vec<String> = Vec::new();
-        loop {
+        let mut resume_page_token: Option<String> = None;
+        let mut restarted_after_cursor_error = false;
+        let list_exhausted = loop {
             let (batch, next) =
-                list_message_ids(&client, &access_token, &q, page_token.as_deref())?;
+                match list_message_ids(&client, &access_token, &q, page_token.as_deref()) {
+                    Ok(page) => page,
+                    Err(_) if page_token.is_some() && !restarted_after_cursor_error => {
+                        ids.clear();
+                        page_token = None;
+                        restarted_after_cursor_error = true;
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                };
             for m in batch {
                 ids.push(m.id);
             }
-            if next.is_none() || ids.len() >= SCAN_MAX_MESSAGE_IDS {
-                break;
+            if next.is_none() {
+                break true;
+            }
+            if ids.len() >= SCAN_MAX_MESSAGE_IDS {
+                resume_page_token = next;
+                break false;
             }
             page_token = next;
-        }
-        ids
+        };
+        (ids, list_exhausted, resume_page_token)
     };
 
+    let mut seen_ids: HashSet<String> = all_ids.iter().cloned().collect();
+    for message_id in &retry_ids_for_provider {
+        if seen_ids.insert(message_id.clone()) {
+            all_ids.push(message_id.clone());
+        }
+    }
     let scanned = all_ids.len() as u32;
     let mut updated = 0u32;
     let created = 0u32;
-    let mut skipped = 0u32;
+    let existing_ids = with_db(db_state, |db| {
+        let mut ids = HashSet::new();
+        for message_id in &all_ids {
+            if db
+                .placement_operation_exists_for_gmail(message_id)
+                .map_err(|e| e.to_string())?
+            {
+                ids.insert(message_id.clone());
+            }
+        }
+        Ok(ids)
+    })?;
+    let mut skipped = existing_ids.len() as u32;
     let mut skipped_ambiguous_contacts = 0u32;
     let mut skipped_ambiguous_placements = 0u32;
     let mut new_conforme_ids: Vec<i64> = Vec::new();
+    let mut retry_message_ids: HashSet<String> = retry_ids_for_provider.into_iter().collect();
+    for message_id in &existing_ids {
+        retry_message_ids.remove(message_id);
+    }
+
+    // Les appels réseau restent hors du verrou SQLite pour ne pas bloquer l'UI.
+    let mut fetched_messages: Vec<(String, FetchedBoxPlacementMessage)> = Vec::new();
+    for message_id in all_ids {
+        if existing_ids.contains(&message_id) {
+            continue;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(
+            super::contact_gmail_sync::METADATA_DELAY_MS,
+        ));
+        match fetch_box_placement_message(&client, &access_token, &message_id, &provider) {
+            Ok(fetched) => {
+                retry_message_ids.remove(&message_id);
+                fetched_messages.push((message_id, fetched));
+            }
+            Err(error) => {
+                eprintln!("Box Placement fetch {message_id}: {error}");
+                retry_message_ids.insert(message_id);
+                skipped += 1;
+            }
+        }
+    }
 
     with_db(db_state, |db| {
-        for message_id in all_ids {
-            if db
-                .placement_operation_exists_for_gmail(&message_id)
-                .map_err(|e| e.to_string())?
-            {
-                skipped += 1;
-                continue;
-            }
-
-            let fetched =
-                fetch_box_placement_message(&client, &access_token, &message_id, &provider)?;
+        for (message_id, fetched) in fetched_messages {
             let subject = fetched.subject;
             let body = fetched.body;
             let received_at = fetched.received_at;
             let Some(parsed) = parse_box_placement_email(&subject, &body) else {
                 skipped += 1;
+                retry_message_ids.insert(message_id);
                 continue;
             };
 
@@ -452,6 +652,7 @@ pub fn scan_box_placement_emails(
                 .map_err(|e| e.to_string())?;
             let Some(contact_id) = contact_id else {
                 skipped += 1;
+                retry_message_ids.insert(message_id);
                 if db
                     .find_contact_by_name(&parsed.contact_nom, &parsed.contact_prenom)
                     .map_err(|e| e.to_string())?
@@ -484,6 +685,7 @@ pub fn scan_box_placement_emails(
 
             let Some(_matched_op) = matched else {
                 skipped += 1;
+                retry_message_ids.insert(message_id);
                 let open_count = db
                     .count_open_placements_for_email_match(
                         contact_id,
@@ -514,18 +716,28 @@ pub fn scan_box_placement_emails(
 
             if !changed {
                 skipped += 1;
+                retry_message_ids.remove(&message_id);
                 continue;
             }
+            retry_message_ids.remove(&message_id);
             updated += 1;
-            if status == STATUS_CONFORME
-                && placement_operation_eligible_for_client_email(&_op)
-            {
+            if status == STATUS_CONFORME && placement_operation_eligible_for_client_email(&_op) {
                 new_conforme_ids.push(_op.id);
             }
         }
 
         new_conforme_ids.sort_unstable();
         new_conforme_ids.dedup();
+
+        let next_state = next_box_scan_state(
+            &scan_state,
+            &provider,
+            list_exhausted,
+            resume_page_token,
+            retry_message_ids.into_iter().collect(),
+            scan_started_at,
+        );
+        save_box_scan_state(db, &next_state)?;
 
         Ok(BoxPlacementScanResult {
             scanned,
@@ -542,9 +754,21 @@ pub fn scan_box_placement_emails(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
 
     const CONFORME_BODY: &str = "Bonjour,\n\nNous vous confirmons de l'envoi au partenaire ce-jour de l'opération suivante :\n\nArbitrage libre - Cristalliance Evoluvie - DUPONT Jean\n\nBien cordialement,\nL'équipe Stellium";
     const CONFORME_SUBJECT: &str = "Box placement - Envoi dossier d'opération - DUPONT Jean";
+
+    #[test]
+    fn gmail_box_placement_query_adds_precise_after_clause() {
+        let ts = chrono::Utc
+            .with_ymd_and_hms(2026, 2, 1, 8, 0, 0)
+            .unwrap()
+            .timestamp();
+        let q = gmail_box_placement_query(Some(ts));
+        assert!(q.contains(&format!("after:{}", ts - 60)));
+        assert!(q.contains("no-reply@stellium.fr"));
+    }
 
     #[test]
     fn parse_conforme_email() {
@@ -566,5 +790,91 @@ mod tests {
         assert_eq!(parsed.contact_prenom, "Tony");
         assert_eq!(parsed.stellium_label, "Souscription");
         assert_eq!(parsed.product_label, "Corum Origin CIF");
+    }
+
+    #[test]
+    fn box_retry_ids_survive_when_list_is_exhausted() {
+        let prev = BoxPlacementScanState::default();
+        let next = next_box_scan_state(&prev, "google", true, None, vec!["msg-retry".into()], 1000);
+        assert_eq!(next.last_scan_at, Some(1000));
+        assert!(next.pending_retryable);
+        assert!(next.list_page_token.is_none());
+        assert_eq!(next.retry_message_ids, vec!["msg-retry"]);
+    }
+
+    #[test]
+    fn box_pagination_keeps_cursor_and_explicit_retry_ids() {
+        let prev = BoxPlacementScanState::default();
+        let next = next_box_scan_state(
+            &prev,
+            "google",
+            false,
+            Some("page-2".into()),
+            vec!["msg-retry".into()],
+            1000,
+        );
+        assert_eq!(next.last_scan_at, None);
+        assert!(next.pending_retryable);
+        assert_eq!(next.list_page_token.as_deref(), Some("page-2"));
+        assert_eq!(next.list_provider.as_deref(), Some("google"));
+        assert_eq!(next.retry_message_ids, vec!["msg-retry"]);
+    }
+
+    #[test]
+    fn box_watermark_holds_when_gmail_list_not_exhausted() {
+        let prev = BoxPlacementScanState::default();
+        let next = next_box_scan_state(&prev, "google", false, Some("page-2".into()), vec![], 1000);
+        assert_eq!(next.last_scan_at, None);
+        assert!(!next.pending_retryable);
+        assert_eq!(next.list_page_token.as_deref(), Some("page-2"));
+    }
+
+    #[test]
+    fn box_watermark_advances_when_fully_processed() {
+        let prev = BoxPlacementScanState {
+            pending_retryable: true,
+            list_page_token: Some("page-2".into()),
+            ..Default::default()
+        };
+        let next = next_box_scan_state(&prev, "google", true, None, vec![], 3000);
+        assert_eq!(next.last_scan_at, Some(3000));
+        assert!(!next.pending_retryable);
+        assert!(next.list_page_token.is_none());
+    }
+
+    #[test]
+    fn box_legacy_retry_state_restarts_listing_from_first_page() {
+        let prev = BoxPlacementScanState {
+            pending_retryable: true,
+            list_page_token: Some("page-2".into()),
+            ..Default::default()
+        };
+        assert!(box_scan_cursor(&prev, "google").is_none());
+        let (last_scan_at, cursor, retries) = box_scan_resume(&prev, "microsoft");
+        assert!(last_scan_at.is_none());
+        assert!(cursor.is_none());
+        assert!(retries.is_empty());
+    }
+
+    #[test]
+    fn box_cursor_is_scoped_to_provider() {
+        let prev = BoxPlacementScanState {
+            last_scan_at: Some(1000),
+            list_page_token: Some("gmail-token".into()),
+            list_provider: Some("google".into()),
+            retry_message_ids: vec!["gmail-retry".into()],
+            scan_provider: Some("google".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            box_scan_cursor(&prev, "google").as_deref(),
+            Some("gmail-token")
+        );
+        assert!(box_scan_cursor(&prev, "microsoft").is_none());
+
+        let (last_scan_at, cursor, retries) = box_scan_resume(&prev, "microsoft");
+        assert!(last_scan_at.is_none());
+        assert!(cursor.is_none());
+        assert!(retries.is_empty());
     }
 }

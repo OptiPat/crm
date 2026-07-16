@@ -83,9 +83,13 @@ export function parseAttachments(json: string | null): MailAttachmentMeta[] {
 }
 
 export async function syncContactGmailMessages(
-  contactId: number
+  contactId: number,
+  options?: { lightweight?: boolean }
 ): Promise<ContactGmailSyncResult> {
-  return invoke<ContactGmailSyncResult>("sync_contact_gmail_messages", { contactId });
+  return invoke<ContactGmailSyncResult>("sync_contact_gmail_messages", {
+    contactId,
+    lightweight: options?.lightweight ?? false,
+  });
 }
 
 export async function getContactGmailMessages(

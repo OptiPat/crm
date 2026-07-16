@@ -36,7 +36,7 @@ import { seedDefaultEmailTemplates } from "@/lib/api/tauri-templates-email";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import { needsLicenseActivation } from "@/lib/api/tauri-license";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
-import { runBackgroundAutomationAfterUnlock } from "@/lib/background/background-automation-runner";
+import { runBackgroundAutomationAfterUnlock, waitForBackgroundAutomationCycleIdle } from "@/lib/background/background-automation-runner";
 import { useBackgroundAutomationListener } from "@/hooks/useBackgroundAutomationListener";
 import { useAutomationNotificationListener } from "@/hooks/useAutomationNotificationListener";
 
@@ -50,6 +50,7 @@ function AppInner() {
   const etiquettesRecalcDone = useRef(
     sessionStorage.getItem("crm_etiquettes_recalc_done") === "1"
   );
+  const etiquettesRecalcInFlight = useRef(false);
 
   useAppNavigationListener((detail) => {
     if (detail.type === "page" && detail.page !== currentPage) {
@@ -141,7 +142,7 @@ function AppInner() {
     } catch (error) {
       console.error("Error checking wizard status:", error);
     }
-    runBackgroundAutomationAfterUnlock();
+    void runBackgroundAutomationAfterUnlock();
   };
 
   const handleLogout = async () => {
@@ -160,27 +161,58 @@ function AppInner() {
   useEffect(() => {
     if (!isAuthenticated || showWizard || showLicense) return;
     if (etiquettesRecalcDone.current) return;
-    etiquettesRecalcDone.current = true;
-    sessionStorage.setItem(ETIQUETTES_RECALC_SESSION_KEY, "1");
+    if (etiquettesRecalcInFlight.current) return;
+    let cancelled = false;
+    let retryTimer: number | null = null;
 
-    void (async () => {
-      try {
-        await seedDefaultEtiquettes();
-      } catch {
-        /* déjà initialisé */
+    const scheduleRetry = () => {
+      if (cancelled) return;
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        void runRecalc();
+      }, 60_000);
+    };
+
+    const runRecalc = async () => {
+      if (cancelled || etiquettesRecalcDone.current || etiquettesRecalcInFlight.current) {
+        return;
       }
+      etiquettesRecalcInFlight.current = true;
       try {
-        await seedDefaultEmailTemplates({ onlyIfEmpty: true });
-      } catch {
-        /* déjà initialisé */
-      }
-      try {
-        await new Promise((resolve) => setTimeout(resolve, 2500));
+        try {
+          await seedDefaultEtiquettes();
+        } catch {
+          /* déjà initialisé */
+        }
+        try {
+          await seedDefaultEmailTemplates({ onlyIfEmpty: true });
+        } catch {
+          /* déjà initialisé */
+        }
+        const idle = await waitForBackgroundAutomationCycleIdle(600_000);
+        if (!idle) {
+          console.warn("Recalcul étiquettes reporté : automatisation encore en cours");
+          scheduleRetry();
+          return;
+        }
         await runFullEtiquettesRecalc();
+        if (!cancelled) {
+          etiquettesRecalcDone.current = true;
+          sessionStorage.setItem(ETIQUETTES_RECALC_SESSION_KEY, "1");
+        }
       } catch (error) {
         console.error("Erreur recalcul étiquettes (arrière-plan):", error);
+        scheduleRetry();
+      } finally {
+        etiquettesRecalcInFlight.current = false;
       }
-    })();
+    };
+
+    void runRecalc();
+    return () => {
+      cancelled = true;
+      if (retryTimer != null) window.clearTimeout(retryTimer);
+    };
   }, [isAuthenticated, showWizard, showLicense]);
 
   const renderPage = () => {
