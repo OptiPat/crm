@@ -10,7 +10,7 @@ import {
 } from "@/lib/api/tauri-box-placement";
 import {
   loadPlacementConformeTemplatePair,
-  resolvePlacementConformeTemplateForOperationType,
+  resolvePlacementConformeTemplateForOperation,
 } from "@/lib/emails/template-email-placement-conforme";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
 import {
@@ -49,9 +49,7 @@ export async function sendPlacementConformeTemplatedEmail(options: {
   contactId: number;
   operation: PlacementOperation;
 }): Promise<void> {
-  const template = await resolvePlacementConformeTemplateForOperationType(
-    options.operation.operation_type
-  );
+  const template = await resolvePlacementConformeTemplateForOperation(options.operation);
   if (!template) return;
 
   const contact = await getContactById(options.contactId);
@@ -105,9 +103,7 @@ export async function maybeSendPlacementConformeEmailForOperation(
 ): Promise<"sent" | "skipped" | "error"> {
   if (!placementEligibleForClientEmail(operation)) return "skipped";
 
-  const template = await resolvePlacementConformeTemplateForOperationType(
-    operation.operation_type
-  );
+  const template = await resolvePlacementConformeTemplateForOperation(operation);
   if (!template) return "skipped";
 
   const emailStatus = await getEmailConnectionStatus();

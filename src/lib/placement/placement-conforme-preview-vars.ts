@@ -2,6 +2,7 @@ import { parseTemplateEmailPlacementConformeTrigger } from "@/lib/emails/templat
 
 const PLACEMENT_CONFORME_ONLY_VAR_KEYS = [
   "libelle_stellium",
+  "libelle_client",
   "type_operation",
   "date_operation",
 ] as const;
@@ -9,8 +10,9 @@ const PLACEMENT_CONFORME_ONLY_VAR_KEYS = [
 /** Valeurs fictives pour l'aperçu des modèles Box Placement (opération conforme). */
 export const SAMPLE_PLACEMENT_CONFORME_PREVIEW_VARS: Record<string, string> = {
   libelle_stellium: "Arbitrage libre",
+  libelle_client: "l'arbitrage",
   produit: "Cristalliance Evoluvie",
-  type_operation: "Arbitrage",
+  type_operation: "Arbitrage libre",
   date_operation: "lundi 14 juillet 2026",
 };
 

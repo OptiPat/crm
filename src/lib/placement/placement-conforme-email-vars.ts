@@ -1,6 +1,7 @@
 import type { PlacementOperation } from "@/lib/api/tauri-box-placement";
 import { escapeHtmlText, sanitizeEmailHeaderValue } from "@/lib/emails/template-email-html";
 import { placementOperationTypeLabel } from "@/lib/placement/placement-operations-ui";
+import { formatPlacementStelliumClientLabel } from "@/lib/placement/placement-stellium-client-labels";
 import { formatStelliumProductForDisplay } from "@/lib/placement/stellium-box-placement-products";
 
 const PARIS_TZ = "Europe/Paris";
@@ -23,9 +24,12 @@ export function buildPlacementConformeEmailExtraVariables(
   >
 ): Record<string, string> {
   return {
-    type_operation: placementOperationTypeLabel(operation.operation_type),
+    type_operation:
+      operation.stellium_label?.trim() ||
+      placementOperationTypeLabel(operation.operation_type),
     produit: formatStelliumProductForDisplay(operation.product_label?.trim() ?? ""),
     libelle_stellium: operation.stellium_label?.trim() ?? "",
+    libelle_client: formatPlacementStelliumClientLabel(operation.stellium_label),
     date_operation: formatPlacementConformeEmailDate(operation.email_received_at),
   };
 }
@@ -42,5 +46,6 @@ export function buildPlacementConformeEmailExtraVariablesForSend(
     ...base,
     produit: escapeHtmlText(sanitizeEmailHeaderValue(base.produit)),
     libelle_stellium: escapeHtmlText(sanitizeEmailHeaderValue(base.libelle_stellium)),
+    libelle_client: escapeHtmlText(sanitizeEmailHeaderValue(base.libelle_client)),
   };
 }

@@ -62,7 +62,7 @@ Doc étiquettes : `docs/ETIQUETTES.md`. Doc chiffrement : `docs/CHIFFREMENT.md`.
 
 ## Après modification de code
 
-1. **Tests** — une verify à la fin de tâche via Shell (pas l’utilisateur) ; arbre dans `verification-automatique.mdc` :
+1. **Tests** — verify à la fin de tâche **substantielle** via Shell (pas l’utilisateur) ; arbre dans `verification-automatique.mdc` (pas de verify pour polish UI / copy seuls) :
    - défaut (`src/**` seul) : `npm run verify:quick`
    - Rust / Tauri : `npm run verify`
 2. **Linter** — `ReadLints` sur les fichiers **que tu as modifiés** (ou le dossier touché).

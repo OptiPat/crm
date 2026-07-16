@@ -99,7 +99,7 @@ export function getTemplateActivationFlags(
   const hasPipeRdv = pipeRdvTrigger.enabled && pipeRdvTrigger.stages.length > 0;
   const placementTrigger = parseTemplateEmailPlacementConformeTrigger(template.variables);
   const hasPlacementConforme =
-    placementTrigger.enabled && placementTrigger.operation_types.length > 0;
+    placementTrigger.enabled && placementTrigger.stellium_labels.length > 0;
   const hasTutoiement = template.tutoiement_template_id != null;
   const hasSendChannel = hasTrigger || hasEtiquetteLink || hasPipeRdv || hasPlacementConforme;
 

@@ -234,6 +234,12 @@ export const PLACEMENT_CONFORME_TEMPLATE_VARIABLES: {
     hint: "Intitulé brut de l'opération dans le mail partenaire",
   },
   {
+    token: "{{libelle_client}}",
+    key: "libelle_client",
+    label: "Libellé client",
+    hint: "Formulation naturelle pour le mail client (ex. l'arbitrage, le transfert)",
+  },
+  {
     token: "{{date_operation}}",
     key: "date_operation",
     label: "Date de l'opération",

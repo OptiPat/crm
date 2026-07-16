@@ -12,9 +12,10 @@ describe("placement-conforme-email-vars", () => {
       stellium_label: "Arbitrage libre",
       email_received_at: 1_700_000_000,
     });
-    expect(vars.type_operation).toBe("Arbitrage");
+    expect(vars.type_operation).toBe("Arbitrage libre");
     expect(vars.produit).toBe("Cristalliance Evoluvie");
     expect(vars.libelle_stellium).toBe("Arbitrage libre");
+    expect(vars.libelle_client).toBe("l'arbitrage");
     expect(vars.date_operation.length).toBeGreaterThan(5);
   });
 

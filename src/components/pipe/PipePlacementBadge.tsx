@@ -32,7 +32,7 @@ export function PipePlacementBadge({
         title={`${counts.non_conforme} non conforme(s) partenaire`}
       >
         <AlertTriangle className="h-2.5 w-2.5" />
-        {counts.non_conforme}
+        NC{counts.non_conforme > 1 ? ` · ${counts.non_conforme}` : ""}
       </span>
     );
   }

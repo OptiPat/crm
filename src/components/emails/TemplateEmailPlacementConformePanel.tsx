@@ -3,10 +3,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
-  PLACEMENT_OPERATION_TYPE_OPTIONS,
   type TemplateEmailPlacementConformeTriggerConfig,
 } from "@/lib/emails/template-email-placement-conforme";
-import { placementOperationTypeLabel } from "@/lib/placement/placement-operations-ui";
+import {
+  formatPlacementTemplateScopedLabel,
+  parsePlacementTemplateScopedLabel,
+  resolveLegacyUnscopedTemplateLabelGroupId,
+  stelliumBoxPlacementLabelsMatch,
+  stelliumBoxPlacementTemplateLabelGroups,
+} from "@/lib/placement/stellium-box-placement-labels";
 
 export type TemplatePlacementConformeDraft = {
   trigger: TemplateEmailPlacementConformeTriggerConfig;
@@ -17,15 +22,40 @@ type Props = {
   onChange: (next: TemplatePlacementConformeDraft) => void;
 };
 
+const LABEL_GROUPS = stelliumBoxPlacementTemplateLabelGroups();
+
+function isLabelChecked(labels: string[], groupId: string, label: string): boolean {
+  const scoped = formatPlacementTemplateScopedLabel(groupId, label);
+  if (labels.includes(scoped)) return true;
+  return labels.some((item) => {
+    const parsed = parsePlacementTemplateScopedLabel(item);
+    if (parsed.groupId !== null) return false;
+    if (!stelliumBoxPlacementLabelsMatch(parsed.label, label)) return false;
+    return resolveLegacyUnscopedTemplateLabelGroupId(parsed.label) === groupId;
+  });
+}
+
+function removeScopedLabel(labels: string[], groupId: string, label: string): string[] {
+  const scoped = formatPlacementTemplateScopedLabel(groupId, label);
+  return labels.filter((item) => {
+    if (item === scoped) return false;
+    const parsed = parsePlacementTemplateScopedLabel(item);
+    if (parsed.groupId !== null) return true;
+    if (!stelliumBoxPlacementLabelsMatch(parsed.label, label)) return true;
+    return resolveLegacyUnscopedTemplateLabelGroupId(parsed.label) !== groupId;
+  });
+}
+
 export function TemplateEmailPlacementConformePanel({ draft, onChange }: Props) {
   const patchTrigger = (partial: Partial<TemplateEmailPlacementConformeTriggerConfig>) =>
     onChange({ trigger: { ...draft.trigger, ...partial } });
 
-  const toggleOperationType = (type: (typeof PLACEMENT_OPERATION_TYPE_OPTIONS)[number], checked: boolean) => {
-    const operation_types = checked
-      ? [...new Set([...draft.trigger.operation_types, type])]
-      : draft.trigger.operation_types.filter((t) => t !== type);
-    patchTrigger({ operation_types });
+  const toggleStelliumLabel = (groupId: string, label: string, checked: boolean) => {
+    const scoped = formatPlacementTemplateScopedLabel(groupId, label);
+    const stellium_labels = checked
+      ? [...removeScopedLabel(draft.trigger.stellium_labels, groupId, label), scoped]
+      : removeScopedLabel(draft.trigger.stellium_labels, groupId, label);
+    patchTrigger({ stellium_labels });
   };
 
   return (
@@ -54,30 +84,46 @@ export function TemplateEmailPlacementConformePanel({ draft, onChange }: Props) 
       </div>
 
       {draft.trigger.enabled && (
-        <div className="space-y-3 rounded-lg border p-4">
-          <Label className="text-sm font-medium">Types d&apos;opération couverts</Label>
-          <div className="flex flex-wrap gap-4">
-            {PLACEMENT_OPERATION_TYPE_OPTIONS.map((type) => (
-              <label key={type} className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={draft.trigger.operation_types.includes(type)}
-                  onCheckedChange={(checked) =>
-                    toggleOperationType(type, checked === true)
-                  }
-                />
-                <span>{placementOperationTypeLabel(type)}</span>
-              </label>
+        <div className="space-y-4 rounded-lg border p-4">
+          <div>
+            <Label className="text-sm font-medium">Types d&apos;opération couverts</Label>
+            <p className="text-xs text-muted-foreground mt-1">
+              Mêmes libellés que lors de la déclaration d&apos;un acte sur un suivi ou une affaire.
+            </p>
+          </div>
+          <div className="space-y-4">
+            {LABEL_GROUPS.map((group) => (
+              <section key={group.id} className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground">{group.label}</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {group.items.map((label) => (
+                    <label
+                      key={`${group.id}::${label}`}
+                      className="flex items-start gap-2 rounded-md border border-transparent px-1 py-0.5 text-sm hover:border-border/60"
+                    >
+                      <Checkbox
+                        className="mt-0.5"
+                        checked={isLabelChecked(draft.trigger.stellium_labels, group.id, label)}
+                        onCheckedChange={(checked) =>
+                          toggleStelliumLabel(group.id, label, checked === true)
+                        }
+                      />
+                      <span className="leading-snug">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
-          {draft.trigger.operation_types.length === 0 && (
+          {draft.trigger.stellium_labels.length === 0 && (
             <p className="text-xs text-amber-700">
-              Sélectionnez au moins un type pour activer l&apos;envoi.
+              Sélectionnez au moins un acte pour activer l&apos;envoi.
             </p>
           )}
           <p className="text-xs text-muted-foreground">
             Variables dédiées :{" "}
             <code className="text-[11px]">
-              {"{{type_operation}}"}, {"{{produit}}"}, {"{{libelle_stellium}}"}, {"{{date_operation}}"}
+              {"{{libelle_client}}"}, {"{{produit}}"}, {"{{libelle_stellium}}"}, {"{{date_operation}}"}
             </code>
             . Tu / vous selon le registre de la fiche contact.
           </p>

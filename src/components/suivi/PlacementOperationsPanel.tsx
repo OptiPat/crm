@@ -26,12 +26,13 @@ import {
 import {
   countOpenPlacementOperations,
   countPlacementPendingClientNotify,
+  formatPlacementOperationSuiviSubtitle,
+  formatPlacementOperationSuiviTitle,
   isPlacementRowVisibleInSuivi,
   placementConformeNeedsClientNotify,
   placementOperationDisplayStatusAccent,
+  placementOperationDisplayStatusKind,
   placementOperationDisplayStatusLabel,
-  placementOperationIsUndeclared,
-  placementOperationTypeLabel,
 } from "@/lib/placement/placement-operations-ui";
 import { toast } from "sonner";
 
@@ -151,8 +152,10 @@ export function PlacementOperationsPanel({
           <CardTitle className="text-lg">Opérations partenaire (Box Placement)</CardTitle>
           <CardDescription>
             Suivi des mails Stellium entrants — {pending} en attente
-            {nonConforme > 0 ? `, ${nonConforme} non conforme(s)` : ""}
-            {pendingNotify > 0 ? `, ${pendingNotify} email(s) client à envoyer` : ""}
+            {nonConforme > 0 ? `, ${nonConforme} NC` : ""}
+            {pendingNotify > 0
+              ? `, ${pendingNotify} Conforme - Mail client`
+              : ""}
           </CardDescription>
         </div>
         <Button
@@ -179,6 +182,9 @@ export function PlacementOperationsPanel({
           <ul className="space-y-2">
             {visibleRows.map((row) => {
               const needsNotify = placementConformeNeedsClientNotify(row.operation);
+              const statusKind = placementOperationDisplayStatusKind(row.operation, {
+                needsClientNotify: needsNotify,
+              });
               return (
                 <li
                   key={row.operation.id}
@@ -187,19 +193,18 @@ export function PlacementOperationsPanel({
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <p className="font-medium truncate">
-                        {placementOperationTypeLabel(row.operation.operation_type)} —{" "}
+                        {formatPlacementOperationSuiviTitle(row.operation)} —{" "}
                         {row.contact_prenom} {row.contact_nom}
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground truncate">
-                      {row.operation.product_label ||
-                        row.operation.stellium_label ||
-                        row.pipe_titre ||
-                        "Produit non renseigné"}
+                      {formatPlacementOperationSuiviSubtitle(row.operation, {
+                        pipeTitre: row.pipe_titre,
+                      })}
                     </p>
                     {needsNotify && (
-                      <p className="text-xs text-amber-800 mt-0.5">
-                        Conforme — email client non envoyé
+                      <p className="text-xs text-emerald-800 mt-0.5">
+                        Conforme — email client à envoyer
                       </p>
                     )}
                     {row.operation.email_subject && row.operation.status === "NON_CONFORME" && (
@@ -269,15 +274,16 @@ export function PlacementOperationsPanel({
                         { needsClientNotify: needsNotify }
                       )}`}
                     >
-                      {row.operation.status === "NON_CONFORME" ? (
+                      {statusKind === "nc" ? (
                         <AlertTriangle className="h-3 w-3" />
-                      ) : needsNotify ? (
+                      ) : statusKind === "client_mail" ? (
                         <Mail className="h-3 w-3" />
-                      ) : row.operation.status === "CONFORME" ? (
-                        <CheckCircle2 className="h-3 w-3" />
-                      ) : placementOperationIsUndeclared(row.operation) ? null : (
+                      ) : statusKind === "waiting" ? (
                         <Clock className="h-3 w-3" />
-                      )}
+                      ) : statusKind === "column" &&
+                        row.operation.status === "CONFORME" ? (
+                        <CheckCircle2 className="h-3 w-3" />
+                      ) : null}
                       {placementOperationDisplayStatusLabel(row.operation, {
                         needsClientNotify: needsNotify,
                       })}

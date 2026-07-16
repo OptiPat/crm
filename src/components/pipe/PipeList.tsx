@@ -4,7 +4,13 @@ import { formatPipeParticipantsLabel } from "@/lib/pipe/pipe-types";
 import { PipeTypeBadge } from "@/components/pipe/PipeTypeBadge";
 import { PipeStageBadge } from "@/components/pipe/PipeStageBadge";
 import { PipePlacementBadge } from "@/components/pipe/PipePlacementBadge";
-import type { PlacementPipeOpenCount } from "@/lib/api/tauri-box-placement";
+import {
+  PipeListStatusBadgeView,
+  PipeSuiviListBadge,
+} from "@/components/pipe/PipeSuiviListBadge";
+import type { PlacementOperationWithContact, PlacementPipeOpenCount } from "@/lib/api/tauri-box-placement";
+import { PIPE_ACTION_LIST_BADGE, buildSuiviPlacementColumnByPipe } from "@/lib/pipe/pipe-list-badges";
+import { isSuiviPipe } from "@/lib/pipe/pipe-suivi";
 
 function formatUpdatedAt(ts: number): string {
   return new Date(ts * 1000).toLocaleDateString("fr-FR", {
@@ -18,6 +24,7 @@ interface PipeListProps {
   selectedId: number | null;
   onSelect: (pipe: PipeRecord) => void;
   placementCountsByPipe?: Record<number, PlacementPipeOpenCount>;
+  placementBoardRows?: PlacementOperationWithContact[];
 }
 
 export function PipeList({
@@ -25,7 +32,9 @@ export function PipeList({
   selectedId,
   onSelect,
   placementCountsByPipe = {},
+  placementBoardRows = [],
 }: PipeListProps) {
+  const suiviColumnByPipe = buildSuiviPlacementColumnByPipe(placementBoardRows);
   if (pipes.length === 0) {
     return (
       <div className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -50,8 +59,22 @@ export function PipeList({
           >
             <div className="flex flex-wrap items-center gap-1.5 mb-1">
               <PipeTypeBadge pipeType={pipe.pipe_type} />
-              <PipeStageBadge stage={pipe.stage} pipe={pipe} />
-              <PipePlacementBadge counts={placementCountsByPipe[pipe.id]} />
+              {pipe.pipe_type === "AFFAIRE" ? (
+                <PipeStageBadge stage={pipe.stage} pipe={pipe} />
+              ) : null}
+              {isSuiviPipe(pipe) ? (
+                <>
+                  <PipePlacementBadge counts={placementCountsByPipe[pipe.id]} />
+                  <PipeSuiviListBadge
+                    pipeId={pipe.id}
+                    counts={placementCountsByPipe[pipe.id]}
+                    columnByPipe={suiviColumnByPipe}
+                  />
+                </>
+              ) : null}
+              {pipe.pipe_type === "ACTION" ? (
+                <PipeListStatusBadgeView badge={PIPE_ACTION_LIST_BADGE} />
+              ) : null}
             </div>
             <p className="font-medium text-sm truncate">{pipe.titre}</p>
             <p className="text-xs text-muted-foreground mt-0.5 truncate">

@@ -32,7 +32,7 @@ alwaysApply: true
 
 - Une question = une commande → Shell direct.
 - La cheat sheet : `shell-commands.mdc`.
-- Après modif code : tu lances `npm run verify:quick` (défaut) ou `verify` si Rust — toi-même sauf boucle longue → alors `shell`. Voir `verification-automatique.mdc`.
+- Après modif code **substantielle** : `npm run verify:quick` (défaut) ou `verify` si Rust — toi-même sauf boucle longue → alors `shell`. Polish UI / copy seuls : pas de verify. Voir `verification-automatique.mdc`.
 
 ## Parallélisme
 

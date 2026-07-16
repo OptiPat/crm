@@ -2,7 +2,7 @@ import type { PlacementOperation } from "@/lib/api/tauri-box-placement";
 import {
   placementOperationIsDismissed,
   placementOperationIsPipeTracked,
-} from "@/lib/placement/placement-operations-ui";
+} from "@/lib/placement/placement-operation-tracking";
 
 /** Acte créé sur le suivi, pas encore confirmé envoyé chez Stellium. */
 export function placementOperationIsSuiviDraft(

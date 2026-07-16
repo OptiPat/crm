@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatPlacementOperationSuiviTitle,
   isPlacementRowVisibleInSuivi,
   placementOperationDisplayStatusLabel,
   placementOperationIsAwaitingPartner,
@@ -158,7 +159,42 @@ describe("placement-operations-ui pipe tracking", () => {
         pipe_timeline_entry_id: 5,
         client_notified_at: null,
       })
-    ).toBe("En attente partenaire");
+    ).toBe("En attente");
+  });
+
+  it("libellé affiché : NC pour non conforme actif", () => {
+    expect(
+      placementOperationDisplayStatusLabel({
+        status: "NON_CONFORME",
+        pipe_timeline_entry_id: 5,
+        client_notified_at: null,
+        email_received_at: 100,
+        non_conforme_at: 100,
+        partner_resent_at: null,
+      })
+    ).toBe("NC");
+  });
+
+  it("libellé affiché : Conforme - Mail client si email client en attente", () => {
+    expect(
+      placementOperationDisplayStatusLabel(
+        {
+          status: "CONFORME",
+          pipe_timeline_entry_id: 5,
+          client_notified_at: null,
+        },
+        { needsClientNotify: true }
+      )
+    ).toBe("Conforme - Mail client");
+  });
+
+  it("titre suivi : libellé Stellium exact", () => {
+    expect(
+      formatPlacementOperationSuiviTitle({
+        stellium_label: "Arbitrage libre",
+        operation_type: "ARBITRAGE",
+      })
+    ).toBe("Arbitrage libre");
   });
 
   it("clôturé = dismiss uniquement (sauf NC)", () => {

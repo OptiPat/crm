@@ -2,7 +2,9 @@
 
 ## Vérification — tu l'exécutes, pas l'utilisateur
 
-Après des changements de code, lance **automatiquement** (Shell, sans demander à l'humain) **une** vérification selon les fichiers modifiés :
+Après des changements de code **substantiels** (logique, types, tests, refactor), lance **automatiquement** (Shell, sans demander à l'humain) **une** vérification selon les fichiers modifiés.
+
+**Pas de verify** pour polish UI / libellés / copy seuls — voir § « Quand NE PAS lancer » dans `verification-automatique.mdc`.
 
 ```powershell
 cd D:\crm

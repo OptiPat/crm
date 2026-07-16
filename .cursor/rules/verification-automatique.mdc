@@ -9,9 +9,23 @@ L'utilisateur **n'exécute pas** les commandes de vérification. C'est **ton** t
 
 ## Quand lancer
 
-- **Fin de tâche** (ou avant de considérer le travail terminé) : **une** vérification selon l'arbre ci-dessous.
+- **Fin de tâche substantielle** (logique métier, refactor, nouveau module, types, tests, plusieurs fichiers) : **une** vérification selon l'arbre ci-dessous.
 - **Pendant l'itération** (debug / boucle correctif) : préférer `npx vitest run <fichier>` ou `npx tsc --noEmit` — pas relancer verify à chaque micro-fix.
 - En cas d'échec : corrige et **relance** jusqu'à vert (ou explique un blocage réel).
+
+## Quand NE PAS lancer (éviter verify « pour rien »)
+
+**Pas de `npm run verify*`** dans ces cas — `ReadLints` sur le(s) fichier(s) touché(s) suffit si besoin :
+
+| Cas | Exemples |
+|-----|----------|
+| **Polish UI / copy** sans logique | libellé de badge, texte bouton, tooltip, classe Tailwind, ordre d'affichage |
+| **Un seul fichier présentatif** | `.tsx` sans hook nouveau, sans changement de types ni d'appel API |
+| **Doc / règles seules** | `.md`, `.mdc`, commentaires |
+| **Suivi conversation** | confirmation résultat, message « task finished », pas de nouveau diff code |
+| **Verify déjà vert** dans la même conversation | micro-tweak cosmétique juste après un verify OK sur la même feature |
+
+**Relancer verify** si le changement touche la logique métier, les types, les hooks, les tests, le SQL/Rust, ou si plusieurs micro-fixs s'accumulent sur une même tâche.
 
 ## Arbre de décision (source canonique)
 
@@ -20,7 +34,7 @@ L'utilisateur **n'exécute pas** les commandes de vérification. C'est **ton** t
 3. Fichier(s) Rust / Tauri / migrations runtime → `npm run verify`
 4. Config build Vite, release, ou gros refactor UI build → `npm run verify:full`
 5. **Publication / bump / tag** (`publication-version.mdc`) → **`npm run verify:full`** avant commit version ou `release-tag.ps1`
-6. Question seule, doc, ou lecture sans modif code → **pas** de verify
+6. Question seule, doc, polish UI, ou lecture sans modif code exécutable → **pas** de verify (cf. § « Quand NE PAS lancer »)
 
 | Contexte | Commande |
 |----------|----------|
@@ -43,7 +57,8 @@ PowerShell : utiliser `;` entre commandes, pas `&&`.
 
 - **Ne pas** demander à l'utilisateur de lancer `verify` lui-même.
 - **Ne pas** faire `git commit` ni `git push` sauf demande explicite.
-- **Ne pas** sauter la vérification en disant « à lancer manuellement ».
+- **Ne pas** sauter la vérification sur une **tâche substantielle** en disant « à lancer manuellement ».
+- **Ne pas** lancer `verify:quick` / `verify` / `verify:full` sur un **polish cosmétique** ou une confirmation sans code — c'est du temps perdu (~2 min).
 - **Ne pas** lancer `npm run verify` (Cargo) si la tâche n'a touché que `src/**`.
 
 ## Rapport

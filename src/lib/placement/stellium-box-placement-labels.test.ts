@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatPlacementTemplateScopedLabel,
   normalizeStelliumBoxPlacementLabel,
   placementOperationTypeFromStelliumLabel,
+  placementTemplateScopedTriggersOverlap,
+  placementTemplateTriggerMatchesOperation,
   stelliumAffaireActLabelGroups,
   stelliumBoxPlacementLabelsMatch,
+  stelliumBoxPlacementTemplateLabelGroups,
   stelliumLabelGroupsForProduct,
   stelliumSuiviActLabelGroups,
   isStelliumLabelAllowedForProduct,
@@ -90,7 +94,11 @@ describe("stellium-box-placement-labels", () => {
 
   it("affaire classique : souscription seule", () => {
     expect(stelliumAffaireActLabelGroups()).toEqual([
-      { id: "souscription", label: "Souscription", items: ["Souscription"] },
+      {
+        id: "souscription-placement",
+        label: "Souscription — placement",
+        items: ["Souscription"],
+      },
     ]);
     expect(isStelliumLabelAllowedForAffaire("Souscription")).toBe(true);
     expect(isStelliumLabelAllowedForAffaire("Arbitrage libre")).toBe(false);
@@ -99,6 +107,45 @@ describe("stellium-box-placement-labels", () => {
     ).toBe(true);
     expect(
       isStelliumLabelAllowedForProduct("Arbitrage libre", "Cristalliance Avenir", { affaire: true })
+    ).toBe(false);
+  });
+
+  it("catalogue modèles email : souscription placement avant SCPI", () => {
+    const groups = stelliumBoxPlacementTemplateLabelGroups();
+    const scpiIndex = groups.findIndex((group) => group.id === "scpi");
+    const souscriptionIndex = groups.findIndex((group) => group.id === "souscription-placement");
+    expect(souscriptionIndex).toBeGreaterThan(-1);
+    expect(scpiIndex).toBeGreaterThan(souscriptionIndex);
+  });
+
+  it("trigger scopé : versements programmés placement vs SCPI", () => {
+    const label = "Versements programmés : Mise en place";
+    const placementScoped = formatPlacementTemplateScopedLabel("versements-programmes", label);
+    const scpiScoped = formatPlacementTemplateScopedLabel("scpi", label);
+    const avOp = {
+      stellium_label: label,
+      product_label: "Cristalliance Evoluvie",
+    };
+    const scpiOp = {
+      stellium_label: label,
+      product_label: "Comète",
+    };
+    expect(placementTemplateTriggerMatchesOperation(avOp, placementScoped)).toBe(true);
+    expect(placementTemplateTriggerMatchesOperation(scpiOp, placementScoped)).toBe(false);
+    expect(placementTemplateTriggerMatchesOperation(scpiOp, scpiScoped)).toBe(true);
+    expect(placementTemplateTriggerMatchesOperation(avOp, scpiScoped)).toBe(false);
+  });
+
+  it("chevauchement legacy non scopé vs trigger SCPI scopé", () => {
+    const label = "Versements programmés : Mise en place";
+    expect(
+      placementTemplateScopedTriggersOverlap(label, formatPlacementTemplateScopedLabel("scpi", label))
+    ).toBe(true);
+    expect(
+      placementTemplateScopedTriggersOverlap(
+        formatPlacementTemplateScopedLabel("versements-programmes", label),
+        formatPlacementTemplateScopedLabel("scpi", label)
+      )
     ).toBe(false);
   });
 });

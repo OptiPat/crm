@@ -84,7 +84,7 @@ import {
 } from "@/components/emails/TemplateEmailPipeRdvPanel";
 import {
   DEFAULT_PLACEMENT_CONFORME_TRIGGER,
-  findPlacementConformeOperationTypeOverlapError,
+  findPlacementConformeStelliumLabelOverlapError,
   parseTemplateEmailPlacementConformeTrigger,
   setTemplateEmailPlacementConformeTriggerInMeta,
 } from "@/lib/emails/template-email-placement-conforme";
@@ -987,10 +987,10 @@ export function TemplateEmailForm({
     if (
       !isEphemeralMode &&
       placementConformeDraft.trigger.enabled &&
-      placementConformeDraft.trigger.operation_types.length === 0
+      placementConformeDraft.trigger.stellium_labels.length === 0
     ) {
       toast.error(
-        "Box Placement : sélectionnez au moins un type d'opération (onglet Box Placement)"
+        "Box Placement : sélectionnez au moins un acte (onglet Box Placement)"
       );
       setFormTab("placement-conforme");
       rejectPendingEphemeralSave(new Error("validation"));
@@ -1004,9 +1004,9 @@ export function TemplateEmailForm({
       return;
     }
     if (!isEphemeralMode && placementConformeDraft.trigger.enabled) {
-      const overlap = await findPlacementConformeOperationTypeOverlapError(
+      const overlap = await findPlacementConformeStelliumLabelOverlapError(
         effectiveTemplateId,
-        placementConformeDraft.trigger.operation_types
+        placementConformeDraft.trigger.stellium_labels
       );
       if (overlap) {
         toast.error(overlap);
@@ -1574,8 +1574,8 @@ export function TemplateEmailForm({
         });
         variables = setTemplateEmailPlacementConformeTriggerInMeta(variables, {
           enabled: placementConformeDraft.trigger.enabled,
-          operation_types: placementConformeDraft.trigger.enabled
-            ? placementConformeDraft.trigger.operation_types
+          stellium_labels: placementConformeDraft.trigger.enabled
+            ? placementConformeDraft.trigger.stellium_labels
             : [],
         });
       }

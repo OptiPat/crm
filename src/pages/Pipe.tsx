@@ -306,7 +306,7 @@ export function Pipe() {
     const onPlacementChanged = () => {
       schedule(() => {
         void loadPlacementCounts();
-        if (boardTab === "actes") {
+        if (viewMode === "list" || boardTab === "actes") {
           void loadPlacementBoardRows({ silent: true });
         }
       });
@@ -318,10 +318,10 @@ export function Pipe() {
       window.removeEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onPlacementChanged);
       if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
     };
-  }, [loadPipes, loadPlacementCounts, boardTab, loadPlacementBoardRows]);
+  }, [loadPipes, loadPlacementCounts, boardTab, viewMode, loadPlacementBoardRows]);
 
   useEffect(() => {
-    if (viewMode === "board" && boardTab === "actes") {
+    if (viewMode === "list" || (viewMode === "board" && boardTab === "actes")) {
       void loadPlacementBoardRows({ silent: placementBoardLoadedRef.current });
     }
   }, [viewMode, boardTab, loadPlacementBoardRows]);
@@ -642,6 +642,7 @@ export function Pipe() {
                   selectedId={selectedPipe?.id ?? null}
                   onSelect={openView}
                   placementCountsByPipe={placementCountsByPipe}
+                  placementBoardRows={placementBoardRows}
                 />
               )}
             </div>

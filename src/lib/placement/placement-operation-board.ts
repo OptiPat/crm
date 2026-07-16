@@ -3,7 +3,7 @@ import {
   getPlacementBoardActiveStepId,
   type PlacementStepperStepId,
 } from "@/lib/placement/placement-operation-stepper";
-import { placementOperationIsUndeclared, placementOperationIsDetachedSuiviDraft, placementOperationIsDeclaredInWorkflow, PLACEMENT_UNDECLARED_BOX_LABEL } from "@/lib/placement/placement-operations-ui";
+import { placementOperationIsUndeclared, placementOperationIsDetachedSuiviDraft, placementOperationIsDeclaredInWorkflow, PLACEMENT_UNDECLARED_BOX_LABEL } from "@/lib/placement/placement-operation-tracking";
 import { placementOperationIsSuiviDraft } from "@/lib/placement/suivi-placement-draft";
 import { formatStelliumProductForDisplay } from "@/lib/placement/stellium-box-placement-products";
 
@@ -36,6 +36,12 @@ export const PLACEMENT_BOARD_COLUMN_LABELS_SHORT: Record<PlacementBoardColumn, s
   conforme_after_nc: "Conforme",
   partner_fin: "Partenaire",
   client_mail: "Mail",
+};
+
+/** Libellés statut suivi / liste pipe (alignés alertes ↔ liste). */
+export const PLACEMENT_SUIVI_LIST_COLUMN_LABELS: Record<PlacementBoardColumn, string> = {
+  ...PLACEMENT_BOARD_COLUMN_LABELS_SHORT,
+  client_mail: "Conforme - Mail client",
 };
 
 export interface PlacementBoardColumnColors {
@@ -116,7 +122,7 @@ export function getPlacementBoardColumn(
   return getPlacementBoardActiveStepId(operation);
 }
 
-export { placementOperationIsDetachedSuiviDraft } from "@/lib/placement/placement-operations-ui";
+export { placementOperationIsDetachedSuiviDraft } from "@/lib/placement/placement-operation-tracking";
 
 export function filterPlacementRowsForBoard(
   rows: PlacementOperationWithContact[]

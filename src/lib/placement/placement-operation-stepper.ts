@@ -1,7 +1,7 @@
 import type { PlacementOperation } from "@/lib/api/tauri-box-placement";
 import { PIPE_STAGE_FIELD_LABEL } from "@/lib/pipe/pipe-types";
 import { formatStelliumProductForDisplay } from "@/lib/placement/stellium-box-placement-products";
-import { placementOperationIsClosed, placementOperationIsUndeclared } from "@/lib/placement/placement-operations-ui";
+import { placementOperationIsClosed, placementOperationIsUndeclared } from "@/lib/placement/placement-operation-tracking";
 import { placementOperationIsSuiviDraft } from "@/lib/placement/suivi-placement-draft";
 
 export type PlacementStepperStepState = "done" | "active" | "pending";
