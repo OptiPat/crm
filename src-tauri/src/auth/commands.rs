@@ -1,9 +1,11 @@
 use super::{AuthManager, PasswordAttemptOutcome};
+use super::session::{require_ui_session, UiSessionState, UI_SESSION_LOCKED_EVENT};
 use crate::commands::DbState;
 use crate::database::Database;
 use serde::Serialize;
 use std::sync::Mutex;
-use tauri::{AppHandle, State};
+use std::time::Duration;
+use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_biometry::{AuthOptions, BiometryExt};
 
 pub type AuthState = Mutex<Option<AuthManager>>;
@@ -129,6 +131,13 @@ fn require_database_unlocked(db: &State<'_, DbState>) -> Result<(), AuthCommandE
     }
 }
 
+fn require_active_ui_session(
+    session: &State<'_, UiSessionState>,
+) -> Result<(), AuthCommandError> {
+    require_ui_session(session)
+        .map_err(|message| AuthCommandError::new("session_locked", message))
+}
+
 fn platform_system_auth_status(app: &AppHandle) -> (bool, bool, String, Option<String>) {
     #[cfg(target_os = "windows")]
     let label = "Windows Hello (visage, empreinte ou code PIN)".to_string();
@@ -231,18 +240,20 @@ async fn authenticate_with_system(app: AppHandle) -> Result<(), AuthCommandError
     .map_err(|error| classify_system_auth_error(&error.to_string()))
 }
 
-/// Libère la connexion SQLite (verrou d'accès).
-fn close_database(db: &State<'_, DbState>) {
-    *db.lock().unwrap() = None;
-}
-
-/// Ouvre la base locale (non chiffrée) et la place dans l'état partagé.
+/// Garantit que la base locale est ouverte, en sérialisant les ouvertures concurrentes.
 fn open_database(
     app: &AppHandle,
     db: &State<'_, DbState>,
     auth: &State<'_, AuthState>,
 ) -> Result<(), String> {
-    close_database(db);
+    let mut db_guard = db
+        .lock()
+        .map_err(|_| "État de la base inaccessible".to_string())?;
+    if db_guard.is_some() {
+        drop(db_guard);
+        crate::birthday_notifications::spawn_run_if_due(app);
+        return Ok(());
+    }
 
     let database = Database::open(app).map_err(|e| {
         eprintln!("❌ open_database: échec ouverture base : {e}");
@@ -255,7 +266,8 @@ fn open_database(
     if let Err(e) = crate::licensing::ensure_on_database_open(app, &database, installed_at) {
         eprintln!("⚠️ Licence : {e}");
     }
-    *db.lock().unwrap() = Some(database);
+    *db_guard = Some(database);
+    drop(db_guard);
     crate::birthday_notifications::spawn_run_if_due(app);
     Ok(())
 }
@@ -273,6 +285,7 @@ pub fn create_master_password(
     app: AppHandle,
     auth: State<'_, AuthState>,
     db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
     password: String,
 ) -> Result<(), String> {
     if password.len() < MIN_PASSWORD_LEN {
@@ -285,7 +298,9 @@ pub fn create_master_password(
         manager.create_master_password(&password)?;
     }
 
-    open_database(&app, &db, &auth)
+    open_database(&app, &db, &auth)?;
+    session.unlock();
+    Ok(())
 }
 
 /// Indique si la base est déjà ouverte côté backend (session Tauri active).
@@ -298,6 +313,28 @@ pub fn is_database_unlocked(db: State<'_, DbState>) -> Result<bool, String> {
     }
 }
 
+/// Statut du verrou de l'interface. La base peut rester ouverte pour le tray.
+#[tauri::command]
+pub fn is_ui_session_unlocked(session: State<'_, UiSessionState>) -> bool {
+    session.is_unlocked()
+}
+
+/// Ping d'activité côté webview. Si le délai était déjà dépassé (notamment après
+/// une veille), la session reste verrouillée et le frontend reçoit l'événement.
+#[tauri::command]
+pub fn touch_ui_session_activity(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> bool {
+    let minutes = crate::app_runtime::load_runtime_prefs(&app).auto_lock_minutes;
+    let was_unlocked = session.is_unlocked();
+    let active = session.touch_or_lock_if_idle(Duration::from_secs(u64::from(minutes) * 60));
+    if was_unlocked && !active {
+        let _ = app.emit(UI_SESSION_LOCKED_EVENT, ());
+    }
+    active
+}
+
 /// Déverrouille : vérifie le mot de passe d'accès puis ouvre la base.
 /// Si la double authentification est activée, la validation système est obligatoire.
 /// Idempotent : si la base est déjà ouverte (ex. rechargement HMR du frontend), ne la ferme pas.
@@ -306,6 +343,7 @@ pub async fn unlock(
     app: AppHandle,
     auth: State<'_, AuthState>,
     db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
     password: String,
 ) -> Result<bool, AuthCommandError> {
     verify_password(&auth, &password)?;
@@ -314,19 +352,8 @@ pub async fn unlock(
         authenticate_with_system(app.clone()).await?;
     }
 
-    match db.try_lock() {
-        Ok(guard) => {
-            if guard.is_some() {
-                crate::birthday_notifications::spawn_run_if_due(&app);
-                return Ok(true);
-            }
-            drop(guard);
-            open_database(&app, &db, &auth).map_err(AuthCommandError::internal)?;
-        }
-        Err(_) => {
-            // Commande longue en cours (recalcul étiquettes…) : la base est déjà ouverte.
-        }
-    }
+    open_database(&app, &db, &auth).map_err(AuthCommandError::internal)?;
+    session.unlock();
     Ok(true)
 }
 
@@ -351,9 +378,11 @@ pub async fn configure_system_auth(
     app: AppHandle,
     auth: State<'_, AuthState>,
     db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
     password: String,
     enabled: bool,
 ) -> Result<SystemAuthStatus, AuthCommandError> {
+    require_active_ui_session(&session)?;
     require_database_unlocked(&db)?;
     verify_password(&auth, &password)?;
 
@@ -379,6 +408,7 @@ pub async fn recover_without_system_auth(
     app: AppHandle,
     auth: State<'_, AuthState>,
     db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
     password: String,
 ) -> Result<bool, AuthCommandError> {
     if !is_system_auth_enabled(&auth)? {
@@ -398,14 +428,14 @@ pub async fn recover_without_system_auth(
     }
     set_system_auth_enabled(&auth, false)?;
     open_database(&app, &db, &auth).map_err(AuthCommandError::internal)?;
+    session.unlock();
     Ok(true)
 }
 
-/// Verrouille l'application : ferme la base (écran de déverrouillage).
+/// Verrouille uniquement l'interface. La base reste ouverte pour les workers tray.
 #[tauri::command]
-pub fn lock(db: State<'_, DbState>) -> Result<(), String> {
-    close_database(&db);
-    Ok(())
+pub fn lock(session: State<'_, UiSessionState>) {
+    session.lock();
 }
 
 /// Change le mot de passe d'accès (la base reste ouverte).
@@ -413,9 +443,11 @@ pub fn lock(db: State<'_, DbState>) -> Result<(), String> {
 pub fn change_master_password(
     auth: State<'_, AuthState>,
     db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
     current_password: String,
     new_password: String,
 ) -> Result<(), AuthCommandError> {
+    require_active_ui_session(&session)?;
     require_database_unlocked(&db)?;
     if new_password.len() < MIN_PASSWORD_LEN {
         return Err(AuthCommandError::new(

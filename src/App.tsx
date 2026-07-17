@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Toaster } from "sonner";
 import { LicenseActivation } from "@/pages/LicenseActivation";
@@ -39,18 +39,36 @@ import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { runBackgroundAutomationAfterUnlock, waitForBackgroundAutomationCycleIdle } from "@/lib/background/background-automation-runner";
 import { useBackgroundAutomationListener } from "@/hooks/useBackgroundAutomationListener";
 import { useAutomationNotificationListener } from "@/hooks/useAutomationNotificationListener";
+import { useAutoLock } from "@/hooks/useAutoLock";
+
+const ETIQUETTES_RECALC_SESSION_KEY = "crm_etiquettes_recalc_done";
 
 function AppInner() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isEngineAvailable, setIsEngineAvailable] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const [showLicense, setShowLicense] = useState(false);
   const [currentPage, setCurrentPage] = useState("dashboard");
-  const ETIQUETTES_RECALC_SESSION_KEY = "crm_etiquettes_recalc_done";
   const etiquettesRecalcDone = useRef(
-    sessionStorage.getItem("crm_etiquettes_recalc_done") === "1"
+    sessionStorage.getItem(ETIQUETTES_RECALC_SESSION_KEY) === "1"
   );
   const etiquettesRecalcInFlight = useRef(false);
+
+  const handleSessionLocked = useCallback(() => {
+    setIsAuthenticated(false);
+    setCurrentPage("dashboard");
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await invoke("lock");
+    } catch (error) {
+      console.error("Erreur verrouillage:", error);
+      return;
+    }
+    handleSessionLocked();
+  }, [handleSessionLocked]);
 
   useAppNavigationListener((detail) => {
     if (detail.type === "page" && detail.page !== currentPage) {
@@ -58,8 +76,9 @@ function AppInner() {
     }
   });
 
-  useBackgroundAutomationListener(isAuthenticated);
+  useBackgroundAutomationListener(isEngineAvailable);
   useAutomationNotificationListener(isAuthenticated, setCurrentPage);
+  useAutoLock(isAuthenticated, handleLogout, handleSessionLocked);
 
   useEffect(() => {
     // Vérifier si c'est le premier lancement
@@ -83,8 +102,11 @@ function AppInner() {
 
     void (async () => {
       try {
-        const unlocked = await invoke<boolean>("is_database_unlocked");
-        if (!unlocked) return;
+        const databaseUnlocked = await invoke<boolean>("is_database_unlocked");
+        setIsEngineAvailable(databaseUnlocked);
+        if (!databaseUnlocked) return;
+        const sessionUnlocked = await invoke<boolean>("is_ui_session_unlocked");
+        if (!sessionUnlocked) return;
         setIsAuthenticated(true);
         void runBackgroundAutomationAfterUnlock();
         const needsLicense = await needsLicenseActivation();
@@ -116,6 +138,7 @@ function AppInner() {
 
   const handlePasswordCreated = async () => {
     setIsFirstLaunch(false);
+    setIsEngineAvailable(true);
     setIsAuthenticated(true);
     await syncPostUnlockState();
   };
@@ -136,6 +159,7 @@ function AppInner() {
   };
 
   const handleUnlocked = async () => {
+    setIsEngineAvailable(true);
     setIsAuthenticated(true);
     try {
       await syncPostUnlockState();
@@ -143,18 +167,6 @@ function AppInner() {
       console.error("Error checking wizard status:", error);
     }
     void runBackgroundAutomationAfterUnlock();
-  };
-
-  const handleLogout = async () => {
-    try {
-      await invoke("lock");
-    } catch (error) {
-      console.error("Erreur verrouillage:", error);
-    }
-    sessionStorage.removeItem(ETIQUETTES_RECALC_SESSION_KEY);
-    etiquettesRecalcDone.current = false;
-    setIsAuthenticated(false);
-    setCurrentPage("dashboard");
   };
 
   // Étiquettes par défaut + recalcul complet une fois par session (après wizard si besoin)

@@ -35,10 +35,12 @@ export function getChecklistItemState(
 }
 
 export function isR1ChecklistItemComplete(
-  templateItem: Pick<PipeChecklistTemplateItem, "noCreditOption">,
+  templateItem: Pick<PipeChecklistTemplateItem, "noCreditOption" | "id">,
   item: PipeR1ChecklistItemState
 ): boolean {
-  if (templateItem.noCreditOption) {
+  const supportsNoCredit =
+    templateItem.noCreditOption === true || templateItem.id === "amortissement_prets";
+  if (supportsNoCredit) {
     return item.received || item.no_credit === true;
   }
   return item.received;

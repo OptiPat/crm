@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod session;
 
 use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},

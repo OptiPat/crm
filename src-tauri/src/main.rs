@@ -26,10 +26,11 @@ use app_branding::commands::{apply_app_branding_os, get_app_branding, save_app_b
 use app_runtime::{
     apply_startup_launch_prefs, focus_main_window, focus_main_window_cmd, get_app_runtime_prefs,
     guard_dev_autostart_boot, hide_main_window_if_minimized_arg, is_force_quit_requested,
-    load_runtime_prefs, quit_app_fully_cmd, save_app_runtime_prefs, setup_tray,
-    start_background_automation_worker,
+    load_runtime_prefs, quit_app_fully_cmd, save_app_runtime_prefs, save_auto_lock_minutes,
+    setup_tray, start_background_automation_worker,
 };
 use auth::commands::*;
+use auth::session::UiSessionState;
 use auth::AuthManager;
 use automation_toast::{
     send_automation_desktop_toast_cmd, take_pending_automation_notification_nav_cmd,
@@ -93,6 +94,7 @@ fn main() {
             // Initialiser l'authentification
             let auth = AuthManager::new(&app.handle()).expect("Failed to initialize auth");
             app.manage(Mutex::new(Some(auth)));
+            app.manage(UiSessionState::default());
 
             // La base reste FERMÉE tant que l'utilisateur n'a pas saisi son mot de passe
             app.manage(Mutex::new(Option::<Database>::None));
@@ -348,8 +350,11 @@ fn main() {
             // Auth
             is_first_launch,
             is_database_unlocked,
+            is_ui_session_unlocked,
+            touch_ui_session_activity,
             get_app_runtime_prefs,
             save_app_runtime_prefs,
+            save_auto_lock_minutes,
             quit_app_fully_cmd,
             focus_main_window_cmd,
             send_automation_desktop_toast_cmd,

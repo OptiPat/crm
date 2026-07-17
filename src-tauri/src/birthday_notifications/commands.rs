@@ -9,6 +9,7 @@ use super::settings::{
 };
 use super::messages::{generate_draft, list_builtin_bodies_full};
 use super::message_settings::BirthdayMessageProfileBodies;
+use crate::auth::session::{require_ui_session, UiSessionState};
 use crate::commands::DbState;
 use crate::database::birthdays::{
     get_birthday_contact_today_by_id, list_birthdays_today_from_connection, BirthdayContactToday,
@@ -85,7 +86,9 @@ pub fn save_birthday_message_settings_cmd(
 pub fn run_birthday_telegram_if_due_cmd(
     app: AppHandle,
     db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
 ) -> Result<BirthdayRunResult, String> {
+    require_ui_session(&session)?;
     run_if_due_on_db_state(&app, &db)
 }
 
@@ -93,7 +96,9 @@ pub fn run_birthday_telegram_if_due_cmd(
 pub fn get_birthday_telegram_settings_cmd(
     app: AppHandle,
     db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
 ) -> Result<BirthdayTelegramSettingsPayload, String> {
+    require_ui_session(&session)?;
     let guard = db.lock().map_err(|e| e.to_string())?;
     let database = guard.as_ref().ok_or("Base non ouverte")?;
     get_birthday_telegram_settings(&app, database)
@@ -103,10 +108,12 @@ pub fn get_birthday_telegram_settings_cmd(
 pub fn save_birthday_telegram_settings_cmd(
     app: AppHandle,
     db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
     enabled: bool,
     chat_id: String,
     bot_token: Option<String>,
 ) -> Result<BirthdayTelegramSettingsPayload, String> {
+    require_ui_session(&session)?;
     let guard = db.lock().map_err(|e| e.to_string())?;
     let database = guard.as_ref().ok_or("Base non ouverte")?;
     save_birthday_telegram_settings(
@@ -122,11 +129,18 @@ pub fn save_birthday_telegram_settings_cmd(
 pub fn send_birthday_telegram_reminders_now_cmd(
     app: AppHandle,
     db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
 ) -> Result<BirthdayRunResult, String> {
+    require_ui_session(&session)?;
     run_now_on_db_state(&app, &db)
 }
 
 #[tauri::command]
-pub fn test_birthday_telegram_cmd(app: AppHandle, db: State<'_, DbState>) -> Result<(), String> {
+pub fn test_birthday_telegram_cmd(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+) -> Result<(), String> {
+    require_ui_session(&session)?;
     send_test_message_on_db_state(&app, &db)
 }

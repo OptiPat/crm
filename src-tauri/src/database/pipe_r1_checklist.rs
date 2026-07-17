@@ -15,12 +15,17 @@ use std::collections::HashMap;
 const PIPE_CHECKLIST_TEMPLATES_SETTING: &str = "pipe.checklist_templates";
 
 #[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct PipeChecklistTemplateItem {
     id: String,
     #[serde(default)]
     profiles: Vec<String>,
     #[serde(default)]
     no_credit_option: bool,
+}
+
+fn template_item_supports_no_credit(item: &PipeChecklistTemplateItem) -> bool {
+    item.no_credit_option || item.id == "amortissement_prets"
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -154,7 +159,7 @@ fn is_template_item_complete(
     state: Option<&PipeR1ChecklistItemState>,
 ) -> bool {
     let state = state.cloned().unwrap_or_default();
-    if item.no_credit_option {
+    if template_item_supports_no_credit(item) {
         return state.received || state.no_credit.unwrap_or(false);
     }
     state.received
@@ -811,6 +816,88 @@ mod tests {
             contenu: None,
             occurred_at: Some(1_700_000_200),
         })
+        .unwrap();
+
+        let summaries = db.list_pipe_r1_missing_docs_summaries().unwrap();
+        assert!(summaries.is_empty());
+    }
+
+    #[test]
+    fn list_pipe_r1_missing_docs_summaries_honours_no_credit_with_camel_case_template() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.set_setting(
+            PIPE_CHECKLIST_TEMPLATES_SETTING,
+            r#"{"R1":[{"id":"avis_imposition","label":"Avis","profiles":["base"]},{"id":"releves_situation","label":"Relevés","profiles":["base"]},{"id":"amortissement_prets","label":"Prêts","profiles":["base"],"noCreditOption":true}]}"#,
+        )
+        .unwrap();
+
+        let contact_id = db
+            .create_contact(NewContact {
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                categorie: "PROSPECT_CLIENT".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("contact");
+
+        let affaire = db
+            .create_pipe(NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Affaire".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+
+        db.create_pipe_timeline_entry(NewPipeTimelineEntry {
+            pipe_id: affaire.id,
+            entry_type: TIMELINE_RDV.into(),
+            titre: Some("R1".into()),
+            contenu: None,
+            occurred_at: Some(1_700_000_300),
+        })
+        .unwrap();
+
+        let mut items = PipeR1ChecklistItems::new();
+        items.insert(
+            "avis_imposition".into(),
+            PipeR1ChecklistItemState {
+                received: true,
+                document_id: None,
+                no_credit: None,
+            },
+        );
+        items.insert(
+            "releves_situation".into(),
+            PipeR1ChecklistItemState {
+                received: true,
+                document_id: None,
+                no_credit: None,
+            },
+        );
+        items.insert(
+            "amortissement_prets".into(),
+            PipeR1ChecklistItemState {
+                received: false,
+                document_id: None,
+                no_credit: Some(true),
+            },
+        );
+
+        db.update_pipe_r1_document_checklist(
+            affaire.id,
+            UpdatePipeR1DocumentChecklistInput {
+                profile_salarie: None,
+                profile_chef_entreprise: None,
+                profile_retraite: None,
+                items: Some(items),
+            },
+        )
         .unwrap();
 
         let summaries = db.list_pipe_r1_missing_docs_summaries().unwrap();

@@ -1,3 +1,4 @@
+use crate::auth::session::{require_ui_session, UiSessionState};
 use crate::commands::DbState;
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
@@ -9,7 +10,11 @@ pub struct AppInfo {
 }
 
 #[tauri::command]
-pub fn get_app_info(app: AppHandle) -> Result<AppInfo, String> {
+pub fn get_app_info(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<AppInfo, String> {
+    require_ui_session(&session)?;
     let version = app.package_info().version.to_string();
     let db_path = app
         .path()
@@ -23,7 +28,11 @@ pub fn get_app_info(app: AppHandle) -> Result<AppInfo, String> {
 }
 
 #[tauri::command]
-pub fn list_db_backups(app: AppHandle) -> Result<Vec<(String, u64)>, String> {
+pub fn list_db_backups(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<Vec<(String, u64)>, String> {
+    require_ui_session(&session)?;
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     crate::backup::list_backups(&app_data_dir).map_err(|e| e.to_string())
 }
@@ -38,8 +47,10 @@ pub struct RestoreDbBackupResult {
 pub fn restore_db_backup(
     app: AppHandle,
     db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
     backup_filename: String,
 ) -> Result<RestoreDbBackupResult, String> {
+    require_ui_session(&session)?;
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let db_path = app_data_dir.join("patrimoine-crm.db");
 
@@ -70,7 +81,11 @@ pub fn restore_db_backup(
 }
 
 #[tauri::command]
-pub fn create_manual_db_backup(app: AppHandle) -> Result<String, String> {
+pub fn create_manual_db_backup(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<String, String> {
+    require_ui_session(&session)?;
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let db_path = app_data_dir.join("patrimoine-crm.db");
     if !db_path.exists() {
@@ -92,8 +107,10 @@ pub struct ExportFullArchiveResult {
 pub fn export_full_archive(
     app: AppHandle,
     db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
     destination_dir: String,
 ) -> Result<ExportFullArchiveResult, String> {
+    require_ui_session(&session)?;
     let dest = std::path::Path::new(destination_dir.trim());
     if destination_dir.trim().is_empty() {
         return Err("Choisissez un dossier de destination.".into());
@@ -124,7 +141,11 @@ pub fn export_full_archive(
 }
 
 #[tauri::command]
-pub fn open_document_file(path: String) -> Result<(), String> {
+pub fn open_document_file(
+    session: State<'_, UiSessionState>,
+    path: String,
+) -> Result<(), String> {
+    require_ui_session(&session)?;
     let p = std::path::Path::new(&path);
     if !p.exists() {
         return Err("Fichier introuvable sur ce PC.".to_string());
@@ -172,15 +193,21 @@ pub fn gmail_web_url(message_id: &str, thread_id: Option<&str>) -> String {
 
 #[tauri::command]
 pub fn open_gmail_message(
+    session: State<'_, UiSessionState>,
     gmail_message_id: String,
     gmail_thread_id: Option<String>,
 ) -> Result<(), String> {
+    require_ui_session(&session)?;
     let url = gmail_web_url(&gmail_message_id, gmail_thread_id.as_deref());
     open_url_in_browser(&url)
 }
 
 #[tauri::command]
-pub fn open_external_url(url: String) -> Result<(), String> {
+pub fn open_external_url(
+    session: State<'_, UiSessionState>,
+    url: String,
+) -> Result<(), String> {
+    require_ui_session(&session)?;
     let u = url.trim();
     if !is_allowed_external_url(u) {
         return Err("URL non autorisée.".into());

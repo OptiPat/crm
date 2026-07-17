@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
 import {
+  APP_RUNTIME_PREFS_CHANGED_EVENT,
   DEFAULT_APP_RUNTIME_PREFS,
   getAppRuntimePrefs,
   quitAppFully,
@@ -78,6 +79,17 @@ export function ParametresBackgroundSection() {
     refreshStats();
     const id = window.setInterval(refreshStats, 10_000);
     return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const handlePrefsChanged = (event: Event) => {
+      const detail = (event as CustomEvent<AppRuntimePrefs>).detail;
+      if (!detail) return;
+      prefsRef.current = detail;
+      setPrefs(detail);
+    };
+    window.addEventListener(APP_RUNTIME_PREFS_CHANGED_EVENT, handlePrefsChanged);
+    return () => window.removeEventListener(APP_RUNTIME_PREFS_CHANGED_EVENT, handlePrefsChanged);
   }, []);
 
   useEffect(() => {

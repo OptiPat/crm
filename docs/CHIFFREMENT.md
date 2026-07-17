@@ -35,15 +35,24 @@ Stocké dans `%APPDATA%\com.patrimoine-crm.app\`. Contient uniquement :
 Flux (`src-tauri/src/auth/`) :
 
 1. `create_master_password` (1ʳᵉ fois) : enregistre le hash, puis ouvre la base.
-2. `unlock` : vérifie le hash, puis Windows Hello ou Touch ID si activé, avant d'ouvrir la base.
+2. `unlock` : vérifie le hash, puis Windows Hello ou Touch ID si activé, avant d'ouvrir la session.
 3. `change_master_password` : vérifie l'actuel, re-hache le nouveau.
+4. Après 15 minutes d'inactivité par défaut (réglable à 5, 15, 30 minutes ou désactivé),
+   l'interface se verrouille sans arrêter les automatisations en tray. Le worker Rust contrôle
+   également le délai et les reprises de veille, indépendamment des timers du webview.
 
 Après 5 mots de passe incorrects, les délais progressent de 1 à 5, 15 puis 60 minutes.
 Ils restent en mémoire et une réussite remet le compteur à zéro. Si l'authentification système
 devient indisponible sur un nouveau poste, un accès de récupération par mot de passe la désactive
 explicitement : aucune panne biométrique ne peut rendre les données inaccessibles définitivement.
 
-La base n'est **pas** ouverte au démarrage : elle ne l'est qu'après le verrou.
+La base n'est **pas** ouverte au démarrage : elle ne l'est qu'après le premier déverrouillage.
+Lors d'un verrouillage automatique, elle reste ouverte dans le processus afin que les workers tray
+continuent. Un état de session séparé interdit alors les commandes IPC sensibles (sauvegarde,
+restauration, export, lecture de documents et configuration de secrets) jusqu'au prochain
+déverrouillage. Les commandes métier nécessaires aux automatisations tray restent utilisables :
+ce mécanisme est un verrou d'interface renforcé, pas une isolation complète contre un webview ou
+un poste déjà compromis.
 
 ## Secrets applicatifs (`secrets.key`)
 
@@ -63,6 +72,10 @@ Sauvegardes automatiques (quotidienne + pré-migration + manuelles, rotation des
 dans `%APPDATA%\com.patrimoine-crm.app\backups\` : base SQLite, dossier `documents/`, et fichiers
 de config jumelés (OAuth, secrets, newsletter, verrou, branding). Étant en clair, elles sont
 **restaurables sans clé**.
+
+Le worker Rust vérifie toutes les trois minutes si la sauvegarde quotidienne manque, y compris
+quand l'interface est verrouillée, en tenant le mutex SQLite pendant la copie. En revanche, lister,
+créer, exporter ou restaurer manuellement une sauvegarde exige une session CRM déverrouillée.
 
 ## Build
 

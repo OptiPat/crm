@@ -1,3 +1,4 @@
+use crate::auth::session::{require_ui_session, UiSessionState};
 use super::google_calendar_probe::probe_google_calendar_access;
 use super::oauth_flow::{disconnect_google_calendar_oauth, disconnect_oauth, run_oauth_connect};
 use super::oauth_send::{
@@ -5,7 +6,7 @@ use super::oauth_send::{
 };
 use super::oauth_store::EmailOAuthStore;
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct EmailConnectionStatus {
@@ -62,7 +63,11 @@ pub fn get_email_connection_status(app_handle: AppHandle) -> Result<EmailConnect
 }
 
 #[tauri::command]
-pub fn get_oauth_app_settings(app_handle: AppHandle) -> Result<OAuthAppSettings, String> {
+pub fn get_oauth_app_settings(
+    app_handle: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<OAuthAppSettings, String> {
+    require_ui_session(&session)?;
     let store = EmailOAuthStore::load(&app_handle)?;
     Ok(OAuthAppSettings {
         google_client_id: store.google_client_id,
@@ -77,8 +82,10 @@ pub fn get_oauth_app_settings(app_handle: AppHandle) -> Result<OAuthAppSettings,
 #[tauri::command]
 pub fn save_oauth_app_settings(
     app_handle: AppHandle,
+    session: State<'_, UiSessionState>,
     settings: OAuthAppSettingsInput,
 ) -> Result<(), String> {
+    require_ui_session(&session)?;
     let mut store = EmailOAuthStore::load(&app_handle)?;
     store.google_client_id = settings
         .google_client_id
@@ -100,9 +107,11 @@ pub fn save_oauth_app_settings(
 #[tauri::command]
 pub async fn connect_email_oauth(
     app_handle: AppHandle,
+    session: State<'_, UiSessionState>,
     provider: String,
     force_consent: Option<bool>,
 ) -> Result<EmailConnectionStatus, String> {
+    require_ui_session(&session)?;
     let force = force_consent.unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move || {
         run_oauth_connect(&app_handle, &provider, force)?;
@@ -113,15 +122,21 @@ pub async fn connect_email_oauth(
 }
 
 #[tauri::command]
-pub fn disconnect_email_oauth(app_handle: AppHandle) -> Result<(), String> {
+pub fn disconnect_email_oauth(
+    app_handle: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<(), String> {
+    require_ui_session(&session)?;
     disconnect_oauth(&app_handle)
 }
 
 #[tauri::command]
 pub async fn connect_google_calendar_oauth(
     app_handle: AppHandle,
+    session: State<'_, UiSessionState>,
     force_consent: Option<bool>,
 ) -> Result<EmailConnectionStatus, String> {
+    require_ui_session(&session)?;
     let force = force_consent.unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move || {
         run_oauth_connect(&app_handle, "google_calendar", force)?;
@@ -132,7 +147,11 @@ pub async fn connect_google_calendar_oauth(
 }
 
 #[tauri::command]
-pub fn disconnect_google_calendar_oauth_cmd(app_handle: AppHandle) -> Result<(), String> {
+pub fn disconnect_google_calendar_oauth_cmd(
+    app_handle: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<(), String> {
+    require_ui_session(&session)?;
     disconnect_google_calendar_oauth(&app_handle)?;
     Ok(())
 }
@@ -140,12 +159,18 @@ pub fn disconnect_google_calendar_oauth_cmd(app_handle: AppHandle) -> Result<(),
 #[tauri::command]
 pub fn fetch_gmail_signature_for_cgp(
     app_handle: AppHandle,
+    session: State<'_, UiSessionState>,
 ) -> Result<ImportedGmailSignature, String> {
+    require_ui_session(&session)?;
     fetch_gmail_signature(&app_handle)
 }
 
 #[tauri::command]
-pub fn test_email_connection(app_handle: AppHandle) -> Result<String, String> {
+pub fn test_email_connection(
+    app_handle: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<String, String> {
+    require_ui_session(&session)?;
     let oauth = EmailOAuthStore::load(&app_handle)?;
     let Some(ref conn) = oauth.connection else {
         return Err(

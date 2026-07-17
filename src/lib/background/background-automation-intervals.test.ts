@@ -13,7 +13,11 @@ import {
   boxPlacementAutoScanEnabled,
   stelliumAutoScanEnabled,
 } from "./background-automation-intervals";
-import { DEFAULT_APP_RUNTIME_PREFS, normalizeAppRuntimePrefs } from "@/lib/api/tauri-app-runtime";
+import {
+  AUTO_LOCK_OPTIONS_MIN,
+  DEFAULT_APP_RUNTIME_PREFS,
+  normalizeAppRuntimePrefs,
+} from "@/lib/api/tauri-app-runtime";
 
 describe("background-automation-intervals", () => {
   it("propose 3 et 5 min pour la sync relation", () => {
@@ -53,6 +57,13 @@ describe("background-automation-intervals", () => {
     });
     expect(normalized.box_placement_interval_minutes).toBe(60);
     expect(normalized.background_box_placement_scan).toBe(true);
+  });
+
+  it("normalise le verrouillage automatique sans casser les préférences legacy", () => {
+    expect(AUTO_LOCK_OPTIONS_MIN).toEqual([0, 5, 15, 30]);
+    expect(normalizeAppRuntimePrefs({}).auto_lock_minutes).toBe(15);
+    expect(normalizeAppRuntimePrefs({ auto_lock_minutes: 5 }).auto_lock_minutes).toBe(5);
+    expect(normalizeAppRuntimePrefs({ auto_lock_minutes: 99 }).auto_lock_minutes).toBe(15);
   });
 
   it("calcule getRelationIntervalMs pour 2 h", () => {

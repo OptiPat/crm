@@ -9,6 +9,10 @@ fn default_foreground_automations() -> bool {
     true
 }
 
+fn default_auto_lock_minutes() -> u32 {
+    15
+}
+
 fn default_relation_interval_minutes() -> u32 {
     15
 }
@@ -32,6 +36,9 @@ pub struct AppRuntimePrefs {
     pub close_to_tray: bool,
     /// Lancer Patrimoine CRM au démarrage de Windows.
     pub launch_at_startup: bool,
+    /// Verrouillage de l'interface après inactivité. 0 = désactivé.
+    #[serde(default = "default_auto_lock_minutes")]
+    pub auto_lock_minutes: u32,
     /// Master : automatisations en tray (sync, scans, rappels).
     pub background_automations: bool,
     /// Sync Gmail + Agenda en tray.
@@ -69,6 +76,7 @@ impl Default for AppRuntimePrefs {
         Self {
             close_to_tray: true,
             launch_at_startup: false,
+            auto_lock_minutes: default_auto_lock_minutes(),
             background_automations: true,
             background_relation_sync: true,
             background_stellium_scan: true,
@@ -87,8 +95,12 @@ impl Default for AppRuntimePrefs {
 
 impl AppRuntimePrefs {
     pub fn normalize_intervals(&mut self) {
+        const AUTO_LOCK: &[u32] = &[0, 5, 15, 30];
         const RELATION: &[u32] = &[3, 5, 15, 30, 45, 60, 120, 180];
         const MAIL_SCAN: &[u32] = &[0, 3, 5, 15, 30, 45, 60, 120, 180];
+        if !AUTO_LOCK.contains(&self.auto_lock_minutes) {
+            self.auto_lock_minutes = default_auto_lock_minutes();
+        }
         if !RELATION.contains(&self.relation_interval_minutes) {
             self.relation_interval_minutes = default_relation_interval_minutes();
         }
@@ -251,6 +263,7 @@ mod tests {
     fn runtime_prefs_default_and_serde_roundtrip() {
         let prefs = AppRuntimePrefs::default();
         assert!(prefs.close_to_tray);
+        assert_eq!(prefs.auto_lock_minutes, 15);
         assert!(prefs.background_automations);
         assert!(!prefs.background_notes_sync);
         assert!(prefs.tray_tick_enabled());
@@ -300,10 +313,12 @@ mod tests {
             relation_interval_minutes: 99,
             stellium_interval_minutes: 7,
             box_placement_interval_minutes: 999,
+            auto_lock_minutes: 99,
             ..AppRuntimePrefs::default()
         };
         prefs.normalize_intervals();
         assert_eq!(prefs.relation_interval_minutes, 15);
+        assert_eq!(prefs.auto_lock_minutes, 15);
         assert_eq!(prefs.stellium_interval_minutes, 15);
         assert_eq!(prefs.box_placement_interval_minutes, 15);
     }

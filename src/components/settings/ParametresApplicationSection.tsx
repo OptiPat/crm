@@ -9,6 +9,7 @@ import { CheckForUpdatesButton } from "@/components/system/AppUpdateChecker";
 import { useAppUpdate } from "@/components/system/app-update-context";
 import { ChangePasswordDialog } from "@/components/settings/ChangePasswordDialog";
 import { SystemAuthSettings } from "@/components/settings/SystemAuthSettings";
+import { AutoLockSettings } from "@/components/settings/AutoLockSettings";
 import { Bell, Download, Lock, Shield } from "lucide-react";
 
 export function ParametresApplicationSection() {
@@ -65,6 +66,7 @@ export function ParametresApplicationSection() {
             </Button>
           </div>
         </div>
+        <AutoLockSettings />
         <SystemAuthSettings />
       </SettingsPanel>
 

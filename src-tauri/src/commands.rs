@@ -1,3 +1,4 @@
+use crate::auth::session::{require_ui_session, UiSessionState};
 use crate::database::{
     compta::{
         ComptaBilanData, ComptaConfig, ComptaDepense, ComptaDeplacement, ComptaEncaissement,
@@ -1732,9 +1733,13 @@ pub fn check_and_create_demembrement_alerts(db: State<'_, DbState>) -> Result<Ve
 // ========== PDF ==========
 
 #[tauri::command]
-pub fn read_pdf_file(file_path: String) -> Result<Vec<u8>, String> {
+pub fn read_pdf_file(
+    session: State<'_, UiSessionState>,
+    file_path: String,
+) -> Result<Vec<u8>, String> {
     use std::fs;
 
+    require_ui_session(&session)?;
     fs::read(&file_path).map_err(|e| format!("Failed to read file: {}", e))
 }
 
@@ -3033,7 +3038,12 @@ pub fn get_cgp_config(db: State<'_, DbState>) -> Result<CgpConfig, String> {
 }
 
 #[tauri::command]
-pub fn save_cgp_config(db: State<'_, DbState>, config: CgpConfig) -> Result<(), String> {
+pub fn save_cgp_config(
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+    config: CgpConfig,
+) -> Result<(), String> {
+    require_ui_session(&session)?;
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 

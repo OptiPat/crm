@@ -133,6 +133,12 @@ export const PARAMETRES_SEARCH_INDEX: ParametresSearchItem[] = [
     section: "application",
   },
   {
+    id: "verrouillage-automatique",
+    label: "Verrouillage automatique",
+    keywords: ["inactivité", "veille", "verrou", "timeout", "sécurité", "tray"],
+    section: "application",
+  },
+  {
     id: "mise-a-jour",
     label: "Mises à jour du logiciel",
     keywords: ["mise à jour", "update", "version", "télécharger"],

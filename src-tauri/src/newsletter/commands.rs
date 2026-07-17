@@ -5,6 +5,7 @@ use super::db::{
 };
 use super::mistral::{generate_newsletter_json, refine_newsletter_json};
 use super::store::{NewsletterSettingsInput, NewsletterSettingsPublic, NewsletterStore};
+use crate::auth::session::{require_ui_session, UiSessionState};
 use crate::commands::DbState;
 use crate::database::models::NewEtiquette;
 use serde::{Deserialize, Serialize};
@@ -68,15 +69,21 @@ pub struct EnsureNewsletterEtiquetteResult {
 }
 
 #[tauri::command]
-pub fn get_newsletter_settings(app: AppHandle) -> Result<NewsletterSettingsPublic, String> {
+pub fn get_newsletter_settings(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<NewsletterSettingsPublic, String> {
+    require_ui_session(&session)?;
     NewsletterStore::load(&app).map(|s| s.to_public())
 }
 
 #[tauri::command]
 pub fn save_newsletter_settings(
     app: AppHandle,
+    session: State<'_, UiSessionState>,
     input: NewsletterSettingsInput,
 ) -> Result<NewsletterSettingsPublic, String> {
+    require_ui_session(&session)?;
     let mut store = NewsletterStore::load(&app)?;
     if let Some(key) = input.api_key {
         let trimmed = key.trim();
@@ -189,8 +196,10 @@ pub fn save_newsletter_settings(
 #[tauri::command]
 pub fn generate_newsletter_content(
     app: AppHandle,
+    session: State<'_, UiSessionState>,
     input: GenerateNewsletterInput,
 ) -> Result<GeneratedNewsletterContent, String> {
+    require_ui_session(&session)?;
     let store = NewsletterStore::load(&app)?;
     let api_key = store
         .api_key
@@ -235,8 +244,10 @@ pub struct RefineNewsletterInput {
 #[tauri::command]
 pub fn refine_newsletter_content(
     app: AppHandle,
+    session: State<'_, UiSessionState>,
     input: RefineNewsletterInput,
 ) -> Result<GeneratedNewsletterContent, String> {
+    require_ui_session(&session)?;
     let store = NewsletterStore::load(&app)?;
     let api_key = store
         .api_key
