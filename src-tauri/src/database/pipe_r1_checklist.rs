@@ -120,13 +120,13 @@ fn default_r1_template_items() -> Vec<PipeChecklistTemplateItem> {
 fn parse_r1_template_from_json(raw: &str) -> Vec<PipeChecklistTemplateItem> {
     #[derive(Debug, Deserialize)]
     struct TemplatesRoot {
-        #[serde(default)]
-        R1: Vec<PipeChecklistTemplateItem>,
+        #[serde(default, rename = "R1")]
+        r1: Vec<PipeChecklistTemplateItem>,
     }
     serde_json::from_str::<TemplatesRoot>(raw)
         .ok()
-        .filter(|root| !root.R1.is_empty())
-        .map(|root| root.R1)
+        .filter(|root| !root.r1.is_empty())
+        .map(|root| root.r1)
         .unwrap_or_else(default_r1_template_items)
 }
 
