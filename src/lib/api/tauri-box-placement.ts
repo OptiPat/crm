@@ -150,8 +150,12 @@ export async function createPlacementOperation(
   return invoke<PlacementOperation>("create_placement_operation", { input });
 }
 
-export async function listPlacementOperations(): Promise<PlacementOperationWithContact[]> {
-  const raw = await invoke<PlacementOperationRow[]>("list_placement_operations");
+export async function listPlacementOperations(
+  includeArchived = false
+): Promise<PlacementOperationWithContact[]> {
+  const raw = await invoke<PlacementOperationRow[]>("list_placement_operations", {
+    includeArchived,
+  });
   return raw.map(normalizePlacementRow);
 }
 

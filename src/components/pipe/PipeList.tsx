@@ -1,6 +1,8 @@
 import { cn } from "@/lib/utils";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import { formatPipeParticipantsLabel } from "@/lib/pipe/pipe-types";
+import { isPipeArchived } from "@/lib/pipe/pipe-board-utils";
+import { Badge } from "@/components/ui/badge";
 import { PipeTypeBadge } from "@/components/pipe/PipeTypeBadge";
 import { PipeStageBadge } from "@/components/pipe/PipeStageBadge";
 import { PipePlacementBadge } from "@/components/pipe/PipePlacementBadge";
@@ -69,6 +71,11 @@ export function PipeList({
           >
             <div className="flex flex-wrap items-center gap-1.5 mb-1">
               <PipeTypeBadge pipeType={pipe.pipe_type} />
+              {isPipeArchived(pipe) ? (
+                <Badge variant="secondary" className="text-[10px] font-normal">
+                  Archivé
+                </Badge>
+              ) : null}
               {pipe.pipe_type === "AFFAIRE" ? (
                 <PipeStageBadge stage={pipe.stage} pipe={pipe} />
               ) : null}

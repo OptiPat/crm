@@ -1,7 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   filterAffairesForBoard,
+  filterPipesForActiveView,
   groupAffairesByStage,
+  isPipeArchived,
   loadPipeBoardTab,
   savePipeBoardTab,
 } from "./pipe-board-utils";
@@ -76,5 +78,15 @@ describe("pipe-board-utils", () => {
     expect(loadPipeBoardTab()).toBe("affaires");
     savePipeBoardTab("remuneration");
     expect(loadPipeBoardTab()).toBe("remuneration");
+  });
+
+  it("masque les pipes archivés sauf en mode Voir archivés", () => {
+    const active = affaire(1, "R1", 10);
+    const archived = { ...affaire(2, "GAGNEE", 20), archived_at: 1_700_000_000 };
+    const rows = [active, archived];
+    expect(isPipeArchived(archived)).toBe(true);
+    expect(isPipeArchived(active)).toBe(false);
+    expect(filterPipesForActiveView(rows, false).map((p) => p.id)).toEqual([1]);
+    expect(filterPipesForActiveView(rows, true).map((p) => p.id)).toEqual([1, 2]);
   });
 });

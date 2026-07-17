@@ -28,6 +28,19 @@ export function savePipeShowArchived(show: boolean): void {
   }
 }
 
+export function isPipeArchived(pipe: { archived_at?: number | null }): boolean {
+  return pipe.archived_at != null && pipe.archived_at > 0;
+}
+
+/** Pipes visibles dans le board / la liste selon le filtre archivés. */
+export function filterPipesForActiveView(
+  pipes: PipeRecord[],
+  showArchived: boolean
+): PipeRecord[] {
+  if (showArchived) return pipes;
+  return pipes.filter((pipe) => !isPipeArchived(pipe));
+}
+
 export function loadPipeBoardTab(): PipeBoardTab {
   try {
     const raw = localStorage.getItem(PIPE_BOARD_TAB_KEY);

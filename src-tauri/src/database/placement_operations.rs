@@ -508,12 +508,19 @@ impl super::Database {
 
     pub fn list_placement_operations_with_contacts(
         &self,
+        include_archived: bool,
     ) -> Result<Vec<super::models::PlacementOperationWithContact>> {
+        let archived_clause = if include_archived {
+            ""
+        } else {
+            " WHERE po.pipe_id IS NULL OR p.archived_at IS NULL"
+        };
         let mut stmt = self.conn.prepare(&format!(
             "SELECT {PLACEMENT_SELECT}, c.nom, c.prenom, p.titre
              FROM placement_operations po
              INNER JOIN contacts c ON c.id = po.contact_id
              LEFT JOIN pipes p ON p.id = po.pipe_id
+             {archived_clause}
              ORDER BY
                CASE po.status
                  WHEN 'NON_CONFORME' THEN 0
@@ -2384,7 +2391,7 @@ mod tests {
         assert_eq!(updated.gmail_message_id.as_deref(), Some("msg-manual"));
         assert_eq!(updated.product_label.as_deref(), Some("AV Generali"));
 
-        let all = db.list_placement_operations_with_contacts().unwrap();
+        let all = db.list_placement_operations_with_contacts(false).unwrap();
         assert_eq!(all.len(), 1);
     }
 

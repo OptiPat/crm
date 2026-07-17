@@ -2816,11 +2816,12 @@ pub fn create_placement_operation(
 #[tauri::command]
 pub fn list_placement_operations(
     db: State<'_, DbState>,
+    include_archived: Option<bool>,
 ) -> Result<Vec<crate::database::models::PlacementOperationWithContact>, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .list_placement_operations_with_contacts()
+        .list_placement_operations_with_contacts(include_archived.unwrap_or(false))
         .map_err(|e| format!("Échec liste opérations partenaire: {}", e))
 }
 

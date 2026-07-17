@@ -15,6 +15,8 @@ import { subscribePipeChanged } from "@/lib/pipe/pipe-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
   filterAffairesForBoard,
+  filterPipesForActiveView,
+  isPipeArchived,
   loadPipeBoardTab,
   loadPipeShowArchived,
   loadPipeViewMode,
@@ -235,6 +237,7 @@ export function Pipe() {
   const pipesRef = useRef<PipeRecord[]>([]);
   const selectedPipeRef = useRef<PipeRecord | null>(null);
   const loadPipesGenerationRef = useRef(0);
+  const loadPlacementBoardRowsGenerationRef = useRef(0);
 
   const PIPE_RELOAD_DEBOUNCE_MS = 150;
 
@@ -288,9 +291,22 @@ export function Pipe() {
         return;
       }
 
+      if (!showArchived && isPipeArchived(prev)) {
+        if (generation === loadPipesGenerationRef.current) {
+          setSelectedPipe(null);
+          setPanelMode("empty");
+        }
+        return;
+      }
+
       try {
         const fresh = await getPipeById(prev.id);
         if (generation !== loadPipesGenerationRef.current) return;
+        if (!showArchived && isPipeArchived(fresh)) {
+          setSelectedPipe(null);
+          setPanelMode("empty");
+          return;
+        }
         setSelectedPipe(fresh);
       } catch {
         if (generation !== loadPipesGenerationRef.current) return;
@@ -298,7 +314,7 @@ export function Pipe() {
         setPanelMode("empty");
       }
     },
-    []
+    [showArchived]
   );
 
   const stageAdvance = usePipeStageAdvance((pipe) => {
@@ -307,14 +323,19 @@ export function Pipe() {
     void loadPipes();
   });
 
-  const affaires = useMemo(() => filterAffairesForBoard(pipes), [pipes]);
+  const activePipes = useMemo(
+    () => filterPipesForActiveView(pipes, showArchived),
+    [pipes, showArchived]
+  );
+
+  const affaires = useMemo(() => filterAffairesForBoard(activePipes), [activePipes]);
   const suiviColumnByPipe = useMemo(
     () => buildSuiviPlacementColumnByPipe(placementBoardRows),
     [placementBoardRows]
   );
 
   const filteredListPipes = useMemo(() => {
-    const filtered = filterPipesForList(pipes, listFilters, {
+    const filtered = filterPipesForList(activePipes, listFilters, {
       columnByPipe: suiviColumnByPipe,
       countsByPipe: placementCountsByPipe,
       placementContextReady: !placementBoardLoading,
@@ -323,7 +344,13 @@ export function Pipe() {
       columnByPipe: suiviColumnByPipe,
       countsByPipe: placementCountsByPipe,
     });
-  }, [pipes, listFilters, suiviColumnByPipe, placementCountsByPipe, placementBoardLoading]);
+  }, [
+    activePipes,
+    listFilters,
+    suiviColumnByPipe,
+    placementCountsByPipe,
+    placementBoardLoading,
+  ]);
 
   const setListFiltersPersisted = (filters: PipeListFilters) => {
     setListFilters(filters);
@@ -359,23 +386,32 @@ export function Pipe() {
     }
   }, []);
 
-  const loadPlacementBoardRows = useCallback(async (options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? placementBoardLoadedRef.current;
-    if (!silent) setPlacementBoardLoading(true);
-    try {
-      const rows = await listPlacementOperations();
-      setPlacementBoardRows(filterPlacementRowsForBoard(rows));
-      placementBoardLoadedRef.current = true;
-    } catch {
-      if (!placementBoardLoadedRef.current) setPlacementBoardRows([]);
-    } finally {
-      if (!silent) setPlacementBoardLoading(false);
-    }
-  }, []);
+  const loadPlacementBoardRows = useCallback(
+    async (options?: { silent?: boolean; includeArchived?: boolean }) => {
+      const generation = ++loadPlacementBoardRowsGenerationRef.current;
+      const silent = options?.silent ?? placementBoardLoadedRef.current;
+      const includeArchived = options?.includeArchived ?? showArchived;
+      if (!silent) setPlacementBoardLoading(true);
+      try {
+        const rows = await listPlacementOperations(includeArchived);
+        if (generation !== loadPlacementBoardRowsGenerationRef.current) return;
+        setPlacementBoardRows(filterPlacementRowsForBoard(rows));
+        placementBoardLoadedRef.current = true;
+      } catch {
+        if (generation !== loadPlacementBoardRowsGenerationRef.current) return;
+        if (!placementBoardLoadedRef.current) setPlacementBoardRows([]);
+      } finally {
+        if (generation === loadPlacementBoardRowsGenerationRef.current && !silent) {
+          setPlacementBoardLoading(false);
+        }
+      }
+    },
+    [showArchived]
+  );
 
-  const loadPipes = useCallback(async () => {
+  const loadPipes = useCallback(async (options?: { includeArchived?: boolean }) => {
     const generation = ++loadPipesGenerationRef.current;
-    const includeArchived = showArchived;
+    const includeArchived = options?.includeArchived ?? showArchived;
     try {
       setError(null);
       const rows = await listPipes(includeArchived);
@@ -463,7 +499,7 @@ export function Pipe() {
     if (viewMode === "list" || (viewMode === "board" && boardTab === "actes")) {
       void loadPlacementBoardRows({ silent: placementBoardLoadedRef.current });
     }
-  }, [viewMode, boardTab, loadPlacementBoardRows]);
+  }, [viewMode, boardTab, showArchived, loadPlacementBoardRows]);
 
   const setViewModePersisted = (mode: PipeViewMode) => {
     setViewMode(mode);
@@ -573,11 +609,11 @@ export function Pipe() {
   };
 
   const handleArchived = () => {
-    if (!showArchived) {
-      setSelectedPipe(null);
-      setPanelMode("empty");
-    }
-    void loadPipes();
+    setShowArchived(false);
+    savePipeShowArchived(false);
+    setSelectedPipe(null);
+    setPanelMode("empty");
+    void loadPipes({ includeArchived: false });
   };
 
   const handlePipeRefreshed = (pipe: PipeRecord) => {
@@ -588,6 +624,13 @@ export function Pipe() {
   const setShowArchivedPersisted = (value: boolean) => {
     setShowArchived(value);
     savePipeShowArchived(value);
+    if (!value) {
+      const prev = selectedPipeRef.current;
+      if (prev && isPipeArchived(prev)) {
+        setSelectedPipe(null);
+        setPanelMode("empty");
+      }
+    }
   };
 
   const cancelPanel = () => {
@@ -800,7 +843,7 @@ export function Pipe() {
             <PipeListToolbar
               filters={listFilters}
               resultCount={filteredListPipes.length}
-              totalCount={pipes.length}
+              totalCount={activePipes.length}
               showArchived={showArchived}
               onShowArchivedChange={setShowArchivedPersisted}
               onChange={setListFiltersPersisted}
