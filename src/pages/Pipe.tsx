@@ -460,7 +460,10 @@ export function Pipe() {
       panelMode === "edit" ||
       (panelMode === "view" && selectedPipe != null));
   const showSuiviStelliumBoardAside =
-    section === "suivi_stellium" && panelMode === "view" && selectedPipe != null;
+    section === "suivi_stellium" &&
+    (panelMode === "create" ||
+      panelMode === "edit" ||
+      (panelMode === "view" && selectedPipe != null));
   const showBoardAside = showAffairesBoardAside || showSuiviStelliumBoardAside;
 
   const openEdit = () => {
