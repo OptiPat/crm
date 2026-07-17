@@ -4,6 +4,7 @@ import { formatPipeParticipantsLabel } from "@/lib/pipe/pipe-types";
 import { PipeTypeBadge } from "@/components/pipe/PipeTypeBadge";
 import { PipeStageBadge } from "@/components/pipe/PipeStageBadge";
 import { PipePlacementBadge } from "@/components/pipe/PipePlacementBadge";
+import { PipeR1MissingDocsBadge } from "@/components/pipe/PipeR1MissingDocsBadge";
 import {
   PipeListStatusBadgeView,
   PipeSuiviListBadge,
@@ -26,6 +27,7 @@ interface PipeListProps {
   onSelect: (pipe: PipeRecord) => void;
   placementCountsByPipe?: Record<number, PlacementPipeOpenCount>;
   suiviColumnByPipe?: Record<number, { column: PlacementBoardColumn; count: number }>;
+  r1MissingByPipeId?: Record<number, string[]>;
 }
 
 export function PipeList({
@@ -34,6 +36,7 @@ export function PipeList({
   onSelect,
   placementCountsByPipe = {},
   suiviColumnByPipe = {},
+  r1MissingByPipeId = {},
 }: PipeListProps) {
   if (pipes.length === 0) {
     return (
@@ -48,12 +51,19 @@ export function PipeList({
       {pipes.map((pipe) => {
         const selected = pipe.id === selectedId;
         return (
-          <button
+          <div
             key={pipe.id}
-            type="button"
+            role="button"
+            tabIndex={0}
             onClick={() => onSelect(pipe)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelect(pipe);
+              }
+            }}
             className={cn(
-              "w-full px-4 py-3 text-left transition-colors hover:bg-muted/50",
+              "w-full px-4 py-3 text-left transition-colors hover:bg-muted/50 cursor-pointer",
               selected && "bg-primary/5 border-l-2 border-l-primary"
             )}
           >
@@ -61,6 +71,12 @@ export function PipeList({
               <PipeTypeBadge pipeType={pipe.pipe_type} />
               {pipe.pipe_type === "AFFAIRE" ? (
                 <PipeStageBadge stage={pipe.stage} pipe={pipe} />
+              ) : null}
+              {pipe.pipe_type === "AFFAIRE" && r1MissingByPipeId[pipe.id]?.length ? (
+                <PipeR1MissingDocsBadge
+                  missingLabels={r1MissingByPipeId[pipe.id]}
+                  onClick={(event) => event.stopPropagation()}
+                />
               ) : null}
               {isSuiviPipe(pipe) ? (
                 <>
@@ -82,7 +98,7 @@ export function PipeList({
               {" · "}
               {formatUpdatedAt(pipe.updated_at)}
             </p>
-          </button>
+          </div>
         );
       })}
     </div>

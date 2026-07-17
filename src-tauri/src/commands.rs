@@ -16,10 +16,12 @@ use crate::database::{
         NewCustomFieldDef, NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInteraction,
         NewInvestissement, NewInvestissementValorisation, NewInvestissementVersement,
         NewPartenaire, NewPipe, NewPipeTimelineEntry, NewSegment, NewTache, NewTemplateEmail,
-        NomProduitSuggestion, Partenaire, Pipe, PipeContactTimelineEntry, PipeTimelineEntry,
+        NomProduitSuggestion, Partenaire, Pipe, PipeContactTimelineEntry, PipeR1DocumentChecklist,
+        PipeR1MissingDocsSummary, PipeTimelineEntry,
         PipelineStats, ProductStats,
         Segment, SegmentWithCount, SetTacheStatutResult, Setting, Tache, TemplateEmail,
-        TemplateEmailAction, UpdateCustomFieldDef, UpdatePipe, UpdatePipeTimelineEntry,
+        TemplateEmailAction, UpdateCustomFieldDef, UpdatePipe, UpdatePipeR1DocumentChecklistInput,
+        UpdatePipeTimelineEntry,
         YearlyActivityStats,
     },
     Database,
@@ -449,6 +451,45 @@ pub fn list_pipe_timeline_for_contact(
     database
         .list_pipe_timeline_for_contact(contact_id)
         .map_err(|e| format!("Failed to list pipe timeline for contact: {}", e))
+}
+
+#[tauri::command]
+pub fn get_pipe_r1_document_checklist(
+    db: State<'_, DbState>,
+    pipe_id: i64,
+) -> Result<PipeR1DocumentChecklist, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_or_create_pipe_r1_document_checklist(pipe_id)
+        .map_err(|e| format!("Failed to get pipe R1 checklist: {}", e))
+}
+
+#[tauri::command]
+pub fn update_pipe_r1_document_checklist(
+    db: State<'_, DbState>,
+    pipe_id: i64,
+    update: UpdatePipeR1DocumentChecklistInput,
+) -> Result<PipeR1DocumentChecklist, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .update_pipe_r1_document_checklist(pipe_id, update)
+        .map_err(|e| format!("Failed to update pipe R1 checklist: {}", e))
+}
+
+#[tauri::command]
+pub fn list_pipe_r1_missing_docs_summaries(
+    db: State<'_, DbState>,
+) -> Result<Vec<PipeR1MissingDocsSummary>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .list_pipe_r1_missing_docs_summaries()
+        .map_err(|e| format!("Failed to list pipe R1 missing docs: {}", e))
 }
 
 #[tauri::command]

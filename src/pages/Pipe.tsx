@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Briefcase, ClipboardList, LayoutGrid, List, PhoneCall, Euro } from "lucide-react";
+import { Briefcase, ClipboardList, LayoutGrid, List, PhoneCall, Euro, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listPipes, getPipeById, type PipeRecord } from "@/lib/api/tauri-pipe";
 import {
@@ -44,6 +44,9 @@ import {
   peekPipeFocusId,
   PIPE_FOCUS_EVENT,
 } from "@/lib/navigation/pipe-navigation";
+import { usePipeListR1MissingDocs } from "@/hooks/usePipeListR1MissingDocs";
+import { usePipeChecklistTemplates } from "@/hooks/usePipeChecklistTemplates";
+import { PipeChecklistSettingsDialog } from "@/components/pipe/PipeChecklistSettingsDialog";
 import { PipeList } from "@/components/pipe/PipeList";
 import { PipeListToolbar } from "@/components/pipe/PipeListToolbar";
 import { PipeBoard } from "@/components/pipe/PipeBoard";
@@ -59,7 +62,13 @@ import { cn } from "@/lib/utils";
 
 type PanelMode = "empty" | "create" | "view" | "edit";
 
-function PipeCreateButtons({ onCreate }: { onCreate: (type: PipeType) => void }) {
+function PipeCreateButtons({
+  onCreate,
+  onOpenSettings,
+}: {
+  onCreate: (type: PipeType) => void;
+  onOpenSettings: () => void;
+}) {
   return (
     <div className="flex flex-wrap gap-1.5">
       <Button
@@ -91,6 +100,16 @@ function PipeCreateButtons({ onCreate }: { onCreate: (type: PipeType) => void })
       >
         <PhoneCall className="h-3.5 w-3.5" />
         Action
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-1.5"
+        onClick={onOpenSettings}
+      >
+        <Settings2 className="h-3.5 w-3.5" />
+        Paramètres
       </Button>
     </div>
   );
@@ -177,6 +196,13 @@ export function Pipe() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<PipeViewMode>(() => loadPipeViewMode());
+  const { templates: checklistTemplates, reload: reloadChecklistTemplates } =
+    usePipeChecklistTemplates();
+  const [checklistSettingsOpen, setChecklistSettingsOpen] = useState(false);
+  const r1MissingByPipeId = usePipeListR1MissingDocs(
+    viewMode === "list",
+    checklistTemplates
+  );
   const [boardTab, setBoardTab] = useState<PipeBoardTab>(() => loadPipeBoardTab());
   const [listFilters, setListFilters] = useState<PipeListFilters>(() => loadPipeListFilters());
   const [showArchived, setShowArchived] = useState(() => loadPipeShowArchived());
@@ -704,7 +730,10 @@ export function Pipe() {
             {showArchived ? "Masquer archivés" : "Voir archivés"}
           </Button>
         </div>
-        <PipeCreateButtons onCreate={openCreate} />
+        <PipeCreateButtons
+          onCreate={openCreate}
+          onOpenSettings={() => setChecklistSettingsOpen(true)}
+        />
       </div>
 
       {error && <p className="text-sm text-destructive px-1">{error}</p>}
@@ -787,6 +816,7 @@ export function Pipe() {
                   onSelect={openView}
                   placementCountsByPipe={placementCountsByPipe}
                   suiviColumnByPipe={suiviColumnByPipe}
+                  r1MissingByPipeId={r1MissingByPipeId}
                 />
               )}
             </div>
@@ -826,6 +856,12 @@ export function Pipe() {
           }}
         />
       )}
+
+      <PipeChecklistSettingsDialog
+        open={checklistSettingsOpen}
+        onOpenChange={setChecklistSettingsOpen}
+        onSaved={() => void reloadChecklistTemplates()}
+      />
     </div>
   );
 }

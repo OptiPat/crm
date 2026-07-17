@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Contact {
@@ -1456,6 +1457,46 @@ pub struct PipeContactTimelineEntry {
     pub pipe_stage: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pipe_archived_at: Option<i64>,
+}
+
+/// État d'une ligne de la checklist documents R1 (affaire).
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct PipeR1ChecklistItemState {
+    pub received: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub no_credit: Option<bool>,
+}
+
+/// Lignes persistées de la checklist R1 (clé = id template).
+pub type PipeR1ChecklistItems = HashMap<String, PipeR1ChecklistItemState>;
+
+/// Checklist documents R1 liée à une affaire.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PipeR1DocumentChecklist {
+    pub pipe_id: i64,
+    pub profile_salarie: bool,
+    pub profile_chef_entreprise: bool,
+    pub profile_retraite: bool,
+    pub items: PipeR1ChecklistItems,
+    pub updated_at: i64,
+}
+
+/// Mise à jour partielle checklist R1.
+#[derive(Debug, Deserialize)]
+pub struct UpdatePipeR1DocumentChecklistInput {
+    pub profile_salarie: Option<bool>,
+    pub profile_chef_entreprise: Option<bool>,
+    pub profile_retraite: Option<bool>,
+    pub items: Option<PipeR1ChecklistItems>,
+}
+
+/// Résumé pour badge liste (pièces R1 manquantes).
+#[derive(Debug, Serialize, Clone)]
+pub struct PipeR1MissingDocsSummary {
+    pub pipe_id: i64,
+    pub missing_item_keys: Vec<String>,
 }
 
 /// Entrée timeline d'un pipe.

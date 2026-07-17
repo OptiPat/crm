@@ -33,8 +33,13 @@ import { PipeSuiviSection } from "@/components/pipe/PipeSuiviSection";
 import { PipeSuiviPlacementAvancement } from "@/components/pipe/PipeSuiviPlacementAvancement";
 import { PipeTimelineQuickAdd } from "@/components/pipe/PipeTimelineQuickAdd";
 import { isSuiviPipe, isVersementComplementaireAffaire } from "@/lib/pipe/pipe-suivi";
+import { shouldShowR1DocumentChecklist } from "@/lib/pipe/r1-document-checklist";
+import { usePipeR1DocumentChecklist } from "@/hooks/usePipeR1DocumentChecklist";
+import { usePipeChecklistTemplates } from "@/hooks/usePipeChecklistTemplates";
 import { PipeSuiviQuickAdd } from "@/components/pipe/PipeSuiviQuickAdd";
 import { PipeTimelineHistory } from "@/components/pipe/PipeTimelineHistory";
+import { PipeR1DocumentChecklist } from "@/components/pipe/PipeR1DocumentChecklist";
+import { PipeR1MissingDocsBadge } from "@/components/pipe/PipeR1MissingDocsBadge";
 import { useGlobalContactDetailSheet } from "@/components/layout/ContactDetailSheetProvider";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { toast } from "sonner";
@@ -143,6 +148,24 @@ export function PipeDetailPanel({
     !isVersementAffaire &&
     isClassicAffaireStelliumSouscriptionStage(pipe.stage);
 
+  const showR1DocumentChecklist =
+    isPipeType(pipe.pipe_type) &&
+    pipe.pipe_type === "AFFAIRE" &&
+    pipe.contact_id > 0 &&
+    !isVersementAffaire &&
+    !timeline.loading &&
+    shouldShowR1DocumentChecklist(timeline.entries);
+
+  const { templates: checklistTemplates } = usePipeChecklistTemplates();
+
+  const r1Documents = usePipeR1DocumentChecklist(
+    pipe.id,
+    pipe.contact_id,
+    pipe.secondary_contact_id,
+    showR1DocumentChecklist,
+    checklistTemplates
+  );
+
   const prospectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -206,6 +229,12 @@ export function PipeDetailPanel({
             <div className="flex flex-wrap items-center gap-2">
               <PipeTypeBadge pipeType={pipe.pipe_type} />
               {pipe.stage ? <PipeStageBadge stage={pipe.stage} pipe={pipe} /> : null}
+              {showR1DocumentChecklist ? (
+                <PipeR1MissingDocsBadge
+                  checklist={r1Documents.checklist}
+                  templates={checklistTemplates}
+                />
+              ) : null}
               {isArchived && (
                 <Badge variant="secondary" className="text-xs">
                   Archivé
@@ -341,6 +370,18 @@ export function PipeDetailPanel({
                 onPlanRdv={onPlanRdv}
               />
             )}
+
+            {showR1DocumentChecklist ? (
+              <PipeR1DocumentChecklist
+                pipeId={pipe.id}
+                stage={pipe.stage}
+                checklist={r1Documents.checklist}
+                documents={r1Documents.documents}
+                loading={r1Documents.loading}
+                templates={checklistTemplates}
+                onPersist={r1Documents.persist}
+              />
+            ) : null}
 
             {showProspectionFields && (
               <div ref={prospectionRef} id="pipe-prospection-section">
