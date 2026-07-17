@@ -8,6 +8,7 @@ import { ParametresLicenseSection } from "@/components/settings/ParametresLicens
 import { CheckForUpdatesButton } from "@/components/system/AppUpdateChecker";
 import { useAppUpdate } from "@/components/system/app-update-context";
 import { ChangePasswordDialog } from "@/components/settings/ChangePasswordDialog";
+import { SystemAuthSettings } from "@/components/settings/SystemAuthSettings";
 import { Bell, Download, Lock, Shield } from "lucide-react";
 
 export function ParametresApplicationSection() {
@@ -64,6 +65,7 @@ export function ParametresApplicationSection() {
             </Button>
           </div>
         </div>
+        <SystemAuthSettings />
       </SettingsPanel>
 
       <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />

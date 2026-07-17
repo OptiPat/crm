@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, Mail, Pencil, Phone, Trash2 } from "lucide-react";
+import { ExternalLink, Mail, Pencil, Phone, Trash2, Archive, ArchiveRestore } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getContactById, type Contact } from "@/lib/api/tauri-contacts";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
-import { deletePipe, type PipeRecord } from "@/lib/api/tauri-pipe";
+import { deletePipe, archivePipe, unarchivePipe, type PipeRecord } from "@/lib/api/tauri-pipe";
 import { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { usePipeRdvStageSync } from "@/hooks/usePipeRdvStageSync";
 import {
@@ -44,6 +44,8 @@ interface PipeDetailPanelProps {
   childAffaires?: PipeRecord[];
   onEdit: () => void;
   onDeleted: () => void;
+  onArchived?: () => void;
+  onRefreshed?: (pipe: PipeRecord) => void;
   onPlanRdv?: (stage: PipeRdvStage) => void;
   onOpenChildAffaire?: (pipe: PipeRecord) => void;
   onOpenParentPipe?: (parentId: number) => void;
@@ -55,6 +57,8 @@ export function PipeDetailPanel({
   childAffaires = [],
   onEdit,
   onDeleted,
+  onArchived,
+  onRefreshed,
   onPlanRdv,
   onOpenChildAffaire,
   onOpenParentPipe,
@@ -62,7 +66,9 @@ export function PipeDetailPanel({
 }: PipeDetailPanelProps) {
   const { openContactWithTab } = useGlobalContactDetailSheet();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const [activeTab, setActiveTab] = useState("suivi");
   const [focusProspectionToken, setFocusProspectionToken] = useState(0);
   const [contactInfo, setContactInfo] = useState<Pick<Contact, "email" | "telephone"> | null>(
@@ -71,6 +77,35 @@ export function PipeDetailPanel({
   const timeline = usePipeTimeline(pipe.id);
 
   usePipeRdvStageSync(pipe, timeline.entries, timeline.loading);
+
+  const isArchived = pipe.archived_at != null && pipe.archived_at > 0;
+
+  const handleArchive = async () => {
+    setArchiving(true);
+    try {
+      await archivePipe(pipe.id);
+      toast.success("Pipe archivé — l'historique reste dans la fiche contact");
+      setConfirmArchive(false);
+      onArchived?.();
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  const handleUnarchive = async () => {
+    setArchiving(true);
+    try {
+      const updated = await unarchivePipe(pipe.id);
+      toast.success("Pipe réactivé");
+      onRefreshed?.(updated);
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setArchiving(false);
+    }
+  };
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -171,6 +206,11 @@ export function PipeDetailPanel({
             <div className="flex flex-wrap items-center gap-2">
               <PipeTypeBadge pipeType={pipe.pipe_type} />
               {pipe.stage ? <PipeStageBadge stage={pipe.stage} pipe={pipe} /> : null}
+              {isArchived && (
+                <Badge variant="secondary" className="text-xs">
+                  Archivé
+                </Badge>
+              )}
             </div>
             <h2 className="text-lg font-semibold leading-tight">{pipe.titre}</h2>
             <p className="text-sm text-muted-foreground">
@@ -232,12 +272,37 @@ export function PipeDetailPanel({
             <Button type="button" variant="outline" size="icon" onClick={onEdit} aria-label="Modifier">
               <Pencil className="h-4 w-4" />
             </Button>
+            {isArchived ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => void handleUnarchive()}
+                disabled={archiving}
+                aria-label="Réactiver"
+                title="Réactiver ce pipe"
+              >
+                <ArchiveRestore className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setConfirmArchive(true)}
+                aria-label="Archiver"
+                title="Archiver — retire du pipe actif, conserve l'historique client"
+              >
+                <Archive className="h-4 w-4" />
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"
               size="icon"
               onClick={() => setConfirmDelete(true)}
               aria-label="Supprimer"
+              title="Suppression définitive"
             >
               <Trash2 className="h-4 w-4 text-destructive" />
             </Button>
@@ -352,12 +417,32 @@ export function PipeDetailPanel({
         </Tabs>
       </div>
 
+      <AlertDialog open={confirmArchive} onOpenChange={setConfirmArchive}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archiver ce pipe ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Il disparaîtra du pipe actif (board et liste). L&apos;historique reste visible dans
+              l&apos;onglet Relation de la fiche contact. Vous pourrez le réactiver plus tard.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={archiving}>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void handleArchive()} disabled={archiving}>
+              {archiving ? "Archivage…" : "Archiver"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer ce pipe ?</AlertDialogTitle>
+            <AlertDialogTitle>Supprimer définitivement ce pipe ?</AlertDialogTitle>
             <AlertDialogDescription>
-              Action définitive. Supprimez d&apos;abord les éléments rattachés en dessous.
+              Action irréversible : le pipe et tout son historique seront effacés. Préférez
+              l&apos;archivage pour conserver la trace côté client. Supprimez d&apos;abord les
+              éléments rattachés actifs.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

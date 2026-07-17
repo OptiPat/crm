@@ -10,18 +10,29 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  coercePipeListStageForPipeType,
   DEFAULT_PIPE_LIST_FILTERS,
+  formatPipeListStageFilterLabel,
   hasActivePipeListFilters,
   PIPE_LIST_FILTER_PIPE_TYPES,
   PIPE_LIST_FILTER_STAGES,
+  PIPE_LIST_FILTER_SUIVI_STEPS,
   type PipeListFilters,
+  type PipeListStageFilter,
 } from "@/lib/pipe/pipe-list-filters";
-import { PIPE_STAGE_LABELS, PIPE_TYPE_LABELS } from "@/lib/pipe/pipe-types";
+import {
+  PIPE_LIST_SORT_KEYS,
+  PIPE_LIST_SORT_LABELS,
+  type PipeListSortKey,
+} from "@/lib/pipe/pipe-list-sort";
+import { PIPE_TYPE_LABELS } from "@/lib/pipe/pipe-types";
 
 interface PipeListToolbarProps {
   filters: PipeListFilters;
   resultCount: number;
   totalCount: number;
+  showArchived?: boolean;
+  onShowArchivedChange?: (show: boolean) => void;
   onChange: (filters: PipeListFilters) => void;
 }
 
@@ -29,12 +40,23 @@ export function PipeListToolbar({
   filters,
   resultCount,
   totalCount,
+  showArchived = false,
+  onShowArchivedChange,
   onChange,
 }: PipeListToolbarProps) {
   const active = hasActivePipeListFilters(filters);
+  const stageOptions: PipeListStageFilter[] =
+    filters.pipeType === "ACTE_GESTION"
+      ? [...PIPE_LIST_FILTER_SUIVI_STEPS]
+      : filters.pipeType === "AFFAIRE"
+        ? [...PIPE_LIST_FILTER_STAGES]
+        : [];
 
   const clearFilters = () => {
-    onChange(DEFAULT_PIPE_LIST_FILTERS);
+    onChange({
+      ...DEFAULT_PIPE_LIST_FILTERS,
+      sort: filters.sort,
+    });
   };
 
   return (
@@ -64,14 +86,27 @@ export function PipeListToolbar({
       </div>
 
       <div className="flex flex-wrap gap-2">
+        {onShowArchivedChange && (
+          <Button
+            type="button"
+            variant={showArchived ? "secondary" : "outline"}
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => onShowArchivedChange(!showArchived)}
+          >
+            {showArchived ? "Masquer archivés" : "Voir archivés"}
+          </Button>
+        )}
         <Select
           value={filters.pipeType}
-          onValueChange={(value) =>
+          onValueChange={(value) => {
+            const pipeType = value as PipeListFilters["pipeType"];
             onChange({
               ...filters,
-              pipeType: value as PipeListFilters["pipeType"],
-            })
-          }
+              pipeType,
+              stage: coercePipeListStageForPipeType(pipeType, filters.stage),
+            });
+          }}
         >
           <SelectTrigger className="h-8 w-[130px] text-xs">
             <SelectValue placeholder="Type" />
@@ -85,22 +120,47 @@ export function PipeListToolbar({
           </SelectContent>
         </Select>
 
+        {stageOptions.length > 0 ? (
+          <Select
+            value={filters.stage}
+            onValueChange={(value) =>
+              onChange({
+                ...filters,
+                stage: value as PipeListFilters["stage"],
+              })
+            }
+          >
+            <SelectTrigger className="h-8 w-[170px] text-xs">
+              <SelectValue
+                placeholder={filters.pipeType === "ACTE_GESTION" ? "Avancement" : "Étape"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {stageOptions.map((stage) => (
+                <SelectItem key={stage} value={stage}>
+                  {formatPipeListStageFilterLabel(stage)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+
         <Select
-          value={filters.stage}
+          value={filters.sort}
           onValueChange={(value) =>
             onChange({
               ...filters,
-              stage: value as PipeListFilters["stage"],
+              sort: value as PipeListSortKey,
             })
           }
         >
-          <SelectTrigger className="h-8 w-[150px] text-xs">
-            <SelectValue placeholder="Étape" />
+          <SelectTrigger className="h-8 min-w-[170px] text-xs" aria-label="Trier les pipes">
+            <SelectValue placeholder="Tri" />
           </SelectTrigger>
           <SelectContent>
-            {PIPE_LIST_FILTER_STAGES.map((stage) => (
-              <SelectItem key={stage} value={stage}>
-                {stage === "ALL" ? "Toutes étapes" : PIPE_STAGE_LABELS[stage]}
+            {PIPE_LIST_SORT_KEYS.map((sortKey) => (
+              <SelectItem key={sortKey} value={sortKey}>
+                {PIPE_LIST_SORT_LABELS[sortKey]}
               </SelectItem>
             ))}
           </SelectContent>
@@ -121,7 +181,7 @@ export function PipeListToolbar({
           )}
           {filters.stage !== "ALL" && (
             <Badge variant="secondary" className="font-normal text-xs">
-              {PIPE_STAGE_LABELS[filters.stage]}
+              {formatPipeListStageFilterLabel(filters.stage)}
             </Badge>
           )}
         </div>

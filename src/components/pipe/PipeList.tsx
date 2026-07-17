@@ -8,8 +8,9 @@ import {
   PipeListStatusBadgeView,
   PipeSuiviListBadge,
 } from "@/components/pipe/PipeSuiviListBadge";
-import type { PlacementOperationWithContact, PlacementPipeOpenCount } from "@/lib/api/tauri-box-placement";
-import { PIPE_ACTION_LIST_BADGE, buildSuiviPlacementColumnByPipe } from "@/lib/pipe/pipe-list-badges";
+import type { PlacementPipeOpenCount } from "@/lib/api/tauri-box-placement";
+import type { PlacementBoardColumn } from "@/lib/placement/placement-operation-board";
+import { PIPE_ACTION_LIST_BADGE } from "@/lib/pipe/pipe-list-badges";
 import { isSuiviPipe } from "@/lib/pipe/pipe-suivi";
 
 function formatUpdatedAt(ts: number): string {
@@ -24,7 +25,7 @@ interface PipeListProps {
   selectedId: number | null;
   onSelect: (pipe: PipeRecord) => void;
   placementCountsByPipe?: Record<number, PlacementPipeOpenCount>;
-  placementBoardRows?: PlacementOperationWithContact[];
+  suiviColumnByPipe?: Record<number, { column: PlacementBoardColumn; count: number }>;
 }
 
 export function PipeList({
@@ -32,9 +33,8 @@ export function PipeList({
   selectedId,
   onSelect,
   placementCountsByPipe = {},
-  placementBoardRows = [],
+  suiviColumnByPipe = {},
 }: PipeListProps) {
-  const suiviColumnByPipe = buildSuiviPlacementColumnByPipe(placementBoardRows);
   if (pipes.length === 0) {
     return (
       <div className="px-4 py-8 text-center text-sm text-muted-foreground">

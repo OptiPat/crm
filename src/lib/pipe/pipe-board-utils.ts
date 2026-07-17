@@ -10,6 +10,24 @@ export const PIPE_BOARD_TAB_KEY = "crm:pipe-board-tab";
 
 export type PipeBoardTab = "affaires" | "actes" | "remuneration";
 
+export const PIPE_SHOW_ARCHIVED_KEY = "crm:pipe-show-archived";
+
+export function loadPipeShowArchived(): boolean {
+  try {
+    return localStorage.getItem(PIPE_SHOW_ARCHIVED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function savePipeShowArchived(show: boolean): void {
+  try {
+    localStorage.setItem(PIPE_SHOW_ARCHIVED_KEY, show ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
 export function loadPipeBoardTab(): PipeBoardTab {
   try {
     const raw = localStorage.getItem(PIPE_BOARD_TAB_KEY);

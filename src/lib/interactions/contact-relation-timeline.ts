@@ -20,7 +20,7 @@ import {
   isMessagingRelanceEntry,
 } from "@/lib/interactions/exchange-history-display";
 
-export type RelationTimelineFilter = "all" | "crm" | "mailbox";
+export type RelationTimelineFilter = "all" | "crm" | "mailbox" | "pipe";
 
 export type ContactRelationTimelineItem =
   | { kind: "email"; entry: ExchangeHistoryEntry; key: string; sort_date: number }
@@ -38,7 +38,7 @@ export type ContactRelationTimelineItem =
   | { kind: "document"; document: Document; key: string; sort_date: number }
   | { kind: "tache"; tache: Tache; key: string; sort_date: number };
 
-/** Événements internes CRM (hors boîte mail) — pour le filtre « CRM ». */
+/** Événements internes CRM (hors boîte mail et pipe). */
 const CRM_KINDS = new Set([
   "email",
   "messaging",
@@ -137,7 +137,10 @@ export function filterRelationTimeline(
   if (filter === "crm") {
     return items.filter((i) => CRM_KINDS.has(i.kind));
   }
-  return items.filter((i) => i.kind === "mailbox_thread");
+  if (filter === "mailbox") {
+    return items.filter((i) => i.kind === "mailbox_thread");
+  }
+  return [];
 }
 
 export function relationTimelineMatchesSearch(

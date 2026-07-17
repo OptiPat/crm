@@ -29,6 +29,8 @@ import { subscribeRelationChanged } from "@/lib/etiquettes/etiquette-events";
 import { subscribeDocumentsChanged } from "@/lib/documents/document-events";
 import { subscribeTachesChanged } from "@/lib/taches/tache-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
+import { subscribePipeChanged } from "@/lib/pipe/pipe-events";
+import { navigateToPipe } from "@/lib/navigation/pipe-navigation";
 import { getTypeAlerteLabel } from "@/lib/alertes/alerte-labels";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { navigateToInteractions } from "@/lib/navigation/interactions-navigation";
@@ -51,7 +53,13 @@ import { getRelationIntervalMs } from "@/lib/background/background-automation-in
 import { isBackgroundAutomationCycleInFlight } from "@/lib/background/background-automation-runner";
 import { getAppRuntimePrefs } from "@/lib/api/tauri-app-runtime";
 import { ContactRelationTimelineRow } from "@/components/interactions/ContactRelationTimelineRow";
+import { ContactRelationPipeTimeline } from "@/components/interactions/ContactRelationPipeTimeline";
 import { groupRelationTimelineByYearMonth } from "@/lib/interactions/relation-timeline-groups";
+import {
+  contactPipeTimelineMatchesSearch,
+  loadContactPipeTimeline,
+} from "@/lib/interactions/contact-relation-pipe-timeline";
+import type { PipeContactTimelineEntry } from "@/lib/api/tauri-pipe-contact-timeline";
 import { InteractionForm } from "./InteractionForm";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -77,6 +85,7 @@ const FILTER_LABELS: { id: RelationTimelineFilter; label: string }[] = [
   { id: "all", label: "Tout" },
   { id: "crm", label: "CRM" },
   { id: "mailbox", label: "Boîte mail" },
+  { id: "pipe", label: "Pipe" },
 ];
 
 function formatTs(ts: number | null | undefined): string | null {
@@ -188,6 +197,7 @@ export function ContactInteractionsPanel({
   onNestedFormOpenChange,
 }: ContactInteractionsPanelProps) {
   const [timeline, setTimeline] = useState<ContactRelationTimelineItem[]>([]);
+  const [pipeTimeline, setPipeTimeline] = useState<PipeContactTimelineEntry[]>([]);
   const [relationStatus, setRelationStatus] = useState<ContactRelationStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -215,15 +225,18 @@ export function ContactInteractionsPanel({
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [items, status] = await Promise.all([
+      const [items, pipeItems, status] = await Promise.all([
         loadContactRelationTimeline(contactId),
+        loadContactPipeTimeline(contactId),
         getContactRelationStatus(contactId),
       ]);
       setTimeline(items);
+      setPipeTimeline(pipeItems);
       setRelationStatus(status);
     } catch (error) {
       console.error(error);
       setTimeline([]);
+      setPipeTimeline([]);
       setRelationStatus(null);
       toast.error("Impossible de charger la relation client");
     } finally {
@@ -414,10 +427,12 @@ export function ContactInteractionsPanel({
     const unsubTaches = subscribeTachesChanged(() => void load());
     const unsubInvest = subscribeInvestissementsChanged(() => void load());
     const unsubDocs = subscribeDocumentsChanged(() => void load());
+    const unsubPipe = subscribePipeChanged(() => void load());
     return () => {
       unsubTaches();
       unsubInvest();
       unsubDocs();
+      unsubPipe();
     };
   }, [load]);
 
@@ -450,6 +465,14 @@ export function ContactInteractionsPanel({
     navigateToInteractions(onNavigate, contactId, "contacts");
   };
 
+  const goToPipe = (pipeId: number) => {
+    if (!onNavigate) {
+      toast.info("Ouvrez Pipe depuis le menu latéral.");
+      return;
+    }
+    navigateToPipe(onNavigate, pipeId);
+  };
+
   const handleDelete = async (id: number) => {
     if (!confirm("Supprimer cette interaction ?")) return;
     try {
@@ -480,6 +503,12 @@ export function ContactInteractionsPanel({
   const filteredTimeline = filterRelationTimeline(timeline, filter).filter((item) =>
     relationTimelineMatchesSearch(item, searchQuery)
   );
+  const filteredPipeTimeline = pipeTimeline.filter((entry) =>
+    contactPipeTimelineMatchesSearch(entry, searchQuery)
+  );
+  const isPipeFilter = filter === "pipe";
+  const displayedCount = isPipeFilter ? filteredPipeTimeline.length : filteredTimeline.length;
+  const totalCount = isPipeFilter ? pipeTimeline.length : timeline.length;
   const timelineByYear = groupRelationTimelineByYearMonth(filteredTimeline);
 
   const progressPct =
@@ -510,11 +539,11 @@ export function ContactInteractionsPanel({
               <CardTitle className="text-lg flex items-center gap-2">
                 <History className="h-5 w-5 text-primary" />
                 Relation client
-                {!loading && filteredTimeline.length > 0 && (
+                {!loading && displayedCount > 0 && (
                   <span className="text-sm font-normal text-muted-foreground">
-                    ({filteredTimeline.length} affiché{filteredTimeline.length > 1 ? "s" : ""}
+                    ({displayedCount} affiché{displayedCount > 1 ? "s" : ""}
                     {filter !== "all" || searchQuery.trim()
-                      ? ` / ${timeline.length} au total`
+                      ? ` / ${totalCount} au total`
                       : ""}
                     )
                   </span>
@@ -531,10 +560,10 @@ export function ContactInteractionsPanel({
                     Dernier contact filleul : <strong>{dernierFilleul}</strong>
                   </span>
                 )}
-                {!dernierClient && !dernierFilleul && !loading && timeline.length === 0 && (
+                {!dernierClient && !dernierFilleul && !loading && timeline.length === 0 && pipeTimeline.length === 0 && (
                   <span>
                     Campagnes, notes, investissements, documents, tâches et boîte mail —
-                    historique complet
+                    onglet Pipe pour l&apos;historique commercial
                   </span>
                 )}
                 {lastSyncLabel && (
@@ -665,6 +694,27 @@ export function ContactInteractionsPanel({
           )}
           {loading ? (
             <p className="text-sm text-muted-foreground py-2">Chargement de l&apos;historique…</p>
+          ) : isPipeFilter ? (
+            filteredPipeTimeline.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-6 text-center">
+                <History className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+                <p className="text-sm font-medium">
+                  {pipeTimeline.length > 0
+                    ? "Aucun événement pipe pour cette recherche"
+                    : "Aucun historique pipe pour ce contact"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {searchQuery.trim()
+                    ? "Essayez d'autres mots-clés."
+                    : "Les appels, RDV et avancements d'affaires apparaissent ici (y compris pipes archivés)."}
+                </p>
+              </div>
+            ) : (
+              <ContactRelationPipeTimeline
+                entries={filteredPipeTimeline}
+                onOpenPipe={onNavigate ? goToPipe : undefined}
+              />
+            )
           ) : filteredTimeline.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-6 text-center">
               <MessageSquare className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
@@ -677,7 +727,7 @@ export function ContactInteractionsPanel({
                 {searchQuery.trim()
                   ? "Aucun résultat pour cette recherche."
                   : filter !== "all"
-                    ? "Changez le filtre Tout / CRM / Boîte mail."
+                    ? "Changez le filtre Tout / CRM / Boîte mail / Pipe."
                     : "Les envois campagne apparaissent après envoi ; synchronisez Gmail pour la boîte mail."}
               </p>
               {(filter !== "all" || searchQuery.trim()) && timeline.length > 0 && (

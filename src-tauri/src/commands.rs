@@ -16,7 +16,8 @@ use crate::database::{
         NewCustomFieldDef, NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInteraction,
         NewInvestissement, NewInvestissementValorisation, NewInvestissementVersement,
         NewPartenaire, NewPipe, NewPipeTimelineEntry, NewSegment, NewTache, NewTemplateEmail,
-        NomProduitSuggestion, Partenaire, Pipe, PipeTimelineEntry, PipelineStats, ProductStats,
+        NomProduitSuggestion, Partenaire, Pipe, PipeContactTimelineEntry, PipeTimelineEntry,
+        PipelineStats, ProductStats,
         Segment, SegmentWithCount, SetTacheStatutResult, Setting, Tache, TemplateEmail,
         TemplateEmailAction, UpdateCustomFieldDef, UpdatePipe, UpdatePipeTimelineEntry,
         YearlyActivityStats,
@@ -405,13 +406,49 @@ pub fn get_all_partenaires(db: State<'_, DbState>) -> Result<Vec<Partenaire>, St
 }
 
 #[tauri::command]
-pub fn list_pipes(db: State<'_, DbState>) -> Result<Vec<Pipe>, String> {
+pub fn list_pipes(
+    db: State<'_, DbState>,
+    include_archived: Option<bool>,
+) -> Result<Vec<Pipe>, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .list_pipes()
+        .list_pipes(include_archived.unwrap_or(false))
         .map_err(|e| format!("Failed to list pipes: {}", e))
+}
+
+#[tauri::command]
+pub fn archive_pipe(db: State<'_, DbState>, id: i64) -> Result<Pipe, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .archive_pipe(id)
+        .map_err(|e| format!("Failed to archive pipe: {}", e))
+}
+
+#[tauri::command]
+pub fn unarchive_pipe(db: State<'_, DbState>, id: i64) -> Result<Pipe, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .unarchive_pipe(id)
+        .map_err(|e| format!("Failed to unarchive pipe: {}", e))
+}
+
+#[tauri::command]
+pub fn list_pipe_timeline_for_contact(
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<Vec<PipeContactTimelineEntry>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .list_pipe_timeline_for_contact(contact_id)
+        .map_err(|e| format!("Failed to list pipe timeline for contact: {}", e))
 }
 
 #[tauri::command]

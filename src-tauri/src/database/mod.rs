@@ -37,6 +37,7 @@ pub mod operations;
 pub mod partenaires;
 pub mod pipe;
 pub mod pipe_contact_sync;
+pub mod pipe_contact_timeline;
 pub mod pipe_rdv_google_sync;
 pub mod pipe_rdv_scheduled_emails;
 pub mod pipe_remuneration;

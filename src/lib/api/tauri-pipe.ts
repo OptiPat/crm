@@ -19,6 +19,7 @@ export interface PipeRecord {
   secondary_contact_nom?: string | null;
   secondary_contact_prenom?: string | null;
   parent_titre?: string | null;
+  archived_at?: number | null;
 }
 
 export interface NewPipeInput {
@@ -33,8 +34,8 @@ export interface NewPipeInput {
 
 export type UpdatePipeInput = NewPipeInput;
 
-export async function listPipes(): Promise<PipeRecord[]> {
-  return invoke<PipeRecord[]>("list_pipes");
+export async function listPipes(includeArchived = false): Promise<PipeRecord[]> {
+  return invoke<PipeRecord[]>("list_pipes", { includeArchived });
 }
 
 export async function getPipeById(id: number): Promise<PipeRecord> {
@@ -56,6 +57,18 @@ export async function updatePipe(id: number, input: UpdatePipeInput): Promise<Pi
 export async function deletePipe(id: number): Promise<void> {
   await invoke<void>("delete_pipe", { id });
   notifyPipeChanged();
+}
+
+export async function archivePipe(id: number): Promise<PipeRecord> {
+  const pipe = await invoke<PipeRecord>("archive_pipe", { id });
+  notifyPipeChanged();
+  return pipe;
+}
+
+export async function unarchivePipe(id: number): Promise<PipeRecord> {
+  const pipe = await invoke<PipeRecord>("unarchive_pipe", { id });
+  notifyPipeChanged();
+  return pipe;
 }
 
 export async function setPipeStage(

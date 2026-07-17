@@ -92,12 +92,13 @@ fn map_pipe_row(row: &Row<'_>) -> Result<super::models::Pipe> {
         secondary_contact_nom: row.get(12)?,
         secondary_contact_prenom: row.get(13)?,
         parent_titre: row.get(14)?,
+        archived_at: row.get(15)?,
     })
 }
 
 const PIPE_SELECT_FIELDS: &str = "p.id, p.contact_id, p.secondary_contact_id, p.pipe_type, p.parent_pipe_id, p.titre, p.stage, p.notes,
                     p.created_at, p.updated_at,
-                    c.nom, c.prenom, c2.nom, c2.prenom, pp.titre";
+                    c.nom, c.prenom, c2.nom, c2.prenom, pp.titre, p.archived_at";
 
 impl super::Database {
     pub fn migrate_pipes_table(&self) -> Result<()> {
@@ -148,6 +149,10 @@ impl super::Database {
         if !self.table_has_column("pipes", "secondary_contact_id")? {
             self.conn.execute("ALTER TABLE pipes ADD COLUMN secondary_contact_id INTEGER", [])?;
             println!("✅ Migration: secondary_contact_id sur pipes");
+        }
+        if !self.table_has_column("pipes", "archived_at")? {
+            self.conn.execute("ALTER TABLE pipes ADD COLUMN archived_at INTEGER", [])?;
+            println!("✅ Migration: archived_at sur pipes");
         }
         self.migrate_pipes_legacy_stages()?;
         Ok(())
@@ -333,13 +338,19 @@ impl super::Database {
             .map(str::to_string)
     }
 
-    pub fn list_pipes(&self) -> Result<Vec<super::models::Pipe>> {
+    pub fn list_pipes(&self, include_archived: bool) -> Result<Vec<super::models::Pipe>> {
+        let archived_clause = if include_archived {
+            ""
+        } else {
+            " WHERE p.archived_at IS NULL"
+        };
         let sql = format!(
             "SELECT {PIPE_SELECT_FIELDS}
              FROM pipes p
              LEFT JOIN contacts c ON c.id = p.contact_id
              LEFT JOIN contacts c2 ON c2.id = p.secondary_contact_id
              LEFT JOIN pipes pp ON pp.id = p.parent_pipe_id
+             {archived_clause}
              ORDER BY p.updated_at DESC"
         );
         let mut stmt = self.conn.prepare(&sql)?;
@@ -546,7 +557,7 @@ impl super::Database {
         let contact_id = pipe.contact_id;
         let secondary_contact_id = pipe.secondary_contact_id;
         let child_count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM pipes WHERE parent_pipe_id = ?1",
+            "SELECT COUNT(*) FROM pipes WHERE parent_pipe_id = ?1 AND archived_at IS NULL",
             params![id],
             |row| row.get(0),
         )?;
@@ -571,6 +582,44 @@ impl super::Database {
             }
         }
         Ok(())
+    }
+
+    pub fn archive_pipe(&self, id: i64) -> Result<super::models::Pipe> {
+        let pipe = self.get_pipe_by_id(id)?;
+        if pipe.archived_at.is_some() {
+            return Ok(pipe);
+        }
+        let child_count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM pipes WHERE parent_pipe_id = ?1 AND archived_at IS NULL",
+            params![id],
+            |row| row.get(0),
+        )?;
+        if child_count > 0 {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "impossible d'archiver un pipe avec des éléments rattachés actifs".into(),
+            ));
+        }
+        let now = now_unix();
+        let updated = self.conn.execute(
+            "UPDATE pipes SET archived_at = ?1, updated_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        self.get_pipe_by_id(id)
+    }
+
+    pub fn unarchive_pipe(&self, id: i64) -> Result<super::models::Pipe> {
+        let now = now_unix();
+        let updated = self.conn.execute(
+            "UPDATE pipes SET archived_at = NULL, updated_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        self.get_pipe_by_id(id)
     }
 }
 
@@ -659,14 +708,52 @@ mod tests {
             .unwrap();
         assert_eq!(action.parent_pipe_id, Some(acte.id));
 
-        let list = db.list_pipes().unwrap();
+        let list = db.list_pipes(true).unwrap();
         assert_eq!(list.len(), 3);
 
         db.delete_pipe(acte.id).unwrap_err();
         db.delete_pipe(action.id).unwrap();
         db.delete_pipe(acte.id).unwrap();
         db.delete_pipe(affaire.id).unwrap();
-        assert!(db.list_pipes().unwrap().is_empty());
+        assert!(db.list_pipes(true).unwrap().is_empty());
+    }
+
+    #[test]
+    fn archive_pipe_hides_from_active_list_keeps_timeline() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        use crate::database::models::{NewPipe, NewPipeTimelineEntry};
+        use crate::database::pipe_timeline::TIMELINE_APPEL;
+
+        let affaire = db
+            .create_pipe(NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Affaire archivée".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+
+        db.create_pipe_timeline_entry(NewPipeTimelineEntry {
+            pipe_id: affaire.id,
+            entry_type: TIMELINE_APPEL.into(),
+            titre: Some("Appel".into()),
+            contenu: None,
+            occurred_at: Some(1_700_000_000),
+        })
+        .unwrap();
+
+        db.archive_pipe(affaire.id).unwrap();
+        assert_eq!(db.list_pipes(false).unwrap().len(), 0);
+        assert_eq!(db.list_pipes(true).unwrap().len(), 1);
+        assert_eq!(db.list_pipe_timeline_entries(affaire.id).unwrap().len(), 2);
+
+        let restored = db.unarchive_pipe(affaire.id).unwrap();
+        assert!(restored.archived_at.is_none());
+        assert_eq!(db.list_pipes(false).unwrap().len(), 1);
     }
 
     #[test]

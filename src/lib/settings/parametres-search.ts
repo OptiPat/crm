@@ -127,6 +127,12 @@ export const PARAMETRES_SEARCH_INDEX: ParametresSearchItem[] = [
     section: "application",
   },
   {
+    id: "authentification-systeme",
+    label: "Double authentification système",
+    keywords: ["windows hello", "touch id", "biométrie", "code pin", "2fa", "sécurité"],
+    section: "application",
+  },
+  {
     id: "mise-a-jour",
     label: "Mises à jour du logiciel",
     keywords: ["mise à jour", "update", "version", "télécharger"],

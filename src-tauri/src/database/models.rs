@@ -1435,6 +1435,27 @@ pub struct Pipe {
     pub secondary_contact_prenom: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_titre: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archived_at: Option<i64>,
+}
+
+/// Entrée timeline pipe avec contexte affaire (onglet Relation client).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PipeContactTimelineEntry {
+    pub id: i64,
+    pub pipe_id: i64,
+    pub entry_type: String,
+    pub titre: Option<String>,
+    pub contenu: Option<String>,
+    pub occurred_at: i64,
+    pub created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub google_event_id: Option<String>,
+    pub pipe_titre: String,
+    pub pipe_type: String,
+    pub pipe_stage: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pipe_archived_at: Option<i64>,
 }
 
 /// Entrée timeline d'un pipe.

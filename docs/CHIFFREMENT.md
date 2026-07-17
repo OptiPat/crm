@@ -11,7 +11,7 @@
 | Élément | État | Détail |
 |--------|------|--------|
 | Base `patrimoine-crm.db` | **En clair** | `rusqlite` feature `bundled` (SQLite standard). Ouverte par `Database::open`, sans clé. |
-| Mot de passe | **Verrou d'accès** | Hash **Argon2id** dans `auth.json` (`{ password_hash, created_at }`). Ne chiffre rien. |
+| Accès au CRM | **Verrou local** | Mot de passe Argon2id, avec Windows Hello ou Touch ID en second facteur optionnel. Ne chiffre pas la base. |
 | Secrets applicatifs | **Chiffrés au repos** | Tokens OAuth (`email_oauth.json`), clé API Mistral (`newsletter_config.json`) — XOR + nonce avec `secrets.key`. |
 
 ### Conséquences
@@ -30,12 +30,18 @@ Stocké dans `%APPDATA%\com.patrimoine-crm.app\`. Contient uniquement :
 |------|------|
 | `password_hash` | hash Argon2id du mot de passe (vérification rapide) |
 | `created_at` | horodatage de création |
+| `system_auth_enabled` | active la confirmation Windows Hello ou Touch ID après le mot de passe |
 
 Flux (`src-tauri/src/auth/`) :
 
 1. `create_master_password` (1ʳᵉ fois) : enregistre le hash, puis ouvre la base.
-2. `unlock` : vérifie le hash, puis ouvre la base (`Database::open`, sans clé).
+2. `unlock` : vérifie le hash, puis Windows Hello ou Touch ID si activé, avant d'ouvrir la base.
 3. `change_master_password` : vérifie l'actuel, re-hache le nouveau.
+
+Après 5 mots de passe incorrects, les délais progressent de 1 à 5, 15 puis 60 minutes.
+Ils restent en mémoire et une réussite remet le compteur à zéro. Si l'authentification système
+devient indisponible sur un nouveau poste, un accès de récupération par mot de passe la désactive
+explicitement : aucune panne biométrique ne peut rendre les données inaccessibles définitivement.
 
 La base n'est **pas** ouverte au démarrage : elle ne l'est qu'après le verrou.
 

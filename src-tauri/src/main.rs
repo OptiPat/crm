@@ -81,6 +81,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_biometry::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec!["--minimized"]),
@@ -139,6 +140,9 @@ fn main() {
             delete_foyer,
             get_all_partenaires,
             list_pipes,
+            archive_pipe,
+            unarchive_pipe,
+            list_pipe_timeline_for_contact,
             get_pipe_by_id,
             create_pipe,
             update_pipe,
@@ -348,8 +352,10 @@ fn main() {
             send_automation_desktop_toast_cmd,
             take_pending_automation_notification_nav_cmd,
             create_master_password,
-            verify_master_password,
             unlock,
+            get_system_auth_status,
+            configure_system_auth,
+            recover_without_system_auth,
             lock,
             change_master_password,
             get_license_status_cmd,

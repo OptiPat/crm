@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
+import type { PlacementPipeOpenCount } from "@/lib/api/tauri-box-placement";
 import {
+  coercePipeListStageForPipeType,
   DEFAULT_PIPE_LIST_FILTERS,
   filterPipesForList,
   hasActivePipeListFilters,
+  pipeMatchesSuiviAdvancementFilter,
 } from "@/lib/pipe/pipe-list-filters";
 
 function pipe(overrides: Partial<PipeRecord> & Pick<PipeRecord, "id" | "titre">): PipeRecord {
@@ -82,5 +85,55 @@ describe("pipe-list-filters", () => {
         pipeType: "AFFAIRE",
       }).map((p) => p.id)
     ).toContain(4);
+  });
+
+  it("coerce le stage incohérent avec le type", () => {
+    expect(coercePipeListStageForPipeType("ALL", "R2")).toBe("ALL");
+    expect(coercePipeListStageForPipeType("AFFAIRE", "journal")).toBe("ALL");
+    expect(coercePipeListStageForPipeType("ACTE_GESTION", "waiting")).toBe("waiting");
+  });
+
+  it("ignore le filtre suivi tant que le contexte placement n'est pas prêt", () => {
+    const suivi = pipe({
+      id: 10,
+      titre: "Suivi test",
+      pipe_type: "ACTE_GESTION",
+      stage: "",
+    });
+    const context = {
+      columnByPipe: {},
+      countsByPipe: {} as Record<number, PlacementPipeOpenCount>,
+      placementContextReady: false,
+    };
+
+    expect(
+      filterPipesForList([suivi], { ...DEFAULT_PIPE_LIST_FILTERS, stage: "journal" }, context)
+    ).toHaveLength(1);
+  });
+
+  it("filtre les suivis par avancement", () => {
+    const suivi = pipe({
+      id: 10,
+      titre: "Suivi test",
+      pipe_type: "ACTE_GESTION",
+      stage: "",
+    });
+    const context = {
+      columnByPipe: { 10: { column: "waiting" as const, count: 1 } },
+      countsByPipe: {} as Record<number, PlacementPipeOpenCount>,
+    };
+
+    expect(
+      filterPipesForList([suivi], { ...DEFAULT_PIPE_LIST_FILTERS, stage: "waiting" }, context)
+    ).toHaveLength(1);
+    expect(
+      filterPipesForList([suivi], { ...DEFAULT_PIPE_LIST_FILTERS, stage: "journal" }, context)
+    ).toHaveLength(0);
+    expect(
+      pipeMatchesSuiviAdvancementFilter(suivi, "pending", {
+        columnByPipe: {},
+        countsByPipe: { 10: { pipe_id: 10, unsent: 0, pending: 2, non_conforme: 0 } },
+      })
+    ).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Briefcase, ClipboardList, LayoutGrid, List, PhoneCall, Euro } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { listPipes, type PipeRecord } from "@/lib/api/tauri-pipe";
+import { listPipes, getPipeById, type PipeRecord } from "@/lib/api/tauri-pipe";
 import {
   dismissPlacementOperation,
   getPlacementOpenCountsByPipe,
@@ -16,8 +16,10 @@ import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
   filterAffairesForBoard,
   loadPipeBoardTab,
+  loadPipeShowArchived,
   loadPipeViewMode,
   savePipeBoardTab,
+  savePipeShowArchived,
   savePipeViewMode,
   type PipeBoardTab,
   type PipeViewMode,
@@ -29,11 +31,19 @@ import {
   savePipeListFilters,
   type PipeListFilters,
 } from "@/lib/pipe/pipe-list-filters";
+import { buildSuiviPlacementColumnByPipe } from "@/lib/pipe/pipe-list-badges";
+import { sortPipesForList } from "@/lib/pipe/pipe-list-sort";
 import { resolvePipeBoardStageDrop } from "@/lib/pipe/pipe-board-stage-actions";
 import { confirmDiscardPipeFormEdits } from "@/lib/pipe/pipe-form-dirty";
 import { trackVersementAffaireOnPipeCreate } from "@/lib/placement/pipe-placement-tracking";
 import { type PipeStage, type PipeType } from "@/lib/pipe/pipe-types";
 import { type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+import {
+  clearPipeFocusId,
+  consumePipeFocusId,
+  peekPipeFocusId,
+  PIPE_FOCUS_EVENT,
+} from "@/lib/navigation/pipe-navigation";
 import { PipeList } from "@/components/pipe/PipeList";
 import { PipeListToolbar } from "@/components/pipe/PipeListToolbar";
 import { PipeBoard } from "@/components/pipe/PipeBoard";
@@ -169,6 +179,7 @@ export function Pipe() {
   const [viewMode, setViewMode] = useState<PipeViewMode>(() => loadPipeViewMode());
   const [boardTab, setBoardTab] = useState<PipeBoardTab>(() => loadPipeBoardTab());
   const [listFilters, setListFilters] = useState<PipeListFilters>(() => loadPipeListFilters());
+  const [showArchived, setShowArchived] = useState(() => loadPipeShowArchived());
   const [panelMode, setPanelMode] = useState<PanelMode>("empty");
   const [selectedPipe, setSelectedPipe] = useState<PipeRecord | null>(null);
   const [createType, setCreateType] = useState<PipeType>("AFFAIRE");
@@ -194,6 +205,10 @@ export function Pipe() {
   const [dismissingPlacementId, setDismissingPlacementId] = useState<number | null>(null);
   const formIsDirtyRef = useRef(false);
   const placementBoardLoadedRef = useRef(false);
+  const pendingPipeFocusRef = useRef<number | null>(consumePipeFocusId());
+  const pipesRef = useRef<PipeRecord[]>([]);
+  const selectedPipeRef = useRef<PipeRecord | null>(null);
+  const loadPipesGenerationRef = useRef(0);
 
   const PIPE_RELOAD_DEBOUNCE_MS = 150;
 
@@ -207,6 +222,59 @@ export function Pipe() {
     }
   }, [panelMode]);
 
+  useEffect(() => {
+    pipesRef.current = pipes;
+  }, [pipes]);
+
+  useEffect(() => {
+    selectedPipeRef.current = selectedPipe;
+  }, [selectedPipe]);
+
+  const focusPipeById = useCallback(async (pipeId: number, rowsHint?: PipeRecord[]) => {
+    const rows = rowsHint ?? pipesRef.current;
+    const found = rows.find((p) => p.id === pipeId);
+    if (found) {
+      setSelectedPipe(found);
+      setPanelMode("view");
+      clearPipeFocusId();
+      return;
+    }
+    try {
+      const pipe = await getPipeById(pipeId);
+      setSelectedPipe(pipe);
+      setPanelMode("view");
+      clearPipeFocusId();
+    } catch {
+      clearPipeFocusId();
+    }
+  }, []);
+
+  const syncSelectedPipeAfterLoad = useCallback(
+    async (rows: PipeRecord[], generation: number) => {
+      const prev = selectedPipeRef.current;
+      if (!prev) return;
+
+      const found = rows.find((p) => p.id === prev.id);
+      if (found) {
+        if (generation === loadPipesGenerationRef.current) {
+          setSelectedPipe(found);
+        }
+        return;
+      }
+
+      try {
+        const fresh = await getPipeById(prev.id);
+        if (generation !== loadPipesGenerationRef.current) return;
+        setSelectedPipe(fresh);
+      } catch {
+        if (generation !== loadPipesGenerationRef.current) return;
+        setSelectedPipe(null);
+        setPanelMode("empty");
+      }
+    },
+    []
+  );
+
   const stageAdvance = usePipeStageAdvance((pipe) => {
     setSelectedPipe(pipe);
     setPanelMode("view");
@@ -214,10 +282,22 @@ export function Pipe() {
   });
 
   const affaires = useMemo(() => filterAffairesForBoard(pipes), [pipes]);
-  const filteredListPipes = useMemo(
-    () => filterPipesForList(pipes, listFilters),
-    [pipes, listFilters]
+  const suiviColumnByPipe = useMemo(
+    () => buildSuiviPlacementColumnByPipe(placementBoardRows),
+    [placementBoardRows]
   );
+
+  const filteredListPipes = useMemo(() => {
+    const filtered = filterPipesForList(pipes, listFilters, {
+      columnByPipe: suiviColumnByPipe,
+      countsByPipe: placementCountsByPipe,
+      placementContextReady: !placementBoardLoading,
+    });
+    return sortPipesForList(filtered, listFilters.sort, {
+      columnByPipe: suiviColumnByPipe,
+      countsByPipe: placementCountsByPipe,
+    });
+  }, [pipes, listFilters, suiviColumnByPipe, placementCountsByPipe, placementBoardLoading]);
 
   const setListFiltersPersisted = (filters: PipeListFilters) => {
     setListFilters(filters);
@@ -268,18 +348,47 @@ export function Pipe() {
   }, []);
 
   const loadPipes = useCallback(async () => {
+    const generation = ++loadPipesGenerationRef.current;
+    const includeArchived = showArchived;
     try {
       setError(null);
-      const rows = await listPipes();
+      const rows = await listPipes(includeArchived);
+      if (generation !== loadPipesGenerationRef.current) return;
+
       setPipes(rows);
-      setSelectedPipe((prev) => (prev ? rows.find((p) => p.id === prev.id) ?? null : null));
+      pipesRef.current = rows;
+
+      const focusId = pendingPipeFocusRef.current ?? peekPipeFocusId();
+      pendingPipeFocusRef.current = null;
+      if (focusId) {
+        await focusPipeById(focusId, rows);
+        if (generation !== loadPipesGenerationRef.current) return;
+      } else {
+        await syncSelectedPipeAfterLoad(rows, generation);
+      }
+
+      if (generation !== loadPipesGenerationRef.current) return;
       await loadPlacementCounts();
     } catch (err) {
+      if (generation !== loadPipesGenerationRef.current) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (generation === loadPipesGenerationRef.current) {
+        setLoading(false);
+      }
     }
-  }, [loadPlacementCounts]);
+  }, [focusPipeById, loadPlacementCounts, showArchived, syncSelectedPipeAfterLoad]);
+
+  useEffect(() => {
+    const onPipeFocus = (event: Event) => {
+      const pipeId = (event as CustomEvent<{ pipeId: number }>).detail?.pipeId;
+      if (!pipeId) return;
+      pendingPipeFocusRef.current = null;
+      void focusPipeById(pipeId);
+    };
+    window.addEventListener(PIPE_FOCUS_EVENT, onPipeFocus);
+    return () => window.removeEventListener(PIPE_FOCUS_EVENT, onPipeFocus);
+  }, [focusPipeById]);
 
   useEffect(() => {
     void loadPipes();
@@ -319,6 +428,10 @@ export function Pipe() {
       if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
     };
   }, [loadPipes, loadPlacementCounts, boardTab, viewMode, loadPlacementBoardRows]);
+
+  useEffect(() => {
+    void loadPipes();
+  }, [showArchived, loadPipes]);
 
   useEffect(() => {
     if (viewMode === "list" || (viewMode === "board" && boardTab === "actes")) {
@@ -433,6 +546,24 @@ export function Pipe() {
     void loadPipes();
   };
 
+  const handleArchived = () => {
+    if (!showArchived) {
+      setSelectedPipe(null);
+      setPanelMode("empty");
+    }
+    void loadPipes();
+  };
+
+  const handlePipeRefreshed = (pipe: PipeRecord) => {
+    setSelectedPipe(pipe);
+    void loadPipes();
+  };
+
+  const setShowArchivedPersisted = (value: boolean) => {
+    setShowArchived(value);
+    savePipeShowArchived(value);
+  };
+
   const cancelPanel = () => {
     setCreatePrefill(null);
     if (selectedPipe) {
@@ -541,6 +672,8 @@ export function Pipe() {
           childAffaires={childAffaires}
           onEdit={openEdit}
           onDeleted={handleDeleted}
+          onArchived={handleArchived}
+          onRefreshed={handlePipeRefreshed}
           onPlanRdv={(stage) => openRdvPlanifier(selectedPipe, stage)}
           onOpenChildAffaire={openView}
           onOpenParentPipe={(parentId) => {
@@ -561,6 +694,15 @@ export function Pipe() {
           {viewMode === "board" ? (
             <PipeBoardTabToggle tab={boardTab} onChange={setBoardTabPersisted} />
           ) : null}
+          <Button
+            type="button"
+            variant={showArchived ? "secondary" : "outline"}
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setShowArchivedPersisted(!showArchived)}
+          >
+            {showArchived ? "Masquer archivés" : "Voir archivés"}
+          </Button>
         </div>
         <PipeCreateButtons onCreate={openCreate} />
       </div>
@@ -630,6 +772,8 @@ export function Pipe() {
               filters={listFilters}
               resultCount={filteredListPipes.length}
               totalCount={pipes.length}
+              showArchived={showArchived}
+              onShowArchivedChange={setShowArchivedPersisted}
               onChange={setListFiltersPersisted}
             />
 
@@ -642,7 +786,7 @@ export function Pipe() {
                   selectedId={selectedPipe?.id ?? null}
                   onSelect={openView}
                   placementCountsByPipe={placementCountsByPipe}
-                  placementBoardRows={placementBoardRows}
+                  suiviColumnByPipe={suiviColumnByPipe}
                 />
               )}
             </div>
