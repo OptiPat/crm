@@ -31,8 +31,6 @@ interface PipeListToolbarProps {
   filters: PipeListFilters;
   resultCount: number;
   totalCount: number;
-  showArchived?: boolean;
-  onShowArchivedChange?: (show: boolean) => void;
   onChange: (filters: PipeListFilters) => void;
 }
 
@@ -40,8 +38,6 @@ export function PipeListToolbar({
   filters,
   resultCount,
   totalCount,
-  showArchived = false,
-  onShowArchivedChange,
   onChange,
 }: PipeListToolbarProps) {
   const active = hasActivePipeListFilters(filters);
@@ -86,17 +82,6 @@ export function PipeListToolbar({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {onShowArchivedChange && (
-          <Button
-            type="button"
-            variant={showArchived ? "secondary" : "outline"}
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => onShowArchivedChange(!showArchived)}
-          >
-            {showArchived ? "Masquer archivés" : "Voir archivés"}
-          </Button>
-        )}
         <Select
           value={filters.pipeType}
           onValueChange={(value) => {

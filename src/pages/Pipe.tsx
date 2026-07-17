@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Briefcase, ClipboardList, LayoutGrid, List, PhoneCall, Euro, Settings2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Briefcase, ClipboardList } from "lucide-react";
 import { listPipes, getPipeById, type PipeRecord } from "@/lib/api/tauri-pipe";
 import {
   dismissPlacementOperation,
@@ -17,15 +16,16 @@ import {
   filterAffairesForBoard,
   filterPipesForActiveView,
   isPipeArchived,
-  loadPipeBoardTab,
   loadPipeShowArchived,
-  loadPipeViewMode,
-  savePipeBoardTab,
   savePipeShowArchived,
-  savePipeViewMode,
-  type PipeBoardTab,
-  type PipeViewMode,
 } from "@/lib/pipe/pipe-board-utils";
+import {
+  loadPipeSection,
+  pipeSectionIsListe,
+  pipeSectionNeedsPlacementBoard,
+  savePipeSection,
+  type PipeSection,
+} from "@/lib/pipe/pipe-section";
 import { filterPlacementRowsForBoard } from "@/lib/placement/placement-operation-board";
 import {
   filterPipesForList,
@@ -49,6 +49,7 @@ import {
 import { usePipeListR1MissingDocs } from "@/hooks/usePipeListR1MissingDocs";
 import { usePipeChecklistTemplates } from "@/hooks/usePipeChecklistTemplates";
 import { PipeChecklistSettingsDialog } from "@/components/pipe/PipeChecklistSettingsDialog";
+import { PipePageToolbar } from "@/components/pipe/PipePageToolbar";
 import { PipeList } from "@/components/pipe/PipeList";
 import { PipeListToolbar } from "@/components/pipe/PipeListToolbar";
 import { PipeBoard } from "@/components/pipe/PipeBoard";
@@ -64,148 +65,18 @@ import { cn } from "@/lib/utils";
 
 type PanelMode = "empty" | "create" | "view" | "edit";
 
-function PipeCreateButtons({
-  onCreate,
-  onOpenSettings,
-}: {
-  onCreate: (type: PipeType) => void;
-  onOpenSettings: () => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="gap-1.5"
-        onClick={() => onCreate("AFFAIRE")}
-      >
-        <Briefcase className="h-3.5 w-3.5" />
-        Affaire
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="gap-1.5"
-        onClick={() => onCreate("ACTE_GESTION")}
-      >
-        <ClipboardList className="h-3.5 w-3.5" />
-        Suivi
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="gap-1.5"
-        onClick={() => onCreate("ACTION")}
-      >
-        <PhoneCall className="h-3.5 w-3.5" />
-        Action
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="gap-1.5"
-        onClick={onOpenSettings}
-      >
-        <Settings2 className="h-3.5 w-3.5" />
-        Paramètres
-      </Button>
-    </div>
-  );
-}
-
-function PipeViewToggle({
-  mode,
-  onChange,
-}: {
-  mode: PipeViewMode;
-  onChange: (mode: PipeViewMode) => void;
-}) {
-  return (
-    <div className="inline-flex rounded-lg border p-1 bg-muted/30">
-      <Button
-        type="button"
-        variant={mode === "board" ? "secondary" : "ghost"}
-        size="sm"
-        className="h-8 gap-1.5 px-3"
-        onClick={() => onChange("board")}
-      >
-        <LayoutGrid className="h-3.5 w-3.5" />
-        Tableau
-      </Button>
-      <Button
-        type="button"
-        variant={mode === "list" ? "secondary" : "ghost"}
-        size="sm"
-        className="h-8 gap-1.5 px-3"
-        onClick={() => onChange("list")}
-      >
-        <List className="h-3.5 w-3.5" />
-        Liste
-      </Button>
-    </div>
-  );
-}
-
-function PipeBoardTabToggle({
-  tab,
-  onChange,
-}: {
-  tab: PipeBoardTab;
-  onChange: (tab: PipeBoardTab) => void;
-}) {
-  return (
-    <div className="inline-flex rounded-lg border p-1 bg-muted/30">
-      <Button
-        type="button"
-        variant={tab === "affaires" ? "secondary" : "ghost"}
-        size="sm"
-        className="h-8 gap-1.5 px-3"
-        onClick={() => onChange("affaires")}
-      >
-        <Briefcase className="h-3.5 w-3.5" />
-        Affaires
-      </Button>
-      <Button
-        type="button"
-        variant={tab === "actes" ? "secondary" : "ghost"}
-        size="sm"
-        className="h-8 gap-1.5 px-3"
-        onClick={() => onChange("actes")}
-      >
-        <ClipboardList className="h-3.5 w-3.5" />
-        Suivi gestion
-      </Button>
-      <Button
-        type="button"
-        variant={tab === "remuneration" ? "secondary" : "ghost"}
-        size="sm"
-        className="h-8 gap-1.5 px-3"
-        onClick={() => onChange("remuneration")}
-      >
-        <Euro className="h-3.5 w-3.5" />
-        Rémunération
-      </Button>
-    </div>
-  );
-}
-
 export function Pipe() {
   const [pipes, setPipes] = useState<PipeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<PipeViewMode>(() => loadPipeViewMode());
+  const [section, setSection] = useState<PipeSection>(() => loadPipeSection());
   const { templates: checklistTemplates, reload: reloadChecklistTemplates } =
     usePipeChecklistTemplates();
   const [checklistSettingsOpen, setChecklistSettingsOpen] = useState(false);
   const r1MissingByPipeId = usePipeListR1MissingDocs(
-    viewMode === "list",
+    pipeSectionIsListe(section),
     checklistTemplates
   );
-  const [boardTab, setBoardTab] = useState<PipeBoardTab>(() => loadPipeBoardTab());
   const [listFilters, setListFilters] = useState<PipeListFilters>(() => loadPipeListFilters());
   const [showArchived, setShowArchived] = useState(() => loadPipeShowArchived());
   const [panelMode, setPanelMode] = useState<PanelMode>("empty");
@@ -477,7 +348,7 @@ export function Pipe() {
     const onPlacementChanged = () => {
       schedule(() => {
         void loadPlacementCounts();
-        if (viewMode === "list" || boardTab === "actes") {
+        if (pipeSectionNeedsPlacementBoard(section)) {
           void loadPlacementBoardRows({ silent: true });
         }
       });
@@ -489,26 +360,21 @@ export function Pipe() {
       window.removeEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, onPlacementChanged);
       if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
     };
-  }, [loadPipes, loadPlacementCounts, boardTab, viewMode, loadPlacementBoardRows]);
+  }, [loadPipes, loadPlacementCounts, section, loadPlacementBoardRows]);
 
   useEffect(() => {
     void loadPipes();
   }, [showArchived, loadPipes]);
 
   useEffect(() => {
-    if (viewMode === "list" || (viewMode === "board" && boardTab === "actes")) {
+    if (pipeSectionNeedsPlacementBoard(section)) {
       void loadPlacementBoardRows({ silent: placementBoardLoadedRef.current });
     }
-  }, [viewMode, boardTab, showArchived, loadPlacementBoardRows]);
+  }, [section, showArchived, loadPlacementBoardRows]);
 
-  const setViewModePersisted = (mode: PipeViewMode) => {
-    setViewMode(mode);
-    savePipeViewMode(mode);
-  };
-
-  const setBoardTabPersisted = (tab: PipeBoardTab) => {
-    setBoardTab(tab);
-    savePipeBoardTab(tab);
+  const setSectionPersisted = (next: PipeSection) => {
+    setSection(next);
+    savePipeSection(next);
     setSelectedPlacementOperationId(null);
     setSelectedPipe(null);
     setPanelMode("empty");
@@ -575,12 +441,13 @@ export function Pipe() {
   };
 
   const showAffairesBoardAside =
-    boardTab === "affaires" &&
+    section === "affaires" &&
     (panelMode === "create" ||
       panelMode === "edit" ||
       (panelMode === "view" && selectedPipe != null));
-  const showActesBoardAside = boardTab === "actes" && panelMode === "view" && selectedPipe != null;
-  const showBoardAside = showAffairesBoardAside || showActesBoardAside;
+  const showSuiviStelliumBoardAside =
+    section === "suivi_stellium" && panelMode === "view" && selectedPipe != null;
+  const showBoardAside = showAffairesBoardAside || showSuiviStelliumBoardAside;
 
   const openEdit = () => {
     if (selectedPipe) setPanelMode("edit");
@@ -676,7 +543,7 @@ export function Pipe() {
 
   const detailPanel = (
     <>
-      {panelMode === "empty" && viewMode === "board" && boardTab === "affaires" && (
+      {panelMode === "empty" && section === "affaires" && (
         <div className="flex h-full flex-col items-center justify-center px-6 py-12 text-center">
           <Briefcase className="h-10 w-10 text-muted-foreground/50 mb-4" />
           <p className="text-sm font-medium">Sélectionnez une affaire dans le tableau</p>
@@ -687,18 +554,18 @@ export function Pipe() {
         </div>
       )}
 
-      {panelMode === "empty" && viewMode === "board" && boardTab === "actes" && (
+      {panelMode === "empty" && section === "suivi_stellium" && (
         <div className="flex h-full flex-col items-center justify-center px-6 py-12 text-center">
           <ClipboardList className="h-10 w-10 text-muted-foreground/50 mb-4" />
-          <p className="text-sm font-medium">Sélectionnez un acte dans le tableau</p>
+          <p className="text-sm font-medium">Sélectionnez une opération Stellium</p>
           <p className="text-sm text-muted-foreground mt-2 max-w-sm">
-            Chaque carte est une opération Stellium en cours. Le panneau ouvre le suivi
-            associé avec l&apos;avancement détaillé.
+            Chaque carte est une opération partenaire en cours. Le panneau ouvre le dossier
+            suivi associé avec l&apos;avancement détaillé.
           </p>
         </div>
       )}
 
-      {panelMode === "empty" && viewMode === "list" && (
+      {panelMode === "empty" && section === "liste" && (
         <div className="flex h-full flex-col items-center justify-center px-6 py-12 text-center">
           <Briefcase className="h-10 w-10 text-muted-foreground/50 mb-4" />
           <p className="text-sm font-medium">Sélectionnez un pipe ou créez-en un</p>
@@ -757,31 +624,18 @@ export function Pipe() {
 
   return (
     <div className="flex flex-col gap-4 min-h-[calc(100vh-10rem)]">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <PipeViewToggle mode={viewMode} onChange={setViewModePersisted} />
-          {viewMode === "board" ? (
-            <PipeBoardTabToggle tab={boardTab} onChange={setBoardTabPersisted} />
-          ) : null}
-          <Button
-            type="button"
-            variant={showArchived ? "secondary" : "outline"}
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => setShowArchivedPersisted(!showArchived)}
-          >
-            {showArchived ? "Masquer archivés" : "Voir archivés"}
-          </Button>
-        </div>
-        <PipeCreateButtons
-          onCreate={openCreate}
-          onOpenSettings={() => setChecklistSettingsOpen(true)}
-        />
-      </div>
+      <PipePageToolbar
+        section={section}
+        showArchived={showArchived}
+        onSectionChange={setSectionPersisted}
+        onShowArchivedChange={setShowArchivedPersisted}
+        onCreate={openCreate}
+        onOpenSettings={() => setChecklistSettingsOpen(true)}
+      />
 
       {error && <p className="text-sm text-destructive px-1">{error}</p>}
 
-      {viewMode === "board" ? (
+      {!pipeSectionIsListe(section) ? (
         <div
           className={cn(
             "flex flex-1 min-h-0 flex-col gap-0",
@@ -795,9 +649,9 @@ export function Pipe() {
               showBoardAside ? "lg:min-h-0" : "w-full"
             )}
           >
-            {loading || (boardTab === "actes" && placementBoardLoading) ? (
+            {loading || (section === "suivi_stellium" && placementBoardLoading) ? (
               <p className="px-4 py-6 text-sm text-muted-foreground">Chargement…</p>
-            ) : boardTab === "actes" ? (
+            ) : section === "suivi_stellium" ? (
               <PipePlacementBoard
                 rows={placementBoardRows}
                 selectedOperationId={selectedPlacementOperationId}
@@ -805,7 +659,7 @@ export function Pipe() {
                 onDismiss={handleDismissPlacementOperation}
                 dismissingOperationId={dismissingPlacementId}
               />
-            ) : boardTab === "remuneration" ? (
+            ) : section === "remuneration" ? (
               <div className="p-4 overflow-auto">
                 <PipeRemunerationBoard />
               </div>
@@ -844,8 +698,6 @@ export function Pipe() {
               filters={listFilters}
               resultCount={filteredListPipes.length}
               totalCount={activePipes.length}
-              showArchived={showArchived}
-              onShowArchivedChange={setShowArchivedPersisted}
               onChange={setListFiltersPersisted}
             />
 
