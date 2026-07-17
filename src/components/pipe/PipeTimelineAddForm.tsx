@@ -4,19 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DictationTextarea } from "@/components/ui/dictation-textarea";
 import { RdvVisioLocationFields } from "@/components/calendar/RdvVisioLocationFields";
+import { PipeAffaireRdvPlanSelect } from "@/components/pipe/PipeAffaireRdvPlanSelect";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import { AgendaRdvConflicts } from "@/components/calendar/AgendaRdvConflicts";
 import type { AgendaRdvPipeDraft } from "@/lib/navigation/agenda-navigation";
 import { syncEndFromStartAndDuration } from "@/lib/calendar/rdv-duration";
 import { useRdvVisioLocation } from "@/hooks/useRdvVisioLocation";
 import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   datetimeLocalToUnix,
   defaultTimelineEntryTitle,
@@ -25,15 +19,16 @@ import {
   type PipeTimelineUserType,
 } from "@/lib/pipe/pipe-timeline-types";
 import {
-  formatRdvStageLabel,
-  PIPE_RDV_STAGE_OPTIONS,
-  type PipeRdvStage,
-} from "@/lib/pipe/pipe-rdv-stage";
+  formatRdvPlanOptionLabel,
+  rdvStageFromPlanOption,
+  type PipeRdvPlanOption,
+} from "@/lib/pipe/pipe-rdv-plan-option";
 import { toast } from "sonner";
 
 export interface PipeRdvSubmitPayload {
   occurredAtUnix: number;
-  rdvStage: PipeRdvStage;
+  rdvPlanOption: PipeRdvPlanOption;
+  rdvStage: ReturnType<typeof rdvStageFromPlanOption>;
   contenu: string | null;
   visio: RdvVisioOptions;
   physicalAddress: string | null;
@@ -44,7 +39,7 @@ interface PipeTimelineAddFormProps {
   occurredAt: string;
   titre: string;
   contenu: string;
-  rdvStage?: PipeRdvStage;
+  rdvPlanOption?: PipeRdvPlanOption;
   pipe?:
     | (Pick<PipeRecord, "id" | "stage" | "pipe_type"> &
         Partial<Pick<PipeRecord, "contact_id" | "contact_prenom" | "contact_nom" | "titre">>)
@@ -53,9 +48,9 @@ interface PipeTimelineAddFormProps {
   onOccurredAtChange: (value: string) => void;
   onTitreChange: (value: string) => void;
   onContenuChange: (value: string) => void;
-  onRdvStageChange?: (value: PipeRdvStage) => void;
-  /** Étape RDV figée (ex. reprise après annulation). */
-  rdvStageReadOnly?: boolean;
+  onRdvPlanOptionChange?: (value: PipeRdvPlanOption) => void;
+  /** Type RDV figé (ex. reprise après annulation). */
+  rdvPlanOptionReadOnly?: boolean;
   contactId?: number;
   onRdvSubmit?: (payload: PipeRdvSubmitPayload) => Promise<void>;
   /** RDV de suivi : pas d'étape R1/R2/R3, libellés adaptés. */
@@ -70,14 +65,14 @@ export function PipeTimelineAddForm({
   occurredAt,
   titre,
   contenu,
-  rdvStage = "R1",
+  rdvPlanOption = "R1",
   pipe = null,
   saving,
   onOccurredAtChange,
   onTitreChange,
   onContenuChange,
-  onRdvStageChange,
-  rdvStageReadOnly = false,
+  onRdvPlanOptionChange,
+  rdvPlanOptionReadOnly = false,
   contactId = 0,
   onRdvSubmit,
   suiviRdv = false,
@@ -88,6 +83,7 @@ export function PipeTimelineAddForm({
   const isRdv = type === "RDV";
   const rdvLocation = useRdvVisioLocation(contactId > 0 ? contactId : undefined, isRdv);
   const showAffaireRdvStage = isRdv && !suiviRdv;
+  const rdvStage = rdvStageFromPlanOption(rdvPlanOption);
 
   const handleFormSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -102,6 +98,7 @@ export function PipeTimelineAddForm({
           await rdvLocation.persistContactAddress();
           await onRdvSubmit({
             occurredAtUnix: datetimeLocalToUnix(occurredAt),
+            rdvPlanOption,
             rdvStage,
             contenu: contenu.trim() || null,
             visio: rdvLocation.getVisioOptions(),
@@ -134,24 +131,15 @@ export function PipeTimelineAddForm({
         {showAffaireRdvStage ? (
           <div className="space-y-2">
             <Label>Type de RDV</Label>
-            {rdvStageReadOnly ? (
-              <p className="text-sm font-medium pt-2">{formatRdvStageLabel(rdvStage)}</p>
+            {rdvPlanOptionReadOnly ? (
+              <p className="text-sm font-medium pt-2">
+                {formatRdvPlanOptionLabel(rdvPlanOption)}
+              </p>
             ) : (
-              <Select
-                value={rdvStage}
-                onValueChange={(value) => onRdvStageChange?.(value as PipeRdvStage)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Choisir…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PIPE_RDV_STAGE_OPTIONS.map((stage) => (
-                    <SelectItem key={stage} value={stage}>
-                      {formatRdvStageLabel(stage)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <PipeAffaireRdvPlanSelect
+                value={rdvPlanOption}
+                onValueChange={(value) => onRdvPlanOptionChange?.(value)}
+              />
             )}
           </div>
         ) : !isRdv ? (

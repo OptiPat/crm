@@ -131,8 +131,8 @@ export function PipePageToolbar({
           variant="outline"
           size="icon"
           className="h-8 w-8 shrink-0"
-          aria-label="Paramètres checklist documents R1"
-          title="Checklist documents R1"
+          aria-label="Paramètres checklists documents"
+          title="Checklists documents R1 / R3"
           onClick={onOpenSettings}
         >
           <Settings2 className="h-4 w-4" />

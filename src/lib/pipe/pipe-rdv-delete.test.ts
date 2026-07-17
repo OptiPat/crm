@@ -6,6 +6,7 @@ import {
   isLastRdvForStage,
   parseRdvTimelineTraceNote,
   phaseHasRdvActivityForStage,
+  rdvPlanOptionFromTraceNote,
   resolveStageAfterRdvCancellation,
   stageHasRdvCancellationTrace,
   canResumeRdvFromCancelledTrace,
@@ -96,6 +97,18 @@ describe("pipe-rdv-delete", () => {
     });
   });
 
+  it("trace annulation RDV typé R2 Placement", () => {
+    const rdv = mkRdv(1, "R2 Placement");
+    expect(buildRdvCancelledTimelinePayload(rdv, "motif")).toEqual({
+      titre: null,
+      contenu: "R2 Placement planifié annulé : motif",
+    });
+    expect(parseRdvTimelineTraceNote("R2 Placement planifié annulé : motif")).toEqual({
+      stage: "R2",
+      kind: "cancelled",
+    });
+  });
+
   it("parse les notes de trace RDV (ancien et nouveau libellé)", () => {
     expect(parseRdvTimelineTraceNote("RDV R2 annulé : motif")).toEqual({
       stage: "R2",
@@ -113,6 +126,15 @@ describe("pipe-rdv-delete", () => {
       stage: "R3",
       kind: "rescheduled",
     });
+    expect(parseRdvTimelineTraceNote("R2 Placement planifié annulé : motif")).toEqual({
+      stage: "R2",
+      kind: "cancelled",
+    });
+    expect(parseRdvTimelineTraceNote("R3 Immo planifié reporté : était le x → y")).toEqual({
+      stage: "R3",
+      kind: "rescheduled",
+    });
+    expect(rdvPlanOptionFromTraceNote("R3 Immo planifié annulé")).toBe("R3_IMMO");
   });
 
   it("conserve la note utilisateur seule sans libellé RDV annulé", () => {

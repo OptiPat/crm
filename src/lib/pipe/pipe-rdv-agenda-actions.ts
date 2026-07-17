@@ -9,10 +9,14 @@ import {
 import type { PipeRdvCalendarSyncResult } from "@/lib/pipe/pipe-rdv-google-calendar";
 import {
   formatPipeRdvCalendarContactLabel,
-  formatPipeRdvGoogleCalendarTitle,
+  formatPipeRdvGoogleCalendarTitleFromPlanOption,
   pipeRdvCalendarEndAt,
 } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { rdvStageFromEntryTitre, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+import {
+  defaultPlanOptionForRdvStage,
+  rdvPlanOptionFromEntryTitre,
+} from "@/lib/pipe/pipe-rdv-plan-option";
 import {
   executePipeRdvReschedule,
   executePipeSuiviRdvReschedule,
@@ -63,15 +67,21 @@ export async function reschedulePipeRdvFromAgenda(options: {
     return calendar;
   }
 
-  const calendarTitle = formatPipeRdvGoogleCalendarTitle(options.rdvStage, contactLabel);
+  const rdvPlanOption =
+    rdvPlanOptionFromEntryTitre(options.entry.titre) ??
+    defaultPlanOptionForRdvStage(options.rdvStage);
+  const calendarTitle =
+    options.calendarTitle ??
+    formatPipeRdvGoogleCalendarTitleFromPlanOption(rdvPlanOption, contactLabel);
 
   const calendar = await executePipeRdvReschedule({
     entry: options.entry,
     pipe: options.pipe,
     rdvStage: options.rdvStage,
+    rdvPlanOption,
     newOccurredAtUnix: options.startAtUnix,
     endAtUnix: options.endAtUnix,
-    calendarTitle: options.calendarTitle ?? calendarTitle,
+    calendarTitle,
     updateEntry: (id, input) => updatePipeTimelineEntry(id, input),
     addEntry: (input) =>
       createPipeTimelineEntry({ ...input, pipe_id: options.entry.pipe_id }),

@@ -11,11 +11,16 @@ import {
   toastAfterRdvSave,
 } from "@/lib/pipe/pipe-rdv-entry-actions";
 import { buildPipeRdvCalendarContext } from "@/lib/pipe/pipe-rdv-calendar-context";
-import { formatRdvEntryTitle, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+import {
+  defaultPlanOptionForRdvStage,
+  type PipeRdvPlanOption,
+} from "@/lib/pipe/pipe-rdv-plan-option";
+import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { toast } from "sonner";
 
 interface PipeTimelineResumeRdvFormProps {
   rdvStage: PipeRdvStage;
+  rdvPlanOption?: PipeRdvPlanOption;
   pipe: Pick<
     PipeRecord,
     "id" | "stage" | "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom" | "titre"
@@ -27,11 +32,13 @@ interface PipeTimelineResumeRdvFormProps {
 
 export function PipeTimelineResumeRdvForm({
   rdvStage,
+  rdvPlanOption: rdvPlanOptionProp,
   pipe,
   timeline,
   onCancel,
   onSuccess,
 }: PipeTimelineResumeRdvFormProps) {
+  const rdvPlanOption = rdvPlanOptionProp ?? defaultPlanOptionForRdvStage(rdvStage);
   const [occurredAt, setOccurredAt] = useState(
     () => createEmptyTimelineAddState("RDV").occurredAt
   );
@@ -46,8 +53,9 @@ export function PipeTimelineResumeRdvForm({
         pipe,
         calendar: buildPipeRdvCalendarContext(pipe),
         entryType: "RDV",
+        rdvPlanOption: payload.rdvPlanOption,
         rdvStage: payload.rdvStage,
-        titre: formatRdvEntryTitle(payload.rdvStage),
+        titre: "",
         contenu: payload.contenu,
         occurredAtUnix: payload.occurredAtUnix,
         visio: payload.visio,
@@ -67,10 +75,10 @@ export function PipeTimelineResumeRdvForm({
     <PipeTimelineAddForm
       type="RDV"
       occurredAt={occurredAt}
-      titre={rdvStage}
+      titre=""
       contenu={contenu}
-      rdvStage={rdvStage}
-      rdvStageReadOnly
+      rdvPlanOption={rdvPlanOption}
+      rdvPlanOptionReadOnly
       pipe={pipe}
       contactId={pipe.contact_id}
       saving={saving}

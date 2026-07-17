@@ -39,13 +39,18 @@ import {
   planifyStandaloneGoogleRdv,
 } from "@/lib/calendar/rdv-planifier";
 import { useRdvVisioLocation } from "@/hooks/useRdvVisioLocation";
+import { PipeAffaireRdvPlanSelect } from "@/components/pipe/PipeAffaireRdvPlanSelect";
 import {
-  formatRdvStageLabel,
-  PIPE_RDV_STAGE_OPTIONS,
-  type PipeRdvStage,
-} from "@/lib/pipe/pipe-rdv-stage";
+  defaultPlanOptionForRdvStage,
+  rdvStageFromPlanOption,
+  type PipeRdvPlanOption,
+} from "@/lib/pipe/pipe-rdv-plan-option";
+import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { isPipeType } from "@/lib/pipe/pipe-types";
-import { formatPipeRdvCalendarContactLabel, formatPipeRdvGoogleCalendarTitle } from "@/lib/pipe/pipe-rdv-google-calendar";
+import {
+  formatPipeRdvCalendarContactLabel,
+  formatPipeRdvGoogleCalendarTitleFromPlanOption,
+} from "@/lib/pipe/pipe-rdv-google-calendar";
 import { toastPipeRdvOutcome, toastAfterSuiviRdvSave } from "@/lib/pipe/pipe-rdv-entry-actions";
 import {
   formatPipeSuiviRdvGoogleCalendarTitle,
@@ -80,6 +85,7 @@ export type RdvPlanifierContext =
         | "titre"
       >;
       rdvStage?: PipeRdvStage;
+      rdvPlanOption?: PipeRdvPlanOption;
       contenu?: string | null;
     };
 
@@ -111,7 +117,8 @@ export function RdvPlanifierDialog({
   const [pipes, setPipes] = useState<PipeRecord[]>([]);
   const [contactId, setContactId] = useState(0);
   const [pipeId, setPipeId] = useState<number | null>(null);
-  const [rdvStage, setRdvStage] = useState<PipeRdvStage>("R1");
+  const [rdvPlanOption, setRdvPlanOption] = useState<PipeRdvPlanOption>("R1");
+  const rdvStage = rdvStageFromPlanOption(rdvPlanOption);
   const [durationPreset, setDurationPreset] = useState<RdvDurationPresetId>("60");
   const [start, setStart] = useState(defaultStartValue());
   const [end, setEnd] = useState("");
@@ -171,7 +178,12 @@ export function RdvPlanifierDialog({
         ? unixToDatetimeLocalInput(defaultEndUnix)
         : syncEndFromStartAndDuration(startVal, rdvDurationMinutesFromPreset(preset))
     );
-    setRdvStage(context.kind === "pipe" ? (context.rdvStage ?? "R1") : "R1");
+    setRdvPlanOption(
+      context.kind === "pipe"
+        ? (context.rdvPlanOption ??
+            (context.rdvStage ? defaultPlanOptionForRdvStage(context.rdvStage) : "R1"))
+        : "R1"
+    );
     setContenu(context.kind === "pipe" ? (context.contenu ?? "") : "");
     setTitleEdited(false);
     void resetRdvLocation();
@@ -230,8 +242,8 @@ export function RdvPlanifierDialog({
       setTitle(formatPipeSuiviRdvGoogleCalendarTitle(pipeContactLabel));
       return;
     }
-    setTitle(formatPipeRdvGoogleCalendarTitle(rdvStage, pipeContactLabel));
-  }, [open, pipeForPlanify, rdvStage, pipeContactLabel, titleEdited, isSuiviPipeContext]);
+    setTitle(formatPipeRdvGoogleCalendarTitleFromPlanOption(rdvPlanOption, pipeContactLabel));
+  }, [open, pipeForPlanify, rdvPlanOption, pipeContactLabel, titleEdited, isSuiviPipeContext]);
 
   const handleStartChange = (value: string) => {
     setStart(value);
@@ -304,6 +316,7 @@ export function RdvPlanifierDialog({
         const result = await planifyPipeRdv({
           pipe: pipeForPlanify,
           rdvStage,
+          rdvPlanOption,
           startAtUnix: startAt,
           endAtUnix: endAt,
           contenu: contenu.trim() || null,
@@ -413,18 +426,10 @@ export function RdvPlanifierDialog({
           {pipeForPlanify && !isSuiviPipeContext && (
             <div className="space-y-2">
               <Label>Type de RDV</Label>
-              <Select value={rdvStage} onValueChange={(v) => setRdvStage(v as PipeRdvStage)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PIPE_RDV_STAGE_OPTIONS.map((stage) => (
-                    <SelectItem key={stage} value={stage}>
-                      {formatRdvStageLabel(stage)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <PipeAffaireRdvPlanSelect
+                value={rdvPlanOption}
+                onValueChange={setRdvPlanOption}
+              />
             </div>
           )}
 
@@ -441,7 +446,10 @@ export function RdvPlanifierDialog({
                 isSuiviPipeContext && pipeContactLabel
                   ? formatPipeSuiviRdvGoogleCalendarTitle(pipeContactLabel)
                   : pipeForPlanify && pipeContactLabel
-                    ? formatPipeRdvGoogleCalendarTitle(rdvStage, pipeContactLabel)
+                    ? formatPipeRdvGoogleCalendarTitleFromPlanOption(
+                        rdvPlanOption,
+                        pipeContactLabel
+                      )
                     : `RDV — ${contactLabel || "…"}`
               }
             />

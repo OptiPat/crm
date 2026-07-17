@@ -41,6 +41,7 @@ pub mod pipe_contact_timeline;
 pub mod pipe_rdv_google_sync;
 pub mod pipe_rdv_scheduled_emails;
 pub mod pipe_r1_checklist;
+pub mod pipe_r3_checklist;
 pub mod pipe_remuneration;
 pub mod pipe_timeline;
 pub mod placement_operations;
@@ -569,6 +570,7 @@ impl Database {
         self.migrate_pipes_table()?;
         self.migrate_pipe_timeline_table()?;
         self.migrate_pipe_r1_document_checklists_table()?;
+        self.migrate_pipe_r3_document_checklists_table()?;
         self.migrate_placement_operations_table()?;
         self.migrate_pipe_rdv_scheduled_emails_table()?;
         self.migrate_purge_premature_etiquette_taches()?;

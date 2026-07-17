@@ -1499,6 +1499,33 @@ pub struct PipeR1MissingDocsSummary {
     pub missing_item_keys: Vec<String>,
 }
 
+/// État d'une ligne de la checklist documents R3 (affaire).
+pub type PipeR3ChecklistItemState = PipeR1ChecklistItemState;
+
+/// Lignes persistées de la checklist R3 (clé = id template).
+pub type PipeR3ChecklistItems = HashMap<String, PipeR3ChecklistItemState>;
+
+/// Checklist documents R3 liée à une affaire.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PipeR3DocumentChecklist {
+    pub pipe_id: i64,
+    pub items: PipeR3ChecklistItems,
+    pub updated_at: i64,
+}
+
+/// Mise à jour partielle checklist R3.
+#[derive(Debug, Deserialize)]
+pub struct UpdatePipeR3DocumentChecklistInput {
+    pub items: Option<PipeR3ChecklistItems>,
+}
+
+/// Résumé pour badge liste (pièces R3 manquantes).
+#[derive(Debug, Serialize, Clone)]
+pub struct PipeR3MissingDocsSummary {
+    pub pipe_id: i64,
+    pub missing_item_keys: Vec<String>,
+}
+
 /// Entrée timeline d'un pipe.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PipeTimelineEntry {

@@ -1,10 +1,13 @@
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
+import { phaseHasRdvActivityForStage } from "@/lib/pipe/pipe-rdv-delete";
 import {
   isPipeRdvStage,
   isPipeRdvStageCompleted,
+  type PipeRdvStage,
 } from "@/lib/pipe/pipe-rdv-stage";
 import {
   getLinearStageIndex,
+  getNextLinearStage,
   PIPE_LINEAR_STAGES,
   type PipeLinearStage,
   type PipeStage,
@@ -45,4 +48,45 @@ export function getPipeCommercialStepperStepState(
   if (stepIndex === effectiveActiveIndex && !done) return "active";
 
   return done ? "done" : "pending";
+}
+
+function getNextRdvStageAfter(stage: PipeRdvStage): PipeRdvStage | null {
+  const next = getNextLinearStage(stage);
+  return next && isPipeRdvStage(next) ? next : null;
+}
+
+/** RDV manquant sur le jalon, sinon RDV de l'étape suivante (anticipation). */
+function suggestedRdvForMilestoneStage(
+  milestone: PipeRdvStage,
+  entries: PipeTimelineEntryRecord[]
+): PipeRdvStage | null {
+  if (!phaseHasRdvActivityForStage(entries, milestone)) {
+    return milestone;
+  }
+  return getNextRdvStageAfter(milestone);
+}
+
+/**
+ * Prochain RDV à proposer via « Planifier le RDV … » (stepper).
+ * Tient compte du RDV manquant sur l'étape active, pas seulement de l'étape linéaire suivante.
+ */
+export function getSuggestedRdvPlanStage(
+  currentStage: PipeStage,
+  entries: PipeTimelineEntryRecord[],
+  now: Date = new Date()
+): PipeRdvStage | null {
+  const effectiveActiveIndex = getEffectiveActiveLinearIndex(currentStage, entries, now);
+  if (effectiveActiveIndex < 0) return null;
+
+  const activeStep = PIPE_LINEAR_STAGES[effectiveActiveIndex];
+
+  if (isPipeRdvStage(activeStep)) {
+    return suggestedRdvForMilestoneStage(activeStep, entries);
+  }
+
+  if (activeStep === "PROSPECTION") {
+    return suggestedRdvForMilestoneStage("R1", entries);
+  }
+
+  return null;
 }

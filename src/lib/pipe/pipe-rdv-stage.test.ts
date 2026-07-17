@@ -33,11 +33,18 @@ const mkRdv = (
 describe("pipe-rdv-stage", () => {
   it("lit le type RDV depuis le titre", () => {
     expect(rdvStageFromEntryTitre("R1")).toBe("R1");
+    expect(rdvStageFromEntryTitre("R2 Placement")).toBe("R2");
+    expect(rdvStageFromEntryTitre("R2 Immo")).toBe("R2");
+    expect(rdvStageFromEntryTitre("R3 Placements")).toBe("R3");
+    expect(rdvStageFromEntryTitre("R3 Immo")).toBe("R3");
     expect(rdvStageFromEntryTitre("Appel")).toBeNull();
   });
 
   it("formate l'affichage RDV planifié", () => {
     expect(formatRdvEntryDisplayLabel({ entry_type: "RDV", titre: "R2" })).toBe("R2 planifié");
+    expect(formatRdvEntryDisplayLabel({ entry_type: "RDV", titre: "R2 Placement" })).toBe(
+      "R2 Placement planifié"
+    );
     expect(formatRdvEntryDisplayLabel({ entry_type: "RDV", titre: "R1" })).toBe("R1 planifié");
   });
 

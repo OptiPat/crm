@@ -3,6 +3,7 @@ import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import {
   getEffectiveActiveLinearIndex,
   getPipeCommercialStepperStepState,
+  getSuggestedRdvPlanStage,
 } from "@/lib/pipe/pipe-stage-stepper";
 
 const mkRdv = (
@@ -35,6 +36,23 @@ describe("pipe-stage-stepper", () => {
     expect(getPipeCommercialStepperStepState("R1", "R1", entries, afterR1)).toBe("done");
     expect(getPipeCommercialStepperStepState("R2", "R1", entries, afterR1)).toBe("active");
     expect(getEffectiveActiveLinearIndex("R1", entries, afterR1)).toBe(2);
+  });
+
+  it("suggère R1 quand l'affaire est à R1 sans RDV planifié", () => {
+    expect(getSuggestedRdvPlanStage("R1", [])).toBe("R1");
+    expect(getSuggestedRdvPlanStage("PROSPECTION", [])).toBe("R1");
+  });
+
+  it("suggère R2 dès que le RDV R1 est planifié (même avant la fin du créneau)", () => {
+    const entries = [mkRdv(1, "R1", r1Start)];
+    const duringR1 = new Date(2026, 6, 15, 8, 30);
+    expect(getSuggestedRdvPlanStage("R1", entries, duringR1)).toBe("R2");
+    expect(getSuggestedRdvPlanStage("PROSPECTION", entries, duringR1)).toBe("R2");
+    expect(getSuggestedRdvPlanStage("R1", entries, afterR1)).toBe("R2");
+  });
+
+  it("suggère R2 directement si l'affaire démarre à R2 sans RDV", () => {
+    expect(getSuggestedRdvPlanStage("R2", [])).toBe("R2");
   });
 
   it("conserve R2 actif tant que le RDV R2 n'est pas terminé", () => {

@@ -39,6 +39,11 @@ import { resolvePipeBoardStageDrop } from "@/lib/pipe/pipe-board-stage-actions";
 import { confirmDiscardPipeFormEdits } from "@/lib/pipe/pipe-form-dirty";
 import { trackVersementAffaireOnPipeCreate } from "@/lib/placement/pipe-placement-tracking";
 import { type PipeStage, type PipeType } from "@/lib/pipe/pipe-types";
+import {
+  defaultPlanOptionForRdvStage,
+  rdvStageFromPlanOption,
+  type PipeRdvPlanOption,
+} from "@/lib/pipe/pipe-rdv-plan-option";
 import { type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import {
   clearPipeFocusId,
@@ -47,6 +52,7 @@ import {
   PIPE_FOCUS_EVENT,
 } from "@/lib/navigation/pipe-navigation";
 import { usePipeListR1MissingDocs } from "@/hooks/usePipeListR1MissingDocs";
+import { usePipeListR3MissingDocs } from "@/hooks/usePipeListR3MissingDocs";
 import { usePipeChecklistTemplates } from "@/hooks/usePipeChecklistTemplates";
 import { PipeChecklistSettingsDialog } from "@/components/pipe/PipeChecklistSettingsDialog";
 import { PipePageToolbar } from "@/components/pipe/PipePageToolbar";
@@ -77,6 +83,10 @@ export function Pipe() {
     pipeSectionIsListe(section),
     checklistTemplates
   );
+  const r3MissingByPipeId = usePipeListR3MissingDocs(
+    pipeSectionIsListe(section),
+    checklistTemplates
+  );
   const [listFilters, setListFilters] = useState<PipeListFilters>(() => loadPipeListFilters());
   const [showArchived, setShowArchived] = useState(() => loadPipeShowArchived());
   const [panelMode, setPanelMode] = useState<PanelMode>("empty");
@@ -90,6 +100,9 @@ export function Pipe() {
   const [rdvPlanifierOpen, setRdvPlanifierOpen] = useState(false);
   const [rdvPlanifierPipe, setRdvPlanifierPipe] = useState<PipeRecord | null>(null);
   const [rdvPlanifierStage, setRdvPlanifierStage] = useState<PipeRdvStage | undefined>();
+  const [rdvPlanifierPlanOption, setRdvPlanifierPlanOption] = useState<
+    PipeRdvPlanOption | undefined
+  >();
   const [focusHistoriqueToken, setFocusHistoriqueToken] = useState(0);
   const [placementCountsByPipe, setPlacementCountsByPipe] = useState<
     Record<number, PlacementPipeOpenCount>
@@ -231,14 +244,15 @@ export function Pipe() {
   const openRdvPlanifier = useCallback(
     (
       pipe: PipeRecord,
-      rdvStage?: PipeRdvStage,
+      planOption?: PipeRdvPlanOption,
       options?: { keepPanelMode?: boolean; isDirty?: boolean }
     ) => {
       if (options?.isDirty && !confirmDiscardPipeFormEdits()) return;
       setSelectedPipe(pipe);
       if (!options?.keepPanelMode) setPanelMode("view");
       setRdvPlanifierPipe(pipe);
-      setRdvPlanifierStage(rdvStage);
+      setRdvPlanifierPlanOption(planOption);
+      setRdvPlanifierStage(planOption ? rdvStageFromPlanOption(planOption) : undefined);
       setRdvPlanifierOpen(true);
     },
     []
@@ -513,7 +527,7 @@ export function Pipe() {
     const action = resolvePipeBoardStageDrop(pipe, target);
     const isDirty = panelMode === "edit" && formIsDirtyRef.current;
     if (action.kind === "plan-rdv") {
-      openRdvPlanifier(pipe, action.rdvStage, { isDirty });
+      openRdvPlanifier(pipe, defaultPlanOptionForRdvStage(action.rdvStage), { isDirty });
       return;
     }
     if (action.kind === "manual-advance") {
@@ -525,7 +539,7 @@ export function Pipe() {
 
   const handleRequestRdvStageFromForm = (stage: PipeRdvStage, options: { isDirty: boolean }) => {
     if (!selectedPipe) return;
-    openRdvPlanifier(selectedPipe, stage, {
+    openRdvPlanifier(selectedPipe, defaultPlanOptionForRdvStage(stage), {
       keepPanelMode: true,
       isDirty: options.isDirty,
     });
@@ -610,7 +624,7 @@ export function Pipe() {
           onDeleted={handleDeleted}
           onArchived={handleArchived}
           onRefreshed={handlePipeRefreshed}
-          onPlanRdv={(stage) => openRdvPlanifier(selectedPipe, stage)}
+          onPlanRdv={(planOption) => openRdvPlanifier(selectedPipe, planOption)}
           onOpenChildAffaire={openView}
           onOpenParentPipe={(parentId) => {
             const parent = pipes.find((p) => p.id === parentId);
@@ -712,6 +726,7 @@ export function Pipe() {
                   placementCountsByPipe={placementCountsByPipe}
                   suiviColumnByPipe={suiviColumnByPipe}
                   r1MissingByPipeId={r1MissingByPipeId}
+                  r3MissingByPipeId={r3MissingByPipeId}
                 />
               )}
             </div>
@@ -736,12 +751,14 @@ export function Pipe() {
             if (!open) {
               setRdvPlanifierPipe(null);
               setRdvPlanifierStage(undefined);
+              setRdvPlanifierPlanOption(undefined);
             }
           }}
           context={{
             kind: "pipe",
             pipe: rdvPlanifierPipe,
             rdvStage: rdvPlanifierStage,
+            rdvPlanOption: rdvPlanifierPlanOption,
           }}
           onCreated={() => {
             void loadPipes();

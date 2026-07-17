@@ -5,11 +5,19 @@ import {
   datetimeLocalToUnix,
   PipeTimelineAddForm,
 } from "@/components/pipe/PipeTimelineAddForm";
+import { PipeRdvTypifyMenu } from "@/components/pipe/PipeRdvTypifyMenu";
 import { PipeRdvOutcomeDialog } from "@/components/pipe/PipeRdvOutcomeDialog";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { toastAfterRdvSave, toastAfterPipeRdvReschedule } from "@/lib/pipe/pipe-rdv-entry-actions";
+import { syncGoogleCalendarForPipeRdv } from "@/lib/calendar/rdv-planifier";
+import { resolvePipeRdvGoogleEventId } from "@/lib/api/tauri-calendar";
+import { buildPipeRdvCalendarContext } from "@/lib/pipe/pipe-rdv-calendar-context";
+import {
+  formatPipeRdvCalendarContactLabel,
+  pipeRdvCalendarEndAt,
+} from "@/lib/pipe/pipe-rdv-google-calendar";
 import {
   applyPipeRdvReschedule,
   applyPipeSuiviRdvReschedule,
@@ -23,10 +31,19 @@ import {
   type PipeTimelineDisplayContext,
 } from "@/lib/pipe/pipe-timeline-display";
 import {
+  formatRdvPlanOptionLabel,
+  isTypifiableR2Entry,
+  isTypifiableR3Entry,
+  R2_TYPIFY_TARGETS,
+  R3_TYPIFY_TARGETS,
+  rdvEntryTitreFromPlanOption,
+  rdvPlanOptionFromEntryTitre,
+  rdvStageFromPlanOption,
+  type PipeRdvPlanOption,
+} from "@/lib/pipe/pipe-rdv-plan-option";
+import {
   applyRdvStageOnSave,
   formatRdvEntryDisplayLabel,
-  formatRdvEntryTitle,
-  rdvStageFromEntryTitre,
   type PipeRdvStage,
 } from "@/lib/pipe/pipe-rdv-stage";
 import {
@@ -86,9 +103,10 @@ export function PipeTimelinePhaseEntryRow({
   const [occurredAt, setOccurredAt] = useState(() => unixToDatetimeLocalInput(entry.occurred_at));
   const [titre, setTitre] = useState(entry.titre ?? "");
   const [contenu, setContenu] = useState(entry.contenu ?? "");
-  const [rdvStage, setRdvStage] = useState<PipeRdvStage>(
-    () => rdvStageFromEntryTitre(entry.titre) ?? "R1"
+  const [rdvPlanOption, setRdvPlanOption] = useState<PipeRdvPlanOption>(
+    () => rdvPlanOptionFromEntryTitre(entry.titre) ?? "R1"
   );
+  const rdvStage: PipeRdvStage = rdvStageFromPlanOption(rdvPlanOption);
   const [saving, setSaving] = useState(false);
 
   const liveEntry = timeline.entries.find((e) => e.id === entry.id) ?? entry;
@@ -118,7 +136,7 @@ export function PipeTimelinePhaseEntryRow({
     setOccurredAt(unixToDatetimeLocalInput(entry.occurred_at));
     setTitre(entry.titre ?? "");
     setContenu(entry.contenu ?? "");
-    setRdvStage(rdvStageFromEntryTitre(entry.titre) ?? "R1");
+    setRdvPlanOption(rdvPlanOptionFromEntryTitre(entry.titre) ?? "R1");
     setEditing(true);
   };
 
@@ -165,7 +183,7 @@ export function PipeTimelinePhaseEntryRow({
       }
 
       const nextTitre =
-        userType === "RDV" ? formatRdvEntryTitle(rdvStage) : titre.trim() || null;
+        userType === "RDV" ? rdvEntryTitreFromPlanOption(rdvPlanOption) : titre.trim() || null;
 
       if (
         userType === "RDV" &&
@@ -189,6 +207,8 @@ export function PipeTimelinePhaseEntryRow({
             titre: pipe.titre,
           },
           rdvStage,
+          rdvPlanOption,
+          timelineEntryTitre: nextTitre,
           newOccurredAtUnix: occurredAtUnix,
           contenu: contenu.trim() || null,
         });
@@ -239,8 +259,60 @@ export function PipeTimelinePhaseEntryRow({
     }
   };
 
+  const handleTypify = async (target: PipeRdvPlanOption) => {
+    try {
+      const newTitre = rdvEntryTitreFromPlanOption(target);
+      await timeline.updateEntry(entry.id, { titre: newTitre });
+
+      if (pipe?.contact_id != null && pipe.contact_id > 0) {
+        const calendarPipe = {
+          contact_id: pipe.contact_id,
+          contact_prenom: pipe.contact_prenom,
+          contact_nom: pipe.contact_nom,
+          secondary_contact_id: pipe.secondary_contact_id,
+          secondary_contact_prenom: pipe.secondary_contact_prenom,
+          secondary_contact_nom: pipe.secondary_contact_nom,
+        };
+        const calendarCtx = buildPipeRdvCalendarContext(calendarPipe);
+        await syncGoogleCalendarForPipeRdv({
+          contactId: pipe.contact_id,
+          contactLabel: formatPipeRdvCalendarContactLabel(calendarPipe),
+          rdvStage: rdvStageFromPlanOption(target),
+          rdvPlanOption: target,
+          startAtUnix: entry.occurred_at,
+          endAtUnix: pipeRdvCalendarEndAt(entry.occurred_at),
+          pipeTimelineEntryId: entry.id,
+          existingGoogleEventId:
+            entry.google_event_id?.trim() ||
+            (await resolvePipeRdvGoogleEventId(entry.id)),
+          additionalAttendeeContactIds: calendarCtx?.additionalAttendeeContactIds,
+        });
+      }
+
+      toast.success(`RDV typifié : ${formatRdvPlanOptionLabel(target)}`);
+    } catch (err) {
+      toast.error(String(err));
+    }
+  };
+
   const actionButtons = (
-    <div className="flex shrink-0 gap-0.5">
+    <div className="flex shrink-0 items-center gap-0.5">
+      {!editing && isTypifiableR2Entry(liveEntry) && (
+        <PipeRdvTypifyMenu
+          disabled={disabled}
+          stageLabel="R2"
+          targets={R2_TYPIFY_TARGETS}
+          onTypify={handleTypify}
+        />
+      )}
+      {!editing && isTypifiableR3Entry(liveEntry) && (
+        <PipeRdvTypifyMenu
+          disabled={disabled}
+          stageLabel="R3"
+          targets={R3_TYPIFY_TARGETS}
+          onTypify={handleTypify}
+        />
+      )}
       <Button
         type="button"
         variant="ghost"
@@ -305,13 +377,13 @@ export function PipeTimelinePhaseEntryRow({
       occurredAt={occurredAt}
       titre={titre}
       contenu={contenu}
-      rdvStage={rdvStage}
+      rdvPlanOption={rdvPlanOption}
       pipe={pipe}
       saving={saving}
       onOccurredAtChange={setOccurredAt}
       onTitreChange={setTitre}
       onContenuChange={setContenu}
-      onRdvStageChange={setRdvStage}
+      onRdvPlanOptionChange={setRdvPlanOption}
       onCancel={cancelEdit}
       onSubmit={(e) => void saveEdit(e)}
       submitLabel="Enregistrer"

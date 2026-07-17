@@ -203,8 +203,8 @@ fn items_to_json(items: &PipeR1ChecklistItems) -> Result<String> {
 fn rdv_stage_from_titre(titre: Option<&str>) -> Option<&'static str> {
     match titre.map(str::trim) {
         Some("R1") => Some("R1"),
-        Some("R2") => Some("R2"),
-        Some("R3") => Some("R3"),
+        Some("R2") | Some("R2 Placement") | Some("R2 Immo") => Some("R2"),
+        Some("R3") | Some("R3 Placements") | Some("R3 Immo") => Some("R3"),
         _ => None,
     }
 }

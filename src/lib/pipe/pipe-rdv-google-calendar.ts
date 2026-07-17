@@ -1,6 +1,10 @@
 import { createCalendarRdv } from "@/lib/api/tauri-calendar";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
+import {
+  rdvStageFromPlanOption,
+  type PipeRdvPlanOption,
+} from "@/lib/pipe/pipe-rdv-plan-option";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import type { PipeRecordLike } from "@/lib/pipe/pipe-types";
 import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
@@ -54,6 +58,26 @@ export function formatPipeRdvGoogleCalendarTitle(
 ): string {
   const contact = contactLabel.trim() || "Contact";
   return `${PIPE_RDV_GOOGLE_CALENDAR_LABELS[rdvStage]} - ${contact}`;
+}
+
+export function formatPipeRdvGoogleCalendarTitleFromPlanOption(
+  planOption: PipeRdvPlanOption,
+  contactLabel: string
+): string {
+  const contact = contactLabel.trim() || "Contact";
+  if (planOption === "R2_PLACEMENT") {
+    return `Présentation placement patrimonial - ${contact}`;
+  }
+  if (planOption === "R2_IMMO") {
+    return `Présentation immobilier - ${contact}`;
+  }
+  if (planOption === "R3_PLACEMENT") {
+    return `Souscription placements - ${contact}`;
+  }
+  if (planOption === "R3_IMMO") {
+    return `Souscription immobilier - ${contact}`;
+  }
+  return formatPipeRdvGoogleCalendarTitle(rdvStageFromPlanOption(planOption), contactLabel);
 }
 
 export function pipeRdvCalendarEndAt(startAtUnix: number): number {

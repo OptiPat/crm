@@ -49,4 +49,25 @@ describe("pipe-checklist-template", () => {
       )
     ).toBe(true);
   });
+
+  it("définit 6 pièces R3 placements par défaut", () => {
+    const items = getActivePipeChecklistTemplateItems("R3", DEFAULT_PIPE_CHECKLIST_TEMPLATES, {
+      salarie: false,
+      chef_entreprise: false,
+      retraite: false,
+    });
+    expect(items.map((item) => item.id)).toEqual([
+      "der",
+      "rio",
+      "qpi_a_signer",
+      "cni",
+      "justificatif_domicile",
+      "rib",
+    ]);
+    expect(items.slice(0, 3).map((item) => item.label)).toEqual([
+      "DER (signé)",
+      "RIO (signé)",
+      "QPI (signé)",
+    ]);
+  });
 });

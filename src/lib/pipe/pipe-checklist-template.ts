@@ -3,8 +3,8 @@ import { getSetting, setSetting } from "@/lib/api/tauri-settings";
 export const PIPE_CHECKLIST_TEMPLATES_SETTING_KEY = "pipe.checklist_templates";
 export const PIPE_CHECKLIST_TEMPLATES_CHANGED_EVENT = "crm:pipe-checklist-templates-changed";
 
-/** Étapes pipe avec checklist documents (R2 à brancher ensuite). */
-export type PipeChecklistStage = "R1" | "R2";
+/** Étapes pipe avec checklist documents. */
+export type PipeChecklistStage = "R1" | "R2" | "R3";
 
 export type PipeChecklistProfileScope = "base" | "salarie" | "chef" | "retraite";
 
@@ -20,7 +20,7 @@ export interface PipeChecklistTemplateItem {
 
 export type PipeChecklistTemplates = Record<PipeChecklistStage, PipeChecklistTemplateItem[]>;
 
-export const PIPE_CHECKLIST_STAGES: PipeChecklistStage[] = ["R1", "R2"];
+export const PIPE_CHECKLIST_STAGES: PipeChecklistStage[] = ["R1", "R2", "R3"];
 
 export const PIPE_CHECKLIST_PROFILE_SCOPE_LABELS: Record<PipeChecklistProfileScope, string> = {
   base: "Toujours",
@@ -71,6 +71,19 @@ export const DEFAULT_PIPE_CHECKLIST_TEMPLATES: PipeChecklistTemplates = {
     },
   ],
   R2: [],
+  R3: [
+    { id: "der", label: "DER (signé)", profiles: ["base"] },
+    { id: "rio", label: "RIO (signé)", profiles: ["base"] },
+    { id: "qpi_a_signer", label: "QPI (signé)", profiles: ["base"] },
+    { id: "cni", label: "CNI", profiles: ["base"] },
+    {
+      id: "justificatif_domicile",
+      label: "Justificatif de domicile (< 3 mois)",
+      hint: "Date d'émission récente",
+      profiles: ["base"],
+    },
+    { id: "rib", label: "RIB", profiles: ["base"] },
+  ],
 };
 
 export interface R1ChecklistProfile {
@@ -92,6 +105,7 @@ export function cloneDefaultPipeChecklistTemplates(): PipeChecklistTemplates {
   return {
     R1: DEFAULT_PIPE_CHECKLIST_TEMPLATES.R1.map((item) => ({ ...item })),
     R2: [],
+    R3: DEFAULT_PIPE_CHECKLIST_TEMPLATES.R3.map((item) => ({ ...item })),
   };
 }
 
@@ -126,6 +140,7 @@ function parseTemplatesJson(raw: string): PipeChecklistTemplates | null {
     return {
       R1: normalizeStage("R1"),
       R2: normalizeStage("R2"),
+      R3: normalizeStage("R3"),
     };
   } catch {
     return null;
@@ -147,11 +162,29 @@ function migrateLegacyLabelOverrides(raw: string): PipeChecklistTemplates | null
   }
 }
 
+function migrateR3SignedLabels(templates: PipeChecklistTemplates): PipeChecklistTemplates {
+  const legacyById: Record<string, { from: string; to: string }> = {
+    der: { from: "DER", to: "DER (signé)" },
+    rio: { from: "RIO", to: "RIO (signé)" },
+    qpi_a_signer: { from: "QPI (à signer)", to: "QPI (signé)" },
+  };
+  return {
+    ...templates,
+    R3: templates.R3.map((item) => {
+      const migration = legacyById[item.id];
+      if (migration && item.label === migration.from) {
+        return { ...item, label: migration.to };
+      }
+      return item;
+    }),
+  };
+}
+
 export async function loadPipeChecklistTemplates(): Promise<PipeChecklistTemplates> {
   const raw = await getSetting(PIPE_CHECKLIST_TEMPLATES_SETTING_KEY);
   if (raw?.trim()) {
     const parsed = parseTemplatesJson(raw);
-    if (parsed) return parsed;
+    if (parsed) return migrateR3SignedLabels(parsed);
   }
   const legacy = await getSetting("pipe.r1_checklist_item_labels");
   if (legacy?.trim()) {
@@ -169,6 +202,9 @@ export async function savePipeChecklistTemplates(
       .map(normalizeTemplateItem)
       .filter((item): item is PipeChecklistTemplateItem => item != null),
     R2: templates.R2
+      .map(normalizeTemplateItem)
+      .filter((item): item is PipeChecklistTemplateItem => item != null),
+    R3: templates.R3
       .map(normalizeTemplateItem)
       .filter((item): item is PipeChecklistTemplateItem => item != null),
   };

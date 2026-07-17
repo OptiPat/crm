@@ -1,5 +1,10 @@
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import {
+  rdvPlanOptionFromEntryTitre,
+  rdvStageFromPlanOption,
+  type PipeRdvPlanOption,
+} from "@/lib/pipe/pipe-rdv-plan-option";
+import {
   formatRdvEntryDisplayLabel,
   formatRdvStageLabel,
   isPipeRdvStage,
@@ -84,10 +89,40 @@ export function buildRdvRescheduledTimelinePayload(
   return { titre: null, contenu: base };
 }
 
+function extractTitreFromTraceNoteText(text: string): string | null {
+  const kindMatch = text.match(/ (annulé|reporté)(?:\s*[:—].*)?$/);
+  if (!kindMatch) return null;
+  const labelPart = text.slice(0, text.length - kindMatch[0].length).trim();
+  let titreCandidate = labelPart.replace(/\s+planifié$/i, "").trim();
+  if (titreCandidate.toUpperCase().startsWith("RDV ")) {
+    titreCandidate = titreCandidate.slice(4).trim();
+  }
+  return titreCandidate || null;
+}
+
+/** Option de plan RDV encodée dans une note de trace annulation/report. */
+export function rdvPlanOptionFromTraceNote(
+  contenu: string | null | undefined
+): PipeRdvPlanOption | null {
+  const text = contenu?.trim() ?? "";
+  if (!text) return null;
+  const titreCandidate = extractTitreFromTraceNoteText(text);
+  return titreCandidate ? rdvPlanOptionFromEntryTitre(titreCandidate) : null;
+}
+
 export function parseRdvTimelineTraceNote(
   contenu: string | null | undefined
 ): RdvTimelineTraceNote | null {
   const text = contenu?.trim() ?? "";
+  const kindMatch = text.match(/ (annulé|reporté)(?:\s*[:—].*)?$/);
+  if (kindMatch) {
+    const kind = kindMatch[1] === "annulé" ? "cancelled" : "rescheduled";
+    const planOption = rdvPlanOptionFromTraceNote(text);
+    if (planOption) {
+      return { stage: rdvStageFromPlanOption(planOption), kind };
+    }
+  }
+
   const match = text.match(/^(?:RDV )?(R[123])(?: planifié)? (annulé|reporté)/);
   if (!match) return null;
   const stage = match[1];

@@ -1,23 +1,34 @@
-import { Calendar, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
+import { PipeRdvPlanStageButton } from "@/components/pipe/PipeRdvPlanStageButton";
 import {
-  getNextLinearStage,
+  formatRdvPlanOptionLabel,
+  planOptionsForRdvStage,
+  stageHasPlanVariants,
+  type PipeRdvPlanOption,
+} from "@/lib/pipe/pipe-rdv-plan-option";
+import { isPipeRdvStage, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+import {
+  getPipeCommercialStepperStepState,
+  getSuggestedRdvPlanStage,
+} from "@/lib/pipe/pipe-stage-stepper";
+import {
   isPipeStage,
   PIPE_LINEAR_STAGES,
   PIPE_STAGE_DESCRIPTIONS,
   PIPE_STAGE_FIELD_LABEL,
   PIPE_STAGE_LABELS,
 } from "@/lib/pipe/pipe-types";
-import { isPipeRdvStage, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
-import { getPipeCommercialStepperStepState } from "@/lib/pipe/pipe-stage-stepper";
+import { phaseHasRdvActivityForStage } from "@/lib/pipe/pipe-rdv-delete";
 import { cn } from "@/lib/utils";
 
 interface PipeStageStepperProps {
   currentStage: string;
   timelineEntries?: PipeTimelineEntryRecord[];
   onViewProspection?: () => void;
-  onPlanRdv?: (stage: PipeRdvStage) => void;
+  onPlanRdv?: (planOption: PipeRdvPlanOption) => void;
 }
 
 export function PipeStageStepper({
@@ -30,9 +41,7 @@ export function PipeStageStepper({
 
   const stage = currentStage;
 
-  const nextStage = getNextLinearStage(stage);
-  const nextRdvStage =
-    nextStage && isPipeRdvStage(nextStage) ? nextStage : null;
+  const suggestedRdvStage = getSuggestedRdvPlanStage(stage, timelineEntries);
 
   const handleProspectionClick = () => {
     if (stage !== "PROSPECTION") {
@@ -43,6 +52,15 @@ export function PipeStageStepper({
       .getElementById("pipe-prospection-section")
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
+  const showPlanNextRdv =
+    suggestedRdvStage &&
+    onPlanRdv &&
+    stage !== "GAGNEE" &&
+    stage !== "PERDUE_OU_EN_ATTENTE";
+
+  const showPlanAnotherR2 =
+    onPlanRdv && phaseHasRdvActivityForStage(timelineEntries, "R2");
 
   return (
     <div className="space-y-2">
@@ -80,6 +98,12 @@ export function PipeStageStepper({
               </>
             );
 
+            const stepButtonClass = cn(
+              "flex flex-col items-center gap-1 min-w-[3.75rem] rounded-lg px-1 py-1 transition-colors",
+              "cursor-pointer hover:bg-muted/60",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            );
+
             return (
               <div key={step} className="flex items-center">
                 {isProspection ? (
@@ -87,24 +111,47 @@ export function PipeStageStepper({
                     type="button"
                     onClick={handleProspectionClick}
                     title={PIPE_STAGE_DESCRIPTIONS[step]}
-                    className={cn(
-                      "flex flex-col items-center gap-1 min-w-[3.75rem] rounded-lg px-1 py-1 transition-colors",
-                      "cursor-pointer hover:bg-muted/60",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    )}
+                    className={stepButtonClass}
                   >
                     {stepContent}
                   </button>
+                ) : isRdvStep && active && onPlanRdv && stageHasPlanVariants(step) ? (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        title={PIPE_STAGE_DESCRIPTIONS[step]}
+                        className={stepButtonClass}
+                      >
+                        {stepContent}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-52 p-2" align="center">
+                      <p className="mb-2 px-1 text-xs text-muted-foreground">
+                        Planifier {PIPE_STAGE_LABELS[step]}
+                      </p>
+                      <div className="flex flex-col gap-1">
+                        {planOptionsForRdvStage(step as PipeRdvStage).map((option) => (
+                          <Button
+                            key={option}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 justify-start text-xs"
+                            onClick={() => onPlanRdv(option)}
+                          >
+                            {formatRdvPlanOptionLabel(option)}
+                          </Button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 ) : isRdvStep && active && onPlanRdv ? (
                   <button
                     type="button"
-                    onClick={() => onPlanRdv(step)}
+                    onClick={() => onPlanRdv(step as PipeRdvPlanOption)}
                     title={PIPE_STAGE_DESCRIPTIONS[step]}
-                    className={cn(
-                      "flex flex-col items-center gap-1 min-w-[3.75rem] rounded-lg px-1 py-1 transition-colors",
-                      "cursor-pointer hover:bg-muted/60",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    )}
+                    className={stepButtonClass}
                   >
                     {stepContent}
                   </button>
@@ -132,17 +179,20 @@ export function PipeStageStepper({
         </div>
       </div>
 
-      {nextRdvStage && onPlanRdv && stage !== "GAGNEE" && stage !== "PERDUE_OU_EN_ATTENTE" && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => onPlanRdv(nextRdvStage)}
-        >
-          <Calendar className="h-3.5 w-3.5" />
-          Planifier le RDV {PIPE_STAGE_LABELS[nextRdvStage]}
-        </Button>
+      {(showPlanNextRdv || showPlanAnotherR2) && (
+        <div className="flex flex-wrap gap-2">
+          {showPlanNextRdv && suggestedRdvStage ? (
+            <PipeRdvPlanStageButton stage={suggestedRdvStage} onSelect={onPlanRdv} />
+          ) : null}
+          {showPlanAnotherR2 ? (
+            <PipeRdvPlanStageButton
+              stage="R2"
+              variant="ghost"
+              actionLabel="Planifier un autre R2"
+              onSelect={onPlanRdv}
+            />
+          ) : null}
+        </div>
       )}
     </div>
   );

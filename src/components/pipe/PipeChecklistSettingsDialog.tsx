@@ -40,12 +40,17 @@ interface PipeChecklistSettingsDialogProps {
 }
 
 function stageTitle(stage: PipeChecklistStage): string {
-  return stage === "R1" ? "Documents R1" : "Documents R2";
+  if (stage === "R1") return "Documents R1";
+  if (stage === "R3") return "Documents R3 — Placements";
+  return "Documents R2";
 }
 
 function stageDescription(stage: PipeChecklistStage): string {
   if (stage === "R1") {
     return "Pièces à collecter avant le RDV R1. Les lignes conditionnelles s'affichent selon le profil (salarié, chef d'entreprise, retraite).";
+  }
+  if (stage === "R3") {
+    return "Pièces placements pour le RDV R3 (DER, RIO, QPI signés, identité, domicile, RIB).";
   }
   return "Pièces à collecter avant le RDV R2 — à configurer avant mise en service.";
 }
@@ -146,7 +151,7 @@ export function PipeChecklistSettingsDialog({
           onValueChange={(value) => setActiveStage(value as PipeChecklistStage)}
           className="flex-1 min-h-0 flex flex-col"
         >
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             {PIPE_CHECKLIST_STAGES.map((stage) => (
               <TabsTrigger key={stage} value={stage}>
                 {stage}
@@ -212,12 +217,16 @@ export function PipeChecklistSettingsDialog({
                                 </SelectContent>
                               </Select>
                             </div>
-                            {stage === "R1" && item.profiles.includes("base") ? (
+                            {stage !== "R2" && item.profiles.includes("base") ? (
                               <div className="space-y-1.5">
                                 <Label className="text-xs">Précision (optionnel)</Label>
                                 <Input
                                   value={item.hint ?? ""}
-                                  placeholder="Ex. Livrets, assurance-vie…"
+                                  placeholder={
+                                    stage === "R3"
+                                      ? "Ex. Date d'émission récente"
+                                      : "Ex. Livrets, assurance-vie…"
+                                  }
                                   onChange={(event) =>
                                     updateItem(stage, index, {
                                       hint: event.target.value || undefined,

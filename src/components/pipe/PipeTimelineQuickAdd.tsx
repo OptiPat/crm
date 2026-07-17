@@ -15,8 +15,7 @@ import {
   toastAfterRdvSave,
 } from "@/lib/pipe/pipe-rdv-entry-actions";
 import { buildPipeRdvCalendarContext } from "@/lib/pipe/pipe-rdv-calendar-context";
-import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
-import { formatRdvEntryTitle } from "@/lib/pipe/pipe-rdv-stage";
+import type { PipeRdvPlanOption } from "@/lib/pipe/pipe-rdv-plan-option";
 import {
   PIPE_TIMELINE_QUICK_ADD_TYPES,
   PIPE_TIMELINE_TYPE_LABELS,
@@ -47,7 +46,7 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
   const [occurredAt, setOccurredAt] = useState(() => createEmptyTimelineAddState("APPEL").occurredAt);
   const [titre, setTitre] = useState("");
   const [contenu, setContenu] = useState("");
-  const [rdvStage, setRdvStage] = useState<PipeRdvStage>("R1");
+  const [rdvPlanOption, setRdvPlanOption] = useState<PipeRdvPlanOption>("R1");
   const [saving, setSaving] = useState(false);
 
   const openAdd = (type: PipeTimelineUserType) => {
@@ -56,7 +55,7 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
     setOccurredAt(state.occurredAt);
     setTitre(state.titre);
     setContenu("");
-    if (type === "RDV") setRdvStage("R1");
+    if (type === "RDV") setRdvPlanOption("R1");
   };
 
   const cancelAdd = () => {
@@ -98,8 +97,9 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
         pipe,
         calendar: pipe ? buildPipeRdvCalendarContext(pipe) : undefined,
         entryType: "RDV",
+        rdvPlanOption: payload.rdvPlanOption,
         rdvStage: payload.rdvStage,
-        titre: formatRdvEntryTitle(payload.rdvStage),
+        titre: "",
         contenu: payload.contenu,
         occurredAtUnix: payload.occurredAtUnix,
         visio: payload.visio,
@@ -150,14 +150,14 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
           occurredAt={occurredAt}
           titre={titre}
           contenu={contenu}
-          rdvStage={rdvStage}
+          rdvPlanOption={rdvPlanOption}
           pipe={pipe}
           contactId={pipe?.contact_id}
           saving={saving}
           onOccurredAtChange={setOccurredAt}
           onTitreChange={setTitre}
           onContenuChange={setContenu}
-          onRdvStageChange={setRdvStage}
+          onRdvPlanOptionChange={setRdvPlanOption}
           onRdvSubmit={addingType === "RDV" ? handleRdvSubmit : undefined}
           onCancel={cancelAdd}
           onSubmit={(e) => void handleAdd(e)}

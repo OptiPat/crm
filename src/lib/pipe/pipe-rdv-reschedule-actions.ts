@@ -14,6 +14,11 @@ import { pipeRdvCalendarEndAt, formatPipeRdvCalendarContactLabel } from "@/lib/p
 import { resyncPipeRdvScheduledEmails } from "@/lib/pipe/pipe-rdv-confirmation-email";
 import { buildRdvRescheduledTimelinePayload } from "@/lib/pipe/pipe-rdv-delete";
 import {
+  defaultPlanOptionForRdvStage,
+  rdvPlanOptionFromEntryTitre,
+  type PipeRdvPlanOption,
+} from "@/lib/pipe/pipe-rdv-plan-option";
+import {
   applyRdvStageOnSave,
   formatRdvEntryTitle,
   type PipeRdvStage,
@@ -46,6 +51,8 @@ export async function executePipeRdvReschedule(options: {
       >
     >;
   rdvStage: PipeRdvStage;
+  rdvPlanOption?: PipeRdvPlanOption;
+  timelineEntryTitre?: string | null;
   newOccurredAtUnix: number;
   endAtUnix?: number;
   contenu?: string | null;
@@ -65,6 +72,14 @@ export async function executePipeRdvReschedule(options: {
   const previousEndAtUnix =
     calendarSnapshot?.end_at ?? pipeRdvCalendarEndAt(previousOccurredAt);
   const endChanged = endAtUnix !== previousEndAtUnix;
+  const resolvedEntryTitre =
+    options.timelineEntryTitre?.trim() ||
+    options.entry.titre?.trim() ||
+    formatRdvEntryTitle(options.rdvStage);
+  const rdvPlanOption =
+    options.rdvPlanOption ??
+    rdvPlanOptionFromEntryTitre(resolvedEntryTitre) ??
+    defaultPlanOptionForRdvStage(options.rdvStage);
   const nextContenu =
     options.contenu !== undefined
       ? options.contenu?.trim() || null
@@ -75,14 +90,14 @@ export async function executePipeRdvReschedule(options: {
   await warnPipeRdvMissingAttendeeEmails(options.pipe);
 
   await options.updateEntry(options.entry.id, {
-    titre: formatRdvEntryTitle(options.rdvStage),
+    titre: resolvedEntryTitre,
     contenu: nextContenu,
     occurred_at: options.newOccurredAtUnix,
   });
 
   if (dateChanged) {
     const { titre, contenu } = buildRdvRescheduledTimelinePayload(
-      options.entry,
+      { entry_type: "RDV", titre: resolvedEntryTitre },
       previousOccurredAt,
       options.newOccurredAtUnix,
       options.userNote
@@ -106,6 +121,7 @@ export async function executePipeRdvReschedule(options: {
       contactId: options.pipe.contact_id,
       contactLabel: formatPipeRdvCalendarContactLabel(options.pipe),
       rdvStage: options.rdvStage,
+      rdvPlanOption,
       startAtUnix: options.newOccurredAtUnix,
       endAtUnix,
       pipeTimelineEntryId: options.entry.id,
@@ -252,6 +268,8 @@ export async function applyPipeRdvReschedule(options: {
       >
     >;
   rdvStage: PipeRdvStage;
+  rdvPlanOption?: PipeRdvPlanOption;
+  timelineEntryTitre?: string | null;
   newOccurredAtUnix: number;
   endAtUnix?: number;
   contenu?: string | null;

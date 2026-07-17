@@ -12,9 +12,14 @@ import {
 } from "@/lib/pipe/pipe-suivi";
 import {
   applyRdvStageOnSave,
-  formatRdvEntryTitle,
   type PipeRdvStage,
 } from "@/lib/pipe/pipe-rdv-stage";
+import {
+  defaultPlanOptionForRdvStage,
+  rdvEntryTitreFromPlanOption,
+  rdvStageFromPlanOption,
+  type PipeRdvPlanOption,
+} from "@/lib/pipe/pipe-rdv-plan-option";
 import { toast } from "sonner";
 
 export type PipeRdvStageSaveResult = {
@@ -91,6 +96,7 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
   };
   entryType: PipeTimelineUserType;
   rdvStage?: PipeRdvStage;
+  rdvPlanOption?: PipeRdvPlanOption;
   titre: string;
   contenu: string | null;
   occurredAtUnix: number;
@@ -98,9 +104,13 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
   visio?: RdvVisioOptions;
   physicalAddress?: string | null;
 }): Promise<PipeRdvStageSaveResult | null> {
+  const planOption =
+    options.rdvPlanOption ??
+    (options.rdvStage ? defaultPlanOptionForRdvStage(options.rdvStage) : null);
+  const rdvStage = planOption ? rdvStageFromPlanOption(planOption) : options.rdvStage;
   const titre =
-    options.entryType === "RDV" && options.rdvStage
-      ? formatRdvEntryTitle(options.rdvStage)
+    options.entryType === "RDV" && planOption
+      ? rdvEntryTitreFromPlanOption(planOption)
       : options.titre;
 
   const entry = await options.timeline.addEntry({
@@ -110,7 +120,7 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
     occurred_at: options.occurredAtUnix,
   });
 
-  if (options.entryType !== "RDV" || !options.rdvStage || !options.pipe) {
+  if (options.entryType !== "RDV" || !rdvStage || !options.pipe) {
     return null;
   }
 
@@ -120,7 +130,8 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
     ? syncGoogleCalendarForPipeRdv({
         contactId: options.calendar.contactId,
         contactLabel: options.calendar.contactLabel,
-        rdvStage: options.rdvStage,
+        rdvStage,
+        rdvPlanOption: planOption ?? undefined,
         startAtUnix: options.occurredAtUnix,
         endAtUnix,
         pipeTimelineEntryId: entry.id,
@@ -133,7 +144,7 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
   const [stageResult, calendar] = await Promise.all([
     applyRdvStageOnSave({
       pipe: options.pipe,
-      rdvStage: options.rdvStage,
+      rdvStage,
       occurredAt: options.occurredAtUnix,
       notes: options.contenu,
     }),
@@ -143,7 +154,7 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
   if (options.pipe) {
     await sendPipeRdvConfirmationAfterCalendar({
       pipe: options.pipe,
-      rdvStage: options.rdvStage,
+      rdvStage,
       pipeTimelineEntryId: entry.id,
       calendar,
       startAtUnix: options.occurredAtUnix,

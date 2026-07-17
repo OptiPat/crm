@@ -2,6 +2,11 @@ import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import { setPipeStage, type PipeRecord } from "@/lib/api/tauri-pipe";
 import { PIPE_RDV_CALENDAR_DURATION_SEC } from "@/lib/pipe/pipe-rdv-google-calendar";
 import {
+  formatRdvPlanOptionLabel,
+  rdvPlanOptionFromEntryTitre,
+  rdvStageFromPlanOption,
+} from "@/lib/pipe/pipe-rdv-plan-option";
+import {
   isPipeStage,
   PIPE_LINEAR_STAGES,
   PIPE_STAGE_LABELS,
@@ -18,8 +23,8 @@ export function isPipeRdvStage(value: string): value is PipeRdvStage {
 }
 
 export function rdvStageFromEntryTitre(titre: string | null | undefined): PipeRdvStage | null {
-  const raw = titre?.trim() ?? "";
-  if (isPipeRdvStage(raw)) return raw;
+  const planOption = rdvPlanOptionFromEntryTitre(titre);
+  if (planOption) return rdvStageFromPlanOption(planOption);
   return null;
 }
 
@@ -35,8 +40,10 @@ export function formatRdvEntryDisplayLabel(
   entry: Pick<PipeTimelineEntryRecord, "entry_type" | "titre">
 ): string | null {
   if (entry.entry_type !== "RDV") return null;
-  const stage = rdvStageFromEntryTitre(entry.titre);
-  if (stage) return `${formatRdvStageLabel(stage)} planifié`;
+  const planOption = rdvPlanOptionFromEntryTitre(entry.titre);
+  if (planOption) {
+    return `${formatRdvPlanOptionLabel(planOption)} planifié`;
+  }
   const titre = entry.titre?.trim();
   return titre ? `${titre} planifié` : "RDV planifié";
 }
