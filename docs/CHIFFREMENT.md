@@ -32,6 +32,10 @@ Stocké dans `%APPDATA%\com.patrimoine-crm.app\`. Contient uniquement :
 | `created_at` | horodatage de création |
 | `system_auth_enabled` | active la confirmation Windows Hello ou Touch ID après le mot de passe |
 
+`auth_attempts.json`, placé dans le même dossier, conserve uniquement le nombre d'échecs et
+l'échéance du blocage. Il est séparé de `auth.json` pour qu'une écriture interrompue du compteur
+ne puisse jamais endommager le hash du mot de passe.
+
 Flux (`src-tauri/src/auth/`) :
 
 1. `create_master_password` (1ʳᵉ fois) : enregistre le hash, puis ouvre la base.
@@ -42,7 +46,12 @@ Flux (`src-tauri/src/auth/`) :
    également le délai et les reprises de veille, indépendamment des timers du webview.
 
 Après 5 mots de passe incorrects, les délais progressent de 1 à 5, 15 puis 60 minutes.
-Ils restent en mémoire et une réussite remet le compteur à zéro. Si l'authentification système
+Le compteur et l'échéance survivent aux redémarrages, sans jamais dépasser 60 minutes ; une
+réussite supprime immédiatement cet état. Supprimer manuellement `auth_attempts.json` réinitialise
+la limitation, mais ne modifie ni le mot de passe ni les données. Pendant l'exécution, une horloge
+monotone empêche un changement de l'heure système de raccourcir le délai. Une restauration de
+configuration purge l'état des tentatives afin de ne pas réappliquer un ancien blocage.
+Si l'authentification système
 devient indisponible sur un nouveau poste, un accès de récupération par mot de passe la désactive
 explicitement : aucune panne biométrique ne peut rendre les données inaccessibles définitivement.
 

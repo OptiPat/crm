@@ -16,6 +16,7 @@ const ROOT_FILES: &[&str] = &[
 
 /// Sous-dossiers AppData à copier intégralement.
 const CONFIG_DIRS: &[&str] = &["logos", "icons"];
+const AUTH_ATTEMPTS_FILE: &str = "auth_attempts.json";
 
 pub fn paired_config_backup_dir_name(db_backup_filename: &str) -> Option<String> {
     let stem = db_backup_filename.strip_suffix(".db")?;
@@ -102,7 +103,33 @@ pub fn restore_app_config_from_backup(
         copy_dir_all(&src, &live)?;
     }
 
+    clear_auth_attempts_state(app_data_dir)?;
     Ok(())
+}
+
+fn clear_auth_attempts_state(app_data_dir: &Path) -> std::io::Result<()> {
+    let path = app_data_dir.join(AUTH_ATTEMPTS_FILE);
+    if !path.exists() {
+        return Ok(());
+    }
+    let write_result = fs::write(
+        &path,
+        r#"{"failed_attempts":0,"blocked_until":null}"#,
+    );
+    let remove_result = fs::remove_file(&path);
+    match (write_result, remove_result) {
+        (Err(write_error), Err(remove_error))
+            if remove_error.kind() != std::io::ErrorKind::NotFound =>
+        {
+            Err(std::io::Error::new(
+                write_error.kind(),
+                format!(
+                    "Réinitialisation des tentatives impossible : écriture={write_error}, suppression={remove_error}"
+                ),
+            ))
+        }
+        _ => Ok(()),
+    }
 }
 
 pub fn prune_paired_config_backups(backups_dir: &Path, db_files_to_remove: &[PathBuf]) {
@@ -159,12 +186,18 @@ mod tests {
         assert!(dest.join("logos/cabinet-logo.png").is_file());
 
         fs::write(app_data.join("auth.json"), b"{}").expect("overwrite auth");
+        fs::write(
+            app_data.join(AUTH_ATTEMPTS_FILE),
+            br#"{"failed_attempts":8,"blocked_until":9999999999}"#,
+        )
+        .expect("attempts");
         fs::remove_dir_all(&logos).expect("remove logos");
 
         restore_app_config_from_backup(&app_data, &dest).expect("restore config");
         let auth = fs::read_to_string(app_data.join("auth.json")).expect("read auth");
         assert!(auth.contains("password_hash"));
         assert!(app_data.join("logos/cabinet-logo.png").is_file());
+        assert!(!app_data.join(AUTH_ATTEMPTS_FILE).exists());
 
         let _ = fs::remove_dir_all(&app_data);
     }
