@@ -28,13 +28,13 @@ describe("r1-document-checklist", () => {
   it("considère amortissement OK si pas de crédit", () => {
     expect(
       isR1ChecklistItemComplete(
-        { noCreditOption: true },
+        { id: "amortissement_prets", noCreditOption: true },
         { received: false, no_credit: true }
       )
     ).toBe(true);
     expect(
       isR1ChecklistItemComplete(
-        { noCreditOption: true },
+        { id: "amortissement_prets", noCreditOption: true },
         { received: false, no_credit: false }
       )
     ).toBe(false);
