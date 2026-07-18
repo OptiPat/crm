@@ -22,6 +22,11 @@ import {
   buildPipeRdvEmailExtraVariables,
   pipeRdvRegistreForContact,
 } from "@/lib/pipe/pipe-rdv-email-vars";
+import {
+  buildR1ChecklistEmailVariables,
+  ensureR1ChecklistProfileForPipeEmail,
+  templateUsesR1ChecklistEmailVariables,
+} from "@/lib/pipe/pipe-r1-checklist-email-vars";
 import { syncPipeRdvReminderSchedules } from "@/lib/pipe/pipe-rdv-reminder-schedule";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { toast } from "sonner";
@@ -54,6 +59,7 @@ export async function sendPipeRdvTemplatedEmailToContact(options: {
   contact: Contact;
   pipe: Pick<
     PipeRecord,
+    | "id"
     | "contact_id"
     | "contact_prenom"
     | "contact_nom"
@@ -63,6 +69,7 @@ export async function sendPipeRdvTemplatedEmailToContact(options: {
   >;
   principal: TemplateEmail;
   tutoiement: TemplateEmail | null;
+  rdvStage?: PipeRdvStage;
   startAtUnix: number;
   endAtUnix: number;
   visioLink?: string | null;
@@ -92,6 +99,23 @@ export async function sendPipeRdvTemplatedEmailToContact(options: {
     visio: options.visio,
     physicalAddress: options.physicalAddress,
   });
+
+  const needsR1Docs =
+    options.rdvStage === "R1" ||
+    templateUsesR1ChecklistEmailVariables(content.sujet, content.corps, corpsHtml);
+
+  if (needsR1Docs && options.pipe.id > 0) {
+    const primaryContact =
+      options.contact.id === options.pipe.contact_id
+        ? options.contact
+        : await getContactById(options.pipe.contact_id).catch(() => null);
+    await ensureR1ChecklistProfileForPipeEmail(options.pipe.id, primaryContact);
+  }
+
+  const checklistVars = needsR1Docs
+    ? await buildR1ChecklistEmailVariables(options.pipe.id)
+    : {};
+
   const preview = renderTemplatePreview(
     content.sujet,
     content.corps,
@@ -108,7 +132,7 @@ export async function sendPipeRdvTemplatedEmailToContact(options: {
     {
       templateNom: options.principal.nom,
       registre,
-      extraVariables: rdvVars,
+      extraVariables: { ...rdvVars, ...checklistVars },
       forSend: true,
     }
   );
@@ -257,6 +281,7 @@ export async function maybeSendPipeRdvConfirmationEmail(options: {
         pipe: options.pipe,
         principal,
         tutoiement,
+        rdvStage: options.rdvStage,
         startAtUnix: options.startAtUnix,
         endAtUnix: options.endAtUnix,
         visioLink: options.visioLink,

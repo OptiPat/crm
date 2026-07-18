@@ -60,6 +60,7 @@ export function PipeTimelineResumeRdvForm({
         occurredAtUnix: payload.occurredAtUnix,
         visio: payload.visio,
         physicalAddress: payload.physicalAddress,
+        r1Profile: payload.r1Profile,
       });
       toastAfterRdvSave(rdvStage, result, "RDV replanifié");
       onSuccess?.();

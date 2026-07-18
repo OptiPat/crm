@@ -1,3 +1,6 @@
+import { DEFAULT_PIPE_CHECKLIST_TEMPLATES } from "@/lib/pipe/pipe-checklist-template";
+import { buildR1ChecklistEmailVariablesFromProfile } from "@/lib/pipe/pipe-r1-checklist-email-vars";
+
 const PIPE_RDV_VAR_KEYS = [
   "date_rdv",
   "heure_rdv",
@@ -8,7 +11,17 @@ const PIPE_RDV_VAR_KEYS = [
   "co_contact_prenom",
   "co_contact_nom",
   "co_contact_et_prenom",
+  "liste_documents_r1_html",
 ] as const;
+
+const SAMPLE_R1_CHECKLIST_VARS = buildR1ChecklistEmailVariablesFromProfile(
+  DEFAULT_PIPE_CHECKLIST_TEMPLATES,
+  {
+    salarie: true,
+    chef_entreprise: false,
+    retraite: false,
+  }
+);
 
 /** Valeurs fictives pour l'aperçu des modèles Pipe RDV (Paramètres → Modèles email). */
 export const SAMPLE_PIPE_RDV_PREVIEW_VARS: Record<string, string> = {
@@ -21,6 +34,7 @@ export const SAMPLE_PIPE_RDV_PREVIEW_VARS: Record<string, string> = {
   co_contact_prenom: "Jean",
   co_contact_nom: "DUPONT",
   co_contact_et_prenom: " et Jean",
+  ...SAMPLE_R1_CHECKLIST_VARS,
 };
 
 function haystack(...parts: (string | null | undefined)[]): string {

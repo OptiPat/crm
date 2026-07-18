@@ -125,6 +125,7 @@ export function PipeProspectionMilestoneEditor({
         occurredAtUnix: payload.occurredAtUnix,
         visio: payload.visio,
         physicalAddress: payload.physicalAddress,
+        r1Profile: payload.r1Profile,
       });
       toastAfterRdvSave(payload.rdvStage, result, `${PIPE_TIMELINE_TYPE_LABELS.RDV} ajouté`);
       cancelAdd();

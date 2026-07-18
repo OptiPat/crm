@@ -5,6 +5,10 @@ import { Label } from "@/components/ui/label";
 import { DictationTextarea } from "@/components/ui/dictation-textarea";
 import { RdvVisioLocationFields } from "@/components/calendar/RdvVisioLocationFields";
 import { PipeAffaireRdvPlanSelect } from "@/components/pipe/PipeAffaireRdvPlanSelect";
+import { PipeR1RdvDocumentsFields } from "@/components/pipe/PipeR1RdvDocumentsFields";
+import { usePipeChecklistTemplates } from "@/hooks/usePipeChecklistTemplates";
+import { usePipeR1RdvProfilePlanning } from "@/hooks/usePipeR1RdvProfilePlanning";
+import type { R1ChecklistProfile } from "@/lib/pipe/pipe-checklist-template";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import { AgendaRdvConflicts } from "@/components/calendar/AgendaRdvConflicts";
 import type { AgendaRdvPipeDraft } from "@/lib/navigation/agenda-navigation";
@@ -32,6 +36,7 @@ export interface PipeRdvSubmitPayload {
   contenu: string | null;
   visio: RdvVisioOptions;
   physicalAddress: string | null;
+  r1Profile?: R1ChecklistProfile;
 }
 
 interface PipeTimelineAddFormProps {
@@ -84,6 +89,15 @@ export function PipeTimelineAddForm({
   const rdvLocation = useRdvVisioLocation(contactId > 0 ? contactId : undefined, isRdv);
   const showAffaireRdvStage = isRdv && !suiviRdv;
   const rdvStage = rdvStageFromPlanOption(rdvPlanOption);
+  const primaryContactId = pipe?.contact_id ?? contactId;
+  const showR1DocumentsFields =
+    showAffaireRdvStage && rdvStage === "R1" && pipe != null && pipe.id > 0;
+  const { templates: checklistTemplates } = usePipeChecklistTemplates();
+  const { profile: r1Profile, setProfile: setR1Profile } = usePipeR1RdvProfilePlanning({
+    enabled: showR1DocumentsFields,
+    pipeId: pipe?.id ?? 0,
+    primaryContactId,
+  });
 
   const handleFormSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -103,6 +117,7 @@ export function PipeTimelineAddForm({
             contenu: contenu.trim() || null,
             visio: rdvLocation.getVisioOptions(),
             physicalAddress: rdvLocation.getPhysicalAddress(),
+            r1Profile: rdvStage === "R1" ? r1Profile : undefined,
           });
         } catch (err) {
           toast.error(String(err));
@@ -154,6 +169,14 @@ export function PipeTimelineAddForm({
           L&apos;affaire passera à l&apos;étape choisie le jour du RDV (ou tout de suite si la date
           est déjà passée).
         </p>
+      )}
+      {showR1DocumentsFields && (
+        <PipeR1RdvDocumentsFields
+          profile={r1Profile}
+          templates={checklistTemplates}
+          onProfileChange={setR1Profile}
+          disabled={saving}
+        />
       )}
       {isRdv && contactId > 0 && (
         <RdvVisioLocationFields

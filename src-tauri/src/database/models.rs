@@ -1484,6 +1484,8 @@ pub struct PipeR1DocumentChecklist {
     pub profile_salarie: bool,
     pub profile_chef_entreprise: bool,
     pub profile_retraite: bool,
+    /// Profil revenus validé explicitement (planif RDV ou fiche checklist).
+    pub profile_revenus_configured: bool,
     pub items: PipeR1ChecklistItems,
     pub updated_at: i64,
 }
@@ -1494,6 +1496,7 @@ pub struct UpdatePipeR1DocumentChecklistInput {
     pub profile_salarie: Option<bool>,
     pub profile_chef_entreprise: Option<bool>,
     pub profile_retraite: Option<bool>,
+    pub profile_revenus_configured: Option<bool>,
     pub items: Option<PipeR1ChecklistItems>,
 }
 

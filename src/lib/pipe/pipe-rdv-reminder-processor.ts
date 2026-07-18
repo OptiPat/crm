@@ -1,6 +1,7 @@
 import { getContactById } from "@/lib/api/tauri-contacts";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { getPipeById } from "@/lib/api/tauri-pipe";
+import { getPipeTimelineEntry } from "@/lib/api/tauri-pipe-timeline";
 import {
   listDuePipeRdvReminderSchedules,
   markPipeRdvReminderScheduleSent,
@@ -11,6 +12,7 @@ import {
   loadPipeRdvTemplatePair,
   sendPipeRdvTemplatedEmailToContact,
 } from "@/lib/pipe/pipe-rdv-confirmation-email";
+import { rdvStageFromEntryTitre } from "@/lib/pipe/pipe-rdv-stage";
 
 export type PipeRdvReminderProcessResult = {
   processed: number;
@@ -99,11 +101,17 @@ async function sendDueReminder(schedule: PipeRdvReminderSchedule): Promise<"sent
 
   const { principal, tutoiement } = await loadPipeRdvTemplatePair(schedule.template_id);
 
+  const timelineEntry = await getPipeTimelineEntry(schedule.pipe_timeline_entry_id).catch(
+    () => null
+  );
+  const rdvStage = timelineEntry ? rdvStageFromEntryTitre(timelineEntry.titre) ?? undefined : undefined;
+
   await sendPipeRdvTemplatedEmailToContact({
     contact,
     pipe,
     principal,
     tutoiement,
+    rdvStage,
     startAtUnix: schedule.rdv_at,
     endAtUnix: schedule.rdv_end_at,
     visioLink: schedule.visio_link,

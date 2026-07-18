@@ -182,15 +182,16 @@ fn now_unix() -> i64 {
 }
 
 fn map_checklist_row(row: &Row<'_>) -> Result<PipeR1DocumentChecklist> {
-    let items_json: String = row.get(4)?;
+    let items_json: String = row.get(5)?;
     let items = parse_items_json(&items_json);
     Ok(PipeR1DocumentChecklist {
         pipe_id: row.get(0)?,
         profile_salarie: row.get::<_, i64>(1)? != 0,
         profile_chef_entreprise: row.get::<_, i64>(2)? != 0,
         profile_retraite: row.get::<_, i64>(3)? != 0,
+        profile_revenus_configured: row.get::<_, i64>(4)? != 0,
         items,
-        updated_at: row.get(5)?,
+        updated_at: row.get(6)?,
     })
 }
 
@@ -254,6 +255,7 @@ fn default_pipe_r1_document_checklist(pipe_id: i64) -> PipeR1DocumentChecklist {
         profile_salarie: false,
         profile_chef_entreprise: false,
         profile_retraite: false,
+        profile_revenus_configured: false,
         items: PipeR1ChecklistItems::default(),
         updated_at: 0,
     }
@@ -299,11 +301,26 @@ impl super::Database {
                 profile_salarie INTEGER NOT NULL DEFAULT 0,
                 profile_chef_entreprise INTEGER NOT NULL DEFAULT 0,
                 profile_retraite INTEGER NOT NULL DEFAULT 0,
+                profile_revenus_configured INTEGER NOT NULL DEFAULT 0,
                 items_json TEXT NOT NULL DEFAULT '{}',
                 updated_at INTEGER NOT NULL
             );
             ",
         )?;
+        if !self.table_has_column("pipe_r1_document_checklists", "profile_revenus_configured")? {
+            self.conn.execute(
+                "ALTER TABLE pipe_r1_document_checklists ADD COLUMN profile_revenus_configured INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            self.conn.execute(
+                "UPDATE pipe_r1_document_checklists
+                 SET profile_revenus_configured = 1
+                 WHERE profile_salarie = 1
+                    OR profile_chef_entreprise = 1
+                    OR profile_retraite = 1",
+                [],
+            )?;
+        }
         Ok(())
     }
 
@@ -372,7 +389,7 @@ impl super::Database {
         self.assert_affaire_pipe(pipe_id)?;
 
         if let Some(existing) = self.conn.query_row(
-            "SELECT pipe_id, profile_salarie, profile_chef_entreprise, profile_retraite, items_json, updated_at
+            "SELECT pipe_id, profile_salarie, profile_chef_entreprise, profile_retraite, profile_revenus_configured, items_json, updated_at
              FROM pipe_r1_document_checklists WHERE pipe_id = ?1",
             params![pipe_id],
             map_checklist_row,
@@ -384,13 +401,13 @@ impl super::Database {
         let items_json = items_to_json(&PipeR1ChecklistItems::default())?;
         self.conn.execute(
             "INSERT INTO pipe_r1_document_checklists
-                (pipe_id, profile_salarie, profile_chef_entreprise, profile_retraite, items_json, updated_at)
-             VALUES (?1, 0, 0, 0, ?2, ?3)",
+                (pipe_id, profile_salarie, profile_chef_entreprise, profile_retraite, profile_revenus_configured, items_json, updated_at)
+             VALUES (?1, 0, 0, 0, 0, ?2, ?3)",
             params![pipe_id, items_json, now],
         )?;
 
         self.conn.query_row(
-            "SELECT pipe_id, profile_salarie, profile_chef_entreprise, profile_retraite, items_json, updated_at
+            "SELECT pipe_id, profile_salarie, profile_chef_entreprise, profile_retraite, profile_revenus_configured, items_json, updated_at
              FROM pipe_r1_document_checklists WHERE pipe_id = ?1",
             params![pipe_id],
             map_checklist_row,
@@ -420,6 +437,15 @@ impl super::Database {
         if let Some(retraite) = update.profile_retraite {
             current.profile_retraite = retraite;
         }
+        if update.profile_salarie.is_some()
+            || update.profile_chef_entreprise.is_some()
+            || update.profile_retraite.is_some()
+        {
+            current.profile_revenus_configured = true;
+        }
+        if let Some(configured) = update.profile_revenus_configured {
+            current.profile_revenus_configured = configured;
+        }
         if let Some(items) = update.items {
             self.validate_checklist_items(&items, contact_id, secondary_contact_id)?;
             current.items = items;
@@ -432,13 +458,15 @@ impl super::Database {
              SET profile_salarie = ?1,
                  profile_chef_entreprise = ?2,
                  profile_retraite = ?3,
-                 items_json = ?4,
-                 updated_at = ?5
-             WHERE pipe_id = ?6",
+                 profile_revenus_configured = ?4,
+                 items_json = ?5,
+                 updated_at = ?6
+             WHERE pipe_id = ?7",
             params![
                 i64::from(current.profile_salarie),
                 i64::from(current.profile_chef_entreprise),
                 i64::from(current.profile_retraite),
+                i64::from(current.profile_revenus_configured),
                 items_json,
                 now,
                 pipe_id,
@@ -457,7 +485,7 @@ impl super::Database {
     ) -> Result<Option<PipeR1DocumentChecklist>> {
         self.conn
             .query_row(
-                "SELECT pipe_id, profile_salarie, profile_chef_entreprise, profile_retraite, items_json, updated_at
+                "SELECT pipe_id, profile_salarie, profile_chef_entreprise, profile_retraite, profile_revenus_configured, items_json, updated_at
                  FROM pipe_r1_document_checklists WHERE pipe_id = ?1",
                 params![pipe_id],
                 map_checklist_row,
@@ -573,6 +601,7 @@ mod tests {
                     profile_salarie: Some(true),
                     profile_chef_entreprise: None,
                     profile_retraite: None,
+                    profile_revenus_configured: None,
                     items: None,
                 },
             )
@@ -683,6 +712,7 @@ mod tests {
                     profile_salarie: None,
                     profile_chef_entreprise: None,
                     profile_retraite: None,
+                    profile_revenus_configured: None,
                     items: Some(items),
                 },
             )
@@ -895,6 +925,7 @@ mod tests {
                 profile_salarie: None,
                 profile_chef_entreprise: None,
                 profile_retraite: None,
+                profile_revenus_configured: None,
                 items: Some(items),
             },
         )

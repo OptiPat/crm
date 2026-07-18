@@ -20,6 +20,8 @@ import {
   rdvStageFromPlanOption,
   type PipeRdvPlanOption,
 } from "@/lib/pipe/pipe-rdv-plan-option";
+import type { R1ChecklistProfile } from "@/lib/pipe/pipe-checklist-template";
+import { saveR1ChecklistProfileForPipe } from "@/lib/pipe/pipe-r1-checklist-email-vars";
 import { toast } from "sonner";
 
 export type PipeRdvStageSaveResult = {
@@ -103,6 +105,7 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
   endAtUnix?: number;
   visio?: RdvVisioOptions;
   physicalAddress?: string | null;
+  r1Profile?: R1ChecklistProfile;
 }): Promise<PipeRdvStageSaveResult | null> {
   const planOption =
     options.rdvPlanOption ??
@@ -112,6 +115,10 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
     options.entryType === "RDV" && planOption
       ? rdvEntryTitreFromPlanOption(planOption)
       : options.titre;
+
+  if (rdvStage === "R1" && options.r1Profile && options.pipe) {
+    await saveR1ChecklistProfileForPipe(options.pipe.id, options.r1Profile);
+  }
 
   const entry = await options.timeline.addEntry({
     entry_type: options.entryType,

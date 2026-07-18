@@ -20,6 +20,7 @@ function baseChecklist(
     profile_salarie: false,
     profile_chef_entreprise: false,
     profile_retraite: false,
+    profile_revenus_configured: false,
     items: {},
     updated_at: 0,
     ...overrides,

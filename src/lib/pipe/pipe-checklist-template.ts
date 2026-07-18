@@ -22,6 +22,22 @@ export type PipeChecklistTemplates = Record<PipeChecklistStage, PipeChecklistTem
 
 export const PIPE_CHECKLIST_STAGES: PipeChecklistStage[] = ["R1", "R2", "R3"];
 
+/** Étapes info-retraite.fr (email R1, liste numérotée après la puce). */
+export const R1_ESTIMATION_RETRAITE_STEPS = [
+  "RDV sur info-retraite.fr",
+  'Onglet "Mon estimation retraite" > "Estimer ma retraite" > "Accéder au simulateur" >"Estimation rapide - voir mon estimation"',
+  "Télécharger le PDF.",
+] as const;
+
+export function formatR1EstimationRetraiteStepsText(
+  steps: readonly string[] = R1_ESTIMATION_RETRAITE_STEPS
+): string {
+  return steps.map((step, index) => `${index + 1}. ${step}`).join("\n");
+}
+
+/** Texte stocké dans le hint checklist (éditable en Paramètres). */
+export const R1_ESTIMATION_RETRAITE_HINT = formatR1EstimationRetraiteStepsText();
+
 export const PIPE_CHECKLIST_PROFILE_SCOPE_LABELS: Record<PipeChecklistProfileScope, string> = {
   base: "Toujours",
   salarie: "Salarié",
@@ -34,8 +50,8 @@ export const DEFAULT_PIPE_CHECKLIST_TEMPLATES: PipeChecklistTemplates = {
     { id: "avis_imposition", label: "Dernier avis d'imposition", profiles: ["base"] },
     {
       id: "releves_situation",
-      label: "Derniers relevés de situation",
-      hint: "Livrets, assurance-vie, PER, PEE/PERCO, comptes titres…",
+      label: "Relevés d'épargne",
+      hint: "Livrets, Assurance-vie, PER, PEE/PERCO, comptes titres...",
       profiles: ["base"],
     },
     {
@@ -66,7 +82,8 @@ export const DEFAULT_PIPE_CHECKLIST_TEMPLATES: PipeChecklistTemplates = {
     },
     {
       id: "estimation_retraite",
-      label: "Estimation de pension retraite",
+      label: "Estimation pension de retraite",
+      hint: R1_ESTIMATION_RETRAITE_HINT,
       profiles: ["retraite"],
     },
   ],
@@ -180,16 +197,64 @@ function migrateR3SignedLabels(templates: PipeChecklistTemplates): PipeChecklist
   };
 }
 
+function migrateR1EmailChecklistCopy(templates: PipeChecklistTemplates): PipeChecklistTemplates {
+  return {
+    ...templates,
+    R1: templates.R1.map((item) => {
+      if (
+        item.id === "releves_situation" &&
+        item.label === "Derniers relevés de situation"
+      ) {
+        return {
+          ...item,
+          label: "Relevés d'épargne",
+          hint: "Livrets, Assurance-vie, PER, PEE/PERCO, comptes titres...",
+        };
+      }
+      if (item.id === "releves_situation" && item.label === "Relevés d'épargne") {
+        const hint = item.hint?.trim() ?? "";
+        if (!hint || /assurance-vie/i.test(hint) || hint.includes("…")) {
+          return { ...item, hint: "Livrets, Assurance-vie, PER, PEE/PERCO, comptes titres..." };
+        }
+      }
+      if (item.id === "estimation_retraite") {
+        const hint = item.hint?.trim() ?? "";
+        const outdated =
+          !hint ||
+          /45\s*ans/i.test(hint) ||
+          hint.startsWith("Si vous avez plus de") ||
+          hint.includes("Comment l'obtenir") ||
+          hint.includes("Allez sur info-retraite.fr") ||
+          item.label === "Estimation de pension retraite";
+        if (outdated) {
+          return {
+            ...item,
+            label: "Estimation pension de retraite",
+            hint: R1_ESTIMATION_RETRAITE_HINT,
+          };
+        }
+      }
+      return item;
+    }),
+  };
+}
+
+function applyChecklistTemplateMigrations(
+  templates: PipeChecklistTemplates
+): PipeChecklistTemplates {
+  return migrateR1EmailChecklistCopy(migrateR3SignedLabels(templates));
+}
+
 export async function loadPipeChecklistTemplates(): Promise<PipeChecklistTemplates> {
   const raw = await getSetting(PIPE_CHECKLIST_TEMPLATES_SETTING_KEY);
   if (raw?.trim()) {
     const parsed = parseTemplatesJson(raw);
-    if (parsed) return migrateR3SignedLabels(parsed);
+    if (parsed) return applyChecklistTemplateMigrations(parsed);
   }
   const legacy = await getSetting("pipe.r1_checklist_item_labels");
   if (legacy?.trim()) {
     const migrated = migrateLegacyLabelOverrides(legacy);
-    if (migrated) return migrated;
+    if (migrated) return applyChecklistTemplateMigrations(migrated);
   }
   return cloneDefaultPipeChecklistTemplates();
 }

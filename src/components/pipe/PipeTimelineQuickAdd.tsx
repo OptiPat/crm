@@ -104,6 +104,7 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
         occurredAtUnix: payload.occurredAtUnix,
         visio: payload.visio,
         physicalAddress: payload.physicalAddress,
+        r1Profile: payload.r1Profile,
       });
       toastAfterRdvSave(payload.rdvStage, result);
       cancelAdd();

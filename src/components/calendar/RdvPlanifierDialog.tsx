@@ -40,6 +40,9 @@ import {
 } from "@/lib/calendar/rdv-planifier";
 import { useRdvVisioLocation } from "@/hooks/useRdvVisioLocation";
 import { PipeAffaireRdvPlanSelect } from "@/components/pipe/PipeAffaireRdvPlanSelect";
+import { usePipeR1RdvProfilePlanning } from "@/hooks/usePipeR1RdvProfilePlanning";
+import { PipeR1RdvDocumentsFields } from "@/components/pipe/PipeR1RdvDocumentsFields";
+import { usePipeChecklistTemplates } from "@/hooks/usePipeChecklistTemplates";
 import {
   defaultPlanOptionForRdvStage,
   rdvStageFromPlanOption,
@@ -52,6 +55,9 @@ import {
   formatPipeRdvGoogleCalendarTitleFromPlanOption,
 } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { toastPipeRdvOutcome, toastAfterSuiviRdvSave } from "@/lib/pipe/pipe-rdv-entry-actions";
+import {
+  saveR1ChecklistProfileForPipe,
+} from "@/lib/pipe/pipe-r1-checklist-email-vars";
 import {
   formatPipeSuiviRdvGoogleCalendarTitle,
   isSuiviPipe,
@@ -126,6 +132,7 @@ export function RdvPlanifierDialog({
   const [titleEdited, setTitleEdited] = useState(false);
   const [contenu, setContenu] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const { templates: checklistTemplates } = usePipeChecklistTemplates();
 
   const effectiveContactId =
     context.kind === "linked"
@@ -231,6 +238,15 @@ export function RdvPlanifierDialog({
   }, [context, pipes, selectedPipe]);
 
   const isSuiviPipeContext = pipeForPlanify != null && isSuiviPipe(pipeForPlanify);
+  const showR1DocumentsFields =
+    pipeForPlanify != null && !isSuiviPipeContext && rdvStage === "R1";
+
+  const primaryContactId = pipeForPlanify?.contact_id ?? effectiveContactId;
+  const { profile: r1Profile, setProfile: setR1Profile } = usePipeR1RdvProfilePlanning({
+    enabled: open && showR1DocumentsFields,
+    pipeId: pipeForPlanify?.id ?? 0,
+    primaryContactId,
+  });
 
   const pipeContactLabel = pipeForPlanify
     ? formatPipeRdvCalendarContactLabel(pipeForPlanify)
@@ -313,6 +329,9 @@ export function RdvPlanifierDialog({
         });
         toastAfterSuiviRdvSave(result.calendar);
       } else if (pipeForPlanify) {
+        if (rdvStage === "R1") {
+          await saveR1ChecklistProfileForPipe(pipeForPlanify.id, r1Profile);
+        }
         const result = await planifyPipeRdv({
           pipe: pipeForPlanify,
           rdvStage,
@@ -432,6 +451,15 @@ export function RdvPlanifierDialog({
               />
             </div>
           )}
+
+          {showR1DocumentsFields ? (
+            <PipeR1RdvDocumentsFields
+              profile={r1Profile}
+              templates={checklistTemplates}
+              onProfileChange={setR1Profile}
+              disabled={submitting}
+            />
+          ) : null}
 
           <div className="space-y-1">
             <Label htmlFor="rdv-plan-title">Titre agenda</Label>

@@ -206,6 +206,12 @@ export const PIPE_RDV_TEMPLATE_VARIABLES: {
     label: "Co-participant (salutation)",
     hint: "Couple : « et Marie » ; solo : rien — Bonjour {{prenom}}{{co_contact_et_prenom}},",
   },
+  {
+    token: "{{liste_documents_r1_html}}",
+    key: "liste_documents_r1_html",
+    label: "Liste documents R1 (HTML)",
+    hint: "Checklist R1 + profil revenus validé à la planification ; listes <ul>/<ol> pour le corps HTML",
+  },
 ];
 
 /** Variables injectées à l'envoi client Box Placement (opération conforme). */

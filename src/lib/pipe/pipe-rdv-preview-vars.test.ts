@@ -18,5 +18,7 @@ describe("pipe-rdv-preview-vars", () => {
   it("expose un exemple couple pour l'aperçu", () => {
     expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.co_contact_prenom).toBe("Jean");
     expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.co_contact).toBe("DUPONT Jean");
+    expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.liste_documents_r1_html).toContain("<ul");
+    expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.liste_documents_r1_html).toContain("avis d'imposition");
   });
 });
