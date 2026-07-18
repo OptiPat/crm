@@ -7,6 +7,7 @@ use tauri::{AppHandle, Manager, State};
 pub struct AppInfo {
     pub version: String,
     pub db_path: String,
+    pub secrets_protection_warning: bool,
 }
 
 #[tauri::command]
@@ -24,7 +25,11 @@ pub fn get_app_info(
         .to_string_lossy()
         .into_owned();
 
-    Ok(AppInfo { version, db_path })
+    Ok(AppInfo {
+        version,
+        db_path,
+        secrets_protection_warning: crate::email::oauth_secrets::storage_protection_warning(&app),
+    })
 }
 
 #[tauri::command]

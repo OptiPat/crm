@@ -52,9 +52,11 @@ Déconnexion : bouton **Déconnecter** (ne supprime pas les Client ID).
 | Donnée | Fichier | Protection |
 |--------|---------|------------|
 | Client ID Google / Microsoft | `email_oauth.json` | En clair (identifiants publics d’application) |
-| Tokens d’accès / refresh | `email_oauth.json` | **Chiffrés** (XOR + nonce, clé = `db_encryption_key` de `auth.json`, même secret que la base CRM) |
+| Tokens d’accès / refresh | `email_oauth.json` | **Chiffrés et authentifiés** (XChaCha20-Poly1305, clé maître protégée par DPAPI sous Windows ou le Trousseau sous macOS) |
 
-Les tokens OAuth ne sont **pas** stockés en clair une fois le CRM configuré (mot de passe maître créé). Un ancien fichier non chiffré est **re-sauvegardé automatiquement** au chargement si la clé CRM est disponible.
+Les tokens OAuth ne sont **pas** stockés en clair. Les anciens formats en clair ou XOR sont
+**re-sauvegardés automatiquement** au chargement. Sur un autre poste, la base reste récupérable,
+mais la connexion OAuth doit être recréée car la clé des secrets est liée au coffre du système.
 
 Recommandations : poste verrouillé, sauvegardes du dossier App Data protégées, révoquer l’accès OAuth depuis Google / Azure si le poste est compromis.
 

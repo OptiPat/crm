@@ -1,47 +1,46 @@
+use super::secret_storage::{
+    has_protection_warning, load_or_create_key, record_protection_warning,
+};
 use base64::Engine;
-use rand::RngCore;
+use chacha20poly1305::{
+    aead::{Aead, Generate, KeyInit},
+    XChaCha20Poly1305, XNonce,
+};
 use std::fs;
-use std::path::PathBuf;
+use std::path::Path;
 use tauri::{AppHandle, Manager};
 
-const NONCE_LEN: usize = 16;
+const LEGACY_NONCE_LEN: usize = 16;
+const AEAD_PREFIX: &str = "v2:";
+const AEAD_NONCE_LEN: usize = 24;
 
 /// Clé de stockage des secrets applicatifs (tokens OAuth, clé API Mistral).
 ///
-/// Clé aléatoire de 32 octets, propre à cette installation, persistée dans
-/// `secrets.key`. Elle est **indépendante de la base** (qui n'est plus chiffrée) :
-/// elle ne peut donc plus être perdue ou écrasée avec elle. Créée automatiquement
-/// à la première utilisation.
+/// Clé aléatoire de 32 octets, propre à cette installation et protégée par
+/// DPAPI sous Windows ou le Trousseau sous macOS. Elle reste indépendante de
+/// la base SQLite, qui n'est pas chiffrée.
 pub fn load_storage_key(app: &AppHandle) -> Result<Option<[u8; 32]>, String> {
-    let path = storage_key_path(app)?;
-    if let Ok(raw) = fs::read(&path) {
-        if raw.len() == 32 {
-            let mut arr = [0u8; 32];
-            arr.copy_from_slice(&raw);
-            return Ok(Some(arr));
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let loaded = load_or_create_key(&app_data_dir, legacy_key_from_auth(app))?;
+    if loaded.os_protected {
+        if let Err(error) = cleanup_legacy_key_material(&app_data_dir, &loaded.key) {
+            record_protection_warning(
+                &app_data_dir,
+                &format!("Nettoyage de l'ancienne clé locale incomplet : {error}"),
+            );
         }
+    } else {
+        eprintln!(
+            "⚠️ Protection DPAPI/Trousseau indisponible : utilisation temporaire de l'ancienne clé locale."
+        );
     }
-    // Première utilisation. Migration : si une ancienne `db_encryption_key` existe dans
-    // `auth.json` (versions précédentes), on la réutilise pour ne PAS invalider les secrets
-    // (tokens mail, clé Mistral) chiffrés avec elle. Sinon, clé aléatoire.
-    let key = legacy_key_from_auth(app).unwrap_or_else(|| {
-        let mut k = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut k);
-        k
-    });
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    fs::write(&path, &key).map_err(|e| e.to_string())?;
-    Ok(Some(key))
+    Ok(Some(loaded.key))
 }
 
-fn storage_key_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(app
-        .path()
+pub fn storage_protection_warning(app: &AppHandle) -> bool {
+    app.path()
         .app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("secrets.key"))
+        .is_ok_and(|dir| has_protection_warning(&dir))
 }
 
 /// Récupère l'ancienne clé de chiffrement des secrets depuis `auth.json` si présente
@@ -71,30 +70,280 @@ fn hex_to_32(s: &str) -> Option<[u8; 32]> {
     Some(out)
 }
 
-/// Chiffrement symétrique au repos (XOR + nonce, clé CRM). Pas de dépendance crypto lourde.
-pub fn encrypt_secret(plaintext: &str, key: &[u8; 32]) -> Result<String, String> {
-    let mut nonce = [0u8; NONCE_LEN];
-    rand::thread_rng().fill_bytes(&mut nonce);
-    let plain = plaintext.as_bytes();
-    let mut cipher = Vec::with_capacity(NONCE_LEN + plain.len());
-    cipher.extend_from_slice(&nonce);
-    for (i, &b) in plain.iter().enumerate() {
-        cipher.push(b ^ key[i % 32] ^ nonce[i % NONCE_LEN]);
+fn cleanup_legacy_key_material(app_data_dir: &Path, key: &[u8; 32]) -> Result<(), String> {
+    let mut errors = Vec::new();
+    cleanup_legacy_key_pair(app_data_dir, key, &mut errors);
+
+    let backups_dir = app_data_dir.join("backups");
+    if backups_dir.is_dir() {
+        match fs::read_dir(&backups_dir) {
+            Ok(entries) => {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let is_config_backup = path.is_dir()
+                        && path
+                            .file_name()
+                            .and_then(|name| name.to_str())
+                            .is_some_and(|name| {
+                                name.starts_with("patrimoine-crm_")
+                                    && name.ends_with("_config")
+                            });
+                    if is_config_backup {
+                        cleanup_legacy_key_pair(&path, key, &mut errors);
+                    }
+                }
+            }
+            Err(error) => errors.push(format!("lecture sauvegardes : {error}")),
+        }
     }
-    Ok(base64::engine::general_purpose::STANDARD.encode(cipher))
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join(" ; "))
+    }
+}
+
+fn cleanup_legacy_key_pair(dir: &Path, key: &[u8; 32], errors: &mut Vec<String>) {
+    if let Err(error) = remove_matching_legacy_auth_key(&dir.join("auth.json"), key) {
+        errors.push(error);
+    }
+    let legacy_key_path = dir.join("secrets.key");
+    if legacy_key_path.is_file() {
+        match fs::read(&legacy_key_path) {
+            Ok(raw) if raw.as_slice() == key => {
+                if let Err(error) = fs::remove_file(&legacy_key_path) {
+                    errors.push(format!(
+                        "suppression {} : {error}",
+                        legacy_key_path.display()
+                    ));
+                }
+            }
+            Ok(_) => {}
+            Err(error) => errors.push(format!("lecture {} : {error}", legacy_key_path.display())),
+        }
+    }
+}
+
+fn remove_matching_legacy_auth_key(path: &Path, key: &[u8; 32]) -> Result<bool, String> {
+    if !path.is_file() {
+        return Ok(false);
+    }
+    let raw = fs::read_to_string(path)
+        .map_err(|e| format!("lecture {} : {e}", path.display()))?;
+    let mut json: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("JSON {} : {e}", path.display()))?;
+    let matches = json
+        .get("db_encryption_key")
+        .and_then(|value| value.as_str())
+        .and_then(hex_to_32)
+        .is_some_and(|legacy| legacy == *key);
+    if !matches {
+        return Ok(false);
+    }
+    let object = json
+        .as_object_mut()
+        .ok_or_else(|| format!("Format auth invalide : {}", path.display()))?;
+    object.remove("db_encryption_key");
+    let serialized =
+        serde_json::to_vec_pretty(&json).map_err(|e| format!("Sérialisation auth : {e}"))?;
+    crate::atomic_file::write(path, serialized)
+        .map_err(|e| format!("réécriture {} : {e}", path.display()))?;
+    Ok(true)
+}
+
+/// Chiffrement authentifié au repos. Le préfixe versionné permet de continuer
+/// à lire les anciens secrets XOR pendant leur migration automatique.
+pub fn encrypt_secret(plaintext: &str, key: &[u8; 32]) -> Result<String, String> {
+    let cipher = XChaCha20Poly1305::new_from_slice(key)
+        .map_err(|_| "Clé de chiffrement locale invalide.".to_string())?;
+    let nonce = XNonce::generate();
+    let encrypted = cipher
+        .encrypt(&nonce, plaintext.as_bytes())
+        .map_err(|_| "Chiffrement du secret impossible.".to_string())?;
+    let mut payload = Vec::with_capacity(AEAD_NONCE_LEN + encrypted.len());
+    payload.extend_from_slice(&nonce);
+    payload.extend_from_slice(&encrypted);
+    Ok(format!(
+        "{AEAD_PREFIX}{}",
+        base64::engine::general_purpose::STANDARD.encode(payload)
+    ))
 }
 
 pub fn decrypt_secret(encoded: &str, key: &[u8; 32]) -> Result<String, String> {
+    let trimmed = encoded.trim();
+    if let Some(payload) = trimmed.strip_prefix(AEAD_PREFIX) {
+        return decrypt_aead_secret(payload, key);
+    }
+    decrypt_legacy_secret(trimmed, key)
+}
+
+pub fn is_legacy_secret(encoded: &str) -> bool {
+    !encoded.trim().starts_with(AEAD_PREFIX)
+}
+
+fn decrypt_aead_secret(encoded: &str, key: &[u8; 32]) -> Result<String, String> {
+    let payload = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|e| format!("Secret chiffré illisible : {e}"))?;
+    if payload.len() <= AEAD_NONCE_LEN {
+        return Err("Données chiffrées invalides.".into());
+    }
+    let (nonce_bytes, ciphertext) = payload.split_at(AEAD_NONCE_LEN);
+    let nonce =
+        XNonce::try_from(nonce_bytes).map_err(|_| "Nonce de chiffrement invalide.".to_string())?;
+    let cipher = XChaCha20Poly1305::new_from_slice(key)
+        .map_err(|_| "Clé de chiffrement locale invalide.".to_string())?;
+    let plain = cipher
+        .decrypt(&nonce, ciphertext)
+        .map_err(|_| "Secret chiffré altéré ou clé locale incompatible.".to_string())?;
+    String::from_utf8(plain).map_err(|e| format!("Secret chiffré UTF-8 invalide : {e}"))
+}
+
+fn decrypt_legacy_secret(encoded: &str, key: &[u8; 32]) -> Result<String, String> {
     let cipher = base64::engine::general_purpose::STANDARD
-        .decode(encoded.trim())
+        .decode(encoded)
         .map_err(|e| format!("Token OAuth illisible: {}", e))?;
-    if cipher.len() <= NONCE_LEN {
+    if cipher.len() <= LEGACY_NONCE_LEN {
         return Err("Données OAuth chiffrées invalides".into());
     }
-    let (nonce, body) = cipher.split_at(NONCE_LEN);
+    let (nonce, body) = cipher.split_at(LEGACY_NONCE_LEN);
     let mut plain = Vec::with_capacity(body.len());
     for (i, &b) in body.iter().enumerate() {
-        plain.push(b ^ key[i % 32] ^ nonce[i % NONCE_LEN]);
+        plain.push(b ^ key[i % 32] ^ nonce[i % LEGACY_NONCE_LEN]);
     }
     String::from_utf8(plain).map_err(|e| format!("Token OAuth UTF-8: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    fn unique_temp_dir() -> PathBuf {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "patrimoine_crm_oauth_secrets_test_{}_{}",
+            std::process::id(),
+            n
+        ))
+    }
+
+    #[test]
+    fn aead_roundtrip_uses_a_random_nonce() {
+        let key = [0x42; 32];
+        let first = encrypt_secret("secret-test", &key).unwrap();
+        let second = encrypt_secret("secret-test", &key).unwrap();
+
+        assert_ne!(first, second);
+        assert!(first.starts_with(AEAD_PREFIX));
+        assert_eq!(decrypt_secret(&first, &key).unwrap(), "secret-test");
+        assert_eq!(decrypt_secret(&second, &key).unwrap(), "secret-test");
+        assert!(!is_legacy_secret(&first));
+    }
+
+    #[test]
+    fn legacy_xor_known_vector_remains_readable() {
+        let key = [0x11; 32];
+        let mut cipher: Vec<u8> = (0u8..16).collect();
+        cipher.extend_from_slice(&[
+            0x62, 0x75, 0x70, 0x60, 0x70, 0x60, 0x3a, 0x62, 0x7c, 0x6b, 0x6f,
+        ]);
+        let encoded = base64::engine::general_purpose::STANDARD.encode(cipher);
+
+        assert_eq!(decrypt_secret(&encoded, &key).unwrap(), "secret-test");
+        assert!(is_legacy_secret(&encoded));
+    }
+
+    #[test]
+    fn rejects_invalid_payloads() {
+        let key = [0x42; 32];
+        assert!(decrypt_secret("not-base64", &key).is_err());
+        let too_short = base64::engine::general_purpose::STANDARD.encode([0u8; LEGACY_NONCE_LEN]);
+        assert!(decrypt_secret(&too_short, &key).is_err());
+        assert!(decrypt_secret("v2:not-base64", &key).is_err());
+    }
+
+    #[test]
+    fn aead_detects_ciphertext_tampering() {
+        let key = [0x42; 32];
+        let encrypted = encrypt_secret("secret-test", &key).unwrap();
+        let mut payload = base64::engine::general_purpose::STANDARD
+            .decode(encrypted.strip_prefix(AEAD_PREFIX).unwrap())
+            .unwrap();
+        *payload.last_mut().unwrap() ^= 0x01;
+        let tampered = format!(
+            "{AEAD_PREFIX}{}",
+            base64::engine::general_purpose::STANDARD.encode(payload)
+        );
+
+        assert!(decrypt_secret(&tampered, &key).is_err());
+    }
+
+    #[test]
+    fn hex_legacy_key_parser_is_strict() {
+        let parsed = hex_to_32(&"ab".repeat(32)).unwrap();
+        assert_eq!(parsed, [0xab; 32]);
+        assert!(hex_to_32("abcd").is_none());
+        assert!(hex_to_32(&"zz".repeat(32)).is_none());
+    }
+
+    #[test]
+    fn cleanup_removes_matching_plaintext_keys_from_live_and_backups() {
+        let dir = unique_temp_dir();
+        let backup = dir
+            .join("backups")
+            .join("patrimoine-crm_20260718_120000_000_config");
+        fs::create_dir_all(&backup).unwrap();
+        let key = [0x11; 32];
+        let auth = serde_json::json!({
+            "password_hash": "argon2-test",
+            "created_at": 123,
+            "db_encryption_key": "11".repeat(32)
+        });
+        for target in [&dir, &backup] {
+            fs::write(
+                target.join("auth.json"),
+                serde_json::to_vec_pretty(&auth).unwrap(),
+            )
+            .unwrap();
+            fs::write(target.join("secrets.key"), key).unwrap();
+        }
+
+        cleanup_legacy_key_material(&dir, &key).unwrap();
+
+        for target in [&dir, &backup] {
+            assert!(!target.join("secrets.key").exists());
+            let cleaned: serde_json::Value =
+                serde_json::from_slice(&fs::read(target.join("auth.json")).unwrap()).unwrap();
+            assert!(cleaned.get("db_encryption_key").is_none());
+            assert_eq!(cleaned["password_hash"], "argon2-test");
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn cleanup_preserves_unrelated_legacy_keys() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("secrets.key"), [0x22; 32]).unwrap();
+        fs::write(
+            dir.join("auth.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "password_hash": "argon2-test",
+                "db_encryption_key": "22".repeat(32)
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        cleanup_legacy_key_material(&dir, &[0x11; 32]).unwrap();
+
+        assert!(dir.join("secrets.key").is_file());
+        let auth = fs::read_to_string(dir.join("auth.json")).unwrap();
+        assert!(auth.contains("db_encryption_key"));
+        let _ = fs::remove_dir_all(dir);
+    }
 }

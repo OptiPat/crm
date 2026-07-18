@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Archive,
+  AlertTriangle,
   FolderOutput,
   HardDrive,
   HelpCircle,
@@ -38,6 +39,7 @@ import { toast } from "sonner";
 
 type ParametresDatabaseSectionProps = {
   dbPath: string;
+  secretsProtectionWarning: boolean;
   backups: DbBackupEntry[];
   onBackupsChanged?: (backups: DbBackupEntry[]) => void;
 };
@@ -53,6 +55,7 @@ function Explainer({ children }: { children: ReactNode }) {
 
 export function ParametresDatabaseSection({
   dbPath,
+  secretsProtectionWarning,
   backups,
   onBackupsChanged,
 }: ParametresDatabaseSectionProps) {
@@ -212,6 +215,21 @@ export function ParametresDatabaseSection({
         }
       >
         <div className="space-y-4">
+          {secretsProtectionWarning && (
+            <div
+              role="alert"
+              className="flex gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
+            >
+              <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">Protection système des connexions incomplète</p>
+                <p className="mt-1 text-amber-900/80">
+                  Le CRM reste accessible et réessaiera automatiquement. Ne supprimez pas les
+                  fichiers de configuration ; créez une copie de secours avant toute intervention.
+                </p>
+              </div>
+            </div>
+          )}
           <Explainer>
             Le fichier ci-dessous contient tous vos contacts, foyers, investissements et réglages. Les PDF
             sont dans le sous-dossier <code className="text-xs bg-muted px-1 rounded">documents/</code> au
@@ -253,7 +271,9 @@ export function ParametresDatabaseSection({
                 mot de passe, connexion email OAuth, newsletter… sur une clé USB, OneDrive, etc.{" "}
                 <strong>Votre base actuelle n&apos;est jamais modifiée</strong> — lecture seule via
                 une copie cohérente SQLite. Seules les copies locales redondantes (dossier{" "}
-                <code className="text-xs bg-muted px-1 rounded">backups/</code>) sont exclues.
+                <code className="text-xs bg-muted px-1 rounded">backups/</code>) sont exclues. Sur
+                un nouveau PC ou après perte du Trousseau macOS, les données restent récupérables,
+                mais OAuth et les clés API doivent être reconnectés.
               </Explainer>
             </div>
             <Button

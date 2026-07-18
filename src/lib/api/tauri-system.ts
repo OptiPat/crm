@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 export interface AppInfo {
   version: string;
   db_path: string;
+  secrets_protection_warning: boolean;
 }
 
 export interface DbBackupEntry {

@@ -5,6 +5,7 @@ pub mod oauth_client;
 pub mod oauth_commands;
 pub mod oauth_flow;
 pub mod oauth_secrets;
+mod secret_storage;
 pub mod oauth_send;
 pub mod contact_gmail_sync;
 pub mod contact_outlook_sync;

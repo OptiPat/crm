@@ -1,12 +1,14 @@
-use super::oauth_secrets::{decrypt_secret, encrypt_secret, load_storage_key};
+use super::oauth_secrets::{decrypt_secret, encrypt_secret, is_legacy_secret, load_storage_key};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 
 pub const OAUTH_REDIRECT_PORT: u16 = 3847;
 pub const OAUTH_REDIRECT_URI: &str = "http://127.0.0.1:3847/callback";
+static OAUTH_STORE_IO_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmailOAuthConnection {
@@ -58,6 +60,14 @@ struct PersistedOAuthConnection {
 
 impl EmailOAuthStore {
     pub fn load(app: &AppHandle) -> Result<Self, String> {
+        let _guard = OAUTH_STORE_IO_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .map_err(|_| "Verrou du stockage OAuth indisponible.".to_string())?;
+        Self::load_locked(app)
+    }
+
+    fn load_locked(app: &AppHandle) -> Result<Self, String> {
         let path = Self::path(app)?;
         if !path.exists() {
             return Ok(Self::default());
@@ -66,19 +76,48 @@ impl EmailOAuthStore {
         let storage_key = load_storage_key(app)?;
 
         if let Ok(persisted) = serde_json::from_str::<PersistedOAuthStore>(&raw) {
-            return Self::from_persisted(persisted, storage_key.as_ref());
+            if persisted.version == 0 {
+                let legacy: EmailOAuthStore =
+                    serde_json::from_str(&raw).map_err(|e| format!("Parse OAuth store: {}", e))?;
+                if storage_key.is_some()
+                    && (legacy.connection.is_some()
+                        || legacy.google_calendar_connection.is_some()
+                        || legacy.google_client_secret.is_some())
+                {
+                    legacy.save_locked(app)?;
+                }
+                return Ok(legacy);
+            }
+            let needs_migration = persisted.needs_secret_migration();
+            let store = Self::from_persisted(persisted, storage_key.as_ref())?;
+            if needs_migration && storage_key.is_some() {
+                store.save_locked(app)?;
+            }
+            return Ok(store);
         }
 
         // Fichier legacy (tokens en clair) — re-sauvegarde chiffrée si possible
         let legacy: EmailOAuthStore =
             serde_json::from_str(&raw).map_err(|e| format!("Parse OAuth store: {}", e))?;
-        if legacy.connection.is_some() && storage_key.is_some() {
-            legacy.save(app)?;
+        if storage_key.is_some()
+            && (legacy.connection.is_some()
+                || legacy.google_calendar_connection.is_some()
+                || legacy.google_client_secret.is_some())
+        {
+            legacy.save_locked(app)?;
         }
         Ok(legacy)
     }
 
     pub fn save(&self, app: &AppHandle) -> Result<(), String> {
+        let _guard = OAUTH_STORE_IO_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .map_err(|_| "Verrou du stockage OAuth indisponible.".to_string())?;
+        self.save_locked(app)
+    }
+
+    fn save_locked(&self, app: &AppHandle) -> Result<(), String> {
         let path = Self::path(app)?;
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -86,7 +125,7 @@ impl EmailOAuthStore {
         let storage_key = load_storage_key(app)?;
         let persisted = self.to_persisted(storage_key.as_ref())?;
         let json = serde_json::to_string_pretty(&persisted).map_err(|e| e.to_string())?;
-        fs::write(path, json).map_err(|e| e.to_string())
+        crate::atomic_file::write(&path, json).map_err(|e| e.to_string())
     }
 
     fn from_persisted(
@@ -144,7 +183,7 @@ impl EmailOAuthStore {
             _ => None,
         };
         Ok(PersistedOAuthStore {
-            version: if storage_key.is_some() { 2 } else { 1 },
+            version: if storage_key.is_some() { 3 } else { 1 },
             google_client_id: self.google_client_id.clone(),
             google_client_secret_enc,
             microsoft_client_id: self.microsoft_client_id.clone(),
@@ -170,6 +209,39 @@ impl EmailOAuthStore {
 
     pub fn connection_needs_refresh(conn: &EmailOAuthConnection) -> bool {
         conn.expires_at <= Self::now_unix() + 60
+    }
+}
+
+impl PersistedOAuthStore {
+    fn needs_secret_migration(&self) -> bool {
+        self.version < 3
+            || self
+                .google_client_secret_enc
+                .as_deref()
+                .is_some_and(is_legacy_secret)
+            || self
+                .connection
+                .as_ref()
+                .is_some_and(PersistedOAuthConnection::needs_secret_migration)
+            || self
+                .google_calendar_connection
+                .as_ref()
+                .is_some_and(PersistedOAuthConnection::needs_secret_migration)
+    }
+}
+
+impl PersistedOAuthConnection {
+    fn needs_secret_migration(&self) -> bool {
+        self.access_token.is_some()
+            || self.refresh_token.is_some()
+            || self
+                .access_token_enc
+                .as_deref()
+                .is_some_and(is_legacy_secret)
+            || self
+                .refresh_token_enc
+                .as_deref()
+                .is_some_and(is_legacy_secret)
     }
 }
 
@@ -234,4 +306,52 @@ fn runtime_connection_to_persisted(
         refresh_token_enc: None,
         expires_at: c.expires_at,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::Engine;
+
+    fn legacy_secret_test_vector() -> String {
+        let mut cipher: Vec<u8> = (0u8..16).collect();
+        cipher.extend_from_slice(&[
+            0x62, 0x75, 0x70, 0x60, 0x70, 0x60, 0x3a, 0x62, 0x7c, 0x6b, 0x6f,
+        ]);
+        base64::engine::general_purpose::STANDARD.encode(cipher)
+    }
+
+    #[test]
+    fn legacy_xor_oauth_store_is_rewritten_as_authenticated_v3() {
+        let key = [0x11; 32];
+        let persisted = PersistedOAuthStore {
+            version: 2,
+            connection: Some(PersistedOAuthConnection {
+                provider: "google".into(),
+                email: "user@example.com".into(),
+                access_token: None,
+                refresh_token: None,
+                access_token_enc: Some(legacy_secret_test_vector()),
+                refresh_token_enc: None,
+                expires_at: 123,
+            }),
+            ..Default::default()
+        };
+
+        assert!(persisted.needs_secret_migration());
+        let runtime = EmailOAuthStore::from_persisted(persisted, Some(&key)).unwrap();
+        assert_eq!(
+            runtime.connection.as_ref().unwrap().access_token,
+            "secret-test"
+        );
+
+        let migrated = runtime.to_persisted(Some(&key)).unwrap();
+        assert_eq!(migrated.version, 3);
+        assert!(migrated
+            .connection
+            .unwrap()
+            .access_token_enc
+            .unwrap()
+            .starts_with("v2:"));
+    }
 }

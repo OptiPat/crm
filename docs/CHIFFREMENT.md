@@ -12,7 +12,7 @@
 |--------|------|--------|
 | Base `patrimoine-crm.db` | **En clair** | `rusqlite` feature `bundled` (SQLite standard). Ouverte par `Database::open`, sans clé. |
 | Accès au CRM | **Verrou local** | Mot de passe Argon2id, avec Windows Hello ou Touch ID en second facteur optionnel. Ne chiffre pas la base. |
-| Secrets applicatifs | **Chiffrés au repos** | Tokens OAuth (`email_oauth.json`), clé API Mistral (`newsletter_config.json`) — XOR + nonce avec `secrets.key`. |
+| Secrets applicatifs | **Chiffrés au repos** | Tokens OAuth, clé API Mistral et token Telegram — XChaCha20-Poly1305 avec une clé protégée par DPAPI/Trousseau. |
 
 ### Conséquences
 
@@ -63,24 +63,37 @@ déverrouillage. Les commandes métier nécessaires aux automatisations tray res
 ce mécanisme est un verrou d'interface renforcé, pas une isolation complète contre un webview ou
 un poste déjà compromis.
 
-## Secrets applicatifs (`secrets.key`)
+## Secrets applicatifs (DPAPI / Trousseau)
 
-Les secrets sensibles (jetons OAuth Google, clé API Mistral) restent **chiffrés au repos**
-pour ne pas traîner en clair sur le disque :
+Les secrets sensibles (jetons OAuth, clé API Mistral, token Telegram) sont **chiffrés
+et authentifiés au repos** :
 
-- Clé de stockage = `secrets.key` (32 octets aléatoires), **propre à l'installation**,
-  générée automatiquement à la première utilisation. **Indépendante de la base** : elle ne
-  peut plus être perdue avec elle.
-- Primitive : `src-tauri/src/email/oauth_secrets.rs` (`encrypt_secret` / `decrypt_secret`,
-  XOR + nonce). Obfuscation au repos, pas une garantie cryptographique forte — la vraie
-  protection au repos reste le chiffrement disque OS.
+- Primitive : XChaCha20-Poly1305 avec nonce aléatoire et format versionné `v2:`.
+- Clé maître aléatoire de 32 octets, **indépendante de la base SQLite**.
+- Sous Windows, la clé est enveloppée silencieusement par DPAPI pour l'utilisateur courant
+  et le blob est stocké dans `secrets.key.os`.
+- Sous macOS, la clé est conservée dans le Trousseau ; `secrets.key.os` n'est qu'un marqueur.
+- Au premier accès après mise à jour, l'ancien `secrets.key` brut est protégé puis supprimé
+  seulement après vérification. Les anciens blobs XOR restent lisibles et sont réécrits
+  automatiquement au nouveau format.
+- Après vérification du coffre OS, le champ historique `db_encryption_key` et les copies
+  `secrets.key` correspondantes sont retirés de l'installation et des anciens sidecars de
+  sauvegarde. Une clé différente n'est jamais supprimée automatiquement.
+- Si le coffre OS est temporairement indisponible, le CRM conserve l'accès avec la clé legacy,
+  réessaie au prochain chargement et affiche un avertissement dans **Paramètres > Données**.
+
+La base, les documents et les fiches restent récupérables indépendamment de cette clé. Une
+clé de secrets perdue impose seulement de reconnecter OAuth et de ressaisir les clés API.
 
 ## Sauvegardes
 
 Sauvegardes automatiques (quotidienne + pré-migration + manuelles, rotation des 10 dernières)
 dans `%APPDATA%\com.patrimoine-crm.app\backups\` : base SQLite, dossier `documents/`, et fichiers
-de config jumelés (OAuth, secrets, newsletter, verrou, branding). Étant en clair, elles sont
-**restaurables sans clé**.
+de config jumelés (OAuth, secrets, newsletter, verrou, branding). La base et les documents sont
+**restaurables sans clé**. Les secrets restaurés ne sont réutilisables qu'avec le même compte
+Windows sur le même poste, ou le même Trousseau macOS ; sur un autre poste, il faut les
+reconfigurer. Sur macOS, une perte ou réinitialisation du Trousseau impose également cette
+reconfiguration, même si les fichiers de sauvegarde ont été conservés.
 
 Le worker Rust vérifie toutes les trois minutes si la sauvegarde quotidienne manque, y compris
 quand l'interface est verrouillée, en tenant le mutex SQLite pendant la copie. En revanche, lister,
@@ -90,3 +103,6 @@ créer, exporter ou restaurer manuellement une sauvegarde exige une session CRM 
 
 Aucun prérequis particulier : SQLite standard compilé depuis les sources (`bundled`).
 Plus de SQLCipher, d'OpenSSL ni d'outils NASM/Perl.
+
+Les versions distribuées ciblent Windows et macOS. Le coffre applicatif n'est pas disponible
+dans les builds Linux non distribués.

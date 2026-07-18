@@ -21,7 +21,7 @@ Contenu (tout le dossier applicatif, sauf backups/ internes) :
 - logos/                  : logo du cabinet
 - auth.json               : verrou d'acces (hash mot de passe)
 - branding.json           : nom et logo affiches dans l'application (ecran de connexion)
-- secrets.key             : cle locale de chiffrement des secrets
+- secrets.key.os          : cle locale protegee par Windows/macOS
 - email_oauth.json        : connexion email OAuth (tokens chiffres)
 - newsletter_config.json  : reglages newsletter / Mistral (si presents)
 - autres fichiers de configuration eventuels
@@ -33,6 +33,10 @@ Restauration manuelle (CRM ferme) :
 3. Extrayez TOUT le contenu de cette archive dans ce dossier
    (remplace patrimoine-crm.db, documents/, auth.json, etc.)
 4. Relancez le CRM
+
+Important : la base et les documents restent restaurables sur tout poste. En revanche,
+la cle des secrets est liee au compte Windows ou au Trousseau macOS d'origine.
+Sur un autre poste, reconnectez OAuth et ressaisissez les cles API.
 
 Note : la restauration depuis l'application (Parametres > Donnees > Restaurer)
 ne concerne que les copies locales dans backups/ — pas cette archive ZIP externe.
@@ -326,7 +330,7 @@ mod tests {
         let app_data = unique_temp_dir();
         fs::create_dir_all(&app_data.join("backups")).expect("backups");
         fs::write(app_data.join("backups/old.db"), b"x").expect("backup");
-        fs::write(app_data.join("secrets.key"), b"key").expect("secrets");
+        fs::write(app_data.join("secrets.key.os"), b"protected-key").expect("secrets");
         fs::write(app_data.join("email_oauth.json"), b"{}").expect("oauth");
         write_marker_db(&app_data.join("patrimoine-crm.db"), "live");
 
@@ -334,7 +338,7 @@ mod tests {
         fs::create_dir_all(&temp).expect("temp");
         copy_app_data_tree(&app_data, &temp).expect("copy tree");
 
-        assert!(temp.join("secrets.key").is_file());
+        assert!(temp.join("secrets.key.os").is_file());
         assert!(temp.join("email_oauth.json").is_file());
         assert!(!temp.join("backups").exists());
         assert!(!temp.join("patrimoine-crm.db").exists());
@@ -353,7 +357,7 @@ mod tests {
         let docs = app_data.join("documents");
         fs::create_dir_all(&docs).expect("docs dir");
         fs::write(docs.join("test.pdf"), b"pdf-content").expect("write pdf");
-        fs::write(app_data.join("secrets.key"), b"secret-key-bytes").expect("secrets");
+        fs::write(app_data.join("secrets.key.os"), b"protected-key").expect("secrets");
         fs::write(app_data.join("auth.json"), br#"{"password_hash":"x"}"#).expect("auth");
 
         let dest = unique_temp_dir();
@@ -377,7 +381,7 @@ mod tests {
 
         let file = File::open(&result.zip_path).expect("open zip");
         let mut archive = zip::read::ZipArchive::new(file).expect("read zip");
-        assert!(archive.by_name("secrets.key").is_ok());
+        assert!(archive.by_name("secrets.key.os").is_ok());
         assert!(archive.by_name("auth.json").is_ok());
         assert!(archive.by_name("documents/test.pdf").is_ok());
 

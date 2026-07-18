@@ -1,5 +1,7 @@
 use crate::database::Database;
-use crate::email::oauth_secrets::{decrypt_secret, encrypt_secret, load_storage_key};
+use crate::email::oauth_secrets::{
+    decrypt_secret, encrypt_secret, is_legacy_secret, load_storage_key,
+};
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -124,6 +126,11 @@ pub fn load_runtime_config(
     let key = load_storage_key(app)?;
     let key = key.ok_or("Clé de chiffrement locale indisponible.")?;
     let bot_token = decrypt_secret(&enc, &key)?;
+    if is_legacy_secret(&enc) {
+        let migrated = encrypt_secret(&bot_token, &key)?;
+        db.set_setting(SETTING_BOT_TOKEN_ENC, &migrated)
+            .map_err(|e| e.to_string())?;
+    }
     if bot_token.trim().is_empty() {
         return Ok(None);
     }

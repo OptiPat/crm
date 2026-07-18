@@ -125,6 +125,7 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
   const [savingProfile, setSavingProfile] = useState(false);
   const [emailConnected, setEmailConnected] = useState(false);
   const [dbPath, setDbPath] = useState("");
+  const [secretsProtectionWarning, setSecretsProtectionWarning] = useState(false);
   const [backups, setBackups] = useState<DbBackupEntry[]>([]);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("accueil");
   const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
@@ -220,7 +221,10 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
     };
     void load();
     getAppInfo()
-      .then((info) => setDbPath(info.db_path))
+      .then((info) => {
+        setDbPath(info.db_path);
+        setSecretsProtectionWarning(info.secrets_protection_warning);
+      })
       .catch(() => {});
     listDbBackups()
       .then(setBackups)
@@ -369,6 +373,7 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
         return (
           <ParametresDatabaseSection
             dbPath={dbPath}
+            secretsProtectionWarning={secretsProtectionWarning}
             backups={backups}
             onBackupsChanged={setBackups}
           />

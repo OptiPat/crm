@@ -165,6 +165,7 @@ pub fn is_blocked_import_source(source: &Path, app_data_dir: &Path) -> bool {
         "patrimoine-crm.db",
         "auth.json",
         "secrets.key",
+        "secrets.key.os",
         "email_oauth.json",
     ];
     if let Some(name) = source.file_name().and_then(|n| n.to_str()) {

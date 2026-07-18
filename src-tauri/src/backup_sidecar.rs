@@ -8,11 +8,13 @@ use std::path::{Path, PathBuf};
 const ROOT_FILES: &[&str] = &[
     "auth.json",
     "secrets.key",
+    "secrets.key.os",
     "email_oauth.json",
     "newsletter_config.json",
     "branding.json",
     "branding-os-state.json",
 ];
+const SECRET_KEY_FILES: &[&str] = &["secrets.key", "secrets.key.os"];
 
 /// Sous-dossiers AppData à copier intégralement.
 const CONFIG_DIRS: &[&str] = &["logos", "icons"];
@@ -84,12 +86,7 @@ pub fn restore_app_config_from_backup(
         return Ok(());
     }
 
-    for name in ROOT_FILES {
-        let src = backup_config_dir.join(name);
-        if src.is_file() {
-            fs::copy(&src, app_data_dir.join(name))?;
-        }
-    }
+    restore_root_files(app_data_dir, backup_config_dir)?;
 
     for dir_name in CONFIG_DIRS {
         let src = backup_config_dir.join(dir_name);
@@ -104,6 +101,97 @@ pub fn restore_app_config_from_backup(
     }
 
     clear_auth_attempts_state(app_data_dir)?;
+    Ok(())
+}
+
+fn restore_root_files(
+    app_data_dir: &Path,
+    backup_config_dir: &Path,
+) -> std::io::Result<()> {
+    let mut incoming = Vec::new();
+    for name in ROOT_FILES {
+        let source = backup_config_dir.join(name);
+        if source.is_file() {
+            incoming.push((*name, fs::read(source)?));
+        }
+    }
+    if incoming.is_empty() {
+        return Ok(());
+    }
+
+    let has_incoming_key = incoming
+        .iter()
+        .any(|(name, _)| SECRET_KEY_FILES.contains(name));
+    let touched: Vec<&str> = ROOT_FILES
+        .iter()
+        .copied()
+        .filter(|name| {
+            incoming
+                .iter()
+                .any(|(incoming_name, _)| incoming_name == name)
+                || (has_incoming_key && SECRET_KEY_FILES.contains(name))
+        })
+        .collect();
+
+    let mut original = Vec::new();
+    for name in &touched {
+        let live = app_data_dir.join(name);
+        if live.exists() && !live.is_file() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "Le chemin de configuration n'est pas un fichier : {}",
+                    live.display()
+                ),
+            ));
+        }
+        original.push((*name, live.is_file().then(|| fs::read(&live)).transpose()?));
+    }
+
+    let restore_result = (|| {
+        for (name, contents) in &incoming {
+            crate::atomic_file::write(&app_data_dir.join(name), contents)?;
+        }
+        if has_incoming_key {
+            for name in SECRET_KEY_FILES {
+                if incoming
+                    .iter()
+                    .any(|(incoming_name, _)| incoming_name == name)
+                {
+                    continue;
+                }
+                let stale = app_data_dir.join(name);
+                if stale.is_file() {
+                    fs::remove_file(stale)?;
+                }
+            }
+        }
+        Ok::<(), std::io::Error>(())
+    })();
+
+    if let Err(restore_error) = restore_result {
+        let rollback_result = (|| {
+            for (name, contents) in &original {
+                let live = app_data_dir.join(name);
+                match contents {
+                    Some(contents) => crate::atomic_file::write(&live, contents)?,
+                    None if live.is_file() => fs::remove_file(live)?,
+                    None => {}
+                }
+            }
+            Ok::<(), std::io::Error>(())
+        })();
+        return match rollback_result {
+            Ok(()) => Err(restore_error),
+            Err(rollback_error) => Err(std::io::Error::new(
+                restore_error.kind(),
+                format!(
+                    "Restauration de la configuration échouée ({restore_error}) et rollback incomplet ({rollback_error})"
+                ),
+            )),
+        };
+    }
+
     Ok(())
 }
 
@@ -183,9 +271,11 @@ mod tests {
             .expect("backup config")
             .expect("some files copied");
         assert!(dest.join("auth.json").is_file());
+        assert!(dest.join("secrets.key").is_file());
         assert!(dest.join("logos/cabinet-logo.png").is_file());
 
         fs::write(app_data.join("auth.json"), b"{}").expect("overwrite auth");
+        fs::write(app_data.join("secrets.key.os"), b"stale-protected-key").expect("protected key");
         fs::write(
             app_data.join(AUTH_ATTEMPTS_FILE),
             br#"{"failed_attempts":8,"blocked_until":9999999999}"#,
@@ -196,10 +286,75 @@ mod tests {
         restore_app_config_from_backup(&app_data, &dest).expect("restore config");
         let auth = fs::read_to_string(app_data.join("auth.json")).expect("read auth");
         assert!(auth.contains("password_hash"));
+        assert!(app_data.join("secrets.key").is_file());
+        assert!(!app_data.join("secrets.key.os").exists());
         assert!(app_data.join("logos/cabinet-logo.png").is_file());
         assert!(!app_data.join(AUTH_ATTEMPTS_FILE).exists());
 
         let _ = fs::remove_dir_all(&app_data);
+    }
+
+    #[test]
+    fn restoring_protected_key_removes_stale_legacy_key() {
+        let app_data = unique_temp_dir();
+        let backup_config = unique_temp_dir();
+        fs::create_dir_all(&app_data).expect("app data");
+        fs::create_dir_all(&backup_config).expect("backup config");
+        fs::write(app_data.join("secrets.key"), b"stale-legacy-key").expect("legacy key");
+        fs::write(backup_config.join("secrets.key.os"), b"protected-key")
+            .expect("protected key");
+
+        restore_app_config_from_backup(&app_data, &backup_config).expect("restore config");
+
+        assert!(!app_data.join("secrets.key").exists());
+        assert_eq!(
+            fs::read(app_data.join("secrets.key.os")).expect("read protected key"),
+            b"protected-key"
+        );
+        let _ = fs::remove_dir_all(app_data);
+        let _ = fs::remove_dir_all(backup_config);
+    }
+
+    #[test]
+    fn failed_key_restore_preserves_the_live_protected_key() {
+        let app_data = unique_temp_dir();
+        let backup_config = unique_temp_dir();
+        fs::create_dir_all(app_data.join("secrets.key")).expect("conflicting directory");
+        fs::create_dir_all(&backup_config).expect("backup config");
+        fs::write(app_data.join("secrets.key.os"), b"live-protected-key").expect("live key");
+        fs::write(backup_config.join("secrets.key"), b"backup-legacy-key")
+            .expect("backup key");
+
+        assert!(restore_app_config_from_backup(&app_data, &backup_config).is_err());
+        assert_eq!(
+            fs::read(app_data.join("secrets.key.os")).expect("preserved live key"),
+            b"live-protected-key"
+        );
+
+        let _ = fs::remove_dir_all(app_data);
+        let _ = fs::remove_dir_all(backup_config);
+    }
+
+    #[test]
+    fn failed_config_restore_preserves_all_live_root_files() {
+        let app_data = unique_temp_dir();
+        let backup_config = unique_temp_dir();
+        fs::create_dir_all(app_data.join("auth.json")).expect("conflicting directory");
+        fs::create_dir_all(&backup_config).expect("backup config");
+        fs::write(app_data.join("secrets.key.os"), b"live-protected-key").expect("live key");
+        fs::write(backup_config.join("auth.json"), b"backup-auth").expect("backup auth");
+        fs::write(backup_config.join("secrets.key"), b"backup-legacy-key")
+            .expect("backup key");
+
+        assert!(restore_app_config_from_backup(&app_data, &backup_config).is_err());
+        assert_eq!(
+            fs::read(app_data.join("secrets.key.os")).expect("preserved live key"),
+            b"live-protected-key"
+        );
+        assert!(!app_data.join("secrets.key").exists());
+
+        let _ = fs::remove_dir_all(app_data);
+        let _ = fs::remove_dir_all(backup_config);
     }
 
     #[test]

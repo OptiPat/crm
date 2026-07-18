@@ -269,7 +269,7 @@ impl AuthManager {
     fn save_config(&self, config: &AuthConfig) -> Result<(), String> {
         let config_json = serde_json::to_string_pretty(config)
             .map_err(|e| format!("Failed to serialize config: {}", e))?;
-        fs::write(&self.config_path, config_json)
+        crate::atomic_file::write(&self.config_path, config_json)
             .map_err(|e| format!("Failed to write config: {}", e))
     }
 

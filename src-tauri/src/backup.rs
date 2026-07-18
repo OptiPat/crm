@@ -212,7 +212,7 @@ mod tests {
         let docs = app_data.join("documents");
         fs::create_dir_all(&docs).expect("docs");
         fs::write(docs.join("test.pdf"), b"pdf").expect("write pdf");
-        fs::write(app_data.join("secrets.key"), b"key").expect("secrets");
+        fs::write(app_data.join("secrets.key.os"), b"protected-key").expect("secrets");
 
         let backup_path =
             create_pre_migration_backup(&app_data, &db_path).expect("backup with docs");
@@ -224,7 +224,7 @@ mod tests {
         assert!(docs_backup.join("test.pdf").is_file());
 
         let cfg_backup = app_data.join("backups").join(format!("{stem}_config"));
-        assert!(cfg_backup.join("secrets.key").is_file());
+        assert!(cfg_backup.join("secrets.key.os").is_file());
 
         let _ = fs::remove_dir_all(&app_data);
     }

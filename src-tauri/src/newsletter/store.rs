@@ -1,8 +1,11 @@
-use crate::email::oauth_secrets::{decrypt_secret, encrypt_secret, load_storage_key};
 use super::db::NewsletterAudienceFilters;
+use crate::email::oauth_secrets::{
+    decrypt_secret, encrypt_secret, is_legacy_secret, load_storage_key,
+};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Manager};
 
 pub const DEFAULT_NEWSLETTER_STYLE_PROMPT: &str = r#"Tu es "Patrimoine Sarcasme", expert en communication financière et Conseiller en Gestion de Patrimoine (CGP).
@@ -43,6 +46,7 @@ INTERDITS :
 - Signature (ajoutée automatiquement)"#;
 
 pub const DEFAULT_MISTRAL_MODEL: &str = "mistral-small-latest";
+static NEWSLETTER_STORE_IO_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -153,6 +157,14 @@ pub struct NewsletterStore {
 
 impl NewsletterStore {
     pub fn load(app: &AppHandle) -> Result<Self, String> {
+        let _guard = NEWSLETTER_STORE_IO_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .map_err(|_| "Verrou du stockage newsletter indisponible.".to_string())?;
+        Self::load_locked(app)
+    }
+
+    fn load_locked(app: &AppHandle) -> Result<Self, String> {
         let path = Self::path(app)?;
         if !path.exists() {
             return Ok(Self::default());
@@ -161,7 +173,16 @@ impl NewsletterStore {
         let storage_key = load_storage_key(app)?;
         let persisted: PersistedNewsletterStore =
             serde_json::from_str(&raw).map_err(|e| format!("Parse newsletter config: {}", e))?;
-        Self::from_persisted(persisted, storage_key.as_ref())
+        let needs_migration = persisted.version < 2
+            || persisted
+                .api_key_enc
+                .as_deref()
+                .is_some_and(is_legacy_secret);
+        let store = Self::from_persisted(persisted, storage_key.as_ref())?;
+        if needs_migration && store.api_key.is_some() {
+            store.save_locked(app)?;
+        }
+        Ok(store)
     }
 
     fn read_persisted(app: &AppHandle) -> Result<Option<PersistedNewsletterStore>, String> {
@@ -176,6 +197,14 @@ impl NewsletterStore {
     }
 
     pub fn save(&self, app: &AppHandle) -> Result<(), String> {
+        let _guard = NEWSLETTER_STORE_IO_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .map_err(|_| "Verrou du stockage newsletter indisponible.".to_string())?;
+        self.save_locked(app)
+    }
+
+    fn save_locked(&self, app: &AppHandle) -> Result<(), String> {
         let path = Self::path(app)?;
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -185,7 +214,7 @@ impl NewsletterStore {
             .and_then(|p| p.api_key_enc);
         let persisted = self.to_persisted(storage_key.as_ref(), existing_enc)?;
         let json = serde_json::to_string_pretty(&persisted).map_err(|e| e.to_string())?;
-        fs::write(path, json).map_err(|e| e.to_string())
+        crate::atomic_file::write(&path, json).map_err(|e| e.to_string())
     }
 
     pub fn to_public(&self) -> NewsletterSettingsPublic {
@@ -310,7 +339,7 @@ impl NewsletterStore {
             }
         };
         Ok(PersistedNewsletterStore {
-            version: 1,
+            version: 2,
             api_key_enc,
             style_prompt: Some(self.style_prompt.clone()),
             model: Some(self.model.clone()),
@@ -355,7 +384,8 @@ impl Default for NewsletterStore {
 
 #[cfg(test)]
 mod tests {
-    use super::NewsletterSettingsInput;
+    use super::*;
+    use base64::Engine;
 
     #[test]
     fn newsletter_settings_input_accepts_camel_case_from_frontend() {
@@ -366,5 +396,26 @@ mod tests {
         assert_eq!(input.model.as_deref(), Some("mistral-small-latest"));
         assert_eq!(input.etiquette_nom.as_deref(), Some("Newsletter"));
         assert_eq!(input.send_delay_ms, Some(3000));
+    }
+
+    #[test]
+    fn legacy_xor_api_key_is_rewritten_as_authenticated_v2() {
+        let key = [0x11; 32];
+        let mut cipher: Vec<u8> = (0u8..16).collect();
+        cipher.extend_from_slice(&[
+            0x62, 0x75, 0x70, 0x60, 0x70, 0x60, 0x3a, 0x62, 0x7c, 0x6b, 0x6f,
+        ]);
+        let persisted = PersistedNewsletterStore {
+            version: 1,
+            api_key_enc: Some(base64::engine::general_purpose::STANDARD.encode(cipher)),
+            ..Default::default()
+        };
+
+        let runtime = NewsletterStore::from_persisted(persisted, Some(&key)).unwrap();
+        assert_eq!(runtime.api_key.as_deref(), Some("secret-test"));
+
+        let migrated = runtime.to_persisted(Some(&key), None).unwrap();
+        assert_eq!(migrated.version, 2);
+        assert!(migrated.api_key_enc.unwrap().starts_with("v2:"));
     }
 }

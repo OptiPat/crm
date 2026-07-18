@@ -4,6 +4,7 @@
 mod app_branding;
 mod app_runtime;
 mod auth;
+mod atomic_file;
 mod automation_toast;
 mod backup;
 mod backup_sidecar;
