@@ -43,8 +43,15 @@ export function countR3ChecklistProgress(
   templates: PipeChecklistTemplates
 ): { received: number; total: number } {
   const definitions = getActiveR3ChecklistItems(templates);
-  const total = definitions.length;
-  const received = definitions.filter((def) =>
+  return countR3ItemsProgress(checklist, definitions);
+}
+
+export function countR3ItemsProgress(
+  checklist: PipeR3DocumentChecklist,
+  items: readonly PipeChecklistTemplateItem[]
+): { received: number; total: number } {
+  const total = items.length;
+  const received = items.filter((def) =>
     isR3ChecklistItemComplete(getChecklistItemState(checklist.items, def.id))
   ).length;
   return { received, total };

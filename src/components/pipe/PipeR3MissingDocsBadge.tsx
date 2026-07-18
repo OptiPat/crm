@@ -43,22 +43,22 @@ export function PipeR3MissingDocsBadge({
         >
           <Badge
             variant="outline"
-            className="text-xs border-violet-300/80 bg-violet-50 text-violet-950 hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-100 dark:hover:bg-violet-950/60 gap-1 max-w-full"
+            className="text-xs border-[#dd216e]/45 bg-[#dd216e]/10 text-[#b01855] hover:bg-[#dd216e]/15 dark:border-[#dd216e]/55 dark:bg-[#dd216e]/20 dark:text-[#f7aac8] dark:hover:bg-[#dd216e]/25 gap-1 max-w-full"
           >
             <FileWarning className="h-3 w-3 shrink-0" />
             <span className="truncate">
-              R3 · {missing.length} pièce{missing.length > 1 ? "s" : ""} manquante
+              R3 Placements · {missing.length} pièce{missing.length > 1 ? "s" : ""} manquante
               {missing.length > 1 ? "s" : ""}
             </span>
           </Badge>
         </span>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-3">
-        <p className="text-xs font-medium text-foreground mb-2">Documents R3 à collecter</p>
+        <p className="text-xs font-medium text-foreground mb-2">Documents R3 Placements à collecter</p>
         <ul className="space-y-1.5 text-xs text-muted-foreground">
           {missing.map((label) => (
             <li key={label} className="flex gap-2 leading-snug">
-              <span className="text-violet-600 dark:text-violet-400 shrink-0">•</span>
+              <span className="text-[#dd216e] dark:text-[#f07aaa] shrink-0">•</span>
               <span>{label}</span>
             </li>
           ))}

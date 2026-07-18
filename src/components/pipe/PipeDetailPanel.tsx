@@ -427,11 +427,14 @@ export function PipeDetailPanel({
               <PipeR1DocumentChecklist
                 pipeId={pipe.id}
                 stage={pipe.stage}
+                contactId={pipe.contact_id}
                 checklist={r1Documents.checklist}
                 documents={r1Documents.documents}
                 loading={r1Documents.loading}
                 templates={checklistTemplates}
                 onPersist={r1Documents.persist}
+                onDocumentImported={r1Documents.addDocument}
+                linkItemDocument={r1Documents.linkItemDocument}
               />
             ) : null}
 
@@ -439,11 +442,14 @@ export function PipeDetailPanel({
               <PipeR3DocumentChecklist
                 pipeId={pipe.id}
                 stage={pipe.stage}
+                contactId={pipe.contact_id}
                 checklist={r3Documents.checklist}
                 documents={r3Documents.documents}
                 loading={r3Documents.loading}
                 templates={checklistTemplates}
                 onPersist={r3Documents.persist}
+                onDocumentImported={r3Documents.addDocument}
+                linkItemDocument={r3Documents.linkItemDocument}
               />
             ) : null}
 
@@ -451,12 +457,15 @@ export function PipeDetailPanel({
               <PipeR3ImmoDocumentChecklist
                 pipeId={pipe.id}
                 stage={pipe.stage}
+                contactId={pipe.contact_id}
                 checklist={r3ImmoDocuments.checklist}
                 checklistContext={r3ImmoDocuments.checklistContext}
                 checklistTemplate={r3ImmoDocuments.checklistTemplate}
                 documents={r3ImmoDocuments.documents}
                 loading={r3ImmoDocuments.loading}
                 onPersist={r3ImmoDocuments.persist}
+                onDocumentImported={r3ImmoDocuments.addDocument}
+                linkItemDocument={r3ImmoDocuments.linkItemDocument}
               />
             ) : null}
 

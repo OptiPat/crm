@@ -4,6 +4,7 @@ import {
   getEffectiveActiveLinearIndex,
   getPipeCommercialStepperStepState,
   getSuggestedRdvPlanStage,
+  shouldShowPlanAnotherR3,
 } from "@/lib/pipe/pipe-stage-stepper";
 
 const mkRdv = (
@@ -62,5 +63,21 @@ describe("pipe-stage-stepper", () => {
     expect(getPipeCommercialStepperStepState("R1", "R2", entries, beforeR2)).toBe("done");
     expect(getPipeCommercialStepperStepState("R2", "R2", entries, beforeR2)).toBe("active");
     expect(getPipeCommercialStepperStepState("R3", "R2", entries, beforeR2)).toBe("pending");
+  });
+
+  it("reste sur R3 actif après un RDV R3 terminé (autre R3 possible)", () => {
+    const r3Start = Math.floor(new Date(2026, 8, 10, 10, 0).getTime() / 1000);
+    const afterR3 = new Date(2026, 8, 10, 12, 0);
+    const entries = [mkRdv(1, "R3 Placements", r3Start)];
+
+    expect(getEffectiveActiveLinearIndex("R3", entries, afterR3)).toBe(3);
+    expect(getPipeCommercialStepperStepState("R3", "R3", entries, afterR3)).toBe("active");
+    expect(getSuggestedRdvPlanStage("R3", entries, afterR3)).toBeNull();
+    expect(shouldShowPlanAnotherR3("R3", entries)).toBe(true);
+  });
+
+  it("ne propose pas un autre R3 hors étape R3", () => {
+    const entries = [mkRdv(1, "R3 Immo", r1Start)];
+    expect(shouldShowPlanAnotherR3("R2", entries)).toBe(false);
   });
 });

@@ -26,6 +26,8 @@ export function getEffectiveActiveLinearIndex(
 
   const current = PIPE_LINEAR_STAGES[linearIndex] as PipeLinearStage;
   if (isPipeRdvStage(current) && isPipeRdvStageCompleted(current, entries, now)) {
+    // R3 : plusieurs RDV possibles (Placements, Immo) tant que l'affaire reste à R3
+    if (current === "R3") return linearIndex;
     return Math.min(linearIndex + 1, PIPE_LINEAR_STAGES.length - 1);
   }
   return linearIndex;
@@ -42,10 +44,13 @@ export function getPipeCommercialStepperStepState(
   if (linearIndex < 0 || stepIndex < 0) return "pending";
 
   const rdvCompleted = isPipeRdvStage(step) && isPipeRdvStageCompleted(step, entries, now);
-  const done = stepIndex < linearIndex || rdvCompleted;
+  const done =
+    stepIndex < linearIndex ||
+    (rdvCompleted && !(currentStage === "R3" && step === "R3"));
 
   const effectiveActiveIndex = getEffectiveActiveLinearIndex(currentStage, entries, now);
   if (stepIndex === effectiveActiveIndex && !done) return "active";
+  if (currentStage === "R3" && step === "R3") return "active";
 
   return done ? "done" : "pending";
 }
@@ -89,4 +94,12 @@ export function getSuggestedRdvPlanStage(
   }
 
   return null;
+}
+
+/** Bouton « Planifier un autre R3 » (Placements / Immo) tant que l'affaire est à R3. */
+export function shouldShowPlanAnotherR3(
+  currentStage: PipeStage,
+  entries: PipeTimelineEntryRecord[]
+): boolean {
+  return currentStage === "R3" && phaseHasRdvActivityForStage(entries, "R3");
 }

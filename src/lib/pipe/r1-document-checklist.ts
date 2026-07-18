@@ -6,11 +6,20 @@ import type {
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import {
   getActivePipeChecklistTemplateItems,
+  PIPE_CHECKLIST_PROFILE_SCOPE_LABELS,
+  type PipeChecklistProfileScope,
   type PipeChecklistTemplateItem,
   type PipeChecklistTemplates,
   type R1ChecklistProfile,
 } from "@/lib/pipe/pipe-checklist-template";
 import { phaseHasRdvActivityForStage } from "@/lib/pipe/pipe-rdv-delete";
+
+const R1_SECTION_ORDER: PipeChecklistProfileScope[] = ["base", "salarie", "chef", "retraite"];
+
+function primaryProfileScope(item: PipeChecklistTemplateItem): PipeChecklistProfileScope {
+  if (item.profiles.includes("base") && item.profiles.length === 1) return "base";
+  return item.profiles.find((p) => p !== "base") ?? "base";
+}
 
 export type { R1ChecklistProfile } from "@/lib/pipe/pipe-checklist-template";
 
@@ -51,6 +60,42 @@ export function getActiveR1ChecklistItems(
   profile: R1ChecklistProfile
 ): PipeChecklistTemplateItem[] {
   return getActivePipeChecklistTemplateItems("R1", templates, profile);
+}
+
+/** Libellé court pour une pièce conditionnelle au profil (null si toujours). */
+export function describeR1ItemVisibility(item: PipeChecklistTemplateItem): string | null {
+  const scope = primaryProfileScope(item);
+  if (scope === "base") return null;
+  return PIPE_CHECKLIST_PROFILE_SCOPE_LABELS[scope];
+}
+
+export function groupR1ItemsBySection(
+  items: PipeChecklistTemplateItem[]
+): { section: string; items: PipeChecklistTemplateItem[] }[] {
+  const byScope = new Map<PipeChecklistProfileScope, PipeChecklistTemplateItem[]>();
+  for (const item of items) {
+    const scope = primaryProfileScope(item);
+    const list = byScope.get(scope) ?? [];
+    list.push(item);
+    byScope.set(scope, list);
+  }
+  return R1_SECTION_ORDER.filter((scope) => (byScope.get(scope)?.length ?? 0) > 0).map(
+    (scope) => ({
+      section: PIPE_CHECKLIST_PROFILE_SCOPE_LABELS[scope],
+      items: byScope.get(scope)!,
+    })
+  );
+}
+
+export function countR1ItemsProgress(
+  checklist: PipeR1DocumentChecklist,
+  items: readonly PipeChecklistTemplateItem[]
+): { received: number; total: number } {
+  const total = items.length;
+  const received = items.filter((def) =>
+    isR1ChecklistItemComplete(def, getChecklistItemState(checklist.items, def.id))
+  ).length;
+  return { received, total };
 }
 
 export function countR1ChecklistProgress(

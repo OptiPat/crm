@@ -54,7 +54,7 @@ export function PipeR3ImmoMissingDocsBadge({
         >
           <Badge
             variant="outline"
-            className="text-xs border-amber-300/80 bg-amber-50 text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950/60 gap-1 max-w-full"
+            className="text-xs border-[#85ad3a]/45 bg-[#85ad3a]/10 text-[#5f7d29] hover:bg-[#85ad3a]/15 dark:border-[#85ad3a]/55 dark:bg-[#85ad3a]/20 dark:text-[#c5e08a] dark:hover:bg-[#85ad3a]/25 gap-1 max-w-full"
           >
             <FileWarning className="h-3 w-3 shrink-0" />
             <span className="truncate">
@@ -69,7 +69,7 @@ export function PipeR3ImmoMissingDocsBadge({
         <ul className="space-y-1.5 text-xs text-muted-foreground">
           {missing.map((label) => (
             <li key={label} className="flex gap-2 leading-snug">
-              <span className="text-amber-600 dark:text-amber-400 shrink-0">•</span>
+              <span className="text-[#85ad3a] dark:text-[#a8c96a] shrink-0">•</span>
               <span>{label}</span>
             </li>
           ))}

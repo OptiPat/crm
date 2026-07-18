@@ -6,8 +6,13 @@ import type {
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
-import { isContactAtLeastAge } from "@/lib/contacts/contact-birthday";
-import { isRetiredProfession } from "@/lib/contacts/contact-occupation";
+import { isContactAtLeastAge, computeAgeAtDate } from "@/lib/contacts/contact-birthday";
+import {
+  isRetiredProfession,
+  STATUT_OCCUPATION_LOGEMENT_LABELS,
+  type StatutOccupationLogement,
+} from "@/lib/contacts/contact-occupation";
+import { formatSituationLabel } from "@/lib/contacts/contact-form-utils";
 import { countEnfantsFoyer } from "@/lib/foyers/foyer-utils";
 import { IMMOBILIER_TYPES } from "@/lib/investissements/investissement-display";
 import { parseRdvTimelineTraceNote, rdvPlanOptionFromTraceNote } from "@/lib/pipe/pipe-rdv-delete";
@@ -161,6 +166,92 @@ export function getActiveR3ImmoChecklistItems(
   template: R3ImmoChecklistTemplate = cloneDefaultR3ImmoChecklistTemplate()
 ): R3ImmoChecklistItemDef[] {
   return template.items.filter((def) => isR3ImmoVisibilityRuleActive(def.rule, ctx));
+}
+
+/** Libellé court expliquant pourquoi une pièce conditionnelle est visible (null si toujours). */
+export function describeR3ImmoItemVisibility(
+  rule: R3ImmoVisibilityRule,
+  ctx: R3ImmoChecklistContext
+): string | null {
+  if (rule === "always") return null;
+
+  switch (rule) {
+    case "couple_or_enfants":
+      return ctx.hasSecondaryContact ? "Couple" : "Enfant(s) à charge";
+    case "marie_or_pacse": {
+      const label = formatSituationLabel(ctx.contact.situation_familiale);
+      return label ? `Fiche : ${label}` : "Marié(e) ou pacsé(e)";
+    }
+    case "divorce":
+      return formatSituationLabel("DIVORCE") ?? "Divorcé(e)";
+    case "separe":
+      return formatSituationLabel("SEPARE") ?? "Séparé(e)";
+    case "salarie":
+      return "Profil salarié";
+    case "salarie_ou_retraite":
+      if (isRetiredProfession(ctx.contact.profession)) return "Profession retraité(e)";
+      if (ctx.checklist.profile_salarie) return "Profil salarié";
+      return "Salarié ou retraité(e)";
+    case "chef":
+      return "Chef d'entreprise";
+    case "emprunteur_pm":
+      return "Emprunteur personne morale";
+    case "revenus_fonciers":
+      return "Revenus fonciers";
+    case "revenus_sci":
+      return "Revenus via SCI";
+    case "estimatif_retraite_55": {
+      const age =
+        ctx.contact.date_naissance != null && ctx.contact.date_naissance > 0
+          ? computeAgeAtDate(ctx.contact.date_naissance)
+          : null;
+      return age != null ? `${age} ans` : "55 ans ou plus";
+    }
+    case "retraite_profession":
+      return "Profession retraité(e)";
+    case "locataire":
+    case "heberge_gratuit":
+    case "proprietaire": {
+      const statut = ctx.contact.statut_occupation_logement as StatutOccupationLogement | undefined;
+      if (statut && statut in STATUT_OCCUPATION_LOGEMENT_LABELS) {
+        return `Fiche : ${STATUT_OCCUPATION_LOGEMENT_LABELS[statut]}`;
+      }
+      return null;
+    }
+    case "patrimoine_immo":
+      return "Patrimoine immo en base";
+    case "proprietaire_ou_patrimoine_immo": {
+      const parts: string[] = [];
+      if (ctx.contact.statut_occupation_logement === "PROPRIETAIRE") {
+        parts.push("Propriétaire");
+      }
+      if (hasImmoPatrimoine(ctx.investissements)) {
+        parts.push("Patrimoine immo");
+      }
+      return parts.length > 0 ? parts.join(" · ") : null;
+    }
+    case "credits_en_cours":
+      return "Crédits en cours";
+    case "projet_vefa":
+      return "Projet VEFA";
+    case "projet_ancien":
+      return "Projet ancien";
+    case "projet_scpi":
+      return "Projet SCPI";
+    default:
+      return null;
+  }
+}
+
+export function countR3ImmoItemsProgress(
+  checklist: PipeR3ImmoDocumentChecklist,
+  items: readonly R3ImmoChecklistItemDef[]
+): { received: number; total: number } {
+  const total = items.length;
+  const received = items.filter((def) =>
+    isR3ImmoChecklistItemComplete(getChecklistItemState(checklist.items, def.id))
+  ).length;
+  return { received, total };
 }
 
 export function countR3ImmoChecklistProgress(

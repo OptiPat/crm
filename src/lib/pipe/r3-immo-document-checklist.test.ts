@@ -4,6 +4,7 @@ import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { PipeR3ImmoDocumentChecklist } from "@/lib/api/tauri-pipe-r3-immo-checklist";
 import {
   buildR3ImmoChecklistContext,
+  describeR3ImmoItemVisibility,
   getActiveR3ImmoChecklistItems,
   isR3ImmoVisibilityRuleActive,
   shouldShowR3ImmoDocumentChecklist,
@@ -222,5 +223,22 @@ describe("r3-immo-document-checklist", () => {
     expect(ids).toContain("avis_imposition_salarie");
     expect(ids).not.toContain("estimatif_retraite");
     expect(ids).not.toContain("bulletins_paie");
+  });
+
+  it("décrit la visibilité avec l'âge ou la situation fiche", () => {
+    const dateNaissance = Math.floor(Date.UTC(1965, 5, 15) / 1000);
+    const ctx = buildR3ImmoChecklistContext({
+      contact: baseContact({
+        date_naissance: dateNaissance,
+        situation_familiale: "SEPARE",
+      }),
+      secondaryContactId: null,
+      foyerMembers: [],
+      investissements: [],
+      checklist: baseChecklist(),
+    });
+    expect(describeR3ImmoItemVisibility("estimatif_retraite_55", ctx)).toMatch(/\d+ ans/);
+    expect(describeR3ImmoItemVisibility("separe", ctx)).toBe("Dissolution de PACS");
+    expect(describeR3ImmoItemVisibility("always", ctx)).toBeNull();
   });
 });

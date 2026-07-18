@@ -6,7 +6,11 @@ import {
   type Contact,
 } from "@/lib/api/tauri-contacts";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
-import { getDocumentsByContact, type Document } from "@/lib/api/tauri-documents";
+import { type Document } from "@/lib/api/tauri-documents";
+import {
+  loadPipeChecklistDocumentsForContacts,
+  mergePipeChecklistDocument,
+} from "@/lib/pipe/pipe-checklist-documents";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import {
@@ -22,33 +26,16 @@ import {
 } from "@/lib/api/tauri-pipe-r3-immo-checklist";
 import {
   buildR3ImmoChecklistContext,
+  getChecklistItemState,
   listMissingR3ImmoChecklistKeys,
 } from "@/lib/pipe/r3-immo-document-checklist";
 import { loadInvestissementsForContactIds } from "@/lib/pipe/r3-immo-missing-docs-loader";
+import { linkChecklistItemDocument } from "@/lib/pipe/pipe-checklist-link-document";
+import { usePipeChecklistHookSession } from "@/lib/pipe/pipe-checklist-hook-session";
 import { notifyPipeR3ImmoChecklistChanged } from "@/lib/pipe/pipe-r3-immo-checklist-events";
 import { subscribePipeR1ChecklistChanged } from "@/lib/pipe/pipe-r1-checklist-events";
+import { subscribeDocumentsChanged } from "@/lib/documents/document-events";
 import { useR3ImmoChecklistTemplate } from "@/hooks/useR3ImmoChecklistTemplate";
-
-async function loadDocumentsForContacts(
-  contactId: number,
-  secondaryContactId?: number | null
-): Promise<Document[]> {
-  const contactIds = [contactId];
-  if (
-    secondaryContactId != null &&
-    secondaryContactId > 0 &&
-    secondaryContactId !== contactId
-  ) {
-    contactIds.push(secondaryContactId);
-  }
-
-  const docArrays = await Promise.all(contactIds.map((id) => getDocumentsByContact(id)));
-  const byId = new Map<number, Document>();
-  for (const doc of docArrays.flat()) {
-    byId.set(doc.id, doc);
-  }
-  return [...byId.values()];
-}
 
 export function usePipeR3ImmoDocumentChecklist(
   pipeId: number,
@@ -58,13 +45,19 @@ export function usePipeR3ImmoDocumentChecklist(
 ) {
   const { template: checklistTemplate } = useR3ImmoChecklistTemplate();
   const [checklist, setChecklist] = useState<PipeR3ImmoDocumentChecklist | null>(null);
+  const checklistRef = useRef<PipeR3ImmoDocumentChecklist | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [contact, setContact] = useState<Contact | null>(null);
   const [foyerMembers, setFoyerMembers] = useState<Contact[]>([]);
   const [investissements, setInvestissements] = useState<Investissement[]>([]);
   const [r1Checklist, setR1Checklist] = useState<PipeR1DocumentChecklist | null>(null);
   const [loading, setLoading] = useState(false);
-  const persistGenerationRef = useRef(0);
+  const { activePipeIdRef, sessionGenerationRef, persistGenerationRef, linkGenerationRef } =
+    usePipeChecklistHookSession(pipeId, contactId, secondaryContactId);
+
+  useEffect(() => {
+    checklistRef.current = checklist;
+  }, [checklist]);
 
   const reloadContext = useCallback(async () => {
     if (!enabled || contactId <= 0) return;
@@ -92,6 +85,7 @@ export function usePipeR3ImmoDocumentChecklist(
   const load = useCallback(async () => {
     if (!enabled || pipeId <= 0 || contactId <= 0) {
       setChecklist(null);
+      checklistRef.current = null;
       setDocuments([]);
       setContact(null);
       setFoyerMembers([]);
@@ -102,6 +96,7 @@ export function usePipeR3ImmoDocumentChecklist(
     }
 
     setLoading(true);
+    const generation = sessionGenerationRef.current;
     try {
       const loadedContact = await getContactById(contactId);
       const foyerPromise =
@@ -112,29 +107,57 @@ export function usePipeR3ImmoDocumentChecklist(
       const [loadedChecklist, loadedDocs, loadedFoyer, loadedInvestissements, loadedR1] =
         await Promise.all([
         getPipeR3ImmoDocumentChecklist(pipeId),
-        loadDocumentsForContacts(contactId, secondaryContactId),
+        loadPipeChecklistDocumentsForContacts(contactId, secondaryContactId),
         foyerPromise,
         loadInvestissementsForContactIds(contactId, secondaryContactId),
         getPipeR1DocumentChecklist(pipeId),
       ]);
 
+      if (generation !== sessionGenerationRef.current) return;
       setChecklist(loadedChecklist);
+      checklistRef.current = loadedChecklist;
       setDocuments(loadedDocs);
       setContact(loadedContact);
       setFoyerMembers(loadedFoyer);
       setInvestissements(loadedInvestissements);
       setR1Checklist(loadedR1);
     } catch (err) {
+      if (generation !== sessionGenerationRef.current) return;
       toast.error(String(err));
       setChecklist(null);
+      checklistRef.current = null;
     } finally {
-      setLoading(false);
+      if (generation === sessionGenerationRef.current) {
+        setLoading(false);
+      }
     }
-  }, [contactId, enabled, pipeId, secondaryContactId]);
+  }, [contactId, enabled, pipeId, secondaryContactId, sessionGenerationRef]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const reloadDocuments = useCallback(async () => {
+    if (!enabled || contactId <= 0) return;
+    const generation = sessionGenerationRef.current;
+    try {
+      const loadedDocs = await loadPipeChecklistDocumentsForContacts(
+        contactId,
+        secondaryContactId
+      );
+      if (generation !== sessionGenerationRef.current) return;
+      setDocuments(loadedDocs);
+    } catch {
+      // Rafraîchissement silencieux (évite les toasts en triple si plusieurs checklists actives).
+    }
+  }, [contactId, enabled, secondaryContactId, sessionGenerationRef]);
+
+  useEffect(() => {
+    if (!enabled || contactId <= 0) return;
+    return subscribeDocumentsChanged(() => {
+      void reloadDocuments();
+    });
+  }, [contactId, enabled, reloadDocuments]);
 
   useEffect(() => {
     if (!enabled || contactId <= 0) return;
@@ -201,32 +224,83 @@ export function usePipeR3ImmoDocumentChecklist(
   }, [checklist, checklistContext, checklistTemplate, enabled, pipeId]);
 
   const persist = useCallback(
-    async (update: UpdatePipeR3ImmoDocumentChecklistInput) => {
-      if (!enabled || pipeId <= 0) return;
+    async (update: UpdatePipeR3ImmoDocumentChecklistInput): Promise<boolean> => {
+      if (!enabled || pipeId <= 0) return false;
 
       let snapshot: PipeR3ImmoDocumentChecklist | null = null;
       setChecklist((prev) => {
         if (!prev) return prev;
         snapshot = prev;
-        return mergePipeR3ImmoChecklistUpdate(prev, update);
+        const merged = mergePipeR3ImmoChecklistUpdate(prev, update);
+        checklistRef.current = merged;
+        return merged;
       });
-      if (!snapshot) return;
+      if (!snapshot) return false;
 
       const generation = ++persistGenerationRef.current;
+      const requestPipeId = pipeId;
       try {
         const updated = await updatePipeR3ImmoDocumentChecklist(pipeId, update);
-        if (generation !== persistGenerationRef.current) return;
+        if (
+          generation !== persistGenerationRef.current ||
+          activePipeIdRef.current !== requestPipeId
+        ) {
+          return false;
+        }
         setChecklist(updated);
+        checklistRef.current = updated;
+        return true;
       } catch (err) {
         toast.error(String(err));
-        if (generation !== persistGenerationRef.current) return;
+        if (
+          generation !== persistGenerationRef.current ||
+          activePipeIdRef.current !== requestPipeId
+        ) {
+          return false;
+        }
         setChecklist(snapshot);
+        checklistRef.current = snapshot;
         if (enabled && pipeId > 0 && contactId > 0) {
           await load();
         }
+        return false;
       }
     },
-    [contactId, enabled, load, pipeId]
+    [activePipeIdRef, contactId, enabled, load, persistGenerationRef, pipeId]
+  );
+
+  const addDocument = useCallback((doc: Document) => {
+    setDocuments((prev) => mergePipeChecklistDocument(prev, doc));
+  }, []);
+
+  const linkItemDocument = useCallback(
+    async (itemId: string, documentId: number | null) => {
+      await linkChecklistItemDocument({
+        enabled,
+        pipeId,
+        itemId,
+        documentId,
+        checklistRef,
+        activePipeIdRef,
+        setChecklist,
+        getItemState: getChecklistItemState,
+        mergeUpdate: mergePipeR3ImmoChecklistUpdate,
+        linkGenerationRef,
+        saveUpdate: (update) => updatePipeR3ImmoDocumentChecklist(pipeId, update),
+        onSaved: (updated) => {
+          if (!checklistContext || !checklistTemplate) return;
+          notifyPipeR3ImmoChecklistChanged({
+            pipeId,
+            missingItemKeys: listMissingR3ImmoChecklistKeys(
+              updated,
+              checklistContext,
+              checklistTemplate
+            ),
+          });
+        },
+      });
+    },
+    [activePipeIdRef, checklistContext, checklistTemplate, enabled, linkGenerationRef, pipeId]
   );
 
   return {
@@ -237,5 +311,8 @@ export function usePipeR3ImmoDocumentChecklist(
     loading,
     persist,
     reload: load,
+    reloadDocuments,
+    addDocument,
+    linkItemDocument,
   };
 }

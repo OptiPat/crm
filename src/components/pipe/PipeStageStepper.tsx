@@ -13,6 +13,7 @@ import { isPipeRdvStage, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import {
   getPipeCommercialStepperStepState,
   getSuggestedRdvPlanStage,
+  shouldShowPlanAnotherR3,
 } from "@/lib/pipe/pipe-stage-stepper";
 import {
   isPipeStage,
@@ -61,6 +62,8 @@ export function PipeStageStepper({
 
   const showPlanAnotherR2 =
     onPlanRdv && phaseHasRdvActivityForStage(timelineEntries, "R2");
+
+  const showPlanAnotherR3 = onPlanRdv && shouldShowPlanAnotherR3(stage, timelineEntries);
 
   return (
     <div className="space-y-2">
@@ -179,7 +182,7 @@ export function PipeStageStepper({
         </div>
       </div>
 
-      {(showPlanNextRdv || showPlanAnotherR2) && (
+      {(showPlanNextRdv || showPlanAnotherR2 || showPlanAnotherR3) && (
         <div className="flex flex-wrap gap-2">
           {showPlanNextRdv && suggestedRdvStage ? (
             <PipeRdvPlanStageButton stage={suggestedRdvStage} onSelect={onPlanRdv} />
@@ -189,6 +192,14 @@ export function PipeStageStepper({
               stage="R2"
               variant="ghost"
               actionLabel="Planifier un autre R2"
+              onSelect={onPlanRdv}
+            />
+          ) : null}
+          {showPlanAnotherR3 ? (
+            <PipeRdvPlanStageButton
+              stage="R3"
+              variant="ghost"
+              actionLabel="Planifier un autre R3"
               onSelect={onPlanRdv}
             />
           ) : null}

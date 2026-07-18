@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   countR1ChecklistProgress,
+  describeR1ItemVisibility,
+  groupR1ItemsBySection,
   isR1ChecklistItemComplete,
   isR1ChecklistPastStage,
   listMissingR1ChecklistLabels,
   shouldShowR1DocumentChecklist,
 } from "./r1-document-checklist";
-import { DEFAULT_PIPE_CHECKLIST_TEMPLATES } from "./pipe-checklist-template";
+import { DEFAULT_PIPE_CHECKLIST_TEMPLATES, getActivePipeChecklistTemplateItems } from "./pipe-checklist-template";
 import type { PipeR1DocumentChecklist } from "@/lib/api/tauri-pipe-r1-checklist";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 
@@ -121,5 +123,23 @@ describe("r1-document-checklist", () => {
       templates
     );
     expect(missing).not.toContain("Tableaux d'amortissement des prêts en cours");
+  });
+
+  it("regroupe les pièces R1 par profil", () => {
+    const items = getActivePipeChecklistTemplateItems(
+      "R1",
+      DEFAULT_PIPE_CHECKLIST_TEMPLATES,
+      { salarie: true, chef_entreprise: false, retraite: false }
+    );
+    const sections = groupR1ItemsBySection(items);
+    expect(sections.map((s) => s.section)).toEqual(["Toujours", "Salarié"]);
+  });
+
+  it("décrit la visibilité conditionnelle R1", () => {
+    const salarieItem = DEFAULT_PIPE_CHECKLIST_TEMPLATES.R1.find(
+      (item) => item.id === "bulletin_salaire"
+    )!;
+    expect(describeR1ItemVisibility(salarieItem)).toBe("Salarié");
+    expect(describeR1ItemVisibility(DEFAULT_PIPE_CHECKLIST_TEMPLATES.R1[0]!)).toBeNull();
   });
 });
