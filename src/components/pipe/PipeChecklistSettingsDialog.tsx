@@ -20,6 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { PipeR1ChecklistEmailPreviewPanel } from "@/components/pipe/PipeR1ChecklistEmailPreviewPanel";
 import {
   cloneDefaultPipeChecklistTemplates,
   createPipeChecklistTemplateItemId,
@@ -31,6 +33,7 @@ import {
   type PipeChecklistStage,
   type PipeChecklistTemplateItem,
   type PipeChecklistTemplates,
+  type R1ChecklistProfile,
 } from "@/lib/pipe/pipe-checklist-template";
 import {
   cloneDefaultR3ImmoChecklistTemplate,
@@ -67,7 +70,7 @@ function stageTitle(stage: PipeChecklistStage): string {
 
 function stageDescription(stage: PipeChecklistStage): string {
   if (stage === "R1") {
-    return "Pièces à collecter avant le RDV R1. Les lignes conditionnelles s'affichent selon le profil (salarié, chef d'entreprise, retraite).";
+    return "Pièces à collecter avant le RDV R1. Les lignes conditionnelles s'affichent selon le profil (salarié, chef d'entreprise, retraite). Alimente la variable {{liste_documents_r1_html}} dans le modèle email RDV.";
   }
   if (stage === "R3") {
     return "Pièces placements pour le RDV R3 (DER, RIO, QPI signés, identité, domicile, RIB).";
@@ -79,6 +82,16 @@ function sectionOptions(template: R3ImmoChecklistTemplate): string[] {
   const fromItems = [...new Set(template.items.map((item) => item.section))];
   const merged = [...template.sections, ...fromItems, ...R3_IMMO_CHECKLIST_SECTIONS];
   return [...new Set(merged.filter(Boolean))];
+}
+
+function r1ItemHintPlaceholder(item: PipeChecklistTemplateItem): string {
+  if (item.id === "estimation_retraite") {
+    return "1. RDV sur info-retraite.fr\n2. Onglet « Mon estimation retraite » > …\n3. Télécharger le PDF.";
+  }
+  if (item.id === "releves_situation") {
+    return "Livrets, Assurance-vie, PER, PEE/PERCO, comptes titres…";
+  }
+  return "Précision affichée dans le mail (optionnel)";
 }
 
 export function PipeChecklistSettingsDialog({
@@ -93,6 +106,11 @@ export function PipeChecklistSettingsDialog({
     cloneDefaultR3ImmoChecklistTemplate()
   );
   const [activeTab, setActiveTab] = useState<ChecklistSettingsTab>("R1");
+  const [r1PreviewProfile, setR1PreviewProfile] = useState<R1ChecklistProfile>({
+    salarie: true,
+    chef_entreprise: false,
+    retraite: false,
+  });
   const [saving, setSaving] = useState(false);
 
   const r3ImmoSections = useMemo(() => sectionOptions(r3ImmoDraft), [r3ImmoDraft]);
@@ -102,6 +120,7 @@ export function PipeChecklistSettingsDialog({
     void loadPipeChecklistTemplates().then(setDraft);
     void loadR3ImmoChecklistTemplate().then(setR3ImmoDraft);
     setActiveTab("R1");
+    setR1PreviewProfile({ salarie: true, chef_entreprise: false, retraite: false });
   }, [open]);
 
   const updateItem = (
@@ -215,7 +234,7 @@ export function PipeChecklistSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="flex max-h-[90vh] w-[min(96vw,64rem)] max-w-[min(96vw,64rem)] flex-col overflow-hidden sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle>Checklists documents</DialogTitle>
           <DialogDescription>
@@ -295,7 +314,38 @@ export function PipeChecklistSettingsDialog({
                                 </SelectContent>
                               </Select>
                             </div>
-                            {stage !== "R2" && item.profiles.includes("base") ? (
+                            {stage === "R1" ? (
+                              <div className="space-y-1.5 sm:col-span-2">
+                                <Label className="text-xs">
+                                  {item.id === "estimation_retraite"
+                                    ? "Étapes mail (liste numérotée)"
+                                    : "Précision (optionnel)"}
+                                </Label>
+                                {item.id === "estimation_retraite" ? (
+                                  <Textarea
+                                    value={item.hint ?? ""}
+                                    rows={4}
+                                    placeholder={r1ItemHintPlaceholder(item)}
+                                    className="text-xs font-mono leading-relaxed"
+                                    onChange={(event) =>
+                                      updateItem(stage, index, {
+                                        hint: event.target.value || undefined,
+                                      })
+                                    }
+                                  />
+                                ) : (
+                                  <Input
+                                    value={item.hint ?? ""}
+                                    placeholder={r1ItemHintPlaceholder(item)}
+                                    onChange={(event) =>
+                                      updateItem(stage, index, {
+                                        hint: event.target.value || undefined,
+                                      })
+                                    }
+                                  />
+                                )}
+                              </div>
+                            ) : stage !== "R2" && item.profiles.includes("base") ? (
                               <div className="space-y-1.5">
                                 <Label className="text-xs">Précision (optionnel)</Label>
                                 <Input
@@ -360,6 +410,15 @@ export function PipeChecklistSettingsDialog({
                   Réinitialiser {stage}
                 </Button>
               </div>
+
+              {stage === "R1" ? (
+                <PipeR1ChecklistEmailPreviewPanel
+                  templates={draft}
+                  profile={r1PreviewProfile}
+                  onProfileChange={setR1PreviewProfile}
+                  idPrefix="settings-r1"
+                />
+              ) : null}
             </TabsContent>
           ))}
 

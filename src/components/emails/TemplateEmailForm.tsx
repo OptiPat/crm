@@ -65,11 +65,7 @@ import { validateEtiquetteTacheAction } from "@/lib/etiquettes/etiquette-form-va
 import { TemplateEmailTacheActionPanel } from "@/components/emails/TemplateEmailTacheActionPanel";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { stampScpiBulletinTemplateMeta } from "@/lib/emails/scpi-template-meta";
-import {
-  isStelliumPerfTemplateNom,
-  stampStelliumPerfTemplateMeta,
-  STELLIUM_PERF_TEMPLATE_VARIABLES,
-} from "@/lib/emails/stellium-template-meta";
+import { stampStelliumPerfTemplateMeta } from "@/lib/emails/stellium-template-meta";
 import {
   TemplateEmailRelancePanel,
   type TemplateRelanceDraft,
@@ -149,13 +145,11 @@ import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { archiveEphemeralCampaign } from "@/lib/api/tauri-ephemeral-campaign";
 import {
   EMAIL_TEMPLATE_CATEGORIES,
-  EMAIL_TEMPLATE_VARIABLES,
-  PIPE_RDV_TEMPLATE_VARIABLES,
-  PLACEMENT_CONFORME_TEMPLATE_VARIABLES,
-  getAgendaVariableTokens,
   getTemplateCategoryMeta,
   normalizeAgendaLinks,
+  type EmailTemplateCategory,
 } from "@/lib/emails/template-email-meta";
+import { TemplateEmailVariablePicker } from "@/components/emails/TemplateEmailVariablePicker";
 import { TemplateEmailPreviewPanel } from "@/components/emails/TemplateEmailPreviewPanel";
 import { TemplateEmailTriggerPanel } from "@/components/emails/TemplateEmailTriggerPanel";
 import {
@@ -773,7 +767,6 @@ export function TemplateEmailForm({
   }, []);
 
   const agendaLinks = useMemo(() => normalizeAgendaLinks(cgp), [cgp]);
-  const agendaVariables = useMemo(() => getAgendaVariableTokens(agendaLinks), [agendaLinks]);
 
   const canonicalizeCorpsHtmlForSave = useCallback(
     (html: string) => canonicalizeTemplateCorpsHtml(html.trim()),
@@ -892,11 +885,6 @@ export function TemplateEmailForm({
       setAbandoning(false);
     }
   };
-
-  const stelliumVariables = useMemo(
-    () => (isStelliumPerfTemplateNom(formData.nom) ? STELLIUM_PERF_TEMPLATE_VARIABLES : []),
-    [formData.nom]
-  );
 
   const categoryPills = EMAIL_TEMPLATE_CATEGORIES.filter((c) => c.id !== "EPHEMERE").map((c) => ({
     value: c.id,
@@ -1728,16 +1716,6 @@ export function TemplateEmailForm({
     }
   };
 
-  const handleVariableInsert = (
-    event: React.MouseEvent,
-    variable: string,
-    field: "sujet" | "corps"
-  ) => {
-    event.preventDefault();
-    captureSelectionsBeforeVariableInsert();
-    insertVariable(variable, field);
-  };
-
   const insertVariable = (variable: string, field: "sujet" | "corps") => {
     if (field === "corps") {
       const html = insertTextInRichEditor(
@@ -1989,103 +1967,22 @@ export function TemplateEmailForm({
                       />
                     </div>
 
-                    <details className="group rounded-lg border bg-muted/20" open>
-                      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm font-medium [&::-webkit-details-marker]:hidden">
-                        Variables à insérer
-                        <ChevronDown className="h-4 w-4 ml-auto text-muted-foreground transition-transform group-open:rotate-180" />
-                      </summary>
-                      <div
-                        className="px-3 pb-3 space-y-2 border-t"
+                    <div className="space-y-1.5 rounded-lg border bg-muted/20 px-2.5 py-2">
+                      <Label className="text-xs font-medium">Variables à insérer</Label>
+                      <TemplateEmailVariablePicker
+                        categorie={formData.categorie as EmailTemplateCategory}
+                        sujet={formData.sujet}
+                        corps={formData.corps}
+                        corpsHtml={corpsHtml}
+                        templateNom={formData.nom}
+                        agendaLinks={agendaLinks}
+                        placementConformeTriggerEnabled={
+                          placementConformeDraft.trigger.enabled
+                        }
+                        onInsert={(token, field) => insertVariable(token, field)}
                         onMouseDownCapture={captureSelectionsBeforeVariableInsert}
-                      >
-                        <div className="flex flex-wrap gap-2 pt-2">
-                          {[
-                            ...EMAIL_TEMPLATE_VARIABLES,
-                            ...PIPE_RDV_TEMPLATE_VARIABLES,
-                            ...PLACEMENT_CONFORME_TEMPLATE_VARIABLES,
-                          ].map((v) => (
-                            <span key={v.token} className="inline-flex gap-0.5">
-                              <Badge
-                                variant="outline"
-                                className="cursor-pointer hover:bg-primary hover:text-primary-foreground rounded-r-none text-[11px]"
-                                title={`${v.label} → message`}
-                                onMouseDown={(event) =>
-                                  handleVariableInsert(event, v.token, "corps")
-                                }
-                              >
-                                {v.token}
-                              </Badge>
-                              <Badge
-                                variant="secondary"
-                                className="cursor-pointer rounded-l-none text-[10px] px-1"
-                                title="→ objet"
-                                onMouseDown={(event) =>
-                                  handleVariableInsert(event, v.token, "sujet")
-                                }
-                              >
-                                obj
-                              </Badge>
-                            </span>
-                          ))}
-                          {agendaVariables.map((v) => (
-                            <span key={v.token} className="inline-flex gap-0.5">
-                              <Badge
-                                variant="outline"
-                                className="cursor-pointer rounded-r-none text-[11px] border-amber-300"
-                                onMouseDown={(event) =>
-                                  handleVariableInsert(event, v.token, "corps")
-                                }
-                              >
-                                {v.token}
-                              </Badge>
-                              <Badge
-                                variant="secondary"
-                                className="cursor-pointer rounded-l-none text-[10px] px-1"
-                                onMouseDown={(event) =>
-                                  handleVariableInsert(event, v.token, "sujet")
-                                }
-                              >
-                                obj
-                              </Badge>
-                            </span>
-                          ))}
-                          {stelliumVariables.map((v) => (
-                            <span key={v.token} className="inline-flex gap-0.5">
-                              <Badge
-                                variant="outline"
-                                className="cursor-pointer rounded-r-none text-[11px] border-emerald-300 bg-emerald-50/50"
-                                title={`${v.label} — ${v.hint}`}
-                                onMouseDown={(event) =>
-                                  handleVariableInsert(event, v.token, "corps")
-                                }
-                              >
-                                {v.token}
-                              </Badge>
-                              <Badge
-                                variant="secondary"
-                                className="cursor-pointer rounded-l-none text-[10px] px-1"
-                                title="→ objet"
-                                onMouseDown={(event) =>
-                                  handleVariableInsert(event, v.token, "sujet")
-                                }
-                              >
-                                obj
-                              </Badge>
-                            </span>
-                          ))}
-                        </div>
-                        {stelliumVariables.length > 0 && (
-                          <p className="text-[11px] text-muted-foreground">
-                            Perf Stellium : composez le message en HTML (gras, puces…) ; seuls les
-                            chiffres viennent des variables vertes à la préparation.
-                          </p>
-                        )}
-                        <p className="text-[11px] text-muted-foreground">
-                          Curseur dans l&apos;objet ou le message : clic variable → corps, « obj
-                          » → objet.
-                        </p>
-                      </div>
-                    </details>
+                      />
+                    </div>
 
                     <TemplateEmailAttachmentsPanel
                       templateId={effectiveTemplateId}
