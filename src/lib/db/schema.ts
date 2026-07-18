@@ -71,11 +71,14 @@ export const contacts = sqliteTable("contacts", {
   lieuNaissance: text("lieu_naissance"),
   profession: text("profession"),
   situationFamiliale: text("situation_familiale", {
-    enum: ["CELIBATAIRE", "MARIE", "PACSE", "UNION_LIBRE", "DIVORCE", "VEUF", "AUTRE"],
+    enum: ["CELIBATAIRE", "MARIE", "PACSE", "UNION_LIBRE", "DIVORCE", "SEPARE", "VEUF", "AUTRE"],
   }),
   regimeMatrimonial: text("regime_matrimonial"),
   revenusAnnuels: real("revenus_annuels"),
   chargesEmprunts: real("charges_emprunts"),
+  statutOccupationLogement: text("statut_occupation_logement", {
+    enum: ["PROPRIETAIRE", "LOCATAIRE", "HEBERGE_GRATUIT"],
+  }),
   epargnePrecautionSouhaitee: real("epargne_precaution_souhaitee"),
   objectifsPatrimoniaux: text("objectifs_patrimoniaux"),
 

@@ -23,6 +23,7 @@ export type SituationFamiliale =
   | "PACSE"
   | "UNION_LIBRE"
   | "DIVORCE"
+  | "SEPARE"
   | "VEUF"
   | "AUTRE";
 export type ContactFormContext = "clients" | "filleuls" | "prescripteurs" | "detail";
@@ -268,6 +269,7 @@ const BASE_EMPTY: NewContact = {
   regime_matrimonial: "",
   revenus_annuels: undefined,
   charges_emprunts: undefined,
+  statut_occupation_logement: undefined,
   epargne_precaution_souhaitee: undefined,
   objectifs_patrimoniaux: "",
   source_lead: "",
@@ -369,6 +371,7 @@ export function contactToFormData(contact: Contact): NewContact {
     regime_matrimonial: contact.regime_matrimonial || "",
     revenus_annuels: contact.revenus_annuels ?? undefined,
     charges_emprunts: contact.charges_emprunts ?? undefined,
+    statut_occupation_logement: contact.statut_occupation_logement || undefined,
     epargne_precaution_souhaitee: contact.epargne_precaution_souhaitee ?? undefined,
     objectifs_patrimoniaux: contact.objectifs_patrimoniaux || "",
     source_lead: contact.source_lead || "",
@@ -755,6 +758,7 @@ export function formatSituationLabel(situation?: string | null): string | null {
     PACSE: "Pacsé(e)",
     UNION_LIBRE: "Union libre",
     DIVORCE: "Divorcé(e)",
+    SEPARE: "Dissolution de PACS",
     VEUF: "Veuf(ve)",
     AUTRE: "Autre",
   };

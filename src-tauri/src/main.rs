@@ -151,6 +151,8 @@ fn main() {
             get_pipe_r3_document_checklist,
             update_pipe_r3_document_checklist,
             list_pipe_r3_missing_docs_summaries,
+            get_pipe_r3_immo_document_checklist,
+            update_pipe_r3_immo_document_checklist,
             get_pipe_by_id,
             create_pipe,
             update_pipe,

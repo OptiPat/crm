@@ -35,15 +35,19 @@ import { PipeTimelineQuickAdd } from "@/components/pipe/PipeTimelineQuickAdd";
 import { isSuiviPipe, isVersementComplementaireAffaire } from "@/lib/pipe/pipe-suivi";
 import { shouldShowR1DocumentChecklist } from "@/lib/pipe/r1-document-checklist";
 import { shouldShowR3DocumentChecklist } from "@/lib/pipe/r3-document-checklist";
+import { shouldShowR3ImmoDocumentChecklist } from "@/lib/pipe/r3-immo-document-checklist";
 import { usePipeR1DocumentChecklist } from "@/hooks/usePipeR1DocumentChecklist";
 import { usePipeR3DocumentChecklist } from "@/hooks/usePipeR3DocumentChecklist";
+import { usePipeR3ImmoDocumentChecklist } from "@/hooks/usePipeR3ImmoDocumentChecklist";
 import { usePipeChecklistTemplates } from "@/hooks/usePipeChecklistTemplates";
 import { PipeSuiviQuickAdd } from "@/components/pipe/PipeSuiviQuickAdd";
 import { PipeTimelineHistory } from "@/components/pipe/PipeTimelineHistory";
 import { PipeR1DocumentChecklist } from "@/components/pipe/PipeR1DocumentChecklist";
 import { PipeR3DocumentChecklist } from "@/components/pipe/PipeR3DocumentChecklist";
+import { PipeR3ImmoDocumentChecklist } from "@/components/pipe/PipeR3ImmoDocumentChecklist";
 import { PipeR1MissingDocsBadge } from "@/components/pipe/PipeR1MissingDocsBadge";
 import { PipeR3MissingDocsBadge } from "@/components/pipe/PipeR3MissingDocsBadge";
+import { PipeR3ImmoMissingDocsBadge } from "@/components/pipe/PipeR3ImmoMissingDocsBadge";
 import { useGlobalContactDetailSheet } from "@/components/layout/ContactDetailSheetProvider";
 import type { PipeRdvPlanOption } from "@/lib/pipe/pipe-rdv-plan-option";
 import { toast } from "sonner";
@@ -168,6 +172,14 @@ export function PipeDetailPanel({
     !timeline.loading &&
     shouldShowR3DocumentChecklist(timeline.entries);
 
+  const showR3ImmoDocumentChecklist =
+    isPipeType(pipe.pipe_type) &&
+    pipe.pipe_type === "AFFAIRE" &&
+    pipe.contact_id > 0 &&
+    !isVersementAffaire &&
+    !timeline.loading &&
+    shouldShowR3ImmoDocumentChecklist(timeline.entries);
+
   const { templates: checklistTemplates } = usePipeChecklistTemplates();
 
   const r1Documents = usePipeR1DocumentChecklist(
@@ -184,6 +196,13 @@ export function PipeDetailPanel({
     pipe.secondary_contact_id,
     showR3DocumentChecklist,
     checklistTemplates
+  );
+
+  const r3ImmoDocuments = usePipeR3ImmoDocumentChecklist(
+    pipe.id,
+    pipe.contact_id,
+    pipe.secondary_contact_id,
+    showR3ImmoDocumentChecklist
   );
 
   const prospectionRef = useRef<HTMLDivElement>(null);
@@ -259,6 +278,13 @@ export function PipeDetailPanel({
                 <PipeR3MissingDocsBadge
                   checklist={r3Documents.checklist}
                   templates={checklistTemplates}
+                />
+              ) : null}
+              {showR3ImmoDocumentChecklist ? (
+                <PipeR3ImmoMissingDocsBadge
+                  checklist={r3ImmoDocuments.checklist}
+                  checklistContext={r3ImmoDocuments.checklistContext}
+                  checklistTemplate={r3ImmoDocuments.checklistTemplate}
                 />
               ) : null}
               {isArchived && (
@@ -418,6 +444,19 @@ export function PipeDetailPanel({
                 loading={r3Documents.loading}
                 templates={checklistTemplates}
                 onPersist={r3Documents.persist}
+              />
+            ) : null}
+
+            {showR3ImmoDocumentChecklist ? (
+              <PipeR3ImmoDocumentChecklist
+                pipeId={pipe.id}
+                stage={pipe.stage}
+                checklist={r3ImmoDocuments.checklist}
+                checklistContext={r3ImmoDocuments.checklistContext}
+                checklistTemplate={r3ImmoDocuments.checklistTemplate}
+                documents={r3ImmoDocuments.documents}
+                loading={r3ImmoDocuments.loading}
+                onPersist={r3ImmoDocuments.persist}
               />
             ) : null}
 

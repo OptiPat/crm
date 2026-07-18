@@ -53,7 +53,9 @@ import {
 } from "@/lib/navigation/pipe-navigation";
 import { usePipeListR1MissingDocs } from "@/hooks/usePipeListR1MissingDocs";
 import { usePipeListR3MissingDocs } from "@/hooks/usePipeListR3MissingDocs";
+import { usePipeListR3ImmoMissingDocs } from "@/hooks/usePipeListR3ImmoMissingDocs";
 import { usePipeChecklistTemplates } from "@/hooks/usePipeChecklistTemplates";
+import { useR3ImmoChecklistTemplate } from "@/hooks/useR3ImmoChecklistTemplate";
 import { PipeChecklistSettingsDialog } from "@/components/pipe/PipeChecklistSettingsDialog";
 import { PipePageToolbar } from "@/components/pipe/PipePageToolbar";
 import { PipeList } from "@/components/pipe/PipeList";
@@ -78,6 +80,8 @@ export function Pipe() {
   const [section, setSection] = useState<PipeSection>(() => loadPipeSection());
   const { templates: checklistTemplates, reload: reloadChecklistTemplates } =
     usePipeChecklistTemplates();
+  const { template: r3ImmoChecklistTemplate, reload: reloadR3ImmoChecklistTemplate } =
+    useR3ImmoChecklistTemplate();
   const [checklistSettingsOpen, setChecklistSettingsOpen] = useState(false);
   const r1MissingByPipeId = usePipeListR1MissingDocs(
     pipeSectionIsListe(section),
@@ -86,6 +90,11 @@ export function Pipe() {
   const r3MissingByPipeId = usePipeListR3MissingDocs(
     pipeSectionIsListe(section),
     checklistTemplates
+  );
+  const r3ImmoMissingByPipeId = usePipeListR3ImmoMissingDocs(
+    pipeSectionIsListe(section),
+    pipes,
+    r3ImmoChecklistTemplate
   );
   const [listFilters, setListFilters] = useState<PipeListFilters>(() => loadPipeListFilters());
   const [showArchived, setShowArchived] = useState(() => loadPipeShowArchived());
@@ -730,6 +739,7 @@ export function Pipe() {
                   suiviColumnByPipe={suiviColumnByPipe}
                   r1MissingByPipeId={r1MissingByPipeId}
                   r3MissingByPipeId={r3MissingByPipeId}
+                  r3ImmoMissingByPipeId={r3ImmoMissingByPipeId}
                 />
               )}
             </div>
@@ -775,7 +785,10 @@ export function Pipe() {
       <PipeChecklistSettingsDialog
         open={checklistSettingsOpen}
         onOpenChange={setChecklistSettingsOpen}
-        onSaved={() => void reloadChecklistTemplates()}
+        onSaved={() => {
+          void reloadChecklistTemplates();
+          void reloadR3ImmoChecklistTemplate();
+        }}
       />
     </div>
   );

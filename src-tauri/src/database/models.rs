@@ -30,6 +30,8 @@ pub struct Contact {
     pub charges_emprunts: Option<f64>,
     /// Épargne de précaution souhaitée (RIO, par personne).
     pub epargne_precaution_souhaitee: Option<f64>,
+    /// Statut d'occupation du logement (propriétaire, locataire, hébergé).
+    pub statut_occupation_logement: Option<String>,
     pub objectifs_patrimoniaux: Option<String>,
     // 🔥 Fiscalité : portée par le contact (célibataire) OU synchronisée depuis le foyer.
     pub tranche_imposition: Option<String>,
@@ -108,6 +110,8 @@ pub struct NewContact {
     pub charges_emprunts: Option<f64>,
     #[serde(default)]
     pub epargne_precaution_souhaitee: Option<f64>,
+    #[serde(default)]
+    pub statut_occupation_logement: Option<String>,
     pub objectifs_patrimoniaux: Option<String>,
     pub source_lead: Option<String>,
     pub profil_risque_sri: Option<i64>,
@@ -171,6 +175,7 @@ impl Default for NewContact {
             revenus_annuels: None,
             charges_emprunts: None,
             epargne_precaution_souhaitee: None,
+            statut_occupation_logement: None,
             objectifs_patrimoniaux: None,
             source_lead: None,
             profil_risque_sri: None,
@@ -1524,6 +1529,42 @@ pub struct UpdatePipeR3DocumentChecklistInput {
 pub struct PipeR3MissingDocsSummary {
     pub pipe_id: i64,
     pub missing_item_keys: Vec<String>,
+}
+
+/// État d'une ligne de la checklist documents R3 immo (affaire).
+pub type PipeR3ImmoChecklistItemState = PipeR1ChecklistItemState;
+
+/// Lignes persistées de la checklist R3 immo (clé = id template).
+pub type PipeR3ImmoChecklistItems = HashMap<String, PipeR3ImmoChecklistItemState>;
+
+/// Checklist documents R3 immobilier liée à une affaire.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PipeR3ImmoDocumentChecklist {
+    pub pipe_id: i64,
+    pub profile_salarie: bool,
+    pub profile_chef_entreprise: bool,
+    pub emprunteur_personne_morale: bool,
+    pub revenus_fonciers_hors_micro: bool,
+    pub revenus_via_sci: bool,
+    pub projet_vefa: bool,
+    pub projet_ancien: bool,
+    pub projet_scpi: bool,
+    pub items: PipeR3ImmoChecklistItems,
+    pub updated_at: i64,
+}
+
+/// Mise à jour partielle checklist R3 immo.
+#[derive(Debug, Deserialize, Default)]
+pub struct UpdatePipeR3ImmoDocumentChecklistInput {
+    pub profile_salarie: Option<bool>,
+    pub profile_chef_entreprise: Option<bool>,
+    pub emprunteur_personne_morale: Option<bool>,
+    pub revenus_fonciers_hors_micro: Option<bool>,
+    pub revenus_via_sci: Option<bool>,
+    pub projet_vefa: Option<bool>,
+    pub projet_ancien: Option<bool>,
+    pub projet_scpi: Option<bool>,
+    pub items: Option<PipeR3ImmoChecklistItems>,
 }
 
 /// Entrée timeline d'un pipe.

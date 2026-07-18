@@ -197,8 +197,8 @@ impl Database {
                 date_r1, type_invitation_filleul, date_invitation_filleul, date_inscription_filleul,
                 presence_invitation_filleul,
                 filleul_titre, filleul_qualification, filleul_volume, filleul_volume_manager,
-                statut_suivi, registre, notes, epargne_precaution_souhaitee
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44)",
+                statut_suivi, registre, notes, epargne_precaution_souhaitee, statut_occupation_logement
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45)",
             params![
                 new_contact.famille_id,
                 new_contact.foyer_id,
@@ -244,6 +244,7 @@ impl Database {
                 registre,
                 new_contact.notes,
                 new_contact.epargne_precaution_souhaitee,
+                new_contact.statut_occupation_logement,
             ],
         )?;
 
@@ -538,8 +539,9 @@ pub fn update_contact(
                 role_famille = ?43,
                 famille_regroupement_exclu = ?44,
                 epargne_precaution_souhaitee = ?45,
+                statut_occupation_logement = ?46,
                 updated_at = unixepoch()
-            WHERE id = ?46",
+            WHERE id = ?47",
             params![
                 &contact.famille_id,
                 &contact.foyer_id,
@@ -590,6 +592,7 @@ pub fn update_contact(
                     0i64
                 },
                 &contact.epargne_precaution_souhaitee,
+                &contact.statut_occupation_logement,
                 id
             ],
         )?;

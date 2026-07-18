@@ -42,6 +42,7 @@ pub mod pipe_rdv_google_sync;
 pub mod pipe_rdv_scheduled_emails;
 pub mod pipe_r1_checklist;
 pub mod pipe_r3_checklist;
+pub mod pipe_r3_immo_checklist;
 pub mod pipe_remuneration;
 pub mod pipe_timeline;
 pub mod placement_operations;
@@ -571,6 +572,8 @@ impl Database {
         self.migrate_pipe_timeline_table()?;
         self.migrate_pipe_r1_document_checklists_table()?;
         self.migrate_pipe_r3_document_checklists_table()?;
+        self.migrate_pipe_r3_immo_document_checklists_table()?;
+        self.migrate_add_contact_statut_occupation_logement()?;
         self.migrate_placement_operations_table()?;
         self.migrate_pipe_rdv_scheduled_emails_table()?;
         self.migrate_purge_premature_etiquette_taches()?;
@@ -780,6 +783,19 @@ impl Database {
         self.conn
             .execute("ALTER TABLE contacts ADD COLUMN pays TEXT", [])?;
         println!("✅ Migration pays appliquée");
+        Ok(())
+    }
+
+    fn migrate_add_contact_statut_occupation_logement(&self) -> Result<()> {
+        if self.table_has_column("contacts", "statut_occupation_logement")? {
+            return Ok(());
+        }
+        println!("🔄 Migration : statut d'occupation du logement sur contacts...");
+        self.conn.execute(
+            "ALTER TABLE contacts ADD COLUMN statut_occupation_logement TEXT",
+            [],
+        )?;
+        println!("✅ Migration statut_occupation_logement appliquée");
         Ok(())
     }
 

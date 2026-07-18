@@ -118,6 +118,15 @@ export function isR3PlacementsRdvEntryTitre(titre: string | null | undefined): b
   return option != null && isR3PlacementsRdvPlanOption(option);
 }
 
+export function isR3ImmoRdvPlanOption(option: PipeRdvPlanOption): boolean {
+  return option === "R3_IMMO";
+}
+
+export function isR3ImmoRdvEntryTitre(titre: string | null | undefined): boolean {
+  const option = rdvPlanOptionFromEntryTitre(titre);
+  return option != null && isR3ImmoRdvPlanOption(option);
+}
+
 export type R2TypifyTarget = Extract<PipeRdvPlanOption, "R2_PLACEMENT" | "R2_IMMO">;
 export type R3TypifyTarget = Extract<PipeRdvPlanOption, "R3_PLACEMENT" | "R3_IMMO">;
 

@@ -993,6 +993,7 @@ mod filleul_rank_category_tests {
             revenus_annuels: None,
             charges_emprunts: None,
             epargne_precaution_souhaitee: None,
+            statut_occupation_logement: None,
             objectifs_patrimoniaux: None,
             tranche_imposition: None,
             nombre_parts_fiscales: None,

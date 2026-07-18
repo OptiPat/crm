@@ -18,12 +18,13 @@ use crate::database::{
         NewInvestissement, NewInvestissementValorisation, NewInvestissementVersement,
         NewPartenaire, NewPipe, NewPipeTimelineEntry, NewSegment, NewTache, NewTemplateEmail,
         NomProduitSuggestion, Partenaire, Pipe, PipeContactTimelineEntry, PipeR1DocumentChecklist,
-        PipeR1MissingDocsSummary, PipeR3DocumentChecklist, PipeR3MissingDocsSummary,
+        PipeR1MissingDocsSummary, PipeR3DocumentChecklist, PipeR3ImmoDocumentChecklist,
+        PipeR3MissingDocsSummary,
         PipeTimelineEntry,
         PipelineStats, ProductStats,
         Segment, SegmentWithCount, SetTacheStatutResult, Setting, Tache, TemplateEmail,
         TemplateEmailAction, UpdateCustomFieldDef, UpdatePipe, UpdatePipeR1DocumentChecklistInput,
-        UpdatePipeR3DocumentChecklistInput,
+        UpdatePipeR3DocumentChecklistInput, UpdatePipeR3ImmoDocumentChecklistInput,
         UpdatePipeTimelineEntry,
         YearlyActivityStats,
     },
@@ -532,6 +533,33 @@ pub fn list_pipe_r3_missing_docs_summaries(
     database
         .list_pipe_r3_missing_docs_summaries()
         .map_err(|e| format!("Failed to list pipe R3 missing docs: {}", e))
+}
+
+#[tauri::command]
+pub fn get_pipe_r3_immo_document_checklist(
+    db: State<'_, DbState>,
+    pipe_id: i64,
+) -> Result<PipeR3ImmoDocumentChecklist, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_or_create_pipe_r3_immo_document_checklist(pipe_id)
+        .map_err(|e| format!("Failed to get pipe R3 immo checklist: {}", e))
+}
+
+#[tauri::command]
+pub fn update_pipe_r3_immo_document_checklist(
+    db: State<'_, DbState>,
+    pipe_id: i64,
+    update: UpdatePipeR3ImmoDocumentChecklistInput,
+) -> Result<PipeR3ImmoDocumentChecklist, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .update_pipe_r3_immo_document_checklist(pipe_id, update)
+        .map_err(|e| format!("Failed to update pipe R3 immo checklist: {}", e))
 }
 
 #[tauri::command]

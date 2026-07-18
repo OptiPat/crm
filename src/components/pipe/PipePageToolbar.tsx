@@ -132,7 +132,7 @@ export function PipePageToolbar({
           size="icon"
           className="h-8 w-8 shrink-0"
           aria-label="Paramètres checklists documents"
-          title="Checklists documents R1 / R3"
+          title="Checklists documents R1 / R3 / R3 Immo"
           onClick={onOpenSettings}
         >
           <Settings2 className="h-4 w-4" />

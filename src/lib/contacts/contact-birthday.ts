@@ -34,6 +34,15 @@ export function computeAgeAtDate(dateNaissanceUnix: number, ref = new Date()): n
   return age;
 }
 
+export function isContactAtLeastAge(
+  dateNaissanceUnix: number | undefined | null,
+  minAge: number,
+  ref = new Date()
+): boolean {
+  if (dateNaissanceUnix == null || dateNaissanceUnix === 0) return false;
+  return computeAgeAtDate(dateNaissanceUnix, ref) >= minAge;
+}
+
 export function formatAgeLabel(age: number): string {
   return age <= 1 ? `${age} an` : `${age} ans`;
 }

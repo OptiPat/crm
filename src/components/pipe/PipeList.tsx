@@ -8,6 +8,7 @@ import { PipeStageBadge } from "@/components/pipe/PipeStageBadge";
 import { PipePlacementBadge } from "@/components/pipe/PipePlacementBadge";
 import { PipeR1MissingDocsBadge } from "@/components/pipe/PipeR1MissingDocsBadge";
 import { PipeR3MissingDocsBadge } from "@/components/pipe/PipeR3MissingDocsBadge";
+import { PipeR3ImmoMissingDocsBadge } from "@/components/pipe/PipeR3ImmoMissingDocsBadge";
 import {
   PipeListStatusBadgeView,
   PipeSuiviListBadge,
@@ -32,6 +33,7 @@ interface PipeListProps {
   suiviColumnByPipe?: Record<number, { column: PlacementBoardColumn; count: number }>;
   r1MissingByPipeId?: Record<number, string[]>;
   r3MissingByPipeId?: Record<number, string[]>;
+  r3ImmoMissingByPipeId?: Record<number, string[]>;
 }
 
 export function PipeList({
@@ -42,6 +44,7 @@ export function PipeList({
   suiviColumnByPipe = {},
   r1MissingByPipeId = {},
   r3MissingByPipeId = {},
+  r3ImmoMissingByPipeId = {},
 }: PipeListProps) {
   if (pipes.length === 0) {
     return (
@@ -91,6 +94,12 @@ export function PipeList({
               {pipe.pipe_type === "AFFAIRE" && r3MissingByPipeId[pipe.id]?.length ? (
                 <PipeR3MissingDocsBadge
                   missingLabels={r3MissingByPipeId[pipe.id]}
+                  onClick={(event) => event.stopPropagation()}
+                />
+              ) : null}
+              {pipe.pipe_type === "AFFAIRE" && r3ImmoMissingByPipeId[pipe.id]?.length ? (
+                <PipeR3ImmoMissingDocsBadge
+                  missingLabels={r3ImmoMissingByPipeId[pipe.id]}
                   onClick={(event) => event.stopPropagation()}
                 />
               ) : null}

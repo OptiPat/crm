@@ -75,6 +75,10 @@ import {
   PROFIL_RISQUE_SRI_FIELD_LABEL,
 } from "@/lib/contacts/investisseur-sri";
 import {
+  STATUT_OCCUPATION_LOGEMENT_LABELS,
+  type StatutOccupationLogement,
+} from "@/lib/contacts/contact-occupation";
+import {
   type Civilite,
   type ContactFormContext,
   type FieldErrors,
@@ -912,6 +916,7 @@ export function ContactForm({
                 <SelectItem value="PACSE">Pacsé(e)</SelectItem>
                 <SelectItem value="UNION_LIBRE">Union libre</SelectItem>
                 <SelectItem value="DIVORCE">Divorcé(e)</SelectItem>
+                <SelectItem value="SEPARE">Dissolution de PACS</SelectItem>
                 <SelectItem value="VEUF">Veuf(ve)</SelectItem>
                 <SelectItem value="AUTRE">Autre</SelectItem>
               </SelectContent>
@@ -1192,6 +1197,33 @@ export function ContactForm({
               </div>
             </>
           )}
+          <div className="space-y-2">
+            <Label htmlFor="statut_occupation_logement">Statut d&apos;occupation du logement</Label>
+            <Select
+              value={formData.statut_occupation_logement || SELECT_NONE}
+              onValueChange={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  statut_occupation_logement:
+                    value === SELECT_NONE ? undefined : (value as StatutOccupationLogement),
+                }))
+              }
+            >
+              <SelectTrigger id="statut_occupation_logement">
+                <SelectValue placeholder="Non renseigné" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SELECT_NONE}>Non renseigné</SelectItem>
+                {(Object.keys(STATUT_OCCUPATION_LOGEMENT_LABELS) as StatutOccupationLogement[]).map(
+                  (key) => (
+                    <SelectItem key={key} value={key}>
+                      {STATUT_OCCUPATION_LOGEMENT_LABELS[key]}
+                    </SelectItem>
+                  )
+                )}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="epargne_precaution_souhaitee">
               Épargne de précaution souhaitée (€)

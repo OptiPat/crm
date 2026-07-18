@@ -31,6 +31,7 @@ export interface Contact {
   charges_emprunts?: number;
   /** Épargne de précaution souhaitée (RIO, par personne). */
   epargne_precaution_souhaitee?: number;
+  statut_occupation_logement?: string;
   objectifs_patrimoniaux?: string;
   // 🔥 Fiscalité : portée par le contact (célibataire) OU synchronisée depuis le foyer.
   tranche_imposition?: string;
@@ -97,6 +98,7 @@ export interface NewContact {
   revenus_annuels?: number;
   charges_emprunts?: number;
   epargne_precaution_souhaitee?: number;
+  statut_occupation_logement?: string;
   objectifs_patrimoniaux?: string;
   source_lead?: string;
   profil_risque_sri?: number;
