@@ -5,7 +5,7 @@ import type { PipeTimelineUserType } from "@/lib/pipe/pipe-timeline-types";
 import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
 import { sendPipeRdvConfirmationAfterCalendar, syncGoogleCalendarForPipeRdv } from "@/lib/calendar/rdv-planifier";
 import type { PipeRdvCalendarSyncResult } from "@/lib/pipe/pipe-rdv-google-calendar";
-import { formatPipeRdvCalendarContactLabel, pipeRdvCalendarEndAt } from "@/lib/pipe/pipe-rdv-google-calendar";
+import { formatPipeRdvCalendarContactLabel, pipeRdvCalendarEndAt, pipeRdvCalendarEndAtForPlanOption } from "@/lib/pipe/pipe-rdv-google-calendar";
 import {
   formatPipeSuiviRdvGoogleCalendarTitle,
   SUIVI_RDV_TITRE,
@@ -22,6 +22,10 @@ import {
 } from "@/lib/pipe/pipe-rdv-plan-option";
 import type { R1ChecklistProfile } from "@/lib/pipe/pipe-checklist-template";
 import { saveR1ChecklistProfileForPipe } from "@/lib/pipe/pipe-r1-checklist-email-vars";
+import {
+  saveR3ImmoChecklistContextForPipe,
+  type R3ImmoRdvPlanningDraft,
+} from "@/lib/pipe/pipe-r3-immo-rdv-planning";
 import { toast } from "sonner";
 
 export type PipeRdvStageSaveResult = {
@@ -106,6 +110,7 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
   visio?: RdvVisioOptions;
   physicalAddress?: string | null;
   r1Profile?: R1ChecklistProfile;
+  r3ImmoDraft?: R3ImmoRdvPlanningDraft;
 }): Promise<PipeRdvStageSaveResult | null> {
   const planOption =
     options.rdvPlanOption ??
@@ -119,6 +124,9 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
   if (rdvStage === "R1" && options.r1Profile && options.pipe) {
     await saveR1ChecklistProfileForPipe(options.pipe.id, options.r1Profile);
   }
+  if (planOption === "R3_IMMO" && options.r3ImmoDraft && options.pipe) {
+    await saveR3ImmoChecklistContextForPipe(options.pipe.id, options.r3ImmoDraft);
+  }
 
   const entry = await options.timeline.addEntry({
     entry_type: options.entryType,
@@ -131,7 +139,8 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
     return null;
   }
 
-  const endAtUnix = options.endAtUnix ?? pipeRdvCalendarEndAt(options.occurredAtUnix);
+  const endAtUnix =
+    options.endAtUnix ?? pipeRdvCalendarEndAtForPlanOption(options.occurredAtUnix, planOption);
 
   const calendarPromise = options.calendar
     ? syncGoogleCalendarForPipeRdv({
@@ -206,7 +215,8 @@ export async function addPipeSuiviRdvEntry(options: {
     occurred_at: options.occurredAtUnix,
   });
 
-  const endAtUnix = options.endAtUnix ?? pipeRdvCalendarEndAt(options.occurredAtUnix);
+  const endAtUnix =
+    options.endAtUnix ?? pipeRdvCalendarEndAt(options.occurredAtUnix);
   const contactLabel = formatPipeRdvCalendarContactLabel(options.pipe);
 
   const calendar = await syncGoogleCalendarForPipeRdv({
@@ -290,7 +300,12 @@ export async function updatePipeRdvWithGoogleSync(options: {
   contenu?: string | null;
   calendarTitle?: string | null;
 }): Promise<PipeRdvCalendarSyncResult | undefined> {
-  const endAtUnix = options.endAtUnix ?? pipeRdvCalendarEndAt(options.occurredAtUnix);
+  const endAtUnix =
+    options.endAtUnix ??
+    pipeRdvCalendarEndAtForPlanOption(
+      options.occurredAtUnix,
+      defaultPlanOptionForRdvStage(options.rdvStage)
+    );
   return syncGoogleCalendarForPipeRdv({
     contactId: options.pipe.contact_id,
     contactLabel: formatPipeRdvCalendarContactLabel(options.pipe),

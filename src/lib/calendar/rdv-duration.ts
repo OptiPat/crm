@@ -10,6 +10,23 @@ export type RdvDurationPresetId = (typeof RDV_DURATION_PRESETS)[number]["id"];
 
 export const DEFAULT_RDV_DURATION_MINUTES = 60;
 
+export function defaultRdvDurationPresetForPlanOption(
+  planOption: import("@/lib/pipe/pipe-rdv-plan-option").PipeRdvPlanOption
+): RdvDurationPresetId {
+  switch (planOption) {
+    case "R1":
+    case "R2_IMMO":
+    case "R3_IMMO":
+      return "90";
+    case "R2_PLACEMENT":
+    case "R3":
+    case "R3_PLACEMENT":
+      return "60";
+    default:
+      return "60";
+  }
+}
+
 export function rdvDurationMinutesFromPreset(presetId: RdvDurationPresetId): number {
   return RDV_DURATION_PRESETS.find((p) => p.id === presetId)?.minutes ?? DEFAULT_RDV_DURATION_MINUTES;
 }

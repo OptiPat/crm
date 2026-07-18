@@ -25,14 +25,15 @@ fn map_checklist_row(row: &Row<'_>) -> Result<PipeR3ImmoDocumentChecklist> {
         pipe_id: row.get(0)?,
         profile_salarie: bool_from_row(row.get(1)?),
         profile_chef_entreprise: bool_from_row(row.get(2)?),
-        emprunteur_personne_morale: bool_from_row(row.get(3)?),
-        revenus_fonciers_hors_micro: bool_from_row(row.get(4)?),
-        revenus_via_sci: bool_from_row(row.get(5)?),
-        projet_vefa: bool_from_row(row.get(6)?),
-        projet_ancien: bool_from_row(row.get(7)?),
-        projet_scpi: bool_from_row(row.get(8)?),
-        items: parse_items_json(&row.get::<_, String>(9)?),
-        updated_at: row.get(10)?,
+        profile_revenus_configured: bool_from_row(row.get(3)?),
+        emprunteur_personne_morale: bool_from_row(row.get(4)?),
+        revenus_fonciers_hors_micro: bool_from_row(row.get(5)?),
+        revenus_via_sci: bool_from_row(row.get(6)?),
+        projet_vefa: bool_from_row(row.get(7)?),
+        projet_ancien: bool_from_row(row.get(8)?),
+        projet_scpi: bool_from_row(row.get(9)?),
+        items: parse_items_json(&row.get::<_, String>(10)?),
+        updated_at: row.get(11)?,
     })
 }
 
@@ -43,8 +44,8 @@ fn items_to_json(items: &PipeR3ImmoChecklistItems) -> Result<String> {
 }
 
 const SELECT_CHECKLIST: &str = "SELECT pipe_id, profile_salarie, profile_chef_entreprise,
-    emprunteur_personne_morale, revenus_fonciers_hors_micro, revenus_via_sci,
-    projet_vefa, projet_ancien, projet_scpi, items_json, updated_at";
+    profile_revenus_configured, emprunteur_personne_morale, revenus_fonciers_hors_micro,
+    revenus_via_sci, projet_vefa, projet_ancien, projet_scpi, items_json, updated_at";
 
 impl super::Database {
     pub fn migrate_pipe_r3_immo_document_checklists_table(&self) -> Result<()> {
@@ -54,6 +55,7 @@ impl super::Database {
                 pipe_id INTEGER PRIMARY KEY REFERENCES pipes(id) ON DELETE CASCADE,
                 profile_salarie INTEGER NOT NULL DEFAULT 0,
                 profile_chef_entreprise INTEGER NOT NULL DEFAULT 0,
+                profile_revenus_configured INTEGER NOT NULL DEFAULT 0,
                 emprunteur_personne_morale INTEGER NOT NULL DEFAULT 0,
                 revenus_fonciers_hors_micro INTEGER NOT NULL DEFAULT 0,
                 revenus_via_sci INTEGER NOT NULL DEFAULT 0,
@@ -65,6 +67,19 @@ impl super::Database {
             );
             ",
         )?;
+        if !self.table_has_column("pipe_r3_immo_document_checklists", "profile_revenus_configured")? {
+            self.conn.execute(
+                "ALTER TABLE pipe_r3_immo_document_checklists ADD COLUMN profile_revenus_configured INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            self.conn.execute(
+                "UPDATE pipe_r3_immo_document_checklists
+                 SET profile_revenus_configured = 1
+                 WHERE profile_salarie = 1
+                    OR profile_chef_entreprise = 1",
+                [],
+            )?;
+        }
         Ok(())
     }
 
@@ -124,10 +139,10 @@ impl super::Database {
         let items_json = items_to_json(&PipeR3ImmoChecklistItems::default())?;
         self.conn.execute(
             "INSERT INTO pipe_r3_immo_document_checklists (
-                pipe_id, profile_salarie, profile_chef_entreprise,
+                pipe_id, profile_salarie, profile_chef_entreprise, profile_revenus_configured,
                 emprunteur_personne_morale, revenus_fonciers_hors_micro, revenus_via_sci,
                 projet_vefa, projet_ancien, projet_scpi, items_json, updated_at
-            ) VALUES (?1, 0, 0, 0, 0, 0, 0, 0, 0, ?2, ?3)",
+            ) VALUES (?1, 0, 0, 0, 0, 0, 0, 0, 0, 0, ?2, ?3)",
             params![pipe_id, items_json, now],
         )?;
 
@@ -148,15 +163,15 @@ impl super::Database {
 
         if let Some(salarie) = update.profile_salarie {
             current.profile_salarie = salarie;
-            if salarie {
-                current.profile_chef_entreprise = false;
-            }
         }
         if let Some(chef) = update.profile_chef_entreprise {
             current.profile_chef_entreprise = chef;
-            if chef {
-                current.profile_salarie = false;
-            }
+        }
+        if update.profile_salarie.is_some() || update.profile_chef_entreprise.is_some() {
+            current.profile_revenus_configured = true;
+        }
+        if let Some(configured) = update.profile_revenus_configured {
+            current.profile_revenus_configured = configured;
         }
         if let Some(v) = update.emprunteur_personne_morale {
             current.emprunteur_personne_morale = v;
@@ -187,18 +202,20 @@ impl super::Database {
             "UPDATE pipe_r3_immo_document_checklists
              SET profile_salarie = ?1,
                  profile_chef_entreprise = ?2,
-                 emprunteur_personne_morale = ?3,
-                 revenus_fonciers_hors_micro = ?4,
-                 revenus_via_sci = ?5,
-                 projet_vefa = ?6,
-                 projet_ancien = ?7,
-                 projet_scpi = ?8,
-                 items_json = ?9,
-                 updated_at = ?10
-             WHERE pipe_id = ?11",
+                 profile_revenus_configured = ?3,
+                 emprunteur_personne_morale = ?4,
+                 revenus_fonciers_hors_micro = ?5,
+                 revenus_via_sci = ?6,
+                 projet_vefa = ?7,
+                 projet_ancien = ?8,
+                 projet_scpi = ?9,
+                 items_json = ?10,
+                 updated_at = ?11
+             WHERE pipe_id = ?12",
             params![
                 i64::from(current.profile_salarie),
                 i64::from(current.profile_chef_entreprise),
+                i64::from(current.profile_revenus_configured),
                 i64::from(current.emprunteur_personne_morale),
                 i64::from(current.revenus_fonciers_hors_micro),
                 i64::from(current.revenus_via_sci),
@@ -261,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn pipe_r3_immo_profile_salarie_clears_chef() {
+    fn pipe_r3_immo_profiles_salarie_et_chef_cumulables() {
         let db = Database::open_in_memory_for_tests().unwrap();
         let contact_id = db
             .create_contact(NewContact {
@@ -286,26 +303,19 @@ mod tests {
             })
             .unwrap();
 
-        db.update_pipe_r3_immo_document_checklist(
-            affaire.id,
-            crate::database::models::UpdatePipeR3ImmoDocumentChecklistInput {
-                profile_chef_entreprise: Some(true),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-
         let updated = db
             .update_pipe_r3_immo_document_checklist(
                 affaire.id,
                 crate::database::models::UpdatePipeR3ImmoDocumentChecklistInput {
                     profile_salarie: Some(true),
+                    profile_chef_entreprise: Some(true),
                     ..Default::default()
                 },
             )
             .unwrap();
         assert!(updated.profile_salarie);
-        assert!(!updated.profile_chef_entreprise);
+        assert!(updated.profile_chef_entreprise);
+        assert!(updated.profile_revenus_configured);
     }
 
     #[test]

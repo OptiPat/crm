@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,8 @@ import {
 import { StatCard } from "@/components/dashboard/StatCard";
 import { DocumentListRow } from "@/components/documents/DocumentListRow";
 import { DocumentPreviewSheet } from "@/components/documents/DocumentPreviewSheet";
+import { DocumentsClientFolderGrid } from "@/components/documents/DocumentsClientFolderGrid";
+import { DocumentsFolderBreadcrumb } from "@/components/documents/DocumentsFolderBreadcrumb";
 import { VirtualizedDocumentsPortfolio } from "@/components/documents/VirtualizedDocumentsPortfolio";
 import { DocumentUpload } from "@/components/documents/DocumentUpload";
 import { RioImportWizard } from "@/components/documents/RioImportWizard";
@@ -85,6 +87,13 @@ import {
   type StagedDocumentFile,
 } from "@/lib/documents/detect-dropped-document-import";
 import {
+  buildClientDocumentFolders,
+  documentsInFolder,
+  getFolderLabel,
+  parseContactFolderKey,
+  type DocumentFolderKey,
+} from "@/lib/documents/documents-folder-utils";
+import {
   loadDocumentsPagePreferences,
   saveDocumentsPagePreferences,
 } from "@/lib/documents/documents-page-preferences";
@@ -112,14 +121,28 @@ export function Documents({ onNavigate }: DocumentsProps) {
     extractedData?: ExtractedData;
   } | null>(null);
   const [dropBusy, setDropBusy] = useState(false);
-  const [contactFilterId, setContactFilterId] = useState<number | null>(null);
+  const [openedFolderKey, setOpenedFolderKey] = useState<DocumentFolderKey | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [sortKey, setSortKey] = useState<DocumentsPortfolioSort>("date_desc");
-  const [groupMode, setGroupMode] = useState<DocumentsPortfolioGroup>("flat");
+  const [groupMode, setGroupMode] = useState<DocumentsPortfolioGroup>("folders");
   const [rioReimportDoc, setRioReimportDoc] = useState<Document | null>(null);
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
-  const focusConsumedRef = useRef(false);
+
+  const openedFolderContactId = useMemo(() => {
+    if (!openedFolderKey?.startsWith("contact:")) return null;
+    const id = Number(openedFolderKey.replace("contact:", ""));
+    return Number.isFinite(id) ? id : null;
+  }, [openedFolderKey]);
+
+  const openClientFolder = useCallback((contactId: number) => {
+    setGroupMode("folders");
+    setOpenedFolderKey(`contact:${contactId}`);
+  }, []);
+
+  const closeClientFolder = useCallback(() => {
+    setOpenedFolderKey(null);
+  }, []);
 
   const loadDocuments = useCallback(async () => {
     try {
@@ -142,10 +165,22 @@ export function Documents({ onNavigate }: DocumentsProps) {
 
   useEffect(() => {
     const prefs = loadDocumentsPagePreferences();
+    const focusId = consumeDocumentsContactFocus();
     setSortKey(prefs.sortKey);
-    setGroupMode(prefs.groupMode);
+    setGroupMode(
+      focusId != null
+        ? "folders"
+        : (prefs.groupMode as string) === "client"
+          ? "folders"
+          : prefs.groupMode
+    );
     setTypeFilter(prefs.typeFilter);
-    setContactFilterId(prefs.contactFilterId);
+    if (focusId != null) {
+      setOpenedFolderKey(`contact:${focusId}`);
+    } else if (prefs.contactFilterId != null) {
+      const restored = parseContactFolderKey(`contact:${prefs.contactFilterId}`);
+      if (restored) setOpenedFolderKey(restored);
+    }
     setPrefsLoaded(true);
   }, []);
 
@@ -155,30 +190,21 @@ export function Documents({ onNavigate }: DocumentsProps) {
       sortKey,
       groupMode,
       typeFilter,
-      contactFilterId,
+      contactFilterId: openedFolderContactId,
     });
-  }, [prefsLoaded, sortKey, groupMode, typeFilter, contactFilterId]);
+  }, [prefsLoaded, sortKey, groupMode, typeFilter, openedFolderContactId]);
 
   useEffect(() => {
     void loadDocuments();
   }, [loadDocuments]);
 
-  useEffect(() => {
-    if (focusConsumedRef.current) return;
-    focusConsumedRef.current = true;
-    const focusId = consumeDocumentsContactFocus();
-    if (focusId != null) {
-      setContactFilterId(focusId);
-    }
-  }, []);
-
   useAppNavigationListener((detail) => {
     if (detail.type !== "documents") return;
     if (detail.contactId != null) {
       setDocumentsContactFocus(detail.contactId);
-      setContactFilterId(detail.contactId);
+      openClientFolder(detail.contactId);
     }
-  }, []);
+  }, [openClientFolder]);
 
   useEventAutoRefresh(loadDocuments, subscribeDocumentsChanged, subscribeContactsChanged);
 
@@ -194,11 +220,15 @@ export function Documents({ onNavigate }: DocumentsProps) {
 
   const contacts = useMemo(() => Object.values(contactsById), [contactsById]);
 
+  const scopedDocuments = useMemo(() => {
+    if (groupMode === "folders" && openedFolderKey != null) {
+      return documentsInFolder(documents, openedFolderKey);
+    }
+    return documents;
+  }, [documents, groupMode, openedFolderKey]);
+
   const filteredDocuments = useMemo(() => {
-    return documents.filter((doc) => {
-      if (contactFilterId != null && doc.contact_id !== contactFilterId) {
-        return false;
-      }
+    return scopedDocuments.filter((doc) => {
       if (!matchesDocumentsStatFilter(doc, statFilter)) {
         return false;
       }
@@ -212,17 +242,34 @@ export function Documents({ onNavigate }: DocumentsProps) {
       const matchesType = typeFilter === "ALL" || doc.type_document === typeFilter;
       return matchesSearch && matchesType;
     });
-  }, [documents, searchQuery, typeFilter, contactsById, contactFilterId, statFilter]);
+  }, [scopedDocuments, searchQuery, typeFilter, contactsById, statFilter]);
+
+  const browseFolders = groupMode === "folders" && searchQuery.trim() === "";
+  const showFolderGrid = browseFolders && openedFolderKey == null;
+
+  const contactFilterOnly =
+    openedFolderContactId != null &&
+    statFilter == null &&
+    typeFilter === "ALL" &&
+    searchQuery.trim() === "";
 
   const hasNarrowingFilters =
     statFilter != null ||
     typeFilter !== "ALL" ||
-    contactFilterId != null ||
+    openedFolderKey != null ||
     searchQuery.trim() !== "";
 
+  const hasFiltersThatFlattenGroups =
+    statFilter != null || typeFilter !== "ALL" || searchQuery.trim() !== "";
+
   const effectiveGroupMode = useMemo(
-    () => resolveDocumentsGroupModeWhenFiltered(groupMode, hasNarrowingFilters),
-    [groupMode, hasNarrowingFilters]
+    () =>
+      resolveDocumentsGroupModeWhenFiltered(
+        groupMode,
+        hasFiltersThatFlattenGroups,
+        contactFilterOnly
+      ),
+    [groupMode, hasFiltersThatFlattenGroups, contactFilterOnly]
   );
 
   const sortedDocuments = useMemo(
@@ -235,6 +282,11 @@ export function Documents({ onNavigate }: DocumentsProps) {
     [sortedDocuments, effectiveGroupMode, contactsById]
   );
 
+  const clientFolders = useMemo(
+    () => buildClientDocumentFolders(filteredDocuments, contactsById),
+    [filteredDocuments, contactsById]
+  );
+
   const documentContactIds = useMemo(() => {
     const ids = new Set<number>();
     for (const doc of filteredDocuments) {
@@ -244,11 +296,9 @@ export function Documents({ onNavigate }: DocumentsProps) {
   }, [filteredDocuments]);
 
   const contactFilterLabel = useMemo(() => {
-    if (contactFilterId == null) return null;
-    const client = contactsById[contactFilterId];
-    if (client) return `${client.prenom} ${client.nom}`;
-    return `Contact #${contactFilterId}`;
-  }, [contactFilterId, contactsById]);
+    if (openedFolderKey == null) return null;
+    return getFolderLabel(openedFolderKey, contactsById);
+  }, [openedFolderKey, contactsById]);
 
   const activeFilterChips = useMemo(
     () =>
@@ -264,15 +314,15 @@ export function Documents({ onNavigate }: DocumentsProps) {
   );
 
   const hasActiveFilters =
-    hasNarrowingFilters || sortKey !== "date_desc" || groupMode !== "flat";
+    hasNarrowingFilters || sortKey !== "date_desc" || groupMode !== "folders";
 
   const resetFilters = () => {
     setSearchQuery("");
     setTypeFilter("ALL");
     setStatFilter(null);
-    setContactFilterId(null);
+    setOpenedFolderKey(null);
     setSortKey("date_desc");
-    setGroupMode("flat");
+    setGroupMode("folders");
   };
 
   const toggleStatFilter = (filter: DocumentsStatFilter) => {
@@ -290,7 +340,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
         setTypeFilter("ALL");
         break;
       case "contact":
-        setContactFilterId(null);
+        closeClientFolder();
         break;
       case "search":
         setSearchQuery("");
@@ -299,7 +349,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
         setSortKey("date_desc");
         break;
       case "group":
-        setGroupMode("flat");
+        setGroupMode("folders");
         break;
       default:
         break;
@@ -515,8 +565,14 @@ export function Documents({ onNavigate }: DocumentsProps) {
               <div>
                 <CardTitle>Bibliothèque de documents</CardTitle>
                 <CardDescription>
-                  {filteredDocuments.length} document
-                  {filteredDocuments.length > 1 ? "s" : ""} sur {documents.length}
+                  {showFolderGrid
+                    ? `${clientFolders.length} dossier${clientFolders.length > 1 ? "s" : ""} client — cliquez pour ouvrir`
+                    : (
+                      <>
+                        {filteredDocuments.length} document
+                        {filteredDocuments.length > 1 ? "s" : ""} sur {documents.length}
+                      </>
+                    )}
                   {documents.length > 0 && (
                     <span className="text-muted-foreground/80">
                       {" "}
@@ -540,10 +596,13 @@ export function Documents({ onNavigate }: DocumentsProps) {
 
               <div className="w-full sm:w-[240px]">
                 <ContactPersonSearch
-                  placeholder="Filtrer par client..."
+                  placeholder="Ouvrir le dossier d'un client..."
                   contacts={contacts}
-                  value={contactFilterId ?? undefined}
-                  onChange={(id) => setContactFilterId(id ?? null)}
+                  value={openedFolderContactId ?? undefined}
+                  onChange={(id) => {
+                    if (id != null) openClientFolder(id);
+                    else closeClientFolder();
+                  }}
                   onOpenContact={
                     (c) => {
                       if (c.id) openClient(c.id);
@@ -589,7 +648,13 @@ export function Documents({ onNavigate }: DocumentsProps) {
 
               <Select
                 value={groupMode}
-                onValueChange={(v) => setGroupMode(v as DocumentsPortfolioGroup)}
+                onValueChange={(v) => {
+                  const next = v as DocumentsPortfolioGroup;
+                  setGroupMode(next);
+                  if (next !== "folders") {
+                    setOpenedFolderKey(null);
+                  }
+                }}
               >
                 <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="Regroupement" />
@@ -606,7 +671,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
               </Select>
             </div>
 
-            {hasNarrowingFilters && groupMode !== "flat" && (
+            {hasFiltersThatFlattenGroups && groupMode !== "flat" && (
               <p className="text-xs text-muted-foreground">
                 Filtre actif — affichage en liste unique (choisissez « Liste unique » pour retrouver
                 le regroupement une fois les filtres levés).
@@ -628,13 +693,13 @@ export function Documents({ onNavigate }: DocumentsProps) {
                     <X className="h-3 w-3 opacity-60" />
                   </button>
                 ))}
-                {contactFilterId != null && onNavigate && (
+                {openedFolderContactId != null && onNavigate && (
                   <Button
                     type="button"
                     variant="link"
                     size="sm"
                     className="h-auto px-0 text-xs"
-                    onClick={() => openClient(contactFilterId)}
+                    onClick={() => openClient(openedFolderContactId)}
                   >
                     Voir la fiche
                   </Button>
@@ -698,6 +763,11 @@ export function Documents({ onNavigate }: DocumentsProps) {
                 </Button>
               </div>
             </div>
+          ) : showFolderGrid ? (
+            <DocumentsClientFolderGrid
+              folders={clientFolders}
+              onOpenFolder={setOpenedFolderKey}
+            />
           ) : filteredDocuments.length === 0 ? (
             <div className="text-center py-8 space-y-3">
               <p className="text-sm text-muted-foreground">
@@ -708,11 +778,19 @@ export function Documents({ onNavigate }: DocumentsProps) {
               </Button>
             </div>
           ) : (
-            <VirtualizedDocumentsPortfolio
-              groups={portfolioGroups}
-              itemCount={sortedDocuments.length}
-              renderRow={renderDocumentRow}
-            />
+            <>
+              {openedFolderKey != null && groupMode === "folders" && (
+                <DocumentsFolderBreadcrumb
+                  folderLabel={getFolderLabel(openedFolderKey, contactsById)}
+                  onBackToFolders={closeClientFolder}
+                />
+              )}
+              <VirtualizedDocumentsPortfolio
+                groups={portfolioGroups}
+                itemCount={sortedDocuments.length}
+                renderRow={renderDocumentRow}
+              />
+            </>
           )}
         </CardContent>
       </Card>
@@ -727,7 +805,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
           }
         }}
         onSuccess={loadDocuments}
-        defaultContactId={contactFilterId ?? undefined}
+        defaultContactId={openedFolderContactId ?? undefined}
         defaultTypeDocument={uploadDefaultType}
         initialUploadedFile={uploadInitialFile}
       />
@@ -770,7 +848,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
           void loadDocuments();
         }}
         contactId={rioReimportDoc?.contact_id ?? undefined}
-        defaultContactId={contactFilterId ?? undefined}
+        defaultContactId={openedFolderContactId ?? undefined}
         defaultTypeDocument={
           stelliumDropImport?.defaultTypeDocument ?? rioReimportDoc?.type_document
         }

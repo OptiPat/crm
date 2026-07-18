@@ -23,5 +23,9 @@ describe("pipe-rdv-preview-vars", () => {
     expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.liste_documents_r3_html).toContain("<ul");
     expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.liste_documents_r3_html).toContain("RIB");
     expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.liste_documents_r3_html).not.toContain("DER");
+    expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.liste_documents_r3_immo_html).toContain("<ul");
+    expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.liste_documents_r3_immo_html).toContain(
+      "Carte nationale"
+    );
   });
 });

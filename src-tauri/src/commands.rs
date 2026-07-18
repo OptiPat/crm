@@ -834,9 +834,13 @@ pub fn create_document(
         .app_data_dir()
         .map_err(|e| format!("App data introuvable : {e}"))?;
     let source = std::path::Path::new(&new_document.chemin_fichier);
-    let (stored_path, size) =
-        crate::documents_storage::ensure_document_stored(&app_data_dir, source)
-            .map_err(|e| format!("Impossible de stocker le document : {e}"))?;
+    let (stored_path, size) = crate::documents_storage::ensure_document_stored(
+        &app_data_dir,
+        source,
+        new_document.contact_id,
+        true,
+    )
+    .map_err(|e| format!("Impossible de stocker le document : {e}"))?;
     new_document.chemin_fichier = stored_path.to_string_lossy().into_owned();
     new_document.taille_fichier = size as i64;
 
@@ -860,16 +864,79 @@ pub fn get_document_by_id(db: State<'_, DbState>, id: i64) -> Result<Document, S
 
 #[tauri::command]
 pub fn update_document(
+    app: tauri::AppHandle,
     db: State<'_, DbState>,
     id: i64,
     document: NewDocument,
 ) -> Result<Document, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("App data introuvable : {e}"))?;
 
-    database
-        .update_document(id, &document)
-        .map_err(|e| format!("Failed to update document: {}", e))
+    let (existing, contact_changed) = {
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        let existing = database
+            .get_document_by_id(id)
+            .map_err(|e| format!("Failed to get document: {}", e))?;
+        let contact_changed = existing.contact_id != document.contact_id;
+        (existing, contact_changed)
+    };
+
+    let mut file_relocation: Option<(std::path::PathBuf, u64)> = None;
+    let mut previous_managed_path: Option<String> = None;
+
+    if contact_changed {
+        let source = std::path::Path::new(&existing.chemin_fichier);
+        if !source.is_file() {
+            return Err(format!(
+                "Impossible de déplacer le document : fichier introuvable ({})",
+                existing.chemin_fichier
+            ));
+        }
+        let (stored_path, size) = crate::documents_storage::ensure_document_stored(
+            &app_data_dir,
+            source,
+            document.contact_id,
+            false,
+        )
+        .map_err(|e| format!("Impossible de déplacer le document : {e}"))?;
+        if stored_path != source {
+            previous_managed_path = Some(existing.chemin_fichier.clone());
+        }
+        file_relocation = Some((stored_path, size));
+    }
+
+    let relocation_for_db = file_relocation.as_ref().map(|(path, size)| {
+        (
+            path.to_string_lossy().into_owned(),
+            *size as i64,
+        )
+    });
+
+    let updated = {
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        database
+            .update_document(
+                id,
+                &document,
+                relocation_for_db
+                    .as_ref()
+                    .map(|(path, size)| (path.as_str(), *size)),
+            )
+            .map_err(|e| format!("Failed to update document: {}", e))?
+    };
+
+    if let Some(old_path) = previous_managed_path {
+        let old = std::path::Path::new(&old_path);
+        if old.is_file() {
+            let _ = crate::documents_storage::delete_managed_document_file(&app_data_dir, old);
+        }
+    }
+
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -908,6 +975,22 @@ pub fn delete_document(
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub fn discard_staged_document(
+    app: tauri::AppHandle,
+    file_path: String,
+) -> Result<(), String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("App data introuvable : {e}"))?;
+    crate::documents_storage::discard_staged_document_file(
+        &app_data_dir,
+        std::path::Path::new(&file_path),
+    )
+    .map_err(|e| format!("Impossible de supprimer le fichier temporaire : {e}"))
 }
 
 // ========== TEMPLATES EMAIL ==========

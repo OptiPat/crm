@@ -7,9 +7,12 @@ import { RdvVisioLocationFields } from "@/components/calendar/RdvVisioLocationFi
 import { PipeAffaireRdvPlanSelect } from "@/components/pipe/PipeAffaireRdvPlanSelect";
 import { PipeR1RdvDocumentsFields } from "@/components/pipe/PipeR1RdvDocumentsFields";
 import { PipeR3RdvDocumentsFields } from "@/components/pipe/PipeR3RdvDocumentsFields";
+import { PipeR3ImmoRdvDocumentsFields } from "@/components/pipe/PipeR3ImmoRdvDocumentsFields";
 import { usePipeChecklistTemplates } from "@/hooks/usePipeChecklistTemplates";
 import { usePipeR1RdvProfilePlanning } from "@/hooks/usePipeR1RdvProfilePlanning";
+import { usePipeR3ImmoRdvPlanning } from "@/hooks/usePipeR3ImmoRdvPlanning";
 import type { R1ChecklistProfile } from "@/lib/pipe/pipe-checklist-template";
+import type { R3ImmoRdvPlanningDraft } from "@/lib/pipe/pipe-r3-immo-rdv-planning";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import { AgendaRdvConflicts } from "@/components/calendar/AgendaRdvConflicts";
 import type { AgendaRdvPipeDraft } from "@/lib/navigation/agenda-navigation";
@@ -25,6 +28,7 @@ import {
 } from "@/lib/pipe/pipe-timeline-types";
 import {
   formatRdvPlanOptionLabel,
+  isR3ImmoRdvPlanOption,
   isR3PlacementsRdvPlanOption,
   rdvStageFromPlanOption,
   type PipeRdvPlanOption,
@@ -39,6 +43,7 @@ export interface PipeRdvSubmitPayload {
   visio: RdvVisioOptions;
   physicalAddress: string | null;
   r1Profile?: R1ChecklistProfile;
+  r3ImmoDraft?: R3ImmoRdvPlanningDraft;
 }
 
 interface PipeTimelineAddFormProps {
@@ -49,7 +54,16 @@ interface PipeTimelineAddFormProps {
   rdvPlanOption?: PipeRdvPlanOption;
   pipe?:
     | (Pick<PipeRecord, "id" | "stage" | "pipe_type"> &
-        Partial<Pick<PipeRecord, "contact_id" | "contact_prenom" | "contact_nom" | "titre">>)
+        Partial<
+          Pick<
+            PipeRecord,
+            | "contact_id"
+            | "contact_prenom"
+            | "contact_nom"
+            | "secondary_contact_id"
+            | "titre"
+          >
+        >)
     | null;
   saving: boolean;
   onOccurredAtChange: (value: string) => void;
@@ -99,12 +113,31 @@ export function PipeTimelineAddForm({
     isR3PlacementsRdvPlanOption(rdvPlanOption) &&
     pipe != null &&
     pipe.id > 0;
+  const showR3ImmoDocumentsFields =
+    showAffaireRdvStage &&
+    isR3ImmoRdvPlanOption(rdvPlanOption) &&
+    pipe != null &&
+    pipe.id > 0;
   const { templates: checklistTemplates } = usePipeChecklistTemplates();
   const { profile: r1Profile, setProfile: setR1Profile, profileReady: r1ProfileReady } =
     usePipeR1RdvProfilePlanning({
     enabled: showR1DocumentsFields,
     pipeId: pipe?.id ?? 0,
     primaryContactId,
+  });
+  const {
+    draft: r3ImmoDraft,
+    setDraft: setR3ImmoDraft,
+    checklistContext: r3ImmoChecklistContext,
+    template: r3ImmoTemplate,
+    planningReady: r3ImmoPlanningReady,
+    revenueFromR1: r3ImmoRevenueFromR1,
+    revenueLabel: r3ImmoRevenueLabel,
+  } = usePipeR3ImmoRdvPlanning({
+    enabled: showR3ImmoDocumentsFields,
+    pipeId: pipe?.id ?? 0,
+    primaryContactId,
+    secondaryContactId: pipe?.secondary_contact_id,
   });
 
   const handleFormSubmit = (e: FormEvent) => {
@@ -120,6 +153,10 @@ export function PipeTimelineAddForm({
           toast.error("Chargement du profil documents R1 en cours…");
           return;
         }
+        if (showR3ImmoDocumentsFields && !r3ImmoPlanningReady) {
+          toast.error("Chargement du contexte documents R3 Immo en cours…");
+          return;
+        }
         try {
           await rdvLocation.persistContactAddress();
           await onRdvSubmit({
@@ -130,6 +167,7 @@ export function PipeTimelineAddForm({
             visio: rdvLocation.getVisioOptions(),
             physicalAddress: rdvLocation.getPhysicalAddress(),
             r1Profile: rdvStage === "R1" ? r1Profile : undefined,
+            r3ImmoDraft: isR3ImmoRdvPlanOption(rdvPlanOption) ? r3ImmoDraft : undefined,
           });
         } catch (err) {
           toast.error(String(err));
@@ -193,6 +231,17 @@ export function PipeTimelineAddForm({
       {showR3DocumentsFields && (
         <PipeR3RdvDocumentsFields templates={checklistTemplates} disabled={saving} />
       )}
+      {showR3ImmoDocumentsFields && (
+        <PipeR3ImmoRdvDocumentsFields
+          draft={r3ImmoDraft}
+          onDraftChange={setR3ImmoDraft}
+          checklistContext={r3ImmoChecklistContext}
+          template={r3ImmoTemplate}
+          revenueFromR1={r3ImmoRevenueFromR1}
+          revenueLabel={r3ImmoRevenueLabel}
+          disabled={saving || !r3ImmoPlanningReady}
+        />
+      )}
       {isRdv && contactId > 0 && (
         <RdvVisioLocationFields
           visioMode={rdvLocation.visioMode}
@@ -230,7 +279,15 @@ export function PipeTimelineAddForm({
         <Button type="button" variant="outline" size="sm" onClick={onCancel}>
           Annuler
         </Button>
-        <Button type="submit" size="sm" disabled={saving || (showR1DocumentsFields && !r1ProfileReady)}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={
+            saving ||
+            (showR1DocumentsFields && !r1ProfileReady) ||
+            (showR3ImmoDocumentsFields && !r3ImmoPlanningReady)
+          }
+        >
           {saving ? "Enregistrement…" : submitLabel}
         </Button>
       </div>

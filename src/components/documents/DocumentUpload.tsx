@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Upload, File, X, FileText } from "lucide-react";
-import { uploadDocument, createDocument, type NewDocument } from "@/lib/api/tauri-documents";
+import { uploadDocument, createDocument, discardStagedDocument, type NewDocument } from "@/lib/api/tauri-documents";
 import { extractTextFromPDFPath, parseAuto, isNativeTextPDF, type ExtractedData } from "@/lib/pdf";
 import { ExtractedDataPreviewAdvanced } from "./ExtractedDataPreviewAdvanced";
 import { IdentityExtractPreviewDialog } from "./IdentityExtractPreviewDialog";
@@ -118,6 +118,14 @@ export function DocumentUpload({
     notes: "",
   });
 
+  const importSucceededRef = useRef(false);
+
+  const discardStagedPaths = async (...paths: (string | undefined)[]) => {
+    for (const path of paths) {
+      if (path) await discardStagedDocument(path);
+    }
+  };
+
   const identityImport = useIdentityDocumentImport({
     effectiveContactId,
     foyerId,
@@ -126,6 +134,16 @@ export function DocumentUpload({
     onSuccess,
     onOpenChange,
   });
+
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && !importSucceededRef.current) {
+      void discardStagedPaths(uploadedFile?.path, identityImport.uploadedVersoFile?.path);
+    }
+    if (!nextOpen) {
+      importSucceededRef.current = false;
+    }
+    onOpenChange(nextOpen);
+  };
 
   const identityTextCallbacks = {
     setExtractedText,
@@ -417,8 +435,9 @@ export function DocumentUpload({
           notes: formData.notes ? `${formData.notes} (verso)` : "Verso",
         });
       }
+      importSucceededRef.current = true;
       onSuccess();
-      onOpenChange(false);
+      handleDialogOpenChange(false);
 
       setUploadedFile(null);
       identityImport.setUploadedVersoFile(null);
@@ -428,6 +447,7 @@ export function DocumentUpload({
       identityImport.setIdentityImportMode("single");
     } catch (error) {
       console.error("Error saving document:", error);
+      await discardStagedPaths(uploadedFile?.path, identityImport.uploadedVersoFile?.path);
       alert("Erreur lors de l'enregistrement: " + String(error));
     } finally {
       setLoading(false);
@@ -503,7 +523,7 @@ export function DocumentUpload({
         }
       />
 
-      <Dialog open={open && !identityImport.showIdentityPreview} onOpenChange={onOpenChange} modal={!nestedSheet}>
+      <Dialog open={open && !identityImport.showIdentityPreview} onOpenChange={handleDialogOpenChange} modal={!nestedSheet}>
         <DialogContent
           hideOverlay={nestedSheet}
           className={nestedStackedDialogClass(

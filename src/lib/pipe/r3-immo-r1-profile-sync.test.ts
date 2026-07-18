@@ -27,6 +27,7 @@ function baseImmoChecklist(): PipeR3ImmoDocumentChecklist {
     pipe_id: 1,
     profile_salarie: false,
     profile_chef_entreprise: false,
+    profile_revenus_configured: false,
     emprunteur_personne_morale: false,
     revenus_fonciers_hors_micro: false,
     revenus_via_sci: false,
@@ -51,11 +52,39 @@ describe("r3-immo-r1-profile-sync", () => {
 
   it("privilégie l'override R3 immo sur le R1", () => {
     const resolved = resolveR3ImmoRevenueProfile(
-      { ...baseImmoChecklist(), profile_chef_entreprise: true },
+      {
+        ...baseImmoChecklist(),
+        profile_chef_entreprise: true,
+        profile_revenus_configured: true,
+      },
       { profile_salarie: true, profile_chef_entreprise: false }
     );
     expect(resolved.source).toBe("r3_immo");
     expect(resolved.profile_chef_entreprise).toBe(true);
+  });
+
+  it("permet de désactiver un profil repris du R1 via override explicite", () => {
+    const resolved = resolveR3ImmoRevenueProfile(
+      {
+        ...baseImmoChecklist(),
+        profile_salarie: false,
+        profile_chef_entreprise: false,
+        profile_revenus_configured: true,
+      },
+      { profile_salarie: true, profile_chef_entreprise: false }
+    );
+    expect(resolved.source).toBe("r3_immo");
+    expect(resolved.profile_salarie).toBe(false);
+    expect(formatR3ImmoRevenueProfileLabel(resolved)).toBeNull();
+  });
+
+  it("affiche les deux profils revenus si cochés", () => {
+    expect(
+      formatR3ImmoRevenueProfileLabel({
+        profile_salarie: true,
+        profile_chef_entreprise: true,
+      })
+    ).toBe("Salarié · Chef d'entreprise");
   });
 
   it("active les pièces salarié via le profil R1", () => {

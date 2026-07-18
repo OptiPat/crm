@@ -62,7 +62,7 @@ export function buildDocumentsActiveFilterChips(input: {
       label: `Tri : ${DOCUMENTS_PORTFOLIO_SORT_LABELS[input.sortKey]}`,
     });
   }
-  if (input.groupMode !== "flat") {
+  if (input.groupMode !== "flat" && input.groupMode !== "folders") {
     chips.push({
       id: "group",
       label: `Regroupement : ${DOCUMENTS_PORTFOLIO_GROUP_LABELS[input.groupMode]}`,

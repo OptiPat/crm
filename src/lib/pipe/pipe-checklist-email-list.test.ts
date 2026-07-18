@@ -7,10 +7,12 @@ import {
   buildR1ChecklistEmailPreviewDocument,
   formatR1ChecklistEmailList,
   formatR3ChecklistEmailList,
+  formatR3ImmoChecklistEmailList,
   suggestR1ChecklistProfileFromContact,
 } from "@/lib/pipe/pipe-checklist-email-list";
 import { getActiveR1ChecklistItems } from "@/lib/pipe/r1-document-checklist";
 import { getActiveR3ChecklistItems } from "@/lib/pipe/r3-document-checklist";
+import { cloneDefaultR3ImmoChecklistTemplate } from "@/lib/pipe/r3-immo-checklist-template";
 
 describe("formatR1ChecklistEmailList", () => {
   it("formate les pièces de base et le profil salarié en puces (sans conditionnel)", () => {
@@ -92,6 +94,61 @@ describe("formatR3ChecklistEmailList", () => {
     expect(html).toContain("<ul");
     expect(html).toContain("Carte d'identité ou passeport en cours de validité");
     expect(html).not.toContain("DER");
+  });
+});
+
+describe("formatR3ImmoChecklistEmailList", () => {
+  it("formate les pièces immo par section sans précision UI", () => {
+    const template = cloneDefaultR3ImmoChecklistTemplate();
+    const items = template.items.filter((item) => item.rule === "always").slice(0, 2);
+
+    const { text, html } = formatR3ImmoChecklistEmailList(items, template);
+
+    expect(text).toContain("Identification");
+    expect(text).toContain("Carte nationale");
+    expect(html).toContain("<p");
+    expect(html).toContain("<ul");
+  });
+
+  it("n'inclut pas le hint checklist dans le mail", () => {
+    const template = cloneDefaultR3ImmoChecklistTemplate();
+    const livret = template.items.find((item) => item.id === "livret_famille");
+    expect(livret).toBeDefined();
+
+    const { text, html } = formatR3ImmoChecklistEmailList([livret!], template);
+
+    expect(text).toContain("Livret de famille complet");
+    expect(text).not.toContain("Si couple");
+    expect(html).not.toContain("Si couple");
+  });
+
+  it("retire les parenthèses projet des libellés mail", () => {
+    const template = cloneDefaultR3ImmoChecklistTemplate();
+    const projetItems = template.items.filter((item) =>
+      ["contrat_reservation_vefa", "compromis_ancien", "bulletin_souscription_scpi"].includes(
+        item.id
+      )
+    );
+
+    const legacyItems = projetItems.map((item) => ({
+      ...item,
+      label:
+        item.id === "contrat_reservation_vefa"
+          ? "Contrat de réservation signé par le client (VEFA)"
+          : item.id === "compromis_ancien"
+            ? "Compromis de vente signé par le client (ancien)"
+            : "Bulletin de souscription signé par le client (SCPI)",
+    }));
+
+    const { text } = formatR3ImmoChecklistEmailList(legacyItems, template);
+
+    expect(text).toContain("Contrat de réservation");
+    expect(text).not.toContain("(VEFA)");
+    expect(text).not.toContain("signé par le client");
+    expect(text).toContain("Compromis de vente");
+    expect(text).not.toContain("(ancien)");
+    expect(text).toContain("Bulletin de souscription");
+    expect(text).not.toContain("(SCPI)");
   });
 });
 

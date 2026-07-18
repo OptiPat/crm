@@ -12,6 +12,7 @@ export interface PipeR3ImmoDocumentChecklist {
   pipe_id: number;
   profile_salarie: boolean;
   profile_chef_entreprise: boolean;
+  profile_revenus_configured: boolean;
   emprunteur_personne_morale: boolean;
   revenus_fonciers_hors_micro: boolean;
   revenus_via_sci: boolean;
@@ -25,6 +26,7 @@ export interface PipeR3ImmoDocumentChecklist {
 export interface UpdatePipeR3ImmoDocumentChecklistInput {
   profile_salarie?: boolean;
   profile_chef_entreprise?: boolean;
+  profile_revenus_configured?: boolean;
   emprunteur_personne_morale?: boolean;
   revenus_fonciers_hors_micro?: boolean;
   revenus_via_sci?: boolean;
@@ -58,6 +60,11 @@ export function mergePipeR3ImmoChecklistUpdate(
     ...current,
     profile_salarie: update.profile_salarie ?? current.profile_salarie,
     profile_chef_entreprise: update.profile_chef_entreprise ?? current.profile_chef_entreprise,
+    profile_revenus_configured:
+      update.profile_revenus_configured ??
+      (update.profile_salarie !== undefined || update.profile_chef_entreprise !== undefined
+        ? true
+        : current.profile_revenus_configured),
     emprunteur_personne_morale:
       update.emprunteur_personne_morale ?? current.emprunteur_personne_morale,
     revenus_fonciers_hors_micro:

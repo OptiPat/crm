@@ -181,6 +181,7 @@ fn main() {
             get_document_by_id,
             update_document,
             delete_document,
+            discard_staged_document,
             get_all_templates_email,
             create_template_email,
             get_template_email_by_id,

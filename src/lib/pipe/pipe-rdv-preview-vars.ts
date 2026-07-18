@@ -1,6 +1,8 @@
 import { DEFAULT_PIPE_CHECKLIST_TEMPLATES } from "@/lib/pipe/pipe-checklist-template";
 import { buildR1ChecklistEmailVariablesFromProfile } from "@/lib/pipe/pipe-r1-checklist-email-vars";
 import { buildR3ChecklistEmailVariablesFromTemplates } from "@/lib/pipe/pipe-r3-checklist-email-vars";
+import { buildR3ImmoChecklistEmailVariablesFromTemplate } from "@/lib/pipe/pipe-r3-immo-checklist-email-vars";
+import { cloneDefaultR3ImmoChecklistTemplate } from "@/lib/pipe/r3-immo-checklist-template";
 
 const PIPE_RDV_VAR_KEYS = [
   "date_rdv",
@@ -14,6 +16,7 @@ const PIPE_RDV_VAR_KEYS = [
   "co_contact_et_prenom",
   "liste_documents_r1_html",
   "liste_documents_r3_html",
+  "liste_documents_r3_immo_html",
 ] as const;
 
 const SAMPLE_R1_CHECKLIST_VARS = buildR1ChecklistEmailVariablesFromProfile(
@@ -29,6 +32,10 @@ const SAMPLE_R3_CHECKLIST_VARS = buildR3ChecklistEmailVariablesFromTemplates(
   DEFAULT_PIPE_CHECKLIST_TEMPLATES
 );
 
+const SAMPLE_R3_IMMO_CHECKLIST_VARS = buildR3ImmoChecklistEmailVariablesFromTemplate(
+  cloneDefaultR3ImmoChecklistTemplate()
+);
+
 /** Valeurs fictives pour l'aperçu des modèles Pipe RDV (Paramètres → Modèles email). */
 export const SAMPLE_PIPE_RDV_PREVIEW_VARS: Record<string, string> = {
   date_rdv: "lundi 14 juillet 2026",
@@ -42,6 +49,7 @@ export const SAMPLE_PIPE_RDV_PREVIEW_VARS: Record<string, string> = {
   co_contact_et_prenom: " et Jean",
   ...SAMPLE_R1_CHECKLIST_VARS,
   ...SAMPLE_R3_CHECKLIST_VARS,
+  ...SAMPLE_R3_IMMO_CHECKLIST_VARS,
 };
 
 function haystack(...parts: (string | null | undefined)[]): string {

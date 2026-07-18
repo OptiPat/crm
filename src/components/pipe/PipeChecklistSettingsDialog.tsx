@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { PipeR3ImmoChecklistEmailPreviewPanel } from "@/components/pipe/PipeR3ImmoChecklistEmailPreviewPanel";
 import { PipeR1ChecklistEmailPreviewPanel } from "@/components/pipe/PipeR1ChecklistEmailPreviewPanel";
 import { PipeR3ChecklistEmailPreviewPanel } from "@/components/pipe/PipeR3ChecklistEmailPreviewPanel";
 import {
@@ -431,7 +432,8 @@ export function PipeChecklistSettingsDialog({
           >
             <p className="text-xs text-muted-foreground">
               Pièces dossier prêt immobilier (RDV R3 Immo). Chaque ligne a une règle de
-              visibilité (contact, profil revenus, patrimoine, toggles dossier).
+              visibilité (contact, profil revenus, patrimoine, toggles dossier). Alimente la
+              variable {"{{liste_documents_r3_immo_html}}"} dans le modèle email RDV.
             </p>
 
             {r3ImmoDraft.items.length === 0 ? (
@@ -554,6 +556,11 @@ export function PipeChecklistSettingsDialog({
                 Réinitialiser R3 Immo
               </Button>
             </div>
+
+            <PipeR3ImmoChecklistEmailPreviewPanel
+              template={r3ImmoDraft}
+              idPrefix="settings-r3-immo"
+            />
           </TabsContent>
         </Tabs>
 

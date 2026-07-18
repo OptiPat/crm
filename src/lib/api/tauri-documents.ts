@@ -66,6 +66,15 @@ export async function deleteDocument(id: number): Promise<void> {
   notifyDocumentsChanged();
 }
 
+export async function discardStagedDocument(filePath: string): Promise<void> {
+  if (!filePath.trim()) return;
+  try {
+    await invoke<void>("discard_staged_document", { filePath });
+  } catch (error) {
+    console.warn("discardStagedDocument:", error);
+  }
+}
+
 async function copyFileIntoDocumentsDir(
   sourcePath: string
 ): Promise<{ path: string; name: string; size: number }> {

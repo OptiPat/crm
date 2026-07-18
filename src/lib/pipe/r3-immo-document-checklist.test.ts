@@ -17,6 +17,7 @@ function baseChecklist(
     pipe_id: 1,
     profile_salarie: false,
     profile_chef_entreprise: false,
+    profile_revenus_configured: false,
     emprunteur_personne_morale: false,
     revenus_fonciers_hors_micro: false,
     revenus_via_sci: false,
@@ -240,5 +241,23 @@ describe("r3-immo-document-checklist", () => {
     expect(describeR3ImmoItemVisibility("estimatif_retraite_55", ctx)).toMatch(/\d+ ans/);
     expect(describeR3ImmoItemVisibility("separe", ctx)).toBe("Dissolution de PACS");
     expect(describeR3ImmoItemVisibility("always", ctx)).toBeNull();
+  });
+
+  it("active salarié et chef ensemble quand les deux profils sont configurés", () => {
+    const ctx = buildR3ImmoChecklistContext({
+      contact: baseContact(),
+      secondaryContactId: null,
+      foyerMembers: [],
+      investissements: [],
+      checklist: baseChecklist({
+        profile_salarie: true,
+        profile_chef_entreprise: true,
+        profile_revenus_configured: true,
+      }),
+      r1Checklist: null,
+    });
+    const ids = getActiveR3ImmoChecklistItems(ctx).map((i) => i.id);
+    expect(ids).toContain("bulletins_paie");
+    expect(ids).toContain("bilans_3");
   });
 });

@@ -10,7 +10,7 @@ import { getPipeRdvCalendarEventForTimeline } from "@/lib/api/tauri-calendar";
 import type { PipeRdvCalendarSyncResult } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { resolvePipeRdvGoogleEventId } from "@/lib/api/tauri-calendar";
 import { buildPipeRdvCalendarContext, warnPipeRdvMissingAttendeeEmails } from "@/lib/pipe/pipe-rdv-calendar-context";
-import { pipeRdvCalendarEndAt, formatPipeRdvCalendarContactLabel } from "@/lib/pipe/pipe-rdv-google-calendar";
+import { pipeRdvCalendarEndAt, pipeRdvCalendarEndAtForPlanOption, formatPipeRdvCalendarContactLabel } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { resyncPipeRdvScheduledEmails } from "@/lib/pipe/pipe-rdv-confirmation-email";
 import { buildRdvRescheduledTimelinePayload } from "@/lib/pipe/pipe-rdv-delete";
 import {
@@ -65,13 +65,6 @@ export async function executePipeRdvReschedule(options: {
 }): Promise<PipeRdvCalendarSyncResult | undefined> {
   const previousOccurredAt = options.entry.occurred_at;
   const dateChanged = previousOccurredAt !== options.newOccurredAtUnix;
-  const endAtUnix = options.endAtUnix ?? pipeRdvCalendarEndAt(options.newOccurredAtUnix);
-  const calendarSnapshot = await getPipeRdvCalendarEventForTimeline(options.entry.id).catch(
-    () => null
-  );
-  const previousEndAtUnix =
-    calendarSnapshot?.end_at ?? pipeRdvCalendarEndAt(previousOccurredAt);
-  const endChanged = endAtUnix !== previousEndAtUnix;
   const resolvedEntryTitre =
     options.timelineEntryTitre?.trim() ||
     options.entry.titre?.trim() ||
@@ -80,6 +73,16 @@ export async function executePipeRdvReschedule(options: {
     options.rdvPlanOption ??
     rdvPlanOptionFromEntryTitre(resolvedEntryTitre) ??
     defaultPlanOptionForRdvStage(options.rdvStage);
+  const endAtUnix =
+    options.endAtUnix ??
+    pipeRdvCalendarEndAtForPlanOption(options.newOccurredAtUnix, rdvPlanOption);
+  const calendarSnapshot = await getPipeRdvCalendarEventForTimeline(options.entry.id).catch(
+    () => null
+  );
+  const previousEndAtUnix =
+    calendarSnapshot?.end_at ??
+    pipeRdvCalendarEndAtForPlanOption(previousOccurredAt, rdvPlanOption);
+  const endChanged = endAtUnix !== previousEndAtUnix;
   const nextContenu =
     options.contenu !== undefined
       ? options.contenu?.trim() || null

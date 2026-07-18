@@ -10,7 +10,7 @@ export type DocumentsPortfolioSort =
   | "type_asc"
   | "size_desc";
 
-export type DocumentsPortfolioGroup = "flat" | "client" | "type";
+export type DocumentsPortfolioGroup = "flat" | "folders" | "type";
 
 export const DOCUMENTS_PORTFOLIO_SORT_LABELS: Record<DocumentsPortfolioSort, string> = {
   date_desc: "Plus récent",
@@ -22,7 +22,7 @@ export const DOCUMENTS_PORTFOLIO_SORT_LABELS: Record<DocumentsPortfolioSort, str
 
 export const DOCUMENTS_PORTFOLIO_GROUP_LABELS: Record<DocumentsPortfolioGroup, string> = {
   flat: "Liste unique",
-  client: "Par client",
+  folders: "Dossiers clients",
   type: "Par type",
 };
 
@@ -86,7 +86,7 @@ export type DocumentsDisplayGroup = {
 export function groupDocumentsPortfolio(
   items: Document[],
   mode: DocumentsPortfolioGroup,
-  contactsById: Record<number, Contact>
+  _contactsById: Record<number, Contact>
 ): DocumentsDisplayGroup[] {
   if (items.length === 0) return [];
 
@@ -94,7 +94,7 @@ export function groupDocumentsPortfolio(
     return [{ key: "all", label: "Tous les documents", items }];
   }
 
-  if (mode === "type") {
+  if (mode === "type" || mode === "folders") {
     const byType = new Map<string, Document[]>();
     for (const doc of items) {
       const key = doc.type_document || "AUTRE";
@@ -113,52 +113,18 @@ export function groupDocumentsPortfolio(
       }));
   }
 
-  const byClient = new Map<string, { label: string; items: Document[] }>();
-  for (const doc of items) {
-    const clientKey =
-      doc.contact_id != null ? `contact:${doc.contact_id}` : "sans-client";
-    const label = getDocumentClientLabel(doc, contactsById);
-    const entry = byClient.get(clientKey) ?? { label, items: [] };
-    entry.items.push(doc);
-    byClient.set(clientKey, entry);
-  }
-  return [...byClient.entries()]
-    .sort(([, a], [, b]) => {
-      if (a.label === "Sans client lié") return 1;
-      if (b.label === "Sans client lié") return -1;
-      return compareLocaleAsc(a.label, b.label);
-    })
-    .map(([clientKey, { label, items: groupItems }]) => {
-      const byType = new Map<string, Document[]>();
-      for (const doc of groupItems) {
-        const typeKey = doc.type_document || "AUTRE";
-        const list = byType.get(typeKey) ?? [];
-        list.push(doc);
-        byType.set(typeKey, list);
-      }
-      const subgroups = [...byType.entries()]
-        .sort(([a], [b]) =>
-          compareLocaleAsc(getDocumentTypeLabel(a), getDocumentTypeLabel(b))
-        )
-        .map(([typeKey, typeItems]) => ({
-          key: `${clientKey}::${typeKey}`,
-          label: getDocumentTypeLabel(typeKey),
-          items: typeItems,
-        }));
-      return {
-        key: clientKey,
-        label,
-        items: groupItems,
-        subgroups: subgroups.length > 1 ? subgroups : undefined,
-      };
-    });
+  return [];
 }
 
-/** Liste plate automatique quand des filtres réduisent la bibliothèque. */
+/** Liste plate automatique quand des filtres réduisent la bibliothèque (sauf filtre client seul). */
 export function resolveDocumentsGroupModeWhenFiltered(
   groupMode: DocumentsPortfolioGroup,
-  hasNarrowingFilters: boolean
+  hasNarrowingFilters: boolean,
+  contactFilterOnly = false
 ): DocumentsPortfolioGroup {
+  if (contactFilterOnly && groupMode === "folders") {
+    return "type";
+  }
   if (hasNarrowingFilters && groupMode !== "flat") {
     return "flat";
   }

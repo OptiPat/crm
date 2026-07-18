@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   formatPipeRdvCalendarContactLabel,
   formatPipeRdvGoogleCalendarTitle,
+  formatPipeRdvGoogleCalendarTitleFromPlanOption,
   isPipeRdvCalendarSyncEligible,
   pipeRdvCalendarEndAt,
+  pipeRdvCalendarEndAtForPlanOption,
   PIPE_RDV_CALENDAR_DURATION_SEC,
 } from "@/lib/pipe/pipe-rdv-google-calendar";
 
@@ -47,10 +49,44 @@ describe("formatPipeRdvGoogleCalendarTitle", () => {
   });
 });
 
+describe("formatPipeRdvGoogleCalendarTitleFromPlanOption", () => {
+  it("formate les préconisations R2", () => {
+    expect(formatPipeRdvGoogleCalendarTitleFromPlanOption("R2_PLACEMENT", "TEST test")).toBe(
+      "Présentation préconisations - TEST test"
+    );
+    expect(formatPipeRdvGoogleCalendarTitleFromPlanOption("R2_IMMO", "TEST test")).toBe(
+      "Présentation préconisations - TEST test"
+    );
+  });
+
+  it("formate les concrétisations R3", () => {
+    expect(formatPipeRdvGoogleCalendarTitleFromPlanOption("R3_PLACEMENT", "TEST test")).toBe(
+      "Concrétisation placements - TEST test"
+    );
+    expect(formatPipeRdvGoogleCalendarTitleFromPlanOption("R3_IMMO", "TEST test")).toBe(
+      "Concrétisation immo - TEST test"
+    );
+  });
+});
+
 describe("pipeRdvCalendarEndAt", () => {
   it("ajoute 1 h par défaut", () => {
     expect(pipeRdvCalendarEndAt(1_700_000_000)).toBe(
       1_700_000_000 + PIPE_RDV_CALENDAR_DURATION_SEC
+    );
+  });
+});
+
+describe("pipeRdvCalendarEndAtForPlanOption", () => {
+  it("ajoute 90 min pour R3 Immo", () => {
+    expect(pipeRdvCalendarEndAtForPlanOption(1_700_000_000, "R3_IMMO")).toBe(
+      1_700_000_000 + 90 * 60
+    );
+  });
+
+  it("ajoute 60 min pour R3 Placements", () => {
+    expect(pipeRdvCalendarEndAtForPlanOption(1_700_000_000, "R3_PLACEMENT")).toBe(
+      1_700_000_000 + 60 * 60
     );
   });
 });

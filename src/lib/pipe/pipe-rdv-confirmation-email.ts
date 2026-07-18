@@ -33,6 +33,12 @@ import {
   shouldInjectR3PlacementsChecklistEmailVars,
   templateUsesR3ChecklistEmailVariables,
 } from "@/lib/pipe/pipe-r3-checklist-email-vars";
+import {
+  buildR3ImmoChecklistEmailVariables,
+  R3_IMMO_CHECKLIST_EMAIL_VAR_KEY,
+  shouldInjectR3ImmoChecklistEmailVars,
+  templateUsesR3ImmoChecklistEmailVariables,
+} from "@/lib/pipe/pipe-r3-immo-checklist-email-vars";
 import { syncPipeRdvReminderSchedules } from "@/lib/pipe/pipe-rdv-reminder-schedule";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { toast } from "sonner";
@@ -115,7 +121,16 @@ export async function sendPipeRdvTemplatedEmailToContact(options: {
     rdvStage: options.rdvStage,
     timelineEntryTitre: options.timelineEntryTitre,
   });
+  const needsR3ImmoList = shouldInjectR3ImmoChecklistEmailVars({
+    rdvStage: options.rdvStage,
+    timelineEntryTitre: options.timelineEntryTitre,
+  });
   const templateHasR3ChecklistVar = templateUsesR3ChecklistEmailVariables(
+    content.sujet,
+    content.corps,
+    corpsHtml
+  );
+  const templateHasR3ImmoChecklistVar = templateUsesR3ImmoChecklistEmailVariables(
     content.sujet,
     content.corps,
     corpsHtml
@@ -135,6 +150,11 @@ export async function sendPipeRdvTemplatedEmailToContact(options: {
       ? await buildR3ChecklistEmailVariables()
       : templateHasR3ChecklistVar
         ? { [R3_CHECKLIST_EMAIL_VAR_KEY]: "" }
+        : {}),
+    ...(needsR3ImmoList
+      ? await buildR3ImmoChecklistEmailVariables(options.pipe)
+      : templateHasR3ImmoChecklistVar
+        ? { [R3_IMMO_CHECKLIST_EMAIL_VAR_KEY]: "" }
         : {}),
   };
 

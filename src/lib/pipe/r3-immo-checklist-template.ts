@@ -222,7 +222,7 @@ export const DEFAULT_R3_IMMO_CHECKLIST_ITEMS: readonly R3ImmoChecklistItemDef[] 
   {
     id: "mandat_recherche_capitaux",
     section: "Divers",
-    label: "Mandat de recherche en capitaux",
+    label: "Mandat de recherche en capitaux à signer",
     rule: "always",
   },
   {
@@ -289,19 +289,19 @@ export const DEFAULT_R3_IMMO_CHECKLIST_ITEMS: readonly R3ImmoChecklistItemDef[] 
   {
     id: "contrat_reservation_vefa",
     section: "Objet de la demande de prêt",
-    label: "Contrat de réservation signé par le client (VEFA)",
+    label: "Contrat de réservation",
     rule: "projet_vefa",
   },
   {
     id: "compromis_ancien",
     section: "Objet de la demande de prêt",
-    label: "Compromis de vente signé par le client (ancien)",
+    label: "Compromis de vente",
     rule: "projet_ancien",
   },
   {
     id: "bulletin_souscription_scpi",
     section: "Objet de la demande de prêt",
-    label: "Bulletin de souscription signé par le client (SCPI)",
+    label: "Bulletin de souscription",
     rule: "projet_scpi",
   },
 ] as const;

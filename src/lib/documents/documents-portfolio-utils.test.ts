@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   getDocumentClientLabel,
   groupDocumentsPortfolio,
+  resolveDocumentsGroupModeWhenFiltered,
   sortDocumentsPortfolio,
 } from "@/lib/documents/documents-portfolio-utils";
+import { buildClientDocumentFolders } from "@/lib/documents/documents-folder-utils";
 import type { Document } from "@/lib/api/tauri-documents";
 import type { Contact } from "@/lib/api/tauri-contacts";
 
@@ -52,17 +54,17 @@ describe("documents-portfolio-utils", () => {
     expect(groups[0]?.key).toBe("IDENTITE");
   });
 
-  it("regroupe par client avec sous-sections type si plusieurs types", () => {
+  it("regroupe par type dans un dossier ouvert", () => {
     const groups = groupDocumentsPortfolio(
       [
         doc({ id: 1, type_document: "PATRIMOINE", contact_id: 1 }),
         doc({ id: 2, type_document: "IDENTITE", contact_id: 1 }),
       ],
-      "client",
+      "folders",
       contacts
     );
-    expect(groups).toHaveLength(1);
-    expect(groups[0]?.subgroups).toHaveLength(2);
+    expect(groups).toHaveLength(2);
+    expect(groups[0]?.key).toBe("IDENTITE");
   });
 
   it("ne fusionne pas deux contacts distincts au même nom", () => {
@@ -70,14 +72,21 @@ describe("documents-portfolio-utils", () => {
       1: { id: 1, nom: "DUPONT", prenom: "Jean", categorie: "CLIENT" } as Contact,
       2: { id: 2, nom: "DUPONT", prenom: "Jean", categorie: "CLIENT" } as Contact,
     };
-    const groups = groupDocumentsPortfolio(
+    const folders = buildClientDocumentFolders(
       [
         doc({ id: 1, contact_id: 1 }),
         doc({ id: 2, contact_id: 2 }),
       ],
-      "client",
       homonymes
     );
-    expect(groups).toHaveLength(2);
+    expect(folders).toHaveLength(2);
+  });
+
+  it("conserve le regroupement par type quand seul le filtre client est actif", () => {
+    expect(resolveDocumentsGroupModeWhenFiltered("folders", false, true)).toBe("type");
+  });
+
+  it("aplatit la liste quand un filtre type ou recherche est actif", () => {
+    expect(resolveDocumentsGroupModeWhenFiltered("folders", true, false)).toBe("flat");
   });
 });

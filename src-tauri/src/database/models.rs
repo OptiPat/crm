@@ -1548,6 +1548,7 @@ pub struct PipeR3ImmoDocumentChecklist {
     pub pipe_id: i64,
     pub profile_salarie: bool,
     pub profile_chef_entreprise: bool,
+    pub profile_revenus_configured: bool,
     pub emprunteur_personne_morale: bool,
     pub revenus_fonciers_hors_micro: bool,
     pub revenus_via_sci: bool,
@@ -1563,6 +1564,7 @@ pub struct PipeR3ImmoDocumentChecklist {
 pub struct UpdatePipeR3ImmoDocumentChecklistInput {
     pub profile_salarie: Option<bool>,
     pub profile_chef_entreprise: Option<bool>,
+    pub profile_revenus_configured: Option<bool>,
     pub emprunteur_personne_morale: Option<bool>,
     pub revenus_fonciers_hors_micro: Option<bool>,
     pub revenus_via_sci: Option<bool>,

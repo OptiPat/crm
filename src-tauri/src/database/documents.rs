@@ -95,31 +95,63 @@ impl super::Database {
         &self,
         id: i64,
         document: &super::models::NewDocument,
+        file_relocation: Option<(&str, i64)>,
     ) -> Result<super::models::Document> {
-        self.conn.execute(
-            "UPDATE documents SET 
-                contact_id = ?1,
-                foyer_id = ?2,
-                type_document = ?3,
-                nom_fichier = ?4,
-                date_document = ?5,
-                notes = ?6,
-                sensibilite_extra_financiere = ?7,
-                experience_investissement = ?8,
-                updated_at = unixepoch()
-            WHERE id = ?9",
-            params![
-                &document.contact_id,
-                &document.foyer_id,
-                &document.type_document,
-                &document.nom_fichier,
-                &document.date_document,
-                &document.notes,
-                &document.sensibilite_extra_financiere,
-                &document.experience_investissement,
-                id
-            ],
-        )?;
+        if let Some((chemin_fichier, taille_fichier)) = file_relocation {
+            self.conn.execute(
+                "UPDATE documents SET 
+                    contact_id = ?1,
+                    foyer_id = ?2,
+                    type_document = ?3,
+                    nom_fichier = ?4,
+                    chemin_fichier = ?5,
+                    taille_fichier = ?6,
+                    date_document = ?7,
+                    notes = ?8,
+                    sensibilite_extra_financiere = ?9,
+                    experience_investissement = ?10,
+                    updated_at = unixepoch()
+                WHERE id = ?11",
+                params![
+                    &document.contact_id,
+                    &document.foyer_id,
+                    &document.type_document,
+                    &document.nom_fichier,
+                    chemin_fichier,
+                    taille_fichier,
+                    &document.date_document,
+                    &document.notes,
+                    &document.sensibilite_extra_financiere,
+                    &document.experience_investissement,
+                    id
+                ],
+            )?;
+        } else {
+            self.conn.execute(
+                "UPDATE documents SET 
+                    contact_id = ?1,
+                    foyer_id = ?2,
+                    type_document = ?3,
+                    nom_fichier = ?4,
+                    date_document = ?5,
+                    notes = ?6,
+                    sensibilite_extra_financiere = ?7,
+                    experience_investissement = ?8,
+                    updated_at = unixepoch()
+                WHERE id = ?9",
+                params![
+                    &document.contact_id,
+                    &document.foyer_id,
+                    &document.type_document,
+                    &document.nom_fichier,
+                    &document.date_document,
+                    &document.notes,
+                    &document.sensibilite_extra_financiere,
+                    &document.experience_investissement,
+                    id
+                ],
+            )?;
+        }
 
         self.get_document_by_id(id)
     }
@@ -127,6 +159,19 @@ impl super::Database {
     pub fn delete_document(&self, id: i64) -> Result<()> {
         self.conn
             .execute("DELETE FROM documents WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn update_document_file_path(
+        &self,
+        id: i64,
+        chemin_fichier: &str,
+        taille_fichier: i64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE documents SET chemin_fichier = ?1, taille_fichier = ?2, updated_at = unixepoch() WHERE id = ?3",
+            params![chemin_fichier, taille_fichier, id],
+        )?;
         Ok(())
     }
 }

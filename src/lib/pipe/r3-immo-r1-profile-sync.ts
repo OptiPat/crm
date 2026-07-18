@@ -19,14 +19,17 @@ export function r1HasRevenueProfile(r1?: RevenueProfilePick | null): boolean {
 }
 
 export function r3ImmoHasRevenueProfileOverride(
-  immo: Pick<PipeR3ImmoDocumentChecklist, "profile_salarie" | "profile_chef_entreprise">
+  immo: Pick<PipeR3ImmoDocumentChecklist, "profile_revenus_configured">
 ): boolean {
-  return immo.profile_salarie || immo.profile_chef_entreprise;
+  return immo.profile_revenus_configured;
 }
 
-/** Profil salarié / chef : override R3 immo, sinon reprise automatique du R1. */
+/** Profil salarié / chef : override R3 immo explicite, sinon reprise automatique du R1. */
 export function resolveR3ImmoRevenueProfile(
-  immo: Pick<PipeR3ImmoDocumentChecklist, "profile_salarie" | "profile_chef_entreprise">,
+  immo: Pick<
+    PipeR3ImmoDocumentChecklist,
+    "profile_salarie" | "profile_chef_entreprise" | "profile_revenus_configured"
+  >,
   r1?: RevenueProfilePick | null
 ): R3ImmoResolvedRevenueProfile {
   if (r3ImmoHasRevenueProfileOverride(immo)) {
@@ -49,7 +52,8 @@ export function resolveR3ImmoRevenueProfile(
 export function formatR3ImmoRevenueProfileLabel(
   profile: Pick<R3ImmoResolvedRevenueProfile, "profile_salarie" | "profile_chef_entreprise">
 ): string | null {
-  if (profile.profile_salarie) return "Salarié";
-  if (profile.profile_chef_entreprise) return "Chef d'entreprise";
-  return null;
+  const parts: string[] = [];
+  if (profile.profile_salarie) parts.push("Salarié");
+  if (profile.profile_chef_entreprise) parts.push("Chef d'entreprise");
+  return parts.length > 0 ? parts.join(" · ") : null;
 }

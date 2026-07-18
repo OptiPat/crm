@@ -228,15 +228,19 @@ export function PipeR3ImmoDocumentChecklist({
   const progress = countR3ImmoChecklistProgress(checklist, checklistContext, checklistTemplate);
   const revenueFromR1 = checklistContext.revenueProfileSource === "r1";
   const revenueLabel = formatR3ImmoRevenueProfileLabel(checklistContext.checklist);
+  const resolvedSalarie = checklistContext.checklist.profile_salarie;
+  const resolvedChef = checklistContext.checklist.profile_chef_entreprise;
   const missingCount = progress.total - progress.received;
 
   const contextSummaryParts: string[] = [];
   if (revenueFromR1 && revenueLabel) {
     contextSummaryParts.push(`Revenus : ${revenueLabel}`);
-  } else if (checklist.profile_salarie) {
-    contextSummaryParts.push("Salarié");
-  } else if (checklist.profile_chef_entreprise) {
-    contextSummaryParts.push("Chef d'entreprise");
+  } else {
+    const revenueSummary = formatR3ImmoRevenueProfileLabel({
+      profile_salarie: checklist.profile_salarie,
+      profile_chef_entreprise: checklist.profile_chef_entreprise,
+    });
+    if (revenueSummary) contextSummaryParts.push(revenueSummary);
   }
   if (checklist.emprunteur_personne_morale) contextSummaryParts.push("PM");
   if (checklist.revenus_fonciers_hors_micro) contextSummaryParts.push("Foncier");
@@ -312,36 +316,36 @@ export function PipeR3ImmoDocumentChecklist({
                 <div className="space-y-2 pt-3">
                   <p className="text-xs font-medium text-muted-foreground">Profil revenus</p>
                   {revenueFromR1 && revenueLabel ? (
-                    <p className="text-sm text-muted-foreground">
-                      Repris automatiquement du R1 :{" "}
+                    <p className="text-xs text-muted-foreground">
+                      Repris du R1 :{" "}
                       <span className="font-medium text-foreground">{revenueLabel}</span>
+                      {" — "}ajustez si besoin pour chaque emprunteur.
                     </p>
-                  ) : (
-                    <div className="flex flex-wrap gap-x-4 gap-y-2">
-                      <ProfileToggle
-                        id="r3-immo-salarie"
-                        label="Salarié"
-                        checked={checklist.profile_salarie}
-                        onCheckedChange={(checked) => {
-                          void onPersist({
-                            profile_salarie: checked,
-                            profile_chef_entreprise: checked ? false : undefined,
-                          });
-                        }}
-                      />
-                      <ProfileToggle
-                        id="r3-immo-chef"
-                        label="Chef d'entreprise"
-                        checked={checklist.profile_chef_entreprise}
-                        onCheckedChange={(checked) => {
-                          void onPersist({
-                            profile_chef_entreprise: checked,
-                            profile_salarie: checked ? false : undefined,
-                          });
-                        }}
-                      />
-                    </div>
-                  )}
+                  ) : null}
+                  <div className="flex flex-wrap gap-x-4 gap-y-2">
+                    <ProfileToggle
+                      id="r3-immo-salarie"
+                      label="Salarié"
+                      checked={resolvedSalarie}
+                      onCheckedChange={(checked) => {
+                        void onPersist({
+                          profile_salarie: checked,
+                          profile_chef_entreprise: resolvedChef,
+                        });
+                      }}
+                    />
+                    <ProfileToggle
+                      id="r3-immo-chef"
+                      label="Chef d'entreprise"
+                      checked={resolvedChef}
+                      onCheckedChange={(checked) => {
+                        void onPersist({
+                          profile_chef_entreprise: checked,
+                          profile_salarie: resolvedSalarie,
+                        });
+                      }}
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">Situation dossier</p>

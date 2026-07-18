@@ -14,7 +14,7 @@ export type DocumentsPagePreferences = {
 
 const DEFAULTS: DocumentsPagePreferences = {
   sortKey: "date_desc",
-  groupMode: "flat",
+  groupMode: "folders",
   typeFilter: "ALL",
   contactFilterId: null,
 };
@@ -27,7 +27,7 @@ const VALID_SORTS = new Set<string>([
   "size_desc",
 ]);
 
-const VALID_GROUPS = new Set<string>(["flat", "client", "type"]);
+const VALID_GROUPS = new Set<string>(["flat", "folders", "type", "client"]);
 
 const VALID_TYPES = new Set<string>([
   "ALL",
@@ -47,9 +47,12 @@ function sanitizePreferences(
     sortKey: VALID_SORTS.has(raw.sortKey ?? "")
       ? (raw.sortKey as DocumentsPortfolioSort)
       : DEFAULTS.sortKey,
-    groupMode: VALID_GROUPS.has(raw.groupMode ?? "")
-      ? (raw.groupMode as DocumentsPortfolioGroup)
-      : DEFAULTS.groupMode,
+    groupMode:
+      (raw.groupMode as string | undefined) === "client"
+        ? "folders"
+        : VALID_GROUPS.has(raw.groupMode ?? "")
+          ? (raw.groupMode as DocumentsPortfolioGroup)
+          : DEFAULTS.groupMode,
     typeFilter: VALID_TYPES.has(raw.typeFilter ?? "")
       ? (raw.typeFilter as string)
       : DEFAULTS.typeFilter,

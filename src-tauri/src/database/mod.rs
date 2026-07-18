@@ -104,6 +104,22 @@ impl Database {
             e
         })?;
 
+        if let Err(e) =
+            crate::documents_storage::migrate_documents_to_contact_folders(&app_data_dir, &db)
+        {
+            eprintln!("⚠️ Migration dossiers documents : {e}");
+        }
+
+        match crate::documents_storage::prune_orphan_staging_files_on_open(&app_data_dir, &db) {
+            Ok(removed) if removed > 0 => {
+                println!(
+                    "✅ Nettoyage staging documents : {removed} fichier(s) orphelin(s) supprimé(s)"
+                );
+            }
+            Err(e) => eprintln!("⚠️ Nettoyage staging documents : {e}"),
+            _ => {}
+        }
+
         if let Err(e) = crate::backup::create_daily_backup_if_needed(&app_data_dir, &db_path) {
             eprintln!("⚠️ Sauvegarde automatique échouée : {e}");
         }

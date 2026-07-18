@@ -9,6 +9,11 @@ import {
   type R1ChecklistProfile,
 } from "@/lib/pipe/pipe-checklist-template";
 import { groupR1ItemsBySection } from "@/lib/pipe/r1-document-checklist";
+import {
+  groupR3ImmoItemsBySection,
+  type R3ImmoChecklistItemDef,
+  type R3ImmoChecklistTemplate,
+} from "@/lib/pipe/r3-immo-checklist-template";
 
 const SECTION_LABEL_TO_SCOPE: Record<string, PipeChecklistProfileScope> = Object.fromEntries(
   (Object.entries(PIPE_CHECKLIST_PROFILE_SCOPE_LABELS) as [PipeChecklistProfileScope, string][]).map(
@@ -156,6 +161,55 @@ export function formatR3ChecklistEmailList(items: PipeChecklistTemplateItem[]): 
 }
 
 const R3_EMAIL_EXCLUDED_ITEM_IDS = new Set(["der", "rio", "qpi_a_signer"]);
+
+const R3_IMMO_EMAIL_SIMPLIFY_PROJET_LABEL_ITEM_IDS = new Set([
+  "contrat_reservation_vefa",
+  "compromis_ancien",
+  "bulletin_souscription_scpi",
+]);
+
+function formatR3ImmoEmailItemLabel(item: R3ImmoChecklistItemDef): string {
+  let label = item.label.trim();
+  if (!label) return "";
+  if (R3_IMMO_EMAIL_SIMPLIFY_PROJET_LABEL_ITEM_IDS.has(item.id)) {
+    label = label.replace(/\s*\([^)]+\)\s*$/, "").trim();
+    label = label.replace(/\s+signé par le client$/i, "").trim();
+  }
+  return label;
+}
+
+const R3_IMMO_EMAIL_SECTION_STYLE = "margin:0.85em 0 0.25em;font-weight:600;font-size:1em;";
+
+export function formatR3ImmoChecklistEmailList(
+  items: readonly R3ImmoChecklistItemDef[],
+  template: R3ImmoChecklistTemplate
+): { text: string; html: string } {
+  if (items.length === 0) {
+    return { text: "", html: "" };
+  }
+
+  const textLines: string[] = [];
+  const htmlParts: string[] = [];
+
+  for (const { section, items: sectionItems } of groupR3ImmoItemsBySection(items, template)) {
+    const labels = sectionItems.map((item) => formatR3ImmoEmailItemLabel(item)).filter(Boolean);
+    if (labels.length === 0) continue;
+
+    textLines.push(`${section} :`);
+    textLines.push(...labels.map((label) => `  - ${label}`));
+    htmlParts.push(`<p style="${R3_IMMO_EMAIL_SECTION_STYLE}">${escapeHtml(section)}</p>`);
+    htmlParts.push(
+      `<ul style="${R1_EMAIL_UL_STYLE}">${labels
+        .map((label) => `<li>${escapeHtml(label)}</li>`)
+        .join("")}</ul>`
+    );
+  }
+
+  return {
+    text: textLines.join("\n"),
+    html: htmlParts.join(""),
+  };
+}
 
 function formatR3EmailItemLabel(item: PipeChecklistTemplateItem): string {
   if (item.id === "cni") {

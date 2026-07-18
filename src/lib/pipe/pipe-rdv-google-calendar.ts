@@ -1,14 +1,14 @@
-import { createCalendarRdv } from "@/lib/api/tauri-calendar";
-import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
-import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
+import {
+  defaultRdvDurationPresetForPlanOption,
+  endUnixFromDuration,
+  rdvDurationMinutesFromPreset,
+} from "@/lib/calendar/rdv-duration";
 import {
   rdvStageFromPlanOption,
   type PipeRdvPlanOption,
 } from "@/lib/pipe/pipe-rdv-plan-option";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import type { PipeRecordLike } from "@/lib/pipe/pipe-types";
-import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
-import { loadDefaultPipeRdvVisio, rdvVisioToApiPayload } from "@/lib/calendar/rdv-visio";
 
 const PIPE_RDV_GOOGLE_CALENDAR_LABELS: Record<PipeRdvStage, string> = {
   R1: "Premier rendez-vous patrimonial",
@@ -66,16 +66,16 @@ export function formatPipeRdvGoogleCalendarTitleFromPlanOption(
 ): string {
   const contact = contactLabel.trim() || "Contact";
   if (planOption === "R2_PLACEMENT") {
-    return `Présentation placement patrimonial - ${contact}`;
+    return `Présentation préconisations - ${contact}`;
   }
   if (planOption === "R2_IMMO") {
-    return `Présentation immobilier - ${contact}`;
+    return `Présentation préconisations - ${contact}`;
   }
   if (planOption === "R3_PLACEMENT") {
-    return `Souscription placements - ${contact}`;
+    return `Concrétisation placements - ${contact}`;
   }
   if (planOption === "R3_IMMO") {
-    return `Souscription immobilier - ${contact}`;
+    return `Concrétisation immo - ${contact}`;
   }
   return formatPipeRdvGoogleCalendarTitle(rdvStageFromPlanOption(planOption), contactLabel);
 }
@@ -84,69 +84,15 @@ export function pipeRdvCalendarEndAt(startAtUnix: number): number {
   return startAtUnix + PIPE_RDV_CALENDAR_DURATION_SEC;
 }
 
-export async function syncPipeRdvToGoogleCalendarIfConnected(options: {
-  contactId: number;
-  contactLabel: string;
-  rdvStage: PipeRdvStage;
-  startAtUnix: number;
-  visio?: RdvVisioOptions;
-  physicalAddress?: string | null;
-  additionalAttendeeContactIds?: number[];
-}): Promise<PipeRdvCalendarSyncResult> {
-  if (options.contactId <= 0) {
-    return { synced: false, reason: "no_contact" };
+export function pipeRdvCalendarEndAtForPlanOption(
+  startAtUnix: number,
+  planOption?: PipeRdvPlanOption | null
+): number {
+  if (!planOption) {
+    return pipeRdvCalendarEndAt(startAtUnix);
   }
-
-  let calendarConnected = false;
-  try {
-    const status = await getEmailConnectionStatus();
-    calendarConnected = status.google_calendar_connected;
-  } catch {
-    return { synced: false, reason: "not_connected" };
-  }
-
-  if (!calendarConnected) {
-    return { synced: false, reason: "not_connected" };
-  }
-
-  if (!isPipeRdvCalendarSyncEligible(options.startAtUnix)) {
-    return { synced: false, reason: "past" };
-  }
-
-  const title = formatPipeRdvGoogleCalendarTitle(
-    options.rdvStage,
-    options.contactLabel
+  const minutes = rdvDurationMinutesFromPreset(
+    defaultRdvDurationPresetForPlanOption(planOption)
   );
-  const endAtUnix = pipeRdvCalendarEndAt(options.startAtUnix);
-  const visio = options.visio ?? (await loadDefaultPipeRdvVisio());
-  const visioPayload = rdvVisioToApiPayload(visio, options.physicalAddress);
-
-  try {
-    await createCalendarRdv({
-      contactId: options.contactId,
-      title,
-      startAt: options.startAtUnix,
-      endAt: endAtUnix,
-      addGoogleMeet: visioPayload.addGoogleMeet,
-      visioLink: visioPayload.visioLink,
-      eventLocation: visioPayload.eventLocation,
-      additionalAttendeeContactIds: options.additionalAttendeeContactIds,
-    });
-  } catch (e) {
-    return {
-      synced: false,
-      reason: "error",
-      message: e instanceof Error ? e.message : String(e),
-    };
-  }
-
-  let clientAlreadyAccepted = false;
-  try {
-    const sync = await runRelationAutoSync();
-    clientAlreadyAccepted = sync.calendar_accepted > 0;
-  } catch {
-    // RDV créé — sync statut optionnelle
-  }
-
-  return { synced: true, clientAlreadyAccepted };
+  return endUnixFromDuration(startAtUnix, minutes);
 }
