@@ -30,6 +30,7 @@ pub struct OAuthAppSettingsInput {
     pub google_client_id: Option<String>,
     /// `None` = ne pas modifier le secret enregistré ; chaîne non vide = enregistrer.
     pub google_client_secret: Option<String>,
+    /// Absent du JSON = conserver la valeur enregistrée (ne pas effacer OneDrive).
     pub microsoft_client_id: Option<String>,
 }
 
@@ -80,6 +81,22 @@ pub fn get_oauth_app_settings(
 }
 
 #[tauri::command]
+pub fn save_microsoft_oauth_client_id(
+    app_handle: AppHandle,
+    session: State<'_, UiSessionState>,
+    client_id: String,
+) -> Result<(), String> {
+    require_ui_session(&session)?;
+    let trimmed = client_id.trim();
+    if trimmed.is_empty() {
+        return Err("Client ID Microsoft vide.".into());
+    }
+    let mut store = EmailOAuthStore::load(&app_handle)?;
+    store.microsoft_client_id = Some(trimmed.to_string());
+    store.save(&app_handle)
+}
+
+#[tauri::command]
 pub fn save_oauth_app_settings(
     app_handle: AppHandle,
     session: State<'_, UiSessionState>,
@@ -87,14 +104,20 @@ pub fn save_oauth_app_settings(
 ) -> Result<(), String> {
     require_ui_session(&session)?;
     let mut store = EmailOAuthStore::load(&app_handle)?;
-    store.google_client_id = settings
-        .google_client_id
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
-    store.microsoft_client_id = settings
-        .microsoft_client_id
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
+    if let Some(google_id) = settings.google_client_id {
+        store.google_client_id = if google_id.trim().is_empty() {
+            None
+        } else {
+            Some(google_id.trim().to_string())
+        };
+    }
+    if let Some(ms_id) = settings.microsoft_client_id {
+        store.microsoft_client_id = if ms_id.trim().is_empty() {
+            None
+        } else {
+            Some(ms_id.trim().to_string())
+        };
+    }
     if let Some(secret) = settings.google_client_secret {
         let trimmed = secret.trim();
         if !trimmed.is_empty() {

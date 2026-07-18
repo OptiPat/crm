@@ -58,6 +58,7 @@ import { FoyerForm } from "@/components/foyers/FoyerForm";
 import { EtiquetteList } from "@/components/etiquettes/EtiquetteBadge";
 import { EtiquetteSelector } from "@/components/etiquettes/EtiquetteSelector";
 import { ContactCreateMenu } from "@/components/contacts/ContactCreateMenu";
+import { ContactOneDriveActions } from "@/components/client-onedrive/ContactOneDriveActions";
 import {
   isAutoEtiquetteAttribution,
   RemoveAutoEtiquetteDialog,
@@ -801,6 +802,7 @@ export function ContactDetail({
                 <FileUp className="h-4 w-4" />
                 <span className="sr-only md:not-sr-only">Importer</span>
               </Button>
+              <ContactOneDriveActions contactId={contact.id} />
               <ContactCreateMenu
                 contactId={contact.id}
                 nestedSheet={nestedInvestissementSheet}

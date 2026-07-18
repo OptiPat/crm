@@ -2,23 +2,22 @@ use super::oauth_store::EmailOAuthStore;
 use oauth2::basic::BasicClient;
 use oauth2::{AuthUrl, ClientId, ClientSecret, TokenUrl};
 
-pub fn oauth_endpoints(provider: &str) -> Result<(&'static str, &'static str), String> {
-    match provider {
-        "google" => Ok((
-            "https://accounts.google.com/o/oauth2/v2/auth",
-            "https://oauth2.googleapis.com/token",
-        )),
-        "microsoft" => Ok((
-            "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-            "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-        )),
-        _ => Err(format!("Fournisseur OAuth inconnu: {}", provider)),
+pub fn microsoft_oauth_tenant(oauth_flow_provider: &str) -> &'static str {
+    // App Azure « comptes personnels uniquement » → endpoint /consumers obligatoire.
+    if oauth_flow_provider == "microsoft_onedrive" {
+        "consumers"
+    } else {
+        "common"
     }
 }
 
-pub fn build_basic_client(provider: &str, store: &EmailOAuthStore) -> Result<BasicClient, String> {
-    let oauth_provider = match provider {
+pub fn build_basic_client(
+    oauth_flow_provider: &str,
+    store: &EmailOAuthStore,
+) -> Result<BasicClient, String> {
+    let oauth_provider = match oauth_flow_provider {
         "google" | "google_calendar" => "google",
+        "microsoft" | "microsoft_onedrive" => "microsoft",
         other => other,
     };
     let (client_id, client_secret) = match oauth_provider {
@@ -44,24 +43,41 @@ pub fn build_basic_client(provider: &str, store: &EmailOAuthStore) -> Result<Bas
             (id, Some(secret))
         }
         "microsoft" => {
+            let missing = if oauth_flow_provider == "microsoft_onedrive" {
+                "Identifiant client Microsoft manquant (Paramètres → Intégrations → Dossiers clients OneDrive)."
+            } else {
+                "Identifiant client Microsoft manquant (Paramètres → Emails & envois → Connexion)."
+            };
             let id = store
                 .microsoft_client_id
                 .as_ref()
                 .filter(|s| !s.trim().is_empty())
                 .cloned()
-                .ok_or_else(|| {
-                    "Identifiant client Microsoft manquant (Paramètres → Emails & envois → Connexion).".to_string()
-                })?;
+                .ok_or_else(|| missing.to_string())?;
             (id, None)
         }
-        _ => return Err(format!("Fournisseur OAuth inconnu: {}", provider)),
+        _ => return Err(format!("Fournisseur OAuth inconnu: {}", oauth_provider)),
     };
 
-    let (auth_url, token_url) = oauth_endpoints(oauth_provider)?;
+    let (auth_url, token_url) = match oauth_provider {
+        "google" => (
+            "https://accounts.google.com/o/oauth2/v2/auth".to_string(),
+            "https://oauth2.googleapis.com/token".to_string(),
+        ),
+        "microsoft" => {
+            let tenant = microsoft_oauth_tenant(oauth_flow_provider);
+            (
+                format!("https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize"),
+                format!("https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"),
+            )
+        }
+        _ => return Err(format!("Fournisseur OAuth inconnu: {}", oauth_provider)),
+    };
+
     Ok(BasicClient::new(
         ClientId::new(client_id),
         client_secret.map(ClientSecret::new),
-        AuthUrl::new(auth_url.to_string()).map_err(|e| e.to_string())?,
-        Some(TokenUrl::new(token_url.to_string()).map_err(|e| e.to_string())?),
+        AuthUrl::new(auth_url).map_err(|e| e.to_string())?,
+        Some(TokenUrl::new(token_url).map_err(|e| e.to_string())?),
     ))
 }

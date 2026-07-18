@@ -69,10 +69,11 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
   const handleSaveIds = async () => {
     try {
       const secretTrimmed = googleClientSecret.trim();
+      const msTrimmed = microsoftClientId.trim();
       await saveOAuthAppSettings({
-        google_client_id: googleClientId.trim() || null,
+        google_client_id: googleClientId.trim(),
         google_client_secret: secretTrimmed ? secretTrimmed : undefined,
-        microsoft_client_id: microsoftClientId.trim() || null,
+        ...(msTrimmed ? { microsoft_client_id: msTrimmed } : {}),
       });
       if (secretTrimmed) {
         setGoogleSecretConfigured(true);

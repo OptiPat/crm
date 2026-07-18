@@ -28,6 +28,8 @@ pub struct EmailOAuthStore {
     pub connection: Option<EmailOAuthConnection>,
     /// Agenda Google en complément d'une boîte Microsoft (lecture RDV campagnes).
     pub google_calendar_connection: Option<EmailOAuthConnection>,
+    /// OneDrive personnel (fichiers) en complément d'une boîte Gmail.
+    pub microsoft_onedrive_connection: Option<EmailOAuthConnection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -41,6 +43,8 @@ struct PersistedOAuthStore {
     connection: Option<PersistedOAuthConnection>,
     #[serde(default)]
     google_calendar_connection: Option<PersistedOAuthConnection>,
+    #[serde(default)]
+    microsoft_onedrive_connection: Option<PersistedOAuthConnection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,6 +144,10 @@ impl EmailOAuthStore {
             .google_calendar_connection
             .map(|c| persisted_connection_to_runtime(c, storage_key))
             .transpose()?;
+        let microsoft_onedrive_connection = persisted
+            .microsoft_onedrive_connection
+            .map(|c| persisted_connection_to_runtime(c, storage_key))
+            .transpose()?;
         let google_client_secret = match (
             persisted.google_client_secret_enc.as_ref(),
             storage_key,
@@ -156,6 +164,7 @@ impl EmailOAuthStore {
             microsoft_client_id: persisted.microsoft_client_id,
             connection,
             google_calendar_connection,
+            microsoft_onedrive_connection,
         })
     }
 
@@ -167,6 +176,11 @@ impl EmailOAuthStore {
             .transpose()?;
         let google_calendar_connection = self
             .google_calendar_connection
+            .as_ref()
+            .map(|c| runtime_connection_to_persisted(c, storage_key))
+            .transpose()?;
+        let microsoft_onedrive_connection = self
+            .microsoft_onedrive_connection
             .as_ref()
             .map(|c| runtime_connection_to_persisted(c, storage_key))
             .transpose()?;
@@ -189,6 +203,7 @@ impl EmailOAuthStore {
             microsoft_client_id: self.microsoft_client_id.clone(),
             connection,
             google_calendar_connection,
+            microsoft_onedrive_connection,
         })
     }
 
@@ -225,6 +240,10 @@ impl PersistedOAuthStore {
                 .is_some_and(PersistedOAuthConnection::needs_secret_migration)
             || self
                 .google_calendar_connection
+                .as_ref()
+                .is_some_and(PersistedOAuthConnection::needs_secret_migration)
+            || self
+                .microsoft_onedrive_connection
                 .as_ref()
                 .is_some_and(PersistedOAuthConnection::needs_secret_migration)
     }

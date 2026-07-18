@@ -16,10 +16,12 @@ export interface OAuthAppSettings {
 }
 
 export interface OAuthAppSettingsInput {
-  google_client_id: string | null;
+  /** Toujours envoyé depuis Emails ; chaîne vide = effacer. */
+  google_client_id?: string | null;
   /** Omit or null = keep existing secret; non-empty string = save new secret */
   google_client_secret?: string | null;
-  microsoft_client_id: string | null;
+  /** Omit to keep existing Microsoft client ID (évite d'effacer OneDrive depuis Emails). */
+  microsoft_client_id?: string | null;
 }
 
 export async function getEmailConnectionStatus(): Promise<EmailConnectionStatus> {
@@ -28,6 +30,10 @@ export async function getEmailConnectionStatus(): Promise<EmailConnectionStatus>
 
 export async function getOAuthAppSettings(): Promise<OAuthAppSettings> {
   return invoke<OAuthAppSettings>("get_oauth_app_settings");
+}
+
+export async function saveMicrosoftOAuthClientId(clientId: string): Promise<void> {
+  await invoke("save_microsoft_oauth_client_id", { clientId });
 }
 
 export async function saveOAuthAppSettings(settings: OAuthAppSettingsInput): Promise<void> {

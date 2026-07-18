@@ -10,6 +10,7 @@ mod backup;
 mod backup_sidecar;
 mod birthday_notifications;
 mod commands;
+mod client_onedrive;
 mod compta;
 mod contact_name;
 mod database;
@@ -42,6 +43,13 @@ use birthday_notifications::{
     list_birthdays_today_cmd, run_birthday_telegram_if_due_cmd, save_birthday_message_settings_cmd,
     save_birthday_telegram_settings_cmd, send_birthday_telegram_reminders_now_cmd,
     test_birthday_telegram_cmd,
+};
+use client_onedrive::commands::{
+    apply_client_onedrive_folder_proposal, browse_client_onedrive,
+    connect_microsoft_onedrive_oauth_cmd, create_contact_onedrive_folder_cmd,
+    disconnect_microsoft_onedrive_oauth_cmd, get_client_onedrive_status,
+    link_contact_onedrive_folder, propose_client_onedrive_folder_matches,
+    resolve_contact_onedrive_folder, save_client_onedrive_root_folder,
 };
 use commands::*;
 use compta::commands::{
@@ -391,6 +399,7 @@ fn main() {
             get_email_connection_status,
             get_oauth_app_settings,
             save_oauth_app_settings,
+            save_microsoft_oauth_client_id,
             connect_email_oauth,
             disconnect_email_oauth,
             connect_google_calendar_oauth,
@@ -477,6 +486,16 @@ fn main() {
             import_compta_calendar_trip,
             compute_compta_driving_distance_km,
             reset_compta_distance_cache,
+            get_client_onedrive_status,
+            connect_microsoft_onedrive_oauth_cmd,
+            disconnect_microsoft_onedrive_oauth_cmd,
+            save_client_onedrive_root_folder,
+            browse_client_onedrive,
+            resolve_contact_onedrive_folder,
+            link_contact_onedrive_folder,
+            create_contact_onedrive_folder_cmd,
+            propose_client_onedrive_folder_matches,
+            apply_client_onedrive_folder_proposal,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

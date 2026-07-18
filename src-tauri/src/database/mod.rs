@@ -4,6 +4,7 @@ use tauri::{AppHandle, Manager};
 pub mod alertes;
 pub mod birthdays;
 pub mod calendar_events;
+pub mod client_onedrive;
 pub mod compta;
 pub mod contact_row;
 pub mod contacts;
@@ -596,7 +597,29 @@ impl Database {
         self.migrate_templates_email_rendez_vous_bulletins_categories()?;
         self.migrate_templates_email_ephemere_category()?;
         self.migrate_template_email_actions()?;
+        self.migrate_client_onedrive_links()?;
 
+        Ok(())
+    }
+
+    fn migrate_client_onedrive_links(&self) -> Result<()> {
+        for table in ["contacts", "foyers"] {
+            if !self.table_has_column(table, "onedrive_folder_id")? {
+                self.conn.execute(
+                    &format!("ALTER TABLE {table} ADD COLUMN onedrive_folder_id TEXT"),
+                    [],
+                )?;
+                self.conn.execute(
+                    &format!("ALTER TABLE {table} ADD COLUMN onedrive_folder_name TEXT"),
+                    [],
+                )?;
+                self.conn.execute(
+                    &format!("ALTER TABLE {table} ADD COLUMN onedrive_web_url TEXT"),
+                    [],
+                )?;
+                println!("✅ Migration: colonnes OneDrive sur {table}");
+            }
+        }
         Ok(())
     }
 

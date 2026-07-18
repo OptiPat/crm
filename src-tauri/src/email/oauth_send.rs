@@ -70,6 +70,7 @@ pub fn refresh_connection_if_needed(
 pub enum OAuthConnectionSlot {
     Primary,
     GoogleCalendar,
+    MicrosoftOnedrive,
 }
 
 pub fn refresh_oauth_connection_if_needed(
@@ -83,10 +84,30 @@ pub fn refresh_oauth_connection_if_needed(
     let refresh = conn
         .refresh_token
         .clone()
-        .ok_or("Session expirée. Reconnectez votre compte dans Paramètres → Emails & envois → Connexion.")?;
+        .ok_or_else(|| -> String {
+            match slot {
+                OAuthConnectionSlot::MicrosoftOnedrive => {
+                    "Session OneDrive expirée. Reconnectez Microsoft dans Paramètres → Intégrations → Dossiers clients."
+                        .into()
+                }
+                OAuthConnectionSlot::GoogleCalendar => {
+                    "Session Google Agenda expirée. Reconnectez Google dans Paramètres → Emails & envois → Connexion."
+                        .into()
+                }
+                OAuthConnectionSlot::Primary => {
+                    "Session expirée. Reconnectez votre compte dans Paramètres → Emails & envois → Connexion."
+                        .into()
+                }
+            }
+        })?;
 
     let store = EmailOAuthStore::load(app)?;
-    let client = build_basic_client(&conn.provider, &store)?;
+    let flow_provider = match slot {
+        OAuthConnectionSlot::MicrosoftOnedrive => "microsoft_onedrive",
+        OAuthConnectionSlot::GoogleCalendar => "google_calendar",
+        OAuthConnectionSlot::Primary => conn.provider.as_str(),
+    };
+    let client = build_basic_client(flow_provider, &store)?;
 
     let token = client
         .exchange_refresh_token(&RefreshToken::new(refresh))
@@ -107,6 +128,9 @@ pub fn refresh_oauth_connection_if_needed(
         OAuthConnectionSlot::Primary => store.connection = Some(conn.clone()),
         OAuthConnectionSlot::GoogleCalendar => {
             store.google_calendar_connection = Some(conn.clone());
+        }
+        OAuthConnectionSlot::MicrosoftOnedrive => {
+            store.microsoft_onedrive_connection = Some(conn.clone());
         }
     }
     store.save(app)?;

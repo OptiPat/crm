@@ -13,6 +13,7 @@ import {
 } from "@/lib/api/tauri-birthday-telegram";
 import { MessageCircle } from "lucide-react";
 import { toast } from "sonner";
+import { ClientOneDriveSettingsPanel } from "@/components/client-onedrive/ClientOneDriveSettingsPanel";
 
 export function ParametresIntegrationsSection() {
   const [birthdaySettings, setBirthdaySettings] = useState<BirthdayTelegramSettings | null>(null);
@@ -111,6 +112,7 @@ export function ParametresIntegrationsSection() {
 
   return (
     <div className="space-y-6">
+      <ClientOneDriveSettingsPanel />
       <SettingsPanel
         title="Anniversaires — Telegram"
         description="Rappel à l'ouverture du CRM : un message Telegram par contact anniversaire. Sans Telegram, les anniversaires restent visibles sur le Dashboard."

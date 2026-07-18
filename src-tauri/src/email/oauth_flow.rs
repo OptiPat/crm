@@ -48,6 +48,14 @@ fn provider_config(provider: &str) -> Result<ProviderOAuth, String> {
                 "email",
             ],
         }),
+        "microsoft_onedrive" => Ok(ProviderOAuth {
+            scopes: &[
+                "offline_access",
+                "openid",
+                "https://graph.microsoft.com/Files.ReadWrite",
+                "https://graph.microsoft.com/User.Read",
+            ],
+        }),
         _ => Err(format!("Fournisseur OAuth inconnu: {}", provider)),
     }
 }
@@ -83,11 +91,26 @@ fn open_authorization_url(url: &str) -> Result<(), String> {
 
 fn write_http_response(stream: &mut TcpStream, status: &str, body: &str) {
     let response = format!(
-        "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
     let _ = stream.write_all(response.as_bytes());
     let _ = stream.flush();
+}
+
+fn escape_html_text(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        match character {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&#39;"),
+            _ => escaped.push(character),
+        }
+    }
+    escaped
 }
 
 fn try_read_oauth_callback(
@@ -118,11 +141,13 @@ fn try_read_oauth_callback(
     let mut code = None;
     let mut state = None;
     let mut err = None;
+    let mut err_desc = None;
     for (k, v) in parsed.query_pairs() {
         match k.as_ref() {
             "code" => code = Some(v.to_string()),
             "state" => state = Some(v.to_string()),
             "error" => err = Some(v.to_string()),
+            "error_description" => err_desc = Some(v.to_string()),
             _ => {}
         }
     }
@@ -130,18 +155,61 @@ fn try_read_oauth_callback(
     let success_body = r#"<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>CRM</title></head>
 <body style="font-family:sans-serif;padding:2rem"><h1>Connexion réussie</h1>
 <p>Vous pouvez fermer cet onglet et revenir au CRM.</p></body></html>"#;
-    write_http_response(stream, "200 OK", success_body);
+    let error_body = |message: &str| {
+        format!(
+            r#"<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>CRM</title></head>
+<body style="font-family:sans-serif;padding:2rem"><h1>Connexion refusée</h1>
+<p>{message}</p><p>Fermez cet onglet et réessayez depuis le CRM.</p></body></html>"#
+        )
+    };
 
     if let Some(e) = err {
-        return Err(format!("OAuth refusé: {}", e));
+        let desc = err_desc
+            .map(|d| format!(" — {d}"))
+            .unwrap_or_default();
+        let hint = if e == "invalid_request" {
+            " Vérifiez Azure → Authentication : plateforme « Applications clientes publiques/mobiles et de bureau », URI http://127.0.0.1:3847/callback, flux client public activé."
+        } else {
+            ""
+        };
+        let message = format!("{e}{desc}{hint}");
+        write_http_response(
+            stream,
+            "400 Bad Request",
+            &error_body(&escape_html_text(&message)),
+        );
+        return Err(format!("OAuth refusé: {message}"));
     }
-    let state = state.ok_or("Paramètre state manquant dans le callback")?;
+
+    let render_callback_error = |stream: &mut TcpStream, message: &str| {
+        write_http_response(
+            stream,
+            "400 Bad Request",
+            &error_body(&escape_html_text(message)),
+        );
+    };
+    let state = match state {
+        Some(state) => state,
+        None => {
+            let message = "Paramètre state manquant dans le callback";
+            render_callback_error(stream, message);
+            return Err(message.into());
+        }
+    };
     if state != expected_state {
-        return Err("État OAuth invalide (CSRF). Réessayez Connecter Google.".into());
+        let message = "État OAuth invalide (CSRF). Réessayez Connecter.";
+        render_callback_error(stream, message);
+        return Err(message.into());
     }
-    let code = code.ok_or(
-        "Code d'autorisation manquant. Ne rechargez pas la page Google : recliquez Connecter Google dans le CRM.",
-    )?;
+    let code = match code {
+        Some(code) => code,
+        None => {
+            let message = "Code d'autorisation manquant. Ne rechargez pas la page : recliquez Connecter dans le CRM.";
+            render_callback_error(stream, message);
+            return Err(message.into());
+        }
+    };
+    write_http_response(stream, "200 OK", success_body);
     Ok(Some(code))
 }
 
@@ -215,11 +283,18 @@ pub fn run_oauth_connect(
     force_consent: bool,
 ) -> Result<EmailOAuthConnection, String> {
     let calendar_only = provider == "google_calendar";
-    let oauth_provider = if calendar_only { "google" } else { provider };
+    let onedrive_only = provider == "microsoft_onedrive";
+    let oauth_provider = if calendar_only {
+        "google"
+    } else if onedrive_only {
+        "microsoft"
+    } else {
+        provider
+    };
     let mut store = EmailOAuthStore::load(app)?;
     let cfg = provider_config(provider)?;
 
-    let oauth_client = build_basic_client(oauth_provider, &store)?
+    let oauth_client = build_basic_client(provider, &store)?
         .set_redirect_uri(RedirectUrl::new(OAUTH_REDIRECT_URI.to_string()).map_err(|e| e.to_string())?);
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
@@ -231,8 +306,11 @@ pub fn run_oauth_connect(
     let mut auth = oauth_client
         .authorize_url(CsrfToken::new_random)
         .add_scopes(scopes)
-        .set_pkce_challenge(pkce_challenge)
-        .add_extra_param("access_type", "offline");
+        .set_pkce_challenge(pkce_challenge);
+    // Paramètre Google uniquement — provoque invalid_request chez Microsoft.
+    if oauth_provider == "google" {
+        auth = auth.add_extra_param("access_type", "offline");
+    }
     if force_consent {
         auth = auth.add_extra_param("prompt", "consent");
     }
@@ -263,9 +341,34 @@ pub fn run_oauth_connect(
                     .map(|c| c.to_string())
                     .unwrap_or_default();
                 let hint = match code.as_str() {
-                    "redirect_uri_mismatch" => " Ajoutez http://127.0.0.1:3847/callback dans Google Cloud → Clients → URI de redirection.",
-                    "invalid_grant" => " Fermez l'onglet Google, attendez 5 s, recliquez Connecter Google une seule fois.",
-                    "invalid_client" => " Vérifiez le Client ID (Application de bureau).",
+                    "redirect_uri_mismatch" => {
+                        if oauth_provider == "microsoft" {
+                            " Ajoutez http://127.0.0.1:3847/callback dans Azure → App registrations → Authentication → URI de redirection (application de bureau)."
+                        } else {
+                            " Ajoutez http://127.0.0.1:3847/callback dans Google Cloud → Clients → URI de redirection."
+                        }
+                    }
+                    "invalid_grant" => {
+                        if oauth_provider == "microsoft" {
+                            " Fermez l'onglet Microsoft, attendez 5 s, recliquez Connecter une seule fois."
+                        } else {
+                            " Fermez l'onglet Google, attendez 5 s, recliquez Connecter Google une seule fois."
+                        }
+                    }
+                    "invalid_request" => {
+                        if oauth_provider == "microsoft" {
+                            " Vérifiez l'URI de redirection Azure (http://127.0.0.1:3847/callback, application de bureau) et les permissions Graph."
+                        } else {
+                            ""
+                        }
+                    }
+                    "invalid_client" => {
+                        if oauth_provider == "microsoft" {
+                            " Vérifiez le Client ID Azure (application de bureau / comptes personnels)."
+                        } else {
+                            " Vérifiez le Client ID (Application de bureau)."
+                        }
+                    }
                     _ => "",
                 };
                 if desc.is_empty() {
@@ -301,6 +404,8 @@ pub fn run_oauth_connect(
 
     if calendar_only {
         store.google_calendar_connection = Some(connection.clone());
+    } else if onedrive_only {
+        store.microsoft_onedrive_connection = Some(connection.clone());
     } else {
         store.connection = Some(connection.clone());
     }
@@ -320,4 +425,23 @@ pub fn disconnect_google_calendar_oauth(app: &AppHandle) -> Result<(), String> {
     let mut store = EmailOAuthStore::load(app)?;
     store.google_calendar_connection = None;
     store.save(app)
+}
+
+pub fn disconnect_microsoft_onedrive_oauth(app: &AppHandle) -> Result<(), String> {
+    let mut store = EmailOAuthStore::load(app)?;
+    store.microsoft_onedrive_connection = None;
+    store.save(app)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::escape_html_text;
+
+    #[test]
+    fn oauth_error_text_is_escaped_before_html_rendering() {
+        assert_eq!(
+            escape_html_text(r#"<script>alert("x")</script> & 'test'"#),
+            "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;test&#39;"
+        );
+    }
 }

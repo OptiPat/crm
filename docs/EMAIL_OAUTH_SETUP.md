@@ -32,7 +32,20 @@ Scopes utilisés : envoi Gmail, lecture Gmail (réponses), signature d’envoi, 
 4. Copiez l’**Application (client) ID** dans le CRM.
 5. **API permissions** → **Microsoft Graph** → déléguées : `Mail.Send`, `User.Read`, `offline_access`, `openid`, `email` → **Grant admin consent** si compte pro.
 
+Pour **OneDrive dossiers clients** (avec Gmail pour les mails), ajoutez aussi : `Files.ReadWrite` (déléguée).
+
 ---
+
+## OneDrive dossiers clients (Microsoft Graph)
+
+Même application Azure que ci-dessus (ou une app dédiée) :
+
+1. Redirect URI identique : `http://127.0.0.1:3847/callback`
+2. Permissions Graph déléguées : `Files.ReadWrite`, `User.Read`, `offline_access`
+3. Collez le **Client ID** dans **Paramètres → Intégrations → Dossiers clients OneDrive**
+4. **Connecter OneDrive** → choisir la racine → **Rattacher les dossiers**
+
+Gmail reste utilisé pour les mails ; cette connexion Microsoft ne sert qu'aux fichiers.
 
 ## Utilisation dans le CRM
 

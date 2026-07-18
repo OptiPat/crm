@@ -99,6 +99,9 @@ import {
 } from "@/lib/documents/documents-page-preferences";
 import type { ExtractedData } from "@/lib/pdf";
 import { cn } from "@/lib/utils";
+import { DocumentsOneDriveLibrary } from "@/components/documents/DocumentsOneDriveLibrary";
+import { getClientOneDriveStatus } from "@/lib/api/tauri-client-onedrive";
+import { setClientOneDriveStatusCache } from "@/lib/client-onedrive/client-onedrive-cache";
 
 type DocumentsProps = {
   onNavigate?: (page: string) => void;
@@ -128,6 +131,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
   const [groupMode, setGroupMode] = useState<DocumentsPortfolioGroup>("folders");
   const [rioReimportDoc, setRioReimportDoc] = useState<Document | null>(null);
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
+  const [librarySource, setLibrarySource] = useState<"crm" | "onedrive">("crm");
 
   const openedFolderContactId = useMemo(() => {
     if (!openedFolderKey?.startsWith("contact:")) return null;
@@ -197,6 +201,12 @@ export function Documents({ onNavigate }: DocumentsProps) {
   useEffect(() => {
     void loadDocuments();
   }, [loadDocuments]);
+
+  useEffect(() => {
+    void getClientOneDriveStatus()
+      .then(setClientOneDriveStatusCache)
+      .catch(() => {});
+  }, []);
 
   useAppNavigationListener((detail) => {
     if (detail.type !== "documents") return;
@@ -561,19 +571,21 @@ export function Documents({ onNavigate }: DocumentsProps) {
       <Card className={cn(isDragging && "ring-2 ring-primary/40")}>
         <CardHeader>
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <CardTitle>Bibliothèque de documents</CardTitle>
                 <CardDescription>
-                  {showFolderGrid
-                    ? `${clientFolders.length} dossier${clientFolders.length > 1 ? "s" : ""} client — cliquez pour ouvrir`
-                    : (
-                      <>
-                        {filteredDocuments.length} document
-                        {filteredDocuments.length > 1 ? "s" : ""} sur {documents.length}
-                      </>
-                    )}
-                  {documents.length > 0 && (
+                  {librarySource === "onedrive"
+                    ? "Parcourez votre dossier clients OneDrive"
+                    : showFolderGrid
+                      ? `${clientFolders.length} dossier${clientFolders.length > 1 ? "s" : ""} client — cliquez pour ouvrir`
+                      : (
+                        <>
+                          {filteredDocuments.length} document
+                          {filteredDocuments.length > 1 ? "s" : ""} sur {documents.length}
+                        </>
+                      )}
+                  {librarySource === "crm" && documents.length > 0 && (
                     <span className="text-muted-foreground/80">
                       {" "}
                       — glissez un fichier depuis l&apos;explorateur sur cette page
@@ -581,8 +593,27 @@ export function Documents({ onNavigate }: DocumentsProps) {
                   )}
                 </CardDescription>
               </div>
+              <div className="flex rounded-lg border p-0.5 bg-muted/30">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={librarySource === "crm" ? "secondary" : "ghost"}
+                  onClick={() => setLibrarySource("crm")}
+                >
+                  CRM local
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={librarySource === "onedrive" ? "secondary" : "ghost"}
+                  onClick={() => setLibrarySource("onedrive")}
+                >
+                  OneDrive clients
+                </Button>
+              </div>
             </div>
 
+            {librarySource === "crm" && (
             <div className="flex gap-4 flex-wrap items-end">
               <div className="flex-1 min-w-[200px] relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -670,15 +701,16 @@ export function Documents({ onNavigate }: DocumentsProps) {
                 </SelectContent>
               </Select>
             </div>
+            )}
 
-            {hasFiltersThatFlattenGroups && groupMode !== "flat" && (
+            {librarySource === "crm" && hasFiltersThatFlattenGroups && groupMode !== "flat" && (
               <p className="text-xs text-muted-foreground">
                 Filtre actif — affichage en liste unique (choisissez « Liste unique » pour retrouver
                 le regroupement une fois les filtres levés).
               </p>
             )}
 
-            {activeFilterChips.length > 0 && (
+            {librarySource === "crm" && activeFilterChips.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
                 <span className="text-muted-foreground shrink-0">Filtres actifs :</span>
                 {activeFilterChips.map((chip) => (
@@ -719,6 +751,10 @@ export function Documents({ onNavigate }: DocumentsProps) {
           </div>
         </CardHeader>
         <CardContent>
+          <div className={cn(librarySource !== "onedrive" && "hidden")}>
+            <DocumentsOneDriveLibrary />
+          </div>
+          <div className={cn(librarySource !== "crm" && "hidden")}>
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">
               Chargement...
@@ -792,6 +828,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
               />
             </>
           )}
+          </div>
         </CardContent>
       </Card>
 

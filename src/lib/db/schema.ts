@@ -12,6 +12,9 @@ export const foyers = sqliteTable("foyers", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   nom: text("nom").notNull(),
   notes: text("notes"),
+  onedriveFolderId: text("onedrive_folder_id"),
+  onedriveFolderName: text("onedrive_folder_name"),
+  onedriveWebUrl: text("onedrive_web_url"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .default(sql`(unixepoch())`)
     .notNull(),
@@ -113,13 +116,15 @@ export const contacts = sqliteTable("contacts", {
   filleulVolume: real("filleul_volume"),
   filleulVolumeManager: real("filleul_volume_manager"),
   
-  // Notes
   notes: text("notes"),
+  onedriveFolderId: text("onedrive_folder_id"),
+  onedriveFolderName: text("onedrive_folder_name"),
+  onedriveWebUrl: text("onedrive_web_url"),
 
   familleRegroupementExclu: integer("famille_regroupement_exclu", { mode: "boolean" })
     .default(false)
     .notNull(),
-  
+
   // Timestamps
   createdAt: integer("created_at", { mode: "timestamp" })
     .default(sql`(unixepoch())`)
