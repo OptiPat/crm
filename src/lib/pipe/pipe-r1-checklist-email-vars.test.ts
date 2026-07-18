@@ -13,9 +13,6 @@ describe("pipe-r1-checklist-email-vars", () => {
         "<p>{{liste_documents_r1_html}}</p>"
       )
     ).toBe(true);
-    expect(
-      templateUsesR1ChecklistEmailVariables("RDV R1", "Legacy {{liste_documents_r1}}")
-    ).toBe(true);
     expect(templateUsesR1ChecklistEmailVariables("RDV", "Sans liste")).toBe(false);
   });
 

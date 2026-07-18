@@ -112,6 +112,7 @@ async function sendDueReminder(schedule: PipeRdvReminderSchedule): Promise<"sent
     principal,
     tutoiement,
     rdvStage,
+    timelineEntryTitre: timelineEntry?.titre,
     startAtUnix: schedule.rdv_at,
     endAtUnix: schedule.rdv_end_at,
     visioLink: schedule.visio_link,

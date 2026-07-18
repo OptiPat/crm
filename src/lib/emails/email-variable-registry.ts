@@ -66,7 +66,7 @@ export const EMAIL_VARIABLE_GROUPS: EmailVariableGroupMeta[] = [
   {
     id: "pipe",
     label: "Rendez-vous Pipe",
-    description: "Date, lieu, visio, co-participant, checklist R1",
+    description: "Date, lieu, visio, co-participant, checklists R1 et R3 Placements",
   },
   {
     id: "placement",

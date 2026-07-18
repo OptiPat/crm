@@ -1388,6 +1388,8 @@ pub struct GoogleCalendarWeekEvent {
     pub visio_link: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event_location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_type: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

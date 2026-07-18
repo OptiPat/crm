@@ -16,7 +16,7 @@ export function DashboardTodayGrid({
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch min-h-[280px]">
-        <CalendarTodayPreview onOpenContact={onOpenContact} />
+        <CalendarTodayPreview onOpenContact={onOpenContact} onNavigate={onNavigate} />
         <TachesPreview onNavigate={onNavigate} onOpenContact={onOpenContact} />
         <BirthdaysTodayPreview onOpenContact={onOpenContact} />
       </div>

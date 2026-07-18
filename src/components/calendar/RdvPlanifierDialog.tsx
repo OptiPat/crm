@@ -42,9 +42,11 @@ import { useRdvVisioLocation } from "@/hooks/useRdvVisioLocation";
 import { PipeAffaireRdvPlanSelect } from "@/components/pipe/PipeAffaireRdvPlanSelect";
 import { usePipeR1RdvProfilePlanning } from "@/hooks/usePipeR1RdvProfilePlanning";
 import { PipeR1RdvDocumentsFields } from "@/components/pipe/PipeR1RdvDocumentsFields";
+import { PipeR3RdvDocumentsFields } from "@/components/pipe/PipeR3RdvDocumentsFields";
 import { usePipeChecklistTemplates } from "@/hooks/usePipeChecklistTemplates";
 import {
   defaultPlanOptionForRdvStage,
+  isR3PlacementsRdvPlanOption,
   rdvStageFromPlanOption,
   type PipeRdvPlanOption,
 } from "@/lib/pipe/pipe-rdv-plan-option";
@@ -240,9 +242,14 @@ export function RdvPlanifierDialog({
   const isSuiviPipeContext = pipeForPlanify != null && isSuiviPipe(pipeForPlanify);
   const showR1DocumentsFields =
     pipeForPlanify != null && !isSuiviPipeContext && rdvStage === "R1";
+  const showR3DocumentsFields =
+    pipeForPlanify != null &&
+    !isSuiviPipeContext &&
+    isR3PlacementsRdvPlanOption(rdvPlanOption);
 
   const primaryContactId = pipeForPlanify?.contact_id ?? effectiveContactId;
-  const { profile: r1Profile, setProfile: setR1Profile } = usePipeR1RdvProfilePlanning({
+  const { profile: r1Profile, setProfile: setR1Profile, profileReady: r1ProfileReady } =
+    usePipeR1RdvProfilePlanning({
     enabled: open && showR1DocumentsFields,
     pipeId: pipeForPlanify?.id ?? 0,
     primaryContactId,
@@ -308,6 +315,10 @@ export function RdvPlanifierDialog({
     const validationError = rdvLocation.validate();
     if (validationError) {
       toast.error(validationError);
+      return;
+    }
+    if (showR1DocumentsFields && !r1ProfileReady) {
+      toast.error("Chargement du profil documents R1 en cours…");
       return;
     }
 
@@ -457,8 +468,12 @@ export function RdvPlanifierDialog({
               profile={r1Profile}
               templates={checklistTemplates}
               onProfileChange={setR1Profile}
-              disabled={submitting}
+              disabled={submitting || !r1ProfileReady}
             />
+          ) : null}
+
+          {showR3DocumentsFields ? (
+            <PipeR3RdvDocumentsFields templates={checklistTemplates} disabled={submitting} />
           ) : null}
 
           <div className="space-y-1">
@@ -555,7 +570,10 @@ export function RdvPlanifierDialog({
           <Button variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
             Annuler
           </Button>
-          <Button disabled={submitting} onClick={() => void handleSubmit()}>
+          <Button
+            disabled={submitting || (showR1DocumentsFields && !r1ProfileReady)}
+            onClick={() => void handleSubmit()}
+          >
             {submitting ? "Enregistrement…" : "Planifier"}
           </Button>
         </DialogFooter>

@@ -44,6 +44,9 @@ export interface GoogleCalendarWeekEvent {
   html_link?: string | null;
   pipe_timeline_entry_id?: number | null;
   pipe_id?: number | null;
+  visio_link?: string | null;
+  event_location?: string | null;
+  event_type?: string | null;
 }
 
 export interface AgendaGooglePipeSyncResult {

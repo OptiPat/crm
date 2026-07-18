@@ -27,6 +27,12 @@ import {
   ensureR1ChecklistProfileForPipeEmail,
   templateUsesR1ChecklistEmailVariables,
 } from "@/lib/pipe/pipe-r1-checklist-email-vars";
+import {
+  buildR3ChecklistEmailVariables,
+  R3_CHECKLIST_EMAIL_VAR_KEY,
+  shouldInjectR3PlacementsChecklistEmailVars,
+  templateUsesR3ChecklistEmailVariables,
+} from "@/lib/pipe/pipe-r3-checklist-email-vars";
 import { syncPipeRdvReminderSchedules } from "@/lib/pipe/pipe-rdv-reminder-schedule";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { toast } from "sonner";
@@ -70,6 +76,7 @@ export async function sendPipeRdvTemplatedEmailToContact(options: {
   principal: TemplateEmail;
   tutoiement: TemplateEmail | null;
   rdvStage?: PipeRdvStage;
+  timelineEntryTitre?: string | null;
   startAtUnix: number;
   endAtUnix: number;
   visioLink?: string | null;
@@ -104,6 +111,16 @@ export async function sendPipeRdvTemplatedEmailToContact(options: {
     options.rdvStage === "R1" ||
     templateUsesR1ChecklistEmailVariables(content.sujet, content.corps, corpsHtml);
 
+  const needsR3PlacementsList = shouldInjectR3PlacementsChecklistEmailVars({
+    rdvStage: options.rdvStage,
+    timelineEntryTitre: options.timelineEntryTitre,
+  });
+  const templateHasR3ChecklistVar = templateUsesR3ChecklistEmailVariables(
+    content.sujet,
+    content.corps,
+    corpsHtml
+  );
+
   if (needsR1Docs && options.pipe.id > 0) {
     const primaryContact =
       options.contact.id === options.pipe.contact_id
@@ -112,9 +129,14 @@ export async function sendPipeRdvTemplatedEmailToContact(options: {
     await ensureR1ChecklistProfileForPipeEmail(options.pipe.id, primaryContact);
   }
 
-  const checklistVars = needsR1Docs
-    ? await buildR1ChecklistEmailVariables(options.pipe.id)
-    : {};
+  const checklistVars = {
+    ...(needsR1Docs ? await buildR1ChecklistEmailVariables(options.pipe.id) : {}),
+    ...(needsR3PlacementsList
+      ? await buildR3ChecklistEmailVariables()
+      : templateHasR3ChecklistVar
+        ? { [R3_CHECKLIST_EMAIL_VAR_KEY]: "" }
+        : {}),
+  };
 
   const preview = renderTemplatePreview(
     content.sujet,
@@ -213,6 +235,7 @@ export async function maybeSendPipeRdvConfirmationEmail(options: {
     | "secondary_contact_nom"
   >;
   rdvStage: PipeRdvStage;
+  timelineEntryTitre?: string | null;
   pipeTimelineEntryId: number;
   startAtUnix: number;
   endAtUnix: number;
@@ -282,6 +305,7 @@ export async function maybeSendPipeRdvConfirmationEmail(options: {
         principal,
         tutoiement,
         rdvStage: options.rdvStage,
+        timelineEntryTitre: options.timelineEntryTitre,
         startAtUnix: options.startAtUnix,
         endAtUnix: options.endAtUnix,
         visioLink: options.visioLink,

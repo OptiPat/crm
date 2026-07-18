@@ -22,6 +22,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { PipeR1ChecklistEmailPreviewPanel } from "@/components/pipe/PipeR1ChecklistEmailPreviewPanel";
+import { PipeR3ChecklistEmailPreviewPanel } from "@/components/pipe/PipeR3ChecklistEmailPreviewPanel";
 import {
   cloneDefaultPipeChecklistTemplates,
   createPipeChecklistTemplateItemId,
@@ -73,7 +74,7 @@ function stageDescription(stage: PipeChecklistStage): string {
     return "Pièces à collecter avant le RDV R1. Les lignes conditionnelles s'affichent selon le profil (salarié, chef d'entreprise, retraite). Alimente la variable {{liste_documents_r1_html}} dans le modèle email RDV.";
   }
   if (stage === "R3") {
-    return "Pièces placements pour le RDV R3 (DER, RIO, QPI signés, identité, domicile, RIB).";
+    return "Pièces placements pour le RDV R3 (DER, RIO, QPI signés, identité, domicile, RIB). Alimente la variable {{liste_documents_r3_html}} dans le modèle email RDV.";
   }
   return "Pièces à collecter avant le RDV R2 — à configurer avant mise en service.";
 }
@@ -418,6 +419,8 @@ export function PipeChecklistSettingsDialog({
                   onProfileChange={setR1PreviewProfile}
                   idPrefix="settings-r1"
                 />
+              ) : stage === "R3" ? (
+                <PipeR3ChecklistEmailPreviewPanel templates={draft} idPrefix="settings-r3" />
               ) : null}
             </TabsContent>
           ))}

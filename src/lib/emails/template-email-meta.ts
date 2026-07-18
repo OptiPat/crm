@@ -212,6 +212,12 @@ export const PIPE_RDV_TEMPLATE_VARIABLES: {
     label: "Liste documents R1 (HTML)",
     hint: "Checklist R1 + profil revenus validé à la planification ; listes <ul>/<ol> pour le corps HTML",
   },
+  {
+    token: "{{liste_documents_r3_html}}",
+    key: "liste_documents_r3_html",
+    label: "Liste documents R3 Placements (HTML)",
+    hint: "Checklist R3 placements (DER, RIO, QPI, identité, domicile, RIB) ; liste <ul> pour le corps HTML",
+  },
 ];
 
 /** Variables injectées à l'envoi client Box Placement (opération conforme). */

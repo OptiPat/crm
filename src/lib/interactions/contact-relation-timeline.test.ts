@@ -99,6 +99,40 @@ describe("contact-relation-timeline", () => {
     expect(items.map((i) => i.kind)).toEqual(["messaging", "email"]);
   });
 
+  it("n'intègre que les investissements « avec moi » (MON_CONSEIL)", () => {
+    const items = buildContactRelationTimeline([], [], [], {
+      investissements: [
+        {
+          id: 1,
+          type_produit: "PER",
+          nom_produit: "PER Eres",
+          versement_programme: false,
+          reinvestissement_dividendes: false,
+          origine: "MON_CONSEIL",
+          date_souscription: 1_700_000_000,
+          created_at: 1_650_000_000,
+          updated_at: 1_700_000_000,
+        },
+        {
+          id: 2,
+          type_produit: "SCPI",
+          nom_produit: "SCPI externe",
+          versement_programme: false,
+          reinvestissement_dividendes: false,
+          origine: "EXISTANT_CLIENT",
+          date_souscription: 1_710_000_000,
+          created_at: 1_650_000_000,
+          updated_at: 1_710_000_000,
+        },
+      ],
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].kind).toBe("investissement");
+    if (items[0].kind === "investissement") {
+      expect(items[0].investissement.id).toBe(1);
+    }
+  });
+
   it("intègre investissements, documents et tâches, triés par date décroissante", () => {
     const items = buildContactRelationTimeline([], [], [], {
       investissements: [

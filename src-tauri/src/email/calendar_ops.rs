@@ -219,6 +219,8 @@ struct GoogleCalendarListEvent {
     hangout_link: Option<String>,
     #[serde(rename = "conferenceData", default)]
     conference_data: Option<GoogleConferenceData>,
+    #[serde(rename = "eventType", default)]
+    event_type: Option<String>,
     start: Option<GoogleCalendarEventTime>,
     end: Option<GoogleCalendarEventTime>,
 }
@@ -285,6 +287,9 @@ fn map_google_list_event(event: GoogleCalendarListEvent) -> Option<GoogleCalenda
         pipe_id: None,
         visio_link,
         event_location,
+        event_type: event
+            .event_type
+            .filter(|s| !s.trim().is_empty()),
     })
 }
 

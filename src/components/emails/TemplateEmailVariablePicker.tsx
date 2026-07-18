@@ -11,7 +11,7 @@ import {
   type EmailVariablePickerSection,
 } from "@/lib/emails/email-variable-registry";
 
-type TemplateEmailVariablePickerProps = {
+export type TemplateEmailVariablePickerProps = {
   categorie: EmailTemplateCategory;
   sujet: string;
   corps: string;
@@ -66,6 +66,26 @@ function VariableChip({
 }) {
   const accent = groupAccentClass(groupId);
   const tooltip = formatTooltip(variable);
+  const htmlOnly = variable.format === "html";
+
+  if (htmlOnly) {
+    return (
+      <button
+        type="button"
+        className={`inline-flex h-5 max-w-[11rem] shrink-0 cursor-pointer items-center truncate rounded border bg-background px-1.5 text-[10px] font-medium leading-none hover:bg-primary hover:text-primary-foreground ${accent}`}
+        title={`${tooltip}\n→ message (HTML, corps uniquement)`}
+        onMouseDown={(event) => {
+          event.preventDefault();
+          onInsert(variable.token, "corps");
+        }}
+      >
+        {variable.label}
+        <span className="ml-1 rounded bg-muted px-1 text-[9px] font-normal text-muted-foreground">
+          HTML
+        </span>
+      </button>
+    );
+  }
 
   return (
     <span className="inline-flex shrink-0">

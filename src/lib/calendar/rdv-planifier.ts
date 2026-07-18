@@ -45,6 +45,7 @@ export async function sendPipeRdvConfirmationAfterCalendar(options: {
     | "secondary_contact_nom"
   >;
   rdvStage: PipeRdvStage;
+  timelineEntryTitre?: string | null;
   pipeTimelineEntryId: number;
   calendar?: PipeRdvCalendarSyncResult;
   startAtUnix: number;
@@ -55,6 +56,7 @@ export async function sendPipeRdvConfirmationAfterCalendar(options: {
   await maybeSendPipeRdvConfirmationEmail({
     pipe: options.pipe,
     rdvStage: options.rdvStage,
+    timelineEntryTitre: options.timelineEntryTitre,
     pipeTimelineEntryId: options.pipeTimelineEntryId,
     startAtUnix: options.startAtUnix,
     endAtUnix: options.endAtUnix,
@@ -224,6 +226,7 @@ export async function planifyPipeRdv(options: {
   await sendPipeRdvConfirmationAfterCalendar({
     pipe: options.pipe,
     rdvStage,
+    timelineEntryTitre: rdvEntryTitreFromPlanOption(planOption),
     pipeTimelineEntryId: entry.id,
     calendar,
     startAtUnix: options.startAtUnix,

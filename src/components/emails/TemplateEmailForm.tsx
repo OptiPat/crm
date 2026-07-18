@@ -66,6 +66,8 @@ import { TemplateEmailTacheActionPanel } from "@/components/emails/TemplateEmail
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { stampScpiBulletinTemplateMeta } from "@/lib/emails/scpi-template-meta";
 import { stampStelliumPerfTemplateMeta } from "@/lib/emails/stellium-template-meta";
+
+type VariableInsertTarget = "main" | "tutoiement" | "relance" | "relanceTu";
 import {
   TemplateEmailRelancePanel,
   type TemplateRelanceDraft,
@@ -149,7 +151,7 @@ import {
   normalizeAgendaLinks,
   type EmailTemplateCategory,
 } from "@/lib/emails/template-email-meta";
-import { TemplateEmailVariablePicker } from "@/components/emails/TemplateEmailVariablePicker";
+import { TemplateEmailVariableField } from "@/components/emails/TemplateEmailVariableField";
 import { TemplateEmailPreviewPanel } from "@/components/emails/TemplateEmailPreviewPanel";
 import { TemplateEmailTriggerPanel } from "@/components/emails/TemplateEmailTriggerPanel";
 import {
@@ -175,7 +177,7 @@ import {
 import { isTriggerRuleTreeValid } from "@/lib/emails/template-email-trigger-rule-tree";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { TemplateEmailEphemeralAudiencePanel } from "@/components/emails/TemplateEmailEphemeralAudiencePanel";
 import { TemplateEmailEphemeralRecipientsPanel } from "@/components/emails/TemplateEmailEphemeralRecipientsPanel";
@@ -305,6 +307,11 @@ export function TemplateEmailForm({
   const [corpsHtml, setCorpsHtml] = useState("");
   const richEditorRef = useRef<HTMLDivElement>(null);
   const tuRichEditorRef = useRef<HTMLDivElement>(null);
+  const tuSujetInputRef = useRef<HTMLInputElement>(null);
+  const relanceSujetInputRef = useRef<HTMLInputElement>(null);
+  const relanceRichEditorRef = useRef<HTMLDivElement>(null);
+  const relanceTuSujetInputRef = useRef<HTMLInputElement>(null);
+  const relanceTuRichEditorRef = useRef<HTMLDivElement>(null);
   const sujetInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const ephemeralSaveIntentRef = useRef<"default" | "sync" | "tab">("default");
@@ -318,7 +325,13 @@ export function TemplateEmailForm({
     reject: (reason?: unknown) => void;
   } | null>(null);
   const sujetSelectionRef = useRef({ start: 0, end: 0 });
+  const tuSujetSelectionRef = useRef({ start: 0, end: 0 });
+  const relanceSujetSelectionRef = useRef({ start: 0, end: 0 });
+  const relanceTuSujetSelectionRef = useRef({ start: 0, end: 0 });
   const editorSelectionRef = useRef<Range | null>(null);
+  const tuEditorSelectionRef = useRef<Range | null>(null);
+  const relanceEditorSelectionRef = useRef<Range | null>(null);
+  const relanceTuEditorSelectionRef = useRef<Range | null>(null);
   const [attachments, setAttachments] = useState<TemplateEmailAttachmentMeta[]>([]);
   const baselineAttachmentsRef = useRef<TemplateEmailAttachmentMeta[]>([]);
   const hydrateActionRequestRef = useRef(0);
@@ -1671,7 +1684,7 @@ export function TemplateEmailForm({
     }
   };
 
-  const applyCorpsHtml = (html: string) => {
+  const applyCorpsHtml = useCallback((html: string) => {
     const normalized = sanitizeTemplateEmailHtml(html.trim());
     setCorpsHtml(normalized);
     setFormData((prev) => ({
@@ -1679,7 +1692,7 @@ export function TemplateEmailForm({
       corps: htmlToPlainEmail(normalized),
       variables: setTemplateCorpsHtmlInMeta(prev.variables, normalized || null),
     }));
-  };
+  }, []);
 
   const applyTuCorpsHtml = useCallback((html: string) => {
     const normalized = sanitizeTemplateEmailHtml(html.trim());
@@ -1687,66 +1700,266 @@ export function TemplateEmailForm({
     setTutoiementVariables((prev) => setTemplateCorpsHtmlInMeta(prev, normalized || null));
   }, []);
 
+  const captureSujetSelectionFor = useCallback(
+    (
+      inputRef: React.RefObject<HTMLInputElement | null>,
+      selectionRef: React.MutableRefObject<{ start: number; end: number }>
+    ) => {
+      const el = inputRef.current;
+      if (!el) return;
+      selectionRef.current = {
+        start: el.selectionStart ?? el.value.length,
+        end: el.selectionEnd ?? el.value.length,
+      };
+    },
+    []
+  );
+
   const captureSujetSelection = useCallback(() => {
-    const el = sujetInputRef.current;
-    if (!el) return;
-    sujetSelectionRef.current = {
-      start: el.selectionStart ?? el.value.length,
-      end: el.selectionEnd ?? el.value.length,
-    };
-  }, []);
+    captureSujetSelectionFor(sujetInputRef, sujetSelectionRef);
+  }, [captureSujetSelectionFor]);
 
   useEffect(() => {
     if (!open) return;
     const onSelectionChange = () => {
       if (sujetInputRef.current === document.activeElement) {
         captureSujetSelection();
+      } else if (tuSujetInputRef.current === document.activeElement) {
+        captureSujetSelectionFor(tuSujetInputRef, tuSujetSelectionRef);
+      } else if (relanceSujetInputRef.current === document.activeElement) {
+        captureSujetSelectionFor(relanceSujetInputRef, relanceSujetSelectionRef);
+      } else if (relanceTuSujetInputRef.current === document.activeElement) {
+        captureSujetSelectionFor(relanceTuSujetInputRef, relanceTuSujetSelectionRef);
       }
     };
     document.addEventListener("selectionchange", onSelectionChange);
     return () => document.removeEventListener("selectionchange", onSelectionChange);
-  }, [open, captureSujetSelection]);
+  }, [open, captureSujetSelection, captureSujetSelectionFor]);
 
-  const captureSelectionsBeforeVariableInsert = () => {
-    if (sujetInputRef.current === document.activeElement) {
-      captureSujetSelection();
-    }
-    if (richEditorRef.current?.contains(document.activeElement)) {
-      editorSelectionRef.current = saveRichEditorSelection(richEditorRef.current);
-    }
-  };
+  const captureSelectionsBeforeVariableInsert = useCallback(
+    (target: VariableInsertTarget) => {
+      const targetConfig = {
+        main: {
+          sujetRef: sujetInputRef,
+          sujetSel: sujetSelectionRef,
+          editorRef: richEditorRef,
+          editorSel: editorSelectionRef,
+        },
+        tutoiement: {
+          sujetRef: tuSujetInputRef,
+          sujetSel: tuSujetSelectionRef,
+          editorRef: tuRichEditorRef,
+          editorSel: tuEditorSelectionRef,
+        },
+        relance: {
+          sujetRef: relanceSujetInputRef,
+          sujetSel: relanceSujetSelectionRef,
+          editorRef: relanceRichEditorRef,
+          editorSel: relanceEditorSelectionRef,
+        },
+        relanceTu: {
+          sujetRef: relanceTuSujetInputRef,
+          sujetSel: relanceTuSujetSelectionRef,
+          editorRef: relanceTuRichEditorRef,
+          editorSel: relanceTuEditorSelectionRef,
+        },
+      }[target];
 
-  const insertVariable = (variable: string, field: "sujet" | "corps") => {
-    if (field === "corps") {
-      const html = insertTextInRichEditor(
-        richEditorRef.current,
-        variable,
-        editorSelectionRef.current
-      );
-      applyCorpsHtml(html);
-      richEditorRef.current?.focus();
-      return;
-    }
-    const sujetInput = sujetInputRef.current;
-    const selection =
-      sujetInput === document.activeElement && sujetInput
-        ? {
-            start: sujetInput.selectionStart ?? formData.sujet.length,
-            end: sujetInput.selectionEnd ?? formData.sujet.length,
-          }
-        : { ...sujetSelectionRef.current };
+      if (targetConfig.sujetRef.current === document.activeElement) {
+        captureSujetSelectionFor(targetConfig.sujetRef, targetConfig.sujetSel);
+      }
+      if (targetConfig.editorRef.current?.contains(document.activeElement)) {
+        targetConfig.editorSel.current = saveRichEditorSelection(targetConfig.editorRef.current);
+      }
+    },
+    [captureSujetSelectionFor]
+  );
 
-    const { value, caret } = insertTextInPlainField(formData.sujet, variable, selection);
-    sujetSelectionRef.current = { start: caret, end: caret };
-    flushSync(() => {
-      setFormData((prev) => ({ ...prev, sujet: value }));
-    });
-    const input = sujetInputRef.current;
-    if (input) {
-      input.focus();
-      input.setSelectionRange(caret, caret);
-    }
-  };
+  const insertVariable = useCallback(
+    (target: VariableInsertTarget, variable: string, field: "sujet" | "corps") => {
+      if (field === "corps") {
+        const editorRef =
+          target === "main"
+            ? richEditorRef
+            : target === "tutoiement"
+              ? tuRichEditorRef
+              : target === "relance"
+                ? relanceRichEditorRef
+                : relanceTuRichEditorRef;
+        const selectionRef =
+          target === "main"
+            ? editorSelectionRef
+            : target === "tutoiement"
+              ? tuEditorSelectionRef
+              : target === "relance"
+                ? relanceEditorSelectionRef
+                : relanceTuEditorSelectionRef;
+        const html = insertTextInRichEditor(
+          editorRef.current,
+          variable,
+          selectionRef.current
+        );
+        if (target === "main") {
+          applyCorpsHtml(html);
+        } else if (target === "tutoiement") {
+          applyTuCorpsHtml(html);
+        } else if (target === "relance") {
+          setRelanceDraft((prev) => ({
+            ...prev,
+            corpsHtml: canonicalizeTemplateCorpsHtml(html.trim()),
+          }));
+        } else {
+          setRelanceTuDraft((prev) => ({
+            ...prev,
+            corpsHtml: canonicalizeTemplateCorpsHtml(html.trim()),
+          }));
+        }
+        editorRef.current?.focus();
+        return;
+      }
+
+      const sujetRef =
+        target === "main"
+          ? sujetInputRef
+          : target === "tutoiement"
+            ? tuSujetInputRef
+            : target === "relance"
+              ? relanceSujetInputRef
+              : relanceTuSujetInputRef;
+      const sujetSelRef =
+        target === "main"
+          ? sujetSelectionRef
+          : target === "tutoiement"
+            ? tuSujetSelectionRef
+            : target === "relance"
+              ? relanceSujetSelectionRef
+              : relanceTuSujetSelectionRef;
+
+      const currentSujet =
+        target === "main"
+          ? formData.sujet
+          : target === "tutoiement"
+            ? tutoiementDraft.sujet
+            : target === "relance"
+              ? relanceDraft.sujet
+              : relanceTuDraft.sujet;
+
+      const selection =
+        sujetRef.current === document.activeElement && sujetRef.current
+          ? {
+              start: sujetRef.current.selectionStart ?? currentSujet.length,
+              end: sujetRef.current.selectionEnd ?? currentSujet.length,
+            }
+          : { ...sujetSelRef.current };
+
+      const { value, caret } = insertTextInPlainField(currentSujet, variable, selection);
+      sujetSelRef.current = { start: caret, end: caret };
+
+      if (target === "main") {
+        flushSync(() => {
+          setFormData((prev) => ({ ...prev, sujet: value }));
+        });
+      } else if (target === "tutoiement") {
+        flushSync(() => {
+          setTutoiementDraft((prev) => ({ ...prev, sujet: value }));
+        });
+      } else if (target === "relance") {
+        flushSync(() => {
+          setRelanceDraft((prev) => ({ ...prev, sujet: value }));
+        });
+      } else {
+        flushSync(() => {
+          setRelanceTuDraft((prev) => ({ ...prev, sujet: value }));
+        });
+      }
+
+      const input = sujetRef.current;
+      if (input) {
+        input.focus();
+        input.setSelectionRange(caret, caret);
+      }
+    },
+    [
+      applyCorpsHtml,
+      applyTuCorpsHtml,
+      formData.sujet,
+      tutoiementDraft.sujet,
+      relanceDraft.sujet,
+      relanceTuDraft.sujet,
+    ]
+  );
+
+  const variablePickerCommon = useMemo(
+    () => ({
+      categorie: formData.categorie as EmailTemplateCategory,
+      templateNom: formData.nom,
+      agendaLinks,
+      placementConformeTriggerEnabled: placementConformeDraft.trigger.enabled,
+    }),
+    [
+      formData.categorie,
+      formData.nom,
+      agendaLinks,
+      placementConformeDraft.trigger.enabled,
+    ]
+  );
+
+  const buildVariablePicker = useCallback(
+    (
+      target: VariableInsertTarget,
+      ctx: { sujet: string; corps: string; corpsHtml: string }
+    ) => (
+      <TemplateEmailVariableField
+        {...variablePickerCommon}
+        sujet={ctx.sujet}
+        corps={ctx.corps}
+        corpsHtml={ctx.corpsHtml}
+        onInsert={(token, field) => insertVariable(target, token, field)}
+        onMouseDownCapture={() => captureSelectionsBeforeVariableInsert(target)}
+      />
+    ),
+    [variablePickerCommon, insertVariable, captureSelectionsBeforeVariableInsert]
+  );
+
+  const mainVariablePicker = useMemo(
+    () =>
+      buildVariablePicker("main", {
+        sujet: formData.sujet,
+        corps: formData.corps,
+        corpsHtml,
+      }),
+    [buildVariablePicker, formData.sujet, formData.corps, corpsHtml]
+  );
+
+  const tutoiementVariablePicker = useMemo(
+    () =>
+      buildVariablePicker("tutoiement", {
+        sujet: tutoiementDraft.sujet,
+        corps: htmlToPlainEmail(tutoiementDraft.corpsHtml),
+        corpsHtml: tutoiementDraft.corpsHtml,
+      }),
+    [buildVariablePicker, tutoiementDraft.sujet, tutoiementDraft.corpsHtml]
+  );
+
+  const relanceVariablePicker = useMemo(
+    () =>
+      buildVariablePicker("relance", {
+        sujet: relanceDraft.sujet,
+        corps: htmlToPlainEmail(relanceDraft.corpsHtml),
+        corpsHtml: relanceDraft.corpsHtml,
+      }),
+    [buildVariablePicker, relanceDraft.sujet, relanceDraft.corpsHtml]
+  );
+
+  const relanceTuVariablePicker = useMemo(
+    () =>
+      buildVariablePicker("relanceTu", {
+        sujet: relanceTuDraft.sujet,
+        corps: htmlToPlainEmail(relanceTuDraft.corpsHtml),
+        corpsHtml: relanceTuDraft.corpsHtml,
+      }),
+    [buildVariablePicker, relanceTuDraft.sujet, relanceTuDraft.corpsHtml]
+  );
 
   const toggleEtiquetteLink = (id: number) => {
     setLinkedEtiquetteIds((prev) =>
@@ -1967,22 +2180,7 @@ export function TemplateEmailForm({
                       />
                     </div>
 
-                    <div className="space-y-1.5 rounded-lg border bg-muted/20 px-2.5 py-2">
-                      <Label className="text-xs font-medium">Variables à insérer</Label>
-                      <TemplateEmailVariablePicker
-                        categorie={formData.categorie as EmailTemplateCategory}
-                        sujet={formData.sujet}
-                        corps={formData.corps}
-                        corpsHtml={corpsHtml}
-                        templateNom={formData.nom}
-                        agendaLinks={agendaLinks}
-                        placementConformeTriggerEnabled={
-                          placementConformeDraft.trigger.enabled
-                        }
-                        onInsert={(token, field) => insertVariable(token, field)}
-                        onMouseDownCapture={captureSelectionsBeforeVariableInsert}
-                      />
-                    </div>
+                    {mainVariablePicker}
 
                     <TemplateEmailAttachmentsPanel
                       templateId={effectiveTemplateId}
@@ -2078,6 +2276,14 @@ export function TemplateEmailForm({
                       attachments={tutoiementAttachmentsState.attachments}
                       onAttachmentsChange={tutoiementAttachmentsState.setAttachments}
                       attachmentsDisabled={loading}
+                      variablePicker={tutoiementVariablePicker}
+                      sujetInputRef={tuSujetInputRef}
+                      onSujetSelectionCapture={() =>
+                        captureSujetSelectionFor(tuSujetInputRef, tuSujetSelectionRef)
+                      }
+                      onEditorSelectionSave={(range) => {
+                        tuEditorSelectionRef.current = range;
+                      }}
                     />
                   </TabsContent>
 
@@ -2107,6 +2313,24 @@ export function TemplateEmailForm({
                       relanceTuAttachments={relanceTuAttachmentsState.attachments}
                       onRelanceTuAttachmentsChange={relanceTuAttachmentsState.setAttachments}
                       attachmentsDisabled={loading}
+                      variablePicker={relanceVariablePicker}
+                      relanceTuVariablePicker={relanceTuVariablePicker}
+                      relanceSujetInputRef={relanceSujetInputRef}
+                      onRelanceSujetSelectionCapture={() =>
+                        captureSujetSelectionFor(relanceSujetInputRef, relanceSujetSelectionRef)
+                      }
+                      relanceEditorRef={relanceRichEditorRef}
+                      onRelanceEditorSelectionSave={(range) => {
+                        relanceEditorSelectionRef.current = range;
+                      }}
+                      relanceTuSujetInputRef={relanceTuSujetInputRef}
+                      onRelanceTuSujetSelectionCapture={() =>
+                        captureSujetSelectionFor(relanceTuSujetInputRef, relanceTuSujetSelectionRef)
+                      }
+                      relanceTuEditorRef={relanceTuRichEditorRef}
+                      onRelanceTuEditorSelectionSave={(range) => {
+                        relanceTuEditorSelectionRef.current = range;
+                      }}
                     />
                   </TabsContent>
 

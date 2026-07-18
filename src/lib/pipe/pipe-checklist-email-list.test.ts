@@ -6,9 +6,11 @@ import {
 import {
   buildR1ChecklistEmailPreviewDocument,
   formatR1ChecklistEmailList,
+  formatR3ChecklistEmailList,
   suggestR1ChecklistProfileFromContact,
 } from "@/lib/pipe/pipe-checklist-email-list";
 import { getActiveR1ChecklistItems } from "@/lib/pipe/r1-document-checklist";
+import { getActiveR3ChecklistItems } from "@/lib/pipe/r3-document-checklist";
 
 describe("formatR1ChecklistEmailList", () => {
   it("formate les pièces de base et le profil salarié en puces (sans conditionnel)", () => {
@@ -71,6 +73,25 @@ describe("formatR1ChecklistEmailList", () => {
     expect(doc).toContain("<!DOCTYPE html>");
     expect(doc).toContain("list-style-type:disc");
     expect(doc).toContain("<li>Test</li>");
+  });
+});
+
+describe("formatR3ChecklistEmailList", () => {
+  it("formate les pièces mail placements sans DER/RIO/QPI", () => {
+    const items = getActiveR3ChecklistItems(DEFAULT_PIPE_CHECKLIST_TEMPLATES);
+
+    const { text, html } = formatR3ChecklistEmailList(items);
+
+    expect(text).not.toContain("DER");
+    expect(text).not.toContain("RIO");
+    expect(text).not.toContain("QPI");
+    expect(text).toContain("Carte d'identité ou passeport en cours de validité.");
+    expect(text).toContain("Justificatif de domicile (< 3 mois).");
+    expect(text).not.toContain("Date d'émission récente");
+    expect(text).toContain("RIB.");
+    expect(html).toContain("<ul");
+    expect(html).toContain("Carte d'identité ou passeport en cours de validité");
+    expect(html).not.toContain("DER");
   });
 });
 

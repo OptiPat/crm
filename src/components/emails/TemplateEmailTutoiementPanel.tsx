@@ -6,7 +6,7 @@ import { TemplateEmailAttachmentsPanel } from "@/components/emails/TemplateEmail
 import { buildTutoiementTemplateNom } from "@/lib/emails/template-email-formality";
 import type { TemplateEmailAttachmentMeta } from "@/lib/emails/template-email-attachments";
 import { Users } from "lucide-react";
-import type { RefObject } from "react";
+import type { RefObject, ReactNode } from "react";
 
 export type TemplateTutoiementDraft = {
   enabled: boolean;
@@ -24,6 +24,10 @@ type Props = {
   attachments?: TemplateEmailAttachmentMeta[];
   onAttachmentsChange?: (attachments: TemplateEmailAttachmentMeta[]) => void;
   attachmentsDisabled?: boolean;
+  variablePicker?: ReactNode;
+  sujetInputRef?: RefObject<HTMLInputElement | null>;
+  onSujetSelectionCapture?: () => void;
+  onEditorSelectionSave?: (range: Range | null) => void;
 };
 
 export function TemplateEmailTutoiementPanel({
@@ -36,6 +40,10 @@ export function TemplateEmailTutoiementPanel({
   attachments = [],
   onAttachmentsChange,
   attachmentsDisabled = false,
+  variablePicker,
+  sujetInputRef,
+  onSujetSelectionCapture,
+  onEditorSelectionSave,
 }: Props) {
   const patch = (partial: Partial<TemplateTutoiementDraft>) =>
     onChange({ ...draft, ...partial });
@@ -74,12 +82,18 @@ export function TemplateEmailTutoiementPanel({
 
       {draft.enabled && (
         <div className="space-y-4 rounded-lg border p-4">
+          {variablePicker}
           <div className="space-y-2">
             <Label htmlFor="tu-sujet">Objet (tu)</Label>
             <Input
               id="tu-sujet"
+              ref={sujetInputRef}
               value={draft.sujet}
               onChange={(e) => patch({ sujet: e.target.value })}
+              onFocus={onSujetSelectionCapture}
+              onClick={onSujetSelectionCapture}
+              onKeyUp={onSujetSelectionCapture}
+              onBlur={onSujetSelectionCapture}
               placeholder="Ex. Un point sur ton dossier"
             />
           </div>
@@ -89,6 +103,7 @@ export function TemplateEmailTutoiementPanel({
               value={draft.corpsHtml}
               onChange={onCorpsHtmlChange}
               editorElementRef={editorElementRef}
+              onSelectionSave={onEditorSelectionSave}
               placeholder="Rédigez la version tutoiement (ton, te, tiens…)"
             />
           </div>

@@ -17,14 +17,17 @@ export function usePipeR1RdvProfilePlanning(options: {
 }) {
   const { enabled, pipeId, primaryContactId } = options;
   const [profile, setProfile] = useState<R1ChecklistProfile>(EMPTY_PROFILE);
+  const [profileReady, setProfileReady] = useState(!enabled || pipeId <= 0);
   const loadGenerationRef = useRef(0);
 
   useEffect(() => {
     if (!enabled || pipeId <= 0) {
       setProfile(EMPTY_PROFILE);
+      setProfileReady(true);
       return;
     }
 
+    setProfileReady(false);
     const generation = ++loadGenerationRef.current;
 
     void (async () => {
@@ -40,9 +43,10 @@ export function usePipeR1RdvProfilePlanning(options: {
       const loadedProfile = await loadR1ChecklistProfileForPipePlanning(pipeId, contact);
       if (loadGenerationRef.current === generation) {
         setProfile(loadedProfile);
+        setProfileReady(true);
       }
     })();
   }, [enabled, pipeId, primaryContactId]);
 
-  return { profile, setProfile };
+  return { profile, setProfile, profileReady };
 }

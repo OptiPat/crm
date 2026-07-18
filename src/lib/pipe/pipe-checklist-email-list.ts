@@ -133,6 +133,42 @@ export function formatR1ChecklistEmailList(items: PipeChecklistTemplateItem[]): 
   };
 }
 
+export function formatR3ChecklistEmailList(items: PipeChecklistTemplateItem[]): {
+  text: string;
+  html: string;
+} {
+  if (items.length === 0) {
+    return { text: "", html: "" };
+  }
+
+  const emailItems = items.filter((item) => !R3_EMAIL_EXCLUDED_ITEM_IDS.has(item.id));
+  const labels = emailItems.map((item) => formatR3EmailItemLabel(item)).filter(Boolean);
+  if (labels.length === 0) {
+    return { text: "", html: "" };
+  }
+
+  return {
+    text: labels.map((label) => `${label}.`).join("\n"),
+    html: `<ul style="${R1_EMAIL_UL_STYLE}">${labels
+      .map((label) => `<li>${escapeHtml(label)}</li>`)
+      .join("")}</ul>`,
+  };
+}
+
+const R3_EMAIL_EXCLUDED_ITEM_IDS = new Set(["der", "rio", "qpi_a_signer"]);
+
+function formatR3EmailItemLabel(item: PipeChecklistTemplateItem): string {
+  if (item.id === "cni") {
+    return "Carte d'identité ou passeport en cours de validité";
+  }
+  const label = item.label.trim();
+  if (!label) return "";
+  if (item.id === "justificatif_domicile") {
+    return label;
+  }
+  return formatItemLabel(item);
+}
+
 /** Document HTML minimal pour l'aperçu iframe (hors reset Tailwind de l'app). */
 export function buildR1ChecklistEmailPreviewDocument(html: string): string {
   const body = html.trim();

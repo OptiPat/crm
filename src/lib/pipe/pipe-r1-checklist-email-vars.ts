@@ -20,16 +20,11 @@ import type { Contact } from "@/lib/api/tauri-contacts";
 
 export const R1_CHECKLIST_EMAIL_VAR_KEY = "liste_documents_r1_html" as const;
 
-const LEGACY_R1_CHECKLIST_TEXT_VAR = "liste_documents_r1";
-
 export function templateUsesR1ChecklistEmailVariables(
   ...parts: (string | null | undefined)[]
 ): boolean {
   const hay = parts.filter(Boolean).join("\n");
-  return (
-    hay.includes(`{{${R1_CHECKLIST_EMAIL_VAR_KEY}}}`) ||
-    hay.includes(`{{${LEGACY_R1_CHECKLIST_TEXT_VAR}}}`)
-  );
+  return hay.includes(`{{${R1_CHECKLIST_EMAIL_VAR_KEY}}}`);
 }
 
 export async function buildR1ChecklistEmailVariables(

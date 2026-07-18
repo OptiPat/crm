@@ -162,6 +162,7 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
     await sendPipeRdvConfirmationAfterCalendar({
       pipe: options.pipe,
       rdvStage,
+      timelineEntryTitre: titre,
       pipeTimelineEntryId: entry.id,
       calendar,
       startAtUnix: options.occurredAtUnix,

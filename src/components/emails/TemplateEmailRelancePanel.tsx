@@ -14,6 +14,7 @@ import type { TemplateTutoiementDraft } from "@/components/emails/TemplateEmailT
 import { buildTutoiementTemplateNom } from "@/lib/emails/template-email-formality";
 import type { TemplateEmailAttachmentMeta } from "@/lib/emails/template-email-attachments";
 import { MessageCircle, RotateCcw } from "lucide-react";
+import type { ReactNode, RefObject } from "react";
 
 export type TemplateRelanceDraft = {
   enabled: boolean;
@@ -44,6 +45,16 @@ type Props = {
   relanceTuAttachments?: TemplateEmailAttachmentMeta[];
   onRelanceTuAttachmentsChange?: (attachments: TemplateEmailAttachmentMeta[]) => void;
   attachmentsDisabled?: boolean;
+  variablePicker?: ReactNode;
+  relanceTuVariablePicker?: ReactNode;
+  relanceSujetInputRef?: RefObject<HTMLInputElement | null>;
+  onRelanceSujetSelectionCapture?: () => void;
+  relanceEditorRef?: RefObject<HTMLDivElement | null>;
+  onRelanceEditorSelectionSave?: (range: Range | null) => void;
+  relanceTuSujetInputRef?: RefObject<HTMLInputElement | null>;
+  onRelanceTuSujetSelectionCapture?: () => void;
+  relanceTuEditorRef?: RefObject<HTMLDivElement | null>;
+  onRelanceTuEditorSelectionSave?: (range: Range | null) => void;
 };
 
 export function TemplateEmailRelancePanel({
@@ -61,6 +72,16 @@ export function TemplateEmailRelancePanel({
   relanceTuAttachments = [],
   onRelanceTuAttachmentsChange,
   attachmentsDisabled = false,
+  variablePicker,
+  relanceTuVariablePicker,
+  relanceSujetInputRef,
+  onRelanceSujetSelectionCapture,
+  relanceEditorRef,
+  onRelanceEditorSelectionSave,
+  relanceTuSujetInputRef,
+  onRelanceTuSujetSelectionCapture,
+  relanceTuEditorRef,
+  onRelanceTuEditorSelectionSave,
 }: Props) {
   const patch = (partial: Partial<TemplateRelanceDraft>) =>
     onChange({ ...draft, ...partial });
@@ -198,20 +219,28 @@ export function TemplateEmailRelancePanel({
                     : "Relance — (nom du modèle principal)"}
                 </strong>
               </p>
+              {variablePicker}
               <div className="space-y-2">
                 <Label htmlFor="relance-sujet">Objet du 2ᵉ email *</Label>
                 <Input
                   id="relance-sujet"
+                  ref={relanceSujetInputRef}
                   value={draft.sujet}
                   onChange={(e) => patch({ sujet: e.target.value })}
+                  onFocus={onRelanceSujetSelectionCapture}
+                  onClick={onRelanceSujetSelectionCapture}
+                  onKeyUp={onRelanceSujetSelectionCapture}
+                  onBlur={onRelanceSujetSelectionCapture}
                   placeholder="Ex. Suite à mon message…"
                 />
               </div>
               <div className="space-y-2">
                 <Label>Message de relance *</Label>
                 <RichTextEmailEditor
+                  ref={relanceEditorRef}
                   value={draft.corpsHtml}
                   onChange={(html) => patch({ corpsHtml: html })}
+                  onSelectionSave={onRelanceEditorSelectionSave}
                   minHeight="160px"
                 />
               </div>
@@ -236,23 +265,31 @@ export function TemplateEmailRelancePanel({
                     )}
                     ).
                   </p>
+                  {relanceTuVariablePicker}
                   <div className="space-y-2">
                     <Label htmlFor="relance-tu-sujet">Objet relance (tu) *</Label>
                     <Input
                       id="relance-tu-sujet"
+                      ref={relanceTuSujetInputRef}
                       value={tutoiementDraft.sujet}
                       onChange={(e) =>
                         onTutoiementChange({ ...tutoiementDraft, sujet: e.target.value })
                       }
+                      onFocus={onRelanceTuSujetSelectionCapture}
+                      onClick={onRelanceTuSujetSelectionCapture}
+                      onKeyUp={onRelanceTuSujetSelectionCapture}
+                      onBlur={onRelanceTuSujetSelectionCapture}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Message relance (tu) *</Label>
                     <RichTextEmailEditor
+                      ref={relanceTuEditorRef}
                       value={tutoiementDraft.corpsHtml}
                       onChange={(html) =>
                         onTutoiementChange({ ...tutoiementDraft, corpsHtml: html })
                       }
+                      onSelectionSave={onRelanceTuEditorSelectionSave}
                       minHeight="140px"
                     />
                   </div>

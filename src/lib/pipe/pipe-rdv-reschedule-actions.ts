@@ -137,6 +137,7 @@ export async function executePipeRdvReschedule(options: {
     await sendPipeRdvConfirmationAfterCalendar({
       pipe: options.pipe,
       rdvStage: options.rdvStage,
+      timelineEntryTitre: resolvedEntryTitre,
       pipeTimelineEntryId: options.entry.id,
       calendar,
       startAtUnix: options.newOccurredAtUnix,

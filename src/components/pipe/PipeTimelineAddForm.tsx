@@ -6,6 +6,7 @@ import { DictationTextarea } from "@/components/ui/dictation-textarea";
 import { RdvVisioLocationFields } from "@/components/calendar/RdvVisioLocationFields";
 import { PipeAffaireRdvPlanSelect } from "@/components/pipe/PipeAffaireRdvPlanSelect";
 import { PipeR1RdvDocumentsFields } from "@/components/pipe/PipeR1RdvDocumentsFields";
+import { PipeR3RdvDocumentsFields } from "@/components/pipe/PipeR3RdvDocumentsFields";
 import { usePipeChecklistTemplates } from "@/hooks/usePipeChecklistTemplates";
 import { usePipeR1RdvProfilePlanning } from "@/hooks/usePipeR1RdvProfilePlanning";
 import type { R1ChecklistProfile } from "@/lib/pipe/pipe-checklist-template";
@@ -24,6 +25,7 @@ import {
 } from "@/lib/pipe/pipe-timeline-types";
 import {
   formatRdvPlanOptionLabel,
+  isR3PlacementsRdvPlanOption,
   rdvStageFromPlanOption,
   type PipeRdvPlanOption,
 } from "@/lib/pipe/pipe-rdv-plan-option";
@@ -92,8 +94,14 @@ export function PipeTimelineAddForm({
   const primaryContactId = pipe?.contact_id ?? contactId;
   const showR1DocumentsFields =
     showAffaireRdvStage && rdvStage === "R1" && pipe != null && pipe.id > 0;
+  const showR3DocumentsFields =
+    showAffaireRdvStage &&
+    isR3PlacementsRdvPlanOption(rdvPlanOption) &&
+    pipe != null &&
+    pipe.id > 0;
   const { templates: checklistTemplates } = usePipeChecklistTemplates();
-  const { profile: r1Profile, setProfile: setR1Profile } = usePipeR1RdvProfilePlanning({
+  const { profile: r1Profile, setProfile: setR1Profile, profileReady: r1ProfileReady } =
+    usePipeR1RdvProfilePlanning({
     enabled: showR1DocumentsFields,
     pipeId: pipe?.id ?? 0,
     primaryContactId,
@@ -106,6 +114,10 @@ export function PipeTimelineAddForm({
         const validationError = rdvLocation.validate();
         if (validationError) {
           toast.error(validationError);
+          return;
+        }
+        if (showR1DocumentsFields && !r1ProfileReady) {
+          toast.error("Chargement du profil documents R1 en cours…");
           return;
         }
         try {
@@ -175,8 +187,11 @@ export function PipeTimelineAddForm({
           profile={r1Profile}
           templates={checklistTemplates}
           onProfileChange={setR1Profile}
-          disabled={saving}
+          disabled={saving || !r1ProfileReady}
         />
+      )}
+      {showR3DocumentsFields && (
+        <PipeR3RdvDocumentsFields templates={checklistTemplates} disabled={saving} />
       )}
       {isRdv && contactId > 0 && (
         <RdvVisioLocationFields
@@ -215,7 +230,7 @@ export function PipeTimelineAddForm({
         <Button type="button" variant="outline" size="sm" onClick={onCancel}>
           Annuler
         </Button>
-        <Button type="submit" size="sm" disabled={saving}>
+        <Button type="submit" size="sm" disabled={saving || (showR1DocumentsFields && !r1ProfileReady)}>
           {saving ? "Enregistrement…" : submitLabel}
         </Button>
       </div>

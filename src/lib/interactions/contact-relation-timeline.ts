@@ -5,6 +5,7 @@ import { getContactGmailMessages } from "@/lib/api/tauri-contact-gmail";
 import { groupMailboxMessagesByThread } from "@/lib/contacts/contact-mail-threads";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
+import { filterByOrigine } from "@/lib/investissements/patrimoine-tab-utils";
 import type { Document } from "@/lib/api/tauri-documents";
 import { getDocumentsByContact } from "@/lib/api/tauri-documents";
 import { documentTimelineSortDate } from "@/lib/documents/document-display";
@@ -107,12 +108,14 @@ export function buildContactRelationTimeline(
       key: `thread-${t.threadId}`,
       sort_date: t.sortDate,
     })),
-    ...(extras.investissements ?? []).map((investissement) => ({
-      kind: "investissement" as const,
-      investissement,
-      key: `investissement-${investissement.id}`,
-      sort_date: investissement.date_souscription ?? investissement.created_at,
-    })),
+    ...filterByOrigine(extras.investissements ?? [], "avec_moi").map(
+      (investissement) => ({
+        kind: "investissement" as const,
+        investissement,
+        key: `investissement-${investissement.id}`,
+        sort_date: investissement.date_souscription ?? investissement.created_at,
+      })
+    ),
     ...(extras.documents ?? []).map((document) => ({
       kind: "document" as const,
       document,
@@ -180,7 +183,11 @@ export function relationTimelineMatchesSearch(
     return hay.includes(q);
   }
   if (item.kind === "investissement") {
-    const hay = [item.investissement.nom_produit, item.investissement.type_produit]
+    const hay = [
+      item.investissement.nom_produit,
+      item.investissement.type_produit,
+      "avec moi",
+    ]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();

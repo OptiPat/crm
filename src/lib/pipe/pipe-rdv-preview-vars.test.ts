@@ -20,5 +20,8 @@ describe("pipe-rdv-preview-vars", () => {
     expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.co_contact).toBe("DUPONT Jean");
     expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.liste_documents_r1_html).toContain("<ul");
     expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.liste_documents_r1_html).toContain("avis d'imposition");
+    expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.liste_documents_r3_html).toContain("<ul");
+    expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.liste_documents_r3_html).toContain("RIB");
+    expect(SAMPLE_PIPE_RDV_PREVIEW_VARS.liste_documents_r3_html).not.toContain("DER");
   });
 });
