@@ -20,6 +20,7 @@ import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X, ClipboardList, Ch
 import * as XLSX from "xlsx";
 import { createContactsBulk, getAllContacts, updateContact, type NewContact } from "@/lib/api/tauri-contacts";
 import { notifyContactsChanged, suppressContactsChangedNotify } from "@/lib/contacts/contact-events";
+import { notifyClientOneDriveChanged } from "@/lib/client-onedrive/client-onedrive-events";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import {
   buildContactIdMap,
@@ -635,6 +636,7 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
     handleClose();
     if (refresh) {
       notifyContactsChanged();
+      notifyClientOneDriveChanged();
       onSuccess?.();
       void runFullEtiquettesRecalc().catch((e) =>
         console.error("Recalcul étiquettes après import:", e)
@@ -647,6 +649,7 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
     handleClose();
     if (refresh) {
       notifyContactsChanged();
+      notifyClientOneDriveChanged();
       onSuccess?.();
       void runFullEtiquettesRecalc().catch((e) =>
         console.error("Recalcul étiquettes après import:", e)

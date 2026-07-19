@@ -21,6 +21,7 @@ import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X, Target, Phone, Sp
 import * as XLSX from "xlsx";
 import { createContact, getAllContacts, updateContact, updateContactFiscal, type NewContact, type Contact } from "@/lib/api/tauri-contacts";
 import { notifyContactsChanged, suppressContactsChangedNotify } from "@/lib/contacts/contact-events";
+import { notifyClientOneDriveChanged } from "@/lib/client-onedrive/client-onedrive-events";
 import {
   notifyInvestissementsChanged,
   suppressInvestissementsChangedNotify,
@@ -2153,6 +2154,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     handleClose();
     if (refresh) {
       notifyContactsChanged();
+      notifyClientOneDriveChanged();
       notifyInvestissementsChanged();
       onSuccess?.();
       void runFullEtiquettesRecalc().catch((e) =>
@@ -2166,6 +2168,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     handleClose();
     if (refresh) {
       notifyContactsChanged();
+      notifyClientOneDriveChanged();
       notifyInvestissementsChanged();
       onSuccess?.();
       void runFullEtiquettesRecalc().catch((e) =>

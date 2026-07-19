@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Upload, File, X, FileText } from "lucide-react";
 import { uploadDocument, createDocument, discardStagedDocument, type NewDocument } from "@/lib/api/tauri-documents";
+import { showDocumentOnedriveImportToast } from "@/lib/client-onedrive/link-onedrive-toast";
 import { extractTextFromPDFPath, parseAuto, isNativeTextPDF, type ExtractedData } from "@/lib/pdf";
 import { ExtractedDataPreviewAdvanced } from "./ExtractedDataPreviewAdvanced";
 import { IdentityExtractPreviewDialog } from "./IdentityExtractPreviewDialog";
@@ -420,10 +421,11 @@ export function DocumentUpload({
         notes: formData.notes,
       };
 
-      await createDocument(newDoc);
+      const created = await createDocument(newDoc);
+      showDocumentOnedriveImportToast(created.onedriveMessage);
 
       if (identityImport.uploadedVersoFile && identityImport.identityImportMode === "two_files") {
-        await createDocument({
+        const verso = await createDocument({
           contact_id: formData.contact_id,
           foyer_id: formData.foyer_id,
           type_document: formData.type_document || "IDENTITE",
@@ -434,6 +436,7 @@ export function DocumentUpload({
           date_document: formData.date_document || undefined,
           notes: formData.notes ? `${formData.notes} (verso)` : "Verso",
         });
+        showDocumentOnedriveImportToast(verso.onedriveMessage);
       }
       importSucceededRef.current = true;
       onSuccess();

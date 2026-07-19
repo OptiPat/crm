@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { FolderOpen, HardDrive, Link2, Loader2, ShieldAlert, Unplug } from "lucide-react";
+import { FolderOpen, HardDrive, Link2, Loader2, PlugZap, ShieldAlert, Unplug } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
 import {
   Dialog,
@@ -19,8 +20,10 @@ import {
   connectMicrosoftOneDriveOAuth,
   disconnectMicrosoftOneDriveOAuth,
   getClientOneDriveStatus,
+  saveClientOneDriveBehavior,
   saveClientOneDriveLocalSyncRoot,
   saveClientOneDriveRootFolder,
+  testClientOneDriveConnection,
   type ClientOneDriveStatus,
 } from "@/lib/api/tauri-client-onedrive";
 import { getOAuthAppSettings, saveMicrosoftOAuthClientId } from "@/lib/api/tauri-email-oauth";
@@ -42,6 +45,8 @@ export function ClientOneDriveSettingsPanel() {
   const [rootPickerOpen, setRootPickerOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [savingLocalRoot, setSavingLocalRoot] = useState(false);
+  const [savingBehavior, setSavingBehavior] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -140,6 +145,44 @@ export function ClientOneDriveSettingsPanel() {
       toast.error(invokeErrorMessage(e) || "Enregistrement impossible");
     } finally {
       setSavingLocalRoot(false);
+    }
+  };
+
+  const handleBehaviorChange = async (
+    field: "autoCreateOnContact" | "copyDocumentOnImport",
+    checked: boolean
+  ) => {
+    if (!status) return;
+    const next = {
+      autoCreateOnContact:
+        field === "autoCreateOnContact" ? checked : status.autoCreateOnContact,
+      copyDocumentOnImport:
+        field === "copyDocumentOnImport" ? checked : status.copyDocumentOnImport,
+    };
+    setStatus({ ...status, ...next });
+    setSavingBehavior(true);
+    try {
+      const updated = await saveClientOneDriveBehavior(next);
+      setStatus(updated);
+      setClientOneDriveStatusCache(updated);
+      toast.success("Préférences OneDrive enregistrées");
+    } catch (e) {
+      await refresh();
+      toast.error(invokeErrorMessage(e) || "Enregistrement impossible");
+    } finally {
+      setSavingBehavior(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    try {
+      const message = await testClientOneDriveConnection();
+      toast.success(message);
+    } catch (e) {
+      toast.error(invokeErrorMessage(e) || "Test de connexion impossible");
+    } finally {
+      setTestingConnection(false);
     }
   };
 
@@ -258,6 +301,19 @@ export function ClientOneDriveSettingsPanel() {
                     <Link2 className="h-4 w-4 mr-1.5" />
                     Rattacher les dossiers
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={testingConnection || !status?.rootFolderId}
+                    onClick={() => void handleTestConnection()}
+                  >
+                    {testingConnection ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <PlugZap className="h-4 w-4 mr-1.5" />
+                    )}
+                    Tester la connexion
+                  </Button>
                   <Button type="button" variant="ghost" onClick={() => void handleDisconnect()}>
                     <Unplug className="h-4 w-4 mr-1.5" />
                     Déconnecter
@@ -274,6 +330,41 @@ export function ClientOneDriveSettingsPanel() {
               <p className="text-sm text-amber-700">
                 Choisissez le dossier « Dossier clients » sur votre OneDrive.
               </p>
+            ) : null}
+            {status?.connected && status.rootFolderId ? (
+              <div className="rounded-xl border border-border/80 bg-muted/10 px-4 py-3 space-y-3">
+                <p className="text-sm font-medium">Comportement automatique</p>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm">Créer le dossier à la création client</p>
+                    <p className="text-xs text-muted-foreground">
+                      Clients et prospects clients — convention « NOM Prénom »
+                    </p>
+                  </div>
+                  <Switch
+                    checked={status.autoCreateOnContact}
+                    disabled={savingBehavior}
+                    onCheckedChange={(checked) =>
+                      void handleBehaviorChange("autoCreateOnContact", checked)
+                    }
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm">Copier les documents importés vers OneDrive</p>
+                    <p className="text-xs text-muted-foreground">
+                      Lors de l&apos;ajout d&apos;un document au CRM (max 4 Mo)
+                    </p>
+                  </div>
+                  <Switch
+                    checked={status.copyDocumentOnImport}
+                    disabled={savingBehavior}
+                    onCheckedChange={(checked) =>
+                      void handleBehaviorChange("copyDocumentOnImport", checked)
+                    }
+                  />
+                </div>
+              </div>
             ) : null}
             {status?.connected ? (
               <div className="rounded-xl border border-border/80 bg-muted/10 px-4 py-3 space-y-2">
@@ -322,11 +413,19 @@ export function ClientOneDriveSettingsPanel() {
             onPickFolder={(item) => {
               void (async () => {
                 try {
-                  await saveClientOneDriveRootFolder(item.id, item.name);
+                  const result = await saveClientOneDriveRootFolder(item.id, item.name);
                   clearClientOneDriveBrowseCache();
                   await refresh();
                   setRootPickerOpen(false);
-                  toast.success("Dossier racine enregistré");
+                  if (result.previousRootChanged) {
+                    toast.warning("Racine OneDrive modifiée", {
+                      description:
+                        "Les liens existants peuvent ne plus correspondre. Relancez « Rattacher les dossiers » si besoin.",
+                      duration: 10_000,
+                    });
+                  } else {
+                    toast.success("Dossier racine enregistré");
+                  }
                 } catch (e) {
                   toast.error(invokeErrorMessage(e) || "Enregistrement impossible");
                 }

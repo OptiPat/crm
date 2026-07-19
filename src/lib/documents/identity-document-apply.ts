@@ -1,4 +1,5 @@
 import { createDocument } from "@/lib/api/tauri-documents";
+import { showDocumentOnedriveImportToast } from "@/lib/client-onedrive/link-onedrive-toast";
 import { updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import type { IdentityPreviewValues } from "@/components/documents/IdentityExtractPreviewDialog";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
@@ -75,7 +76,7 @@ export async function applyIdentityDocumentImport(options: {
     options.formDateDocument ||
     undefined;
 
-  await createDocument({
+  const recto = await createDocument({
     contact_id: options.contactId,
     foyer_id: options.foyerId,
     type_document: "IDENTITE",
@@ -90,9 +91,10 @@ export async function applyIdentityDocumentImport(options: {
         ? "Recto"
         : options.formNotes,
   });
+  showDocumentOnedriveImportToast(recto.onedriveMessage);
 
   if (options.uploadedVersoFile) {
-    await createDocument({
+    const verso = await createDocument({
       contact_id: options.contactId,
       foyer_id: options.foyerId,
       type_document: "IDENTITE",
@@ -103,6 +105,7 @@ export async function applyIdentityDocumentImport(options: {
       date_document: documentExpiryDate,
       notes: options.formNotes ? `${options.formNotes} (verso)` : "Verso",
     });
+    showDocumentOnedriveImportToast(verso.onedriveMessage);
   }
 
   return { filledFields, skippedFields };

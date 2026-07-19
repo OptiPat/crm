@@ -27,7 +27,7 @@ describe("importPipeChecklistDocument", () => {
       name: "test.pdf",
       size: 42,
     });
-    createDocument.mockResolvedValue({ id: 9, nom_fichier: "test.pdf" });
+    createDocument.mockResolvedValue({ document: { id: 9, nom_fichier: "test.pdf" } });
 
     const doc = await importPipeChecklistDocument({
       contactId: 3,

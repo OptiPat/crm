@@ -48,8 +48,13 @@ export async function getDocumentById(id: number): Promise<Document> {
   return await invoke<Document>("get_document_by_id", { id });
 }
 
-export async function createDocument(newDocument: NewDocument): Promise<Document> {
-  const created = await invoke<Document>("create_document", { newDocument });
+export interface CreateDocumentResult {
+  document: Document;
+  onedriveMessage?: string | null;
+}
+
+export async function createDocument(newDocument: NewDocument): Promise<CreateDocumentResult> {
+  const created = await invoke<CreateDocumentResult>("create_document", { newDocument });
   notifyDocumentsChanged();
   return created;
 }

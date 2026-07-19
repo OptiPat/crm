@@ -442,6 +442,78 @@ pub fn ensure_folder_under_client_root(
     )
 }
 
+const SIMPLE_UPLOAD_MAX_BYTES: usize = 4 * 1024 * 1024;
+
+fn graph_encode_path_segment(segment: &str) -> String {
+    segment
+        .bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{:02X}", b),
+        })
+        .collect()
+}
+
+/// Nom de fichier plat pour upload Graph (pas de chemin relatif).
+pub fn sanitize_onedrive_upload_filename(file_name: &str) -> Result<String, String> {
+    let trimmed = file_name.trim();
+    if trimmed.is_empty() {
+        return Err("Nom de fichier vide.".into());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
+        return Err("Nom de fichier invalide.".into());
+    }
+    let base = std::path::Path::new(trimmed)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| "Nom de fichier invalide.".to_string())?;
+    if base.is_empty() || base == "." || base == ".." {
+        return Err("Nom de fichier invalide.".into());
+    }
+    if base.chars().any(|c| c.is_control() || c == '\r' || c == '\n') {
+        return Err("Nom de fichier invalide.".into());
+    }
+    Ok(base.to_string())
+}
+
+/// Copie un fichier vers un dossier OneDrive (upload simple Graph, max 4 Mo).
+pub fn upload_file_to_onedrive_folder(
+    app: &AppHandle,
+    folder_id: &str,
+    file_name: &str,
+    file_bytes: &[u8],
+) -> Result<(), String> {
+    if file_bytes.len() > SIMPLE_UPLOAD_MAX_BYTES {
+        return Err(format!(
+            "Fichier trop volumineux pour la copie OneDrive ({:.1} Mo, max 4 Mo).",
+            file_bytes.len() as f64 / 1_048_576.0
+        ));
+    }
+    let safe_name = sanitize_onedrive_upload_filename(file_name)?;
+    let token = onedrive_token(app)?;
+    let client = reqwest::blocking::Client::new();
+    let encoded_name = graph_encode_path_segment(&safe_name);
+    let url = format!(
+        "https://graph.microsoft.com/v1.0/me/drive/items/{folder_id}:/{encoded_name}:/content"
+    );
+    let res = client
+        .put(&url)
+        .bearer_auth(&token)
+        .header("Content-Type", "application/octet-stream")
+        .body(file_bytes.to_vec())
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!(
+            "Copie OneDrive : {}",
+            res.text().unwrap_or_default()
+        ));
+    }
+    Ok(())
+}
+
 pub fn list_client_onedrive_child_folders(
     app: &AppHandle,
     parent_folder_id: &str,
@@ -452,4 +524,28 @@ pub fn list_client_onedrive_child_folders(
         .into_iter()
         .filter(|i| i.is_folder)
         .collect())
+}
+
+#[cfg(test)]
+mod upload_tests {
+    use super::{graph_encode_path_segment, sanitize_onedrive_upload_filename};
+
+    #[test]
+    fn graph_encode_path_segment_handles_utf8_accents() {
+        assert_eq!(graph_encode_path_segment("avis_imposition.pdf"), "avis_imposition.pdf");
+        assert_eq!(
+            graph_encode_path_segment("Pièce jointe.pdf"),
+            "Pi%C3%A8ce%20jointe.pdf"
+        );
+    }
+
+    #[test]
+    fn sanitize_onedrive_upload_filename_rejects_path_traversal() {
+        assert!(sanitize_onedrive_upload_filename("../DUPONT/secret.pdf").is_err());
+        assert!(sanitize_onedrive_upload_filename("ok/secret.pdf").is_err());
+        assert_eq!(
+            sanitize_onedrive_upload_filename("  rapport QPI.pdf  ").unwrap(),
+            "rapport QPI.pdf"
+        );
+    }
 }

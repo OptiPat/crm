@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifyClientOneDriveChanged } from "@/lib/client-onedrive/client-onedrive-events";
 
 export interface ClientOneDriveStatus {
   connected: boolean;
@@ -7,6 +8,17 @@ export interface ClientOneDriveStatus {
   rootFolderName: string | null;
   localSyncRoot: string | null;
   microsoftClientIdConfigured: boolean;
+  autoCreateOnContact: boolean;
+  copyDocumentOnImport: boolean;
+}
+
+export interface SaveClientOneDriveRootFolderResult {
+  config: {
+    rootFolderId: string | null;
+    rootFolderName: string | null;
+    localSyncRoot: string | null;
+  };
+  previousRootChanged: boolean;
 }
 
 export interface OpenClientOneDriveFolderResult {
@@ -56,20 +68,42 @@ export async function getClientOneDriveStatus(): Promise<ClientOneDriveStatus> {
 export async function connectMicrosoftOneDriveOAuth(options?: {
   forceConsent?: boolean;
 }): Promise<ClientOneDriveStatus> {
-  return invoke<ClientOneDriveStatus>("connect_microsoft_onedrive_oauth_cmd", {
+  const status = await invoke<ClientOneDriveStatus>("connect_microsoft_onedrive_oauth_cmd", {
     forceConsent: options?.forceConsent ?? null,
   });
+  notifyClientOneDriveChanged();
+  return status;
 }
 
 export async function disconnectMicrosoftOneDriveOAuth(): Promise<void> {
-  return invoke<void>("disconnect_microsoft_onedrive_oauth_cmd");
+  await invoke<void>("disconnect_microsoft_onedrive_oauth_cmd");
+  notifyClientOneDriveChanged();
 }
 
 export async function saveClientOneDriveRootFolder(
   folderId: string,
   folderName: string
-): Promise<void> {
-  await invoke("save_client_onedrive_root_folder", { folderId, folderName });
+): Promise<SaveClientOneDriveRootFolderResult> {
+  const result = await invoke<SaveClientOneDriveRootFolderResult>("save_client_onedrive_root_folder", {
+    folderId,
+    folderName,
+  });
+  notifyClientOneDriveChanged();
+  return result;
+}
+
+export async function saveClientOneDriveBehavior(input: {
+  autoCreateOnContact: boolean;
+  copyDocumentOnImport: boolean;
+}): Promise<ClientOneDriveStatus> {
+  return invoke<ClientOneDriveStatus>("save_client_onedrive_behavior", {
+    autoCreateOnContact: input.autoCreateOnContact,
+    copyDocumentOnImport: input.copyDocumentOnImport,
+  });
+}
+
+export async function testClientOneDriveConnection(): Promise<string> {
+  return invoke<string>("test_client_onedrive_connection_cmd");
 }
 
 export async function saveClientOneDriveLocalSyncRoot(path: string): Promise<void> {
@@ -107,6 +141,7 @@ export interface ContactOneDriveLinkFlag {
 
 export async function unlinkContactOneDriveFolder(contactId: number): Promise<void> {
   await invoke("unlink_contact_onedrive_folder", { contactId });
+  notifyClientOneDriveChanged();
 }
 
 export async function getContactOneDriveHealth(
@@ -145,20 +180,24 @@ export async function linkContactOneDriveFolder(input: {
   folderName: string;
   webUrl?: string | null;
 }): Promise<LinkContactOneDriveFolderResult> {
-  return invoke<LinkContactOneDriveFolderResult>("link_contact_onedrive_folder", {
+  const result = await invoke<LinkContactOneDriveFolderResult>("link_contact_onedrive_folder", {
     contactId: input.contactId,
     folderId: input.folderId,
     folderName: input.folderName,
     webUrl: input.webUrl ?? null,
   });
+  notifyClientOneDriveChanged();
+  return result;
 }
 
 export async function createContactOneDriveFolder(
   contactId: number
 ): Promise<ClientOneDriveFolderLink> {
-  return invoke<ClientOneDriveFolderLink>("create_contact_onedrive_folder_cmd", {
+  const link = await invoke<ClientOneDriveFolderLink>("create_contact_onedrive_folder_cmd", {
     contactId,
   });
+  notifyClientOneDriveChanged();
+  return link;
 }
 
 export async function proposeClientOneDriveFolderMatches(): Promise<
@@ -175,4 +214,5 @@ export async function applyClientOneDriveFolderProposal(
     proposal,
     renameTo: options?.renameTo ?? null,
   });
+  notifyClientOneDriveChanged();
 }

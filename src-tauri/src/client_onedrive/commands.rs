@@ -29,6 +29,15 @@ pub struct ClientOneDriveStatus {
     pub root_folder_name: Option<String>,
     pub local_sync_root: Option<String>,
     pub microsoft_client_id_configured: bool,
+    pub auto_create_on_contact: bool,
+    pub copy_document_on_import: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveClientOneDriveRootFolderResult {
+    pub config: ClientOneDriveConfig,
+    pub previous_root_changed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,7 +69,7 @@ pub struct LinkContactOneDriveFolderResult {
     pub shared_with_labels: Vec<String>,
 }
 
-async fn run_onedrive_blocking<T, F>(f: F) -> Result<T, String>
+pub(crate) async fn run_onedrive_blocking<T, F>(f: F) -> Result<T, String>
 where
     F: FnOnce() -> Result<T, String> + Send + 'static,
     T: Send + 'static,
@@ -70,7 +79,7 @@ where
         .map_err(|e| format!("OneDrive interrompu: {e}"))?
 }
 
-fn foyer_folder_name(
+pub(crate) fn foyer_folder_name(
     database: &crate::database::Database,
     foyer_id: i64,
     fallback_contact: &Contact,
@@ -120,10 +129,12 @@ fn load_status(app: &AppHandle) -> Result<ClientOneDriveStatus, String> {
         root_folder_name: config.root_folder_name,
         local_sync_root: config.local_sync_root,
         microsoft_client_id_configured,
+        auto_create_on_contact: super::hooks::is_auto_create_on_contact_enabled(database),
+        copy_document_on_import: super::hooks::is_copy_document_on_import_enabled(database),
     })
 }
 
-fn require_root_folder_id(database: &crate::database::Database) -> Result<String, String> {
+pub(crate) fn require_root_folder_id(database: &crate::database::Database) -> Result<String, String> {
     let config = database
         .get_client_onedrive_config()
         .map_err(|e| e.to_string())?;
@@ -145,7 +156,7 @@ fn ensure_link_under_configured_root(
     ensure_folder_under_client_root(app, folder_id, &root_id)
 }
 
-fn save_created_link(
+pub(crate) fn save_created_link(
     database: &crate::database::Database,
     contact: &Contact,
     created: &ClientOneDriveItem,
@@ -230,19 +241,82 @@ pub fn save_client_onedrive_root_folder(
     session: State<'_, UiSessionState>,
     folder_id: String,
     folder_name: String,
-) -> Result<ClientOneDriveConfig, String> {
+) -> Result<SaveClientOneDriveRootFolderResult, String> {
     require_ui_session(&session)?;
     let database = db.lock().unwrap();
     let database = database.as_ref().ok_or("Database not initialized")?;
     let mut config = database
         .get_client_onedrive_config()
         .map_err(|e| e.to_string())?;
+    let previous_root_changed = config
+        .root_folder_id
+        .as_ref()
+        .filter(|id| !id.trim().is_empty())
+        .is_some_and(|old| old != &folder_id);
     config.root_folder_id = Some(folder_id);
     config.root_folder_name = Some(folder_name);
     database
         .save_client_onedrive_config(&config)
         .map_err(|e| e.to_string())?;
-    Ok(config)
+    Ok(SaveClientOneDriveRootFolderResult {
+        config,
+        previous_root_changed,
+    })
+}
+
+#[tauri::command]
+pub async fn save_client_onedrive_behavior(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+    auto_create_on_contact: bool,
+    copy_document_on_import: bool,
+) -> Result<ClientOneDriveStatus, String> {
+    require_ui_session(&session)?;
+    run_onedrive_blocking(move || {
+        let db = app.state::<DbState>();
+        let database = db.lock().unwrap();
+        let database = database.as_ref().ok_or("Database not initialized")?;
+        super::hooks::set_auto_create_on_contact(database, auto_create_on_contact)?;
+        super::hooks::set_copy_document_on_import(database, copy_document_on_import)?;
+        load_status(&app)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn test_client_onedrive_connection_cmd(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<String, String> {
+    require_ui_session(&session)?;
+    run_onedrive_blocking(move || {
+        let db = app.state::<DbState>();
+        let database = db.lock().unwrap();
+        let database = database.as_ref().ok_or("Database not initialized")?;
+        let conn = resolve_microsoft_onedrive_connection(&app)?
+            .ok_or("OneDrive non connecté — connectez Microsoft ci-dessus.")?;
+        let root_id = require_root_folder_id(database)?;
+        let config = database
+            .get_client_onedrive_config()
+            .map_err(|e| e.to_string())?;
+        browse_client_onedrive_folder(&app, Some(&root_id))?;
+        let root_label = config
+            .root_folder_name
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Dossier clients");
+        let local_hint = config
+            .local_sync_root
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .map(|path| format!(" Dossier local : {path}."))
+            .unwrap_or_default();
+        Ok(format!(
+            "OneDrive OK ({}) — « {root_label} » accessible.{local_hint}",
+            conn.email
+        ))
+    })
+    .await
 }
 
 #[tauri::command]

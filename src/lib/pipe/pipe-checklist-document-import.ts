@@ -3,6 +3,7 @@ import {
   uploadDocument,
   type Document,
 } from "@/lib/api/tauri-documents";
+import { showDocumentOnedriveImportToast } from "@/lib/client-onedrive/link-onedrive-toast";
 import { getMimeType } from "@/lib/documents/file-mime";
 
 export interface ImportPipeChecklistDocumentInput {
@@ -22,7 +23,7 @@ export async function importPipeChecklistDocument(
   const file = await uploadDocument();
   if (!file) return null;
 
-  return createDocument({
+  const result = await createDocument({
     contact_id: input.contactId,
     type_document: input.typeDocument ?? "AUTRE",
     nom_fichier: file.name,
@@ -31,6 +32,8 @@ export async function importPipeChecklistDocument(
     mime_type: getMimeType(file.name),
     notes: input.notes,
   });
+  showDocumentOnedriveImportToast(result.onedriveMessage);
+  return result.document;
 }
 
 /** Type document suggéré selon l'id de pièce checklist (optionnel à l'import). */

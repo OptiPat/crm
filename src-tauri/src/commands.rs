@@ -58,36 +58,85 @@ pub fn get_contacts_by_foyer(
         .map_err(|e| format!("Failed to get contacts by foyer: {}", e))
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateContactResult {
+    pub contact: Contact,
+    pub onedrive_message: Option<String>,
+    pub onedrive_link_created: bool,
+}
+
 #[tauri::command]
-pub fn create_contact(
+pub async fn create_contact(
     app: AppHandle,
     db: State<'_, DbState>,
     new_contact: NewContact,
     skip_post_save_hooks: Option<bool>,
-) -> Result<Contact, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+) -> Result<CreateContactResult, String> {
+    let (contact, contact_id, categorie, skip_hooks) = {
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
-    let contact = database
-        .create_contact(new_contact)
-        .map_err(|e| format!("Failed to create contact: {}", e))?;
-    if let Some(id) = contact.id {
-        if !skip_post_save_hooks.unwrap_or(false) {
-            let _ = database.check_auto_etiquettes_for_contact(id);
-            drop(db_guard);
+        let contact = database
+            .create_contact(new_contact)
+            .map_err(|e| format!("Failed to create contact: {}", e))?;
+        let contact_id = contact.id;
+        let categorie = contact.categorie.clone();
+        let skip_hooks = skip_post_save_hooks.unwrap_or(false);
+        if let Some(id) = contact_id {
+            if !skip_hooks {
+                let _ = database.check_auto_etiquettes_for_contact(id);
+            }
+        }
+        (contact, contact_id, categorie, skip_hooks)
+    };
+
+    let mut onedrive_message = None;
+    let mut onedrive_link_created = false;
+    if let Some(id) = contact_id {
+        if crate::client_onedrive::hooks::is_client_category(&categorie) {
+            let app_clone = app.clone();
+            match crate::client_onedrive::commands::run_onedrive_blocking(move || {
+                crate::client_onedrive::hooks::maybe_auto_create_onedrive_for_contact(
+                    &app_clone, id,
+                )
+            })
+            .await
+            {
+                Ok(true) => onedrive_link_created = true,
+                Ok(false) => {}
+                Err(e) => {
+                    onedrive_message = Some(format!(
+                        "Contact créé — dossier OneDrive non créé : {e}"
+                    ));
+                }
+            }
+        }
+        if !skip_hooks {
             crate::email::google_contacts::sync_contact_after_save(&app, &db, id);
-            let db_guard = db.lock().unwrap();
-            let database = db_guard.as_ref().ok_or("Database not initialized")?;
-            return database
-                .get_contact_by_id(id)
-                .map_err(|e| format!("Failed to get contact: {}", e));
         }
     }
-    Ok(contact)
+
+    let contact = if let Some(id) = contact_id {
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        database
+            .get_contact_by_id(id)
+            .map_err(|e| format!("Failed to get contact: {}", e))?
+    } else {
+        contact
+    };
+
+    Ok(CreateContactResult {
+        contact,
+        onedrive_message,
+        onedrive_link_created,
+    })
 }
 
 #[tauri::command]
-pub fn create_contacts_bulk(
+pub async fn create_contacts_bulk(
+    app: AppHandle,
     db: State<'_, DbState>,
     new_contacts: Vec<NewContact>,
     skip_post_save_hooks: Option<bool>,
@@ -98,11 +147,29 @@ pub fn create_contacts_bulk(
                 .into(),
         );
     }
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    database
-        .create_contacts_bulk(new_contacts)
-        .map_err(|e| format!("Failed to bulk create contacts: {}", e))
+    let contacts = {
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        database
+            .create_contacts_bulk(new_contacts)
+            .map_err(|e| format!("Failed to bulk create contacts: {}", e))?
+    };
+
+    for contact in &contacts {
+        if let Some(id) = contact.id {
+            if crate::client_onedrive::hooks::is_client_category(&contact.categorie) {
+                let app_clone = app.clone();
+                let _ = crate::client_onedrive::commands::run_onedrive_blocking(move || {
+                    crate::client_onedrive::hooks::maybe_auto_create_onedrive_for_contact(
+                        &app_clone, id,
+                    )
+                })
+                .await;
+            }
+        }
+    }
+
+    Ok(contacts)
 }
 
 #[tauri::command]
@@ -823,12 +890,19 @@ pub fn get_documents_by_contact(
         .map_err(|e| format!("Failed to get documents: {}", e))
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateDocumentResult {
+    pub document: Document,
+    pub onedrive_message: Option<String>,
+}
+
 #[tauri::command]
-pub fn create_document(
+pub async fn create_document(
     app: tauri::AppHandle,
     db: State<'_, DbState>,
     mut new_document: NewDocument,
-) -> Result<Document, String> {
+) -> Result<CreateDocumentResult, String> {
     let app_data_dir = app
         .path()
         .app_data_dir()
@@ -844,12 +918,40 @@ pub fn create_document(
     new_document.chemin_fichier = stored_path.to_string_lossy().into_owned();
     new_document.taille_fichier = size as i64;
 
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let document = {
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        database
+            .create_document(new_document)
+            .map_err(|e| format!("Failed to create document: {}", e))?
+    };
 
-    database
-        .create_document(new_document)
-        .map_err(|e| format!("Failed to create document: {}", e))
+    let document_id = document.id;
+    let app_clone = app.clone();
+    let onedrive_message = match crate::client_onedrive::commands::run_onedrive_blocking(move || {
+        let db_state = app_clone.state::<DbState>();
+        let database = db_state.lock().unwrap();
+        let database = database.as_ref().ok_or("Database not initialized")?;
+        let document = database
+            .get_document_by_id(document_id)
+            .map_err(|e| format!("Failed to get document: {}", e))?;
+        crate::client_onedrive::hooks::maybe_copy_document_to_contact_onedrive(
+            &app_clone,
+            &document,
+        )
+    })
+    .await
+    {
+        Ok(msg) => msg,
+        Err(e) => Some(format!(
+            "Document enregistré — copie OneDrive échouée : {e}"
+        )),
+    };
+
+    Ok(CreateDocumentResult {
+        document,
+        onedrive_message,
+    })
 }
 
 #[tauri::command]

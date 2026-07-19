@@ -6,6 +6,7 @@ import {
   findContactByName,
 } from "@/lib/api/tauri-contacts";
 import { createDocument, type NewDocument } from "@/lib/api/tauri-documents";
+import { showDocumentOnedriveImportToast } from "@/lib/client-onedrive/link-onedrive-toast";
 import type { ExtractedData } from "@/lib/pdf";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import {
@@ -89,7 +90,8 @@ export async function applyQpiImport(
       sensibilite_extra_financiere: data.sensibiliteExtraFinanciere?.trim() || undefined,
       experience_investissement: data.experienceInvestissement?.trim() || undefined,
     };
-    await createDocument(doc);
+    const created = await createDocument(doc);
+    showDocumentOnedriveImportToast(created.onedriveMessage);
   }
 
   return {

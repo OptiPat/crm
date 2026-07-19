@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifyContactsChanged } from "@/lib/contacts/contact-events";
+import { notifyClientOneDriveChanged } from "@/lib/client-onedrive/client-onedrive-events";
+import { showContactOnedriveAutoCreateToast } from "@/lib/client-onedrive/link-onedrive-toast";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { runBirthdayTelegramIfDue } from "@/lib/api/tauri-birthday-telegram";
 
@@ -135,19 +137,29 @@ export async function getContactById(id: number): Promise<Contact> {
   return await invoke<Contact>("get_contact_by_id", { id });
 }
 
+export interface CreateContactResult {
+  contact: Contact;
+  onedriveMessage?: string | null;
+  onedriveLinkCreated?: boolean;
+}
+
 export async function createContact(
   newContact: NewContact,
   options?: { skipPostSaveHooks?: boolean }
 ): Promise<Contact> {
-  const created = await invoke<Contact>("create_contact", {
+  const result = await invoke<CreateContactResult>("create_contact", {
     newContact,
     skipPostSaveHooks: options?.skipPostSaveHooks ?? null,
   });
+  showContactOnedriveAutoCreateToast(result.onedriveMessage);
   if (!options?.skipPostSaveHooks) {
     notifyContactsChanged();
     notifyEtiquettesChanged();
   }
-  return created;
+  if (result.onedriveLinkCreated) {
+    notifyClientOneDriveChanged();
+  }
+  return result.contact;
 }
 
 export async function createContactsBulk(

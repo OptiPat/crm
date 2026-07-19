@@ -50,6 +50,7 @@ describe("applyQpiImport", () => {
     vi.clearAllMocks();
     getContactById.mockResolvedValue(existingClient);
     updateContact.mockResolvedValue(existingClient);
+    createDocument.mockResolvedValue({ document: { id: 1 } });
   });
 
   it("ne rétrograde pas un CLIENT existant en SUSPECT_CLIENT", async () => {
