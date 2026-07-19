@@ -1,7 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { copyFile, exists, mkdir, remove } from "@tauri-apps/plugin-fs";
-import { appDataDir, join } from "@tauri-apps/api/path";
+import {
+  importManagedLogoFile,
+  removeManagedLogoFile,
+} from "@/lib/api/tauri-secure-files";
 
 export type AppLogoMode = "default" | "custom" | "cabinet";
 
@@ -11,8 +13,6 @@ export interface AppBranding {
   /** Chemin absolu sur disque ; null = logo embarqué par défaut. */
   logoPath: string | null;
 }
-
-const APP_LOGO_BASENAME = "app-branding";
 
 export async function getAppBranding(): Promise<AppBranding> {
   return await invoke<AppBranding>("get_app_branding");
@@ -57,33 +57,13 @@ export async function pickAndStoreAppLogo(): Promise<string | null> {
     return null;
   }
 
-  const appData = await appDataDir();
-  const logosDir = await join(appData, "logos");
-  if (!(await exists(logosDir))) {
-    await mkdir(logosDir, { recursive: true });
-  }
-
-  const extMatch = selected.match(/\.(png|jpe?g|webp)$/i);
-  const ext = extMatch ? extMatch[1].toLowerCase().replace("jpeg", "jpg") : "png";
-  const destinationPath = await join(logosDir, `${APP_LOGO_BASENAME}.${ext}`);
-
-  for (const oldExt of ["png", "jpg", "webp"]) {
-    const oldPath = await join(logosDir, `${APP_LOGO_BASENAME}.${oldExt}`);
-    if (await exists(oldPath)) {
-      await remove(oldPath);
-    }
-  }
-
-  await copyFile(selected, destinationPath);
-  return destinationPath;
+  return importManagedLogoFile(selected, "app");
 }
 
 export async function removeStoredAppLogo(logoPath: string | undefined | null): Promise<void> {
   if (!logoPath?.trim()) return;
   try {
-    if (await exists(logoPath)) {
-      await remove(logoPath);
-    }
+    await removeManagedLogoFile("app");
   } catch {
     /* fichier déjà absent */
   }

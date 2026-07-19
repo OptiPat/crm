@@ -147,43 +147,22 @@ pub fn export_full_archive(
 
 #[tauri::command]
 pub fn open_document_file(
+    app: AppHandle,
     session: State<'_, UiSessionState>,
     path: String,
 ) -> Result<(), String> {
     require_ui_session(&session)?;
-    let p = std::path::Path::new(&path);
-    if !p.exists() {
-        return Err("Fichier introuvable sur ce PC.".to_string());
-    }
-    open_path_with_system_default(p).map_err(|e| e.to_string())
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let managed = crate::documents_storage::validate_managed_document_file(
+        &app_data_dir,
+        std::path::Path::new(&path),
+    )?;
+    open_path_with_system_default(&managed).map_err(|e| e.to_string())
 }
 
 /// Ouvre une URL externe (https, ou sms: pour Phone Link / mobile).
 pub fn open_url_in_browser(url: &str) -> Result<(), String> {
-    if cfg!(target_os = "windows") {
-        let escaped = url.replace('\'', "''");
-        std::process::Command::new("powershell")
-            .args([
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                &format!("Start-Process '{escaped}'"),
-            ])
-            .spawn()
-            .map_err(|e| format!("Ouverture du navigateur: {}", e))?;
-    } else if cfg!(target_os = "macos") {
-        std::process::Command::new("open")
-            .arg(url)
-            .spawn()
-            .map_err(|e| format!("Ouverture du navigateur: {}", e))?;
-    } else {
-        std::process::Command::new("xdg-open")
-            .arg(url)
-            .spawn()
-            .map_err(|e| format!("Ouverture du navigateur: {}", e))?;
-    }
-    Ok(())
+    open::that_detached(url).map_err(|e| format!("Ouverture du navigateur : {e}"))
 }
 
 pub fn gmail_web_url(message_id: &str, thread_id: Option<&str>) -> String {
@@ -221,10 +200,16 @@ pub fn open_external_url(
 }
 
 fn is_allowed_external_url(url: &str) -> bool {
-    url.starts_with("https://")
-        || url.starts_with("http://")
-        || is_allowed_sms_url(url)
-        || is_allowed_mailto_url(url)
+    if is_allowed_sms_url(url) || is_allowed_tel_url(url) || is_allowed_mailto_url(url) {
+        return true;
+    }
+    let Ok(parsed) = url::Url::parse(url) else {
+        return false;
+    };
+    matches!(parsed.scheme(), "http" | "https")
+        && parsed.host_str().is_some()
+        && parsed.username().is_empty()
+        && parsed.password().is_none()
 }
 
 fn is_allowed_mailto_url(url: &str) -> bool {
@@ -247,9 +232,24 @@ fn is_allowed_sms_url(url: &str) -> bool {
     !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
 }
 
+fn is_allowed_tel_url(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("tel:") else {
+        return false;
+    };
+    let mut digit_count = 0;
+    for character in rest.chars() {
+        if character.is_ascii_digit() {
+            digit_count += 1;
+        } else if !matches!(character, '+' | ' ' | '-' | '(' | ')' | '.') {
+            return false;
+        }
+    }
+    digit_count >= 6
+}
+
 #[cfg(test)]
 mod open_external_url_tests {
-    use super::{is_allowed_external_url, is_allowed_sms_url};
+    use super::{is_allowed_external_url, is_allowed_sms_url, is_allowed_tel_url};
 
     #[test]
     fn allows_https_and_wa_me() {
@@ -269,26 +269,29 @@ mod open_external_url_tests {
     }
 
     #[test]
+    fn allows_safe_phone_links() {
+        assert!(is_allowed_tel_url("tel:+33 6 12 34 56 78"));
+        assert!(is_allowed_external_url("tel:0612345678"));
+        assert!(!is_allowed_tel_url("tel:12&calc"));
+        assert!(!is_allowed_tel_url("tel:123"));
+    }
+
+    #[test]
     fn rejects_unknown_schemes() {
         assert!(!is_allowed_external_url("javascript:alert(1)"));
         assert!(!is_allowed_sms_url("sms:abc"));
     }
+
+    #[test]
+    fn allows_http_notes_but_rejects_credentials_and_invalid_urls() {
+        assert!(is_allowed_external_url("http://example.com"));
+        assert!(!is_allowed_external_url("https://user:password@example.com"));
+        assert!(!is_allowed_external_url("http://user:password@example.com"));
+        assert!(!is_allowed_external_url("https://"));
+        assert!(is_allowed_external_url("https://example.com/path?q=1"));
+    }
 }
 
 pub(crate) fn open_path_with_system_default(path: &std::path::Path) -> std::io::Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", &path.to_string_lossy()])
-            .spawn()?;
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open").arg(path).spawn()?;
-    }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        std::process::Command::new("xdg-open").arg(path).spawn()?;
-    }
-    Ok(())
+    open::that_detached(path)
 }

@@ -1,8 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifyDocumentsChanged } from "@/lib/documents/document-events";
 import { open } from "@tauri-apps/plugin-dialog";
-import { copyFile, exists, mkdir, stat } from "@tauri-apps/plugin-fs";
-import { appDataDir, join } from "@tauri-apps/api/path";
+import { stageDocumentFile } from "@/lib/api/tauri-secure-files";
 
 export interface Document {
   id: number;
@@ -78,25 +77,7 @@ export async function discardStagedDocument(filePath: string): Promise<void> {
 async function copyFileIntoDocumentsDir(
   sourcePath: string
 ): Promise<{ path: string; name: string; size: number }> {
-  const appData = await appDataDir();
-  const documentsDir = await join(appData, "documents");
-
-  const dirExists = await exists(documentsDir);
-  if (!dirExists) {
-    await mkdir(documentsDir, { recursive: true });
-  }
-
-  const fileName = sourcePath.split(/[\\/]/).pop() || "document";
-  const destinationPath = await join(documentsDir, `${Date.now()}_${fileName}`);
-
-  await copyFile(sourcePath, destinationPath);
-
-  const fileStats = await stat(destinationPath);
-  return {
-    path: destinationPath,
-    name: fileName,
-    size: fileStats.size,
-  };
+  return stageDocumentFile(sourcePath);
 }
 
 /** Copie un fichier déposé (drag & drop Tauri) dans le dossier documents de l'app. */

@@ -12,6 +12,7 @@ static KEY_IO_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 pub struct LoadedStorageKey {
     pub key: [u8; 32],
     pub os_protected: bool,
+    pub conflicting_legacy_keys: Vec<[u8; 32]>,
 }
 
 pub fn load_or_create_key(
@@ -24,6 +25,7 @@ pub fn load_or_create_key(
         .map_err(|_| "Verrou interne du stockage des secrets indisponible.".to_string())?;
     let protected_path = app_data_dir.join(PROTECTED_KEY_FILE);
     let legacy_path = app_data_dir.join(LEGACY_KEY_FILE);
+    restore_single_quarantined_key(app_data_dir, &legacy_path)?;
 
     if protected_path.is_file() {
         let protected_key = fs::read(&protected_path)
@@ -32,11 +34,12 @@ pub fn load_or_create_key(
             .and_then(|key| key_from_bytes(&key));
         match protected_key {
             Ok(key) => {
-                remove_legacy_key_if_matching(&legacy_path, &key)?;
-                clear_protection_warning(app_data_dir);
+                let conflicting_legacy_keys =
+                    remove_matching_or_collect_legacy_key(&legacy_path, &key)?;
                 return Ok(LoadedStorageKey {
                     key,
                     os_protected: true,
+                    conflicting_legacy_keys,
                 });
             }
             Err(_) if legacy_path.is_file() => {
@@ -54,7 +57,11 @@ pub fn load_or_create_key(
                         false
                     }
                 };
-                return Ok(LoadedStorageKey { key, os_protected });
+                return Ok(LoadedStorageKey {
+                    key,
+                    os_protected,
+                    conflicting_legacy_keys: Vec::new(),
+                });
             }
             Err(protected_error) => {
                 return Err(format!(
@@ -94,6 +101,7 @@ pub fn load_or_create_key(
             return Ok(LoadedStorageKey {
                 key,
                 os_protected: false,
+                conflicting_legacy_keys: Vec::new(),
             });
         }
         return Err(error);
@@ -106,18 +114,39 @@ pub fn load_or_create_key(
     Ok(LoadedStorageKey {
         key,
         os_protected: true,
+        conflicting_legacy_keys: Vec::new(),
     })
 }
 
 pub fn record_protection_warning(app_data_dir: &Path, error: &str) {
-    eprintln!("⚠️ Protection des secrets incomplète : {error}");
     let message = format!(
         "La protection DPAPI/Trousseau n'a pas pu être finalisée. Le CRM réessaiera automatiquement.\nDétail : {error}"
     );
-    let _ = crate::atomic_file::write(
-        &app_data_dir.join(PROTECTION_WARNING_FILE),
-        message.as_bytes(),
+    write_protection_marker(
+        app_data_dir,
+        &message,
+        &format!("⚠️ Protection des secrets incomplète : {error}"),
     );
+}
+
+pub fn record_key_conflict_notice(app_data_dir: &Path, detail: &str) {
+    let message = format!(
+        "La clé protégée DPAPI/Trousseau est valide. Une ancienne clé différente est conservée pour récupération.\nDétail : {detail}"
+    );
+    write_protection_marker(
+        app_data_dir,
+        &message,
+        &format!("⚠️ Conflit de clés locales : {detail}"),
+    );
+}
+
+fn write_protection_marker(app_data_dir: &Path, message: &str, log_message: &str) {
+    let path = app_data_dir.join(PROTECTION_WARNING_FILE);
+    if fs::read(&path).is_ok_and(|existing| existing == message.as_bytes()) {
+        return;
+    }
+    eprintln!("{log_message}");
+    let _ = crate::atomic_file::write(&path, message.as_bytes());
 }
 
 pub fn clear_protection_warning(app_data_dir: &Path) {
@@ -166,20 +195,47 @@ fn key_from_bytes(bytes: &[u8]) -> Result<[u8; 32], String> {
     })
 }
 
-fn remove_legacy_key_if_matching(path: &PathBuf, key: &[u8; 32]) -> Result<(), String> {
+fn remove_matching_or_collect_legacy_key(
+    path: &PathBuf,
+    key: &[u8; 32],
+) -> Result<Vec<[u8; 32]>, String> {
     if !path.is_file() {
-        return Ok(());
+        return Ok(Vec::new());
     }
     let raw =
         fs::read(path).map_err(|e| format!("Lecture de l'ancienne clé locale impossible : {e}"))?;
-    if raw.as_slice() != key {
-        return Err(
-            "Deux clés locales incompatibles ont été détectées. Les secrets n'ont pas été modifiés."
-                .into(),
-        );
+    let legacy_key = key_from_bytes(&raw)?;
+    if raw.as_slice() == key {
+        fs::remove_file(path)
+            .map_err(|e| format!("Suppression de l'ancienne clé locale impossible : {e}"))?;
+        return Ok(Vec::new());
     }
-    let _ = fs::remove_file(path);
-    Ok(())
+    Ok(vec![legacy_key])
+}
+
+fn restore_single_quarantined_key(app_data_dir: &Path, legacy_path: &Path) -> Result<(), String> {
+    if legacy_path.exists() || !app_data_dir.is_dir() {
+        return Ok(());
+    }
+    let mut quarantined = fs::read_dir(app_data_dir)
+        .map_err(|e| format!("Lecture du dossier des secrets impossible : {e}"))?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file()
+                && path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("secrets.key.conflict-"))
+        });
+    let Some(candidate) = quarantined.next() else {
+        return Ok(());
+    };
+    if quarantined.next().is_some() {
+        return Ok(());
+    }
+    fs::rename(candidate, legacy_path)
+        .map_err(|e| format!("Restauration de l'ancienne clé locale impossible : {e}"))
 }
 
 #[cfg(windows)]
@@ -337,6 +393,39 @@ mod tests {
         assert!(first.os_protected);
         assert!(second.os_protected);
         assert!(!dir.join(LEGACY_KEY_FILE).exists());
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn preserves_a_conflicting_legacy_key_for_validation_by_the_caller() {
+        let dir = unique_temp_dir();
+        let protected = load_or_create_key(&dir, None).unwrap();
+        let conflicting = [0x33; 32];
+        fs::write(dir.join(LEGACY_KEY_FILE), conflicting).unwrap();
+
+        let loaded = load_or_create_key(&dir, None).unwrap();
+
+        assert_eq!(loaded.key, protected.key);
+        assert_eq!(loaded.conflicting_legacy_keys, vec![conflicting]);
+        assert_eq!(fs::read(dir.join(LEGACY_KEY_FILE)).unwrap(), conflicting);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn restores_a_single_previously_quarantined_key() {
+        let dir = unique_temp_dir();
+        let protected = load_or_create_key(&dir, None).unwrap();
+        let conflicting = [0x44; 32];
+        fs::write(dir.join("secrets.key.conflict-123"), conflicting).unwrap();
+
+        let loaded = load_or_create_key(&dir, None).unwrap();
+
+        assert_eq!(loaded.key, protected.key);
+        assert_eq!(loaded.conflicting_legacy_keys, vec![conflicting]);
+        assert_eq!(fs::read(dir.join(LEGACY_KEY_FILE)).unwrap(), conflicting);
+        assert!(!dir.join("secrets.key.conflict-123").exists());
 
         let _ = fs::remove_dir_all(dir);
     }

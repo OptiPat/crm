@@ -980,8 +980,10 @@ pub fn delete_document(
 #[tauri::command]
 pub fn discard_staged_document(
     app: tauri::AppHandle,
+    session: State<'_, UiSessionState>,
     file_path: String,
 ) -> Result<(), String> {
+    require_ui_session(&session)?;
     let app_data_dir = app
         .path()
         .app_data_dir()
@@ -1123,9 +1125,12 @@ pub fn delete_template_email(
 pub fn import_template_email_attachment_cmd(
     app: AppHandle,
     db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
     template_id: i64,
     source_path: String,
 ) -> Result<crate::template_email_attachments::TemplateEmailAttachmentRecord, String> {
+    require_ui_session(&session)?;
+    let source = crate::secure_files::require_scoped_file(&app, &source_path)?;
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     let tpl = database
@@ -1143,7 +1148,7 @@ pub fn import_template_email_attachment_cmd(
     crate::template_email_attachments::import_template_attachment(
         &app_data,
         template_id,
-        std::path::Path::new(&source_path),
+        &source,
         existing_count,
     )
 }
@@ -1886,13 +1891,25 @@ pub fn check_and_create_demembrement_alerts(db: State<'_, DbState>) -> Result<Ve
 
 #[tauri::command]
 pub fn read_pdf_file(
+    app: AppHandle,
     session: State<'_, UiSessionState>,
     file_path: String,
 ) -> Result<Vec<u8>, String> {
     use std::fs;
 
     require_ui_session(&session)?;
-    fs::read(&file_path).map_err(|e| format!("Failed to read file: {}", e))
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let app_cache_dir = app.path().app_cache_dir().map_err(|e| e.to_string())?;
+    let managed = crate::documents_storage::validate_document_or_compta_cache_file(
+        &app_data_dir,
+        &app_cache_dir,
+        std::path::Path::new(&file_path),
+    )?;
+    crate::secure_files::ensure_file_size(
+        &managed,
+        crate::secure_files::MAX_DOCUMENT_BYTES,
+    )?;
+    fs::read(managed).map_err(|e| format!("Lecture du document impossible : {e}"))
 }
 
 // ========== ETIQUETTES ==========

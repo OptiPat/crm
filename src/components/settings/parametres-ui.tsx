@@ -272,7 +272,7 @@ export function ProfileHeroCard({
   displayName: string;
   subtitle: string;
   completionPercent: number;
-  /** URL asset locale (convertFileSrc) */
+  /** Image locale chargée en data URL par la passerelle Rust. */
   logoSrc?: string | null;
   children?: ReactNode;
 }) {

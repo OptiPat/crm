@@ -1,5 +1,6 @@
 use super::secret_storage::{
-    has_protection_warning, load_or_create_key, record_protection_warning,
+    has_protection_warning, load_or_create_key, record_key_conflict_notice,
+    record_protection_warning,
 };
 use base64::Engine;
 use chacha20poly1305::{
@@ -22,19 +23,111 @@ const AEAD_NONCE_LEN: usize = 24;
 pub fn load_storage_key(app: &AppHandle) -> Result<Option<[u8; 32]>, String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let loaded = load_or_create_key(&app_data_dir, legacy_key_from_auth(app))?;
-    if loaded.os_protected {
-        if let Err(error) = cleanup_legacy_key_material(&app_data_dir, &loaded.key) {
+    let had_conflicting_keys = !loaded.conflicting_legacy_keys.is_empty();
+    let (key, os_protected) = select_key_for_existing_secrets(&app_data_dir, loaded)?;
+    if os_protected {
+        if let Err(error) = cleanup_legacy_key_material(&app_data_dir, &key) {
             record_protection_warning(
                 &app_data_dir,
                 &format!("Nettoyage de l'ancienne clé locale incomplet : {error}"),
             );
+        } else if !had_conflicting_keys {
+            super::secret_storage::clear_protection_warning(&app_data_dir);
         }
     } else {
         eprintln!(
             "⚠️ Protection DPAPI/Trousseau indisponible : utilisation temporaire de l'ancienne clé locale."
         );
     }
-    Ok(Some(loaded.key))
+    Ok(Some(key))
+}
+
+fn select_key_for_existing_secrets(
+    app_data_dir: &Path,
+    loaded: super::secret_storage::LoadedStorageKey,
+) -> Result<([u8; 32], bool), String> {
+    if loaded.conflicting_legacy_keys.is_empty() {
+        return Ok((loaded.key, loaded.os_protected));
+    }
+
+    match key_matches_persisted_secrets(app_data_dir, &loaded.key)? {
+        Some(true) => {
+            record_key_conflict_notice(
+                app_data_dir,
+                "Une ancienne clé locale incompatible a été conservée par sécurité. La clé protégée a été validée contre les secrets existants.",
+            );
+            Ok((loaded.key, loaded.os_protected))
+        }
+        Some(false) => {
+            let mut fallback = None;
+            for candidate in loaded.conflicting_legacy_keys {
+                if key_matches_persisted_secrets(app_data_dir, &candidate)? == Some(true) {
+                    fallback = Some(candidate);
+                    break;
+                }
+            }
+            let fallback = fallback.ok_or_else(|| {
+                    "Deux clés locales incompatibles ont été détectées et aucune ne déchiffre les secrets existants. Aucun fichier n'a été supprimé.".to_string()
+                })?;
+            record_protection_warning(
+                app_data_dir,
+                "La clé protégée ne correspond pas aux secrets existants. L'ancienne clé locale est utilisée temporairement sans modifier les fichiers.",
+            );
+            Ok((fallback, false))
+        }
+        None => {
+            record_protection_warning(
+                app_data_dir,
+                "Deux clés locales incompatibles sont présentes, mais aucun secret chiffré ne permet de les départager. La clé protégée reste prioritaire.",
+            );
+            Ok((loaded.key, loaded.os_protected))
+        }
+    }
+}
+
+fn key_matches_persisted_secrets(
+    app_data_dir: &Path,
+    key: &[u8; 32],
+) -> Result<Option<bool>, String> {
+    let mut encrypted = Vec::new();
+    for file_name in ["email_oauth.json", "newsletter_config.json"] {
+        let path = app_data_dir.join(file_name);
+        if !path.is_file() {
+            continue;
+        }
+        let raw = fs::read_to_string(&path)
+            .map_err(|e| format!("Lecture {} impossible : {e}", path.display()))?;
+        let json: serde_json::Value = serde_json::from_str(&raw)
+            .map_err(|e| format!("JSON {} invalide : {e}", path.display()))?;
+        collect_aead_secrets(&json, &mut encrypted);
+    }
+    if encrypted.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(
+        encrypted
+            .iter()
+            .all(|secret| decrypt_secret(secret, key).is_ok()),
+    ))
+}
+
+fn collect_aead_secrets(value: &serde_json::Value, encrypted: &mut Vec<String>) {
+    match value {
+        serde_json::Value::String(value) if value.trim().starts_with(AEAD_PREFIX) => {
+            encrypted.push(value.clone());
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                collect_aead_secrets(value, encrypted);
+            }
+        }
+        serde_json::Value::Object(values) => {
+            for value in values.values() {
+                collect_aead_secrets(value, encrypted);
+            }
+        }
+        _ => {}
+    }
 }
 
 pub fn storage_protection_warning(app: &AppHandle) -> bool {
@@ -280,6 +373,70 @@ mod tests {
         );
 
         assert!(decrypt_secret(&tampered, &key).is_err());
+    }
+
+    #[test]
+    fn conflicting_keys_are_selected_against_existing_aead_secrets() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        let protected_key = [0x31; 32];
+        let legacy_key = [0x42; 32];
+        let encrypted = encrypt_secret("oauth-token", &legacy_key).unwrap();
+        fs::write(
+            dir.join("email_oauth.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "version": 3,
+                "connection": { "access_token_enc": encrypted }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let selected = select_key_for_existing_secrets(
+            &dir,
+            super::super::secret_storage::LoadedStorageKey {
+                key: protected_key,
+                os_protected: true,
+                conflicting_legacy_keys: vec![legacy_key],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(selected, (legacy_key, false));
+        assert!(has_protection_warning(&dir));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn validated_protected_key_remains_authoritative() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        let protected_key = [0x51; 32];
+        let legacy_key = [0x62; 32];
+        let encrypted = encrypt_secret("oauth-token", &protected_key).unwrap();
+        fs::write(
+            dir.join("newsletter_config.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "version": 2,
+                "api_key_enc": encrypted
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let selected = select_key_for_existing_secrets(
+            &dir,
+            super::super::secret_storage::LoadedStorageKey {
+                key: protected_key,
+                os_protected: true,
+                conflicting_legacy_keys: vec![legacy_key],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(selected, (protected_key, true));
+        assert!(has_protection_warning(&dir));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getContactById, type Contact } from "@/lib/api/tauri-contacts";
+import { openExternalUrl } from "@/lib/api/tauri-system";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { deletePipe, archivePipe, unarchivePipe, type PipeRecord } from "@/lib/api/tauri-pipe";
 import { usePipeTimeline } from "@/hooks/usePipeTimeline";
@@ -329,22 +330,24 @@ export function PipeDetailPanel({
                   Voir la fiche contact
                 </Button>
                 {contactInfo?.email?.trim() && (
-                  <a
-                    href={`mailto:${contactInfo.email.trim()}`}
+                  <button
+                    type="button"
+                    onClick={() => void openExternalUrl(`mailto:${contactInfo.email!.trim()}`)}
                     className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                   >
                     <Mail className="h-3 w-3" />
                     {contactInfo.email.trim()}
-                  </a>
+                  </button>
                 )}
                 {contactInfo?.telephone?.trim() && (
-                  <a
-                    href={`tel:${contactInfo.telephone.trim().replace(/\s/g, "")}`}
+                  <button
+                    type="button"
+                    onClick={() => void openExternalUrl(`tel:${contactInfo.telephone!.trim()}`)}
                     className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                   >
                     <Phone className="h-3 w-3" />
                     {contactInfo.telephone.trim()}
-                  </a>
+                  </button>
                 )}
               </div>
             )}

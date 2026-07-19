@@ -18,9 +18,11 @@ mod documents_storage;
 mod email;
 mod export_archive;
 mod licensing;
+mod navigation_guard;
 mod newsletter;
 mod notes;
 mod scpi_bulletin;
+mod secure_files;
 mod system_commands;
 mod template_email_attachments;
 
@@ -71,19 +73,18 @@ use notes::{
     get_shared_notes_cmd, sync_shared_notes_cmd, update_personal_note_cmd, update_shared_note_cmd,
 };
 use scpi_bulletin::{get_scpi_campaign_dashboard_cmd, prepare_scpi_bulletins_from_pdfs_cmd};
+use secure_files::{
+    import_managed_logo_file_cmd, read_local_image_file_cmd, read_public_branding_logo_file_cmd,
+    remove_managed_logo_file_cmd, stage_document_file_cmd,
+};
 use std::sync::Mutex;
 use system_commands::*;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
 
-// Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Bonjour, {}! Bienvenue dans CRM W.Y.S.", name)
-}
-
 fn main() {
     tauri::Builder::default()
+        .plugin(navigation_guard::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             focus_main_window(app);
         }))
@@ -120,7 +121,6 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            greet,
             get_all_contacts,
             get_contacts_by_foyer,
             create_contact,
@@ -412,6 +412,11 @@ fn main() {
             restore_db_backup,
             export_full_archive,
             open_document_file,
+            stage_document_file_cmd,
+            import_managed_logo_file_cmd,
+            remove_managed_logo_file_cmd,
+            read_local_image_file_cmd,
+            read_public_branding_logo_file_cmd,
             open_gmail_message,
             open_external_url,
             get_all_interactions_with_contacts,

@@ -46,6 +46,45 @@ pub fn is_managed_document_path(app_data_dir: &Path, file_path: &Path) -> bool {
     target.starts_with(&docs)
 }
 
+pub fn validate_managed_document_file(
+    app_data_dir: &Path,
+    file_path: &Path,
+) -> Result<PathBuf, String> {
+    if !file_path.is_file() {
+        return Err("Fichier introuvable sur ce PC.".into());
+    }
+    if !is_managed_document_path(app_data_dir, file_path) {
+        return Err("Accès refusé : ce fichier n'appartient pas au stockage documentaire du CRM.".into());
+    }
+    file_path
+        .canonicalize()
+        .map_err(|error| format!("Chemin de document invalide : {error}"))
+}
+
+pub fn validate_document_or_compta_cache_file(
+    app_data_dir: &Path,
+    app_cache_dir: &Path,
+    file_path: &Path,
+) -> Result<PathBuf, String> {
+    if let Ok(managed) = validate_managed_document_file(app_data_dir, file_path) {
+        return Ok(managed);
+    }
+    if !file_path.is_file() {
+        return Err("Fichier introuvable sur ce PC.".into());
+    }
+    let cache_root = app_cache_dir
+        .join("compta-drive")
+        .canonicalize()
+        .map_err(|_| "Cache comptable introuvable.".to_string())?;
+    let target = file_path
+        .canonicalize()
+        .map_err(|error| format!("Chemin de cache invalide : {error}"))?;
+    if !target.starts_with(&cache_root) {
+        return Err("Accès refusé : fichier hors documents et cache comptable gérés.".into());
+    }
+    Ok(target)
+}
+
 fn is_in_target_dir(app_data_dir: &Path, file_path: &Path, contact_id: Option<i64>) -> bool {
     let target = normalize_path(&target_documents_dir(app_data_dir, contact_id));
     let path = normalize_path(file_path);
@@ -78,6 +117,19 @@ fn store_file_in_dir(
     fs::copy(source, &dest)?;
     let size = fs::metadata(&dest)?.len();
     Ok((dest, size))
+}
+
+pub fn stage_document_file(
+    app_data_dir: &Path,
+    source: &Path,
+) -> std::io::Result<(PathBuf, u64)> {
+    if !source.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Fichier introuvable : {}", source.display()),
+        ));
+    }
+    store_file_in_dir(source, &documents_dir(app_data_dir), false)
 }
 
 /// Copie ou déplace le fichier dans le dossier client approprié. Retourne (chemin, taille).
@@ -362,6 +414,38 @@ mod tests {
             std::process::id(),
             n
         ))
+    }
+
+    #[test]
+    fn managed_document_validation_rejects_external_and_prefix_sibling_files() {
+        let app_data = unique_temp_dir();
+        let app_cache = unique_temp_dir();
+        let docs = documents_dir(&app_data);
+        let sibling = app_data.join("documents-export");
+        let compta_cache = app_cache.join("compta-drive");
+        fs::create_dir_all(&docs).unwrap();
+        fs::create_dir_all(&sibling).unwrap();
+        fs::create_dir_all(&compta_cache).unwrap();
+        let managed = docs.join("managed.pdf");
+        let external = app_data.join("external.pdf");
+        let prefixed = sibling.join("prefixed.pdf");
+        let cached = compta_cache.join("invoice.pdf");
+        fs::write(&managed, b"managed").unwrap();
+        fs::write(&external, b"external").unwrap();
+        fs::write(&prefixed, b"prefixed").unwrap();
+        fs::write(&cached, b"cached").unwrap();
+
+        assert!(validate_managed_document_file(&app_data, &managed).is_ok());
+        assert!(validate_managed_document_file(&app_data, &external).is_err());
+        assert!(validate_managed_document_file(&app_data, &prefixed).is_err());
+        assert!(validate_document_or_compta_cache_file(&app_data, &app_cache, &managed).is_ok());
+        assert!(validate_document_or_compta_cache_file(&app_data, &app_cache, &cached).is_ok());
+        assert!(
+            validate_document_or_compta_cache_file(&app_data, &app_cache, &external).is_err()
+        );
+
+        let _ = fs::remove_dir_all(app_data);
+        let _ = fs::remove_dir_all(app_cache);
     }
 
     #[test]

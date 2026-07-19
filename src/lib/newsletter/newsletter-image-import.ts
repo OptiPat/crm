@@ -1,25 +1,10 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { readFile } from "@tauri-apps/plugin-fs";
+import {
+  localImageToDataUrl,
+  readLocalImageFile,
+} from "@/lib/api/tauri-secure-files";
 
 const MAX_EMBED_BYTES = 800_000;
-
-function mimeFromPath(path: string): string {
-  const lower = path.toLowerCase();
-  if (lower.endsWith(".png")) return "image/png";
-  if (lower.endsWith(".webp")) return "image/webp";
-  if (lower.endsWith(".gif")) return "image/gif";
-  return "image/jpeg";
-}
-
-function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
-  let binary = "";
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const slice = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...slice);
-  }
-  return `data:${mime};base64,${btoa(binary)}`;
-}
 
 /** Ouvre un fichier image local et retourne une data URL embarquée pour l'email. */
 export async function pickNewsletterImageDataUrl(): Promise<{
@@ -40,12 +25,12 @@ export async function pickNewsletterImageDataUrl(): Promise<{
     return null;
   }
 
-  const bytes = await readFile(selected);
-  if (bytes.byteLength > MAX_EMBED_BYTES) {
+  const image = await readLocalImageFile(selected);
+  if (image.bytes.byteLength > MAX_EMBED_BYTES) {
     return { dataUrl: "", tooLarge: true };
   }
 
-  return { dataUrl: bytesToDataUrl(bytes, mimeFromPath(selected)) };
+  return { dataUrl: localImageToDataUrl(image.bytes, image.mime) };
 }
 
 export function newNewsletterImageId(): string {

@@ -1,4 +1,5 @@
 use super::pipeline::{prepare_processed_scpi_bulletin_batch, process_scpi_bulletin_pdfs};
+use crate::auth::session::{require_ui_session, UiSessionState};
 use crate::commands::DbState;
 use crate::database::scpi_campaigns::{PrepareScpiCampaignResult, ScpiCampaignDashboard};
 use crate::newsletter::store::NewsletterStore;
@@ -19,8 +20,10 @@ pub fn get_scpi_campaign_dashboard_cmd(
 pub async fn prepare_scpi_bulletins_from_pdfs_cmd(
     app: AppHandle,
     _db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
     pdf_paths: Vec<String>,
 ) -> Result<PrepareScpiCampaignResult, String> {
+    require_ui_session(&session)?;
     let store = NewsletterStore::load(&app)?;
     let api_key = store
         .api_key
@@ -33,7 +36,23 @@ pub async fn prepare_scpi_bulletins_from_pdfs_cmd(
         .into_iter()
         .map(|p| p.trim().to_string())
         .filter(|p| !p.is_empty())
-        .collect();
+        .map(|path| {
+            let canonical = crate::secure_files::require_scoped_file(&app, &path)?;
+            let is_pdf = canonical
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .map(|extension| extension.eq_ignore_ascii_case("pdf"))
+                .unwrap_or(false);
+            if !is_pdf {
+                return Err("Seuls les bulletins PDF sont autorisés.".to_string());
+            }
+            crate::secure_files::ensure_file_size(
+                &canonical,
+                crate::secure_files::MAX_DOCUMENT_BYTES,
+            )?;
+            Ok(canonical.to_string_lossy().into_owned())
+        })
+        .collect::<Result<_, String>>()?;
 
     let app_handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {

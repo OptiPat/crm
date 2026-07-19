@@ -102,7 +102,13 @@ impl AppBrandingManager {
                 .logo_path
                 .as_ref()
                 .map(PathBuf::from)
-                .filter(|p| p.is_file()),
+                .filter(|path| {
+                    crate::secure_files::validate_public_logo_path(
+                        &self.app_data_dir,
+                        &path.to_string_lossy(),
+                    )
+                    .is_ok()
+                }),
             LogoMode::Cabinet => find_cabinet_logo(&self.app_data_dir),
         }
     }
@@ -220,5 +226,25 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(mgr.resolve_logo_path(&config), Some(logo));
+    }
+
+    #[test]
+    fn resolve_custom_logo_rejects_paths_outside_managed_logos() {
+        let mgr = temp_manager();
+        let logos = mgr.app_data_dir.join("logos");
+        fs::create_dir_all(&logos).unwrap();
+        let managed = logos.join("app-branding.png");
+        let external = mgr.app_data_dir.join("external.png");
+        fs::write(&managed, b"fake").unwrap();
+        fs::write(&external, b"fake").unwrap();
+
+        let mut config = AppBrandingConfig {
+            logo_mode: LogoMode::Custom,
+            logo_path: Some(managed.to_string_lossy().into_owned()),
+            ..Default::default()
+        };
+        assert_eq!(mgr.resolve_logo_path(&config), Some(managed));
+        config.logo_path = Some(external.to_string_lossy().into_owned());
+        assert_eq!(mgr.resolve_logo_path(&config), None);
     }
 }

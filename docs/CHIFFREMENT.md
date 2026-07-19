@@ -79,6 +79,8 @@ et authentifiés au repos** :
 - Après vérification du coffre OS, le champ historique `db_encryption_key` et les copies
   `secrets.key` correspondantes sont retirés de l'installation et des anciens sidecars de
   sauvegarde. Une clé différente n'est jamais supprimée automatiquement.
+- Si deux clés différentes coexistent, le CRM les départage en testant les secrets AEAD
+  existants. Il conserve les deux fichiers et signale le conflit tant qu'il subsiste.
 - Si le coffre OS est temporairement indisponible, le CRM conserve l'accès avec la clé legacy,
   réessaie au prochain chargement et affiche un avertissement dans **Paramètres > Données**.
 
@@ -94,6 +96,7 @@ de config jumelés (OAuth, secrets, newsletter, verrou, branding). La base et le
 Windows sur le même poste, ou le même Trousseau macOS ; sur un autre poste, il faut les
 reconfigurer. Sur macOS, une perte ou réinitialisation du Trousseau impose également cette
 reconfiguration, même si les fichiers de sauvegarde ont été conservés.
+Les exports ZIP n'incluent pas de clé legacy brute lorsqu'une clé protégée OS est présente.
 
 Le worker Rust vérifie toutes les trois minutes si la sauvegarde quotidienne manque, y compris
 quand l'interface est verrouillée, en tenant le mutex SQLite pendant la copie. En revanche, lister,
@@ -106,3 +109,15 @@ Plus de SQLCipher, d'OpenSSL ni d'outils NASM/Perl.
 
 Les versions distribuées ciblent Windows et macOS. Le coffre applicatif n'est pas disponible
 dans les builds Linux non distribués.
+
+## Durcissement Tauri
+
+- La WebView n'autorise que les scripts embarqués ; `unsafe-eval`, les requêtes réseau web
+  arbitraires et les navigations hors de l'origine interne sont bloqués.
+- Les capacités Tauri sont accordées commande par commande. Les ensembles globaux
+  `core:default`, `fs:default`, `process:default`, etc. ne sont pas exposés au frontend.
+- Le frontend n'a aucun accès direct au système de fichiers ni au protocole `asset`.
+  Les documents et images passent par une passerelle Rust qui exige une session CRM active,
+  vérifie le chemin accordé par le dialogue/glisser-déposer, le type et la taille du fichier.
+- Seuls les logos de branding aux noms et emplacement fixes peuvent être lus avant
+  déverrouillage afin d'afficher l'écran d'accès personnalisé.

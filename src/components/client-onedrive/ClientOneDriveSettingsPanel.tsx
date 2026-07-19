@@ -23,6 +23,7 @@ import {
 } from "@/lib/api/tauri-client-onedrive";
 import { getOAuthAppSettings, saveMicrosoftOAuthClientId } from "@/lib/api/tauri-email-oauth";
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
+import { openExternalUrl } from "@/lib/api/tauri-system";
 import {
   clearClientOneDriveCache,
   clearClientOneDriveBrowseCache,
@@ -139,14 +140,17 @@ export function ClientOneDriveSettingsPanel() {
               <p className="font-medium">Prérequis Azure (une seule fois)</p>
               <ol className="list-decimal list-inside text-muted-foreground space-y-1 text-xs leading-relaxed">
                 <li>
-                  <a
-                    href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade"
+                  <button
+                    type="button"
                     className="text-primary underline-offset-2 hover:underline"
-                    target="_blank"
-                    rel="noreferrer"
+                    onClick={() =>
+                      void openExternalUrl(
+                        "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade"
+                      )
+                    }
                   >
                     Azure → App registrations
-                  </a>{" "}
+                  </button>{" "}
                   → nouvelle app, comptes personnels Microsoft inclus
                 </li>
                 <li>

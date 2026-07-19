@@ -9,7 +9,7 @@ edition = "2021"
 tauri-build = { version = "2.6", features = [] }
 
 [dependencies]
-tauri = { version = "2.11", features = ["devtools", "protocol-asset", "tray-icon"] }
+tauri = { version = "2.11", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled", "backup", "hooks"] }
@@ -38,6 +38,7 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-biometry = "0.2.8"
 chacha20poly1305 = "0.11.0"
 atomic-write-file = "0.3.0"
+open = { version = "5.4.0", features = ["shellexecute-on-windows"] }
 
 [profile.dev]
 # debug = 0 evite LNK1318 ; codegen-units = 1 limite le pic RAM au link (Windows)

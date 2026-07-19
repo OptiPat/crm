@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { type Contact as ContactRecord } from "@/lib/api/tauri-contacts";
 import { type Foyer } from "@/lib/api/tauri-foyers";
+import { openExternalUrl } from "@/lib/api/tauri-system";
 import { resolveContactFiscal, type FiscalFields } from "@/lib/foyers/foyer-fiscal-sync";
 import { ContactFoyerRelationsBlock, type ContactFoyerRelationsActions } from "@/components/contacts/ContactFoyerRelationsBlock";
 import { FoyerProspectionDatesApplyButton } from "@/components/contacts/FoyerProspectionDatesApplyButton";
@@ -341,9 +342,13 @@ export function ContactDetailSyntheseTab({
           {contact.email ? (
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-muted-foreground" />
-              <a href={`mailto:${contact.email}`} className="text-primary hover:underline">
+              <button
+                type="button"
+                onClick={() => void openExternalUrl(`mailto:${contact.email}`)}
+                className="text-primary hover:underline"
+              >
                 {contact.email}
-              </a>
+              </button>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground italic">Email non renseigné</p>
@@ -351,9 +356,13 @@ export function ContactDetailSyntheseTab({
           {contact.telephone ? (
             <div className="flex items-center gap-2">
               <Phone className="h-4 w-4 text-muted-foreground" />
-              <a href={`tel:${contact.telephone}`} className="text-primary hover:underline">
+              <button
+                type="button"
+                onClick={() => void openExternalUrl(`tel:${contact.telephone}`)}
+                className="text-primary hover:underline"
+              >
                 {contact.telephone}
-              </a>
+              </button>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground italic">Téléphone non renseigné</p>

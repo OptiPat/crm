@@ -1,7 +1,8 @@
 use super::{normalize_config, os, AppBrandingConfig, AppBrandingManager, LogoMode};
 use super::os::OsBrandingResult;
+use crate::auth::session::{require_ui_session, UiSessionState};
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,10 +31,12 @@ pub fn get_app_branding(app: AppHandle) -> Result<AppBrandingResponse, String> {
 #[tauri::command]
 pub fn save_app_branding(
     app: AppHandle,
+    session: State<'_, UiSessionState>,
     display_name: String,
     logo_mode: LogoMode,
     logo_path: Option<String>,
 ) -> Result<AppBrandingResponse, String> {
+    require_ui_session(&session)?;
     let manager = AppBrandingManager::new(&app)?;
     let config = normalize_config(&AppBrandingConfig {
         display_name,
@@ -43,7 +46,7 @@ pub fn save_app_branding(
 
     if config.logo_mode == LogoMode::Custom {
         let path = config.logo_path.as_deref().unwrap_or("");
-        if path.is_empty() || !std::path::Path::new(path).is_file() {
+        if crate::secure_files::validate_public_logo_path(&manager.app_data_dir, path).is_err() {
             return Err("Logo personnalisé introuvable — choisissez une image.".to_string());
         }
     }

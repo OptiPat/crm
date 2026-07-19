@@ -48,6 +48,10 @@ pub fn is_registry_configured() -> bool {
 }
 
 pub fn post_registry_event(payload: &RegistryPayload<'_>) -> Result<(), String> {
+    run_on_dedicated_thread(|| post_registry_event_blocking(payload))
+}
+
+fn post_registry_event_blocking(payload: &RegistryPayload<'_>) -> Result<(), String> {
     let url = registry_url().ok_or("Registre non configuré (LICENSE_REGISTRY_URL).")?;
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(12))
@@ -75,6 +79,17 @@ pub fn post_registry_event(payload: &RegistryPayload<'_>) -> Result<(), String> 
     Ok(())
 }
 
+fn run_on_dedicated_thread<T: Send>(
+    operation: impl FnOnce() -> Result<T, String> + Send,
+) -> Result<T, String> {
+    std::thread::scope(|scope| {
+        scope
+            .spawn(operation)
+            .join()
+            .map_err(|_| "Le traitement du registre de licence s'est interrompu.".to_string())?
+    })
+}
+
 pub fn os_label() -> String {
     #[cfg(target_os = "windows")]
     {
@@ -91,5 +106,23 @@ pub fn os_label() -> String {
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
         "Unknown".to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::run_on_dedicated_thread;
+
+    #[test]
+    fn blocking_http_client_is_dropped_outside_the_async_runtime() {
+        tauri::async_runtime::block_on(async {
+            run_on_dedicated_thread(|| {
+                reqwest::blocking::Client::builder()
+                    .build()
+                    .map(|_| ())
+                    .map_err(|error| error.to_string())
+            })
+            .unwrap();
+        });
     }
 }

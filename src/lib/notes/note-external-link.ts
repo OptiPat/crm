@@ -15,7 +15,7 @@ export async function openNoteLink(href: string): Promise<void> {
   await openExternalUrl(url);
 }
 
-/** Ouvre https/mailto dans le navigateur ou client mail système (pas dans le WebView CRM). */
+/** Ouvre http(s)/mailto dans le navigateur ou client mail système (pas dans le WebView CRM). */
 export function handleNoteLinkClick(event: React.MouseEvent<HTMLElement>): void {
   const anchor = (event.target as HTMLElement).closest("a[href]");
   if (!anchor) return;

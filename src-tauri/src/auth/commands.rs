@@ -3,7 +3,8 @@ use super::session::{require_ui_session, UiSessionState, UI_SESSION_LOCKED_EVENT
 use crate::commands::DbState;
 use crate::database::Database;
 use serde::Serialize;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock, TryLockError};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_biometry::{AuthOptions, BiometryExt};
@@ -11,6 +12,30 @@ use tauri_plugin_biometry::{AuthOptions, BiometryExt};
 pub type AuthState = Mutex<Option<AuthManager>>;
 
 const MIN_PASSWORD_LEN: usize = 8;
+static DATABASE_OPEN_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static SYSTEM_AUTH_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+
+#[derive(Debug)]
+struct SystemAuthGuard(&'static AtomicBool);
+
+impl SystemAuthGuard {
+    fn acquire(flag: &'static AtomicBool) -> Result<Self, AuthCommandError> {
+        flag.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| Self(flag))
+            .map_err(|_| {
+                AuthCommandError::new(
+                    "system_auth_in_progress",
+                    "Une validation Windows Hello ou Touch ID est déjà en cours",
+                )
+            })
+    }
+}
+
+impl Drop for SystemAuthGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -222,6 +247,7 @@ fn classify_system_auth_error(plugin_error: &str) -> AuthCommandError {
 }
 
 async fn authenticate_with_system(app: AppHandle) -> Result<(), AuthCommandError> {
+    let _system_auth_guard = SystemAuthGuard::acquire(&SYSTEM_AUTH_IN_PROGRESS)?;
     tauri::async_runtime::spawn_blocking(move || {
         app.biometry().authenticate(
             "Confirmez votre identité pour accéder au CRM".to_string(),
@@ -246,13 +272,19 @@ fn open_database(
     db: &State<'_, DbState>,
     auth: &State<'_, AuthState>,
 ) -> Result<(), String> {
-    let mut db_guard = db
+    let _open_guard = DATABASE_OPEN_LOCK
+        .get_or_init(|| Mutex::new(()))
         .lock()
-        .map_err(|_| "État de la base inaccessible".to_string())?;
-    if db_guard.is_some() {
-        drop(db_guard);
-        crate::birthday_notifications::spawn_run_if_due(app);
-        return Ok(());
+        .map_err(|_| "Sérialisation de l'ouverture de la base inaccessible".to_string())?;
+    {
+        let db_guard = db
+            .lock()
+            .map_err(|_| "État de la base inaccessible".to_string())?;
+        if db_guard.is_some() {
+            drop(db_guard);
+            crate::birthday_notifications::spawn_run_if_due(app);
+            return Ok(());
+        }
     }
 
     let database = Database::open(app).map_err(|e| {
@@ -260,12 +292,17 @@ fn open_database(
         format!("Échec d'ouverture de la base : {e}")
     })?;
     let installed_at = {
-        let guard = auth.lock().unwrap();
+        let guard = auth
+            .lock()
+            .map_err(|_| "État d'authentification inaccessible".to_string())?;
         guard.as_ref().and_then(|manager| manager.created_at().ok())
     };
     if let Err(e) = crate::licensing::ensure_on_database_open(app, &database, installed_at) {
         eprintln!("⚠️ Licence : {e}");
     }
+    let mut db_guard = db
+        .lock()
+        .map_err(|_| "État de la base inaccessible".to_string())?;
     *db_guard = Some(database);
     drop(db_guard);
     crate::birthday_notifications::spawn_run_if_due(app);
@@ -309,7 +346,8 @@ pub fn create_master_password(
 pub fn is_database_unlocked(db: State<'_, DbState>) -> Result<bool, String> {
     match db.try_lock() {
         Ok(guard) => Ok(guard.is_some()),
-        Err(_) => Ok(true),
+        Err(TryLockError::WouldBlock) => Ok(false),
+        Err(TryLockError::Poisoned(_)) => Err("État de la base inaccessible".to_string()),
     }
 }
 
@@ -469,7 +507,8 @@ pub fn change_master_password(
 
 #[cfg(test)]
 mod tests {
-    use super::classify_system_auth_error;
+    use super::{classify_system_auth_error, SystemAuthGuard};
+    use std::sync::atomic::AtomicBool;
 
     #[test]
     fn classifies_system_auth_errors_from_stable_display_codes() {
@@ -489,5 +528,15 @@ mod tests {
             classify_system_auth_error("[authenticationFailed] - failed").code,
             "system_auth_failed"
         );
+    }
+
+    #[test]
+    fn rejects_overlapping_system_authentication_prompts() {
+        static FLAG: AtomicBool = AtomicBool::new(false);
+        let first = SystemAuthGuard::acquire(&FLAG).unwrap();
+        let second = SystemAuthGuard::acquire(&FLAG).unwrap_err();
+        assert_eq!(second.code, "system_auth_in_progress");
+        drop(first);
+        assert!(SystemAuthGuard::acquire(&FLAG).is_ok());
     }
 }

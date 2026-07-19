@@ -1,31 +1,16 @@
-import { exists, readFile } from "@tauri-apps/plugin-fs";
 import {
   getPdfPageCount,
   renderPdfPageToDataUrl,
 } from "@/lib/documents/extraction/pdf-render";
+import {
+  localImageToDataUrl,
+  readLocalImageFile,
+} from "@/lib/api/tauri-secure-files";
 
 export type IdentityPreviewPage = {
   label: string;
   dataUrl: string;
 };
-
-function mimeFromPath(path: string): string {
-  const lower = path.toLowerCase();
-  if (lower.endsWith(".png")) return "image/png";
-  if (lower.endsWith(".webp")) return "image/webp";
-  if (lower.endsWith(".pdf")) return "application/pdf";
-  return "image/jpeg";
-}
-
-function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
-  let binary = "";
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const slice = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...slice);
-  }
-  return `data:${mime};base64,${btoa(binary)}`;
-}
 
 function isPdfPath(path: string): boolean {
   return path.toLowerCase().endsWith(".pdf");
@@ -56,8 +41,6 @@ export async function loadIdentityDocumentPreviewPages(
   if (!path) return [];
 
   try {
-    if (!(await exists(path))) return [];
-
     if (isPdfPath(path)) {
       const pageCount = await getPdfPageCount(path);
       const pages: IdentityPreviewPage[] = [];
@@ -71,11 +54,11 @@ export async function loadIdentityDocumentPreviewPages(
       return pages;
     }
 
-    const bytes = await readFile(path);
+    const image = await readLocalImageFile(path);
     return [
       {
         label: side === "recto" ? "Recto" : side === "verso" ? "Verso" : "Document",
-        dataUrl: bytesToDataUrl(bytes, mimeFromPath(path)),
+        dataUrl: localImageToDataUrl(image.bytes, image.mime),
       },
     ];
   } catch (error) {

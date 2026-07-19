@@ -84,12 +84,16 @@ fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn should_skip_entry(name: &str, is_dir: bool) -> bool {
-    is_dir && EXPORT_SKIP_DIRS.iter().any(|skip| *skip == name)
+fn should_skip_entry(name: &str, is_dir: bool, has_protected_key: bool) -> bool {
+    (is_dir && EXPORT_SKIP_DIRS.iter().any(|skip| *skip == name))
+        || (has_protected_key
+            && !is_dir
+            && (name == "secrets.key" || name.starts_with("secrets.key.conflict-")))
 }
 
 /// Copie tout AppData dans temp, sauf la base live (snapshot separe) et backups/.
 fn copy_app_data_tree(app_data_dir: &Path, temp_dir: &Path) -> Result<(), String> {
+    let has_protected_key = app_data_dir.join("secrets.key.os").is_file();
     for entry in fs::read_dir(app_data_dir).map_err(|e| format!("Lecture AppData : {e}"))? {
         let entry = entry.map_err(|e| format!("Entree AppData : {e}"))?;
         let name = entry.file_name();
@@ -100,7 +104,7 @@ fn copy_app_data_tree(app_data_dir: &Path, temp_dir: &Path) -> Result<(), String
         let file_type = entry
             .file_type()
             .map_err(|e| format!("Type fichier {name_str} : {e}"))?;
-        if should_skip_entry(&name_str, file_type.is_dir()) {
+        if should_skip_entry(&name_str, file_type.is_dir(), has_protected_key) {
             continue;
         }
         let from = entry.path();
@@ -331,6 +335,12 @@ mod tests {
         fs::create_dir_all(&app_data.join("backups")).expect("backups");
         fs::write(app_data.join("backups/old.db"), b"x").expect("backup");
         fs::write(app_data.join("secrets.key.os"), b"protected-key").expect("secrets");
+        fs::write(app_data.join("secrets.key"), b"legacy-key").expect("legacy secrets");
+        fs::write(
+            app_data.join("secrets.key.conflict-123"),
+            b"conflicting-key",
+        )
+        .expect("conflicting secrets");
         fs::write(app_data.join("email_oauth.json"), b"{}").expect("oauth");
         write_marker_db(&app_data.join("patrimoine-crm.db"), "live");
 
@@ -339,6 +349,8 @@ mod tests {
         copy_app_data_tree(&app_data, &temp).expect("copy tree");
 
         assert!(temp.join("secrets.key.os").is_file());
+        assert!(!temp.join("secrets.key").exists());
+        assert!(!temp.join("secrets.key.conflict-123").exists());
         assert!(temp.join("email_oauth.json").is_file());
         assert!(!temp.join("backups").exists());
         assert!(!temp.join("patrimoine-crm.db").exists());
