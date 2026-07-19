@@ -28,6 +28,7 @@ import {
 import { open } from "@tauri-apps/plugin-dialog";
 import { cleanupOrphanedData, getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
 import {
+  cleanupLegacySecretKey,
   createManualDbBackup,
   exportFullArchive,
   restoreDbBackup,
@@ -35,13 +36,16 @@ import {
   type DbBackupEntry,
 } from "@/lib/api/tauri-system";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { invokeErrorMessage } from "@/lib/api/invoke-error";
 import { toast } from "sonner";
 
 type ParametresDatabaseSectionProps = {
   dbPath: string;
   secretsProtectionWarning: boolean;
+  legacySecretKeyCleanupAvailable: boolean;
   backups: DbBackupEntry[];
   onBackupsChanged?: (backups: DbBackupEntry[]) => void;
+  onSecretsProtectionCleaned?: () => void;
 };
 
 function Explainer({ children }: { children: ReactNode }) {
@@ -56,10 +60,13 @@ function Explainer({ children }: { children: ReactNode }) {
 export function ParametresDatabaseSection({
   dbPath,
   secretsProtectionWarning,
+  legacySecretKeyCleanupAvailable,
   backups,
   onBackupsChanged,
+  onSecretsProtectionCleaned,
 }: ParametresDatabaseSectionProps) {
   const [cleaningUp, setCleaningUp] = useState(false);
+  const [cleaningSecretKey, setCleaningSecretKey] = useState(false);
   const [creatingBackup, setCreatingBackup] = useState(false);
   const [exportingArchive, setExportingArchive] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<DbBackupEntry | null>(null);
@@ -111,6 +118,28 @@ export function ParametresDatabaseSection({
       toast.error("Impossible de créer la copie de secours");
     } finally {
       setCreatingBackup(false);
+    }
+  };
+
+  const handleCleanupSecretKey = async () => {
+    setCleaningSecretKey(true);
+    try {
+      const result = await cleanupLegacySecretKey();
+      onSecretsProtectionCleaned?.();
+      toast.success("Ancienne clé supprimée en sécurité", {
+        description: `Copie préalable : ${result.backup_path.split(/[\\/]/).pop() ?? result.backup_path}`,
+      });
+      try {
+        const updated = await listDbBackups();
+        onBackupsChanged?.(updated);
+      } catch (refreshError) {
+        console.warn("Liste des sauvegardes non actualisée:", refreshError);
+      }
+    } catch (error) {
+      console.error("Erreur nettoyage clé:", error);
+      toast.error(invokeErrorMessage(error));
+    } finally {
+      setCleaningSecretKey(false);
     }
   };
 
@@ -221,12 +250,24 @@ export function ParametresDatabaseSection({
               className="flex gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
             >
               <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
-              <div>
+              <div className="space-y-2">
                 <p className="font-medium">Protection système des connexions incomplète</p>
                 <p className="mt-1 text-amber-900/80">
                   Le CRM reste accessible et réessaiera automatiquement. Ne supprimez pas les
                   fichiers de configuration ; créez une copie de secours avant toute intervention.
                 </p>
+                {legacySecretKeyCleanupAvailable && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={cleaningSecretKey}
+                    onClick={() => void handleCleanupSecretKey()}
+                  >
+                    <Wrench className="mr-2 h-4 w-4" />
+                    {cleaningSecretKey ? "Vérification…" : "Vérifier et nettoyer l’ancienne clé"}
+                  </Button>
+                )}
               </div>
             </div>
           )}

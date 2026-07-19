@@ -1,13 +1,17 @@
 use crate::auth::session::{require_ui_session, UiSessionState};
 use crate::commands::DbState;
 use serde::Serialize;
+use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Manager, State};
+
+static LEGACY_KEY_CLEANUP_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Serialize)]
 pub struct AppInfo {
     pub version: String,
     pub db_path: String,
     pub secrets_protection_warning: bool,
+    pub legacy_secret_key_cleanup_available: bool,
 }
 
 #[tauri::command]
@@ -29,6 +33,8 @@ pub fn get_app_info(
         version,
         db_path,
         secrets_protection_warning: crate::email::oauth_secrets::storage_protection_warning(&app),
+        legacy_secret_key_cleanup_available:
+            crate::email::oauth_secrets::legacy_secret_key_cleanup_available(&app),
     })
 }
 
@@ -99,6 +105,60 @@ pub fn create_manual_db_backup(
     let dest = crate::backup::create_manual_backup(&app_data_dir, &db_path)
         .map_err(|e| e.to_string())?;
     Ok(dest.to_string_lossy().into_owned())
+}
+
+#[derive(Serialize)]
+pub struct CleanupLegacySecretKeyResult {
+    pub backup_path: String,
+}
+
+#[tauri::command]
+pub fn cleanup_legacy_secret_key(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+) -> Result<CleanupLegacySecretKeyResult, String> {
+    require_ui_session(&session)?;
+    let _cleanup_guard = LEGACY_KEY_CLEANUP_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| "Nettoyage de l'ancienne clé déjà indisponible.".to_string())?;
+    let keys = crate::email::oauth_secrets::validated_protected_key_for_cleanup(&app)?
+        .ok_or("Aucune ancienne clé incompatible à nettoyer.")?;
+    {
+        let guard = db
+            .lock()
+            .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
+        let database = guard.as_ref().ok_or("Base non initialisée")?;
+        crate::birthday_notifications::validate_stored_bot_token_key(database, &keys.protected)?;
+    }
+
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db_path = app_data_dir.join("patrimoine-crm.db");
+    let backup_path = crate::backup::create_manual_backup(&app_data_dir, &db_path)
+        .map_err(|e| format!("Sauvegarde préalable impossible : {e}"))?;
+    let revalidated = crate::email::oauth_secrets::validated_protected_key_for_cleanup(&app)?
+        .ok_or("Le conflit de clés a changé pendant la sauvegarde. Aucun fichier supprimé.")?;
+    if revalidated != keys {
+        return Err("Les clés ont changé pendant la sauvegarde. Aucun fichier supprimé.".into());
+    }
+    {
+        let guard = db
+            .lock()
+            .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
+        let database = guard.as_ref().ok_or("Base non initialisée")?;
+        crate::birthday_notifications::validate_stored_bot_token_key(
+            database,
+            &keys.protected,
+        )?;
+    }
+    if !crate::email::oauth_secrets::finalize_validated_legacy_key_cleanup(&app, keys)? {
+        return Err("L'ancienne clé n'est plus présente ; aucun fichier supprimé.".into());
+    }
+
+    Ok(CleanupLegacySecretKeyResult {
+        backup_path: backup_path.to_string_lossy().into_owned(),
+    })
 }
 
 #[derive(Serialize)]

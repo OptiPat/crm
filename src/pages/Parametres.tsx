@@ -126,6 +126,7 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
   const [emailConnected, setEmailConnected] = useState(false);
   const [dbPath, setDbPath] = useState("");
   const [secretsProtectionWarning, setSecretsProtectionWarning] = useState(false);
+  const [legacySecretKeyCleanupAvailable, setLegacySecretKeyCleanupAvailable] = useState(false);
   const [backups, setBackups] = useState<DbBackupEntry[]>([]);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("accueil");
   const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
@@ -224,6 +225,7 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
       .then((info) => {
         setDbPath(info.db_path);
         setSecretsProtectionWarning(info.secrets_protection_warning);
+        setLegacySecretKeyCleanupAvailable(info.legacy_secret_key_cleanup_available);
       })
       .catch(() => {});
     listDbBackups()
@@ -374,8 +376,13 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
           <ParametresDatabaseSection
             dbPath={dbPath}
             secretsProtectionWarning={secretsProtectionWarning}
+            legacySecretKeyCleanupAvailable={legacySecretKeyCleanupAvailable}
             backups={backups}
             onBackupsChanged={setBackups}
+            onSecretsProtectionCleaned={() => {
+              setSecretsProtectionWarning(false);
+              setLegacySecretKeyCleanupAvailable(false);
+            }}
           />
         );
       case "application":

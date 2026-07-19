@@ -81,6 +81,8 @@ et authentifiés au repos** :
   sauvegarde. Une clé différente n'est jamais supprimée automatiquement.
 - Si deux clés différentes coexistent, le CRM les départage en testant les secrets AEAD
   existants. Il conserve les deux fichiers et signale le conflit tant qu'il subsiste.
+- L'action **Vérifier et nettoyer l'ancienne clé** contrôle aussi le token Telegram, crée une
+  sauvegarde complète, puis supprime la clé legacy uniquement si tous les contrôles réussissent.
 - Si le coffre OS est temporairement indisponible, le CRM conserve l'accès avec la clé legacy,
   réessaie au prochain chargement et affiche un avertissement dans **Paramètres > Données**.
 

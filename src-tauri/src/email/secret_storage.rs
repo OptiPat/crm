@@ -160,6 +160,32 @@ pub fn has_protection_warning(app_data_dir: &Path) -> bool {
     app_data_dir.join(PROTECTION_WARNING_FILE).is_file()
 }
 
+pub fn remove_legacy_key_after_validation(
+    app_data_dir: &Path,
+    expected_protected_key: &[u8; 32],
+) -> Result<bool, String> {
+    let _guard = KEY_IO_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| "Verrou interne du stockage des secrets indisponible.".to_string())?;
+    let protected_path = app_data_dir.join(PROTECTED_KEY_FILE);
+    let protected_key = fs::read(&protected_path)
+        .map_err(|e| format!("Lecture de la clé locale protégée impossible : {e}"))
+        .and_then(|protected| platform::unprotect_key(&protected))
+        .and_then(|key| key_from_bytes(&key))?;
+    if protected_key != *expected_protected_key {
+        return Err("La clé protégée a changé pendant la vérification. Aucun fichier supprimé.".into());
+    }
+    let legacy_path = app_data_dir.join(LEGACY_KEY_FILE);
+    if !legacy_path.is_file() {
+        return Ok(false);
+    }
+    fs::remove_file(&legacy_path)
+        .map_err(|e| format!("Suppression de l'ancienne clé locale impossible : {e}"))?;
+    clear_protection_warning(app_data_dir);
+    Ok(true)
+}
+
 fn persist_protected_key(
     app_data_dir: &Path,
     protected_path: &Path,
@@ -426,6 +452,22 @@ mod tests {
         assert_eq!(loaded.conflicting_legacy_keys, vec![conflicting]);
         assert_eq!(fs::read(dir.join(LEGACY_KEY_FILE)).unwrap(), conflicting);
         assert!(!dir.join("secrets.key.conflict-123").exists());
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn removes_legacy_key_only_for_the_validated_protected_key() {
+        let dir = unique_temp_dir();
+        let protected = load_or_create_key(&dir, None).unwrap();
+        fs::write(dir.join(LEGACY_KEY_FILE), [0x77; 32]).unwrap();
+        record_key_conflict_notice(&dir, "test");
+
+        assert!(remove_legacy_key_after_validation(&dir, &[0x88; 32]).is_err());
+        assert!(dir.join(LEGACY_KEY_FILE).is_file());
+        assert!(remove_legacy_key_after_validation(&dir, &protected.key).unwrap());
+        assert!(!dir.join(LEGACY_KEY_FILE).exists());
+        assert!(!has_protection_warning(&dir));
 
         let _ = fs::remove_dir_all(dir);
     }

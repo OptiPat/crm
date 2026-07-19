@@ -4,6 +4,7 @@ export interface AppInfo {
   version: string;
   db_path: string;
   secrets_protection_warning: boolean;
+  legacy_secret_key_cleanup_available: boolean;
 }
 
 export interface DbBackupEntry {
@@ -22,6 +23,14 @@ export async function listDbBackups(): Promise<DbBackupEntry[]> {
 
 export async function createManualDbBackup(): Promise<string> {
   return invoke<string>("create_manual_db_backup");
+}
+
+export interface CleanupLegacySecretKeyResult {
+  backup_path: string;
+}
+
+export async function cleanupLegacySecretKey(): Promise<CleanupLegacySecretKeyResult> {
+  return invoke<CleanupLegacySecretKeyResult>("cleanup_legacy_secret_key");
 }
 
 export async function openDocumentFile(path: string): Promise<void> {

@@ -409,6 +409,7 @@ fn main() {
             get_app_info,
             list_db_backups,
             create_manual_db_backup,
+            cleanup_legacy_secret_key,
             restore_db_backup,
             export_full_archive,
             open_document_file,

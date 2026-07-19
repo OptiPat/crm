@@ -89,18 +89,7 @@ fn key_matches_persisted_secrets(
     app_data_dir: &Path,
     key: &[u8; 32],
 ) -> Result<Option<bool>, String> {
-    let mut encrypted = Vec::new();
-    for file_name in ["email_oauth.json", "newsletter_config.json"] {
-        let path = app_data_dir.join(file_name);
-        if !path.is_file() {
-            continue;
-        }
-        let raw = fs::read_to_string(&path)
-            .map_err(|e| format!("Lecture {} impossible : {e}", path.display()))?;
-        let json: serde_json::Value = serde_json::from_str(&raw)
-            .map_err(|e| format!("JSON {} invalide : {e}", path.display()))?;
-        collect_aead_secrets(&json, &mut encrypted);
-    }
+    let encrypted = persisted_encrypted_secrets(app_data_dir)?;
     if encrypted.is_empty() {
         return Ok(None);
     }
@@ -111,19 +100,38 @@ fn key_matches_persisted_secrets(
     ))
 }
 
-fn collect_aead_secrets(value: &serde_json::Value, encrypted: &mut Vec<String>) {
-    match value {
-        serde_json::Value::String(value) if value.trim().starts_with(AEAD_PREFIX) => {
-            encrypted.push(value.clone());
+fn persisted_encrypted_secrets(app_data_dir: &Path) -> Result<Vec<String>, String> {
+    let mut encrypted = Vec::new();
+    for file_name in ["email_oauth.json", "newsletter_config.json"] {
+        let path = app_data_dir.join(file_name);
+        if !path.is_file() {
+            continue;
         }
+        let raw = fs::read_to_string(&path)
+            .map_err(|e| format!("Lecture {} impossible : {e}", path.display()))?;
+        let json: serde_json::Value = serde_json::from_str(&raw)
+            .map_err(|e| format!("JSON {} invalide : {e}", path.display()))?;
+        collect_encrypted_secrets(&json, &mut encrypted);
+    }
+    Ok(encrypted)
+}
+
+fn collect_encrypted_secrets(value: &serde_json::Value, encrypted: &mut Vec<String>) {
+    match value {
         serde_json::Value::Array(values) => {
             for value in values {
-                collect_aead_secrets(value, encrypted);
+                collect_encrypted_secrets(value, encrypted);
             }
         }
         serde_json::Value::Object(values) => {
-            for value in values.values() {
-                collect_aead_secrets(value, encrypted);
+            for (name, value) in values {
+                if name.ends_with("_enc") {
+                    if let Some(secret) = value.as_str().filter(|secret| !secret.trim().is_empty()) {
+                        encrypted.push(secret.to_string());
+                    }
+                } else {
+                    collect_encrypted_secrets(value, encrypted);
+                }
             }
         }
         _ => {}
@@ -134,6 +142,70 @@ pub fn storage_protection_warning(app: &AppHandle) -> bool {
     app.path()
         .app_data_dir()
         .is_ok_and(|dir| has_protection_warning(&dir))
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ValidatedCleanupKeys {
+    pub protected: [u8; 32],
+    pub legacy: [u8; 32],
+}
+
+pub fn legacy_secret_key_cleanup_available(app: &AppHandle) -> bool {
+    let Ok(app_data_dir) = app.path().app_data_dir() else {
+        return false;
+    };
+    load_or_create_key(&app_data_dir, legacy_key_from_auth(app)).is_ok_and(|loaded| {
+        loaded.os_protected && loaded.conflicting_legacy_keys.len() == 1
+    })
+}
+
+pub(crate) fn validated_protected_key_for_cleanup(
+    app: &AppHandle,
+) -> Result<Option<ValidatedCleanupKeys>, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let loaded = load_or_create_key(&app_data_dir, legacy_key_from_auth(app))?;
+    if !loaded.os_protected || loaded.conflicting_legacy_keys.is_empty() {
+        return Ok(None);
+    }
+    if loaded.conflicting_legacy_keys.len() != 1 {
+        return Err("Plusieurs anciennes clés incompatibles sont présentes. Aucun fichier supprimé.".into());
+    }
+    let encrypted = persisted_encrypted_secrets(&app_data_dir)?;
+    if encrypted.iter().any(|secret| is_legacy_secret(secret)) {
+        return Err(
+            "Des secrets OAuth/newsletter utilisent encore l'ancien format XOR. Ouvrez d'abord les réglages concernés pour terminer leur migration."
+                .into(),
+        );
+    }
+    let protected_matches = key_matches_persisted_secrets(&app_data_dir, &loaded.key)?;
+    if protected_matches == Some(false) {
+        return Err(
+            "La clé protégée ne déchiffre pas les secrets OAuth/newsletter. Aucun fichier supprimé."
+                .into(),
+        );
+    }
+    let legacy = loaded.conflicting_legacy_keys[0];
+    if protected_matches == Some(true)
+        && key_matches_persisted_secrets(&app_data_dir, &legacy)? == Some(true)
+    {
+        return Err(
+            "Les deux clés peuvent lire les anciens secrets non authentifiés. Aucun fichier supprimé."
+                .into(),
+        );
+    }
+    Ok(Some(ValidatedCleanupKeys {
+        protected: loaded.key,
+        legacy,
+    }))
+}
+
+pub(crate) fn finalize_validated_legacy_key_cleanup(
+    app: &AppHandle,
+    keys: ValidatedCleanupKeys,
+) -> Result<bool, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    remove_matching_legacy_auth_key(&app_data_dir.join("auth.json"), &keys.legacy)?;
+    super::secret_storage::remove_legacy_key_after_validation(&app_data_dir, &keys.protected)
 }
 
 /// Récupère l'ancienne clé de chiffrement des secrets depuis `auth.json` si présente
@@ -348,6 +420,31 @@ mod tests {
 
         assert_eq!(decrypt_secret(&encoded, &key).unwrap(), "secret-test");
         assert!(is_legacy_secret(&encoded));
+    }
+
+    #[test]
+    fn cleanup_detection_includes_legacy_xor_fields() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        let mut cipher: Vec<u8> = (0u8..16).collect();
+        cipher.extend_from_slice(&[
+            0x62, 0x75, 0x70, 0x60, 0x70, 0x60, 0x3a, 0x62, 0x7c, 0x6b, 0x6f,
+        ]);
+        let encoded = base64::engine::general_purpose::STANDARD.encode(cipher);
+        fs::write(
+            dir.join("email_oauth.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "version": 2,
+                "connection": { "access_token_enc": encoded }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let encrypted = persisted_encrypted_secrets(&dir).unwrap();
+        assert_eq!(encrypted.len(), 1);
+        assert!(is_legacy_secret(&encrypted[0]));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

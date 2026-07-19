@@ -13,6 +13,7 @@ pub use commands::{
     send_birthday_telegram_reminders_now_cmd, test_birthday_telegram_cmd,
 };
 pub use runner::run_if_due_on_db_state;
+pub(crate) use settings::validate_stored_bot_token_key;
 
 use crate::commands::DbState;
 use tauri::{AppHandle, Manager};

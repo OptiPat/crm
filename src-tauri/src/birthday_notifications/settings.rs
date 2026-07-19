@@ -60,6 +60,22 @@ pub fn get_birthday_telegram_settings(
     })
 }
 
+pub fn validate_stored_bot_token_key(
+    db: &Database,
+    key: &[u8; 32],
+) -> Result<(), String> {
+    let Some(encrypted) = db
+        .get_setting(SETTING_BOT_TOKEN_ENC)
+        .map_err(|e| e.to_string())?
+        .filter(|value| !value.trim().is_empty())
+    else {
+        return Ok(());
+    };
+    decrypt_secret(&encrypted, key)
+        .map(|_| ())
+        .map_err(|_| "La clé protégée ne déchiffre pas le token Telegram.".to_string())
+}
+
 pub fn save_birthday_telegram_settings(
     app: &AppHandle,
     db: &Database,
@@ -171,4 +187,20 @@ pub fn save_notified_contact_ids(db: &Database, ids: &HashSet<i64>) -> Result<()
         .map_err(|e| e.to_string())?;
     db.set_setting(SETTING_LAST_RUN_DATE, &today_date_label())
         .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_telegram_token_before_legacy_key_cleanup() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let key = [0x21; 32];
+        let encrypted = encrypt_secret("telegram-test-token", &key).unwrap();
+        db.set_setting(SETTING_BOT_TOKEN_ENC, &encrypted).unwrap();
+
+        assert!(validate_stored_bot_token_key(&db, &key).is_ok());
+        assert!(validate_stored_bot_token_key(&db, &[0x42; 32]).is_err());
+    }
 }
