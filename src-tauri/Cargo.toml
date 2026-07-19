@@ -1,6 +1,6 @@
 [package]
 name = "patrimoine-crm"
-version = "0.4.82"
+version = "0.4.83"
 description = "CRM Desktop pour Conseillers en Gestion de Patrimoine"
 authors = ["you"]
 edition = "2021"
