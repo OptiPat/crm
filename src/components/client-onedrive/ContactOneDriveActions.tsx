@@ -22,11 +22,24 @@ import {
   notifyClientOneDriveChanged,
   subscribeClientOneDriveChanged,
 } from "@/lib/client-onedrive/client-onedrive-events";
-import { openExternalUrl } from "@/lib/api/tauri-system";
+import { openClientOneDriveFolderWithFeedback } from "@/lib/client-onedrive/open-client-onedrive-folder";
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
+import {
+  nestedStackedDialogClass,
+  nestedStackedOutsideHandlers,
+  nestedStackedPortalLayer,
+} from "@/lib/ui/nested-stacked-dialog";
+import { stopWheelPropagation } from "@/lib/ui/nested-sheet-scroll";
+import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 import { toast } from "sonner";
 
-export function ContactOneDriveActions({ contactId }: { contactId: number }) {
+export function ContactOneDriveActions({
+  contactId,
+  nestedSheet = false,
+}: {
+  contactId: number;
+  nestedSheet?: boolean;
+}) {
   const cachedStatus = getClientOneDriveStatusCache();
   const [loading, setLoading] = useState(!cachedStatus);
   const [busy, setBusy] = useState(false);
@@ -64,11 +77,13 @@ export function ContactOneDriveActions({ contactId }: { contactId: number }) {
   useEffect(() => subscribeClientOneDriveChanged(() => void refresh(true)), [refresh]);
 
   const openFolder = async () => {
-    if (!link?.webUrl) {
+    if (!link?.folderId) {
       toast.error("Dossier OneDrive introuvable — reliez-le depuis Paramètres.");
       return;
     }
-    await openExternalUrl(link.webUrl);
+    await openClientOneDriveFolderWithFeedback(link.folderId, {
+      folderName: link.folderName,
+    });
   };
 
   const createFolder = async () => {
@@ -78,7 +93,9 @@ export function ContactOneDriveActions({ contactId }: { contactId: number }) {
       setLink(created);
       notifyClientOneDriveChanged();
       toast.success(`Dossier créé : ${created.folderName}`);
-      if (created.webUrl) await openExternalUrl(created.webUrl);
+      await openClientOneDriveFolderWithFeedback(created.folderId, {
+        folderName: created.folderName,
+      });
     } catch (e) {
       toast.error(invokeErrorMessage(e) || "Création impossible");
     } finally {
@@ -129,7 +146,7 @@ export function ContactOneDriveActions({ contactId }: { contactId: number }) {
         variant="outline"
         size="sm"
         className="gap-1.5"
-        title={`Ouvrir OneDrive — ${link.folderName}`}
+        title={`Ouvrir le dossier — ${link.folderName}`}
         onClick={() => void openFolder()}
       >
         <FolderOpen className="h-4 w-4" />
@@ -167,26 +184,33 @@ export function ContactOneDriveActions({ contactId }: { contactId: number }) {
         </Button>
       </div>
 
-      <Dialog open={linkPickerOpen} onOpenChange={setLinkPickerOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Relier un dossier OneDrive</DialogTitle>
-            <DialogDescription>
-              Choisissez le dossier client existant dans votre bibliothèque OneDrive.
-            </DialogDescription>
-          </DialogHeader>
-          {rootFolderId ? (
-            <ClientOneDriveBrowsePanel
-              initialFolderId={rootFolderId}
-              boundaryFolderId={rootFolderId}
-              pickFolderLabel="Relier ce dossier"
-              onPickFolder={(item) => void linkExistingFolder(item)}
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground py-6 text-center">
-              Configurez d&apos;abord le dossier racine dans Paramètres → Intégrations.
-            </p>
-          )}
+      <Dialog open={linkPickerOpen} onOpenChange={setLinkPickerOpen} modal={!nestedSheet}>
+        <DialogContent
+          hideOverlay={nestedSheet}
+          className={nestedStackedDialogClass("max-w-2xl", nestedSheet)}
+          onWheel={nestedSheet ? stopWheelPropagation : undefined}
+          {...nestedStackedOutsideHandlers(nestedSheet)}
+        >
+          <PortalLayerProvider layer={nestedStackedPortalLayer(nestedSheet)}>
+            <DialogHeader>
+              <DialogTitle>Relier un dossier OneDrive</DialogTitle>
+              <DialogDescription>
+                Choisissez le dossier client existant dans votre bibliothèque OneDrive.
+              </DialogDescription>
+            </DialogHeader>
+            {rootFolderId ? (
+              <ClientOneDriveBrowsePanel
+                initialFolderId={rootFolderId}
+                boundaryFolderId={rootFolderId}
+                pickFolderLabel="Relier ce dossier"
+                onPickFolder={(item) => void linkExistingFolder(item)}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                Configurez d&apos;abord le dossier racine dans Paramètres → Intégrations.
+              </p>
+            )}
+          </PortalLayerProvider>
         </DialogContent>
       </Dialog>
     </>

@@ -50,8 +50,9 @@ use client_onedrive::commands::{
     apply_client_onedrive_folder_proposal, browse_client_onedrive,
     connect_microsoft_onedrive_oauth_cmd, create_contact_onedrive_folder_cmd,
     disconnect_microsoft_onedrive_oauth_cmd, get_client_onedrive_status,
-    link_contact_onedrive_folder, propose_client_onedrive_folder_matches,
-    resolve_contact_onedrive_folder, save_client_onedrive_root_folder,
+    link_contact_onedrive_folder, open_client_onedrive_folder,
+    propose_client_onedrive_folder_matches, resolve_contact_onedrive_folder,
+    save_client_onedrive_local_sync_root, save_client_onedrive_root_folder,
 };
 use commands::*;
 use compta::commands::{
@@ -496,6 +497,8 @@ fn main() {
             connect_microsoft_onedrive_oauth_cmd,
             disconnect_microsoft_onedrive_oauth_cmd,
             save_client_onedrive_root_folder,
+            save_client_onedrive_local_sync_root,
+            open_client_onedrive_folder,
             browse_client_onedrive,
             resolve_contact_onedrive_folder,
             link_contact_onedrive_folder,

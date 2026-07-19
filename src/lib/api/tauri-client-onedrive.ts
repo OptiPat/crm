@@ -5,7 +5,13 @@ export interface ClientOneDriveStatus {
   email: string | null;
   rootFolderId: string | null;
   rootFolderName: string | null;
+  localSyncRoot: string | null;
   microsoftClientIdConfigured: boolean;
+}
+
+export interface OpenClientOneDriveFolderResult {
+  mode: "local" | "web" | string;
+  message: string | null;
 }
 
 export interface ClientOneDriveItem {
@@ -64,6 +70,20 @@ export async function saveClientOneDriveRootFolder(
   folderName: string
 ): Promise<void> {
   await invoke("save_client_onedrive_root_folder", { folderId, folderName });
+}
+
+export async function saveClientOneDriveLocalSyncRoot(path: string): Promise<void> {
+  await invoke("save_client_onedrive_local_sync_root", { path });
+}
+
+export async function openClientOneDriveFolder(
+  folderId: string,
+  options?: { folderName?: string | null }
+): Promise<OpenClientOneDriveFolderResult> {
+  return invoke<OpenClientOneDriveFolderResult>("open_client_onedrive_folder", {
+    folderId,
+    folderName: options?.folderName ?? null,
+  });
 }
 
 export async function browseClientOneDrive(

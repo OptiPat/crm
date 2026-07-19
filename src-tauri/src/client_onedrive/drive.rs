@@ -138,6 +138,61 @@ fn fetch_item_meta(
     res.json().map_err(|e| e.to_string())
 }
 
+pub fn get_drive_item_relative_path(app: &AppHandle, item_id: &str) -> Result<String, String> {
+    let token = onedrive_token(app)?;
+    let client = reqwest::blocking::Client::new();
+    let url = format!(
+        "https://graph.microsoft.com/v1.0/me/drive/items/{item_id}?$select=name,parentReference"
+    );
+    let res = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("OneDrive API: {}", res.text().unwrap_or_default()));
+    }
+    let json: serde_json::Value = res.json().map_err(|e| e.to_string())?;
+    let name = json
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or("Nom de dossier OneDrive introuvable.")?;
+    let parent_path = json
+        .get("parentReference")
+        .and_then(|p| p.get("path"))
+        .and_then(|v| v.as_str())
+        .ok_or("Chemin OneDrive introuvable pour ce dossier.")?;
+    let parent_relative = super::local_sync::graph_parent_path_to_relative(parent_path)
+        .unwrap_or_default();
+    let relative = if parent_relative.is_empty() {
+        name.to_string()
+    } else {
+        super::local_sync::join_drive_relative(&parent_relative, name)
+            .to_string_lossy()
+            .into_owned()
+    };
+    Ok(relative)
+}
+
+pub fn get_drive_item_web_url(app: &AppHandle, item_id: &str) -> Result<Option<String>, String> {
+    let token = onedrive_token(app)?;
+    let client = reqwest::blocking::Client::new();
+    let url = format!("https://graph.microsoft.com/v1.0/me/drive/items/{item_id}?$select=webUrl");
+    let res = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("OneDrive API: {}", res.text().unwrap_or_default()));
+    }
+    let json: serde_json::Value = res.json().map_err(|e| e.to_string())?;
+    Ok(json
+        .get("webUrl")
+        .and_then(|v| v.as_str())
+        .map(str::to_string))
+}
+
 pub fn browse_client_onedrive_folder(
     app: &AppHandle,
     folder_id: Option<&str>,

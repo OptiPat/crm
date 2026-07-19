@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { FolderOpen, Link2, Loader2, ShieldAlert, Unplug } from "lucide-react";
+import { FolderOpen, HardDrive, Link2, Loader2, ShieldAlert, Unplug } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ import {
   connectMicrosoftOneDriveOAuth,
   disconnectMicrosoftOneDriveOAuth,
   getClientOneDriveStatus,
+  saveClientOneDriveLocalSyncRoot,
   saveClientOneDriveRootFolder,
   type ClientOneDriveStatus,
 } from "@/lib/api/tauri-client-onedrive";
@@ -39,6 +41,7 @@ export function ClientOneDriveSettingsPanel() {
   const [savingClientId, setSavingClientId] = useState(false);
   const [rootPickerOpen, setRootPickerOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [savingLocalRoot, setSavingLocalRoot] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -117,6 +120,26 @@ export function ClientOneDriveSettingsPanel() {
       toast.success("OneDrive déconnecté");
     } catch (e) {
       toast.error(invokeErrorMessage(e) || "Déconnexion impossible");
+    }
+  };
+
+  const handlePickLocalSyncRoot = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      defaultPath: status?.localSyncRoot ?? "D:\\OneDrive",
+      title: "Dossier OneDrive sur ce PC (ex. D:\\OneDrive ou D:\\OneDrive\\Dossier Clients PRODEMIAL)",
+    });
+    if (!selected || typeof selected !== "string") return;
+    setSavingLocalRoot(true);
+    try {
+      await saveClientOneDriveLocalSyncRoot(selected);
+      await refresh();
+      toast.success("Dossier OneDrive local enregistré");
+    } catch (e) {
+      toast.error(invokeErrorMessage(e) || "Enregistrement impossible");
+    } finally {
+      setSavingLocalRoot(false);
     }
   };
 
@@ -244,12 +267,43 @@ export function ClientOneDriveSettingsPanel() {
             </div>
             {status?.rootFolderName ? (
               <p className="text-sm text-muted-foreground">
-                Racine : <span className="text-foreground font-medium">{status.rootFolderName}</span>
+                Racine cloud :{" "}
+                <span className="text-foreground font-medium">{status.rootFolderName}</span>
               </p>
             ) : status?.connected ? (
               <p className="text-sm text-amber-700">
                 Choisissez le dossier « Dossier clients » sur votre OneDrive.
               </p>
+            ) : null}
+            {status?.connected ? (
+              <div className="rounded-xl border border-border/80 bg-muted/10 px-4 py-3 space-y-2">
+                <p className="text-sm font-medium">Dossier OneDrive sur ce PC</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Pour ouvrir les dossiers clients dans l&apos;Explorateur Windows, indiquez soit la
+                  racine OneDrive (<code className="bg-muted px-1 rounded">D:\OneDrive</code>), soit
+                  directement votre dossier clients (
+                  <code className="bg-muted px-1 rounded">D:\OneDrive\Dossier Clients PRODEMIAL</code>
+                  ). Le CRM détecte aussi la variable Windows <code className="bg-muted px-1 rounded">OneDrive</code>.
+                </p>
+                {status.localSyncRoot ? (
+                  <p className="text-xs font-mono text-foreground break-all">{status.localSyncRoot}</p>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={savingLocalRoot}
+                  onClick={() => void handlePickLocalSyncRoot()}
+                >
+                  {savingLocalRoot ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <HardDrive className="h-4 w-4" />
+                  )}
+                  Choisir le dossier OneDrive local
+                </Button>
+              </div>
             ) : null}
           </div>
         )}

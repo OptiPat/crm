@@ -1,15 +1,17 @@
 use super::Database;
-use rusqlite::{params, Result};
+use rusqlite::{params, OptionalExtension, Result};
 use serde::{Deserialize, Serialize};
 
 pub const SETTING_ROOT_FOLDER_ID: &str = "client_onedrive_root_folder_id";
 pub const SETTING_ROOT_FOLDER_NAME: &str = "client_onedrive_root_folder_name";
+pub const SETTING_LOCAL_SYNC_ROOT: &str = "client_onedrive_local_sync_root";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientOneDriveConfig {
     pub root_folder_id: Option<String>,
     pub root_folder_name: Option<String>,
+    pub local_sync_root: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +52,7 @@ impl Database {
         Ok(ClientOneDriveConfig {
             root_folder_id: self.get_setting(SETTING_ROOT_FOLDER_ID)?,
             root_folder_name: self.get_setting(SETTING_ROOT_FOLDER_NAME)?,
+            local_sync_root: self.get_setting(SETTING_LOCAL_SYNC_ROOT)?,
         })
     }
 
@@ -62,7 +65,15 @@ impl Database {
             SETTING_ROOT_FOLDER_NAME,
             config.root_folder_name.as_deref().unwrap_or(""),
         )?;
+        self.set_setting(
+            SETTING_LOCAL_SYNC_ROOT,
+            config.local_sync_root.as_deref().unwrap_or(""),
+        )?;
         Ok(())
+    }
+
+    pub fn save_client_onedrive_local_sync_root(&self, path: &str) -> Result<()> {
+        self.set_setting(SETTING_LOCAL_SYNC_ROOT, path)
     }
 
     pub fn set_foyer_onedrive_link(
@@ -131,12 +142,15 @@ impl Database {
                 folder_id,
                 folder_name,
                 web_url: f_url,
-                source: if foyer_id.is_some() {
-                    "foyer".into()
-                } else {
-                    "foyer".into()
-                },
+                source: "foyer".into(),
             }));
+        }
+        if let Some(foyer_id) = foyer_id {
+            if let Some(link) =
+                self.resolve_couple_foyer_member_onedrive_link(contact_id, foyer_id)?
+            {
+                return Ok(Some(link));
+            }
         }
         if let (Some(folder_id), Some(folder_name)) = (c_id, c_name) {
             return Ok(Some(ClientOneDriveFolderLink {
@@ -147,6 +161,83 @@ impl Database {
             }));
         }
         Ok(None)
+    }
+
+    /// Dossier OneDrive relié à un autre membre du même foyer couple.
+    fn resolve_couple_foyer_member_onedrive_link(
+        &self,
+        contact_id: i64,
+        foyer_id: i64,
+    ) -> Result<Option<ClientOneDriveFolderLink>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT c2.onedrive_folder_id, c2.onedrive_folder_name, c2.onedrive_web_url
+             FROM contacts c1
+             JOIN foyers f ON f.id = c1.foyer_id AND f.id = ?2 AND f.type_foyer = 'COUPLE'
+             JOIN contacts c2 ON c2.foyer_id = f.id AND c2.id != c1.id
+             WHERE c1.id = ?1
+               AND c2.onedrive_folder_id IS NOT NULL
+               AND c2.onedrive_folder_name IS NOT NULL
+             LIMIT 1",
+        )?;
+        let row = stmt.query_row(params![contact_id, foyer_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        });
+        match row {
+            Ok((folder_id, folder_name, web_url)) => Ok(Some(ClientOneDriveFolderLink {
+                folder_id,
+                folder_name,
+                web_url,
+                source: "foyer".into(),
+            })),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn contacts_share_couple_foyer(
+        &self,
+        contact_id_a: i64,
+        contact_id_b: i64,
+    ) -> Result<bool> {
+        if contact_id_a == contact_id_b {
+            return Ok(true);
+        }
+        let mut stmt = self.conn.prepare(
+            "SELECT 1 FROM contacts ca
+             JOIN contacts cb ON cb.foyer_id = ca.foyer_id AND cb.id = ?2
+             JOIN foyers f ON f.id = ca.foyer_id AND f.type_foyer = 'COUPLE'
+             WHERE ca.id = ?1
+             LIMIT 1",
+        )?;
+        let found = stmt
+            .query_row(params![contact_id_a, contact_id_b], |_| Ok(()))
+            .optional()?;
+        Ok(found.is_some())
+    }
+
+    pub fn contact_belongs_to_foyer(&self, contact_id: i64, foyer_id: i64) -> Result<bool> {
+        let mut stmt = self.conn.prepare(
+            "SELECT 1 FROM contacts WHERE id = ?1 AND foyer_id = ?2 LIMIT 1",
+        )?;
+        let found = stmt
+            .query_row(params![contact_id, foyer_id], |_| Ok(()))
+            .optional()?;
+        Ok(found.is_some())
+    }
+
+    pub fn clear_foyer_members_contact_onedrive_links(&self, foyer_id: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE contacts
+             SET onedrive_folder_id = NULL, onedrive_folder_name = NULL,
+                 onedrive_web_url = NULL, updated_at = unixepoch()
+             WHERE foyer_id = ?1",
+            params![foyer_id],
+        )?;
+        Ok(())
     }
 
     pub fn list_contacts_for_onedrive_matching(
@@ -232,5 +323,118 @@ impl Database {
             }));
         }
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::database::models::{NewContact, NewFoyer};
+    use crate::database::Database;
+
+    fn test_db() -> Database {
+        Database::open_in_memory_for_tests().expect("in-memory db")
+    }
+
+    fn sample_contact(nom: &str, prenom: &str) -> NewContact {
+        NewContact {
+            categorie: "CLIENT".into(),
+            nom: nom.into(),
+            prenom: prenom.into(),
+            statut_suivi: Some("ACTIF".into()),
+            ..Default::default()
+        }
+    }
+
+    fn couple_foyer_with_members(db: &Database) -> (i64, i64, i64) {
+        let foyer = db
+            .create_foyer(NewFoyer {
+                nom: "PERALTA & MARTIN".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                ir_net_a_payer: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+        let flora = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("DECLARANT_1".into()),
+                ..sample_contact("PERALTA", "Flora")
+            })
+            .unwrap();
+        let conjoint = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("DECLARANT_2".into()),
+                ..sample_contact("MARTIN", "Paul")
+            })
+            .unwrap();
+        (foyer.id, flora.id.unwrap(), conjoint.id.unwrap())
+    }
+
+    #[test]
+    fn resolve_contact_inherits_spouse_onedrive_link_in_couple_foyer() {
+        let db = test_db();
+        let (foyer_id, flora_id, conjoint_id) = couple_foyer_with_members(&db);
+        db.set_contact_onedrive_link(
+            flora_id,
+            "folder-abc",
+            "PERALTA Flora",
+            Some("https://example.com/folder-abc"),
+        )
+        .unwrap();
+
+        let link = db
+            .resolve_contact_onedrive_link(conjoint_id)
+            .unwrap()
+            .expect("conjoint doit voir le dossier du foyer");
+
+        assert_eq!(link.folder_id, "folder-abc");
+        assert_eq!(link.source, "foyer");
+
+        db.set_foyer_onedrive_link(
+            foyer_id,
+            "folder-abc",
+            "PERALTA Flora",
+            Some("https://example.com/folder-abc"),
+        )
+        .unwrap();
+        db.clear_foyer_members_contact_onedrive_links(foyer_id)
+            .unwrap();
+
+        let link = db
+            .resolve_contact_onedrive_link(conjoint_id)
+            .unwrap()
+            .expect("lien foyer direct");
+        assert_eq!(link.folder_id, "folder-abc");
+        assert_eq!(link.source, "foyer");
+    }
+
+    #[test]
+    fn contacts_share_couple_foyer_only_for_couple_type() {
+        let db = test_db();
+        let (foyer_id, flora_id, conjoint_id) = couple_foyer_with_members(&db);
+        assert!(db
+            .contacts_share_couple_foyer(flora_id, conjoint_id)
+            .unwrap());
+
+        let solo = db.create_contact(sample_contact("SOLO", "Anne")).unwrap();
+        assert!(!db
+            .contacts_share_couple_foyer(flora_id, solo.id.unwrap())
+            .unwrap());
+
+        db.get_connection()
+            .execute(
+                "UPDATE foyers SET type_foyer = 'FAMILLE' WHERE id = ?1",
+                rusqlite::params![foyer_id],
+            )
+            .unwrap();
+        assert!(!db
+            .contacts_share_couple_foyer(flora_id, conjoint_id)
+            .unwrap());
     }
 }

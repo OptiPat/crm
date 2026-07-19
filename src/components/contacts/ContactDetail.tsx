@@ -802,7 +802,10 @@ export function ContactDetail({
                 <FileUp className="h-4 w-4" />
                 <span className="sr-only md:not-sr-only">Importer</span>
               </Button>
-              <ContactOneDriveActions contactId={contact.id} />
+              <ContactOneDriveActions
+                contactId={contact.id}
+                nestedSheet={nestedInvestissementSheet}
+              />
               <ContactCreateMenu
                 contactId={contact.id}
                 nestedSheet={nestedInvestissementSheet}
