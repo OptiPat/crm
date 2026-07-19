@@ -19,10 +19,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { StatCard } from "@/components/dashboard/StatCard";
 import { DocumentListRow } from "@/components/documents/DocumentListRow";
 import { DocumentPreviewSheet } from "@/components/documents/DocumentPreviewSheet";
-import { DocumentsClientFolderGrid } from "@/components/documents/DocumentsClientFolderGrid";
+import { DocumentsClientFolderList } from "@/components/documents/DocumentsClientFolderList";
+import { DocumentsStatFilterPills } from "@/components/documents/DocumentsStatFilterPills";
 import { DocumentsFolderBreadcrumb } from "@/components/documents/DocumentsFolderBreadcrumb";
 import { VirtualizedDocumentsPortfolio } from "@/components/documents/VirtualizedDocumentsPortfolio";
 import { DocumentUpload } from "@/components/documents/DocumentUpload";
@@ -34,11 +34,9 @@ import {
   Filter,
   X,
   FileText,
-  IdCard,
-  UserX,
-  FolderOpen,
   Cloud,
   Loader2,
+  IdCard,
 } from "lucide-react";
 import {
   getAllDocuments,
@@ -555,77 +553,22 @@ export function Documents({ onNavigate }: DocumentsProps) {
         </Button>
       </div>
 
-      <section className="space-y-2" aria-label="Synthèse documents">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Synthèse — cliquer pour filtrer la liste
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Total documents"
-            value={pageStats.total}
-            description={
-              statFilter == null && !hasActiveFilters
-                ? "Bibliothèque complète"
-                : `${filteredDocuments.length} affiché${filteredDocuments.length > 1 ? "s" : ""} — cliquer pour tout voir`
-            }
-            icon={FolderOpen}
-            accentColor="#dc216e"
-            iconColor="text-rose-700"
-            iconBgColor="bg-rose-50"
-            highlight={statFilter == null && hasActiveFilters}
-            onClick={hasActiveFilters ? resetFilters : undefined}
-          />
-          <StatCard
-            title="RIO / patrimoine"
-            value={pageStats.patrimoine}
-            description="Relevés Stellium, QPI — cliquer pour filtrer"
-            icon={FileText}
-            accentColor="#7C3AED"
-            iconColor="text-violet-600"
-            iconBgColor="bg-violet-50"
-            highlight={statFilter === "patrimoine"}
-            onClick={
-              pageStats.patrimoine > 0 || statFilter === "patrimoine"
-                ? () => toggleStatFilter("patrimoine")
-                : undefined
-            }
-          />
-          <StatCard
-            title="Identité"
-            value={pageStats.identite}
-            description="CNI, passeport — cliquer pour filtrer"
-            icon={IdCard}
-            accentColor="#3B82F6"
-            iconColor="text-blue-600"
-            iconBgColor="bg-blue-50"
-            highlight={statFilter === "identite"}
-            onClick={
-              pageStats.identite > 0 || statFilter === "identite"
-                ? () => toggleStatFilter("identite")
-                : undefined
-            }
-          />
-          <StatCard
-            title="Sans client lié"
-            value={pageStats.sansClient}
-            description="Documents orphelins — cliquer pour filtrer"
-            icon={UserX}
-            accentColor="#C9A227"
-            iconColor="text-amber-600"
-            iconBgColor="bg-amber-50"
-            highlight={statFilter === "sans_client"}
-            onClick={
-              pageStats.sansClient > 0 || statFilter === "sans_client"
-                ? () => toggleStatFilter("sans_client")
-                : undefined
-            }
-          />
-        </div>
-      </section>
-
       <Card className={cn(isDragging && "ring-2 ring-primary/40")}>
         <CardHeader>
           <div className="space-y-4">
+            {librarySource === "crm" && (
+              <DocumentsStatFilterPills
+                total={pageStats.total}
+                filteredCount={filteredDocuments.length}
+                patrimoine={pageStats.patrimoine}
+                identite={pageStats.identite}
+                sansClient={pageStats.sansClient}
+                statFilter={statFilter}
+                hasActiveFilters={hasActiveFilters}
+                onSelectAll={resetFilters}
+                onToggleStat={toggleStatFilter}
+              />
+            )}
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <CardTitle>Bibliothèque de documents</CardTitle>
@@ -880,7 +823,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
               </div>
             </div>
           ) : showFolderGrid ? (
-            <DocumentsClientFolderGrid
+            <DocumentsClientFolderList
               folders={clientFolders}
               onOpenFolder={setOpenedFolderKey}
             />

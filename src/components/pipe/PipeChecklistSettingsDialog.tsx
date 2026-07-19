@@ -378,23 +378,9 @@ export function PipeChecklistSettingsDialog({
     });
   }, []);
 
-  const r3ImmoSectionKey = useMemo(
-    () =>
-      [
-        ...new Set([
-          ...r3ImmoDraft.sections,
-          ...r3ImmoDraft.items.map((item) => item.section),
-          ...R3_IMMO_CHECKLIST_SECTIONS,
-        ]),
-      ]
-        .filter(Boolean)
-        .sort()
-        .join("\0"),
-    [r3ImmoDraft.sections, r3ImmoDraft.items]
-  );
   const r3ImmoSections = useMemo(
     () => sectionOptions(r3ImmoDraft),
-    [r3ImmoSectionKey]
+    [r3ImmoDraft]
   );
 
   useEffect(() => {

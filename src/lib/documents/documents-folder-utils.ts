@@ -2,6 +2,11 @@ import type { Document } from "@/lib/api/tauri-documents";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import { documentTimelineSortDate } from "@/lib/documents/document-display";
 import { getDocumentClientLabel } from "@/lib/documents/documents-portfolio-utils";
+import {
+  computeClientDocumentCompliance,
+  type ClientDocumentCompliance,
+  type ClientDocumentTypeBadge,
+} from "@/lib/documents/client-document-compliance";
 
 export type DocumentFolderKey = `contact:${number}` | "sans-client";
 
@@ -11,6 +16,8 @@ export type ClientDocumentFolder = {
   label: string;
   documentCount: number;
   latestDocumentAt: number;
+  typeBadges: ClientDocumentTypeBadge[];
+  alerts: ClientDocumentCompliance["alerts"];
 };
 
 export function getDocumentFolderKey(doc: Document): DocumentFolderKey {
@@ -38,13 +45,20 @@ export function buildClientDocumentFolders(
   }
 
   return [...byFolder.entries()]
-    .map(([key, { label, contactId, items }]) => ({
-      key,
-      contactId,
-      label,
-      documentCount: items.length,
-      latestDocumentAt: Math.max(...items.map((item) => documentTimelineSortDate(item))),
-    }))
+    .map(([key, { label, contactId, items }]) => {
+      const compliance = computeClientDocumentCompliance(items, {
+        checkMissing: contactId != null,
+      });
+      return {
+        key,
+        contactId,
+        label,
+        documentCount: items.length,
+        latestDocumentAt: Math.max(...items.map((item) => documentTimelineSortDate(item))),
+        typeBadges: compliance.typeBadges,
+        alerts: compliance.alerts,
+      };
+    })
     .sort((a, b) => {
       if (a.key === "sans-client") return 1;
       if (b.key === "sans-client") return -1;
