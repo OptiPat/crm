@@ -541,24 +541,38 @@ export function PipeChecklistSettingsDialog({
     setSyncKey((key) => key + 1);
   };
 
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (!nextOpen) flushBufferedDrafts();
+      onOpenChange(nextOpen);
+    },
+    [flushBufferedDrafts, onOpenChange]
+  );
+
+  const handleTabChange = useCallback(
+    (value: string) => {
+      flushBufferedDrafts();
+      setActiveTab(value as ChecklistSettingsTab);
+      setShowEmailPreview(false);
+    },
+    [flushBufferedDrafts]
+  );
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="flex max-h-[90vh] w-[min(96vw,64rem)] max-w-[min(96vw,64rem)] flex-col overflow-hidden sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle>Checklists documents</DialogTitle>
           <DialogDescription>
             Configurez les pièces demandées aux clients pour chaque étape. Partagé sur cette
-            installation. Les libellés sont enregistrés dans le brouillon quand vous quittez le
-            champ (Tab ou clic ailleurs).
+            installation. Les libellés en cours sont conservés si vous changez d&apos;onglet ou
+            fermez la fenêtre.
           </DialogDescription>
         </DialogHeader>
 
         <Tabs
           value={activeTab}
-          onValueChange={(value) => {
-            setActiveTab(value as ChecklistSettingsTab);
-            setShowEmailPreview(false);
-          }}
+          onValueChange={handleTabChange}
           className="flex-1 min-h-0 flex flex-col"
         >
           <TabsList className="grid w-full grid-cols-4">
@@ -742,7 +756,7 @@ export function PipeChecklistSettingsDialog({
         </Tabs>
 
         <DialogFooter className="gap-2 sm:gap-0 shrink-0">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={saving}>
             Annuler
           </Button>
           <Button type="button" onClick={() => void handleSave()} disabled={saving}>

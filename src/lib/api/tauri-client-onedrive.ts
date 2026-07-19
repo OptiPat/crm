@@ -65,6 +65,11 @@ export async function getClientOneDriveStatus(): Promise<ClientOneDriveStatus> {
   return invoke<ClientOneDriveStatus>("get_client_onedrive_status");
 }
 
+/** Statut local (SQLite + token stocké) — pas de refresh OAuth ni appel Graph. */
+export function getClientOneDriveStatusLocal(): Promise<ClientOneDriveStatus> {
+  return invoke<ClientOneDriveStatus>("get_client_onedrive_status_local");
+}
+
 export async function connectMicrosoftOneDriveOAuth(options?: {
   forceConsent?: boolean;
 }): Promise<ClientOneDriveStatus> {

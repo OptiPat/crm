@@ -228,6 +228,15 @@ pub(crate) fn save_created_link(
 }
 
 #[tauri::command]
+pub fn get_client_onedrive_status_local(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<ClientOneDriveStatus, String> {
+    require_ui_session(&session)?;
+    load_status_without_oauth_refresh(&app)
+}
+
+#[tauri::command]
 pub async fn get_client_onedrive_status(
     app: AppHandle,
     session: State<'_, UiSessionState>,

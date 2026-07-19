@@ -35,7 +35,7 @@ import {
 import { ClientOneDriveBrowsePanel } from "@/components/client-onedrive/ClientOneDriveBrowsePanel";
 import {
   createContactOneDriveFolder,
-  getClientOneDriveStatus,
+  getClientOneDriveStatusLocal,
   getContactOneDriveHealth,
   linkContactOneDriveFolder,
   resolveContactOneDriveFolder,
@@ -44,7 +44,10 @@ import {
   type ClientOneDriveItem,
   type ContactOneDriveHealth,
 } from "@/lib/api/tauri-client-onedrive";
-import { getClientOneDriveStatusCache } from "@/lib/client-onedrive/client-onedrive-cache";
+import {
+  getClientOneDriveStatusCache,
+  setClientOneDriveStatusCache,
+} from "@/lib/client-onedrive/client-onedrive-cache";
 import {
   notifyClientOneDriveChanged,
   subscribeClientOneDriveChanged,
@@ -77,6 +80,21 @@ function healthLabel(health: ContactOneDriveHealth | null): string | null {
   }
 }
 
+function applyLocalOneDriveState(
+  status: Awaited<ReturnType<typeof getClientOneDriveStatusLocal>>,
+  folder: ClientOneDriveFolderLink | null,
+  setters: {
+    setConnected: (v: boolean) => void;
+    setRootFolderId: (v: string | null) => void;
+    setLink: (v: ClientOneDriveFolderLink | null) => void;
+  }
+): void {
+  setters.setConnected(status.connected);
+  setters.setRootFolderId(status.rootFolderId);
+  setters.setLink(folder);
+  setClientOneDriveStatusCache(status);
+}
+
 export function ContactOneDriveActions({
   contactId,
   nestedSheet = false,
@@ -87,7 +105,6 @@ export function ContactOneDriveActions({
   onOpenSettings?: () => void;
 }) {
   const cachedStatus = getClientOneDriveStatusCache();
-  const [loading, setLoading] = useState(!cachedStatus);
   const [busy, setBusy] = useState(false);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [unlinkOpen, setUnlinkOpen] = useState(false);
@@ -98,34 +115,86 @@ export function ContactOneDriveActions({
   );
   const [link, setLink] = useState<ClientOneDriveFolderLink | null>(null);
   const [health, setHealth] = useState<ContactOneDriveHealth | null>(null);
+  const [localLoaded, setLocalLoaded] = useState(!!cachedStatus);
 
-  const refresh = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const [status, folder, healthResult] = await Promise.all([
-        getClientOneDriveStatus(),
-        resolveContactOneDriveFolder(contactId),
-        getContactOneDriveHealth(contactId).catch(() => null),
-      ]);
-      setConnected(status.connected);
-      setRootFolderId(status.rootFolderId);
-      setLink(folder);
-      setHealth(healthResult);
-    } catch (e) {
-      console.error(e);
-      if (!silent) {
-        toast.error(invokeErrorMessage(e) || "OneDrive indisponible");
-      }
-    } finally {
-      setLoading(false);
-    }
+  const refreshLocal = useCallback(async () => {
+    const [status, folder] = await Promise.all([
+      getClientOneDriveStatusLocal(),
+      resolveContactOneDriveFolder(contactId),
+    ]);
+    applyLocalOneDriveState(status, folder, {
+      setConnected,
+      setRootFolderId,
+      setLink,
+    });
+    return { status, folder };
   }, [contactId]);
 
-  useEffect(() => {
-    void refresh(!!cachedStatus);
-  }, [refresh, cachedStatus]);
+  const refreshCloudHealth = useCallback(() => {
+    void getContactOneDriveHealth(contactId)
+      .then(setHealth)
+      .catch(() => setHealth(null));
+  }, [contactId]);
 
-  useEffect(() => subscribeClientOneDriveChanged(() => void refresh(true)), [refresh]);
+  const refresh = useCallback(
+    async (options?: { cloudHealth?: boolean }) => {
+      try {
+        await refreshLocal();
+        if (options?.cloudHealth !== false) {
+          refreshCloudHealth();
+        }
+      } catch (e) {
+        console.error(e);
+        toast.error(invokeErrorMessage(e) || "OneDrive indisponible");
+      }
+    },
+    [refreshLocal, refreshCloudHealth]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const { folder } = await refreshLocal();
+        if (cancelled) return;
+        setLocalLoaded(true);
+        if (folder) {
+          refreshCloudHealth();
+        } else {
+          setHealth(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          console.error(e);
+          setLocalLoaded(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshLocal, refreshCloudHealth]);
+
+  useEffect(
+    () =>
+      subscribeClientOneDriveChanged(() => {
+        void (async () => {
+          try {
+            const { folder } = await refreshLocal();
+            if (folder) {
+              refreshCloudHealth();
+            } else {
+              setHealth(null);
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        })();
+      }),
+    [refreshLocal, refreshCloudHealth]
+  );
 
   const openFolder = async () => {
     if (!link?.folderId) {
@@ -147,7 +216,7 @@ export function ContactOneDriveActions({
       await openClientOneDriveFolderWithFeedback(created.folderId, {
         folderName: created.folderName,
       });
-      void refresh(true);
+      void refresh();
     } catch (e) {
       toast.error(invokeErrorMessage(e) || "Création impossible");
     } finally {
@@ -175,7 +244,7 @@ export function ContactOneDriveActions({
       setLinkPickerOpen(false);
       notifyClientOneDriveChanged();
       toast.success(`Dossier relié : ${item.name}`);
-      void refresh(true);
+      void refresh();
     } catch (e) {
       toast.error(invokeErrorMessage(e) || "Liaison impossible");
     } finally {
@@ -188,10 +257,11 @@ export function ContactOneDriveActions({
     try {
       await unlinkContactOneDriveFolder(contactId);
       setLink(null);
+      setHealth(null);
       setUnlinkOpen(false);
       notifyClientOneDriveChanged();
       toast.success("Lien OneDrive retiré");
-      void refresh(true);
+      void refresh({ cloudHealth: false });
     } catch (e) {
       toast.error(invokeErrorMessage(e) || "Impossible de retirer le lien");
     } finally {
@@ -235,10 +305,11 @@ export function ContactOneDriveActions({
     </Dialog>
   );
 
-  if (loading) {
+  if (!localLoaded) {
     return (
-      <Button type="button" variant="outline" size="sm" disabled>
-        <Loader2 className="h-4 w-4 animate-spin" />
+      <Button type="button" variant="outline" size="sm" disabled className="px-2">
+        <FolderOpen className="h-4 w-4 opacity-40" />
+        <span className="sr-only">Chargement OneDrive</span>
       </Button>
     );
   }

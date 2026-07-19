@@ -78,7 +78,7 @@ import {
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import {
-  getClientOneDriveStatus,
+  getClientOneDriveStatusLocal,
   listContactsOneDriveLinkFlags,
 } from "@/lib/api/tauri-client-onedrive";
 import { subscribeClientOneDriveChanged } from "@/lib/client-onedrive/client-onedrive-events";
@@ -257,7 +257,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
     try {
       const [flags, status] = await Promise.all([
         listContactsOneDriveLinkFlags(),
-        getClientOneDriveStatus(),
+        getClientOneDriveStatusLocal(),
       ]);
       setOnedriveConnected(status.connected);
       setOnedriveLinkByContact(
