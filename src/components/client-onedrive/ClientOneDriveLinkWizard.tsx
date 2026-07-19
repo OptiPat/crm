@@ -9,11 +9,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
 import {
   applyClientOneDriveFolderProposal,
+  linkContactOneDriveFolder,
   proposeClientOneDriveFolderMatches,
   type ClientOneDriveFolderProposal,
 } from "@/lib/api/tauri-client-onedrive";
+import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
 import { notifyClientOneDriveChanged } from "@/lib/client-onedrive/client-onedrive-events";
 import { toast } from "sonner";
@@ -75,6 +78,69 @@ function ProposalRow({
   );
 }
 
+function ManualLinkRow({
+  proposal,
+  contacts,
+  busy,
+  onLinked,
+}: {
+  proposal: ClientOneDriveFolderProposal;
+  contacts: Contact[];
+  busy: boolean;
+  onLinked: (folderId: string) => void;
+}) {
+  const [contactId, setContactId] = useState<number | undefined>();
+  const [linking, setLinking] = useState(false);
+
+  const link = async () => {
+    if (contactId == null) return;
+    setLinking(true);
+    try {
+      await linkContactOneDriveFolder({
+        contactId,
+        folderId: proposal.folderId,
+        folderName: proposal.folderName,
+        webUrl: proposal.webUrl,
+      });
+      onLinked(proposal.folderId);
+      notifyClientOneDriveChanged();
+      toast.success(`Dossier relié : ${proposal.folderName}`);
+    } catch (e) {
+      toast.error(invokeErrorMessage(e) || "Liaison impossible");
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  return (
+    <li className="flex flex-col gap-2 rounded-lg border px-3 py-2 sm:flex-row sm:items-end">
+      <div className="min-w-0 flex-1">
+        <div className="font-medium truncate text-sm">{proposal.folderName}</div>
+        {proposal.label !== proposal.folderName ? (
+          <div className="text-xs text-muted-foreground truncate">{proposal.label}</div>
+        ) : null}
+      </div>
+      <div className="w-full sm:w-72">
+        <ContactPersonSearch
+          contacts={contacts}
+          value={contactId}
+          onChange={setContactId}
+          placeholder="Choisir le contact…"
+        />
+      </div>
+      <Button
+        type="button"
+        size="sm"
+        className="shrink-0"
+        disabled={busy || linking || contactId == null}
+        onClick={() => void link()}
+      >
+        {linking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Relier"}
+      </Button>
+    </li>
+  );
+}
+
 export function ClientOneDriveLinkWizard({
   open,
   onOpenChange,
@@ -86,13 +152,23 @@ export function ClientOneDriveLinkWizard({
 }) {
   const [loading, setLoading] = useState(false);
   const [proposals, setProposals] = useState<ClientOneDriveFolderProposal[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [batchBusy, setBatchBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setProposals(await proposeClientOneDriveFolderMatches());
+      const [nextProposals, allContacts] = await Promise.all([
+        proposeClientOneDriveFolderMatches(),
+        getAllContacts(),
+      ]);
+      setProposals(nextProposals);
+      setContacts(
+        allContacts.filter(
+          (c) => c.categorie === "CLIENT" || c.categorie === "PROSPECT_CLIENT"
+        )
+      );
     } catch (e) {
       toast.error(invokeErrorMessage(e) || "Analyse impossible");
       setProposals([]);
@@ -127,6 +203,11 @@ export function ClientOneDriveLinkWizard({
     [proposals]
   );
 
+  const removeProposal = (folderId: string) => {
+    setProposals((prev) => prev.filter((p) => p.folderId !== folderId));
+    onUpdated?.();
+  };
+
   const apply = async (
     proposal: ClientOneDriveFolderProposal,
     renameTo?: string | null
@@ -136,8 +217,7 @@ export function ClientOneDriveLinkWizard({
       await applyClientOneDriveFolderProposal(proposal, {
         renameTo: renameTo ?? null,
       });
-      setProposals((prev) => prev.filter((p) => p.folderId !== proposal.folderId));
-      onUpdated?.();
+      removeProposal(proposal.folderId);
       notifyClientOneDriveChanged();
       const finalName = renameTo?.trim() || proposal.folderName;
       toast.success(
@@ -150,6 +230,28 @@ export function ClientOneDriveLinkWizard({
     } finally {
       setApplyingId(null);
     }
+  };
+
+  const applyAllExact = async () => {
+    if (exact.length === 0) return;
+    setBatchBusy(true);
+    let ok = 0;
+    for (const proposal of exact) {
+      try {
+        await applyClientOneDriveFolderProposal(proposal, { renameTo: null });
+        ok += 1;
+        setProposals((prev) => prev.filter((p) => p.folderId !== proposal.folderId));
+      } catch (e) {
+        toast.error(`${proposal.folderName} : ${invokeErrorMessage(e)}`);
+        break;
+      }
+    }
+    if (ok > 0) {
+      onUpdated?.();
+      notifyClientOneDriveChanged();
+      toast.success(`${ok} dossier${ok > 1 ? "s" : ""} relié${ok > 1 ? "s" : ""}`);
+    }
+    setBatchBusy(false);
   };
 
   const applyAllRename = async () => {
@@ -231,7 +333,22 @@ export function ClientOneDriveLinkWizard({
 
             {exact.length > 0 ? (
               <section className="space-y-2">
-                <h4 className="text-sm font-medium">Déjà au bon format ({exact.length})</h4>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h4 className="text-sm font-medium">Déjà au bon format ({exact.length})</h4>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={batchBusy || applyingId != null}
+                    onClick={() => void applyAllExact()}
+                  >
+                    {batchBusy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Tout relier"
+                    )}
+                  </Button>
+                </div>
                 <ul className="space-y-2">
                   {exact.map((p) => (
                     <ProposalRow
@@ -249,15 +366,17 @@ export function ClientOneDriveLinkWizard({
             {ambiguous.length > 0 ? (
               <section className="space-y-2">
                 <h4 className="text-sm font-medium text-amber-800">
-                  Homonymes — à traiter manuellement ({ambiguous.length})
+                  Homonymes — choisir le contact ({ambiguous.length})
                 </h4>
-                <ul className="space-y-1 text-sm text-muted-foreground max-h-36 overflow-y-auto">
+                <ul className="space-y-2">
                   {ambiguous.map((p) => (
-                    <li key={p.folderId} className="px-1">
-                      <span className="font-medium text-foreground">{p.folderName}</span>
-                      {" — "}
-                      {p.label}
-                    </li>
+                    <ManualLinkRow
+                      key={p.folderId}
+                      proposal={p}
+                      contacts={contacts}
+                      busy={batchBusy || applyingId != null}
+                      onLinked={removeProposal}
+                    />
                   ))}
                 </ul>
               </section>
@@ -266,13 +385,17 @@ export function ClientOneDriveLinkWizard({
             {unmatched.length > 0 ? (
               <section className="space-y-2">
                 <h4 className="text-sm font-medium text-muted-foreground">
-                  Non reconnus ({unmatched.length})
+                  Non reconnus — choisir le contact ({unmatched.length})
                 </h4>
-                <ul className="space-y-1 text-sm text-muted-foreground max-h-36 overflow-y-auto">
+                <ul className="space-y-2">
                   {unmatched.map((p) => (
-                    <li key={p.folderId} className="truncate px-1">
-                      {p.folderName}
-                    </li>
+                    <ManualLinkRow
+                      key={p.folderId}
+                      proposal={p}
+                      contacts={contacts}
+                      busy={batchBusy || applyingId != null}
+                      onLinked={removeProposal}
+                    />
                   ))}
                 </ul>
               </section>

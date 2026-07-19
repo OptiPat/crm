@@ -805,6 +805,7 @@ export function ContactDetail({
               <ContactOneDriveActions
                 contactId={contact.id}
                 nestedSheet={nestedInvestissementSheet}
+                onOpenSettings={() => onNavigate?.("parametres")}
               />
               <ContactCreateMenu
                 contactId={contact.id}

@@ -78,6 +78,11 @@ import {
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import {
+  getClientOneDriveStatus,
+  listContactsOneDriveLinkFlags,
+} from "@/lib/api/tauri-client-onedrive";
+import { subscribeClientOneDriveChanged } from "@/lib/client-onedrive/client-onedrive-events";
+import {
   armContactInvestissementFormOnDetail,
   consumePendingOpenContactId,
 } from "@/lib/investissements/investissement-navigation";
@@ -151,6 +156,8 @@ export function Contacts({ onNavigate }: ContactsProps) {
     null
   );
   const [alertContactIds, setAlertContactIds] = useState<Set<number>>(new Set());
+  const [onedriveConnected, setOnedriveConnected] = useState(false);
+  const [onedriveLinkByContact, setOnedriveLinkByContact] = useState<Record<number, boolean>>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
   const pendingOpenContactIdRef = useRef<number | null>(null);
   const contactsRefreshGenRef = useRef(0);
@@ -244,6 +251,41 @@ export function Contacts({ onNavigate }: ContactsProps) {
       setAlertContactIds(new Set());
     }
   }, []);
+
+  const loadOneDriveLinkFlags = useCallback(async () => {
+    if (mainTab !== "clients") return;
+    try {
+      const [flags, status] = await Promise.all([
+        listContactsOneDriveLinkFlags(),
+        getClientOneDriveStatus(),
+      ]);
+      setOnedriveConnected(status.connected);
+      setOnedriveLinkByContact(
+        Object.fromEntries(flags.map((flag) => [flag.contactId, flag.linked]))
+      );
+    } catch {
+      setOnedriveConnected(false);
+      setOnedriveLinkByContact({});
+    }
+  }, [mainTab]);
+
+  useEffect(() => {
+    void loadOneDriveLinkFlags();
+  }, [loadOneDriveLinkFlags]);
+
+  useEffect(
+    () => subscribeClientOneDriveChanged(() => void loadOneDriveLinkFlags()),
+    [loadOneDriveLinkFlags]
+  );
+
+  const getOnedriveLinkState = useCallback(
+    (contact: Contact): "linked" | "missing" | null => {
+      if (mainTab !== "clients" || !onedriveConnected || contact.id == null) return null;
+      if (contact.categorie !== "CLIENT" && contact.categorie !== "PROSPECT_CLIENT") return null;
+      return onedriveLinkByContact[contact.id] ? "linked" : "missing";
+    },
+    [mainTab, onedriveConnected, onedriveLinkByContact]
+  );
 
   const loadContacts = useCallback(async (options?: {
     silent?: boolean;
@@ -1101,6 +1143,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
                   selected={selectedContact?.id === contact.id}
                   variant={listRowVariant}
                   nameSize={listRowNameSize}
+                  onedriveLinkState={getOnedriveLinkState(contact)}
                 />
               )}
               className={cn("pr-1", showPinnedSplit && "min-h-0 flex-1")}
@@ -1115,6 +1158,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
                   selected={selectedContact?.id === contact.id}
                   variant={listRowVariant}
                   nameSize={listRowNameSize}
+                  onedriveLinkState={getOnedriveLinkState(contact)}
                 />
               ))}
             </div>

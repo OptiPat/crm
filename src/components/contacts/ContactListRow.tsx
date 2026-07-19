@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { ChevronRight, Home } from "lucide-react";
+import { ChevronRight, Cloud, CloudOff, Home } from "lucide-react";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { ContactEtiquetteDetails } from "@/lib/api/tauri-etiquettes";
 import {
@@ -32,6 +32,7 @@ export type ContactListRowProps = {
   showNonRattache?: boolean;
   showFoyerRole?: boolean;
   nameSize?: "md" | "lg";
+  onedriveLinkState?: "linked" | "missing" | null;
 };
 
 export function ContactListRow({
@@ -46,6 +47,7 @@ export function ContactListRow({
   showNonRattache = false,
   showFoyerRole = false,
   nameSize = "lg",
+  onedriveLinkState = null,
 }: ContactListRowProps) {
   const priorite = getContactPriorite(contact, isFilleulTab);
   const contactEtiquettes =
@@ -163,6 +165,26 @@ export function ContactListRow({
               {getFilleulCategorieLabel(contact.filleul_categorie)}
             </Badge>
           )}
+          {onedriveLinkState === "linked" ? (
+            <Badge
+              variant="outline"
+              className="text-xs gap-1 text-sky-700 border-sky-200 bg-sky-50"
+              title="Dossier OneDrive relié"
+            >
+              <Cloud className="h-3 w-3" />
+              OneDrive
+            </Badge>
+          ) : null}
+          {onedriveLinkState === "missing" ? (
+            <Badge
+              variant="outline"
+              className="text-xs gap-1 text-amber-800 border-amber-200 bg-amber-50"
+              title="Dossier OneDrive non relié"
+            >
+              <CloudOff className="h-3 w-3" />
+              OneDrive
+            </Badge>
+          ) : null}
           {patrimoineBlock}
         </div>
         {contact.id && (

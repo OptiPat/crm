@@ -86,6 +86,39 @@ export async function openClientOneDriveFolder(
   });
 }
 
+export interface ContactOneDriveHealth {
+  status:
+    | "not_connected"
+    | "not_linked"
+    | "not_configured"
+    | "ok"
+    | "cloud_missing"
+    | "out_of_root"
+    | string;
+  folderId: string | null;
+  folderName: string | null;
+  localAvailable: boolean;
+}
+
+export interface ContactOneDriveLinkFlag {
+  contactId: number;
+  linked: boolean;
+}
+
+export async function unlinkContactOneDriveFolder(contactId: number): Promise<void> {
+  await invoke("unlink_contact_onedrive_folder", { contactId });
+}
+
+export async function getContactOneDriveHealth(
+  contactId: number
+): Promise<ContactOneDriveHealth> {
+  return invoke<ContactOneDriveHealth>("get_contact_onedrive_health", { contactId });
+}
+
+export async function listContactsOneDriveLinkFlags(): Promise<ContactOneDriveLinkFlag[]> {
+  return invoke<ContactOneDriveLinkFlag[]>("list_contacts_onedrive_link_flags");
+}
+
 export async function browseClientOneDrive(
   folderId?: string | null
 ): Promise<ClientOneDriveBrowseResult> {

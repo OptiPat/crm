@@ -240,6 +240,94 @@ impl Database {
         Ok(())
     }
 
+    pub fn clear_contact_onedrive_link_by_id(&self, contact_id: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE contacts
+             SET onedrive_folder_id = NULL, onedrive_folder_name = NULL,
+                 onedrive_web_url = NULL, updated_at = unixepoch()
+             WHERE id = ?1",
+            params![contact_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn clear_foyer_onedrive_link(&self, foyer_id: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE foyers
+             SET onedrive_folder_id = NULL, onedrive_folder_name = NULL,
+                 onedrive_web_url = NULL, updated_at = unixepoch()
+             WHERE id = ?1",
+            params![foyer_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn clear_onedrive_link_for_contact(&self, contact_id: i64) -> Result<bool> {
+        if let Some(link) = self.resolve_contact_onedrive_link(contact_id)? {
+            if link.source == "foyer" {
+                let contact = self.get_contact_by_id(contact_id)?;
+                if let Some(foyer_id) = contact.foyer_id {
+                    self.clear_foyer_onedrive_link(foyer_id)?;
+                    self.clear_foyer_members_contact_onedrive_links(foyer_id)?;
+                    return Ok(true);
+                }
+            }
+            if self
+                .conn
+                .query_row::<Option<String>, _, _>(
+                    "SELECT onedrive_folder_id FROM contacts WHERE id = ?1",
+                    params![contact_id],
+                    |row| row.get(0),
+                )?
+                .is_some()
+            {
+                self.clear_contact_onedrive_link_by_id(contact_id)?;
+                return Ok(true);
+            }
+            if let Some(foyer_id) = self.get_contact_by_id(contact_id)?.foyer_id {
+                let spouse_id: Option<i64> = self
+                    .conn
+                    .query_row(
+                        "SELECT id FROM contacts
+                         WHERE foyer_id = ?1 AND id != ?2 AND onedrive_folder_id IS NOT NULL
+                         LIMIT 1",
+                        params![foyer_id, contact_id],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                if let Some(spouse_id) = spouse_id {
+                    self.clear_contact_onedrive_link_by_id(spouse_id)?;
+                    return Ok(true);
+                }
+            }
+            let _ = link;
+        }
+        Ok(false)
+    }
+
+    pub fn list_client_onedrive_link_flags(&self) -> Result<Vec<(i64, bool)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT c.id,
+                    CASE
+                      WHEN c.onedrive_folder_id IS NOT NULL THEN 1
+                      WHEN f.onedrive_folder_id IS NOT NULL THEN 1
+                      WHEN EXISTS (
+                        SELECT 1 FROM contacts c2
+                        JOIN foyers f2 ON f2.id = c2.foyer_id AND f2.type_foyer = 'COUPLE'
+                        WHERE c2.foyer_id = c.foyer_id
+                          AND c2.id != c.id
+                          AND c2.onedrive_folder_id IS NOT NULL
+                      ) THEN 1
+                      ELSE 0
+                    END AS linked
+             FROM contacts c
+             LEFT JOIN foyers f ON f.id = c.foyer_id
+             WHERE c.categorie IN ('CLIENT', 'PROSPECT_CLIENT')",
+        )?;
+        let rows = stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)? == 1)))?;
+        rows.collect()
+    }
+
     pub fn list_contacts_for_onedrive_matching(
         &self,
     ) -> Result<Vec<(i64, String, String, Option<i64>)>> {

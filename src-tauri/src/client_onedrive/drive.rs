@@ -193,6 +193,29 @@ pub fn get_drive_item_web_url(app: &AppHandle, item_id: &str) -> Result<Option<S
         .map(str::to_string))
 }
 
+pub fn verify_onedrive_folder_health(
+    app: &AppHandle,
+    folder_id: &str,
+    root_folder_id: &str,
+) -> Result<(), String> {
+    let token = onedrive_token(app)?;
+    let client = reqwest::blocking::Client::new();
+    let url = format!("https://graph.microsoft.com/v1.0/me/drive/items/{folder_id}?$select=id");
+    let res = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .map_err(|e| e.to_string())?;
+    if res.status() == reqwest::StatusCode::NOT_FOUND {
+        return Err("cloud_missing".into());
+    }
+    if !res.status().is_success() {
+        return Err(format!("OneDrive API: {}", res.text().unwrap_or_default()));
+    }
+    ensure_folder_under_client_root(app, folder_id, root_folder_id)?;
+    Ok(())
+}
+
 pub fn browse_client_onedrive_folder(
     app: &AppHandle,
     folder_id: Option<&str>,

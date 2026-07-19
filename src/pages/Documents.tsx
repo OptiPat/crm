@@ -37,6 +37,8 @@ import {
   IdCard,
   UserX,
   FolderOpen,
+  Cloud,
+  Loader2,
 } from "lucide-react";
 import {
   getAllDocuments,
@@ -100,8 +102,14 @@ import {
 import type { ExtractedData } from "@/lib/pdf";
 import { cn } from "@/lib/utils";
 import { DocumentsOneDriveLibrary } from "@/components/documents/DocumentsOneDriveLibrary";
-import { getClientOneDriveStatus } from "@/lib/api/tauri-client-onedrive";
+import {
+  getClientOneDriveStatus,
+  resolveContactOneDriveFolder,
+  type ClientOneDriveFolderLink,
+} from "@/lib/api/tauri-client-onedrive";
 import { setClientOneDriveStatusCache } from "@/lib/client-onedrive/client-onedrive-cache";
+import { subscribeClientOneDriveChanged } from "@/lib/client-onedrive/client-onedrive-events";
+import { openClientOneDriveFolderWithFeedback } from "@/lib/client-onedrive/open-client-onedrive-folder";
 
 type DocumentsProps = {
   onNavigate?: (page: string) => void;
@@ -132,6 +140,10 @@ export function Documents({ onNavigate }: DocumentsProps) {
   const [rioReimportDoc, setRioReimportDoc] = useState<Document | null>(null);
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
   const [librarySource, setLibrarySource] = useState<"crm" | "onedrive">("crm");
+  const [contactOnedriveLink, setContactOnedriveLink] =
+    useState<ClientOneDriveFolderLink | null>(null);
+  const [contactOnedriveLinkLoading, setContactOnedriveLinkLoading] = useState(false);
+  const [openingOnedriveFolder, setOpeningOnedriveFolder] = useState(false);
 
   const openedFolderContactId = useMemo(() => {
     if (!openedFolderKey?.startsWith("contact:")) return null;
@@ -207,6 +219,49 @@ export function Documents({ onNavigate }: DocumentsProps) {
       .then(setClientOneDriveStatusCache)
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (openedFolderContactId == null) {
+      setContactOnedriveLink(null);
+      return;
+    }
+    let cancelled = false;
+    setContactOnedriveLinkLoading(true);
+    void resolveContactOneDriveFolder(openedFolderContactId)
+      .then((link) => {
+        if (!cancelled) setContactOnedriveLink(link);
+      })
+      .catch(() => {
+        if (!cancelled) setContactOnedriveLink(null);
+      })
+      .finally(() => {
+        if (!cancelled) setContactOnedriveLinkLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openedFolderContactId]);
+
+  useEffect(() => {
+    return subscribeClientOneDriveChanged(() => {
+      if (openedFolderContactId == null) return;
+      void resolveContactOneDriveFolder(openedFolderContactId)
+        .then(setContactOnedriveLink)
+        .catch(() => setContactOnedriveLink(null));
+    });
+  }, [openedFolderContactId]);
+
+  const openFilteredContactOnedriveFolder = useCallback(async () => {
+    if (!contactOnedriveLink) return;
+    setOpeningOnedriveFolder(true);
+    try {
+      await openClientOneDriveFolderWithFeedback(contactOnedriveLink.folderId, {
+        folderName: contactOnedriveLink.folderName,
+      });
+    } finally {
+      setOpeningOnedriveFolder(false);
+    }
+  }, [contactOnedriveLink]);
 
   useAppNavigationListener((detail) => {
     if (detail.type !== "documents") return;
@@ -736,6 +791,30 @@ export function Documents({ onNavigate }: DocumentsProps) {
                     Voir la fiche
                   </Button>
                 )}
+                {openedFolderContactId != null && contactOnedriveLink && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    disabled={openingOnedriveFolder}
+                    onClick={() => void openFilteredContactOnedriveFolder()}
+                  >
+                    {openingOnedriveFolder ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Cloud className="h-3.5 w-3.5" />
+                    )}
+                    Ouvrir dossier OneDrive
+                  </Button>
+                )}
+                {openedFolderContactId != null &&
+                  !contactOnedriveLinkLoading &&
+                  !contactOnedriveLink && (
+                    <span className="text-xs text-muted-foreground">
+                      Aucun dossier OneDrive relié
+                    </span>
+                  )}
                 <Button
                   type="button"
                   variant="ghost"

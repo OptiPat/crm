@@ -2,7 +2,7 @@ use super::drive::{
     browse_client_onedrive_folder, create_client_onedrive_folder, ensure_folder_under_client_root,
     get_drive_item_relative_path, get_drive_item_web_url, list_client_onedrive_child_folders,
     rename_client_onedrive_folder, resolve_microsoft_onedrive_connection,
-    ClientOneDriveBrowseResult, ClientOneDriveItem,
+    verify_onedrive_folder_health, ClientOneDriveBrowseResult, ClientOneDriveItem,
 };
 use super::local_sync::{resolve_local_onedrive_folder, LocalFolderResolveInput};
 use super::matching::{format_contact_folder_name, propose_folder_matches};
@@ -36,6 +36,22 @@ pub struct ClientOneDriveStatus {
 pub struct OpenClientOneDriveFolderResult {
     pub mode: String,
     pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContactOneDriveHealth {
+    pub status: String,
+    pub folder_id: Option<String>,
+    pub folder_name: Option<String>,
+    pub local_available: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContactOneDriveLinkFlag {
+    pub contact_id: i64,
+    pub linked: bool,
 }
 
 async fn run_onedrive_blocking<T, F>(f: F) -> Result<T, String>
@@ -324,6 +340,110 @@ pub async fn open_client_onedrive_folder(
             &folder_id,
             folder_name.as_deref(),
         )
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn unlink_contact_onedrive_folder(
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+    contact_id: i64,
+) -> Result<(), String> {
+    require_ui_session(&session)?;
+    let database = db.lock().unwrap();
+    let database = database.as_ref().ok_or("Database not initialized")?;
+    if database
+        .clear_onedrive_link_for_contact(contact_id)
+        .map_err(|e| e.to_string())?
+    {
+        return Ok(());
+    }
+    Err("Aucun dossier OneDrive relié à ce contact.".into())
+}
+
+#[tauri::command]
+pub fn list_contacts_onedrive_link_flags(
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+) -> Result<Vec<ContactOneDriveLinkFlag>, String> {
+    require_ui_session(&session)?;
+    let database = db.lock().unwrap();
+    let database = database.as_ref().ok_or("Database not initialized")?;
+    Ok(database
+        .list_client_onedrive_link_flags()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(contact_id, linked)| ContactOneDriveLinkFlag { contact_id, linked })
+        .collect())
+}
+
+#[tauri::command]
+pub async fn get_contact_onedrive_health(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+    contact_id: i64,
+) -> Result<ContactOneDriveHealth, String> {
+    require_ui_session(&session)?;
+    run_onedrive_blocking(move || {
+        if resolve_microsoft_onedrive_connection(&app)?.is_none() {
+            return Ok(ContactOneDriveHealth {
+                status: "not_connected".into(),
+                folder_id: None,
+                folder_name: None,
+                local_available: false,
+            });
+        }
+        let db = app.state::<DbState>();
+        let database = db.inner().lock().unwrap();
+        let database = database.as_ref().ok_or("Database not initialized")?;
+        let link = database
+            .resolve_contact_onedrive_link(contact_id)
+            .map_err(|e| e.to_string())?;
+        let Some(link) = link else {
+            return Ok(ContactOneDriveHealth {
+                status: "not_linked".into(),
+                folder_id: None,
+                folder_name: None,
+                local_available: false,
+            });
+        };
+        let config = database
+            .get_client_onedrive_config()
+            .map_err(|e| e.to_string())?;
+        let Some(root_id) = config
+            .root_folder_id
+            .as_ref()
+            .filter(|s| !s.trim().is_empty())
+        else {
+            return Ok(ContactOneDriveHealth {
+                status: "not_configured".into(),
+                folder_id: Some(link.folder_id.clone()),
+                folder_name: Some(link.folder_name.clone()),
+                local_available: false,
+            });
+        };
+        let status = match verify_onedrive_folder_health(&app, &link.folder_id, root_id) {
+            Ok(()) => "ok",
+            Err(code) if code == "cloud_missing" => "cloud_missing",
+            Err(_) => "out_of_root",
+        };
+        let graph_relative = get_drive_item_relative_path(&app, &link.folder_id).ok();
+        let local_available = super::local_sync::resolve_local_onedrive_folder(
+            super::local_sync::LocalFolderResolveInput {
+                configured_local: config.local_sync_root.as_deref(),
+                cloud_root_name: config.root_folder_name.as_deref(),
+                graph_relative: graph_relative.as_deref(),
+                folder_name: Some(link.folder_name.as_str()),
+            },
+        )
+        .is_some();
+        Ok(ContactOneDriveHealth {
+            status: status.into(),
+            folder_id: Some(link.folder_id),
+            folder_name: Some(link.folder_name),
+            local_available,
+        })
     })
     .await
 }
