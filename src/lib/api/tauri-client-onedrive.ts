@@ -135,13 +135,17 @@ export async function resolveContactOneDriveFolder(
   });
 }
 
+export interface LinkContactOneDriveFolderResult {
+  sharedWithLabels: string[];
+}
+
 export async function linkContactOneDriveFolder(input: {
   contactId: number;
   folderId: string;
   folderName: string;
   webUrl?: string | null;
-}): Promise<void> {
-  await invoke("link_contact_onedrive_folder", {
+}): Promise<LinkContactOneDriveFolderResult> {
+  return invoke<LinkContactOneDriveFolderResult>("link_contact_onedrive_folder", {
     contactId: input.contactId,
     folderId: input.folderId,
     folderName: input.folderName,

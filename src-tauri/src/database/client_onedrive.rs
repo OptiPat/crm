@@ -1,6 +1,7 @@
 use super::Database;
 use rusqlite::{params, OptionalExtension, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 pub const SETTING_ROOT_FOLDER_ID: &str = "client_onedrive_root_folder_id";
 pub const SETTING_ROOT_FOLDER_NAME: &str = "client_onedrive_root_folder_name";
@@ -38,13 +39,6 @@ pub struct ClientOneDriveFolderProposal {
     pub match_kind: String,
     /// Nom cible convention CRM (renommage OneDrive proposé).
     pub suggested_folder_name: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct OneDriveFolderOwner {
-    pub contact_id: Option<i64>,
-    pub foyer_id: Option<i64>,
-    pub label: String,
 }
 
 impl Database {
@@ -191,42 +185,11 @@ impl Database {
                 folder_id,
                 folder_name,
                 web_url,
-                source: "foyer".into(),
+                source: "inherited".into(),
             })),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e),
         }
-    }
-
-    pub fn contacts_share_couple_foyer(
-        &self,
-        contact_id_a: i64,
-        contact_id_b: i64,
-    ) -> Result<bool> {
-        if contact_id_a == contact_id_b {
-            return Ok(true);
-        }
-        let mut stmt = self.conn.prepare(
-            "SELECT 1 FROM contacts ca
-             JOIN contacts cb ON cb.foyer_id = ca.foyer_id AND cb.id = ?2
-             JOIN foyers f ON f.id = ca.foyer_id AND f.type_foyer = 'COUPLE'
-             WHERE ca.id = ?1
-             LIMIT 1",
-        )?;
-        let found = stmt
-            .query_row(params![contact_id_a, contact_id_b], |_| Ok(()))
-            .optional()?;
-        Ok(found.is_some())
-    }
-
-    pub fn contact_belongs_to_foyer(&self, contact_id: i64, foyer_id: i64) -> Result<bool> {
-        let mut stmt = self.conn.prepare(
-            "SELECT 1 FROM contacts WHERE id = ?1 AND foyer_id = ?2 LIMIT 1",
-        )?;
-        let found = stmt
-            .query_row(params![contact_id, foyer_id], |_| Ok(()))
-            .optional()?;
-        Ok(found.is_some())
     }
 
     pub fn clear_foyer_members_contact_onedrive_links(&self, foyer_id: i64) -> Result<()> {
@@ -263,46 +226,96 @@ impl Database {
     }
 
     pub fn clear_onedrive_link_for_contact(&self, contact_id: i64) -> Result<bool> {
-        if let Some(link) = self.resolve_contact_onedrive_link(contact_id)? {
-            if link.source == "foyer" {
-                let contact = self.get_contact_by_id(contact_id)?;
-                if let Some(foyer_id) = contact.foyer_id {
-                    self.clear_foyer_onedrive_link(foyer_id)?;
-                    self.clear_foyer_members_contact_onedrive_links(foyer_id)?;
-                    return Ok(true);
-                }
-            }
-            if self
+        let has_own_link = self
+            .conn
+            .query_row::<i64, _, _>(
+                "SELECT 1 FROM contacts WHERE id = ?1 AND onedrive_folder_id IS NOT NULL LIMIT 1",
+                params![contact_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .is_some();
+        if has_own_link {
+            self.clear_contact_onedrive_link_by_id(contact_id)?;
+            return Ok(true);
+        }
+
+        let contact = self.get_contact_by_id(contact_id)?;
+        if let Some(foyer_id) = contact.foyer_id {
+            let foyer_has_link = self
                 .conn
-                .query_row::<Option<String>, _, _>(
-                    "SELECT onedrive_folder_id FROM contacts WHERE id = ?1",
-                    params![contact_id],
+                .query_row::<i64, _, _>(
+                    "SELECT 1 FROM foyers WHERE id = ?1 AND onedrive_folder_id IS NOT NULL LIMIT 1",
+                    params![foyer_id],
                     |row| row.get(0),
-                )?
-                .is_some()
-            {
-                self.clear_contact_onedrive_link_by_id(contact_id)?;
+                )
+                .optional()?
+                .is_some();
+            if foyer_has_link {
+                self.clear_foyer_onedrive_link(foyer_id)?;
+                self.clear_foyer_members_contact_onedrive_links(foyer_id)?;
                 return Ok(true);
             }
-            if let Some(foyer_id) = self.get_contact_by_id(contact_id)?.foyer_id {
-                let spouse_id: Option<i64> = self
-                    .conn
-                    .query_row(
-                        "SELECT id FROM contacts
-                         WHERE foyer_id = ?1 AND id != ?2 AND onedrive_folder_id IS NOT NULL
-                         LIMIT 1",
-                        params![foyer_id, contact_id],
-                        |row| row.get(0),
-                    )
-                    .optional()?;
-                if let Some(spouse_id) = spouse_id {
-                    self.clear_contact_onedrive_link_by_id(spouse_id)?;
-                    return Ok(true);
-                }
-            }
-            let _ = link;
         }
+
         Ok(false)
+    }
+
+    pub fn list_contact_onedrive_folder_ids(&self) -> Result<HashMap<i64, String>> {
+        let mut map = HashMap::new();
+        let mut stmt = self.conn.prepare(
+            "SELECT id, onedrive_folder_id FROM contacts WHERE onedrive_folder_id IS NOT NULL",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (contact_id, folder_id) = row?;
+            map.insert(contact_id, folder_id);
+        }
+        Ok(map)
+    }
+
+    pub fn list_onedrive_folder_contact_labels_excluding(
+        &self,
+        folder_id: &str,
+        exclude_contact_id: i64,
+    ) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT nom, prenom FROM contacts
+             WHERE onedrive_folder_id = ?1 AND id != ?2
+             ORDER BY nom COLLATE NOCASE, prenom COLLATE NOCASE",
+        )?;
+        let rows = stmt.query_map(params![folder_id, exclude_contact_id], |row| {
+            let nom: String = row.get(0)?;
+            let prenom: String = row.get(1)?;
+            Ok(format!("{nom} {prenom}"))
+        })?;
+        rows.collect()
+    }
+
+    pub fn propagate_onedrive_folder_link_rename(
+        &self,
+        old_folder_id: &str,
+        new_folder_id: &str,
+        folder_name: &str,
+        web_url: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE contacts
+             SET onedrive_folder_id = ?1, onedrive_folder_name = ?2,
+                 onedrive_web_url = ?3, updated_at = unixepoch()
+             WHERE onedrive_folder_id = ?4",
+            params![new_folder_id, folder_name, web_url, old_folder_id],
+        )?;
+        self.conn.execute(
+            "UPDATE foyers
+             SET onedrive_folder_id = ?1, onedrive_folder_name = ?2,
+                 onedrive_web_url = ?3, updated_at = unixepoch()
+             WHERE onedrive_folder_id = ?4",
+            params![new_folder_id, folder_name, web_url, old_folder_id],
+        )?;
+        Ok(())
     }
 
     pub fn list_client_onedrive_link_flags(&self) -> Result<Vec<(i64, bool)>> {
@@ -381,37 +394,6 @@ impl Database {
         }
         Ok(ids)
     }
-
-    pub fn find_onedrive_folder_owner(
-        &self,
-        folder_id: &str,
-    ) -> Result<Option<OneDriveFolderOwner>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, nom, prenom FROM contacts WHERE onedrive_folder_id = ?1 LIMIT 1",
-        )?;
-        if let Ok((id, nom, prenom)) = stmt.query_row(params![folder_id], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
-        }) {
-            return Ok(Some(OneDriveFolderOwner {
-                contact_id: Some(id),
-                foyer_id: None,
-                label: format!("{nom} {prenom}"),
-            }));
-        }
-        let mut stmt = self.conn.prepare(
-            "SELECT id, nom FROM foyers WHERE onedrive_folder_id = ?1 LIMIT 1",
-        )?;
-        if let Ok((id, nom)) = stmt.query_row(params![folder_id], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-        }) {
-            return Ok(Some(OneDriveFolderOwner {
-                contact_id: None,
-                foyer_id: Some(id),
-                label: nom,
-            }));
-        }
-        Ok(None)
-    }
 }
 
 #[cfg(test)]
@@ -482,7 +464,7 @@ mod tests {
             .expect("conjoint doit voir le dossier du foyer");
 
         assert_eq!(link.folder_id, "folder-abc");
-        assert_eq!(link.source, "foyer");
+        assert_eq!(link.source, "inherited");
 
         db.set_foyer_onedrive_link(
             foyer_id,
@@ -503,26 +485,113 @@ mod tests {
     }
 
     #[test]
-    fn contacts_share_couple_foyer_only_for_couple_type() {
+    fn multiple_contacts_can_share_same_onedrive_folder() {
         let db = test_db();
-        let (foyer_id, flora_id, conjoint_id) = couple_foyer_with_members(&db);
-        assert!(db
-            .contacts_share_couple_foyer(flora_id, conjoint_id)
-            .unwrap());
+        let parent = db.create_contact(sample_contact("GUETTE", "Julie")).unwrap();
+        let child = db.create_contact(sample_contact("GUETTE", "Emma")).unwrap();
+        let parent_id = parent.id.unwrap();
+        let child_id = child.id.unwrap();
 
-        let solo = db.create_contact(sample_contact("SOLO", "Anne")).unwrap();
-        assert!(!db
-            .contacts_share_couple_foyer(flora_id, solo.id.unwrap())
-            .unwrap());
+        db.set_contact_onedrive_link(
+            parent_id,
+            "folder-shared",
+            "GUETTE Julie",
+            Some("https://example.com/shared"),
+        )
+        .unwrap();
+        db.set_contact_onedrive_link(
+            child_id,
+            "folder-shared",
+            "GUETTE Julie",
+            Some("https://example.com/shared"),
+        )
+        .unwrap();
 
-        db.get_connection()
-            .execute(
-                "UPDATE foyers SET type_foyer = 'FAMILLE' WHERE id = ?1",
-                rusqlite::params![foyer_id],
-            )
+        let parent_link = db
+            .resolve_contact_onedrive_link(parent_id)
+            .unwrap()
+            .expect("parent linked");
+        let child_link = db
+            .resolve_contact_onedrive_link(child_id)
+            .unwrap()
+            .expect("child linked");
+        assert_eq!(parent_link.folder_id, "folder-shared");
+        assert_eq!(child_link.folder_id, "folder-shared");
+
+        let flags = db.list_client_onedrive_link_flags().unwrap();
+        assert!(flags.iter().any(|(id, linked)| *id == parent_id && *linked));
+        assert!(flags.iter().any(|(id, linked)| *id == child_id && *linked));
+    }
+
+    #[test]
+    fn unlink_one_of_shared_contacts_keeps_other() {
+        let db = test_db();
+        let parent = db.create_contact(sample_contact("GUETTE", "Julie")).unwrap();
+        let child = db.create_contact(sample_contact("GUETTE", "Emma")).unwrap();
+        let parent_id = parent.id.unwrap();
+        let child_id = child.id.unwrap();
+        db.set_contact_onedrive_link(parent_id, "folder-shared", "GUETTE Julie", None)
             .unwrap();
-        assert!(!db
-            .contacts_share_couple_foyer(flora_id, conjoint_id)
-            .unwrap());
+        db.set_contact_onedrive_link(child_id, "folder-shared", "GUETTE Julie", None)
+            .unwrap();
+
+        assert!(db.clear_onedrive_link_for_contact(child_id).unwrap());
+
+        assert!(db
+            .resolve_contact_onedrive_link(parent_id)
+            .unwrap()
+            .is_some());
+        assert!(db
+            .resolve_contact_onedrive_link(child_id)
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn unlink_inherited_spouse_link_does_not_clear_spouse() {
+        let db = test_db();
+        let (_foyer_id, flora_id, conjoint_id) = couple_foyer_with_members(&db);
+        db.set_contact_onedrive_link(flora_id, "folder-abc", "PERALTA Flora", None)
+            .unwrap();
+
+        assert!(!db.clear_onedrive_link_for_contact(conjoint_id).unwrap());
+        assert!(db
+            .resolve_contact_onedrive_link(flora_id)
+            .unwrap()
+            .is_some());
+        assert!(db
+            .resolve_contact_onedrive_link(conjoint_id)
+            .unwrap()
+            .is_some());
+    }
+
+    #[test]
+    fn propagate_onedrive_folder_link_rename_updates_all_contacts() {
+        let db = test_db();
+        let parent = db.create_contact(sample_contact("GUETTE", "Julie")).unwrap();
+        let child = db.create_contact(sample_contact("GUETTE", "Emma")).unwrap();
+        let parent_id = parent.id.unwrap();
+        let child_id = child.id.unwrap();
+        db.set_contact_onedrive_link(parent_id, "folder-old", "GUETTE Julie", None)
+            .unwrap();
+        db.set_contact_onedrive_link(child_id, "folder-old", "GUETTE Julie", None)
+            .unwrap();
+
+        db.propagate_onedrive_folder_link_rename(
+            "folder-old",
+            "folder-new",
+            "GUETTE Julie",
+            Some("https://example.com/new"),
+        )
+        .unwrap();
+
+        for contact_id in [parent_id, child_id] {
+            let link = db
+                .resolve_contact_onedrive_link(contact_id)
+                .unwrap()
+                .expect("contact still linked");
+            assert_eq!(link.folder_id, "folder-new");
+            assert_eq!(link.folder_name, "GUETTE Julie");
+        }
     }
 }

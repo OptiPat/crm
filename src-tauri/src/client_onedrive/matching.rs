@@ -62,6 +62,10 @@ fn resolve_rename_against_siblings(
     }) else {
         return;
     };
+    // Ne pas basculer vers un dossier frère si le dossier source est déjà partagé.
+    if linked_ids.contains(source_folder_id) {
+        return;
+    }
     if linked_ids.contains(existing_id) {
         return;
     }
@@ -132,11 +136,24 @@ struct SurnameTarget {
     source: String,
 }
 
+fn proposal_already_linked_to_target(
+    proposal: &ClientOneDriveFolderProposal,
+    contact_folder_ids: &HashMap<i64, String>,
+) -> bool {
+    if let Some(contact_id) = proposal.contact_id {
+        return contact_folder_ids
+            .get(&contact_id)
+            .is_some_and(|folder_id| folder_id == &proposal.folder_id);
+    }
+    false
+}
+
 pub fn propose_folder_matches(
     folders: &[(String, String, Option<String>)], // id, name, web_url
     contacts: &[(i64, String, String, Option<i64>)],
     foyers: &[(i64, String, Option<String>, Option<String>, Option<String>)],
     linked_ids: &HashSet<String>,
+    contact_folder_ids: &HashMap<i64, String>,
 ) -> Vec<ClientOneDriveFolderProposal> {
     let mut contact_map: HashMap<String, ExactTarget> = HashMap::new();
     for (id, nom, prenom, _) in contacts {
@@ -214,15 +231,13 @@ pub fn propose_folder_matches(
 
     let mut proposals = Vec::new();
     for (folder_id, folder_name, web_url) in folders {
-        if linked_ids.contains(folder_id) {
-            continue;
-        }
-
         if let Some(mut proposal) =
             match_exact(folder_id, folder_name, web_url, &contact_map, &foyer_map)
         {
             resolve_rename_against_siblings(&mut proposal, folder_id, folders, linked_ids);
-            proposals.push(proposal);
+            if !proposal_already_linked_to_target(&proposal, contact_folder_ids) {
+                proposals.push(proposal);
+            }
             continue;
         }
 
@@ -235,7 +250,9 @@ pub fn propose_folder_matches(
                 &surname_foyers,
             ) {
                 resolve_rename_against_siblings(&mut proposal, folder_id, folders, linked_ids);
-                proposals.push(proposal);
+                if !proposal_already_linked_to_target(&proposal, contact_folder_ids) {
+                    proposals.push(proposal);
+                }
                 continue;
             }
         }
@@ -416,7 +433,7 @@ mod tests {
             Some("https://example.com".into()),
         )];
         let contacts = vec![(1, "DUPONT".into(), "Jean".into(), None)];
-        let proposals = propose_folder_matches(&folders, &contacts, &[], &HashSet::new());
+        let proposals = propose_folder_matches(&folders, &contacts, &[], &HashSet::new(), &HashMap::new());
         assert_eq!(proposals.len(), 1);
         assert_eq!(proposals[0].match_kind, "surname");
         assert_eq!(proposals[0].confidence, "medium");
@@ -431,7 +448,7 @@ mod tests {
             (1, "DUPONT".into(), "Jean".into(), None),
             (2, "DUPONT".into(), "Marie".into(), None),
         ];
-        let proposals = propose_folder_matches(&folders, &contacts, &[], &HashSet::new());
+        let proposals = propose_folder_matches(&folders, &contacts, &[], &HashSet::new(), &HashMap::new());
         assert_eq!(proposals[0].confidence, "ambiguous");
         assert!(proposals[0].contact_id.is_none());
     }
@@ -440,7 +457,7 @@ mod tests {
     fn exact_match_skips_surname() {
         let folders = vec![("f1".into(), "DUPONT Jean".into(), None)];
         let contacts = vec![(1, "DUPONT".into(), "Jean".into(), None)];
-        let proposals = propose_folder_matches(&folders, &contacts, &[], &HashSet::new());
+        let proposals = propose_folder_matches(&folders, &contacts, &[], &HashSet::new(), &HashMap::new());
         assert_eq!(proposals[0].match_kind, "exact");
         assert_eq!(proposals[0].confidence, "high");
         assert!(proposals[0].suggested_folder_name.is_none());
@@ -450,7 +467,7 @@ mod tests {
     fn proposes_rename_for_prenom_nom_order() {
         let folders = vec![("f1".into(), "Tifene MERIAU".into(), None)];
         let contacts = vec![(1, "MERIAU".into(), "Tifène".into(), None)];
-        let proposals = propose_folder_matches(&folders, &contacts, &[], &HashSet::new());
+        let proposals = propose_folder_matches(&folders, &contacts, &[], &HashSet::new(), &HashMap::new());
         assert_eq!(proposals.len(), 1);
         assert_eq!(proposals[0].match_kind, "rename");
         assert_eq!(proposals[0].confidence, "medium");
@@ -468,7 +485,7 @@ mod tests {
             ("f2".into(), "MERIAU Tifène".into(), None),
         ];
         let contacts = vec![(1, "MERIAU".into(), "Tifène".into(), None)];
-        let proposals = propose_folder_matches(&folders, &contacts, &[], &HashSet::new());
+        let proposals = propose_folder_matches(&folders, &contacts, &[], &HashSet::new(), &HashMap::new());
         let linked: Vec<_> = proposals
             .iter()
             .filter(|p| p.contact_id == Some(1))
@@ -477,5 +494,30 @@ mod tests {
         assert_eq!(linked[0].folder_id, "f2");
         assert!(linked[0].suggested_folder_name.is_none());
         assert_eq!(linked[0].match_kind, "existing");
+    }
+
+    #[test]
+    fn skips_proposal_when_contact_already_linked_to_folder() {
+        let folders = vec![("f1".into(), "DUPONT Jean".into(), None)];
+        let contacts = vec![(1, "DUPONT".into(), "Jean".into(), None)];
+        let mut contact_links = HashMap::new();
+        contact_links.insert(1, "f1".into());
+        let linked: HashSet<String> = ["f1".into()].into_iter().collect();
+        let proposals = propose_folder_matches(&folders, &contacts, &[], &linked, &contact_links);
+        assert!(proposals.is_empty());
+    }
+
+    #[test]
+    fn does_not_redirect_rename_when_source_folder_already_linked() {
+        let folders = vec![("f1".into(), "Tifene MERIAU".into(), None)];
+        let contacts = vec![(1, "MERIAU".into(), "Tifène".into(), None)];
+        let linked: HashSet<String> = ["f1".into()].into_iter().collect();
+        let proposals = propose_folder_matches(&folders, &contacts, &[], &linked, &HashMap::new());
+        let linked_proposal = proposals
+            .iter()
+            .find(|p| p.contact_id == Some(1))
+            .expect("proposal for contact");
+        assert_eq!(linked_proposal.folder_id, "f1");
+        assert_eq!(linked_proposal.match_kind, "rename");
     }
 }

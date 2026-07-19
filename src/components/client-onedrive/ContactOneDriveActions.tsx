@@ -50,6 +50,7 @@ import {
   subscribeClientOneDriveChanged,
 } from "@/lib/client-onedrive/client-onedrive-events";
 import { openClientOneDriveFolderWithFeedback } from "@/lib/client-onedrive/open-client-onedrive-folder";
+import { showOneDriveLinkSharedToast } from "@/lib/client-onedrive/link-onedrive-toast";
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
 import {
   nestedStackedDialogClass,
@@ -157,12 +158,13 @@ export function ContactOneDriveActions({
   const linkExistingFolder = async (item: ClientOneDriveItem) => {
     setBusy(true);
     try {
-      await linkContactOneDriveFolder({
+      const linkResult = await linkContactOneDriveFolder({
         contactId,
         folderId: item.id,
         folderName: item.name,
         webUrl: item.webUrl,
       });
+      showOneDriveLinkSharedToast(linkResult);
       const linked: ClientOneDriveFolderLink = {
         folderId: item.id,
         folderName: item.name,
@@ -198,6 +200,7 @@ export function ContactOneDriveActions({
   };
 
   const healthHint = healthLabel(health);
+  const inheritedLink = link?.source === "inherited";
   const linkPickerDialog = (
     <Dialog open={linkPickerOpen} onOpenChange={setLinkPickerOpen} modal={!nestedSheet}>
       <DialogContent
@@ -251,7 +254,7 @@ export function ContactOneDriveActions({
         onClick={() => onOpenSettings?.()}
       >
         <Cloud className="h-4 w-4" />
-        <span className="sr-only md:not-sr-only">OneDrive</span>
+        <span className="sr-only">Configurer OneDrive</span>
       </Button>
     );
   }
@@ -277,7 +280,7 @@ export function ContactOneDriveActions({
             ) : (
               <FolderOpen className="h-4 w-4" />
             )}
-            <span className="sr-only md:not-sr-only">OneDrive</span>
+            <span className="sr-only">Ouvrir le dossier OneDrive</span>
           </Button>
           <Popover open={actionsOpen} onOpenChange={setActionsOpen}>
             <PopoverTrigger asChild>
@@ -304,17 +307,19 @@ export function ContactOneDriveActions({
                 <Link2 className="h-4 w-4" />
                 Changer de dossier
               </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-muted"
-                onClick={() => {
-                  setActionsOpen(false);
-                  setUnlinkOpen(true);
-                }}
-              >
-                <Unlink className="h-4 w-4" />
-                Délier
-              </button>
+              {!inheritedLink ? (
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-muted"
+                  onClick={() => {
+                    setActionsOpen(false);
+                    setUnlinkOpen(true);
+                  }}
+                >
+                  <Unlink className="h-4 w-4" />
+                  Délier
+                </button>
+              ) : null}
             </PopoverContent>
           </Popover>
         </div>
@@ -347,25 +352,25 @@ export function ContactOneDriveActions({
           type="button"
           variant="outline"
           size="sm"
-          className="gap-1.5"
+          className="px-2"
           title="Relier un dossier OneDrive existant"
           disabled={busy || !rootFolderId}
           onClick={() => setLinkPickerOpen(true)}
         >
           <Link2 className="h-4 w-4" />
-          <span className="sr-only md:not-sr-only">Relier</span>
+          <span className="sr-only">Relier un dossier OneDrive</span>
         </Button>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="gap-1.5"
+          className="px-2"
           title="Créer le dossier client sur OneDrive"
           disabled={busy || !rootFolderId}
           onClick={() => void createFolder()}
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-          <span className="sr-only md:not-sr-only">Créer</span>
+          <span className="sr-only">Créer le dossier client</span>
         </Button>
       </div>
       {linkPickerDialog}

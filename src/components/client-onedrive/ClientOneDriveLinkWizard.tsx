@@ -19,6 +19,7 @@ import {
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
 import { notifyClientOneDriveChanged } from "@/lib/client-onedrive/client-onedrive-events";
+import { showOneDriveLinkSharedToast } from "@/lib/client-onedrive/link-onedrive-toast";
 import { toast } from "sonner";
 
 function ProposalRow({
@@ -96,12 +97,13 @@ function ManualLinkRow({
     if (contactId == null) return;
     setLinking(true);
     try {
-      await linkContactOneDriveFolder({
+      const linkResult = await linkContactOneDriveFolder({
         contactId,
         folderId: proposal.folderId,
         folderName: proposal.folderName,
         webUrl: proposal.webUrl,
       });
+      showOneDriveLinkSharedToast(linkResult);
       onLinked(proposal.folderId);
       notifyClientOneDriveChanged();
       toast.success(`Dossier relié : ${proposal.folderName}`);

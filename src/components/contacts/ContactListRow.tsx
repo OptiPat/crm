@@ -168,21 +168,21 @@ export function ContactListRow({
           {onedriveLinkState === "linked" ? (
             <Badge
               variant="outline"
-              className="text-xs gap-1 text-sky-700 border-sky-200 bg-sky-50"
+              className="text-xs px-1.5 text-sky-700 border-sky-200 bg-sky-50"
               title="Dossier OneDrive relié"
             >
               <Cloud className="h-3 w-3" />
-              OneDrive
+              <span className="sr-only">OneDrive relié</span>
             </Badge>
           ) : null}
           {onedriveLinkState === "missing" ? (
             <Badge
               variant="outline"
-              className="text-xs gap-1 text-amber-800 border-amber-200 bg-amber-50"
+              className="text-xs px-1.5 text-amber-800 border-amber-200 bg-amber-50"
               title="Dossier OneDrive non relié"
             >
               <CloudOff className="h-3 w-3" />
-              OneDrive
+              <span className="sr-only">OneDrive non relié</span>
             </Badge>
           ) : null}
           {patrimoineBlock}

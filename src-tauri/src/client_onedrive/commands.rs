@@ -54,6 +54,12 @@ pub struct ContactOneDriveLinkFlag {
     pub linked: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkContactOneDriveFolderResult {
+    pub shared_with_labels: Vec<String>,
+}
+
 async fn run_onedrive_blocking<T, F>(f: F) -> Result<T, String>
 where
     F: FnOnce() -> Result<T, String> + Send + 'static,
@@ -359,6 +365,16 @@ pub fn unlink_contact_onedrive_folder(
     {
         return Ok(());
     }
+    if database
+        .resolve_contact_onedrive_link(contact_id)
+        .map_err(|e| e.to_string())?
+        .is_some()
+    {
+        return Err(
+            "Ce contact partage le dossier via son conjoint — déliez depuis la fiche du conjoint."
+                .into(),
+        );
+    }
     Err("Aucun dossier OneDrive relié à ce contact.".into())
 }
 
@@ -472,58 +488,6 @@ pub fn resolve_contact_onedrive_folder(
         .map_err(|e| e.to_string())
 }
 
-fn ensure_onedrive_folder_available(
-    database: &crate::database::Database,
-    folder_id: &str,
-    contact_id: Option<i64>,
-    foyer_id: Option<i64>,
-) -> Result<(), String> {
-    let Some(owner) = database
-        .find_onedrive_folder_owner(folder_id)
-        .map_err(|e| e.to_string())?
-    else {
-        return Ok(());
-    };
-    let same_contact = contact_id.is_some_and(|id| owner.contact_id == Some(id));
-    let same_foyer = foyer_id.is_some_and(|id| owner.foyer_id == Some(id));
-    if same_contact || same_foyer {
-        return Ok(());
-    }
-    if let (Some(owner_contact_id), Some(target_contact_id)) = (owner.contact_id, contact_id) {
-        if database
-            .contacts_share_couple_foyer(owner_contact_id, target_contact_id)
-            .map_err(|e| e.to_string())?
-        {
-            return Ok(());
-        }
-    }
-    if let (Some(owner_contact_id), Some(target_foyer_id)) = (owner.contact_id, foyer_id) {
-        if database
-            .contact_belongs_to_foyer(owner_contact_id, target_foyer_id)
-            .map_err(|e| e.to_string())?
-        {
-            let foyer = database
-                .get_foyer_by_id(target_foyer_id)
-                .map_err(|e| e.to_string())?;
-            if foyer.type_foyer == "COUPLE" {
-                return Ok(());
-            }
-        }
-    }
-    if let (Some(owner_foyer_id), Some(target_contact_id)) = (owner.foyer_id, contact_id) {
-        if database
-            .contact_belongs_to_foyer(target_contact_id, owner_foyer_id)
-            .map_err(|e| e.to_string())?
-        {
-            return Ok(());
-        }
-    }
-    Err(format!(
-        "Ce dossier OneDrive est déjà relié à {}.",
-        owner.label
-    ))
-}
-
 fn persist_onedrive_folder_link(
     database: &crate::database::Database,
     contact_id: i64,
@@ -539,7 +503,6 @@ fn persist_onedrive_folder_link(
             .get_foyer_by_id(foyer_id)
             .map_err(|e| e.to_string())?;
         if foyer.type_foyer == "COUPLE" {
-            ensure_onedrive_folder_available(database, folder_id, None, Some(foyer_id))?;
             database
                 .set_foyer_onedrive_link(foyer_id, folder_id, folder_name, web_url)
                 .map_err(|e| e.to_string())?;
@@ -548,7 +511,6 @@ fn persist_onedrive_folder_link(
                 .map_err(|e| e.to_string());
         }
     }
-    ensure_onedrive_folder_available(database, folder_id, Some(contact_id), None)?;
     database
         .set_contact_onedrive_link(contact_id, folder_id, folder_name, web_url)
         .map_err(|e| e.to_string())
@@ -562,20 +524,24 @@ pub async fn link_contact_onedrive_folder(
     folder_id: String,
     folder_name: String,
     web_url: Option<String>,
-) -> Result<(), String> {
+) -> Result<LinkContactOneDriveFolderResult, String> {
     require_ui_session(&session)?;
     run_onedrive_blocking(move || {
         let db = app.state::<DbState>();
         let database = db.inner().lock().unwrap();
         let database = database.as_ref().ok_or("Database not initialized")?;
         ensure_link_under_configured_root(&app, database, &folder_id)?;
+        let shared_with_labels = database
+            .list_onedrive_folder_contact_labels_excluding(&folder_id, contact_id)
+            .map_err(|e| e.to_string())?;
         persist_onedrive_folder_link(
             database,
             contact_id,
             &folder_id,
             &folder_name,
             web_url.as_deref(),
-        )
+        )?;
+        Ok(LinkContactOneDriveFolderResult { shared_with_labels })
     })
     .await
 }
@@ -632,7 +598,7 @@ pub async fn propose_client_onedrive_folder_matches(
     require_ui_session(&session)?;
     run_onedrive_blocking(move || {
         let db = app.state::<DbState>();
-        let (root_id, contacts, foyers, linked_ids) = {
+        let (root_id, contacts, foyers, linked_ids, contact_folder_ids) = {
             let database = db.inner().lock().unwrap();
             let database = database.as_ref().ok_or("Database not initialized")?;
             let root_id = require_root_folder_id(database)?;
@@ -645,7 +611,10 @@ pub async fn propose_client_onedrive_folder_matches(
             let linked_ids = database
                 .list_linked_onedrive_folder_ids()
                 .map_err(|e| e.to_string())?;
-            (root_id, contacts, foyers, linked_ids)
+            let contact_folder_ids = database
+                .list_contact_onedrive_folder_ids()
+                .map_err(|e| e.to_string())?;
+            (root_id, contacts, foyers, linked_ids, contact_folder_ids)
         };
         let folders = list_client_onedrive_child_folders(&app, &root_id)?;
         let linked: HashSet<String> = linked_ids.into_iter().collect();
@@ -658,6 +627,7 @@ pub async fn propose_client_onedrive_folder_matches(
             &contacts,
             &foyers,
             &linked,
+            &contact_folder_ids,
         ))
     })
     .await
@@ -672,6 +642,7 @@ pub async fn apply_client_onedrive_folder_proposal(
 ) -> Result<(), String> {
     require_ui_session(&session)?;
     run_onedrive_blocking(move || {
+        let original_folder_id = proposal.folder_id.clone();
         let (folder_id, folder_name, web_url) = if let Some(new_name) = rename_to {
             let trimmed = new_name.trim();
             if trimmed.is_empty() {
@@ -690,8 +661,17 @@ pub async fn apply_client_onedrive_folder_proposal(
         let database = db.inner().lock().unwrap();
         let database = database.as_ref().ok_or("Database not initialized")?;
         ensure_link_under_configured_root(&app, database, &folder_id)?;
+        if original_folder_id != folder_id {
+            database
+                .propagate_onedrive_folder_link_rename(
+                    &original_folder_id,
+                    &folder_id,
+                    &folder_name,
+                    web_url.as_deref(),
+                )
+                .map_err(|e| e.to_string())?;
+        }
         if let Some(foyer_id) = proposal.foyer_id {
-            ensure_onedrive_folder_available(database, &folder_id, None, Some(foyer_id))?;
             database
                 .set_foyer_onedrive_link(
                     foyer_id,

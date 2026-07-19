@@ -796,8 +796,9 @@ export function Documents({ onNavigate }: DocumentsProps) {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-7 text-xs gap-1"
+                    className="h-7 w-7 p-0"
                     disabled={openingOnedriveFolder}
+                    title="Ouvrir le dossier OneDrive du client"
                     onClick={() => void openFilteredContactOnedriveFolder()}
                   >
                     {openingOnedriveFolder ? (
@@ -805,7 +806,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
                     ) : (
                       <Cloud className="h-3.5 w-3.5" />
                     )}
-                    Ouvrir dossier OneDrive
+                    <span className="sr-only">Ouvrir le dossier OneDrive</span>
                   </Button>
                 )}
                 {openedFolderContactId != null &&
