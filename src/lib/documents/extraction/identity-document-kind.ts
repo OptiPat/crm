@@ -10,6 +10,13 @@ export function inferIdentityDocumentKindFromPath(filePath: string): IdentityDoc
   return undefined;
 }
 
+/** Passeport ou CNI explicite dans le nom ; sinon ambigu (validité stricte côté conformité). */
+export function classifyIdentityDocumentKindFromPath(
+  filePath: string
+): IdentityDocumentKind | "ambiguous" {
+  return inferIdentityDocumentKindFromPath(filePath) ?? "ambiguous";
+}
+
 export function resolveIdentityDocumentKindFromPaths(
   rectoPath: string,
   versoPath: string

@@ -72,13 +72,17 @@ describe("documents-portfolio-utils", () => {
       1: { id: 1, nom: "DUPONT", prenom: "Jean", categorie: "CLIENT" } as Contact,
       2: { id: 2, nom: "DUPONT", prenom: "Jean", categorie: "CLIENT" } as Contact,
     };
-    const folders = buildClientDocumentFolders(
-      [
+    const folders = buildClientDocumentFolders({
+      visibleDocuments: [
         doc({ id: 1, contact_id: 1 }),
         doc({ id: 2, contact_id: 2 }),
       ],
-      homonymes
-    );
+      allDocuments: [
+        doc({ id: 1, contact_id: 1 }),
+        doc({ id: 2, contact_id: 2 }),
+      ],
+      contactsById: homonymes,
+    });
     expect(folders).toHaveLength(2);
   });
 

@@ -154,6 +154,19 @@ export function Documents({ onNavigate }: DocumentsProps) {
     setOpenedFolderKey(`contact:${contactId}`);
   }, []);
 
+  const openDocumentFolder = useCallback(
+    (folderKey: DocumentFolderKey) => {
+      if (folderKey === "sans-client") {
+        setGroupMode("folders");
+        setOpenedFolderKey(folderKey);
+        return;
+      }
+      const contactId = Number(folderKey.replace("contact:", ""));
+      if (Number.isFinite(contactId)) openClientFolder(contactId);
+    },
+    [openClientFolder]
+  );
+
   const closeClientFolder = useCallback(() => {
     setOpenedFolderKey(null);
   }, []);
@@ -346,8 +359,13 @@ export function Documents({ onNavigate }: DocumentsProps) {
   );
 
   const clientFolders = useMemo(
-    () => buildClientDocumentFolders(filteredDocuments, contactsById),
-    [filteredDocuments, contactsById]
+    () =>
+      buildClientDocumentFolders({
+        visibleDocuments: filteredDocuments,
+        allDocuments: documents,
+        contactsById,
+      }),
+    [filteredDocuments, documents, contactsById]
   );
 
   const documentContactIds = useMemo(() => {
@@ -553,22 +571,21 @@ export function Documents({ onNavigate }: DocumentsProps) {
         </Button>
       </div>
 
+      <DocumentsStatFilterPills
+        total={pageStats.total}
+        filteredCount={filteredDocuments.length}
+        patrimoine={pageStats.patrimoine}
+        identite={pageStats.identite}
+        sansClient={pageStats.sansClient}
+        statFilter={statFilter}
+        hasActiveFilters={hasActiveFilters}
+        onSelectAll={resetFilters}
+        onToggleStat={toggleStatFilter}
+      />
+
       <Card className={cn(isDragging && "ring-2 ring-primary/40")}>
         <CardHeader>
           <div className="space-y-4">
-            {librarySource === "crm" && (
-              <DocumentsStatFilterPills
-                total={pageStats.total}
-                filteredCount={filteredDocuments.length}
-                patrimoine={pageStats.patrimoine}
-                identite={pageStats.identite}
-                sansClient={pageStats.sansClient}
-                statFilter={statFilter}
-                hasActiveFilters={hasActiveFilters}
-                onSelectAll={resetFilters}
-                onToggleStat={toggleStatFilter}
-              />
-            )}
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <CardTitle>Bibliothèque de documents</CardTitle>
@@ -703,8 +720,8 @@ export function Documents({ onNavigate }: DocumentsProps) {
 
             {librarySource === "crm" && hasFiltersThatFlattenGroups && groupMode !== "flat" && (
               <p className="text-xs text-muted-foreground">
-                Filtre actif — affichage en liste unique (choisissez « Liste unique » pour retrouver
-                le regroupement une fois les filtres levés).
+                Filtre actif — chaque dossier n’affiche que les pièces correspondantes ; les
+                alertes de conformité restent calculées sur l’ensemble du dossier client.
               </p>
             )}
 
@@ -825,7 +842,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
           ) : showFolderGrid ? (
             <DocumentsClientFolderList
               folders={clientFolders}
-              onOpenFolder={setOpenedFolderKey}
+              onOpenFolder={openDocumentFolder}
             />
           ) : filteredDocuments.length === 0 ? (
             <div className="text-center py-8 space-y-3">

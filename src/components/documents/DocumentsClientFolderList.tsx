@@ -8,6 +8,7 @@ const TYPE_BADGE_LABEL: Record<ClientDocumentTypeBadge, string> = {
   rio: "RIO",
   qpi: "QPI",
   identite: "CNI",
+  passeport: "Passeport",
 };
 
 function formatLatestDate(timestamp: number): string {
@@ -55,9 +56,17 @@ export function DocumentsClientFolderList({
               )}
               onClick={() => onOpenFolder(folder.key)}
             >
-              <p className="font-medium text-sm truncate text-foreground">{folder.label}</p>
+              <p
+                className="font-medium text-sm truncate text-foreground"
+                title={folder.label}
+              >
+                {folder.label}
+              </p>
 
               <div className="flex flex-wrap gap-1 min-h-[1.25rem]">
+                <span className="sm:hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground w-full">
+                  Pièces
+                </span>
                 {folder.typeBadges.length === 0 ? (
                   <span className="text-xs text-muted-foreground">—</span>
                 ) : (
@@ -74,6 +83,9 @@ export function DocumentsClientFolderList({
               </div>
 
               <div className="flex flex-wrap gap-1 min-h-[1.25rem]">
+                <span className="sm:hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground w-full">
+                  À vérifier
+                </span>
                 {folder.alerts.length === 0 ? (
                   <span className="text-xs text-muted-foreground">OK</span>
                 ) : (
@@ -81,26 +93,37 @@ export function DocumentsClientFolderList({
                     <span
                       key={alert.id}
                       className={cn(
-                        "inline-flex items-center gap-0.5 text-[11px] leading-tight rounded px-1.5 py-0.5",
+                        "inline-flex items-center gap-0.5 text-[11px] leading-tight rounded px-1.5 py-0.5 max-w-full",
                         alert.severity === "error"
-                          ? "bg-red-50 text-red-800"
-                          : "bg-amber-50 text-amber-900"
+                          ? "bg-destructive/10 text-destructive"
+                          : "bg-amber-500/15 text-amber-900 dark:text-amber-200"
                       )}
                       title={alert.label}
                     >
                       <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
-                      <span className="truncate max-w-[14rem]">{alert.label}</span>
+                      <span className="truncate">{alert.label}</span>
                     </span>
                   ))
                 )}
               </div>
 
-              <p className="text-xs text-muted-foreground sm:text-right tabular-nums">
-                {formatLatestDate(folder.latestDocumentAt)}
-              </p>
-              <p className="text-xs text-muted-foreground sm:text-right tabular-nums">
-                {folder.documentCount}
-              </p>
+              <div className="flex items-center justify-between gap-2 sm:contents">
+                <span className="sm:hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Dernier
+                </span>
+                <p className="text-xs text-muted-foreground sm:text-right tabular-nums">
+                  {formatLatestDate(folder.latestDocumentAt)}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 sm:contents">
+                <span className="sm:hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Nb
+                </span>
+                <p className="text-xs text-muted-foreground sm:text-right tabular-nums">
+                  {folder.documentCount}
+                </p>
+              </div>
             </button>
           </li>
         ))}

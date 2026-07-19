@@ -7,23 +7,28 @@ function StatFilterPill({
   count,
   onClick,
   disabled,
+  resetHighlight,
 }: {
   active: boolean;
   label: string;
   count: number;
   onClick?: () => void;
   disabled?: boolean;
+  resetHighlight?: boolean;
 }) {
   const interactive = Boolean(onClick) && !disabled && count > 0;
   return (
     <button
       type="button"
+      aria-pressed={active}
       disabled={!interactive && !active}
       onClick={interactive || active ? onClick : undefined}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
         active
-          ? "border-primary bg-primary/10 text-primary"
+          ? resetHighlight
+            ? "border-primary/70 bg-primary/15 text-primary ring-1 ring-primary/30"
+            : "border-primary bg-primary/10 text-primary"
           : interactive
             ? "border-border/80 bg-card text-muted-foreground hover:bg-muted/50"
             : "border-border/60 bg-muted/20 text-muted-foreground/70 cursor-default"
@@ -64,11 +69,13 @@ export function DocumentsStatFilterPills({
   onToggleStat: (filter: DocumentsStatFilter) => void;
 }) {
   const allActive = statFilter == null && !hasActiveFilters;
+  const resetAvailable = hasActiveFilters && !allActive;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <StatFilterPill
         active={allActive}
+        resetHighlight={resetAvailable}
         label="Tous"
         count={total}
         onClick={hasActiveFilters ? onSelectAll : undefined}

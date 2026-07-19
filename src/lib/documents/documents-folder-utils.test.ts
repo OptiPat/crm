@@ -34,18 +34,51 @@ describe("documents-folder-utils", () => {
   });
 
   it("construit un dossier par client", () => {
-    const folders = buildClientDocumentFolders(
-      [
+    const folders = buildClientDocumentFolders({
+      visibleDocuments: [
         doc({ id: 1, contact_id: 1 }),
         doc({ id: 2, contact_id: 2 }),
         doc({ id: 3 }),
       ],
-      contacts
-    );
+      allDocuments: [
+        doc({ id: 1, contact_id: 1 }),
+        doc({ id: 2, contact_id: 2 }),
+        doc({ id: 3 }),
+      ],
+      contactsById: contacts,
+    });
     expect(folders).toHaveLength(3);
     expect(folders[0]?.key).toBe("contact:1");
     expect(folders[1]?.key).toBe("contact:2");
     expect(folders[2]?.key).toBe("sans-client");
+  });
+
+  it("calcule la conformité sur tous les documents du client", () => {
+    const allDocuments = [
+      doc({
+        id: 1,
+        contact_id: 1,
+        type_document: "PATRIMOINE",
+        date_document: "2024-01-15",
+      }),
+      doc({
+        id: 2,
+        contact_id: 1,
+        type_document: "QPI",
+        date_document: "2025-08-01",
+      }),
+    ];
+    const visibleDocuments = [allDocuments[0]!];
+
+    const folders = buildClientDocumentFolders({
+      visibleDocuments,
+      allDocuments,
+      contactsById: contacts,
+    });
+
+    const dupont = folders.find((folder) => folder.key === "contact:1");
+    expect(dupont?.documentCount).toBe(1);
+    expect(dupont?.alerts.map((alert) => alert.id)).not.toContain("qpi_missing");
   });
 
   it("filtre les documents d'un dossier", () => {

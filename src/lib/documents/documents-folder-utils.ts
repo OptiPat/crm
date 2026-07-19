@@ -20,19 +20,17 @@ export type ClientDocumentFolder = {
   alerts: ClientDocumentCompliance["alerts"];
 };
 
-export function getDocumentFolderKey(doc: Document): DocumentFolderKey {
-  return doc.contact_id != null ? `contact:${doc.contact_id}` : "sans-client";
-}
+type FolderAccumulator = {
+  label: string;
+  contactId: number | null;
+  items: Document[];
+};
 
-export function buildClientDocumentFolders(
+function accumulateFolders(
   documents: Document[],
   contactsById: Record<number, Contact>
-): ClientDocumentFolder[] {
-  const byFolder = new Map<
-    DocumentFolderKey,
-    { label: string; contactId: number | null; items: Document[] }
-  >();
-
+): Map<DocumentFolderKey, FolderAccumulator> {
+  const byFolder = new Map<DocumentFolderKey, FolderAccumulator>();
   for (const doc of documents) {
     const key = getDocumentFolderKey(doc);
     const entry = byFolder.get(key) ?? {
@@ -43,18 +41,35 @@ export function buildClientDocumentFolders(
     entry.items.push(doc);
     byFolder.set(key, entry);
   }
+  return byFolder;
+}
 
-  return [...byFolder.entries()]
-    .map(([key, { label, contactId, items }]) => {
-      const compliance = computeClientDocumentCompliance(items, {
+export function getDocumentFolderKey(doc: Document): DocumentFolderKey {
+  return doc.contact_id != null ? `contact:${doc.contact_id}` : "sans-client";
+}
+
+export function buildClientDocumentFolders(input: {
+  visibleDocuments: Document[];
+  allDocuments: Document[];
+  contactsById: Record<number, Contact>;
+}): ClientDocumentFolder[] {
+  const allByFolder = accumulateFolders(input.allDocuments, input.contactsById);
+  const visibleByFolder = accumulateFolders(input.visibleDocuments, input.contactsById);
+
+  return [...visibleByFolder.entries()]
+    .map(([key, { label, contactId, items: visibleItems }]) => {
+      const allItems = allByFolder.get(key)?.items ?? visibleItems;
+      const compliance = computeClientDocumentCompliance(allItems, {
         checkMissing: contactId != null,
       });
       return {
         key,
         contactId,
         label,
-        documentCount: items.length,
-        latestDocumentAt: Math.max(...items.map((item) => documentTimelineSortDate(item))),
+        documentCount: visibleItems.length,
+        latestDocumentAt: Math.max(
+          ...visibleItems.map((item) => documentTimelineSortDate(item))
+        ),
         typeBadges: compliance.typeBadges,
         alerts: compliance.alerts,
       };
