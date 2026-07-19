@@ -1,7 +1,8 @@
 import type { BienImmobilier, ExtractedData } from "../types";
+import { mapRioStatutOccupationLogement } from "@/lib/contacts/contact-occupation";
 import { extractAmountAfterLabel, parseStelliumAmount, AMOUNT_CAPTURE } from "./amounts";
 import { computeStelliumConfidence } from "./confidence";
-import { parseAdressesPostales, parsePaysResidenceFiscale } from "./rio-adresse";
+import { parseAdressesPostales, parsePaysResidenceFiscale, parseStatutOccupationLogement } from "./rio-adresse";
 import { normalizeStelliumText, sanitizeStelliumFieldValue } from "./normalize";
 import {
   detectCoupleRio,
@@ -534,6 +535,11 @@ function parseStelliumRioSolo(
     if (adressePrincipale.ville) data.ville = adressePrincipale.ville;
     data.pays = parsePaysResidenceFiscale(coordonnees)[0] ?? "France";
   }
+
+  const statutOccupation = mapRioStatutOccupationLogement(
+    parseStatutOccupationLogement(coordonnees)[0]
+  );
+  if (statutOccupation) data.statutOccupationLogement = statutOccupation;
 
   const situation = extractFieldValue(relations, ["Situation matrimoniale"], ["Régime"]);
   if (situation) {

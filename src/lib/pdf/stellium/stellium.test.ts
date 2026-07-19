@@ -46,6 +46,7 @@ describe("Stellium — RIO solo Legrand 2026", () => {
     expect(data.adresse).toBe("12 Rue des Acacias");
     expect(data.codePostal).toBe("75001");
     expect(data.ville).toBe("Paris");
+    expect(data.statutOccupationLogement).toBe("LOCATAIRE");
   });
 
   it("extrait la situation familiale et les enfants", () => {
@@ -237,6 +238,7 @@ describe("Stellium — RIO couple ROUSSEAU 2026", () => {
     expect(data.dateNaissance).toBe("22/10/1987");
     expect(data.profession).toBe("Chef de projet");
     expect(data.employeur).toBe("AIRBUS");
+    expect(data.statutOccupationLogement).toBe("PROPRIETAIRE");
 
     expect(data.conjoint).toMatchObject({
       civilite: "MME",
@@ -245,6 +247,7 @@ describe("Stellium — RIO couple ROUSSEAU 2026", () => {
       nomNaissance: "PETIT",
       email: "anne.petit@example.com",
       telephone: "+33600000003",
+      statutOccupationLogement: "PROPRIETAIRE",
       dateNaissance: "27/09/1985",
       profession: "Coordinatrice logistique",
       employeur: "IDP ARCHITECTE",

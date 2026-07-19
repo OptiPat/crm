@@ -112,6 +112,9 @@ export function buildSoloRioIdentityContactFields(data: ExtractedData): Partial<
   if (data.codePostal?.trim()) fields.code_postal = data.codePostal.trim();
   if (data.ville?.trim()) fields.ville = data.ville.trim();
   if (data.pays?.trim()) fields.pays = data.pays.trim();
+  if (data.statutOccupationLogement) {
+    fields.statut_occupation_logement = data.statutOccupationLogement;
+  }
   if (data.lieuNaissance?.trim()) fields.lieu_naissance = data.lieuNaissance.trim();
   if (data.profession?.trim()) fields.profession = data.profession.trim();
   else if (data.employeur?.trim()) fields.profession = data.employeur.trim();
@@ -217,6 +220,7 @@ export function buildCoupleMemberRioFields(
           codePostal: data.codePostal,
           ville: data.ville,
           pays: data.pays,
+          statutOccupationLogement: data.statutOccupationLogement,
           dateNaissance: data.dateNaissance,
           lieuNaissance: data.lieuNaissance,
           profession: data.profession,
@@ -231,6 +235,7 @@ export function buildCoupleMemberRioFields(
           codePostal: data.codePostal,
           ville: data.ville,
           pays: data.pays,
+          statutOccupationLogement: data.conjoint?.statutOccupationLogement,
           dateNaissance: data.conjoint?.dateNaissance,
           lieuNaissance: data.conjoint?.lieuNaissance,
           profession: data.conjoint?.profession,
@@ -252,6 +257,9 @@ export function buildCoupleMemberRioFields(
   if (base.codePostal?.trim()) partial.code_postal = base.codePostal.trim();
   if (base.ville?.trim()) partial.ville = base.ville.trim();
   if (base.pays?.trim()) partial.pays = base.pays.trim();
+  if (base.statutOccupationLogement) {
+    partial.statut_occupation_logement = base.statutOccupationLogement;
+  }
   if (base.lieuNaissance?.trim()) partial.lieu_naissance = base.lieuNaissance.trim();
   if (base.profession?.trim()) partial.profession = base.profession.trim();
 
@@ -312,6 +320,11 @@ export function mergeRioFieldsOntoContact(
     code_postal: pickStr(rio.code_postal, existing.code_postal, true),
     ville: pickStr(rio.ville, existing.ville, true),
     pays: pickStr(rio.pays, existing.pays, true),
+    statut_occupation_logement: pickOptional(
+      rio.statut_occupation_logement,
+      existing.statut_occupation_logement,
+      true
+    ),
     lieu_naissance: pickStr(rio.lieu_naissance, existing.lieu_naissance, true),
     profession: pickStr(rio.profession, existing.profession, true),
     situation_familiale: pickOptional(

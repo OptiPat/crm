@@ -147,8 +147,24 @@ export function parsePaysResidenceFiscale(coordonnees: string): string[] {
     /Pays de r[ée]sidence fiscale\s*:?\s*(.+?)(?=\s*Statut|\n|$)/is
   );
   if (!match) return [];
-  return match[1]
-    .split(/\t|\s{2,}/)
+  return splitCoordonneesColumns(match[1]);
+}
+
+/**
+ * Extrait le « Statut d'occupation du logement » de la section Coordonnées.
+ * Renvoie une colonne par personne (solo → 1, couple → 2). Ignore les « - ».
+ */
+export function parseStatutOccupationLogement(coordonnees: string): string[] {
+  const match = coordonnees.match(
+    /Statut d'occupation du\s+logement\s*:?\s*([\s\S]+?)(?=\s*Relations\b|$)/i
+  );
+  if (!match) return [];
+  return splitCoordonneesColumns(match[1]);
+}
+
+function splitCoordonneesColumns(raw: string): string[] {
+  return raw
+    .split(/\t|\s{2,}|\r?\n/)
     .map((s) => s.replace(/\s+/g, " ").trim())
     .filter((s) => s.length > 0 && s !== "-");
 }

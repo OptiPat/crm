@@ -1,7 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifyContactsChanged } from "@/lib/contacts/contact-events";
-import { notifyClientOneDriveChanged } from "@/lib/client-onedrive/client-onedrive-events";
-import { showContactOnedriveAutoCreateToast } from "@/lib/client-onedrive/link-onedrive-toast";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { runBirthdayTelegramIfDue } from "@/lib/api/tauri-birthday-telegram";
 
@@ -151,13 +149,9 @@ export async function createContact(
     newContact,
     skipPostSaveHooks: options?.skipPostSaveHooks ?? null,
   });
-  showContactOnedriveAutoCreateToast(result.onedriveMessage);
   if (!options?.skipPostSaveHooks) {
     notifyContactsChanged();
     notifyEtiquettesChanged();
-  }
-  if (result.onedriveLinkCreated) {
-    notifyClientOneDriveChanged();
   }
   return result.contact;
 }

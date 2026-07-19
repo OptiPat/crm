@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAdressesPostales, parsePaysResidenceFiscale } from "./rio-adresse";
+import { parseAdressesPostales, parsePaysResidenceFiscale, parseStatutOccupationLogement } from "./rio-adresse";
 
 describe("parseAdressesPostales", () => {
   it("layout inline (solo)", () => {
@@ -122,6 +122,58 @@ describe("parsePaysResidenceFiscale", () => {
 
   it("absent → tableau vide", () => {
     expect(parsePaysResidenceFiscale("Téléphone mobile\t+33600000001\n")).toEqual(
+      []
+    );
+  });
+});
+
+describe("parseStatutOccupationLogement", () => {
+  it("solo (valeur inline avec tabulation)", () => {
+    const coordonnees =
+      "Pays de résidence fiscale\tFrance\n" +
+      "Statut d'occupation du logement\tLocataire\n";
+    expect(parseStatutOccupationLogement(coordonnees)).toEqual(["Locataire"]);
+  });
+
+  it("couple (deux colonnes)", () => {
+    const coordonnees =
+      "Statut d'occupation du logement\tPropriétaire\tPropriétaire\n";
+    expect(parseStatutOccupationLogement(coordonnees)).toEqual([
+      "Propriétaire",
+      "Propriétaire",
+    ]);
+  });
+
+  it("layout aplati (libellé coupé, séparateurs espaces)", () => {
+    const coordonnees =
+      "Statut d'occupation du  logement   Propriétaire   Locataire  Relations";
+    expect(parseStatutOccupationLogement(coordonnees)).toEqual([
+      "Propriétaire",
+      "Locataire",
+    ]);
+  });
+
+  it("hébergé à titre gratuit (libellé long)", () => {
+    const coordonnees =
+      "Statut d'occupation du logement\tHébergé(e) à titre gratuit\n";
+    expect(parseStatutOccupationLogement(coordonnees)).toEqual([
+      "Hébergé(e) à titre gratuit",
+    ]);
+  });
+
+  it("couple multi-lignes (une valeur par ligne)", () => {
+    const coordonnees =
+      "Statut d'occupation du logement   Propriétaire\n" +
+      "Locataire\n" +
+      "Relations\n";
+    expect(parseStatutOccupationLogement(coordonnees)).toEqual([
+      "Propriétaire",
+      "Locataire",
+    ]);
+  });
+
+  it("absent → tableau vide", () => {
+    expect(parseStatutOccupationLogement("Téléphone mobile\t+33600000001\n")).toEqual(
       []
     );
   });

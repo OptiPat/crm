@@ -3,7 +3,6 @@ import {
   uploadDocument,
   type Document,
 } from "@/lib/api/tauri-documents";
-import { showDocumentOnedriveImportToast } from "@/lib/client-onedrive/link-onedrive-toast";
 import { getMimeType } from "@/lib/documents/file-mime";
 
 export interface ImportPipeChecklistDocumentInput {
@@ -32,7 +31,6 @@ export async function importPipeChecklistDocument(
     mime_type: getMimeType(file.name),
     notes: input.notes,
   });
-  showDocumentOnedriveImportToast(result.onedriveMessage);
   return result.document;
 }
 

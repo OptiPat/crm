@@ -1,6 +1,7 @@
 import type { BienImmobilier, ExtractedData, RioCoupleOwnerHint } from "../types";
 import { parseStelliumAmount } from "./amounts";
-import { parseAdressesPostales, parsePaysResidenceFiscale } from "./rio-adresse";
+import { parseAdressesPostales, parsePaysResidenceFiscale, parseStatutOccupationLogement } from "./rio-adresse";
+import { mapRioStatutOccupationLogement } from "@/lib/contacts/contact-occupation";
 import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
 import { registerFinancialActifLine, hasEpargneBancaireDetail } from "./financial-contracts";
 import {
@@ -138,6 +139,7 @@ export function parseCoupleIdentite(
     | "codePostal"
     | "ville"
     | "pays"
+    | "statutOccupationLogement"
     | "profession"
     | "employeur"
   >;
@@ -203,6 +205,7 @@ function buildCoupleIdentity(
     | "codePostal"
     | "ville"
     | "pays"
+    | "statutOccupationLogement"
     | "profession"
     | "employeur"
   >;
@@ -239,6 +242,7 @@ function buildCoupleIdentity(
   const adressesPostales = parseAdressesPostales(coordonnees);
   const adresse1 = adressesPostales[0];
   const paysFiscal = parsePaysResidenceFiscale(coordonnees);
+  const statutsOccupation = parseStatutOccupationLogement(coordonnees);
 
   const [profession1, profession2] = extractPair(
     professionnel,
@@ -266,6 +270,7 @@ function buildCoupleIdentity(
     codePostal: adresse1?.codePostal,
     ville: adresse1?.ville,
     pays: paysFiscal[0] ?? "France",
+    statutOccupationLogement: mapRioStatutOccupationLogement(statutsOccupation[0]),
     profession: profession1,
     employeur: employeur1 && employeur1 !== "-" ? employeur1 : undefined,
   };
@@ -280,6 +285,7 @@ function buildCoupleIdentity(
     nationalite: nationalite2,
     email: email2,
     telephone: tel2,
+    statutOccupationLogement: mapRioStatutOccupationLogement(statutsOccupation[1]),
     profession: profession2,
     employeur: employeur2 && employeur2 !== "-" ? employeur2 : undefined,
   };

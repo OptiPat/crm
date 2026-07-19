@@ -50,6 +50,16 @@ describe("rio-contact-fields", () => {
     expect(fields.objectifs_patrimoniaux).toContain("Accompagner vos enfants");
   });
 
+  it("mappe le statut d'occupation du logement", () => {
+    const fields = buildSoloRioContactFields({
+      typeDocument: "RIO",
+      nom: "LEGRAND",
+      prenom: "Paul",
+      statutOccupationLogement: "LOCATAIRE",
+    });
+    expect(fields.statut_occupation_logement).toBe("LOCATAIRE");
+  });
+
   it("ignore le régime vide ou tiret", () => {
     const fields = buildSoloRioContactFields({
       typeDocument: "RIO",

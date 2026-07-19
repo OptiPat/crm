@@ -1,3 +1,4 @@
+pub mod background;
 pub mod commands;
 pub mod drive;
 pub mod hooks;

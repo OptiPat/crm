@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { createDocument, type NewDocument } from "@/lib/api/tauri-documents";
-import { showDocumentOnedriveImportToast } from "@/lib/client-onedrive/link-onedrive-toast";
 import {
   createInvestissement,
   type NewInvestissement,
@@ -99,7 +98,7 @@ export function useRioPatrimoineFlow(options: {
         params;
 
       if (uploadedFile && result.finalContactId && options.existingDocumentId == null) {
-        const created = await createDocument(
+        await createDocument(
           buildRioPatrimoineDocument({
             data,
             finalContactId: result.finalContactId,
@@ -110,7 +109,6 @@ export function useRioPatrimoineFlow(options: {
             formNotes: formData.notes,
           })
         );
-        showDocumentOnedriveImportToast(created.onedriveMessage);
       }
 
       if (hasPatrimoineToTri(data) && result.finalContactId) {

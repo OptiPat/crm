@@ -1,5 +1,7 @@
 // Types pour l'extraction de données depuis les PDF
 
+import type { StatutOccupationLogement } from "@/lib/contacts/contact-occupation";
+
 /** Propriétaire probable d'une ligne patrimoine RIO couple (colonnes investisseur 1 / 2). */
 export type RioCoupleOwnerHint = "person1" | "person2" | "foyer";
 
@@ -62,6 +64,7 @@ export interface ExtractedData {
   codePostal?: string;
   ville?: string;
   pays?: string;
+  statutOccupationLogement?: StatutOccupationLogement;
   
   // === SITUATION FAMILIALE ===
   situationFamiliale?: string;
@@ -210,6 +213,7 @@ export interface ExtractedData {
     employeur?: string;
     email?: string;
     telephone?: string;
+    statutOccupationLogement?: StatutOccupationLogement;
     revenusTotal?: number;
     chargesTotal?: number;
     chargesEmprunts?: number;

@@ -13,7 +13,7 @@ use crate::database::client_onedrive::{
 };
 use crate::database::models::Contact;
 use crate::email::oauth_flow::{disconnect_microsoft_onedrive_oauth, run_oauth_connect};
-use crate::email::oauth_store::EmailOAuthStore;
+use crate::email::oauth_store::{EmailOAuthConnection, EmailOAuthStore};
 use crate::system_commands::{open_path_with_system_default, open_url_in_browser};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -116,6 +116,31 @@ fn load_status(app: &AppHandle) -> Result<ClientOneDriveStatus, String> {
         .as_ref()
         .is_some_and(|id| !id.trim().is_empty());
     let conn = resolve_microsoft_onedrive_connection(app)?;
+    build_client_onedrive_status(app, &store, conn, microsoft_client_id_configured)
+}
+
+/// Statut OneDrive sans appel réseau (préférences locales, pas de refresh token).
+fn load_status_without_oauth_refresh(app: &AppHandle) -> Result<ClientOneDriveStatus, String> {
+    let store = EmailOAuthStore::load(app)?;
+    let microsoft_client_id_configured = store
+        .microsoft_client_id
+        .as_ref()
+        .is_some_and(|id| !id.trim().is_empty());
+    let conn = store.microsoft_onedrive_connection.clone();
+    build_client_onedrive_status(
+        app,
+        &store,
+        conn,
+        microsoft_client_id_configured,
+    )
+}
+
+fn build_client_onedrive_status(
+    app: &AppHandle,
+    _store: &EmailOAuthStore,
+    conn: Option<EmailOAuthConnection>,
+    microsoft_client_id_configured: bool,
+) -> Result<ClientOneDriveStatus, String> {
     let db_state = app.state::<DbState>();
     let database = db_state.lock().unwrap();
     let database = database.as_ref().ok_or("Database not initialized")?;
@@ -265,22 +290,21 @@ pub fn save_client_onedrive_root_folder(
 }
 
 #[tauri::command]
-pub async fn save_client_onedrive_behavior(
+pub fn save_client_onedrive_behavior(
     app: AppHandle,
     session: State<'_, UiSessionState>,
     auto_create_on_contact: bool,
     copy_document_on_import: bool,
 ) -> Result<ClientOneDriveStatus, String> {
     require_ui_session(&session)?;
-    run_onedrive_blocking(move || {
-        let db = app.state::<DbState>();
-        let database = db.lock().unwrap();
-        let database = database.as_ref().ok_or("Database not initialized")?;
+    let db_state = app.state::<DbState>();
+    {
+        let guard = db_state.lock().unwrap();
+        let database = guard.as_ref().ok_or("Database not initialized")?;
         super::hooks::set_auto_create_on_contact(database, auto_create_on_contact)?;
         super::hooks::set_copy_document_on_import(database, copy_document_on_import)?;
-        load_status(&app)
-    })
-    .await
+    }
+    load_status_without_oauth_refresh(&app)
 }
 
 #[tauri::command]

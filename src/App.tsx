@@ -39,6 +39,7 @@ import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { runBackgroundAutomationAfterUnlock, waitForBackgroundAutomationCycleIdle } from "@/lib/background/background-automation-runner";
 import { useBackgroundAutomationListener } from "@/hooks/useBackgroundAutomationListener";
 import { useAutomationNotificationListener } from "@/hooks/useAutomationNotificationListener";
+import { useOneDriveBackgroundListener } from "@/hooks/useOneDriveBackgroundListener";
 import { useAutoLock } from "@/hooks/useAutoLock";
 
 const ETIQUETTES_RECALC_SESSION_KEY = "crm_etiquettes_recalc_done";
@@ -77,6 +78,7 @@ function AppInner() {
   });
 
   useBackgroundAutomationListener(isEngineAvailable);
+  useOneDriveBackgroundListener(isEngineAvailable);
   useAutomationNotificationListener(isAuthenticated, setCurrentPage);
   useAutoLock(isAuthenticated, handleLogout, handleSessionLocked);
 

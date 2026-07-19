@@ -17,6 +17,24 @@ export function isStatutOccupationLogement(value: string): value is StatutOccupa
   return (STATUTS_OCCUPATION_LOGEMENT as readonly string[]).includes(value);
 }
 
+/** Libellé RIO « Statut d'occupation du logement » → valeur fiche contact. */
+export function mapRioStatutOccupationLogement(
+  label?: string
+): StatutOccupationLogement | undefined {
+  if (!label?.trim()) return undefined;
+  const normalized = label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+  if (normalized.includes("proprietaire")) return "PROPRIETAIRE";
+  if (normalized.includes("locataire")) return "LOCATAIRE";
+  if (normalized.includes("heberge") || normalized.includes("titre gratuit")) {
+    return "HEBERGE_GRATUIT";
+  }
+  return undefined;
+}
+
 /** Profession indiquant une retraite (checklist R3 immo). */
 export function isRetiredProfession(profession?: string | null): boolean {
   const p = profession?.trim().toLowerCase() ?? "";
