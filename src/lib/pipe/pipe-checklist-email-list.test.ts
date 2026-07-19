@@ -106,7 +106,8 @@ describe("formatR3ImmoChecklistEmailList", () => {
 
     expect(text).toContain("Identification");
     expect(text).toContain("Carte nationale");
-    expect(html).toContain("<p");
+    expect(html).toContain("<strong>Identification");
+    expect(html).toContain(" :</strong>");
     expect(html).toContain("<ul");
   });
 

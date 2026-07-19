@@ -16,7 +16,7 @@ import type { R3ImmoRdvPlanningDraft } from "@/lib/pipe/pipe-r3-immo-rdv-plannin
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import { AgendaRdvConflicts } from "@/components/calendar/AgendaRdvConflicts";
 import type { AgendaRdvPipeDraft } from "@/lib/navigation/agenda-navigation";
-import { syncEndFromStartAndDuration } from "@/lib/calendar/rdv-duration";
+import { syncEndFromStartAndDuration, defaultRdvDurationPresetForPlanOption, rdvDurationMinutesFromPreset } from "@/lib/calendar/rdv-duration";
 import { useRdvVisioLocation } from "@/hooks/useRdvVisioLocation";
 import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
 import {
@@ -118,6 +118,9 @@ export function PipeTimelineAddForm({
     isR3ImmoRdvPlanOption(rdvPlanOption) &&
     pipe != null &&
     pipe.id > 0;
+  const rdvConflictDurationMinutes = rdvDurationMinutesFromPreset(
+    defaultRdvDurationPresetForPlanOption(rdvPlanOption)
+  );
   const { templates: checklistTemplates } = usePipeChecklistTemplates();
   const { profile: r1Profile, setProfile: setR1Profile, profileReady: r1ProfileReady } =
     usePipeR1RdvProfilePlanning({
@@ -256,7 +259,7 @@ export function PipeTimelineAddForm({
       {isRdv && (
         <AgendaRdvConflicts
           occurredAt={occurredAt}
-          endAt={syncEndFromStartAndDuration(occurredAt, 60)}
+          endAt={syncEndFromStartAndDuration(occurredAt, rdvConflictDurationMinutes)}
           pipeDraft={
             pipe && pipe.contact_id != null && pipe.contact_id > 0
               ? {

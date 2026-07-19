@@ -16,7 +16,7 @@ import { resolvePipeRdvGoogleEventId } from "@/lib/api/tauri-calendar";
 import { buildPipeRdvCalendarContext } from "@/lib/pipe/pipe-rdv-calendar-context";
 import {
   formatPipeRdvCalendarContactLabel,
-  pipeRdvCalendarEndAt,
+  resolvePipeRdvCalendarEndAtForTimelineEntry,
 } from "@/lib/pipe/pipe-rdv-google-calendar";
 import {
   applyPipeRdvReschedule,
@@ -274,13 +274,18 @@ export function PipeTimelinePhaseEntryRow({
           secondary_contact_nom: pipe.secondary_contact_nom,
         };
         const calendarCtx = buildPipeRdvCalendarContext(calendarPipe);
+        const endAtUnix = await resolvePipeRdvCalendarEndAtForTimelineEntry({
+          startAtUnix: entry.occurred_at,
+          pipeTimelineEntryId: entry.id,
+          planOption: target,
+        });
         await syncGoogleCalendarForPipeRdv({
           contactId: pipe.contact_id,
           contactLabel: formatPipeRdvCalendarContactLabel(calendarPipe),
           rdvStage: rdvStageFromPlanOption(target),
           rdvPlanOption: target,
           startAtUnix: entry.occurred_at,
-          endAtUnix: pipeRdvCalendarEndAt(entry.occurred_at),
+          endAtUnix,
           pipeTimelineEntryId: entry.id,
           existingGoogleEventId:
             entry.google_event_id?.trim() ||

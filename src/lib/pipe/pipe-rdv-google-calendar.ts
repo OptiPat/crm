@@ -3,6 +3,7 @@ import {
   endUnixFromDuration,
   rdvDurationMinutesFromPreset,
 } from "@/lib/calendar/rdv-duration";
+import { getPipeRdvCalendarEventForTimeline } from "@/lib/api/tauri-calendar";
 import {
   rdvStageFromPlanOption,
   type PipeRdvPlanOption,
@@ -95,4 +96,31 @@ export function pipeRdvCalendarEndAtForPlanOption(
     defaultRdvDurationPresetForPlanOption(planOption)
   );
   return endUnixFromDuration(startAtUnix, minutes);
+}
+
+/** Fin agenda : conserve la durée déjà enregistrée, sinon défaut du type de RDV. */
+export function resolvePipeRdvCalendarEndAtFromSnapshot(options: {
+  startAtUnix: number;
+  calendarEndAt?: number | null;
+  planOption?: PipeRdvPlanOption | null;
+}): number {
+  if (options.calendarEndAt != null && options.calendarEndAt > options.startAtUnix) {
+    return options.calendarEndAt;
+  }
+  return pipeRdvCalendarEndAtForPlanOption(options.startAtUnix, options.planOption);
+}
+
+export async function resolvePipeRdvCalendarEndAtForTimelineEntry(options: {
+  startAtUnix: number;
+  pipeTimelineEntryId: number;
+  planOption?: PipeRdvPlanOption | null;
+}): Promise<number> {
+  const calendar = await getPipeRdvCalendarEventForTimeline(options.pipeTimelineEntryId).catch(
+    () => null
+  );
+  return resolvePipeRdvCalendarEndAtFromSnapshot({
+    startAtUnix: options.startAtUnix,
+    calendarEndAt: calendar?.end_at,
+    planOption: options.planOption,
+  });
 }

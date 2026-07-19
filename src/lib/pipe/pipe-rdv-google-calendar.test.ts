@@ -6,6 +6,7 @@ import {
   isPipeRdvCalendarSyncEligible,
   pipeRdvCalendarEndAt,
   pipeRdvCalendarEndAtForPlanOption,
+  resolvePipeRdvCalendarEndAtFromSnapshot,
   PIPE_RDV_CALENDAR_DURATION_SEC,
 } from "@/lib/pipe/pipe-rdv-google-calendar";
 
@@ -88,6 +89,31 @@ describe("pipeRdvCalendarEndAtForPlanOption", () => {
     expect(pipeRdvCalendarEndAtForPlanOption(1_700_000_000, "R3_PLACEMENT")).toBe(
       1_700_000_000 + 60 * 60
     );
+  });
+});
+
+describe("resolvePipeRdvCalendarEndAtFromSnapshot", () => {
+  it("conserve end_at agenda existant", () => {
+    const start = 1_700_000_000;
+    const end = start + 120 * 60;
+    expect(
+      resolvePipeRdvCalendarEndAtFromSnapshot({
+        startAtUnix: start,
+        calendarEndAt: end,
+        planOption: "R3_IMMO",
+      })
+    ).toBe(end);
+  });
+
+  it("utilise le défaut du type sans fin agenda", () => {
+    const start = 1_700_000_000;
+    expect(
+      resolvePipeRdvCalendarEndAtFromSnapshot({
+        startAtUnix: start,
+        calendarEndAt: null,
+        planOption: "R3_IMMO",
+      })
+    ).toBe(start + 90 * 60);
   });
 });
 

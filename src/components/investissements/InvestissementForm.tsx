@@ -708,12 +708,13 @@ export function InvestissementForm({
           : undefined,
         versement_programme: accepteVersementProgramme ? versementProgramme : false,
         montant_versement_programme:
-          accepteVersementProgramme && montantVersementProgramme
+          accepteVersementProgramme && versementProgramme && montantVersementProgramme
             ? Math.round(parseFloat(montantVersementProgramme) * 100)
             : undefined,
-        frequence_versement: accepteVersementProgramme
-          ? frequenceVersement || undefined
-          : undefined,
+        frequence_versement:
+          accepteVersementProgramme && versementProgramme
+            ? frequenceVersement || undefined
+            : undefined,
         reinvestissement_dividendes: accepteReinvestissement ? reinvestissementDividendes : false,
         notes: finalNotes || undefined,
         origine,

@@ -197,7 +197,9 @@ export function formatR3ImmoChecklistEmailList(
 
     textLines.push(`${section} :`);
     textLines.push(...labels.map((label) => `  - ${label}`));
-    htmlParts.push(`<p style="${R3_IMMO_EMAIL_SECTION_STYLE}">${escapeHtml(section)}</p>`);
+    htmlParts.push(
+      `<p style="${R3_IMMO_EMAIL_SECTION_STYLE}"><strong>${escapeHtml(section)} :</strong></p>`
+    );
     htmlParts.push(
       `<ul style="${R1_EMAIL_UL_STYLE}">${labels
         .map((label) => `<li>${escapeHtml(label)}</li>`)

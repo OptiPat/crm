@@ -1,7 +1,11 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { buildR1ChecklistEmailPreviewDocument } from "@/lib/pipe/pipe-checklist-email-list";
 
-export function R1ChecklistEmailHtmlPreview({ html }: { html: string }) {
+export const R1ChecklistEmailHtmlPreview = memo(function R1ChecklistEmailHtmlPreview({
+  html,
+}: {
+  html: string;
+}) {
   const srcDoc = useMemo(() => buildR1ChecklistEmailPreviewDocument(html), [html]);
   if (!srcDoc) return null;
 
@@ -20,4 +24,4 @@ export function R1ChecklistEmailHtmlPreview({ html }: { html: string }) {
       }}
     />
   );
-}
+});

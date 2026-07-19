@@ -76,6 +76,8 @@ Invoke-VerifyStep 'Tests frontend (Vitest)' {
 
 if (-not $Quick) {
     Invoke-VerifyStep 'Tests backend (Cargo)' {
+        # Hors src-tauri/ pour ne pas déclencher le watcher `tauri dev`.
+        $env:CARGO_TARGET_DIR = Join-Path $PSScriptRoot 'target-cargo-verify'
         cargo test --manifest-path src-tauri/Cargo.toml
         if ($LASTEXITCODE -ne 0) { throw "cargo test a echoue." }
     }

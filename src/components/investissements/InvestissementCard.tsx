@@ -12,7 +12,10 @@ import {
   getEffectiveEncoursCentimes,
   isPlacementEncoursEligible,
 } from "@/lib/investissements/investissement-encours";
-import { getMontantInvestiCentimes } from "@/lib/investissements/investissement-versements";
+import {
+  getMontantInvestiCentimes,
+  hasActiveVersementProgramme,
+} from "@/lib/investissements/investissement-versements";
 import {
   formatScpiCreditLabel,
   hasScpiCredit,
@@ -234,10 +237,9 @@ export function InvestissementCard({
                 Souscr. {formatCalendarDateFr(inv.date_souscription)}
               </InvestissementMetaRow>
             )}
-            {inv.montant_versement_programme &&
-              inv.montant_versement_programme > 0 && (
+            {hasActiveVersementProgramme(inv) && (
                 <InvestissementMetaRow icon={Repeat} tone="vp">
-                  VP : {formatEuroCentimes(inv.montant_versement_programme)}
+                  VP : {formatEuroCentimes(inv.montant_versement_programme!)}
                   {inv.frequence_versement &&
                     ` (${inv.frequence_versement})`}
                 </InvestissementMetaRow>

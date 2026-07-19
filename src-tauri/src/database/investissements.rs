@@ -495,6 +495,15 @@ impl super::Database {
             0
         };
 
+        let (montant_versement_programme, frequence_versement) = if versement_programme == 1 {
+            (
+                investissement.montant_versement_programme,
+                investissement.frequence_versement.clone(),
+            )
+        } else {
+            (None, None)
+        };
+
         self.conn.execute(
             "UPDATE investissements SET 
                 contact_id = ?1,
@@ -539,8 +548,8 @@ impl super::Database {
                 prevoyance_pro,
                 &investissement.prevoyance_versement_mensuel,
                 versement_programme,
-                &investissement.montant_versement_programme,
-                &investissement.frequence_versement,
+                &montant_versement_programme,
+                &frequence_versement,
                 reinvestissement_dividendes,
                 &investissement.notes,
                 &origine,
@@ -1454,5 +1463,79 @@ mod tests {
 
         let updated = db.get_investissement_by_id(created.id).unwrap();
         assert_eq!(updated.origine, "EXISTANT_CLIENT");
+    }
+
+    #[test]
+    fn update_investissement_clears_versement_programme_fields_when_disabled() {
+        use super::super::models::NewInvestissement;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.get_connection()
+            .execute(
+                "INSERT INTO contacts (categorie, nom, prenom, created_at, updated_at)
+                 VALUES ('CLIENT', 'DUPONT', 'Jean', 1, 1)",
+                [],
+            )
+            .unwrap();
+        let created = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(1),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "Contrat AV".into(),
+                numero_contrat: None,
+                montant_initial: None,
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: Some(true),
+                montant_versement_programme: Some(50_000),
+                frequence_versement: Some("MENSUEL".into()),
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+
+        db.update_investissement(
+            created.id,
+            &NewInvestissement {
+                contact_id: Some(1),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "Contrat AV".into(),
+                numero_contrat: None,
+                montant_initial: None,
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: Some(50_000),
+                frequence_versement: Some("MENSUEL".into()),
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            },
+        )
+        .unwrap();
+
+        let updated = db.get_investissement_by_id(created.id).unwrap();
+        assert!(!updated.versement_programme);
+        assert_eq!(updated.montant_versement_programme, None);
+        assert_eq!(updated.frequence_versement, None);
     }
 }

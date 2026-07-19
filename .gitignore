@@ -25,6 +25,8 @@ dist-ssr
 
 # Tauri
 /src-tauri/target
+/src-tauri/target-verify
+/target-cargo-verify
 
 # --- Données sensibles (ne jamais committer) ---
 _fixtures/identity/*

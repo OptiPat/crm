@@ -1,0 +1,3 @@
+# Artefacts Cargo : ne pas relancer `tauri dev` à chaque écriture incremental.
+target/
+target-verify/
