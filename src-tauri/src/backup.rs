@@ -352,11 +352,34 @@ pub fn create_daily_backup_if_needed(
 
 /// Restaure la base depuis une copie du dossier backups (nom de fichier uniquement).
 /// Cree d'abord une copie de securite de la base actuelle si elle existe.
+#[derive(Debug)]
+pub struct RestoreDbFailure {
+    error: io::Error,
+    pub rollback_complete: bool,
+}
+
+impl std::fmt::Display for RestoreDbFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.error.fmt(formatter)
+    }
+}
+
+impl std::error::Error for RestoreDbFailure {}
+
+impl From<io::Error> for RestoreDbFailure {
+    fn from(error: io::Error) -> Self {
+        Self {
+            error,
+            rollback_complete: true,
+        }
+    }
+}
+
 pub fn restore_db_from_backup(
     app_data_dir: &Path,
     db_path: &Path,
     backup_filename: &str,
-) -> std::io::Result<(PathBuf, Option<PathBuf>)> {
+) -> Result<(PathBuf, Option<PathBuf>), RestoreDbFailure> {
     let backups_dir = app_data_dir.join("backups");
     let src = validate_db_backup(app_data_dir, backup_filename)?;
     let file_name = src
@@ -402,13 +425,19 @@ pub fn restore_db_from_backup(
                 )
             });
         return match rollback_result {
-            Ok(()) => Err(restore_error),
-            Err(rollback_error) => Err(io::Error::new(
-                restore_error.kind(),
-                format!(
-                    "Restauration échouée ({restore_error}) et rollback incomplet ({rollback_error})"
+            Ok(()) => Err(RestoreDbFailure {
+                error: restore_error,
+                rollback_complete: true,
+            }),
+            Err(rollback_error) => Err(RestoreDbFailure {
+                error: io::Error::new(
+                    restore_error.kind(),
+                    format!(
+                        "Restauration échouée ({restore_error}) et rollback incomplet ({rollback_error})"
+                    ),
                 ),
-            )),
+                rollback_complete: false,
+            }),
         };
     }
 
@@ -727,7 +756,7 @@ mod tests {
 
         let err = restore_db_from_backup(&app_data, &db_path, "../evil.db")
             .expect_err("must reject path traversal");
-        assert!(err.kind() == std::io::ErrorKind::InvalidInput);
+        assert!(err.error.kind() == std::io::ErrorKind::InvalidInput);
 
         let _ = fs::remove_dir_all(&app_data);
     }
@@ -741,7 +770,12 @@ mod tests {
         let backup_name = "patrimoine-crm_corrupted.db";
         fs::write(app_data.join("backups").join(backup_name), b"not sqlite").unwrap();
 
-        assert!(restore_db_from_backup(&app_data, &db_path, backup_name).is_err());
+        let failure = restore_db_from_backup(&app_data, &db_path, backup_name)
+            .expect_err("restore must fail");
+        assert!(
+            failure.rollback_complete,
+            "prevalidation failure leaves the live database untouched"
+        );
         assert_eq!(read_marker(&db_path), "live");
         let _ = fs::remove_dir_all(&app_data);
     }
@@ -768,7 +802,12 @@ mod tests {
         fs::write(target_config.join("auth.json"), b"{}").expect("target auth");
         fs::create_dir_all(app_data.join("auth.json")).expect("invalid live auth path");
 
-        assert!(restore_db_from_backup(&app_data, &db_path, backup_name).is_err());
+        let failure = restore_db_from_backup(&app_data, &db_path, backup_name)
+            .expect_err("restore must fail");
+        assert!(
+            !failure.rollback_complete,
+            "a failed config rollback must keep the database closed"
+        );
         assert_eq!(read_marker(&db_path), "live");
         assert!(live_documents.join("live.pdf").is_file());
         assert!(!live_documents.join("target.pdf").exists());

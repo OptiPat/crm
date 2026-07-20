@@ -103,6 +103,11 @@ pub fn restore_db_backup(
     let (restored, safety) = match restore_result {
         Ok(result) => result,
         Err(error) => {
+            if !error.rollback_complete {
+                return Err(format!(
+                    "Restauration impossible et retour arrière incomplet : {error}. La base reste fermée pour éviter toute écriture. Fermez le CRM et utilisez la copie de sécurité du dossier backups."
+                ));
+            }
             drop(backup_guard);
             let reopen_result = crate::database::Database::open(&app)
                 .map_err(|reopen_error| reopen_error.to_string())

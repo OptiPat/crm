@@ -30,7 +30,8 @@ import { buildPatrimoineMaps } from "@/lib/investissements/bulk-patrimoine";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import { downloadCsvFile } from "@/lib/export/csv-export";
-import { buildContactsCsv } from "@/lib/export/contacts-csv";
+import { buildClientsContactsCsv, buildContactsExportFilename, buildFilleulsContactsCsv, clientExportIncludesPatrimoine } from "@/lib/export/contacts-csv";
+import { getInvestissementsWithDetails } from "@/lib/api/tauri-investissements";
 import { getAllEtiquettes, getAllContactEtiquettesDetails, type ContactEtiquetteDetails, type Etiquette } from "@/lib/api/tauri-etiquettes";
 import { getAllSegments, getContactsMatchingSegment, type Segment } from "@/lib/api/tauri-segments";
 import { groupEtiquettesByContactId } from "@/lib/etiquettes/etiquette-condition-labels";
@@ -648,19 +649,36 @@ export function Contacts({ onNavigate }: ContactsProps) {
     [contacts, openLinkedContact]
   );
 
-  const handleExportCsv = () => {
-    const date = new Date().toISOString().slice(0, 10);
-    downloadCsvFile(
-      `contacts_${date}.csv`,
-      buildContactsCsv(
-        filteredContacts,
-        foyers,
-        patrimoines,
-        patrimoinesAvecMoi,
-        etiquettesParContact
-      )
+  const handleExportCsv = async () => {
+    const filename = buildContactsExportFilename(
+      mainTab,
+      mainTab === "clients" ? clientSubTab : filleulSubTab
     );
-    toast.success(`${filteredContacts.length} contact(s) exporté(s)`);
+    try {
+      if (mainTab === "clients") {
+        const investissements = clientExportIncludesPatrimoine(clientSubTab)
+          ? await getInvestissementsWithDetails()
+          : [];
+        downloadCsvFile(
+          filename,
+          buildClientsContactsCsv(
+            filteredContacts,
+            foyers,
+            clientSubTab,
+            investissements
+          )
+        );
+      } else {
+        downloadCsvFile(
+          filename,
+          buildFilleulsContactsCsv(filteredContacts, foyers, filleulSubTab, contacts)
+        );
+      }
+      toast.success(`${filteredContacts.length} contact(s) exporté(s)`);
+    } catch (error) {
+      console.error("Erreur export contacts:", error);
+      toast.error("Impossible d'exporter les contacts");
+    }
   };
 
   const closeContactDetail = () => {
