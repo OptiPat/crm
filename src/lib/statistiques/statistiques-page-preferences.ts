@@ -82,3 +82,50 @@ export function saveStatistiquesSectionOpen(
 ): void {
   writeState({ ...readState(), [sectionId]: open });
 }
+
+export const ALL_STATISTIQUES_PANEL_IDS: StatistiquesPanelId[] = [
+  "source_client",
+  "source_filleul",
+  "conversion_client",
+  "conversion_filleul",
+  "prescripteur_client",
+  "prescripteur_filleul",
+  "prescripteur_conversion_client",
+  "prescripteur_conversion_filleul",
+  "attrition_client",
+  "attrition_filleul",
+  "geography_client",
+  "geography_filleul",
+  "age_client",
+  "age_filleul",
+  "client_encours_placements",
+  "client_versements_programmes",
+  "client_panier_moyen",
+  "client_assurance_vie",
+  "client_scpi",
+  "client_per",
+  "client_immobilier",
+  "client_above_panier_moyen",
+  "client_scpi_reinvest",
+  "client_vp_coverage",
+  "filleul_org_manager",
+  "filleul_org_volume",
+  "filleul_org_parraineur",
+  "filleul_org_bridge",
+];
+
+export function setAllStatistiquesPanelsOpen(open: boolean): void {
+  const next = { ...readState() };
+  for (const panelId of ALL_STATISTIQUES_PANEL_IDS) {
+    next[panelId] = open;
+  }
+  writeState(next);
+}
+
+export function expandAllStatistiquesPanels(): void {
+  setAllStatistiquesPanelsOpen(true);
+}
+
+export function collapseAllStatistiquesPanels(): void {
+  setAllStatistiquesPanelsOpen(false);
+}

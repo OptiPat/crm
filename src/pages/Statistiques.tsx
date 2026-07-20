@@ -3,50 +3,55 @@ import { ContactClientStatsPanel } from "@/components/statistiques/ContactClient
 import { ContactFilleulOrganisationPanel } from "@/components/statistiques/ContactFilleulOrganisationPanel";
 import { ContactPrescripteurPanel } from "@/components/statistiques/ContactPrescripteurPanel";
 import { ContactSourceLeadPanel } from "@/components/statistiques/ContactSourceLeadPanel";
-import { StatistiquesCollapsibleSection } from "@/components/statistiques/statistiques-ui";
+import { StatistiquesPageToolbar } from "@/components/statistiques/StatistiquesPageToolbar";
+import { StatistiquesSection } from "@/components/statistiques/statistiques-ui";
+import { StatistiquesPageDataProvider } from "@/components/statistiques/statistiques-page-data-context";
+import { STATISTIQUES_SECTIONS } from "@/lib/statistiques/statistiques-sections";
 
 type StatistiquesProps = {
   onNavigate?: (page: string) => void;
 };
 
+const SECTION_ICONS = {
+  contacts: Users,
+  prescripteurs: Share2,
+  filleuls_organisation: Network,
+  clients: CircleUser,
+} as const;
+
+function StatistiquesContent({ onNavigate }: StatistiquesProps) {
+  return (
+    <div className="space-y-8 max-w-[1600px] mx-auto pb-8">
+      <StatistiquesPageToolbar />
+
+      {STATISTIQUES_SECTIONS.map((section) => (
+        <StatistiquesSection
+          key={section.id}
+          sectionId={section.id}
+          title={section.title}
+          subtitle={section.subtitle}
+          intro={section.intro}
+          icon={SECTION_ICONS[section.id]}
+          panelCount={section.panelCount}
+        >
+          {section.id === "contacts" ? <ContactSourceLeadPanel onNavigate={onNavigate} /> : null}
+          {section.id === "prescripteurs" ? (
+            <ContactPrescripteurPanel onNavigate={onNavigate} />
+          ) : null}
+          {section.id === "filleuls_organisation" ? (
+            <ContactFilleulOrganisationPanel onNavigate={onNavigate} />
+          ) : null}
+          {section.id === "clients" ? <ContactClientStatsPanel onNavigate={onNavigate} /> : null}
+        </StatistiquesSection>
+      ))}
+    </div>
+  );
+}
+
 export function Statistiques({ onNavigate }: StatistiquesProps) {
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto pb-8">
-      <StatistiquesCollapsibleSection
-        sectionId="contacts"
-        title="Source / lead"
-        subtitle="Origine des contacts et taux de conversion par source"
-        icon={Users}
-      >
-        <ContactSourceLeadPanel onNavigate={onNavigate} />
-      </StatistiquesCollapsibleSection>
-
-      <StatistiquesCollapsibleSection
-        sectionId="prescripteurs"
-        title="Prescripteurs"
-        subtitle="Qui vous recommande des clients et des filleuls — conversion par prescripteur"
-        icon={Share2}
-      >
-        <ContactPrescripteurPanel onNavigate={onNavigate} />
-      </StatistiquesCollapsibleSection>
-
-      <StatistiquesCollapsibleSection
-        sectionId="filleuls_organisation"
-        title="Organisation filleuls"
-        subtitle="Stats générales"
-        icon={Network}
-      >
-        <ContactFilleulOrganisationPanel onNavigate={onNavigate} />
-      </StatistiquesCollapsibleSection>
-
-      <StatistiquesCollapsibleSection
-        sectionId="clients"
-        title="Clients"
-        subtitle="Stats générales"
-        icon={CircleUser}
-      >
-        <ContactClientStatsPanel onNavigate={onNavigate} />
-      </StatistiquesCollapsibleSection>
-    </div>
+    <StatistiquesPageDataProvider>
+      <StatistiquesContent onNavigate={onNavigate} />
+    </StatistiquesPageDataProvider>
   );
 }

@@ -4,7 +4,6 @@ import {
   departementCodeFromCodePostal,
   geographyGroupKeyFromContact,
   geographyGroupLabel,
-  GEOGRAPHY_FOREIGN_KEY,
   GEOGRAPHY_UNSET_KEY,
 } from "@/lib/contacts/departement-from-code-postal";
 import {
@@ -42,10 +41,15 @@ describe("departement-from-code-postal", () => {
   it("classe hors France et non renseigné", () => {
     expect(
       geographyGroupKeyFromContact({ code_postal: "34000", pays: "Suisse" })
-    ).toBe(GEOGRAPHY_FOREIGN_KEY);
+    ).toBe("country:suisse");
+    expect(geographyGroupLabel("country:suisse")).toBe("Suisse");
     expect(geographyGroupKeyFromContact({ code_postal: "", pays: "France" })).toBe(
       GEOGRAPHY_UNSET_KEY
     );
+    expect(geographyGroupKeyFromContact({ code_postal: "98700", pays: "France" })).toBe("987");
+    expect(geographyGroupKeyFromContact({ pays: "Polynésie française" })).toBe("987");
+    expect(geographyGroupKeyFromContact({ pays: "Royaume-Uni" })).toBe("country:royaume-uni");
+    expect(geographyGroupKeyFromContact({ pays: "USA" })).toBe("country:usa");
   });
 });
 
@@ -106,6 +110,18 @@ describe("contact-geography-stats", () => {
     expect(isContactEligibleForFilleulGeographyStats({ categorie: "AUCUN", filleul_categorie: "SUSPECT_FILLEUL" })).toBe(
       false
     );
+  });
+
+  it("regroupe les pays étrangers par libellé pays", () => {
+    const withForeign = [
+      ...contacts,
+      contact({ id: 11, categorie: "CLIENT", pays: "Royaume-Uni" }),
+      contact({ id: 12, categorie: "CLIENT", pays: "USA" }),
+      contact({ id: 13, categorie: "CLIENT", pays: "Royaume-Uni" }),
+    ];
+    const stats = computeContactGeographyStats(withForeign, "client");
+    expect(stats.rows.find((row) => row.key === "country:royaume-uni")?.count).toBe(2);
+    expect(stats.rows.find((row) => row.key === "country:usa")?.label).toBe("USA");
   });
 
   it("filtre le drill-down par département", () => {

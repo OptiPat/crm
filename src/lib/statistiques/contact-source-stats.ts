@@ -107,13 +107,16 @@ function isContactEligibleForLens(
 
 function normalizeSourceLeadKey(value?: string | null): string | null {
   const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
+  if (!trimmed) return null;
+  const lowered = trimmed.toLocaleLowerCase("fr");
+  if (lowered === "non renseigné" || lowered === "non renseigne") return null;
+  return trimmed;
 }
 
 function sourceLeadGroupKeyFromContact(contact: Contact): string {
   const source = normalizeSourceLeadKey(contact.source_lead);
-  const key = source ?? CONTACT_SOURCE_LEAD_UNSET_KEY;
-  return key === CONTACT_SOURCE_LEAD_UNSET_KEY ? key : key.toLocaleLowerCase("fr");
+  if (!source) return CONTACT_SOURCE_LEAD_UNSET_KEY;
+  return source.toLocaleLowerCase("fr");
 }
 
 export function contactSourceLeadDisplayLabel(key: string): string {
@@ -121,12 +124,12 @@ export function contactSourceLeadDisplayLabel(key: string): string {
 }
 
 function sourceLeadRowFromContact(contact: Contact): { key: string; label: string } {
-  const source = normalizeSourceLeadKey(contact.source_lead);
-  const key = source ?? CONTACT_SOURCE_LEAD_UNSET_KEY;
-  return {
-    key: sourceLeadGroupKeyFromContact(contact),
-    label: contactSourceLeadDisplayLabel(key),
-  };
+  const key = sourceLeadGroupKeyFromContact(contact);
+  if (key === CONTACT_SOURCE_LEAD_UNSET_KEY) {
+    return { key, label: CONTACT_SOURCE_LEAD_UNSET_LABEL };
+  }
+  const trimmed = contact.source_lead?.trim();
+  return { key, label: trimmed || key };
 }
 
 /** Contact éligible (lentille client) auquel rattacher un investissement « avec moi ». */

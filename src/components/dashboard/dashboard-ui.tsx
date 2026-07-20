@@ -235,6 +235,10 @@ export function DashboardKpiHelp() {
           <strong className="text-foreground">Versements programmés</strong> — projection annuelle
           des VP actifs sur le portefeuille « avec moi ».
         </p>
+        <p>
+          Analyses détaillées (source, prescripteur, géographie, couverture produits) : page{" "}
+          <strong className="text-foreground">Statistiques</strong> dans le menu latéral.
+        </p>
       </div>
     </details>
   );

@@ -1,13 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
-import { getCgpConfig } from "@/lib/api/tauri-settings";
-import {
-  getInvestissementsWithDetails,
-  type InvestissementWithDetails,
-} from "@/lib/api/tauri-investissements";
-import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
-import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
-import { resolveOrganisationSelfContact } from "@/lib/organisation/organisation-tree";
+import { useCallback, useMemo, useState } from "react";
+import type { InvestissementWithDetails } from "@/lib/api/tauri-investissements";
 import {
   computeContactSourceLeadInvestissementStats,
   computeContactSourceLeadStats,
@@ -31,17 +23,22 @@ import {
   type AttributionInvestissementStatRow,
   type AttributionStatRow,
 } from "./contact-stats-panels";
+import { useStatistiquesPageData } from "./statistiques-page-data-context";
 
 type ContactSourceLeadPanelProps = {
   onNavigate?: (page: string) => void;
 };
 
 export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelProps) {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [investissements, setInvestissements] = useState<InvestissementWithDetails[]>([]);
-  const [selfContactId, setSelfContactId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [dataRefreshKey, setDataRefreshKey] = useState(0);
+  const {
+    contacts,
+    investissementsWithDetails: investissements,
+    selfContactId,
+    loading,
+    dataRefreshKey,
+    refreshData,
+  } = useStatistiquesPageData();
+
   const [contactsSheetOpen, setContactsSheetOpen] = useState(false);
   const [investissementsSheetOpen, setInvestissementsSheetOpen] = useState(false);
   const [selectedContactRow, setSelectedContactRow] = useState<AttributionStatRow | null>(null);
@@ -50,28 +47,6 @@ export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelPro
     useState<AttributionInvestissementStatRow | null>(null);
 
   const statsOptions = useMemo(() => ({ selfContactId }), [selfContactId]);
-
-  const refreshData = useCallback(async (options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? false;
-    if (!silent) setLoading(true);
-    try {
-      const [rows, invRows, cgp] = await Promise.all([
-        getAllContacts(),
-        getInvestissementsWithDetails(),
-        getCgpConfig(),
-      ]);
-      setContacts(rows);
-      setInvestissements(invRows);
-      setSelfContactId(resolveOrganisationSelfContact(rows, cgp)?.id ?? null);
-      setDataRefreshKey((key) => key + 1);
-    } catch (error) {
-      console.error("Erreur chargement statistiques contacts:", error);
-      setContacts([]);
-      setInvestissements([]);
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, []);
 
   const {
     openContactWithTab,
@@ -83,20 +58,6 @@ export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelPro
     onNavigate,
     onUpdate: () => void refreshData({ silent: true }),
   });
-
-  useEffect(() => {
-    void refreshData();
-  }, [refreshData]);
-
-  useEffect(
-    () => subscribeContactsChanged(() => void refreshData({ silent: true })),
-    [refreshData]
-  );
-
-  useEffect(
-    () => subscribeInvestissementsChanged(() => void refreshData({ silent: true })),
-    [refreshData]
-  );
 
   const clientContactStats = useMemo(
     () => computeContactSourceLeadStats(contacts, statsOptions, "client"),
@@ -207,7 +168,7 @@ export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelPro
           loading={loading}
           total={clientContactStats.total}
           totalLabel="Clients"
-          totalHint="Exclus : suspects clients, prescripteurs, filleuls seuls. Un contact client+filleul est compté ici."
+          totalHint="Exclus : suspects clients, prescripteurs, filleuls seuls."
           rows={clientContactStats.rows}
           onOpenRow={(row) => openContactDistributionRow(row, "client")}
         />
@@ -219,7 +180,7 @@ export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelPro
           loading={loading}
           total={filleulContactStats.total}
           totalLabel="Filleuls"
-          totalHint="Prospects, inscrits et désinscrits. Exclus : suspects filleuls et filleuls d'un autre parrain."
+          totalHint="Prospects, inscrits et désinscrits."
           rows={filleulContactStats.rows}
           onOpenRow={(row) => openContactDistributionRow(row, "filleul")}
         />

@@ -6,19 +6,16 @@ import { ContactClientProductCoveragePanels } from "./ContactClientProductCovera
 import { ContactClientScpiReinvestPanel } from "./ContactClientScpiReinvestPanel";
 import { ContactClientVpCoveragePanel } from "./ContactClientVpCoveragePanel";
 import { ContactGeographyPanel } from "./ContactGeographyPanel";
-import { StatistiquesClientDataProvider } from "./statistiques-client-data-context";
-
 type ContactClientStatsPanelProps = {
   onNavigate?: (page: string) => void;
 };
 
 export function ContactClientStatsPanel({ onNavigate }: ContactClientStatsPanelProps) {
   return (
-    <StatistiquesClientDataProvider>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
         <ContactGeographyPanel onNavigate={onNavigate} lens="client" />
         <ContactAgePanel onNavigate={onNavigate} lens="client" />
-        <ContactClientPatrimoinePanels />
+        <ContactClientPatrimoinePanels onNavigate={onNavigate} />
         <ContactClientAbovePanierMoyenPanel onNavigate={onNavigate} />
         <ContactClientProductCoveragePanels onNavigate={onNavigate} />
         <ContactClientScpiReinvestPanel onNavigate={onNavigate} />
@@ -27,6 +24,5 @@ export function ContactClientStatsPanel({ onNavigate }: ContactClientStatsPanelP
           <ContactAttritionPanel onNavigate={onNavigate} title="Attrition" />
         </div>
       </div>
-    </StatistiquesClientDataProvider>
   );
 }

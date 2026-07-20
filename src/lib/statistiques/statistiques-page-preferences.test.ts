@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  expandAllStatistiquesPanels,
+  collapseAllStatistiquesPanels,
   loadStatistiquesSectionOpen,
   saveStatistiquesSectionOpen,
+  ALL_STATISTIQUES_PANEL_IDS,
 } from "./statistiques-page-preferences";
 
 describe("statistiques-page-preferences", () => {
@@ -40,5 +43,16 @@ describe("statistiques-page-preferences", () => {
     storage.set("crm_statistiques_sections_v1", JSON.stringify({ attrition: false }));
     expect(loadStatistiquesSectionOpen("clients", true)).toBe(false);
     expect(loadStatistiquesSectionOpen("attrition" as "clients", true)).toBe(true);
+  });
+
+  it("replie et rouvre tous les panneaux", () => {
+    collapseAllStatistiquesPanels();
+    for (const panelId of ALL_STATISTIQUES_PANEL_IDS) {
+      expect(loadStatistiquesSectionOpen(panelId, true)).toBe(false);
+    }
+    expandAllStatistiquesPanels();
+    for (const panelId of ALL_STATISTIQUES_PANEL_IDS) {
+      expect(loadStatistiquesSectionOpen(panelId, false)).toBe(true);
+    }
   });
 });

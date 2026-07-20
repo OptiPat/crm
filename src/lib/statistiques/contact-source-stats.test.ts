@@ -100,6 +100,36 @@ describe("contact-source-stats", () => {
       expect(reco?.count).toBe(2);
       expect(reco?.percent).toBe(50);
     });
+
+    it("fusionne source vide et libellé « Non renseigné »", () => {
+      const stats = computeContactSourceLeadStats(
+        [
+          contact({ id: 1, source_lead: "" }),
+          contact({ id: 2, source_lead: "Non renseigné" }),
+        ],
+        opts,
+        "client"
+      );
+
+      expect(stats.rows).toHaveLength(1);
+      expect(stats.rows[0].key).toBe(CONTACT_SOURCE_LEAD_UNSET_KEY);
+      expect(stats.rows[0].count).toBe(2);
+    });
+
+    it("fusionne aussi la variante sans accent « non renseigne »", () => {
+      const stats = computeContactSourceLeadStats(
+        [
+          contact({ id: 1, source_lead: "" }),
+          contact({ id: 2, source_lead: "non renseigne" }),
+        ],
+        opts,
+        "client"
+      );
+
+      expect(stats.rows).toHaveLength(1);
+      expect(stats.rows[0].key).toBe(CONTACT_SOURCE_LEAD_UNSET_KEY);
+      expect(stats.rows[0].count).toBe(2);
+    });
   });
 
   describe("lentille filleul", () => {

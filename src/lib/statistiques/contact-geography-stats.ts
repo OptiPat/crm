@@ -4,6 +4,8 @@ import {
   GEOGRAPHY_UNSET_KEY,
   geographyGroupKeyFromContact,
   geographyGroupLabel,
+  geographyGroupLabelFromContact,
+  isForeignCountryGeographyKey,
 } from "@/lib/contacts/departement-from-code-postal";
 import {
   isContactEligibleForStatsLens,
@@ -26,6 +28,10 @@ function sortGeographyRows(rows: ContactGeographyStatRow[]): ContactGeographySta
     if (b.key === GEOGRAPHY_UNSET_KEY) return -1;
     if (a.key === GEOGRAPHY_FOREIGN_KEY) return 1;
     if (b.key === GEOGRAPHY_FOREIGN_KEY) return -1;
+    const aForeign = isForeignCountryGeographyKey(a.key);
+    const bForeign = isForeignCountryGeographyKey(b.key);
+    if (aForeign && !bForeign) return 1;
+    if (!aForeign && bForeign) return -1;
     return b.count - a.count || a.label.localeCompare(b.label, "fr");
   });
 }
@@ -42,21 +48,24 @@ export function computeContactGeographyStats(
     return { total: 0, rows: [] };
   }
 
-  const buckets = new Map<string, number[]>();
+  const buckets = new Map<string, { contactIds: number[]; label?: string }>();
 
   for (const contact of eligible) {
     const key = geographyGroupKeyFromContact(contact);
-    const ids = buckets.get(key) ?? [];
-    ids.push(contact.id!);
-    buckets.set(key, ids);
+    const existing = buckets.get(key) ?? { contactIds: [] };
+    existing.contactIds.push(contact.id!);
+    if (isForeignCountryGeographyKey(key)) {
+      existing.label = geographyGroupLabelFromContact(contact);
+    }
+    buckets.set(key, existing);
   }
 
-  const rows: ContactGeographyStatRow[] = [...buckets.entries()].map(([key, contactIds]) => ({
+  const rows: ContactGeographyStatRow[] = [...buckets.entries()].map(([key, bucket]) => ({
     key,
-    label: geographyGroupLabel(key),
-    count: contactIds.length,
-    percent: (contactIds.length / total) * 100,
-    contactIds,
+    label: bucket.label ?? geographyGroupLabel(key),
+    count: bucket.contactIds.length,
+    percent: (bucket.contactIds.length / total) * 100,
+    contactIds: bucket.contactIds,
   }));
 
   return { total, rows: sortGeographyRows(rows) };

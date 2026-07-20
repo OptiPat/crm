@@ -253,6 +253,7 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
                 accentColor="#8B5CF6"
                 iconColor="text-purple-600"
                 iconBgColor="bg-purple-50"
+                onClick={onNavigate ? () => onNavigate("statistiques") : undefined}
               />
             </>
           ) : (

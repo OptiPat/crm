@@ -1,9 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
-import { getCgpConfig } from "@/lib/api/tauri-settings";
-import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
-import { resolveOrganisationSelfContact } from "@/lib/organisation/organisation-tree";
 import {
   computeFilleulAverageVolumeStats,
   computeFilleulClientBridgeStats,
@@ -44,6 +40,7 @@ import { AttritionKpiPanel } from "./contact-attrition-kpi-panel";
 import { ContactAgePanel } from "./ContactAgePanel";
 import { ContactGeographyPanel } from "./ContactGeographyPanel";
 import { StatistiquesPanel } from "./statistiques-ui";
+import { useStatistiquesPageData } from "./statistiques-page-data-context";
 
 function OrganisationListButton({
   label,
@@ -210,7 +207,7 @@ function ParraineurKpiPanel({
   return (
     <StatistiquesPanel
       title="Parraineurs"
-      description="Part des filleuls inscrits ayant parrainé au moins une personne dans le réseau filleul."
+      description="Part des filleuls inscrits ayant parrainé au moins une personne."
       collapsible
       panelId="filleul_org_parraineur"
     >
@@ -345,28 +342,10 @@ function drillDownTitle(drillDown: OrganisationDrillDown): string {
 export function ContactFilleulOrganisationPanel({
   onNavigate,
 }: ContactFilleulOrganisationPanelProps) {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [selfContactId, setSelfContactId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [dataRefreshKey, setDataRefreshKey] = useState(0);
+  const { contacts, selfContactId, loading, dataRefreshKey, refreshData } =
+    useStatistiquesPageData();
   const [contactsSheetOpen, setContactsSheetOpen] = useState(false);
   const [drillDown, setDrillDown] = useState<OrganisationDrillDown | null>(null);
-
-  const refreshData = useCallback(async (options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? false;
-    if (!silent) setLoading(true);
-    try {
-      const [rows, cgp] = await Promise.all([getAllContacts(), getCgpConfig()]);
-      setContacts(rows);
-      setSelfContactId(resolveOrganisationSelfContact(rows, cgp)?.id ?? null);
-      setDataRefreshKey((key) => key + 1);
-    } catch (error) {
-      console.error("Erreur chargement statistiques organisation filleuls:", error);
-      setContacts([]);
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, []);
 
   const {
     openContactWithTab,
@@ -378,15 +357,6 @@ export function ContactFilleulOrganisationPanel({
     onNavigate,
     onUpdate: () => void refreshData({ silent: true }),
   });
-
-  useEffect(() => {
-    void refreshData();
-  }, [refreshData]);
-
-  useEffect(
-    () => subscribeContactsChanged(() => void refreshData({ silent: true })),
-    [refreshData]
-  );
 
   const statsOptions = useMemo(() => ({ selfContactId }), [selfContactId]);
 
@@ -507,7 +477,7 @@ export function ContactFilleulOrganisationPanel({
 
   return (
     <>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
         <ContactGeographyPanel onNavigate={onNavigate} lens="filleul" />
         <ContactAgePanel onNavigate={onNavigate} lens="filleul" />
         <ManagerKpiPanel loading={loading} stats={managerStats} onOpenList={openManagerList} />

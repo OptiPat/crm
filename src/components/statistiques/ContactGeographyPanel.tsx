@@ -13,6 +13,7 @@ import {
   toDashboardStatContactList,
   type AttributionStatRow,
 } from "./contact-stats-panels";
+import { FranceDepartementsHeatMap } from "./FranceDepartementsHeatMap";
 import { useStatistiquesContactsFetch } from "./statistiques-client-data-context";
 
 type ContactGeographyPanelProps = {
@@ -60,35 +61,37 @@ export function ContactGeographyPanel({
 
   const selectedStats = selectedLens === "client" ? clientStats : filleulStats;
 
+  const renderDistributionPanel = (geoLens: GeographyLens, stats: typeof clientStats) => (
+    <AttributionDistributionPanel
+      panelId={geoLens === "client" ? "geography_client" : "geography_filleul"}
+      title={lens === "both" ? (geoLens === "client" ? "Clients" : "Filleuls") : "Géographie"}
+      description={
+        geoLens === "client"
+          ? "Clients actifs, anciens clients et prospects clients par département."
+          : "Filleuls inscrits, prospects filleuls et filleuls désinscrits par département — tous parrains confondus."
+      }
+      loading={loading}
+      total={stats.total}
+      totalLabel={geoLens === "client" ? "Clients" : "Filleuls"}
+      totalHint="Suspects exclus — département dérivé du code postal."
+      rows={stats.rows}
+      onOpenRow={(row) => openRow(geoLens, row)}
+      mapSlot={
+        !loading && stats.total > 0 ? (
+          <FranceDepartementsHeatMap
+            rows={stats.rows}
+            onSelectDept={(row) => openRow(geoLens, row)}
+            foreignAudienceLabel={geoLens === "client" ? "Clients" : "Filleuls"}
+          />
+        ) : null
+      }
+    />
+  );
+
   const distributionPanels = (
     <>
-      {(lens === "both" || lens === "client") && (
-        <AttributionDistributionPanel
-          panelId="geography_client"
-          title={lens === "both" ? "Clients" : "Géographie"}
-          description="Clients actifs, anciens clients et prospects clients par département."
-          loading={loading}
-          total={clientStats.total}
-          totalLabel="Clients"
-          totalHint="Suspects exclus — département dérivé du code postal."
-          rows={clientStats.rows}
-          onOpenRow={(row) => openRow("client", row)}
-        />
-      )}
-
-      {(lens === "both" || lens === "filleul") && (
-        <AttributionDistributionPanel
-          panelId="geography_filleul"
-          title={lens === "filleul" ? "Géographie" : "Filleuls"}
-          description="Filleuls inscrits, prospects filleuls et filleuls désinscrits par département — tous parrains confondus."
-          loading={loading}
-          total={filleulStats.total}
-          totalLabel="Filleuls"
-          totalHint="Suspects filleuls exclus — département dérivé du code postal."
-          rows={filleulStats.rows}
-          onOpenRow={(row) => openRow("filleul", row)}
-        />
-      )}
+      {(lens === "both" || lens === "client") && renderDistributionPanel("client", clientStats)}
+      {(lens === "both" || lens === "filleul") && renderDistributionPanel("filleul", filleulStats)}
     </>
   );
 
