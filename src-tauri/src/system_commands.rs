@@ -6,6 +6,25 @@ use tauri::{AppHandle, Manager, State};
 
 static LEGACY_KEY_CLEANUP_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
+fn open_backup_source(
+    db: &State<'_, DbState>,
+    db_path: &std::path::Path,
+) -> Result<rusqlite::Connection, String> {
+    {
+        let guard = db
+            .lock()
+            .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
+        if guard.is_none() {
+            return Err("Base non initialisée".to_string());
+        }
+    }
+    rusqlite::Connection::open_with_flags(
+        db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .map_err(|error| format!("Ouverture de la base pour sauvegarde impossible : {error}"))
+}
+
 #[derive(Serialize)]
 pub struct AppInfo {
     pub version: String,
@@ -64,6 +83,10 @@ pub fn restore_db_backup(
     require_ui_session(&session)?;
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let db_path = app_data_dir.join("patrimoine-crm.db");
+    let backup_guard = crate::backup::lock_backup_operations()
+        .map_err(|error| format!("Restauration impossible : {error}"))?;
+    crate::backup::validate_db_backup(&app_data_dir, &backup_filename)
+        .map_err(|error| format!("Restauration impossible : {error}"))?;
 
     {
         let mut guard = db
@@ -72,12 +95,32 @@ pub fn restore_db_backup(
         *guard = None;
     }
 
-    let (restored, safety) = crate::backup::restore_db_from_backup(
+    let restore_result = crate::backup::restore_db_from_backup(
         &app_data_dir,
         &db_path,
         &backup_filename,
-    )
-    .map_err(|e| format!("Restauration impossible : {}", e))?;
+    );
+    let (restored, safety) = match restore_result {
+        Ok(result) => result,
+        Err(error) => {
+            drop(backup_guard);
+            let reopen_result = crate::database::Database::open(&app)
+                .map_err(|reopen_error| reopen_error.to_string())
+                .and_then(|database| {
+                    let mut guard = db
+                        .lock()
+                        .map_err(|_| "Impossible de reverrouiller la base.".to_string())?;
+                    *guard = Some(database);
+                    Ok(())
+                });
+            return match reopen_result {
+                Ok(()) => Err(format!("Restauration impossible : {error}")),
+                Err(reopen_error) => Err(format!(
+                    "Restauration impossible : {error}. Réouverture de la base impossible : {reopen_error}"
+                )),
+            };
+        }
+    };
 
     Ok(RestoreDbBackupResult {
         restored_from: restored
@@ -94,6 +137,7 @@ pub fn restore_db_backup(
 #[tauri::command]
 pub fn create_manual_db_backup(
     app: AppHandle,
+    db: State<'_, DbState>,
     session: State<'_, UiSessionState>,
 ) -> Result<String, String> {
     require_ui_session(&session)?;
@@ -102,7 +146,10 @@ pub fn create_manual_db_backup(
     if !db_path.exists() {
         return Err("Fichier de base introuvable.".to_string());
     }
-    let dest = crate::backup::create_manual_backup(&app_data_dir, &db_path)
+    let _backup_guard =
+        crate::backup::lock_backup_operations().map_err(|error| error.to_string())?;
+    let source = open_backup_source(&db, &db_path)?;
+    let dest = crate::backup::create_manual_backup(&app_data_dir, &source)
         .map_err(|e| e.to_string())?;
     Ok(dest.to_string_lossy().into_owned())
 }
@@ -123,6 +170,8 @@ pub fn cleanup_legacy_secret_key(
         .get_or_init(|| Mutex::new(()))
         .lock()
         .map_err(|_| "Nettoyage de l'ancienne clé déjà indisponible.".to_string())?;
+    let _backup_guard =
+        crate::backup::lock_backup_operations().map_err(|error| error.to_string())?;
     let keys = crate::email::oauth_secrets::validated_protected_key_for_cleanup(&app)?
         .ok_or("Aucune ancienne clé incompatible à nettoyer.")?;
     {
@@ -135,8 +184,11 @@ pub fn cleanup_legacy_secret_key(
 
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let db_path = app_data_dir.join("patrimoine-crm.db");
-    let backup_path = crate::backup::create_manual_backup(&app_data_dir, &db_path)
-        .map_err(|e| format!("Sauvegarde préalable impossible : {e}"))?;
+    let backup_path = {
+        let source = open_backup_source(&db, &db_path)?;
+        crate::backup::create_manual_backup(&app_data_dir, &source)
+            .map_err(|e| format!("Sauvegarde préalable impossible : {e}"))?
+    };
     let revalidated = crate::email::oauth_secrets::validated_protected_key_for_cleanup(&app)?
         .ok_or("Le conflit de clés a changé pendant la sauvegarde. Aucun fichier supprimé.")?;
     if revalidated != keys {
@@ -168,6 +220,133 @@ pub struct ExportFullArchiveResult {
     pub files_included: usize,
 }
 
+#[derive(Serialize)]
+pub struct ExternalBackupSettings {
+    pub directory: Option<String>,
+    pub last_backup_path: Option<String>,
+    pub last_attempt_at: Option<String>,
+    pub last_error: Option<String>,
+}
+
+fn external_backup_settings(app: &AppHandle) -> Result<ExternalBackupSettings, String> {
+    let directory = crate::app_runtime::load_runtime_prefs(app).external_backup_directory;
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let status = crate::backup::load_external_backup_status(&app_data_dir);
+    let last_backup_path = directory
+        .as_deref()
+        .map(std::path::Path::new)
+        .and_then(|path| crate::export_archive::latest_automatic_archive(path).ok().flatten())
+        .map(|path| path.to_string_lossy().into_owned());
+    Ok(ExternalBackupSettings {
+        directory,
+        last_backup_path,
+        last_attempt_at: status.last_attempt_at,
+        last_error: status.last_error,
+    })
+}
+
+#[tauri::command]
+pub fn get_external_backup_settings(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<ExternalBackupSettings, String> {
+    require_ui_session(&session)?;
+    external_backup_settings(&app)
+}
+
+#[tauri::command]
+pub fn set_external_backup_directory(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+    directory: Option<String>,
+) -> Result<ExternalBackupSettings, String> {
+    require_ui_session(&session)?;
+    let mut prefs = crate::app_runtime::load_runtime_prefs(&app);
+    prefs.external_backup_directory = match directory {
+        Some(directory) if !directory.trim().is_empty() => {
+            let selected = std::path::PathBuf::from(directory.trim());
+            if !selected.is_dir() {
+                return Err("Le dossier de sauvegarde externe est introuvable.".into());
+            }
+            let selected = selected
+                .canonicalize()
+                .map_err(|error| format!("Dossier externe invalide : {error}"))?;
+            let app_data = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| error.to_string())?;
+            let app_data = app_data.canonicalize().unwrap_or(app_data);
+            if selected.starts_with(&app_data) {
+                return Err(
+                    "Choisissez un dossier hors des données internes du CRM.".to_string(),
+                );
+            }
+            let probe = selected.join(format!(
+                ".patrimoine-crm-write-test-{}-{}",
+                std::process::id(),
+                chrono::Local::now().timestamp_millis()
+            ));
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&probe)
+                .map_err(|error| {
+                    format!("Le dossier externe n'est pas accessible en écriture : {error}")
+                })?;
+            std::fs::remove_file(&probe)
+                .map_err(|error| format!("Nettoyage du test d'écriture impossible : {error}"))?;
+            Some(selected.to_string_lossy().into_owned())
+        }
+        _ => None,
+    };
+    crate::app_runtime::save_runtime_prefs(&app, &prefs)?;
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::backup::clear_external_backup_status(&app_data_dir);
+    external_backup_settings(&app)
+}
+
+#[tauri::command]
+pub fn create_external_backup_now(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+) -> Result<ExportFullArchiveResult, String> {
+    require_ui_session(&session)?;
+    let settings = external_backup_settings(&app)?;
+    let directory = settings
+        .directory
+        .ok_or("Choisissez d'abord un dossier de sauvegarde externe.")?;
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let _backup_guard =
+        crate::backup::lock_backup_operations().map_err(|error| error.to_string())?;
+    let db_path = app_data_dir.join("patrimoine-crm.db");
+    let source = open_backup_source(&db, &db_path)?;
+    let export_result = crate::export_archive::export_automatic_archive_if_due(
+        crate::export_archive::ExportArchiveInput {
+            source_db: &source,
+            app_data_dir: &app_data_dir,
+            destination_dir: std::path::Path::new(&directory),
+        },
+        true,
+    );
+    let output = match export_result {
+        Ok(Some(output)) => {
+            crate::backup::record_external_backup_success(&app_data_dir, &output.zip_path);
+            output
+        }
+        Ok(None) => return Err("Aucune archive externe créée.".to_string()),
+        Err(error) => {
+            crate::backup::record_external_backup_error(&app_data_dir, &error);
+            return Err(error);
+        }
+    };
+    Ok(ExportFullArchiveResult {
+        zip_path: output.zip_path.to_string_lossy().into_owned(),
+        zip_size: output.zip_size,
+        files_included: output.files_included,
+    })
+}
+
 #[tauri::command]
 pub fn export_full_archive(
     app: AppHandle,
@@ -185,14 +364,14 @@ pub fn export_full_archive(
     }
 
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db_guard = db
-        .lock()
-        .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
-    let database = db_guard.as_ref().ok_or("Base non initialisée")?;
+    let _backup_guard =
+        crate::backup::lock_backup_operations().map_err(|error| error.to_string())?;
+    let db_path = app_data_dir.join("patrimoine-crm.db");
+    let source = open_backup_source(&db, &db_path)?;
 
     let output = crate::export_archive::export_full_archive(
         crate::export_archive::ExportArchiveInput {
-            source_db: database.connection(),
+            source_db: &source,
             app_data_dir: &app_data_dir,
             destination_dir: dest,
         },

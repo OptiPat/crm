@@ -29,6 +29,8 @@ export interface AppRuntimePrefs {
   stellium_interval_minutes: number;
   /** Intervalle scan Box Placement (minutes). 0 = manuel uniquement. */
   box_placement_interval_minutes: number;
+  /** Dossier synchronisé utilisé pour l'archive externe quotidienne. */
+  external_backup_directory: string | null;
 }
 
 export const DEFAULT_APP_RUNTIME_PREFS: AppRuntimePrefs = {
@@ -47,6 +49,7 @@ export const DEFAULT_APP_RUNTIME_PREFS: AppRuntimePrefs = {
   relation_interval_minutes: 15,
   stellium_interval_minutes: 15,
   box_placement_interval_minutes: 15,
+  external_backup_directory: null,
 };
 
 export const APP_RUNTIME_PREFS_CHANGED_EVENT = "crm-runtime-prefs-changed";
@@ -124,7 +127,7 @@ export async function saveAutoLockMinutes(minutes: number): Promise<AppRuntimePr
   return saved;
 }
 
-function notifyRuntimePrefsChanged(saved: AppRuntimePrefs): void {
+export function notifyRuntimePrefsChanged(saved: AppRuntimePrefs): void {
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent<AppRuntimePrefs>(APP_RUNTIME_PREFS_CHANGED_EVENT, { detail: saved })

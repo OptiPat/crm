@@ -90,8 +90,15 @@ impl Database {
         println!("Database path: {:?}", db_path);
 
         if db_existed {
-            if let Err(e) = crate::backup::create_pre_migration_backup(&app_data_dir, &db_path) {
-                eprintln!("⚠️ Backup pré-migration échoué : {e}");
+            match crate::backup::lock_backup_operations() {
+                Ok(_backup_guard) => {
+                    if let Err(e) =
+                        crate::backup::create_pre_migration_backup(&app_data_dir, &db_path)
+                    {
+                        eprintln!("⚠️ Backup pré-migration échoué : {e}");
+                    }
+                }
+                Err(e) => eprintln!("⚠️ Verrou backup pré-migration inaccessible : {e}"),
             }
         }
 
@@ -121,9 +128,17 @@ impl Database {
             _ => {}
         }
 
-        if let Err(e) = crate::backup::create_daily_backup_if_needed(&app_data_dir, &db_path) {
-            eprintln!("⚠️ Sauvegarde automatique échouée : {e}");
+        match crate::backup::lock_backup_operations() {
+            Ok(_backup_guard) => {
+                if let Err(e) =
+                    crate::backup::create_daily_backup_if_needed(&app_data_dir, db.connection())
+                {
+                    eprintln!("⚠️ Sauvegarde automatique échouée : {e}");
+                }
+            }
+            Err(e) => eprintln!("⚠️ Verrou sauvegarde automatique inaccessible : {e}"),
         }
+        crate::backup::spawn_external_backup_if_configured(&app_data_dir);
 
         crate::licensing::refresh_write_gate(&db);
 

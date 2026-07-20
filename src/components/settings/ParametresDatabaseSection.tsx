@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -30,10 +30,14 @@ import { cleanupOrphanedData, getAllContacts, deleteContact, type Contact } from
 import {
   cleanupLegacySecretKey,
   createManualDbBackup,
+  createExternalBackupNow,
   exportFullArchive,
+  getExternalBackupSettings,
   restoreDbBackup,
   listDbBackups,
+  setExternalBackupDirectory,
   type DbBackupEntry,
+  type ExternalBackupSettings,
 } from "@/lib/api/tauri-system";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
@@ -69,6 +73,10 @@ export function ParametresDatabaseSection({
   const [cleaningSecretKey, setCleaningSecretKey] = useState(false);
   const [creatingBackup, setCreatingBackup] = useState(false);
   const [exportingArchive, setExportingArchive] = useState(false);
+  const [externalBackup, setExternalBackup] = useState<ExternalBackupSettings | null>(null);
+  const [externalBackupLoadError, setExternalBackupLoadError] = useState(false);
+  const [configuringExternalBackup, setConfiguringExternalBackup] = useState(false);
+  const [runningExternalBackup, setRunningExternalBackup] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<DbBackupEntry | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false);
@@ -78,6 +86,23 @@ export function ParametresDatabaseSection({
   const [searching, setSearching] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
   const [deletingContact, setDeletingContact] = useState(false);
+
+  useEffect(() => {
+    const load = () => {
+      void getExternalBackupSettings()
+        .then((settings) => {
+          setExternalBackup(settings);
+          setExternalBackupLoadError(false);
+        })
+        .catch((error) => {
+          console.warn("Configuration sauvegarde externe inaccessible:", error);
+          setExternalBackupLoadError(true);
+        });
+    };
+    load();
+    window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
+  }, []);
 
   const handleConfirmRestore = async () => {
     if (!restoreTarget) return;
@@ -168,6 +193,62 @@ export function ParametresDatabaseSection({
       );
     } finally {
       setExportingArchive(false);
+    }
+  };
+
+  const handleChooseExternalBackupFolder = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Choisir un dossier synchronisé (OneDrive, Google Drive, Dropbox, NAS…)",
+    });
+    if (!selected || typeof selected !== "string") return;
+    setConfiguringExternalBackup(true);
+    try {
+      const settings = await setExternalBackupDirectory(selected);
+      setExternalBackup(settings);
+      toast.success("Sauvegarde externe quotidienne activée");
+    } catch (error) {
+      toast.error(invokeErrorMessage(error));
+      try {
+        setExternalBackup(await getExternalBackupSettings());
+      } catch {
+        setExternalBackupLoadError(true);
+      }
+    } finally {
+      setConfiguringExternalBackup(false);
+    }
+  };
+
+  const handleDisableExternalBackup = async () => {
+    setConfiguringExternalBackup(true);
+    try {
+      setExternalBackup(await setExternalBackupDirectory(null));
+      toast.success("Sauvegarde externe automatique désactivée");
+    } catch (error) {
+      toast.error(invokeErrorMessage(error));
+    } finally {
+      setConfiguringExternalBackup(false);
+    }
+  };
+
+  const handleCreateExternalBackup = async () => {
+    setRunningExternalBackup(true);
+    try {
+      const result = await createExternalBackupNow();
+      setExternalBackup(await getExternalBackupSettings());
+      toast.success("Sauvegarde externe créée", {
+        description: `${result.zip_path.split(/[\\/]/).pop() ?? result.zip_path} — ${formatBackupSize(result.zip_size)}`,
+      });
+    } catch (error) {
+      toast.error(invokeErrorMessage(error));
+      try {
+        setExternalBackup(await getExternalBackupSettings());
+      } catch {
+        setExternalBackupLoadError(true);
+      }
+    } finally {
+      setRunningExternalBackup(false);
     }
   };
 
@@ -327,6 +408,95 @@ export function ParametresDatabaseSection({
               <FolderOutput className="h-4 w-4" />
               {exportingArchive ? "Export en cours…" : "Exporter vers un dossier externe…"}
             </Button>
+          </div>
+
+          <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-medium mb-1">
+                <FolderOutput className="h-4 w-4 text-primary" />
+                Sauvegarde externe automatique
+              </div>
+              <Explainer>
+                Choisissez un dossier OneDrive, Google Drive, Dropbox, NAS ou disque externe.
+                Le CRM y crée au maximum une archive complète par jour et conserve les 10 plus
+                récentes. Le fournisseur synchronise ensuite le dossier s&apos;il est configuré.
+              </Explainer>
+            </div>
+            {externalBackupLoadError && (
+              <p className="text-xs text-destructive">
+                Configuration de sauvegarde externe inaccessible. Reverrouillez puis déverrouillez
+                le CRM avant de réessayer.
+              </p>
+            )}
+            {externalBackup?.directory ? (
+              <div className="space-y-2">
+                <p className="text-xs font-mono text-muted-foreground break-all">
+                  {externalBackup.directory}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {externalBackup.last_backup_path
+                    ? `Dernière archive : ${externalBackup.last_backup_path.split(/[\\/]/).pop()}`
+                    : "Aucune archive automatique créée dans ce dossier."}
+                </p>
+                {externalBackup.last_error && (
+                  <div
+                    role="alert"
+                    className="flex gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive"
+                  >
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>
+                      Dernier essai automatique en échec
+                      {externalBackup.last_attempt_at
+                        ? ` (${new Date(externalBackup.last_attempt_at).toLocaleString("fr-FR")})`
+                        : ""}
+                      {" : "}
+                      {externalBackup.last_error}
+                    </span>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={runningExternalBackup || configuringExternalBackup}
+                    onClick={() => void handleCreateExternalBackup()}
+                  >
+                    <Archive className="mr-2 h-4 w-4" />
+                    {runningExternalBackup ? "Sauvegarde en cours…" : "Sauvegarder maintenant"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={runningExternalBackup || configuringExternalBackup}
+                    onClick={() => void handleChooseExternalBackupFolder()}
+                  >
+                    Modifier le dossier
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={runningExternalBackup || configuringExternalBackup}
+                    onClick={() => void handleDisableExternalBackup()}
+                  >
+                    <X className="mr-2 h-4 w-4" />
+                    Désactiver
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={configuringExternalBackup}
+                onClick={() => void handleChooseExternalBackupFolder()}
+              >
+                <FolderOutput className="mr-2 h-4 w-4" />
+                Choisir le dossier automatique…
+              </Button>
+            )}
           </div>
 
           {backups.length > 0 && (

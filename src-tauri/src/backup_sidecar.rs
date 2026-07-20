@@ -13,11 +13,12 @@ const ROOT_FILES: &[&str] = &[
     "newsletter_config.json",
     "branding.json",
     "branding-os-state.json",
+    "runtime_prefs.json",
 ];
 const SECRET_KEY_FILES: &[&str] = &["secrets.key", "secrets.key.os"];
 
 /// Sous-dossiers AppData à copier intégralement.
-const CONFIG_DIRS: &[&str] = &["logos", "icons"];
+const CONFIG_DIRS: &[&str] = &["logos", "icons", "email-template-attachments"];
 const AUTH_ATTEMPTS_FILE: &str = "auth_attempts.json";
 
 pub fn paired_config_backup_dir_name(db_backup_filename: &str) -> Option<String> {
@@ -86,27 +87,110 @@ pub fn restore_app_config_from_backup(
         return Ok(());
     }
 
-    restore_root_files(app_data_dir, backup_config_dir)?;
-
-    for dir_name in CONFIG_DIRS {
-        let src = backup_config_dir.join(dir_name);
-        if !src.is_dir() {
-            continue;
-        }
-        let live = app_data_dir.join(dir_name);
-        if live.exists() {
-            fs::remove_dir_all(&live)?;
-        }
-        copy_dir_all(&src, &live)?;
-    }
-
+    restore_root_files(app_data_dir, backup_config_dir, false)?;
+    restore_config_dirs(app_data_dir, backup_config_dir, false)?;
     clear_auth_attempts_state(app_data_dir)?;
     Ok(())
+}
+
+pub fn restore_app_config_exact_from_backup(
+    app_data_dir: &Path,
+    backup_config_dir: &Path,
+) -> std::io::Result<()> {
+    restore_root_files(app_data_dir, backup_config_dir, true)?;
+    restore_config_dirs(app_data_dir, backup_config_dir, true)?;
+    clear_auth_attempts_state(app_data_dir)?;
+    Ok(())
+}
+
+fn restore_config_dirs(
+    app_data_dir: &Path,
+    backup_config_dir: &Path,
+    exact: bool,
+) -> std::io::Result<()> {
+    for dir_name in CONFIG_DIRS {
+        let source = backup_config_dir.join(dir_name);
+        if source.is_dir() {
+            replace_config_dir(app_data_dir, dir_name, &source)?;
+        } else if exact {
+            remove_config_dir(app_data_dir, dir_name)?;
+        }
+    }
+    Ok(())
+}
+
+fn replace_config_dir(
+    app_data_dir: &Path,
+    dir_name: &str,
+    source: &Path,
+) -> std::io::Result<()> {
+    let live = app_data_dir.join(dir_name);
+    if live.exists() && !live.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Le chemin de configuration n'est pas un dossier : {}", live.display()),
+        ));
+    }
+    let nonce = format!(
+        "{}-{}",
+        std::process::id(),
+        chrono::Local::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+    let staged = app_data_dir.join(format!(".{dir_name}-restore-{nonce}"));
+    let previous = app_data_dir.join(format!(".{dir_name}-rollback-{nonce}"));
+    if let Err(error) = copy_dir_all(source, &staged) {
+        let _ = fs::remove_dir_all(&staged);
+        return Err(error);
+    }
+    let had_live = live.is_dir();
+    if had_live {
+        fs::rename(&live, &previous)?;
+    }
+    if let Err(error) = fs::rename(&staged, &live) {
+        let rollback_error = had_live
+            .then(|| fs::rename(&previous, &live).err())
+            .flatten();
+        let _ = fs::remove_dir_all(&staged);
+        return match rollback_error {
+            Some(rollback_error) => Err(std::io::Error::new(
+                error.kind(),
+                format!(
+                    "Publication de {dir_name} échouée ({error}) et rollback incomplet ({rollback_error})"
+                ),
+            )),
+            None => Err(error),
+        };
+    }
+    if had_live {
+        let _ = fs::remove_dir_all(previous);
+    }
+    Ok(())
+}
+
+fn remove_config_dir(app_data_dir: &Path, dir_name: &str) -> std::io::Result<()> {
+    let live = app_data_dir.join(dir_name);
+    if !live.exists() {
+        return Ok(());
+    }
+    if !live.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Le chemin de configuration n'est pas un dossier : {}", live.display()),
+        ));
+    }
+    let removed = app_data_dir.join(format!(
+        ".{dir_name}-removed-{}-{}",
+        std::process::id(),
+        chrono::Local::now().timestamp_nanos_opt().unwrap_or_default()
+    ));
+    fs::rename(&live, &removed)?;
+    fs::remove_dir_all(removed)
 }
 
 fn restore_root_files(
     app_data_dir: &Path,
     backup_config_dir: &Path,
+    exact: bool,
 ) -> std::io::Result<()> {
     let mut incoming = Vec::new();
     for name in ROOT_FILES {
@@ -115,23 +199,27 @@ fn restore_root_files(
             incoming.push((*name, fs::read(source)?));
         }
     }
-    if incoming.is_empty() {
+    if incoming.is_empty() && !exact {
         return Ok(());
     }
 
     let has_incoming_key = incoming
         .iter()
         .any(|(name, _)| SECRET_KEY_FILES.contains(name));
-    let touched: Vec<&str> = ROOT_FILES
-        .iter()
-        .copied()
-        .filter(|name| {
-            incoming
-                .iter()
-                .any(|(incoming_name, _)| incoming_name == name)
-                || (has_incoming_key && SECRET_KEY_FILES.contains(name))
-        })
-        .collect();
+    let touched: Vec<&str> = if exact {
+        ROOT_FILES.to_vec()
+    } else {
+        ROOT_FILES
+            .iter()
+            .copied()
+            .filter(|name| {
+                incoming
+                    .iter()
+                    .any(|(incoming_name, _)| incoming_name == name)
+                    || (has_incoming_key && SECRET_KEY_FILES.contains(name))
+            })
+            .collect()
+    };
 
     let mut original = Vec::new();
     for name in &touched {
@@ -152,7 +240,20 @@ fn restore_root_files(
         for (name, contents) in &incoming {
             crate::atomic_file::write(&app_data_dir.join(name), contents)?;
         }
-        if has_incoming_key {
+        if exact {
+            for name in ROOT_FILES {
+                if incoming
+                    .iter()
+                    .any(|(incoming_name, _)| incoming_name == name)
+                {
+                    continue;
+                }
+                let stale = app_data_dir.join(name);
+                if stale.is_file() {
+                    fs::remove_file(stale)?;
+                }
+            }
+        } else if has_incoming_key {
             for name in SECRET_KEY_FILES {
                 if incoming
                     .iter()
@@ -355,6 +456,33 @@ mod tests {
 
         let _ = fs::remove_dir_all(app_data);
         let _ = fs::remove_dir_all(backup_config);
+    }
+
+    #[test]
+    fn exact_restore_removes_config_absent_from_safety_snapshot() {
+        let app_data = unique_temp_dir();
+        let safety_config = unique_temp_dir();
+        fs::create_dir_all(app_data.join("logos")).expect("live logos");
+        fs::create_dir_all(&safety_config).expect("safety config");
+        fs::write(app_data.join("auth.json"), b"introduced-auth").expect("live auth");
+        fs::write(app_data.join("logos/introduced.png"), b"introduced").expect("live logo");
+        fs::write(
+            safety_config.join("newsletter_config.json"),
+            b"safe-newsletter",
+        )
+        .expect("safe newsletter");
+
+        restore_app_config_exact_from_backup(&app_data, &safety_config)
+            .expect("exact restore");
+
+        assert!(!app_data.join("auth.json").exists());
+        assert!(!app_data.join("logos").exists());
+        assert_eq!(
+            fs::read(app_data.join("newsletter_config.json")).expect("newsletter"),
+            b"safe-newsletter"
+        );
+        let _ = fs::remove_dir_all(app_data);
+        let _ = fs::remove_dir_all(safety_config);
     }
 
     #[test]

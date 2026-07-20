@@ -38,18 +38,77 @@ fn emit_tick_if_enabled(app: &AppHandle) {
 
 fn create_daily_backup_if_due(app: &AppHandle) {
     let db = app.state::<DbState>();
-    let Ok(guard) = db.try_lock() else {
-        return;
+    let guard = match db.try_lock() {
+        Ok(guard) => guard,
+        Err(std::sync::TryLockError::WouldBlock) => return,
+        Err(std::sync::TryLockError::Poisoned(_)) => {
+            eprintln!("⚠️ État de la base inaccessible pour la sauvegarde tray.");
+            return;
+        }
     };
     if guard.is_none() {
         return;
     }
+    drop(guard);
     let Ok(app_data_dir) = app.path().app_data_dir() else {
         return;
     };
+    let prefs = load_runtime_prefs(app);
+    let _operation_guard = match crate::backup::lock_backup_operations() {
+        Ok(guard) => guard,
+        Err(error) => {
+            if prefs.external_backup_directory.is_some() {
+                crate::backup::record_external_backup_error(
+                    &app_data_dir,
+                    &error.to_string(),
+                );
+            }
+            return;
+        }
+    };
     let db_path = app_data_dir.join("patrimoine-crm.db");
-    if let Err(error) = crate::backup::create_daily_backup_if_needed(&app_data_dir, &db_path) {
+    let source = match rusqlite::Connection::open_with_flags(
+        &db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    ) {
+        Ok(source) => source,
+        Err(error) => {
+            if prefs.external_backup_directory.is_some() {
+                crate::backup::record_external_backup_error(
+                    &app_data_dir,
+                    &error.to_string(),
+                );
+            }
+            eprintln!("⚠️ Ouverture de la base pour sauvegarde tray : {error}");
+            return;
+        }
+    };
+    if let Err(error) =
+        crate::backup::create_daily_backup_if_needed(&app_data_dir, &source)
+    {
         eprintln!("⚠️ Sauvegarde quotidienne tray échouée : {error}");
+    }
+    if let Some(directory) = prefs.external_backup_directory {
+        match crate::export_archive::export_automatic_archive_if_due(
+            crate::export_archive::ExportArchiveInput {
+                source_db: &source,
+                app_data_dir: &app_data_dir,
+                destination_dir: std::path::Path::new(&directory),
+            },
+            false,
+        ) {
+            Ok(Some(output)) => {
+                crate::backup::record_external_backup_success(
+                    &app_data_dir,
+                    &output.zip_path,
+                );
+            }
+            Ok(None) => {}
+            Err(error) => {
+                crate::backup::record_external_backup_error(&app_data_dir, &error);
+                eprintln!("⚠️ Sauvegarde externe quotidienne échouée : {error}");
+            }
+        }
     }
 }
 

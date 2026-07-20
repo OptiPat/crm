@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import {
   applyDueRdvStageAdvance,
@@ -15,6 +15,15 @@ import { setPipeStage } from "@/lib/api/tauri-pipe";
 vi.mock("@/lib/api/tauri-pipe", () => ({
   setPipeStage: vi.fn(),
 }));
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 6, 15, 10, 0));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const mkRdv = (
   id: number,

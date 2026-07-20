@@ -69,6 +69,8 @@ pub struct AppRuntimePrefs {
     /// Scan Box Placement en tray.
     #[serde(default = "default_background_box_placement_scan")]
     pub background_box_placement_scan: bool,
+    /// Dossier synchronisé (OneDrive, Google Drive, Dropbox, NAS...) pour l'archive quotidienne.
+    pub external_backup_directory: Option<String>,
 }
 
 impl Default for AppRuntimePrefs {
@@ -89,6 +91,7 @@ impl Default for AppRuntimePrefs {
             stellium_interval_minutes: 15,
             box_placement_interval_minutes: 15,
             background_box_placement_scan: true,
+            external_backup_directory: None,
         }
     }
 }
@@ -270,6 +273,21 @@ mod tests {
         let json = serde_json::to_string(&prefs).unwrap();
         let parsed: AppRuntimePrefs = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, prefs);
+    }
+
+    #[test]
+    fn runtime_prefs_preserves_external_backup_directory() {
+        let prefs: AppRuntimePrefs = serde_json::from_str(
+            r#"{"external_backup_directory":"D:/Sauvegardes CRM"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            prefs.external_backup_directory.as_deref(),
+            Some("D:/Sauvegardes CRM")
+        );
+        let serialized = serde_json::to_string(&prefs).unwrap();
+        let restored: AppRuntimePrefs = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(restored.external_backup_directory, prefs.external_backup_directory);
     }
 
     #[test]

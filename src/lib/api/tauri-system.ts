@@ -1,4 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
+import {
+  getAppRuntimePrefs,
+  notifyRuntimePrefsChanged,
+} from "@/lib/api/tauri-app-runtime";
 
 export interface AppInfo {
   version: string;
@@ -60,6 +64,31 @@ export async function exportFullArchive(
   return invoke<ExportFullArchiveResult>("export_full_archive", {
     destinationDir,
   });
+}
+
+export interface ExternalBackupSettings {
+  directory: string | null;
+  last_backup_path: string | null;
+  last_attempt_at: string | null;
+  last_error: string | null;
+}
+
+export async function getExternalBackupSettings(): Promise<ExternalBackupSettings> {
+  return invoke<ExternalBackupSettings>("get_external_backup_settings");
+}
+
+export async function setExternalBackupDirectory(
+  directory: string | null
+): Promise<ExternalBackupSettings> {
+  const settings = await invoke<ExternalBackupSettings>("set_external_backup_directory", {
+    directory,
+  });
+  notifyRuntimePrefsChanged(await getAppRuntimePrefs());
+  return settings;
+}
+
+export async function createExternalBackupNow(): Promise<ExportFullArchiveResult> {
+  return invoke<ExportFullArchiveResult>("create_external_backup_now");
 }
 
 export async function openExternalUrl(url: string): Promise<void> {

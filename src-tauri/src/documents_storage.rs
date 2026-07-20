@@ -293,10 +293,70 @@ pub fn restore_documents_from_backup(
     }
 
     let live = documents_dir(app_data_dir);
-    if live.exists() {
-        fs::remove_dir_all(&live)?;
+    if live.exists() && !live.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Le chemin documents actif n'est pas un dossier.",
+        ));
     }
-    copy_dir_all(backup_documents_dir, &live)
+    let nonce = format!(
+        "{}-{}",
+        std::process::id(),
+        chrono::Local::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+    let staged = app_data_dir.join(format!(".documents-restore-{nonce}"));
+    let previous = app_data_dir.join(format!(".documents-rollback-{nonce}"));
+    let _ = fs::remove_dir_all(&staged);
+    let _ = fs::remove_dir_all(&previous);
+
+    if let Err(error) = copy_dir_all(backup_documents_dir, &staged) {
+        let _ = fs::remove_dir_all(&staged);
+        return Err(error);
+    }
+
+    let had_live = live.is_dir();
+    if had_live {
+        fs::rename(&live, &previous)?;
+    }
+    if let Err(error) = fs::rename(&staged, &live) {
+        let rollback_error = had_live
+            .then(|| fs::rename(&previous, &live).err())
+            .flatten();
+        let _ = fs::remove_dir_all(&staged);
+        return match rollback_error {
+            Some(rollback_error) => Err(std::io::Error::new(
+                error.kind(),
+                format!(
+                    "Publication des documents échouée ({error}) et rollback incomplet ({rollback_error})"
+                ),
+            )),
+            None => Err(error),
+        };
+    }
+    if had_live {
+        let _ = fs::remove_dir_all(previous);
+    }
+    Ok(())
+}
+
+pub fn remove_documents_for_restore(app_data_dir: &Path) -> std::io::Result<()> {
+    let live = documents_dir(app_data_dir);
+    if !live.exists() {
+        return Ok(());
+    }
+    if !live.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Le chemin documents actif n'est pas un dossier.",
+        ));
+    }
+    let removed = app_data_dir.join(format!(
+        ".documents-removed-{}-{}",
+        std::process::id(),
+        chrono::Local::now().timestamp_nanos_opt().unwrap_or_default()
+    ));
+    fs::rename(&live, &removed)?;
+    fs::remove_dir_all(removed)
 }
 
 fn safe_dir_name(name: &str) -> bool {

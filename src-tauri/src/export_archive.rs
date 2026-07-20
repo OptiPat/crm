@@ -1,13 +1,19 @@
+use chrono::{Datelike, Timelike};
 use rusqlite::Connection;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use walkdir::WalkDir;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
 /// Copies locales redondantes — l'export contient déjà un snapshot cohérent de la base.
 const EXPORT_SKIP_DIRS: &[&str] = &["backups"];
+const EXPORT_SKIP_FILES: &[&str] = &["external_backup_status.json"];
+const AUTOMATIC_ARCHIVE_PREFIX: &str = "patrimoine-crm_auto_";
+const MAX_AUTOMATIC_ARCHIVES: usize = 10;
+static EXPORT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 const README_CONTENT: &str = r#"Patrimoine CRM — Archive complete d'export
 =========================================
@@ -56,11 +62,18 @@ pub fn create_consistent_db_snapshot(source: &Connection, dest_path: &Path) -> R
             .run_to_completion(100, std::time::Duration::from_millis(10), None)
             .map_err(|e| format!("Echec copie backup SQLite : {e}"))?;
     }
-    let check: String = dest
+    drop(dest);
+    validate_database_file(dest_path)
+}
+
+pub fn validate_database_file(path: &Path) -> Result<(), String> {
+    let connection = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| format!("Ouverture de la copie SQLite impossible : {e}"))?;
+    let check: String = connection
         .query_row("PRAGMA integrity_check", [], |row| row.get(0))
-        .map_err(|e| format!("Verification integrite snapshot : {e}"))?;
+        .map_err(|e| format!("Vérification intégrité SQLite : {e}"))?;
     if check != "ok" {
-        return Err(format!("Snapshot incoherent : {check}"));
+        return Err(format!("Copie SQLite incohérente : {check}"));
     }
     Ok(())
 }
@@ -86,6 +99,7 @@ fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
 
 fn should_skip_entry(name: &str, is_dir: bool, has_protected_key: bool) -> bool {
     (is_dir && EXPORT_SKIP_DIRS.iter().any(|skip| *skip == name))
+        || (!is_dir && EXPORT_SKIP_FILES.iter().any(|skip| *skip == name))
         || (has_protected_key
             && !is_dir
             && (name == "secrets.key" || name.starts_with("secrets.key.conflict-")))
@@ -165,7 +179,25 @@ fn zip_tree<W: Write + std::io::Seek>(
         let Some(name) = safe_zip_entry_name(base_dir, path) else {
             continue;
         };
-        zip.start_file(&name, options)
+        let modified = fs::metadata(path)
+            .and_then(|metadata| metadata.modified())
+            .map(chrono::DateTime::<chrono::Local>::from)
+            .unwrap_or_else(|_| chrono::Local::now());
+        let modified = if (1980..=2107).contains(&modified.year()) {
+            modified
+        } else {
+            chrono::Local::now()
+        };
+        let zip_modified = zip::DateTime::from_date_and_time(
+            modified.year() as u16,
+            modified.month() as u8,
+            modified.day() as u8,
+            modified.hour() as u8,
+            modified.minute() as u8,
+            modified.second() as u8,
+        )
+        .unwrap_or_default();
+        zip.start_file(&name, options.last_modified_time(zip_modified))
             .map_err(|e| format!("Erreur ZIP : {e}"))?;
         let mut file = File::open(path).map_err(|e| format!("Lecture {name} : {e}"))?;
         std::io::copy(&mut file, zip).map_err(|e| format!("Ecriture ZIP {name} : {e}"))?;
@@ -188,9 +220,112 @@ pub struct ExportArchiveOutput {
 
 /// Export lecture seule : snapshot DB + integralite AppData vers un ZIP externe.
 pub fn export_full_archive(input: ExportArchiveInput<'_>) -> Result<ExportArchiveOutput, String> {
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S_%3f");
+    let zip_name = format!("patrimoine-crm_export_{timestamp}.zip");
+    export_archive_named(input, &zip_name)
+}
+
+pub fn export_automatic_archive_if_due(
+    input: ExportArchiveInput<'_>,
+    force: bool,
+) -> Result<Option<ExportArchiveOutput>, String> {
     if !input.destination_dir.is_dir() {
         return Err("Le dossier de destination est introuvable.".into());
     }
+    let date = chrono::Local::now().format("%Y%m%d").to_string();
+    let daily_prefix = format!("{AUTOMATIC_ARCHIVE_PREFIX}{date}_");
+    if !force
+        && automatic_archives(input.destination_dir)?
+            .iter()
+            .any(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with(&daily_prefix))
+            })
+    {
+        return Ok(None);
+    }
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S_%3f");
+    let zip_name = format!("{AUTOMATIC_ARCHIVE_PREFIX}{timestamp}.zip");
+    let output = export_archive_named(input, &zip_name)?;
+    prune_automatic_archives(
+        output
+            .zip_path
+            .parent()
+            .ok_or("Dossier de sauvegarde externe invalide.")?,
+    )?;
+    Ok(Some(output))
+}
+
+pub fn latest_automatic_archive(destination_dir: &Path) -> Result<Option<PathBuf>, String> {
+    Ok(automatic_archives(destination_dir)?.pop())
+}
+
+fn automatic_archives(destination_dir: &Path) -> Result<Vec<PathBuf>, String> {
+    if !destination_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut archives: Vec<PathBuf> = fs::read_dir(destination_dir)
+        .map_err(|error| format!("Lecture du dossier de sauvegarde externe : {error}"))?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let name = entry.file_name();
+            let name = name.to_str()?;
+            (entry.path().is_file()
+                && name.starts_with(AUTOMATIC_ARCHIVE_PREFIX)
+                && name.ends_with(".zip"))
+            .then(|| entry.path())
+        })
+        .collect();
+    archives.sort();
+    Ok(archives)
+}
+
+fn prune_automatic_archives(destination_dir: &Path) -> Result<(), String> {
+    let archives = automatic_archives(destination_dir)?;
+    let excess = archives.len().saturating_sub(MAX_AUTOMATIC_ARCHIVES);
+    for path in archives.into_iter().take(excess) {
+        fs::remove_file(&path)
+            .map_err(|error| format!("Suppression de l'ancienne archive externe : {error}"))?;
+    }
+    Ok(())
+}
+
+fn cleanup_stale_partial_archives(destination_dir: &Path) -> Result<(), String> {
+    let stale_after = std::time::Duration::from_secs(24 * 60 * 60);
+    let now = std::time::SystemTime::now();
+    for entry in fs::read_dir(destination_dir)
+        .map_err(|error| format!("Lecture du dossier de sauvegarde externe : {error}"))?
+        .filter_map(Result::ok)
+    {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if !name.starts_with(".patrimoine-crm_") || !name.contains(".zip.partial-") {
+            continue;
+        }
+        let path = entry.path();
+        let is_stale = path
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .ok()
+            .and_then(|modified| now.duration_since(modified).ok())
+            .is_some_and(|age| age >= stale_after);
+        if is_stale {
+            fs::remove_file(path)
+                .map_err(|error| format!("Nettoyage d'une archive partielle : {error}"))?;
+        }
+    }
+    Ok(())
+}
+
+fn export_archive_named(
+    input: ExportArchiveInput<'_>,
+    zip_name: &str,
+) -> Result<ExportArchiveOutput, String> {
+    if !input.destination_dir.is_dir() {
+        return Err("Le dossier de destination est introuvable.".into());
+    }
+    cleanup_stale_partial_archives(input.destination_dir)?;
 
     let live_db_path = input.app_data_dir.join("patrimoine-crm.db");
     if !live_db_path.is_file() {
@@ -198,8 +333,10 @@ pub fn export_full_archive(input: ExportArchiveInput<'_>) -> Result<ExportArchiv
     }
 
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S_%3f");
-    let zip_name = format!("patrimoine-crm_export_{timestamp}.zip");
-    let zip_path = input.destination_dir.join(&zip_name);
+    let zip_path = input.destination_dir.join(zip_name);
+    let partial_zip_path = input
+        .destination_dir
+        .join(format!(".{zip_name}.partial-{}", std::process::id()));
 
     if zip_path.exists() {
         return Err(format!(
@@ -208,9 +345,10 @@ pub fn export_full_archive(input: ExportArchiveInput<'_>) -> Result<ExportArchiv
     }
 
     let temp_dir = std::env::temp_dir().join(format!(
-        "patrimoine_crm_export_{}_{}",
+        "patrimoine_crm_export_{}_{}_{}",
         std::process::id(),
-        timestamp
+        timestamp,
+        EXPORT_COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     fs::create_dir_all(&temp_dir).map_err(|e| format!("Dossier temporaire : {e}"))?;
 
@@ -240,7 +378,7 @@ pub fn export_full_archive(input: ExportArchiveInput<'_>) -> Result<ExportArchiv
         .compression_method(CompressionMethod::Deflated)
         .unix_permissions(0o644);
 
-    let zip_file = File::create(&zip_path).map_err(|e| {
+    let zip_file = File::create(&partial_zip_path).map_err(|e| {
         cleanup();
         format!("Creation ZIP : {e}")
     })?;
@@ -248,22 +386,26 @@ pub fn export_full_archive(input: ExportArchiveInput<'_>) -> Result<ExportArchiv
 
     let zipped = zip_tree(&mut zip, &temp_dir, zip_options).map_err(|e| {
         cleanup();
-        let _ = fs::remove_file(&zip_path);
+        let _ = fs::remove_file(&partial_zip_path);
         e
     })?;
 
     zip.finish().map_err(|e| {
         cleanup();
-        let _ = fs::remove_file(&zip_path);
+        let _ = fs::remove_file(&partial_zip_path);
         format!("Finalisation ZIP : {e}")
     })?;
 
     cleanup();
 
     if !live_db_path.is_file() {
-        let _ = fs::remove_file(&zip_path);
+        let _ = fs::remove_file(&partial_zip_path);
         return Err("La base d'origine est introuvable apres l'export.".into());
     }
+    fs::rename(&partial_zip_path, &zip_path).map_err(|error| {
+        let _ = fs::remove_file(&partial_zip_path);
+        format!("Publication de l'archive ZIP : {error}")
+    })?;
 
     let zip_size = fs::metadata(&zip_path)
         .map_err(|e| format!("Taille ZIP : {e}"))?
@@ -285,11 +427,13 @@ mod tests {
     fn unique_temp_dir() -> PathBuf {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        std::env::temp_dir().join(format!(
+        let path = std::env::temp_dir().join(format!(
             "patrimoine_crm_export_test_{}_{}",
             std::process::id(),
             n
-        ))
+        ));
+        let _ = fs::remove_dir_all(&path);
+        path
     }
 
     fn write_marker_db(path: &Path, value: &str) {
@@ -330,6 +474,17 @@ mod tests {
     }
 
     #[test]
+    fn database_integrity_check_rejects_corrupted_files() {
+        let dir = unique_temp_dir();
+        fs::create_dir_all(&dir).expect("temp dir");
+        let corrupted = dir.join("corrupted.db");
+        fs::write(&corrupted, b"not a sqlite database").expect("corrupted db");
+
+        assert!(validate_database_file(&corrupted).is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn copy_app_data_tree_includes_secrets_and_skips_backups() {
         let app_data = unique_temp_dir();
         fs::create_dir_all(&app_data.join("backups")).expect("backups");
@@ -342,6 +497,7 @@ mod tests {
         )
         .expect("conflicting secrets");
         fs::write(app_data.join("email_oauth.json"), b"{}").expect("oauth");
+        fs::write(app_data.join("external_backup_status.json"), b"{}").expect("status");
         write_marker_db(&app_data.join("patrimoine-crm.db"), "live");
 
         let temp = unique_temp_dir();
@@ -352,6 +508,7 @@ mod tests {
         assert!(!temp.join("secrets.key").exists());
         assert!(!temp.join("secrets.key.conflict-123").exists());
         assert!(temp.join("email_oauth.json").is_file());
+        assert!(!temp.join("external_backup_status.json").exists());
         assert!(!temp.join("backups").exists());
         assert!(!temp.join("patrimoine-crm.db").exists());
 
@@ -396,6 +553,15 @@ mod tests {
         assert!(archive.by_name("secrets.key.os").is_ok());
         assert!(archive.by_name("auth.json").is_ok());
         assert!(archive.by_name("documents/test.pdf").is_ok());
+        let auth_modified = archive
+            .by_name("auth.json")
+            .expect("auth entry")
+            .last_modified()
+            .expect("auth modified date");
+        assert!(
+            auth_modified.year() >= 2020,
+            "ZIP entry timestamp must be a real date"
+        );
 
         let mut db_entry = archive.by_name("patrimoine-crm.db").expect("db in zip");
         let extracted = app_data.join("from_zip.db");
@@ -411,5 +577,56 @@ mod tests {
 
         let _ = fs::remove_dir_all(&app_data);
         let _ = fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    fn automatic_archive_runs_once_per_day_and_rotates_to_ten_files() {
+        let app_data = unique_temp_dir();
+        fs::create_dir_all(&app_data).expect("app data");
+        let live_db = app_data.join("patrimoine-crm.db");
+        write_marker_db(&live_db, "original");
+        let destination = unique_temp_dir();
+        fs::create_dir_all(&destination).expect("destination");
+        let source = Connection::open(&live_db).expect("source");
+
+        let first = export_automatic_archive_if_due(
+            ExportArchiveInput {
+                source_db: &source,
+                app_data_dir: &app_data,
+                destination_dir: &destination,
+            },
+            false,
+        )
+        .expect("first automatic archive");
+        assert!(first.is_some());
+        let second = export_automatic_archive_if_due(
+            ExportArchiveInput {
+                source_db: &source,
+                app_data_dir: &app_data,
+                destination_dir: &destination,
+            },
+            false,
+        )
+        .expect("daily deduplication");
+        assert!(second.is_none());
+
+        for index in 0..11 {
+            fs::write(
+                destination.join(format!(
+                    "{AUTOMATIC_ARCHIVE_PREFIX}202001{:02}_000000_000.zip",
+                    index + 1
+                )),
+                b"old",
+            )
+            .unwrap();
+        }
+        prune_automatic_archives(&destination).expect("rotation");
+        assert_eq!(
+            automatic_archives(&destination).expect("archives").len(),
+            MAX_AUTOMATIC_ARCHIVES
+        );
+
+        let _ = fs::remove_dir_all(&app_data);
+        let _ = fs::remove_dir_all(&destination);
     }
 }
