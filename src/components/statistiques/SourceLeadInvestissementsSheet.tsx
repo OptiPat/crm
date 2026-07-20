@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, TrendingUp } from "lucide-react";
+import { Building2, ChevronRight, TrendingUp } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -13,10 +13,17 @@ import {
   formatNomProduit,
   getTypeProduitBgColor,
   getTypeProduitTextClass,
+  IMMOBILIER_TYPES,
 } from "@/lib/investissements/investissement-display";
 import { cn } from "@/lib/utils";
 import { preventStackedSheetOutsideDismiss } from "@/lib/ui/radix-outside-interaction";
 import { investissementOwnerLabel } from "@/components/dashboard/dashboard-investissements-sheet-utils";
+
+function investissementRowIcon(typeProduit: string) {
+  return IMMOBILIER_TYPES.includes(typeProduit as (typeof IMMOBILIER_TYPES)[number])
+    ? Building2
+    : TrendingUp;
+}
 
 interface SourceLeadInvestissementsSheetProps {
   open: boolean;
@@ -103,6 +110,7 @@ export function SourceLeadInvestissementsSheet({
                 const contactId = resolveContactId(inv);
                 const interactive = Boolean(onOpenContact && contactId != null);
                 const isActive = activeContactId != null && contactId === activeContactId;
+                const RowIcon = investissementRowIcon(inv.type_produit);
                 return (
                   <li key={inv.id}>
                     <button
@@ -120,13 +128,16 @@ export function SourceLeadInvestissementsSheet({
                       disabled={!interactive}
                     >
                       <div
-                        className={cn(
-                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-                          getTypeProduitBgColor(inv.type_produit)
-                        )}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                        style={{
+                          backgroundColor: getTypeProduitBgColor(inv.type_produit, inv.origine),
+                        }}
                       >
-                        <TrendingUp
-                          className={cn("h-4 w-4", getTypeProduitTextClass(inv.type_produit))}
+                        <RowIcon
+                          className={cn(
+                            "h-4 w-4",
+                            getTypeProduitTextClass(inv.type_produit, inv.origine)
+                          )}
                           aria-hidden
                         />
                       </div>

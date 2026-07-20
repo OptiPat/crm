@@ -9,11 +9,11 @@ import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { resolveOrganisationSelfContact } from "@/lib/organisation/organisation-tree";
 import {
-  computeContactSourceLeadInvestissementStats,
-  computeContactSourceLeadStats,
-  filterContactsBySourceLeadKey,
-  type SourceLeadStatsLens,
-} from "@/lib/statistiques/contact-source-stats";
+  computeContactPrescripteurConversionStats,
+  computeContactPrescripteurStats,
+  filterContactsByPrescripteurKey,
+} from "@/lib/statistiques/contact-prescripteur-stats";
+import type { SourceLeadStatsLens } from "@/lib/statistiques/contact-source-stats";
 import {
   formatDashboardCurrency,
   formatDashboardPercent,
@@ -32,11 +32,11 @@ import {
   type AttributionStatRow,
 } from "./contact-stats-panels";
 
-type ContactSourceLeadPanelProps = {
+type ContactPrescripteurPanelProps = {
   onNavigate?: (page: string) => void;
 };
 
-export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelProps) {
+export function ContactPrescripteurPanel({ onNavigate }: ContactPrescripteurPanelProps) {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [investissements, setInvestissements] = useState<InvestissementWithDetails[]>([]);
   const [selfContactId, setSelfContactId] = useState<number | null>(null);
@@ -65,7 +65,7 @@ export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelPro
       setSelfContactId(resolveOrganisationSelfContact(rows, cgp)?.id ?? null);
       setDataRefreshKey((key) => key + 1);
     } catch (error) {
-      console.error("Erreur chargement statistiques contacts:", error);
+      console.error("Erreur chargement statistiques prescripteurs:", error);
       setContacts([]);
       setInvestissements([]);
     } finally {
@@ -99,24 +99,24 @@ export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelPro
   );
 
   const clientContactStats = useMemo(
-    () => computeContactSourceLeadStats(contacts, statsOptions, "client"),
+    () => computeContactPrescripteurStats(contacts, statsOptions, "client"),
     [contacts, statsOptions]
   );
 
   const filleulContactStats = useMemo(
-    () => computeContactSourceLeadStats(contacts, statsOptions, "filleul"),
+    () => computeContactPrescripteurStats(contacts, statsOptions, "filleul"),
     [contacts, statsOptions]
   );
 
   const clientConversionStats = useMemo(
     () =>
-      computeContactSourceLeadInvestissementStats(contacts, investissements, statsOptions, "client"),
+      computeContactPrescripteurConversionStats(contacts, investissements, statsOptions, "client"),
     [contacts, investissements, statsOptions]
   );
 
   const filleulConversionStats = useMemo(
     () =>
-      computeContactSourceLeadInvestissementStats(
+      computeContactPrescripteurConversionStats(
         contacts,
         investissements,
         statsOptions,
@@ -145,7 +145,7 @@ export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelPro
 
   const loadContactsSheet = useCallback(async () => {
     if (!selectedContactRow) return [];
-    return filterContactsBySourceLeadKey(
+    return filterContactsByPrescripteurKey(
       contacts,
       selectedContactRow.key,
       statsOptions,
@@ -199,33 +199,33 @@ export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelPro
     <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
         <AttributionDistributionPanel
-          panelId="source_client"
-          title="Source contact — Spécial client"
-          description="Prospects et clients actifs avec le champ Source / lead renseigné sur la fiche."
+          panelId="prescripteur_client"
+          title="Prescripteur — Spécial client"
+          description="Clients regroupés par prescripteur renseigné sur la fiche."
           loading={loading}
           total={clientContactStats.total}
           totalLabel="Clients"
-          totalHint="Exclus : suspects clients, prescripteurs, filleuls seuls. Un contact client+filleul est compté ici."
+          totalHint="Mêmes règles que Source / lead : suspects clients et filleuls seuls exclus."
           rows={clientContactStats.rows}
           onOpenRow={(row) => openContactDistributionRow(row, "client")}
         />
 
         <AttributionDistributionPanel
-          panelId="source_filleul"
-          title="Source contact — Spécial filleul"
-          description="Filleuls de votre réseau direct avec Source / lead — vous devez être leur parrain sur la fiche."
+          panelId="prescripteur_filleul"
+          title="Prescripteur — Spécial filleul"
+          description="Filleuls du réseau direct regroupés par prescripteur."
           loading={loading}
           total={filleulContactStats.total}
           totalLabel="Filleuls"
-          totalHint="Prospects, inscrits et désinscrits. Exclus : suspects filleuls et filleuls d'un autre parrain."
+          totalHint="Mêmes règles que Source / lead : réseau direct, suspects filleuls exclus."
           rows={filleulContactStats.rows}
           onOpenRow={(row) => openContactDistributionRow(row, "filleul")}
         />
 
         <AttributionConversionPanel
-          panelId="conversion_client"
+          panelId="prescripteur_conversion_client"
           title="Conversion et volume — Spécial client"
-          description="Par source : combien ont signé un investissement « avec moi », et combien d'euros au total."
+          description="Par prescripteur : taux de conversion et montants signés « avec moi »."
           loading={loading}
           rows={clientConversionStats.rows}
           variant="client"
@@ -236,9 +236,9 @@ export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelPro
         />
 
         <AttributionConversionPanel
-          panelId="conversion_filleul"
+          panelId="prescripteur_conversion_filleul"
           title="Conversion — Spécial filleul"
-          description="Par source : combien de prospects filleuls sont devenus inscrits (ou désinscrits) dans votre réseau."
+          description="Par prescripteur : taux de conversion filleul (inscrit ou désinscrit)."
           loading={loading}
           rows={filleulConversionStats.rows}
           variant="filleul"

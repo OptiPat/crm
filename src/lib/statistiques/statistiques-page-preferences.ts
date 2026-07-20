@@ -1,10 +1,16 @@
-export type StatistiquesSectionId = "contacts";
+export type StatistiquesSectionId = "contacts" | "prescripteurs" | "attrition";
 
 export type StatistiquesPanelId =
   | "source_client"
   | "source_filleul"
   | "conversion_client"
-  | "conversion_filleul";
+  | "conversion_filleul"
+  | "prescripteur_client"
+  | "prescripteur_filleul"
+  | "prescripteur_conversion_client"
+  | "prescripteur_conversion_filleul"
+  | "attrition_client"
+  | "attrition_filleul";
 
 type StatistiquesCollapsibleId = StatistiquesSectionId | StatistiquesPanelId;
 
