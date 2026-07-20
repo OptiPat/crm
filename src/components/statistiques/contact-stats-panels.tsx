@@ -2,6 +2,7 @@ import { ChevronRight, TrendingUp, Users, type LucideIcon } from "lucide-react";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { InvestissementWithDetails } from "@/lib/api/tauri-investissements";
 import type { DashboardStatContact } from "@/lib/api/tauri-dashboard";
+import { sortContactsAlphabetically } from "@/lib/contacts/contact-sort";
 import { formatDashboardPercent } from "@/components/dashboard/dashboard-format";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import type {
@@ -33,6 +34,11 @@ export function toDashboardStatContact(contact: Contact): DashboardStatContact {
     date_r1: contact.date_r1,
     date_invitation_filleul: contact.date_invitation_filleul,
   };
+}
+
+/** Liste drill-down statistiques — tri alphabétique nom, prénom. */
+export function toDashboardStatContactList(contacts: Contact[]): DashboardStatContact[] {
+  return sortContactsAlphabetically(contacts).map(toDashboardStatContact);
 }
 
 export function resolveInvestissementOpenContactId(

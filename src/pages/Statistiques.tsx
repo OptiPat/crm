@@ -1,5 +1,6 @@
-import { Share2, UserMinus, Users } from "lucide-react";
-import { ContactAttritionPanel } from "@/components/statistiques/ContactAttritionPanel";
+import { CircleUser, Network, Share2, Users } from "lucide-react";
+import { ContactClientStatsPanel } from "@/components/statistiques/ContactClientStatsPanel";
+import { ContactFilleulOrganisationPanel } from "@/components/statistiques/ContactFilleulOrganisationPanel";
 import { ContactPrescripteurPanel } from "@/components/statistiques/ContactPrescripteurPanel";
 import { ContactSourceLeadPanel } from "@/components/statistiques/ContactSourceLeadPanel";
 import { StatistiquesCollapsibleSection } from "@/components/statistiques/statistiques-ui";
@@ -30,12 +31,21 @@ export function Statistiques({ onNavigate }: StatistiquesProps) {
       </StatistiquesCollapsibleSection>
 
       <StatistiquesCollapsibleSection
-        sectionId="attrition"
-        title="Attrition"
-        subtitle="Clients devenus anciens clients et filleuls désinscrits du réseau"
-        icon={UserMinus}
+        sectionId="filleuls_organisation"
+        title="Organisation filleuls"
+        subtitle="Stats générales"
+        icon={Network}
       >
-        <ContactAttritionPanel onNavigate={onNavigate} />
+        <ContactFilleulOrganisationPanel onNavigate={onNavigate} />
+      </StatistiquesCollapsibleSection>
+
+      <StatistiquesCollapsibleSection
+        sectionId="clients"
+        title="Clients"
+        subtitle="Stats générales"
+        icon={CircleUser}
+      >
+        <ContactClientStatsPanel onNavigate={onNavigate} />
       </StatistiquesCollapsibleSection>
     </div>
   );

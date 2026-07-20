@@ -7,3 +7,10 @@ export function compareContactsAlphabetically(
   if (byNom !== 0) return byNom;
   return a.prenom.localeCompare(b.prenom, "fr", { sensitivity: "base" });
 }
+
+/** Copie triée nom puis prénom — drill-down stats sans ordre métier. */
+export function sortContactsAlphabetically<T extends { nom: string; prenom: string }>(
+  contacts: T[]
+): T[] {
+  return [...contacts].sort(compareContactsAlphabetically);
+}

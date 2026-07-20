@@ -27,7 +27,7 @@ import {
   AttributionDistributionPanel,
   formatConversionSubtitle,
   resolveInvestissementOpenContactId,
-  toDashboardStatContact,
+  toDashboardStatContactList,
   type AttributionInvestissementStatRow,
   type AttributionStatRow,
 } from "./contact-stats-panels";
@@ -145,12 +145,14 @@ export function ContactPrescripteurPanel({ onNavigate }: ContactPrescripteurPane
 
   const loadContactsSheet = useCallback(async () => {
     if (!selectedContactRow) return [];
-    return filterContactsByPrescripteurKey(
-      contacts,
-      selectedContactRow.key,
-      statsOptions,
-      selectedContactLens
-    ).map(toDashboardStatContact);
+    return toDashboardStatContactList(
+      filterContactsByPrescripteurKey(
+        contacts,
+        selectedContactRow.key,
+        statsOptions,
+        selectedContactLens
+      )
+    );
   }, [contacts, selectedContactRow, statsOptions, selectedContactLens]);
 
   const loadInvestissementsSheet = useCallback(async () => {

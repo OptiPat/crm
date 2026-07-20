@@ -1,4 +1,8 @@
-export type StatistiquesSectionId = "contacts" | "prescripteurs" | "attrition";
+export type StatistiquesSectionId =
+  | "contacts"
+  | "prescripteurs"
+  | "clients"
+  | "filleuls_organisation";
 
 export type StatistiquesPanelId =
   | "source_client"
@@ -10,7 +14,24 @@ export type StatistiquesPanelId =
   | "prescripteur_conversion_client"
   | "prescripteur_conversion_filleul"
   | "attrition_client"
-  | "attrition_filleul";
+  | "attrition_filleul"
+  | "geography_client"
+  | "geography_filleul"
+  | "age_client"
+  | "age_filleul"
+  | "client_encours_placements"
+  | "client_versements_programmes"
+  | "client_panier_moyen"
+  | "client_assurance_vie"
+  | "client_scpi"
+  | "client_per"
+  | "client_immobilier"
+  | "client_above_panier_moyen"
+  | "client_scpi_reinvest"
+  | "filleul_org_manager"
+  | "filleul_org_volume"
+  | "filleul_org_parraineur"
+  | "filleul_org_bridge";
 
 type StatistiquesCollapsibleId = StatistiquesSectionId | StatistiquesPanelId;
 
