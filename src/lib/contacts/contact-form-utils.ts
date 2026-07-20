@@ -45,6 +45,11 @@ export function isFilleulReseauInscrit(cat?: string | null): boolean {
   return cat === "FILLEUL";
 }
 
+/** Filleul ayant rejoint le réseau (inscrit ou désinscrit ensuite). */
+export function isFilleulReseauSigne(cat?: string | null): boolean {
+  return cat === "FILLEUL" || cat === "FILLEUL_DESINSCRIT";
+}
+
 export function isPrescripteurCategorie(cat?: string | null): boolean {
   return cat === "PRESCRIPTEUR";
 }

@@ -1574,7 +1574,7 @@ export function ContactForm({
                 {mesFilleulsCount > 1 ? "s" : ""}. Modifier le lien depuis la fiche de chaque filleul.
               </p>
             )}
-            {clientActif && (
+            {(clientActif || filleulActif) && (
               <>
                 <ContactPersonSearch
                   label="Prescripteur"

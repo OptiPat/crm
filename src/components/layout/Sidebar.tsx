@@ -26,6 +26,7 @@ import {
   Calculator,
   StickyNote,
   Briefcase,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -100,6 +101,12 @@ const patrimoineGroup: NavGroup = {
     { id: "souscription-cif", label: "Souscription CIF", icon: FileSignature },
     { id: "documents", label: "Documents", icon: FileText },
   ],
+};
+
+const statistiquesNavItem: NavItem = {
+  id: "statistiques",
+  label: "Statistiques",
+  icon: BarChart3,
 };
 
 const pipeNavItem: NavItem = { id: "pipe", label: "Pipe", icon: Briefcase };
@@ -340,6 +347,7 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
 
       <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
         {renderNavItem(dashboard)}
+        {renderNavItem(statistiquesNavItem)}
         {renderNavItem(pipeNavItem)}
 
         {collapsed

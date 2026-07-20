@@ -7,6 +7,7 @@ import { SetupWizard } from "@/pages/SetupWizard";
 import { UnlockScreen } from "@/pages/UnlockScreen";
 import { Layout } from "@/components/layout/Layout";
 import { Dashboard } from "@/pages/Dashboard";
+import { Statistiques } from "@/pages/Statistiques";
 import { Contacts } from "@/pages/Contacts";
 import { Familles } from "@/pages/Familles";
 import { Foyers } from "@/pages/Foyers";
@@ -238,6 +239,8 @@ function AppInner() {
             onNavigate={setCurrentPage}
           />
         );
+      case "statistiques":
+        return <Statistiques onNavigate={setCurrentPage} />;
       case "pipe":
         return <Pipe />;
       case "contacts":
