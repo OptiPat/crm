@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { getDashboardStats, type DashboardStats } from "@/lib/api/tauri-dashboard";
+import type { DashboardStats } from "@/lib/api/tauri-dashboard";
 import { formatDashboardCurrency } from "@/components/dashboard/dashboard-format";
 import { ChartEmpty, ChartLoading } from "@/components/dashboard/dashboard-ui";
-import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
-import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { StatistiquesPanel } from "./statistiques-ui";
 import type { StatistiquesPanelId } from "@/lib/statistiques/statistiques-page-preferences";
+import { useStatistiquesDashboardFetch } from "./statistiques-client-data-context";
 
 type PatrimoineKpiConfig = {
   panelId: StatistiquesPanelId;
@@ -43,7 +41,7 @@ const PATRIMOINE_KPIS: PatrimoineKpiConfig[] = [
     title: "Panier moyen",
     description: "Montant souscrit par client actif « avec moi » (montant initial, pas l'encours actuel).",
     kpiLabel: "Panier moyen",
-    hint: "Somme des montants initiaux souscrits « avec moi », divisée par le nombre de clients actifs (hors anciens clients).",
+    hint: "Somme des montants initiaux souscrits « avec moi » (clients actifs uniquement), divisée par le nombre de clients actifs.",
     formatValue: (stats) => formatDashboardCurrency(stats.panier_moyen),
     formatSubtitle: (stats) => {
       const label = stats.total_clients > 1 ? "clients actifs" : "client actif";
@@ -98,41 +96,7 @@ function PatrimoineKpiPanel({
 }
 
 export function ContactClientPatrimoinePanels() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const refreshData = useCallback(async (options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? false;
-    if (!silent) setLoading(true);
-    try {
-      setStats(await getDashboardStats());
-    } catch (error) {
-      console.error("Erreur chargement stats patrimoine clients:", error);
-      setStats(null);
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshData();
-  }, [refreshData]);
-
-  useEffect(
-    () =>
-      subscribeContactsChanged(() => {
-        void refreshData({ silent: true });
-      }),
-    [refreshData]
-  );
-
-  useEffect(
-    () =>
-      subscribeInvestissementsChanged(() => {
-        void refreshData({ silent: true });
-      }),
-    [refreshData]
-  );
+  const { dashboard: stats, loading } = useStatistiquesDashboardFetch();
 
   return (
     <>

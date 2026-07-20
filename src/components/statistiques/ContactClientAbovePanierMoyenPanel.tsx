@@ -1,11 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { getDashboardStats } from "@/lib/api/tauri-dashboard";
-import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
-import { getAllInvestissements } from "@/lib/api/tauri-investissements";
 import { formatDashboardCurrency } from "@/components/dashboard/dashboard-format";
-import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
-import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import {
   computeClientAbovePanierMoyenStats,
   filterContactsForClientAbovePanierMoyenList,
@@ -20,6 +15,7 @@ import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { cn } from "@/lib/utils";
 import { toDashboardStatContactList } from "./contact-stats-panels";
 import { StatistiquesPanel } from "./statistiques-ui";
+import { useStatistiquesClientPatrimoineFetch } from "./statistiques-client-data-context";
 
 function PanierMoyenListButton({
   label,
@@ -61,38 +57,17 @@ type ContactClientAbovePanierMoyenPanelProps = {
 export function ContactClientAbovePanierMoyenPanel({
   onNavigate,
 }: ContactClientAbovePanierMoyenPanelProps) {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [investissements, setInvestissements] = useState<Awaited<ReturnType<typeof getAllInvestissements>>>(
-    []
-  );
-  const [panierMoyenEuros, setPanierMoyenEuros] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [dataRefreshKey, setDataRefreshKey] = useState(0);
+  const {
+    contacts,
+    investissements,
+    dashboard,
+    loading,
+    dataRefreshKey,
+    refreshData,
+  } = useStatistiquesClientPatrimoineFetch();
+  const panierMoyenEuros = dashboard?.panier_moyen ?? null;
   const [contactsSheetOpen, setContactsSheetOpen] = useState(false);
   const [listKind, setListKind] = useState<ClientAbovePanierMoyenListKind | null>(null);
-
-  const refreshData = useCallback(async (options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? false;
-    if (!silent) setLoading(true);
-    try {
-      const [rows, invs, dashboard] = await Promise.all([
-        getAllContacts(),
-        getAllInvestissements(),
-        getDashboardStats(),
-      ]);
-      setContacts(rows);
-      setInvestissements(invs);
-      setPanierMoyenEuros(dashboard.panier_moyen);
-      setDataRefreshKey((key) => key + 1);
-    } catch (error) {
-      console.error("Erreur chargement stat panier moyen dépassé:", error);
-      setContacts([]);
-      setInvestissements([]);
-      setPanierMoyenEuros(null);
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, []);
 
   const {
     openContactWithTab,
@@ -104,20 +79,6 @@ export function ContactClientAbovePanierMoyenPanel({
     onNavigate,
     onUpdate: () => void refreshData({ silent: true }),
   });
-
-  useEffect(() => {
-    void refreshData();
-  }, [refreshData]);
-
-  useEffect(
-    () => subscribeContactsChanged(() => void refreshData({ silent: true })),
-    [refreshData]
-  );
-
-  useEffect(
-    () => subscribeInvestissementsChanged(() => void refreshData({ silent: true })),
-    [refreshData]
-  );
 
   const stats = useMemo(() => {
     if (panierMoyenEuros == null) return null;

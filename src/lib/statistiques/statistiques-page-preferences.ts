@@ -39,11 +39,21 @@ const STORAGE_KEY = "crm_statistiques_sections_v1";
 
 type StatistiquesSectionsState = Partial<Record<StatistiquesCollapsibleId, boolean>>;
 
+function migrateSectionsState(state: StatistiquesSectionsState): StatistiquesSectionsState {
+  const raw = state as StatistiquesSectionsState & { attrition?: boolean };
+  const migrated: StatistiquesSectionsState = { ...raw };
+  if (raw.attrition !== undefined && migrated.clients === undefined) {
+    migrated.clients = raw.attrition;
+  }
+  delete (migrated as { attrition?: boolean }).attrition;
+  return migrated;
+}
+
 function readState(): StatistiquesSectionsState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
-    return JSON.parse(raw) as StatistiquesSectionsState;
+    return migrateSectionsState(JSON.parse(raw) as StatistiquesSectionsState);
   } catch {
     return {};
   }

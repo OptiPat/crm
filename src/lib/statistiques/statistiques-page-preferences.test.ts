@@ -35,4 +35,10 @@ describe("statistiques-page-preferences", () => {
     saveStatistiquesSectionOpen("contacts", true);
     expect(loadStatistiquesSectionOpen("contacts", false)).toBe(true);
   });
+
+  it("migre l'ancienne section attrition vers clients", () => {
+    storage.set("crm_statistiques_sections_v1", JSON.stringify({ attrition: false }));
+    expect(loadStatistiquesSectionOpen("clients", true)).toBe(false);
+    expect(loadStatistiquesSectionOpen("attrition" as "clients", true)).toBe(true);
+  });
 });

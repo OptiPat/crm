@@ -44,6 +44,25 @@ export function buildActiveClientCountByFoyer(contacts: Contact[]): Record<numbe
   return counts;
 }
 
+export function buildActiveClientIdSet(contacts: Contact[]): Set<number> {
+  const ids = new Set<number>();
+  for (const contact of contacts) {
+    if (isContactEligibleForClientProductCoverageStats(contact) && contact.id != null) {
+      ids.add(contact.id);
+    }
+  }
+  return ids;
+}
+
+function foyerInvestissementsForPanierPool(
+  foyerInvestissements: Investissement[],
+  activeClientIds: Set<number>
+): Investissement[] {
+  return foyerInvestissements.filter(
+    (inv) => inv.contact_id == null || activeClientIds.has(inv.contact_id)
+  );
+}
+
 function sumMontantInitialAvecMoiCentimes(
   investissements: Pick<Investissement, "origine" | "montant_initial">[]
 ): number {
@@ -60,7 +79,8 @@ function sumMontantInitialAvecMoiCentimes(
 export function contactMontantSouscritAvecMoiEuros(
   contact: Contact,
   indexes: InvestissementIndexes,
-  activeClientCountByFoyer: Record<number, number>
+  activeClientCountByFoyer: Record<number, number>,
+  activeClientIds: Set<number>
 ): number {
   if (contact.id == null) return 0;
 
@@ -73,7 +93,10 @@ export function contactMontantSouscritAvecMoiEuros(
     return purePersoCentimes / 100;
   }
 
-  const foyerInvs = indexes.byFoyer[contact.foyer_id] ?? [];
+  const foyerInvs = foyerInvestissementsForPanierPool(
+    indexes.byFoyer[contact.foyer_id] ?? [],
+    activeClientIds
+  );
   const foyerPoolCentimes = sumMontantInitialAvecMoiCentimes(foyerInvs);
   const memberCount = activeClientCountByFoyer[contact.foyer_id] ?? 1;
 
@@ -84,11 +107,16 @@ export function contactExceedsPanierMoyen(
   contact: Contact,
   indexes: InvestissementIndexes,
   panierMoyenEuros: number,
-  activeClientCountByFoyer: Record<number, number>
+  activeClientCountByFoyer: Record<number, number>,
+  activeClientIds: Set<number>
 ): boolean {
   return (
-    contactMontantSouscritAvecMoiEuros(contact, indexes, activeClientCountByFoyer) >
-    panierMoyenEuros
+    contactMontantSouscritAvecMoiEuros(
+      contact,
+      indexes,
+      activeClientCountByFoyer,
+      activeClientIds
+    ) > panierMoyenEuros
   );
 }
 
@@ -99,12 +127,19 @@ export function computeClientAbovePanierMoyenStats(
 ): ClientAbovePanierMoyenStatResult {
   const indexes = buildInvestissementIndexes(investissements);
   const activeClientCountByFoyer = buildActiveClientCountByFoyer(contacts);
+  const activeClientIds = buildActiveClientIdSet(contacts);
   const aboveContactIds: number[] = [];
   const atOrBelowContactIds: number[] = [];
 
   for (const contact of contacts) {
     if (!isContactEligibleForClientProductCoverageStats(contact) || contact.id == null) continue;
-    if (contactExceedsPanierMoyen(contact, indexes, panierMoyenEuros, activeClientCountByFoyer)) {
+    if (contactExceedsPanierMoyen(
+      contact,
+      indexes,
+      panierMoyenEuros,
+      activeClientCountByFoyer,
+      activeClientIds
+    )) {
       aboveContactIds.push(contact.id);
     } else {
       atOrBelowContactIds.push(contact.id);
@@ -132,13 +167,15 @@ export function filterContactsForClientAbovePanierMoyenList(
 ): Contact[] {
   const indexes = buildInvestissementIndexes(investissements);
   const activeClientCountByFoyer = buildActiveClientCountByFoyer(contacts);
+  const activeClientIds = buildActiveClientIdSet(contacts);
   return contacts.filter((contact) => {
     if (!isContactEligibleForClientProductCoverageStats(contact)) return false;
     const exceeds = contactExceedsPanierMoyen(
       contact,
       indexes,
       panierMoyenEuros,
-      activeClientCountByFoyer
+      activeClientCountByFoyer,
+      activeClientIds
     );
     return kind === "above" ? exceeds : !exceeds;
   });

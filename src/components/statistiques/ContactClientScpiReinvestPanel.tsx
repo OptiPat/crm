@@ -1,9 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
-import { getAllInvestissements } from "@/lib/api/tauri-investissements";
-import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
-import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import {
   computeClientScpiReinvestStats,
   filterContactsForClientScpiReinvestList,
@@ -18,6 +14,7 @@ import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { cn } from "@/lib/utils";
 import { toDashboardStatContactList } from "./contact-stats-panels";
 import { StatistiquesPanel } from "./statistiques-ui";
+import { useStatistiquesClientPatrimoineFetch } from "./statistiques-client-data-context";
 
 function ScpiReinvestListButton({
   label,
@@ -57,31 +54,10 @@ type ContactClientScpiReinvestPanelProps = {
 };
 
 export function ContactClientScpiReinvestPanel({ onNavigate }: ContactClientScpiReinvestPanelProps) {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [investissements, setInvestissements] = useState<Awaited<ReturnType<typeof getAllInvestissements>>>(
-    []
-  );
-  const [loading, setLoading] = useState(true);
-  const [dataRefreshKey, setDataRefreshKey] = useState(0);
+  const { contacts, investissements, loading, dataRefreshKey, refreshData } =
+    useStatistiquesClientPatrimoineFetch();
   const [contactsSheetOpen, setContactsSheetOpen] = useState(false);
   const [listKind, setListKind] = useState<ClientScpiReinvestListKind | null>(null);
-
-  const refreshData = useCallback(async (options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? false;
-    if (!silent) setLoading(true);
-    try {
-      const [rows, invs] = await Promise.all([getAllContacts(), getAllInvestissements()]);
-      setContacts(rows);
-      setInvestissements(invs);
-      setDataRefreshKey((key) => key + 1);
-    } catch (error) {
-      console.error("Erreur chargement stat réinvestissement SCPI:", error);
-      setContacts([]);
-      setInvestissements([]);
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, []);
 
   const {
     openContactWithTab,
@@ -94,24 +70,15 @@ export function ContactClientScpiReinvestPanel({ onNavigate }: ContactClientScpi
     onUpdate: () => void refreshData({ silent: true }),
   });
 
-  useEffect(() => {
-    void refreshData();
-  }, [refreshData]);
-
-  useEffect(
-    () => subscribeContactsChanged(() => void refreshData({ silent: true })),
-    [refreshData]
-  );
-
-  useEffect(
-    () => subscribeInvestissementsChanged(() => void refreshData({ silent: true })),
-    [refreshData]
-  );
-
   const stats = useMemo(
     () => computeClientScpiReinvestStats(contacts, investissements),
     [contacts, investissements]
   );
+
+  const withoutReinvestPercent =
+    stats.totalCount > 0
+      ? (stats.withoutReinvestContactIds.length / stats.totalCount) * 100
+      : 0;
 
   const loadContactsSheet = useCallback(async () => {
     if (!listKind) return [];
@@ -201,7 +168,9 @@ export function ContactClientScpiReinvestPanel({ onNavigate }: ContactClientScpi
         title={sheetTitle}
         description={
           listKind && sheetCount > 0
-            ? `${sheetCount} client${sheetCount > 1 ? "s" : ""} · ${formatClientScpiReinvestPercent(stats.withReinvestPercent)} avec réinvestissement au total`
+            ? listKind === "withReinvest"
+              ? `${sheetCount} client${sheetCount > 1 ? "s" : ""} · ${formatClientScpiReinvestPercent(stats.withReinvestPercent)} avec réinvestissement au total`
+              : `${sheetCount} client${sheetCount > 1 ? "s" : ""} · ${formatClientScpiReinvestPercent(withoutReinvestPercent)} sans réinvestissement au total`
             : undefined
         }
         loadContacts={loadContactsSheet}

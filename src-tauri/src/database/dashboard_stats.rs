@@ -19,6 +19,22 @@ const CLIENT_STATS_WHERE: &str =
 const CLIENT_STATS_EXISTS: &str =
     "c.categorie = 'CLIENT' AND COALESCE(c.statut_suivi, 'ACTIF') != 'EN_PAUSE'";
 
+fn panier_avec_moi_invest_where() -> String {
+    format!(
+        "i.origine = 'MON_CONSEIL'
+         AND (
+           (i.contact_id IS NOT NULL AND EXISTS (
+             SELECT 1 FROM contacts c WHERE c.id = i.contact_id AND {CLIENT_STATS_EXISTS}
+           ))
+           OR (
+             i.contact_id IS NULL AND i.foyer_id IS NOT NULL AND EXISTS (
+               SELECT 1 FROM contacts c WHERE c.foyer_id = i.foyer_id AND {CLIENT_STATS_EXISTS}
+             )
+           )
+         )"
+    )
+}
+
 fn activity_bucket_format(bucket: Option<&str>) -> &'static str {
     match bucket {
         Some("month") => "%Y-%m",
@@ -205,12 +221,13 @@ impl super::Database {
             |row| row.get(0),
         ).unwrap_or(0);
 
-        // Panier moyen = montants souscrits (montant_initial) « avec moi » / clients — pas l'encours
+        // Panier moyen = montants souscrits (montant_initial) « avec moi » / clients actifs — pas l'encours
+        let panier_where = panier_avec_moi_invest_where();
         let total_invests_avec_moi: f64 = self.conn.query_row(
-            "SELECT COALESCE(SUM(i.montant_initial), 0) FROM investissements i
-             WHERE i.origine = 'MON_CONSEIL'
-               AND ((i.contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id))
-                    OR (i.foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = i.foyer_id)))",
+            &format!(
+                "SELECT COALESCE(SUM(i.montant_initial), 0) FROM investissements i
+                 WHERE {panier_where}"
+            ),
             [],
             |row| {
                 let centimes: i64 = row.get(0)?;

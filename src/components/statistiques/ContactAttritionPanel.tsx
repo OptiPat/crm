@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
-import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { useCallback, useMemo, useState } from "react";
 import {
   computeClientAttritionStats,
   filterContactsForClientAttritionLens,
@@ -12,6 +10,7 @@ import { DashboardStatContactsSheet } from "@/components/dashboard/DashboardStat
 import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { toDashboardStatContactList } from "./contact-stats-panels";
 import { AttritionKpiPanel } from "./contact-attrition-kpi-panel";
+import { useStatistiquesContactsFetch } from "./statistiques-client-data-context";
 
 type AttritionDrillDown = {
   kind: "active" | "attrited";
@@ -28,25 +27,9 @@ export function ContactAttritionPanel({
   onNavigate,
   title = "Attrition",
 }: ContactAttritionPanelProps) {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [dataRefreshKey, setDataRefreshKey] = useState(0);
   const [contactsSheetOpen, setContactsSheetOpen] = useState(false);
   const [drillDown, setDrillDown] = useState<AttritionDrillDown | null>(null);
-
-  const refreshData = useCallback(async (options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? false;
-    if (!silent) setLoading(true);
-    try {
-      setContacts(await getAllContacts());
-      setDataRefreshKey((key) => key + 1);
-    } catch (error) {
-      console.error("Erreur chargement statistiques attrition:", error);
-      setContacts([]);
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, []);
+  const { contacts, loading, dataRefreshKey, refreshData } = useStatistiquesContactsFetch();
 
   const {
     openContactWithTab,
@@ -58,15 +41,6 @@ export function ContactAttritionPanel({
     onNavigate,
     onUpdate: () => void refreshData({ silent: true }),
   });
-
-  useEffect(() => {
-    void refreshData();
-  }, [refreshData]);
-
-  useEffect(
-    () => subscribeContactsChanged(() => void refreshData({ silent: true })),
-    [refreshData]
-  );
 
   const clientStats = useMemo(() => computeClientAttritionStats(contacts), [contacts]);
 

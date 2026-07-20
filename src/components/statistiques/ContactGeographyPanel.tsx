@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
-import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { useCallback, useMemo, useState } from "react";
 import {
   computeContactGeographyStats,
   filterContactsByGeographyKey,
@@ -15,6 +13,7 @@ import {
   toDashboardStatContactList,
   type AttributionStatRow,
 } from "./contact-stats-panels";
+import { useStatistiquesContactsFetch } from "./statistiques-client-data-context";
 
 type ContactGeographyPanelProps = {
   onNavigate?: (page: string) => void;
@@ -26,26 +25,10 @@ export function ContactGeographyPanel({
   onNavigate,
   lens = "both",
 }: ContactGeographyPanelProps) {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [dataRefreshKey, setDataRefreshKey] = useState(0);
   const [contactsSheetOpen, setContactsSheetOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<AttributionStatRow | null>(null);
   const [selectedLens, setSelectedLens] = useState<GeographyLens>("client");
-
-  const refreshData = useCallback(async (options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? false;
-    if (!silent) setLoading(true);
-    try {
-      setContacts(await getAllContacts());
-      setDataRefreshKey((key) => key + 1);
-    } catch (error) {
-      console.error("Erreur chargement statistiques géographie:", error);
-      setContacts([]);
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, []);
+  const { contacts, loading, dataRefreshKey, refreshData } = useStatistiquesContactsFetch();
 
   const {
     openContactWithTab,
@@ -57,15 +40,6 @@ export function ContactGeographyPanel({
     onNavigate,
     onUpdate: () => void refreshData({ silent: true }),
   });
-
-  useEffect(() => {
-    void refreshData();
-  }, [refreshData]);
-
-  useEffect(
-    () => subscribeContactsChanged(() => void refreshData({ silent: true })),
-    [refreshData]
-  );
 
   const clientStats = useMemo(() => computeContactGeographyStats(contacts, "client"), [contacts]);
   const filleulStats = useMemo(() => computeContactGeographyStats(contacts, "filleul"), [contacts]);

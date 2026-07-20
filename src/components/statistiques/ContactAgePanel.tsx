@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
-import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
   computeContactAgeStats,
   filterContactsForAgeLens,
@@ -19,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { toDashboardStatContactList } from "./contact-stats-panels";
 import { StatistiquesPanel } from "./statistiques-ui";
 import type { StatistiquesPanelId } from "@/lib/statistiques/statistiques-page-preferences";
+import { useStatistiquesContactsFetch } from "./statistiques-client-data-context";
 
 type AgeDrillDown = {
   lens: AgeLens;
@@ -135,25 +134,9 @@ function ageSheetTitle(lens: AgeLens, kind: AgeListKind): string {
 }
 
 export function ContactAgePanel({ onNavigate, lens = "both" }: ContactAgePanelProps) {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [dataRefreshKey, setDataRefreshKey] = useState(0);
   const [contactsSheetOpen, setContactsSheetOpen] = useState(false);
   const [drillDown, setDrillDown] = useState<AgeDrillDown | null>(null);
-
-  const refreshData = useCallback(async (options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? false;
-    if (!silent) setLoading(true);
-    try {
-      setContacts(await getAllContacts());
-      setDataRefreshKey((key) => key + 1);
-    } catch (error) {
-      console.error("Erreur chargement statistiques âge:", error);
-      setContacts([]);
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, []);
+  const { contacts, loading, dataRefreshKey, refreshData } = useStatistiquesContactsFetch();
 
   const {
     openContactWithTab,
@@ -165,15 +148,6 @@ export function ContactAgePanel({ onNavigate, lens = "both" }: ContactAgePanelPr
     onNavigate,
     onUpdate: () => void refreshData({ silent: true }),
   });
-
-  useEffect(() => {
-    void refreshData();
-  }, [refreshData]);
-
-  useEffect(
-    () => subscribeContactsChanged(() => void refreshData({ silent: true })),
-    [refreshData]
-  );
 
   const clientStats = useMemo(() => computeContactAgeStats(contacts, "client"), [contacts]);
   const filleulStats = useMemo(() => computeContactAgeStats(contacts, "filleul"), [contacts]);

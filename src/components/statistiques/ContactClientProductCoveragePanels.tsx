@@ -1,9 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
-import { getAllInvestissements } from "@/lib/api/tauri-investissements";
-import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
-import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import {
   CLIENT_PRODUCT_COVERAGE_CONFIGS,
   computeClientProductCoverageStats,
@@ -21,6 +17,7 @@ import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { cn } from "@/lib/utils";
 import { toDashboardStatContactList } from "./contact-stats-panels";
 import { StatistiquesPanel } from "./statistiques-ui";
+import { useStatistiquesClientPatrimoineFetch } from "./statistiques-client-data-context";
 
 type ProductCoverageDrillDown = {
   config: ClientProductCoverageConfig;
@@ -123,31 +120,15 @@ type ContactClientProductCoveragePanelsProps = {
 export function ContactClientProductCoveragePanels({
   onNavigate,
 }: ContactClientProductCoveragePanelsProps) {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [investissements, setInvestissements] = useState<Awaited<ReturnType<typeof getAllInvestissements>>>(
-    []
-  );
-  const [loading, setLoading] = useState(true);
-  const [dataRefreshKey, setDataRefreshKey] = useState(0);
+  const {
+    contacts,
+    investissements,
+    loading,
+    dataRefreshKey,
+    refreshData,
+  } = useStatistiquesClientPatrimoineFetch();
   const [contactsSheetOpen, setContactsSheetOpen] = useState(false);
   const [drillDown, setDrillDown] = useState<ProductCoverageDrillDown | null>(null);
-
-  const refreshData = useCallback(async (options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? false;
-    if (!silent) setLoading(true);
-    try {
-      const [rows, invs] = await Promise.all([getAllContacts(), getAllInvestissements()]);
-      setContacts(rows);
-      setInvestissements(invs);
-      setDataRefreshKey((key) => key + 1);
-    } catch (error) {
-      console.error("Erreur chargement stats produits clients:", error);
-      setContacts([]);
-      setInvestissements([]);
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, []);
 
   const {
     openContactWithTab,
@@ -159,20 +140,6 @@ export function ContactClientProductCoveragePanels({
     onNavigate,
     onUpdate: () => void refreshData({ silent: true }),
   });
-
-  useEffect(() => {
-    void refreshData();
-  }, [refreshData]);
-
-  useEffect(
-    () => subscribeContactsChanged(() => void refreshData({ silent: true })),
-    [refreshData]
-  );
-
-  useEffect(
-    () => subscribeInvestissementsChanged(() => void refreshData({ silent: true })),
-    [refreshData]
-  );
 
   const statsByKind = useMemo(() => {
     const map = new Map<
@@ -212,6 +179,11 @@ export function ContactClientProductCoveragePanels({
       ? selectedStats?.withProductCount ?? 0
       : selectedStats?.withoutProductContactIds.length ?? 0;
 
+  const withoutProductPercent =
+    selectedStats && selectedStats.totalCount > 0
+      ? ((selectedStats.withoutProductContactIds.length / selectedStats.totalCount) * 100)
+      : 0;
+
   const sheetTitle =
     drillDown == null
       ? "Contacts"
@@ -246,7 +218,9 @@ export function ContactClientProductCoveragePanels({
         title={sheetTitle}
         description={
           drillDown && selectedStats && sheetCount > 0
-            ? `${sheetCount} client${sheetCount > 1 ? "s" : ""} · ${formatClientProductCoveragePercent(selectedStats.withProductPercent)} ${drillDown.config.withLabel.toLowerCase()} au total`
+            ? drillDown.kind === "withProduct"
+              ? `${sheetCount} client${sheetCount > 1 ? "s" : ""} · ${formatClientProductCoveragePercent(selectedStats.withProductPercent)} ${drillDown.config.withLabel.toLowerCase()} au total`
+              : `${sheetCount} client${sheetCount > 1 ? "s" : ""} · ${formatClientProductCoveragePercent(withoutProductPercent)} ${drillDown.config.withoutLabel.toLowerCase()} au total`
             : undefined
         }
         loadContacts={loadContactsSheet}

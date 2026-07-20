@@ -703,6 +703,76 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn panier_moyen_excludes_en_pause_client_investments() {
+        let db = test_db();
+        let active = db.create_contact(sample_contact("Actif", "Jean")).unwrap();
+        let paused = db.create_contact(sample_contact("Ancien", "Paul")).unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(active.id.unwrap()),
+            foyer_id: None,
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: None,
+            nom_produit: "AV actif".into(),
+            numero_contrat: None,
+            montant_initial: Some(1_000_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            prevoyance_perso: None,
+            prevoyance_pro: None,
+            prevoyance_versement_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        let paused_inv = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(paused.id.unwrap()),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "AV ancien".into(),
+                numero_contrat: None,
+                montant_initial: Some(9_000_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+        db.close_investissement(paused_inv.id, None).unwrap();
+        assert_eq!(
+            db.get_contact_by_id(paused.id.unwrap()).unwrap().statut_suivi,
+            "EN_PAUSE",
+            "dernier encours clôturé → client exclu du dénominateur panier"
+        );
+
+        let stats = db.get_dashboard_stats().unwrap();
+        assert_eq!(stats.total_clients, 1);
+        assert!((stats.panier_moyen - 10_000.0).abs() < 0.01);
+    }
+
+    #[test]
     fn closed_investissement_excluded_from_encours_kept_in_panier_moyen() {
         let db = test_db();
         let contact = db.create_contact(sample_contact("Vendu", "Luc")).unwrap();
