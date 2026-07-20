@@ -55,7 +55,7 @@ Principaux frais :
   {
     key: "epargne_pierre_europe",
     label: "Épargne Pierre Europe",
-    partPriceEur: 200,
+    partPriceEur: 20,
     description: `— ÉPARGNE PIERRE EUROPE —
 
 Epargne Pierre Europe accompagne les projets d'avenir de la 3ème puissance mondiale. Elle vous permet d'accéder à un patrimoine immobilier diversifié tant sur le plan sectoriel (bureaux, commerces, ou locaux d'activité) que géographique, en bénéficiant des différences de cycles économique entre les pays de la zone euro.
@@ -74,7 +74,7 @@ Principaux frais :
   {
     key: "epargne_pierre",
     label: "Épargne Pierre",
-    partPriceEur: 208,
+    partPriceEur: 20.8,
     description: `— ÉPARGNE PIERRE —
 
 Épargne Pierre déploie une stratégie recherchant le rendement en se positionnant sur toutes les typologies d'actifs : bureaux, commerces et locaux d'activités pour profiter des opportunités de marché. La stratégie privilégie les grandes métropoles régionales afin de bénéficier d'un bon mix géographique sur le territoire et cible des actifs d'une valeur unitaire entre 1 et 50 M€. Epargne Pierre bénéficie du label ISR et prend en compte les critères environnementaux, sociétaux et de gouvernance (ESG) dans le cadre de la mise en œuvre de sa stratégie d'investissement et dans sa gestion des actifs. La capitalisation importante permet une large diversification et mutualisation du risque immobilier grâce à la variété d'actifs et des locataires (principalement grands utilisateurs publics ou privés).
@@ -207,7 +207,7 @@ Principaux frais :
   {
     key: "activimmo",
     label: "Activimmo",
-    partPriceEur: 610,
+    partPriceEur: 613.5,
     description: `— ACTIVIMMO —
 
 Activimmo est une SCPI spécialisée ciblant les actifs à usage de locaux d'activités, d'entrepôts et de logistique urbaine ou du « dernier kilomètre », situés en périphéries des villes, à proximité des axes routiers ou au sein même des bassins d'emploi et de consommation. Les locaux pourront abriter diverses activités permettant de répondre aux besoins immobiliers : des PME / PMI et ETI, jusqu'aux filiales de grands groupes, ou encore des entreprises à la recherche de bâtiments pour assurer leur service de logistique notamment du dernier kilomètre, dernier ou avant-dernier maillon précédant la livraison au consommateur final. A titre de diversification, la SCPI pourra investir en bureaux et commerces.

@@ -200,7 +200,7 @@ export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelPro
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
         <AttributionDistributionPanel
           panelId="source_client"
-          title="Source contact — Spécial client"
+          title="Source contact — Clients"
           description="Prospects et clients actifs avec le champ Source / lead renseigné sur la fiche."
           loading={loading}
           total={clientContactStats.total}
@@ -212,7 +212,7 @@ export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelPro
 
         <AttributionDistributionPanel
           panelId="source_filleul"
-          title="Source contact — Spécial filleul"
+          title="Source contact — Filleuls"
           description="Filleuls de votre réseau direct avec Source / lead — vous devez être leur parrain sur la fiche."
           loading={loading}
           total={filleulContactStats.total}
@@ -224,7 +224,7 @@ export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelPro
 
         <AttributionConversionPanel
           panelId="conversion_client"
-          title="Conversion et volume — Spécial client"
+          title="Conversion et volume — Clients"
           description="Par source : combien ont signé un investissement « avec moi », et combien d'euros au total."
           loading={loading}
           rows={clientConversionStats.rows}
@@ -237,7 +237,7 @@ export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelPro
 
         <AttributionConversionPanel
           panelId="conversion_filleul"
-          title="Conversion — Spécial filleul"
+          title="Conversion — Filleuls"
           description="Par source : combien de prospects filleuls sont devenus inscrits (ou désinscrits) dans votre réseau."
           loading={loading}
           rows={filleulConversionStats.rows}

@@ -200,7 +200,7 @@ export function ContactPrescripteurPanel({ onNavigate }: ContactPrescripteurPane
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
         <AttributionDistributionPanel
           panelId="prescripteur_client"
-          title="Prescripteur — Spécial client"
+          title="Prescripteur — Clients"
           description="Clients regroupés par prescripteur renseigné sur la fiche."
           loading={loading}
           total={clientContactStats.total}
@@ -212,7 +212,7 @@ export function ContactPrescripteurPanel({ onNavigate }: ContactPrescripteurPane
 
         <AttributionDistributionPanel
           panelId="prescripteur_filleul"
-          title="Prescripteur — Spécial filleul"
+          title="Prescripteur — Filleuls"
           description="Filleuls du réseau direct regroupés par prescripteur."
           loading={loading}
           total={filleulContactStats.total}
@@ -224,7 +224,7 @@ export function ContactPrescripteurPanel({ onNavigate }: ContactPrescripteurPane
 
         <AttributionConversionPanel
           panelId="prescripteur_conversion_client"
-          title="Conversion et volume — Spécial client"
+          title="Conversion et volume — Clients"
           description="Par prescripteur : taux de conversion et montants signés « avec moi »."
           loading={loading}
           rows={clientConversionStats.rows}
@@ -237,7 +237,7 @@ export function ContactPrescripteurPanel({ onNavigate }: ContactPrescripteurPane
 
         <AttributionConversionPanel
           panelId="prescripteur_conversion_filleul"
-          title="Conversion — Spécial filleul"
+          title="Conversion — Filleuls"
           description="Par prescripteur : taux de conversion filleul (inscrit ou désinscrit)."
           loading={loading}
           rows={filleulConversionStats.rows}

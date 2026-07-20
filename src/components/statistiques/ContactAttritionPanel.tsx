@@ -210,7 +210,7 @@ export function ContactAttritionPanel({ onNavigate }: ContactAttritionPanelProps
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
         <AttritionKpiPanel
           panelId="attrition_client"
-          title="Attrition — Spécial client"
+          title="Clients"
           description="Part des clients devenus anciens clients (statut EN_PAUSE) parmi les clients actifs et anciens."
           loading={loading}
           stats={clientStats}
@@ -222,7 +222,7 @@ export function ContactAttritionPanel({ onNavigate }: ContactAttritionPanelProps
 
         <AttritionKpiPanel
           panelId="attrition_filleul"
-          title="Attrition — Spécial filleul"
+          title="Filleuls"
           description="Part des filleuls désinscrits parmi les filleuls ayant rejoint le réseau (inscrits + désinscrits)."
           loading={loading}
           stats={filleulStats}
