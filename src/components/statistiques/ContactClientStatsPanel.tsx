@@ -4,6 +4,7 @@ import { ContactClientAbovePanierMoyenPanel } from "./ContactClientAbovePanierMo
 import { ContactClientPatrimoinePanels } from "./ContactClientPatrimoinePanels";
 import { ContactClientProductCoveragePanels } from "./ContactClientProductCoveragePanels";
 import { ContactClientScpiReinvestPanel } from "./ContactClientScpiReinvestPanel";
+import { ContactClientVpCoveragePanel } from "./ContactClientVpCoveragePanel";
 import { ContactGeographyPanel } from "./ContactGeographyPanel";
 import { StatistiquesClientDataProvider } from "./statistiques-client-data-context";
 
@@ -18,9 +19,10 @@ export function ContactClientStatsPanel({ onNavigate }: ContactClientStatsPanelP
         <ContactGeographyPanel onNavigate={onNavigate} lens="client" />
         <ContactAgePanel onNavigate={onNavigate} lens="client" />
         <ContactClientPatrimoinePanels />
-        <ContactClientProductCoveragePanels onNavigate={onNavigate} />
         <ContactClientAbovePanierMoyenPanel onNavigate={onNavigate} />
+        <ContactClientProductCoveragePanels onNavigate={onNavigate} />
         <ContactClientScpiReinvestPanel onNavigate={onNavigate} />
+        <ContactClientVpCoveragePanel onNavigate={onNavigate} />
         <div className="lg:col-span-2">
           <ContactAttritionPanel onNavigate={onNavigate} title="Attrition" />
         </div>

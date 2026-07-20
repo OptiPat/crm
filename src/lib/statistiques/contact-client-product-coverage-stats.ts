@@ -48,20 +48,6 @@ export const CLIENT_PRODUCT_COVERAGE_CONFIGS: ClientProductCoverageConfig[] = [
     matchesType: (type) => type === "ASSURANCE_VIE",
   },
   {
-    kind: "scpi",
-    panelId: "client_scpi",
-    title: "SCPI",
-    description:
-      "Part des clients actifs ayant au moins une SCPI « avec moi » (pleine propriété, démembrement ou à crédit).",
-    kpiLabel: "Avec SCPI",
-    withLabel: "Avec SCPI",
-    withoutLabel: "Sans SCPI",
-    sheetWithTitle: "Clients actifs — avec SCPI",
-    sheetWithoutTitle: "Clients actifs — sans SCPI",
-    hint: "Toutes SCPI « avec moi » — clients actifs, hors anciens clients.",
-    matchesType: (type) => SCPI_TYPES.has(type),
-  },
-  {
     kind: "per",
     panelId: "client_per",
     title: "PER",
@@ -74,6 +60,20 @@ export const CLIENT_PRODUCT_COVERAGE_CONFIGS: ClientProductCoverageConfig[] = [
     sheetWithoutTitle: "Clients actifs — sans PER",
     hint: "Placements « avec moi » uniquement — clients actifs, hors anciens clients.",
     matchesType: (type) => type === "PER",
+  },
+  {
+    kind: "scpi",
+    panelId: "client_scpi",
+    title: "SCPI",
+    description:
+      "Part des clients actifs ayant au moins une SCPI « avec moi » (pleine propriété, démembrement ou à crédit).",
+    kpiLabel: "Avec SCPI",
+    withLabel: "Avec SCPI",
+    withoutLabel: "Sans SCPI",
+    sheetWithTitle: "Clients actifs — avec SCPI",
+    sheetWithoutTitle: "Clients actifs — sans SCPI",
+    hint: "Toutes SCPI « avec moi » — clients actifs, hors anciens clients.",
+    matchesType: (type) => SCPI_TYPES.has(type),
   },
   {
     kind: "immobilier",

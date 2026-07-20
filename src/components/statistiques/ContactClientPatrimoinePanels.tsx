@@ -21,7 +21,7 @@ const PATRIMOINE_KPIS: PatrimoineKpiConfig[] = [
   {
     panelId: "client_encours_placements",
     title: "Encours placements",
-    description: "Valorisation actuelle des placements « avec moi » (AV, PER, FIP/FCPI… — hors SCPI et immobilier).",
+    description: "Valorisation actuelle des placements « avec moi » (AV, PER, épargne salariale, FIP/FCPI… — hors SCPI et immobilier).",
     kpiLabel: "Encours",
     hint: "Encours actif des investissements financiers conseillés — pas les montants souscrits initiaux.",
     formatValue: (stats) => formatDashboardCurrency(stats.encours_placements),

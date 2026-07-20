@@ -16,6 +16,6 @@ describe("stellium-template-meta", () => {
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw!) as Record<string, unknown>;
     expect(parsed.stellium_perf_template_user_customized).toBe(true);
-    expect(parsed.stellium_perf_template_version).toBe(6);
+    expect(parsed.stellium_perf_template_version).toBe(7);
   });
 });

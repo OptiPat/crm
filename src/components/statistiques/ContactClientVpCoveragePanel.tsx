@@ -1,12 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import {
-  computeClientScpiReinvestStats,
-  filterContactsForClientScpiReinvestList,
-  formatClientScpiReinvestPercent,
-  formatClientScpiReinvestSubtitle,
-  type ClientScpiReinvestListKind,
-} from "@/lib/statistiques/contact-client-scpi-reinvest-stats";
+  computeClientVpCoverageStats,
+  filterContactsForClientVpCoverageList,
+  formatClientVpCoveragePercent,
+  formatClientVpCoverageSubtitle,
+  type ClientVpCoverageListKind,
+} from "@/lib/statistiques/contact-client-vp-coverage-stats";
 import { DashboardDrillDownBackdrop } from "@/components/dashboard/DashboardDrillDownBackdrop";
 import { DashboardStatContactsSheet } from "@/components/dashboard/DashboardStatContactsSheet";
 import { ChartEmpty, ChartLoading } from "@/components/dashboard/dashboard-ui";
@@ -16,7 +16,7 @@ import { toDashboardStatContactList } from "./contact-stats-panels";
 import { StatistiquesPanel } from "./statistiques-ui";
 import { useStatistiquesClientPatrimoineFetch } from "./statistiques-client-data-context";
 
-function ScpiReinvestListButton({
+function VpCoverageListButton({
   label,
   count,
   onClick,
@@ -38,9 +38,7 @@ function ScpiReinvestListButton({
     >
       <div className="min-w-0">
         <p className="text-sm font-medium truncate">{label}</p>
-        <p className="text-xs text-muted-foreground tabular-nums">
-          {count} SCPI
-        </p>
+        <p className="text-xs text-muted-foreground tabular-nums">{count} contrat{count > 1 ? "s" : ""}</p>
       </div>
       {interactive ? (
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -49,15 +47,15 @@ function ScpiReinvestListButton({
   );
 }
 
-type ContactClientScpiReinvestPanelProps = {
+type ContactClientVpCoveragePanelProps = {
   onNavigate?: (page: string) => void;
 };
 
-export function ContactClientScpiReinvestPanel({ onNavigate }: ContactClientScpiReinvestPanelProps) {
+export function ContactClientVpCoveragePanel({ onNavigate }: ContactClientVpCoveragePanelProps) {
   const { contacts, investissements, loading, dataRefreshKey, refreshData } =
     useStatistiquesClientPatrimoineFetch();
   const [contactsSheetOpen, setContactsSheetOpen] = useState(false);
-  const [listKind, setListKind] = useState<ClientScpiReinvestListKind | null>(null);
+  const [listKind, setListKind] = useState<ClientVpCoverageListKind | null>(null);
 
   const {
     openContactWithTab,
@@ -71,78 +69,74 @@ export function ContactClientScpiReinvestPanel({ onNavigate }: ContactClientScpi
   });
 
   const stats = useMemo(
-    () => computeClientScpiReinvestStats(contacts, investissements),
+    () => computeClientVpCoverageStats(contacts, investissements),
     [contacts, investissements]
   );
 
-  const withoutReinvestPercent =
-    stats.totalCount > 0 ? (stats.withoutReinvestCount / stats.totalCount) * 100 : 0;
+  const withoutVpPercent =
+    stats.totalCount > 0 ? (stats.withoutVpCount / stats.totalCount) * 100 : 0;
 
   const loadContactsSheet = useCallback(async () => {
     if (!listKind) return [];
     return toDashboardStatContactList(
-      filterContactsForClientScpiReinvestList(contacts, listKind, investissements)
+      filterContactsForClientVpCoverageList(contacts, listKind, investissements)
     );
   }, [contacts, investissements, listKind]);
 
-  const openList = useCallback((kind: ClientScpiReinvestListKind) => {
+  const openList = useCallback((kind: ClientVpCoverageListKind) => {
     setListKind(kind);
     setContactsSheetOpen(true);
   }, []);
 
-  const sheetScpiCount =
-    listKind === "withReinvest" ? stats.withReinvestCount : stats.withoutReinvestCount;
+  const sheetContractCount = listKind === "withVp" ? stats.withVpCount : stats.withoutVpCount;
 
   const sheetTitle =
-    listKind === "withReinvest"
-      ? "Clients — SCPI avec réinvestissement des dividendes"
-      : listKind === "withoutReinvest"
-        ? "Clients — SCPI sans réinvestissement des dividendes"
+    listKind === "withVp"
+      ? "Clients — AV/PER avec versement programmé"
+      : listKind === "withoutVp"
+        ? "Clients — AV/PER sans versement programmé"
         : "Contacts";
 
   return (
     <>
       <StatistiquesPanel
-        title="Réinvestissement SCPI"
-        description="Part des SCPI pleine propriété « avec moi » avec réinvestissement des dividendes actif."
+        title="Couverture VP"
+        description="Part des contrats AV & PER « avec moi » avec versement programmé actif."
         collapsible
-        panelId="client_scpi_reinvest"
+        panelId="client_vp_coverage"
       >
         {loading ? (
           <ChartLoading />
         ) : stats.totalCount === 0 ? (
-          <ChartEmpty title="Aucune SCPI pleine propriété « avec moi »." height={180} />
+          <ChartEmpty title="Aucun contrat AV/PER « avec moi »." height={180} />
         ) : (
           <div className="space-y-4">
             <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Avec réinvestissement
-                </p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Avec VP</p>
                 <p className="text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5 text-primary">
-                  {formatClientScpiReinvestPercent(stats.withReinvestPercent)}
+                  {formatClientVpCoveragePercent(stats.withVpPercent)}
                 </p>
               </div>
               <p className="text-xs text-muted-foreground text-right max-w-xs">
-                {formatClientScpiReinvestSubtitle(stats)}
+                {formatClientVpCoverageSubtitle(stats)}
               </p>
             </div>
 
             <p className="text-xs text-muted-foreground">
-              SCPI pleine propriété actives « avec moi » uniquement — aligné onglet Patrimoine /
-              Investissements.
+              AV & PER actifs « avec moi » uniquement — aligné onglet Patrimoine / Investissements.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <ScpiReinvestListButton
-                label="Avec réinvestissement"
-                count={stats.withReinvestCount}
-                onClick={() => openList("withReinvest")}
+              <VpCoverageListButton
+                label="Avec VP"
+                count={stats.withVpCount}
+                onClick={() => openList("withVp")}
               />
-              <ScpiReinvestListButton
-                label="Sans réinvestissement"
-                count={stats.withoutReinvestCount}
-                onClick={() => openList("withoutReinvest")}
+              <VpCoverageListButton
+                label="Sans VP"
+                count={stats.withoutVpCount}
+                onClick={() => openList("withoutVp")}
               />
             </div>
           </div>
@@ -163,10 +157,10 @@ export function ContactClientScpiReinvestPanel({ onNavigate }: ContactClientScpi
         }}
         title={sheetTitle}
         description={
-          listKind && sheetScpiCount > 0
-            ? listKind === "withReinvest"
-              ? `${stats.withReinvestContactIds.length} client${stats.withReinvestContactIds.length > 1 ? "s" : ""} · ${formatClientScpiReinvestPercent(stats.withReinvestPercent)} avec réinvestissement (${sheetScpiCount} SCPI)`
-              : `${stats.withoutReinvestContactIds.length} client${stats.withoutReinvestContactIds.length > 1 ? "s" : ""} · ${formatClientScpiReinvestPercent(withoutReinvestPercent)} sans réinvestissement (${sheetScpiCount} SCPI)`
+          listKind && sheetContractCount > 0
+            ? listKind === "withVp"
+              ? `${stats.withVpContactIds.length} client${stats.withVpContactIds.length > 1 ? "s" : ""} · ${formatClientVpCoveragePercent(stats.withVpPercent)} avec VP (${sheetContractCount} contrat${sheetContractCount > 1 ? "s" : ""})`
+              : `${stats.withoutVpContactIds.length} client${stats.withoutVpContactIds.length > 1 ? "s" : ""} · ${formatClientVpCoveragePercent(withoutVpPercent)} sans VP (${sheetContractCount} contrat${sheetContractCount > 1 ? "s" : ""})`
             : undefined
         }
         loadContacts={loadContactsSheet}

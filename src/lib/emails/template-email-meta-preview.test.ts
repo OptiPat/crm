@@ -32,7 +32,7 @@ describe("renderTemplatePreview corpsHtmlOverride", () => {
       null,
       { templateNom: "Performance AV/PER Stellium (tu)", registre: "TU" }
     );
-    expect(tuPreview.body_html ?? tuPreview.body).toContain("Ce que tu as versé");
+    expect(tuPreview.body_html ?? tuPreview.body).toContain("Capital net investi");
     expect(tuPreview.body_html ?? tuPreview.body).not.toContain("_tu");
 
     const vousPreview = renderTemplatePreview(
@@ -45,7 +45,7 @@ describe("renderTemplatePreview corpsHtmlOverride", () => {
       null,
       { templateNom: "Performance AV/PER Stellium", registre: "VOUS" }
     );
-    expect(vousPreview.body_html ?? vousPreview.body).toContain("Ce que vous avez versé");
+    expect(vousPreview.body_html ?? vousPreview.body).toContain("Capital net investi");
     expect(vousPreview.body_html ?? vousPreview.body).not.toContain("_tu");
   });
 

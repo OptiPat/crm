@@ -64,11 +64,11 @@ describe("alignStelliumVarsForRegistre", () => {
   it("mappe perf_detail vers perf_detail_tu pour un contact TU", () => {
     const aligned = alignStelliumVarsForRegistre(
       {
-        perf_detail: "Ce que vous avez versé",
-        perf_detail_tu: "Ce que tu as versé",
+        perf_detail: "Capital net investi (vous)",
+        perf_detail_tu: "Capital net investi (tu)",
       },
       "TU"
     );
-    expect(aligned.perf_detail).toBe("Ce que tu as versé");
+    expect(aligned.perf_detail).toBe("Capital net investi (tu)");
   });
 });

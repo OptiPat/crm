@@ -299,8 +299,8 @@ describe("etiquette-email-preview", () => {
 
   it("répare un gabarit perf Stellium tu legacy ({{perf_detail}}_tu + vous)", () => {
     const detailTu =
-      "Valeur actuelle : 362 585,54 €\nCe que tu as versé (Net de frais) : 348 874,80 €\nPerformance : +13 710,74 € soit +3,93 %";
-    const detailVous = detailTu.replace("tu as", "vous avez");
+      "Valeur actuelle : 362 585,54 €\nCapital net investi : 348 874,80 € (après déduction des droits d'entrée)\nPerformance : +13 710,74 € soit +3,93 %";
+    const detailVous = detailTu;
     const item: EtiquetteEmailQueueItem = {
       contact_etiquette_id: 1,
       contact_id: 2,
@@ -333,8 +333,8 @@ describe("etiquette-email-preview", () => {
       queue_issue: null,
     };
     const rendered = renderEtiquetteEmailPreview(item, null);
-    expect(rendered.body).toContain("Ce que tu as versé");
-    expect(rendered.body).not.toContain("Ce que vous avez versé");
+    expect(rendered.body).toContain("Capital net investi");
+    expect(rendered.body).toContain("après déduction des droits d'entrée");
     expect(rendered.body).not.toContain("_tu");
   });
 });

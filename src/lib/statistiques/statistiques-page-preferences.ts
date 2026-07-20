@@ -28,6 +28,7 @@ export type StatistiquesPanelId =
   | "client_immobilier"
   | "client_above_panier_moyen"
   | "client_scpi_reinvest"
+  | "client_vp_coverage"
   | "filleul_org_manager"
   | "filleul_org_volume"
   | "filleul_org_parraineur"

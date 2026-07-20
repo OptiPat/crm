@@ -110,19 +110,19 @@ fn normalize_batch_key(periode: &str) -> String {
         .collect()
 }
 
-const STELLIUM_TEMPLATE_VERSION: i64 = 6;
+const STELLIUM_TEMPLATE_VERSION: i64 = 7;
 
 const DEFAULT_METRICS_PLAIN_VOUS: &str = "Valeur actuelle : {{encours}}\n\
-Ce que vous avez versé (Net de frais) : {{nets}}\n\
+Capital net investi : {{nets}} (après déduction des droits d'entrée)\n\
 Performance : {{perf_signed}} soit {{perf_pct}}";
 
 const DEFAULT_METRICS_PLAIN_TU: &str = "Valeur actuelle : {{encours}}\n\
-Ce que tu as versé (Net de frais) : {{nets}}\n\
+Capital net investi : {{nets}} (après déduction des droits d'entrée)\n\
 Performance : {{perf_signed}} soit {{perf_pct}}";
 
-const DEFAULT_METRICS_HTML_VOUS: &str = r#"<ul style="margin:0;padding:0 0 0 20px;list-style:disc"><li style="line-height:1.5;margin:0;padding:0"><strong>Valeur actuelle :</strong> {{encours}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Ce que vous avez versé (Net de frais) :</strong> {{nets}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Performance :</strong> {{perf_signed}} soit {{perf_pct}}</li></ul>"#;
+const DEFAULT_METRICS_HTML_VOUS: &str = r#"<ul style="margin:0;padding:0 0 0 20px;list-style:disc"><li style="line-height:1.5;margin:0;padding:0"><strong>Valeur actuelle :</strong> {{encours}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Capital net investi :</strong> {{nets}} (après déduction des droits d'entrée)</li><li style="line-height:1.5;margin:0;padding:0"><strong>Performance :</strong> {{perf_signed}} soit {{perf_pct}}</li></ul>"#;
 
-const DEFAULT_METRICS_HTML_TU: &str = r#"<ul style="margin:0;padding:0 0 0 20px;list-style:disc"><li style="line-height:1.5;margin:0;padding:0"><strong>Valeur actuelle :</strong> {{encours}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Ce que tu as versé (Net de frais) :</strong> {{nets}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Performance :</strong> {{perf_signed}} soit {{perf_pct}}</li></ul>"#;
+const DEFAULT_METRICS_HTML_TU: &str = r#"<ul style="margin:0;padding:0 0 0 20px;list-style:disc"><li style="line-height:1.5;margin:0;padding:0"><strong>Valeur actuelle :</strong> {{encours}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Capital net investi :</strong> {{nets}} (après déduction des droits d'entrée)</li><li style="line-height:1.5;margin:0;padding:0"><strong>Performance :</strong> {{perf_signed}} soit {{perf_pct}}</li></ul>"#;
 
 #[derive(Debug, Clone)]
 struct StelliumLineFormats {
@@ -517,9 +517,9 @@ fn contract_scalar_fields(c: &ContractPerfLine, contrat_label: &str) -> serde_js
     obj
 }
 
-const AUTRES_CONTRAT_BLOCK_VOUS: &str = r#"<div style="margin-top:12px;padding:0"><div style="line-height:1.5;margin:0 0 4px 0;font-weight:600">{{produit}}</div><ul style="margin:0;padding:0 0 0 20px;list-style:disc"><li style="line-height:1.5;margin:0;padding:0"><strong>Valeur actuelle :</strong> {{encours}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Ce que vous avez versé (Net de frais) :</strong> {{nets}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Performance :</strong> {{perf_signed}} soit {{perf_pct}}</li></ul></div>"#;
+const AUTRES_CONTRAT_BLOCK_VOUS: &str = r#"<div style="margin-top:12px;padding:0"><div style="line-height:1.5;margin:0 0 4px 0;font-weight:600">{{produit}}</div><ul style="margin:0;padding:0 0 0 20px;list-style:disc"><li style="line-height:1.5;margin:0;padding:0"><strong>Valeur actuelle :</strong> {{encours}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Capital net investi :</strong> {{nets}} (après déduction des droits d'entrée)</li><li style="line-height:1.5;margin:0;padding:0"><strong>Performance :</strong> {{perf_signed}} soit {{perf_pct}}</li></ul></div>"#;
 
-const AUTRES_CONTRAT_BLOCK_TU: &str = r#"<div style="margin-top:12px;padding:0"><div style="line-height:1.5;margin:0 0 4px 0;font-weight:600">{{produit}}</div><ul style="margin:0;padding:0 0 0 20px;list-style:disc"><li style="line-height:1.5;margin:0;padding:0"><strong>Valeur actuelle :</strong> {{encours}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Ce que tu as versé (Net de frais) :</strong> {{nets}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Performance :</strong> {{perf_signed}} soit {{perf_pct}}</li></ul></div>"#;
+const AUTRES_CONTRAT_BLOCK_TU: &str = r#"<div style="margin-top:12px;padding:0"><div style="line-height:1.5;margin:0 0 4px 0;font-weight:600">{{produit}}</div><ul style="margin:0;padding:0 0 0 20px;list-style:disc"><li style="line-height:1.5;margin:0;padding:0"><strong>Valeur actuelle :</strong> {{encours}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Capital net investi :</strong> {{nets}} (après déduction des droits d'entrée)</li><li style="line-height:1.5;margin:0;padding:0"><strong>Performance :</strong> {{perf_signed}} soit {{perf_pct}}</li></ul></div>"#;
 
 fn build_fixed_contracts_html(
     contracts: &[ContractPerfLine],

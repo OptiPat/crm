@@ -7,7 +7,7 @@ import {
 export { STELLIUM_PERF_TEMPLATE_NOM, STELLIUM_PERF_TEMPLATE_TU_NOM };
 
 /** Aligné sur `STELLIUM_TEMPLATE_VERSION` (Rust). */
-export const STELLIUM_PERF_TEMPLATE_VERSION = 6;
+export const STELLIUM_PERF_TEMPLATE_VERSION = 7;
 
 /** Variables injectées à la préparation — modèle simple : intro + bloc détail. */
 export const STELLIUM_PERF_TEMPLATE_VARIABLES: {

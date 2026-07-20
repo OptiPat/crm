@@ -196,13 +196,13 @@ const STELLIUM_SCALAR_KEYS = [
 const SAMPLE_METRICS_HTML_TU =
   '<ul style="margin:0;padding:0 0 0 20px;list-style:disc">' +
   '<li style="line-height:1.5;margin:0;padding:0"><strong>Valeur actuelle :</strong> 5 946,02 €</li>' +
-  '<li style="line-height:1.5;margin:0;padding:0"><strong>Ce que tu as versé (Net de frais) :</strong> 5 040,84 €</li>' +
+  '<li style="line-height:1.5;margin:0;padding:0"><strong>Capital net investi :</strong> 5 040,84 € (après déduction des droits d\'entrée)</li>' +
   '<li style="line-height:1.5;margin:0;padding:0"><strong>Performance :</strong> +905,18 € soit +17,96 %</li>' +
   "</ul>";
 
 const SAMPLE_DETAIL_TU =
   "Valeur actuelle : 5 946,02 €\n" +
-  "Ce que tu as versé (Net de frais) : 5 040,84 €\n" +
+  "Capital net investi : 5 040,84 € (après déduction des droits d'entrée)\n" +
   "Performance : +905,18 € soit +17,96 %";
 
 export function buildStelliumPerfPreviewVariables(): Record<string, string> {
@@ -212,13 +212,13 @@ export function buildStelliumPerfPreviewVariables(): Record<string, string> {
     releve_date_label: "au 20/06/2026",
     perf_intro_vous: "Voici la performance de votre contrat au 20/06/2026 :",
     perf_intro_tu: "Voici la performance de ton contrat au 20/06/2026 :",
-    perf_detail: SAMPLE_DETAIL_TU.replace("tu as", "vous avez"),
+    perf_detail: SAMPLE_DETAIL_TU,
     perf_detail_tu: SAMPLE_DETAIL_TU,
-    perf_detail_html: SAMPLE_METRICS_HTML_TU.replace("tu as", "vous avez"),
+    perf_detail_html: SAMPLE_METRICS_HTML_TU,
     perf_detail_html_tu: SAMPLE_METRICS_HTML_TU,
-    perf_resume: SAMPLE_DETAIL_TU.replace("tu as", "vous avez"),
+    perf_resume: SAMPLE_DETAIL_TU,
     perf_resume_tu: SAMPLE_DETAIL_TU,
-    perf_resume_html: SAMPLE_METRICS_HTML_TU.replace("tu as", "vous avez"),
+    perf_resume_html: SAMPLE_METRICS_HTML_TU,
     perf_resume_html_tu: SAMPLE_METRICS_HTML_TU,
     encours: "5 946,02 €",
     nets: "5 040,84 €",

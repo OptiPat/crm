@@ -1,6 +1,7 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import {
+  computeScpiReinvestissementCoverageStats,
   hasActiveReinvestissementDividendes,
   isScpiPleineProprieteType,
 } from "@/lib/investissements/investissement-scpi-reinvest";
@@ -14,10 +15,14 @@ import { isContactEligibleForClientProductCoverageStats } from "./contact-client
 export type ClientScpiReinvestListKind = "withReinvest" | "withoutReinvest";
 
 export type ClientScpiReinvestStatResult = {
+  /** SCPI pleine propriété actives « avec moi » (contrats). */
   totalCount: number;
   withReinvestCount: number;
+  withoutReinvestCount: number;
   withReinvestPercent: number;
+  /** Clients actifs ayant au moins une SCPI éligible avec réinvestissement. */
   withReinvestContactIds: number[];
+  /** Clients actifs ayant au moins une SCPI éligible sans réinvestissement. */
   withoutReinvestContactIds: number[];
 };
 
@@ -45,11 +50,14 @@ export function isQualifyingScpiForClientReinvestStats(
   );
 }
 
-export function contactHasQualifyingScpi(
+export function contactHasQualifyingScpiWithoutReinvest(
   contact: Contact,
   indexes: InvestissementIndexes
 ): boolean {
-  return contactInvestissements(contact, indexes).some(isQualifyingScpiForClientReinvestStats);
+  return contactInvestissements(contact, indexes).some(
+    (inv) =>
+      isQualifyingScpiForClientReinvestStats(inv) && !hasActiveReinvestissementDividendes(inv)
+  );
 }
 
 export function contactHasScpiReinvestissementDividendes(
@@ -62,31 +70,31 @@ export function contactHasScpiReinvestissementDividendes(
   );
 }
 
+/** KPI contrat — aligné `computeScpiReinvestissementCoverageStats` (page Investissements). */
 export function computeClientScpiReinvestStats(
   contacts: Contact[],
   investissements: Investissement[]
 ): ClientScpiReinvestStatResult {
+  const coverage = computeScpiReinvestissementCoverageStats(investissements);
   const indexes = buildInvestissementIndexes(investissements);
   const withReinvestContactIds: number[] = [];
   const withoutReinvestContactIds: number[] = [];
 
   for (const contact of contacts) {
     if (!isContactEligibleForClientProductCoverageStats(contact) || contact.id == null) continue;
-    if (!contactHasQualifyingScpi(contact, indexes)) continue;
     if (contactHasScpiReinvestissementDividendes(contact, indexes)) {
       withReinvestContactIds.push(contact.id);
-    } else {
+    }
+    if (contactHasQualifyingScpiWithoutReinvest(contact, indexes)) {
       withoutReinvestContactIds.push(contact.id);
     }
   }
 
-  const totalCount = withReinvestContactIds.length + withoutReinvestContactIds.length;
-  const withReinvestCount = withReinvestContactIds.length;
-
   return {
-    totalCount,
-    withReinvestCount,
-    withReinvestPercent: totalCount > 0 ? (withReinvestCount / totalCount) * 100 : 0,
+    totalCount: coverage.total,
+    withReinvestCount: coverage.withReinvest,
+    withoutReinvestCount: coverage.withoutReinvest,
+    withReinvestPercent: coverage.percentWithReinvest ?? 0,
     withReinvestContactIds,
     withoutReinvestContactIds,
   };
@@ -100,16 +108,17 @@ export function filterContactsForClientScpiReinvestList(
   const indexes = buildInvestissementIndexes(investissements);
   return contacts.filter((contact) => {
     if (!isContactEligibleForClientProductCoverageStats(contact)) return false;
-    if (!contactHasQualifyingScpi(contact, indexes)) return false;
-    const hasReinvest = contactHasScpiReinvestissementDividendes(contact, indexes);
-    return kind === "withReinvest" ? hasReinvest : !hasReinvest;
+    return kind === "withReinvest"
+      ? contactHasScpiReinvestissementDividendes(contact, indexes)
+      : contactHasQualifyingScpiWithoutReinvest(contact, indexes);
   });
 }
 
+/** Arrondi entier — aligné carte « Réinv. dividendes » (Investissements). */
 export function formatClientScpiReinvestPercent(percent: number): string {
-  return `${percent.toFixed(1).replace(".0", "")} %`;
+  return `${Math.round(percent)}\u00a0%`;
 }
 
 export function formatClientScpiReinvestSubtitle(stats: ClientScpiReinvestStatResult): string {
-  return `${stats.withReinvestCount}/${stats.totalCount} clients avec SCPI`;
+  return `${stats.withReinvestCount}/${stats.totalCount} avec réinv.`;
 }

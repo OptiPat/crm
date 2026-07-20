@@ -153,7 +153,7 @@ function VolumeKpiPanel({
 }) {
   return (
     <StatistiquesPanel
-      title="Volume exercice"
+      title="Volume moyen / consultant"
       description="Volume propre moyen de l'exercice en cours (champ « Volume propre » sur la fiche filleul)."
       collapsible
       panelId="filleul_org_volume"

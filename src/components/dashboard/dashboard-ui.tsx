@@ -225,7 +225,7 @@ export function DashboardKpiHelp() {
       <div className="px-4 pb-4 space-y-2 text-xs text-muted-foreground leading-relaxed border-t pt-3">
         <p>
           <strong className="text-foreground">Encours placements</strong> — valorisation actuelle
-          AV, PER, FIP/FCPI… « avec moi ». Les SCPI et l&apos;immobilier ne sont pas inclus.
+          AV, PER, épargne salariale, FIP/FCPI… « avec moi ». Les SCPI et l&apos;immobilier ne sont pas inclus.
         </p>
         <p>
           <strong className="text-foreground">Panier moyen</strong> — montants souscrits (
