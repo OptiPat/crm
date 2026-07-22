@@ -192,13 +192,15 @@ export function PipeR3ImmoDocumentChecklist({
   useEffect(() => {
     if (!checklist || sections.length === 0) return;
     setSectionCollapsed((prev) => {
+      let changed = false;
       const next = { ...prev };
       for (const { section, items } of sections) {
         if (section in next) continue;
+        changed = true;
         const prog = countR3ImmoItemsProgress(checklist, items);
         next[section] = prog.total > 0 && prog.received === prog.total;
       }
-      return next;
+      return changed ? next : prev;
     });
   }, [checklist, sections]);
 

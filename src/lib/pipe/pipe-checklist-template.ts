@@ -281,10 +281,11 @@ export function templateItemActiveForProfile(
   item: PipeChecklistTemplateItem,
   profile: R1ChecklistProfile
 ): boolean {
-  if (item.profiles.includes("base")) return true;
-  if (item.profiles.includes("salarie") && profile.salarie) return true;
-  if (item.profiles.includes("chef") && profile.chef_entreprise) return true;
-  if (item.profiles.includes("retraite") && profile.retraite) return true;
+  const profiles = item.profiles ?? ["base"];
+  if (profiles.includes("base")) return true;
+  if (profiles.includes("salarie") && profile.salarie) return true;
+  if (profiles.includes("chef") && profile.chef_entreprise) return true;
+  if (profiles.includes("retraite") && profile.retraite) return true;
   return false;
 }
 
@@ -293,7 +294,9 @@ export function getActivePipeChecklistTemplateItems(
   templates: PipeChecklistTemplates,
   profile: R1ChecklistProfile
 ): PipeChecklistTemplateItem[] {
-  return templates[stage].filter((item) => templateItemActiveForProfile(item, profile));
+  const stageItems = templates[stage];
+  if (!Array.isArray(stageItems)) return [];
+  return stageItems.filter((item) => templateItemActiveForProfile(item, profile));
 }
 
 export function createPipeChecklistTemplateItemId(): string {
@@ -305,6 +308,7 @@ export function mapPipeChecklistKeysToLabels(
   stage: PipeChecklistStage,
   templates: PipeChecklistTemplates
 ): string[] {
-  const byId = new Map(templates[stage].map((item) => [item.id, item.label]));
+  const stageItems = templates[stage] ?? [];
+  const byId = new Map(stageItems.map((item) => [item.id, item.label]));
   return keys.map((key) => byId.get(key) ?? key);
 }

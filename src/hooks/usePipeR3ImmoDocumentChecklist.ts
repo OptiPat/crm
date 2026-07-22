@@ -211,17 +211,11 @@ export function usePipeR3ImmoDocumentChecklist(
     });
   }, [checklist, contact, foyerMembers, investissements, r1Checklist, secondaryContactId]);
 
-  useEffect(() => {
-    if (!enabled || !checklist || !checklistContext || !checklistTemplate) return;
-    notifyPipeR3ImmoChecklistChanged({
-      pipeId,
-      missingItemKeys: listMissingR3ImmoChecklistKeys(
-        checklist,
-        checklistContext,
-        checklistTemplate
-      ),
-    });
-  }, [checklist, checklistContext, checklistTemplate, enabled, pipeId]);
+  const scopedChecklist = checklist?.pipe_id === pipeId ? checklist : null;
+  const scopedChecklistContext =
+    scopedChecklist && checklistContext && scopedChecklist.pipe_id === pipeId
+      ? checklistContext
+      : null;
 
   const persist = useCallback(
     async (update: UpdatePipeR3ImmoDocumentChecklistInput): Promise<boolean> => {
@@ -249,6 +243,16 @@ export function usePipeR3ImmoDocumentChecklist(
         }
         setChecklist(updated);
         checklistRef.current = updated;
+        if (checklistContext && checklistTemplate) {
+          notifyPipeR3ImmoChecklistChanged({
+            pipeId,
+            missingItemKeys: listMissingR3ImmoChecklistKeys(
+              updated,
+              checklistContext,
+              checklistTemplate
+            ),
+          });
+        }
         return true;
       } catch (err) {
         toast.error(String(err));
@@ -266,7 +270,7 @@ export function usePipeR3ImmoDocumentChecklist(
         return false;
       }
     },
-    [activePipeIdRef, contactId, enabled, load, persistGenerationRef, pipeId]
+    [activePipeIdRef, checklistContext, checklistTemplate, contactId, enabled, load, persistGenerationRef, pipeId]
   );
 
   const addDocument = useCallback((doc: Document) => {
@@ -304,9 +308,9 @@ export function usePipeR3ImmoDocumentChecklist(
   );
 
   return {
-    checklist,
+    checklist: scopedChecklist,
     documents,
-    checklistContext,
+    checklistContext: scopedChecklistContext,
     checklistTemplate,
     loading,
     persist,

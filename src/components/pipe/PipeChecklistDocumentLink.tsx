@@ -51,6 +51,13 @@ export function PipeChecklistDocumentLink({
       ? documentOptions.find((doc) => doc.id === documentId)
       : undefined;
 
+  const selectValue = useMemo(() => {
+    if (documentId == null) return NONE_DOC_VALUE;
+    return documentOptions.some((doc) => doc.id === documentId)
+      ? String(documentId)
+      : NONE_DOC_VALUE;
+  }, [documentId, documentOptions]);
+
   const linkDocument = async (nextDocumentId: number | null) => {
     if (nextDocumentId === (documentId ?? null)) return;
     try {
@@ -107,7 +114,7 @@ export function PipeChecklistDocumentLink({
     <div className="flex flex-wrap items-center gap-2 pl-6">
       <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       <Select
-        value={documentId != null ? String(documentId) : NONE_DOC_VALUE}
+        value={selectValue}
         onValueChange={(value) => {
           void linkDocument(value === NONE_DOC_VALUE ? null : Number(value));
         }}

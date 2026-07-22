@@ -242,7 +242,11 @@ function AppInner() {
       case "statistiques":
         return <Statistiques onNavigate={setCurrentPage} />;
       case "pipe":
-        return <Pipe />;
+        return (
+          <ErrorBoundary>
+            <Pipe />
+          </ErrorBoundary>
+        );
       case "contacts":
         return (
           <ErrorBoundary>

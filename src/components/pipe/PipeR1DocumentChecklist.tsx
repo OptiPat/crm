@@ -13,7 +13,6 @@ import type {
 } from "@/lib/api/tauri-pipe-r1-checklist";
 import type { PipeChecklistTemplateItem, PipeChecklistTemplates } from "@/lib/pipe/pipe-checklist-template";
 import {
-  checklistProfileFromRecord,
   countR1ChecklistProgress,
   countR1ItemsProgress,
   describeR1ItemVisibility,
@@ -22,6 +21,7 @@ import {
   groupR1ItemsBySection,
   isR1ChecklistItemComplete,
   isR1ChecklistPastStage,
+  normalizeR1ChecklistItems,
 } from "@/lib/pipe/r1-document-checklist";
 import { suggestedDocumentTypeForChecklistItem } from "@/lib/pipe/pipe-checklist-document-import";
 import { cn } from "@/lib/utils";
@@ -185,13 +185,28 @@ export function PipeR1DocumentChecklist({
       nextState = { ...nextState, no_credit: false };
     }
     const items: PipeR1ChecklistItems = {
-      ...checklist.items,
+      ...normalizeR1ChecklistItems(checklist.items),
       [itemId]: nextState,
     };
     void onPersist({ items });
   };
 
-  const profile = checklist ? checklistProfileFromRecord(checklist) : null;
+  const profileSalarie = checklist?.profile_salarie ?? false;
+  const profileChefEntreprise = checklist?.profile_chef_entreprise ?? false;
+  const profileRetraite = checklist?.profile_retraite ?? false;
+  const hasChecklist = checklist != null;
+
+  const profile = useMemo(
+    () =>
+      hasChecklist
+        ? {
+            salarie: profileSalarie,
+            chef_entreprise: profileChefEntreprise,
+            retraite: profileRetraite,
+          }
+        : null,
+    [hasChecklist, profileSalarie, profileChefEntreprise, profileRetraite]
+  );
 
   const activeItems = useMemo(
     () => (templates && profile ? getActiveR1ChecklistItems(templates, profile) : []),
@@ -207,13 +222,15 @@ export function PipeR1DocumentChecklist({
   useEffect(() => {
     if (!checklist || sections.length === 0) return;
     setSectionCollapsed((prev) => {
+      let changed = false;
       const next = { ...prev };
       for (const { section, items } of sections) {
         if (section in next) continue;
+        changed = true;
         const prog = countR1ItemsProgress(checklist, items);
         next[section] = prog.total > 0 && prog.received === prog.total;
       }
-      return next;
+      return changed ? next : prev;
     });
   }, [checklist, sections]);
 

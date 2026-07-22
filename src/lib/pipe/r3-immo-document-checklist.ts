@@ -63,10 +63,13 @@ export interface R3ImmoChecklistContext {
 }
 
 export function getChecklistItemState(
-  items: PipeR3ImmoChecklistItems,
+  items: PipeR3ImmoChecklistItems | null | undefined,
   itemId: string
 ): PipeR3ImmoChecklistItemState {
-  return items[itemId] ?? { received: false };
+  if (!items || typeof items !== "object") return { received: false };
+  const item = items[itemId];
+  if (!item || typeof item !== "object") return { received: false };
+  return item;
 }
 
 export function isR3ImmoChecklistItemComplete(item: PipeR3ImmoChecklistItemState): boolean {

@@ -17,8 +17,9 @@ import { phaseHasRdvActivityForStage } from "@/lib/pipe/pipe-rdv-delete";
 const R1_SECTION_ORDER: PipeChecklistProfileScope[] = ["base", "salarie", "chef", "retraite"];
 
 function primaryProfileScope(item: PipeChecklistTemplateItem): PipeChecklistProfileScope {
-  if (item.profiles.includes("base") && item.profiles.length === 1) return "base";
-  return item.profiles.find((p) => p !== "base") ?? "base";
+  const profiles = item.profiles ?? ["base"];
+  if (profiles.includes("base") && profiles.length === 1) return "base";
+  return profiles.find((p) => p !== "base") ?? "base";
 }
 
 export type { R1ChecklistProfile } from "@/lib/pipe/pipe-checklist-template";
@@ -36,11 +37,20 @@ export function checklistProfileFromRecord(
   };
 }
 
+export function normalizeR1ChecklistItems(
+  items: PipeR1ChecklistItems | null | undefined
+): PipeR1ChecklistItems {
+  return items && typeof items === "object" ? items : {};
+}
+
 export function getChecklistItemState(
-  items: PipeR1ChecklistItems,
+  items: PipeR1ChecklistItems | null | undefined,
   itemId: string
 ): PipeR1ChecklistItemState {
-  return items[itemId] ?? { received: false };
+  const normalized = normalizeR1ChecklistItems(items);
+  const item = normalized[itemId];
+  if (!item || typeof item !== "object") return { received: false };
+  return item;
 }
 
 export function isR1ChecklistItemComplete(

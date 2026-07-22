@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { normalizeR1ChecklistItems } from "@/lib/pipe/r1-document-checklist";
 
 export interface PipeR1ChecklistItemState {
   received: boolean;
@@ -82,6 +83,6 @@ export function mergePipeR1ChecklistUpdate(
     profile_chef_entreprise,
     profile_retraite,
     profile_revenus_configured,
-    items: update.items ?? current.items,
+    items: update.items ?? normalizeR1ChecklistItems(current.items),
   };
 }

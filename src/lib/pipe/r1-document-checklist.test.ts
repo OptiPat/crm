@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   countR1ChecklistProgress,
   describeR1ItemVisibility,
+  getChecklistItemState,
   groupR1ItemsBySection,
   isR1ChecklistItemComplete,
   isR1ChecklistPastStage,
@@ -28,6 +29,22 @@ function baseChecklist(
 }
 
 describe("r1-document-checklist", () => {
+  it("tolère items absents ou invalides", () => {
+    expect(getChecklistItemState(null, "avis_imposition")).toEqual({ received: false });
+    expect(getChecklistItemState(undefined, "avis_imposition")).toEqual({ received: false });
+    expect(getChecklistItemState({ avis_imposition: true as never }, "avis_imposition")).toEqual({
+      received: false,
+    });
+  });
+
+  it("tolère items absents ou invalides", () => {
+    expect(getChecklistItemState(null, "avis_imposition")).toEqual({ received: false });
+    expect(getChecklistItemState(undefined, "avis_imposition")).toEqual({ received: false });
+    expect(getChecklistItemState({ avis_imposition: true as never }, "avis_imposition")).toEqual({
+      received: false,
+    });
+  });
+
   it("considère amortissement OK si pas de crédit", () => {
     expect(
       isR1ChecklistItemComplete(

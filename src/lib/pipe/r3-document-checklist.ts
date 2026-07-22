@@ -22,10 +22,13 @@ const R3_EMPTY_PROFILE = {
 } as const;
 
 export function getChecklistItemState(
-  items: PipeR3ChecklistItems,
+  items: PipeR3ChecklistItems | null | undefined,
   itemId: string
 ): PipeR3ChecklistItemState {
-  return items[itemId] ?? { received: false };
+  if (!items || typeof items !== "object") return { received: false };
+  const item = items[itemId];
+  if (!item || typeof item !== "object") return { received: false };
+  return item;
 }
 
 export function isR3ChecklistItemComplete(item: PipeR3ChecklistItemState): boolean {

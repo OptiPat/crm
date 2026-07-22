@@ -165,12 +165,26 @@ export function PipeDetailPanel({
     !timeline.loading &&
     shouldShowR1DocumentChecklist(timeline.entries);
 
+  const loadR1DocumentChecklist =
+    isPipeType(pipe.pipe_type) &&
+    pipe.pipe_type === "AFFAIRE" &&
+    pipe.contact_id > 0 &&
+    !isVersementAffaire &&
+    shouldShowR1DocumentChecklist(timeline.entries);
+
   const showR3DocumentChecklist =
     isPipeType(pipe.pipe_type) &&
     pipe.pipe_type === "AFFAIRE" &&
     pipe.contact_id > 0 &&
     !isVersementAffaire &&
     !timeline.loading &&
+    shouldShowR3DocumentChecklist(timeline.entries);
+
+  const loadR3DocumentChecklist =
+    isPipeType(pipe.pipe_type) &&
+    pipe.pipe_type === "AFFAIRE" &&
+    pipe.contact_id > 0 &&
+    !isVersementAffaire &&
     shouldShowR3DocumentChecklist(timeline.entries);
 
   const showR3ImmoDocumentChecklist =
@@ -181,13 +195,20 @@ export function PipeDetailPanel({
     !timeline.loading &&
     shouldShowR3ImmoDocumentChecklist(timeline.entries);
 
+  const loadR3ImmoDocumentChecklist =
+    isPipeType(pipe.pipe_type) &&
+    pipe.pipe_type === "AFFAIRE" &&
+    pipe.contact_id > 0 &&
+    !isVersementAffaire &&
+    shouldShowR3ImmoDocumentChecklist(timeline.entries);
+
   const { templates: checklistTemplates } = usePipeChecklistTemplates();
 
   const r1Documents = usePipeR1DocumentChecklist(
     pipe.id,
     pipe.contact_id,
     pipe.secondary_contact_id,
-    showR1DocumentChecklist,
+    loadR1DocumentChecklist,
     checklistTemplates
   );
 
@@ -195,7 +216,7 @@ export function PipeDetailPanel({
     pipe.id,
     pipe.contact_id,
     pipe.secondary_contact_id,
-    showR3DocumentChecklist,
+    loadR3DocumentChecklist,
     checklistTemplates
   );
 
@@ -203,7 +224,7 @@ export function PipeDetailPanel({
     pipe.id,
     pipe.contact_id,
     pipe.secondary_contact_id,
-    showR3ImmoDocumentChecklist
+    loadR3ImmoDocumentChecklist
   );
 
   const prospectionRef = useRef<HTMLDivElement>(null);

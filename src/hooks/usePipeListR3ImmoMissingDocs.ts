@@ -8,6 +8,7 @@ import {
   subscribeR3ImmoChecklistTemplatesChanged,
   type R3ImmoChecklistTemplate,
 } from "@/lib/pipe/r3-immo-checklist-template";
+import { subscribePipeR1ChecklistChanged } from "@/lib/pipe/pipe-r1-checklist-events";
 import { subscribePipeR3ImmoChecklistChanged } from "@/lib/pipe/pipe-r3-immo-checklist-events";
 import { subscribePipeChanged } from "@/lib/pipe/pipe-events";
 
@@ -59,12 +60,14 @@ export function usePipeListR3ImmoMissingDocs(
     };
 
     const unsubChecklist = subscribePipeR3ImmoChecklistChanged(onChecklistChanged);
+    const unsubR1Checklist = subscribePipeR1ChecklistChanged(onRefresh);
     const unsubPipe = subscribePipeChanged(onRefresh);
     const unsubContacts = subscribeContactsChanged(onRefresh);
     const unsubInvestissements = subscribeInvestissementsChanged(onRefresh);
     const unsubTemplates = subscribeR3ImmoChecklistTemplatesChanged(onRefresh);
     return () => {
       unsubChecklist();
+      unsubR1Checklist();
       unsubPipe();
       unsubContacts();
       unsubInvestissements();
