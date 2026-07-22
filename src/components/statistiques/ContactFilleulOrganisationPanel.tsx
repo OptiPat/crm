@@ -30,6 +30,14 @@ import {
 } from "@/lib/statistiques/contact-attrition-stats";
 import { formatDashboardPercent } from "@/components/dashboard/dashboard-format";
 import { formatFilleulVolumeDisplay } from "@/lib/organisation/organisation-branch-volumes";
+import {
+  filleulVolumeBenchmarkStatusBoxClasses,
+  filleulVolumeBenchmarkStatusLabel,
+  filleulVolumeBenchmarkStatusValueClasses,
+  formatVolumeVsGroupBenchmarkPercent,
+  getFilleulVolumeBenchmarkStatus,
+} from "@/lib/statistiques/statistiques-benchmark-settings";
+import { useStatistiquesBenchmarkSettings } from "@/hooks/useStatistiquesBenchmarkSettings";
 import { DashboardDrillDownBackdrop } from "@/components/dashboard/DashboardDrillDownBackdrop";
 import { DashboardStatContactsSheet } from "@/components/dashboard/DashboardStatContactsSheet";
 import { ChartEmpty, ChartLoading } from "@/components/dashboard/dashboard-ui";
@@ -148,10 +156,16 @@ function VolumeKpiPanel({
   stats: FilleulAverageVolumeStatResult;
   onOpenList: (kind: FilleulVolumeListKind) => void;
 }) {
+  const benchmarkSettings = useStatistiquesBenchmarkSettings();
+  const benchmarkStatus =
+    stats.averageVolume != null
+      ? getFilleulVolumeBenchmarkStatus(stats.averageVolume, benchmarkSettings)
+      : null;
+
   return (
     <StatistiquesPanel
-      title="Volume moyen / consultant"
-      description="Volume propre moyen de l'exercice en cours (champ « Volume propre » sur la fiche filleul)."
+      title="Volume moyen / consultant actif"
+      description="Volume propre moyen sur l'exercice en cours, calculé uniquement sur les consultants actifs (≥ 1 € de volume propre)."
       collapsible
       panelId="filleul_org_volume"
     >
@@ -159,32 +173,60 @@ function VolumeKpiPanel({
         <ChartLoading />
       ) : stats.totalEligible === 0 ? (
         <ChartEmpty title="Aucun filleul inscrit éligible pour cette statistique." height={180} />
+      ) : stats.averageVolume == null ? (
+        <ChartEmpty
+          title="Aucun consultant actif (volume propre inférieur à 1 € sur l'exercice)."
+          height={180}
+        />
       ) : (
         <div className="space-y-4">
-          <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
+          <div
+            className={cn(
+              "rounded-xl border px-4 py-3 flex items-center justify-between gap-4 transition-colors",
+              benchmarkStatus
+                ? filleulVolumeBenchmarkStatusBoxClasses(benchmarkStatus)
+                : "border-border/60 bg-muted/20"
+            )}
+            title={benchmarkStatus ? filleulVolumeBenchmarkStatusLabel(benchmarkStatus) : undefined}
+          >
             <div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Volume moyen</p>
-              <p className="text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5 text-primary">
-                {formatFilleulVolumeDisplay(stats.averageVolume!)}
+              <p
+                className={cn(
+                  "text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5",
+                  benchmarkStatus
+                    ? filleulVolumeBenchmarkStatusValueClasses(benchmarkStatus)
+                    : "text-primary"
+                )}
+              >
+                {formatFilleulVolumeDisplay(stats.averageVolume)}
               </p>
             </div>
-            <p className="text-xs text-muted-foreground text-right max-w-xs">
-              {formatFilleulAverageVolumeSubtitle(stats)}
-            </p>
+            <div className="text-xs text-muted-foreground text-right max-w-xs space-y-0.5">
+              <p>{formatFilleulAverageVolumeSubtitle(stats)}</p>
+              <p className="tabular-nums">
+                Réf. groupe {formatFilleulVolumeDisplay(benchmarkSettings.groupActiveConsultantVolumeEuros)}
+              </p>
+              <p className="font-medium text-foreground tabular-nums">
+                {formatVolumeVsGroupBenchmarkPercent(stats.averageVolume, benchmarkSettings)}
+              </p>
+            </div>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Filleuls inscrits uniquement — tous parrains confondus. Volume non renseigné = 0 €.
+            Filleuls inscrits uniquement — tous parrains confondus. Consultant actif = au moins 1 €
+            de volume propre sur l&apos;exercice. Référence groupe modifiable via « Références » en
+            haut de page.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <OrganisationListButton
-              label="Avec volume exercice"
-              count={stats.countedCount - stats.missingVolumeCount}
+              label="Consultants actifs (≥ 1 €)"
+              count={stats.countedCount}
               onClick={() => onOpenList("withVolume")}
             />
             <OrganisationListButton
-              label="Sans volume renseigné (0 €)"
+              label="Consultants inactifs"
               count={stats.missingVolumeCount}
               onClick={() => onOpenList("missingVolume")}
             />
@@ -335,8 +377,8 @@ function drillDownTitle(drillDown: OrganisationDrillDown): string {
     return drillDown.title;
   }
   return drillDown.kind === "withVolume"
-    ? "Filleuls inscrits — avec volume exercice renseigné"
-    : "Filleuls inscrits — sans volume renseigné (0 €)";
+    ? "Filleuls inscrits — consultants actifs (≥ 1 €)"
+    : "Filleuls inscrits — consultants inactifs";
 }
 
 export function ContactFilleulOrganisationPanel({
@@ -448,7 +490,7 @@ export function ContactFilleulOrganisationPanel({
       return drillDown.count;
     }
     return drillDown.kind === "withVolume"
-      ? volumeStats.countedCount - volumeStats.missingVolumeCount
+      ? volumeStats.countedCount
       : volumeStats.missingVolumeCount;
   }, [drillDown, managerStats, parraineurStats, bridgeStats, volumeStats]);
 

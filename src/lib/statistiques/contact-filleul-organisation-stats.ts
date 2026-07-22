@@ -111,14 +111,21 @@ export function formatFilleulManagerSubtitle(stats: FilleulManagerStatResult): s
   return `${stats.managerCount}/${stats.totalCount} filleuls inscrits`;
 }
 
-function hasFilleulVolumeRecorded(
+/** Volume propre minimal pour être « consultant actif » sur l'exercice (€). */
+export const FILLEUL_ACTIVE_CONSULTANT_MIN_VOLUME_EUROS = 1;
+
+/** Consultant actif = au moins 1 € de volume propre sur l'exercice en cours. */
+export function isFilleulActiveConsultantForVolume(
   contact: Pick<Contact, "filleul_volume">
-): contact is Pick<Contact, "filleul_volume"> & { filleul_volume: number } {
+): boolean {
   const volume = contact.filleul_volume;
-  return volume != null && Number.isFinite(volume);
+  if (volume == null || !Number.isFinite(volume) || volume < FILLEUL_ACTIVE_CONSULTANT_MIN_VOLUME_EUROS) {
+    return false;
+  }
+  return true;
 }
 
-/** Volume propre moyen de l'exercice en cours — filleuls inscrits, tous parrains. Absence = 0 €. */
+/** Volume propre moyen par consultant actif — filleuls inscrits, tous parrains. */
 export function computeFilleulAverageVolumeStats(contacts: Contact[]): FilleulAverageVolumeStatResult {
   const eligible = contacts.filter(
     (contact) => contact.id != null && isContactEligibleForFilleulOrganisationStats(contact)
@@ -136,18 +143,24 @@ export function computeFilleulAverageVolumeStats(contacts: Contact[]): FilleulAv
   }
 
   let volumeSum = 0;
+  let activeCount = 0;
   let missingVolumeCount = 0;
   const contactIds: number[] = [];
 
   for (const contact of eligible) {
-    if (!hasFilleulVolumeRecorded(contact)) missingVolumeCount += 1;
-    volumeSum += contactOwnVolume(contact);
+    const ownVolume = contactOwnVolume(contact);
+    if (isFilleulActiveConsultantForVolume(contact)) {
+      volumeSum += ownVolume;
+      activeCount += 1;
+    } else {
+      missingVolumeCount += 1;
+    }
     contactIds.push(contact.id!);
   }
 
   return {
-    averageVolume: volumeSum / totalEligible,
-    countedCount: totalEligible,
+    averageVolume: activeCount > 0 ? volumeSum / activeCount : null,
+    countedCount: activeCount,
     totalEligible,
     missingVolumeCount,
     contactIds,
@@ -160,18 +173,21 @@ export function filterContactsForFilleulVolumeList(
 ): Contact[] {
   return contacts.filter((contact) => {
     if (!isContactEligibleForFilleulOrganisationStats(contact)) return false;
-    const hasVolume = hasFilleulVolumeRecorded(contact);
-    return kind === "withVolume" ? hasVolume : !hasVolume;
+    const isActive = isFilleulActiveConsultantForVolume(contact);
+    return kind === "withVolume" ? isActive : !isActive;
   });
 }
 
 export function formatFilleulAverageVolumeSubtitle(stats: FilleulAverageVolumeStatResult): string {
   if (stats.totalEligible === 0) return "Aucun filleul inscrit";
-  const missing =
+  if (stats.countedCount === 0) {
+    return `Aucun consultant actif sur ${stats.totalEligible} filleul${stats.totalEligible > 1 ? "s" : ""} inscrit${stats.totalEligible > 1 ? "s" : ""}`;
+  }
+  const inactive =
     stats.missingVolumeCount > 0
-      ? ` · ${stats.missingVolumeCount} compté${stats.missingVolumeCount > 1 ? "s" : ""} à 0 €`
+      ? ` · ${stats.missingVolumeCount} inactif${stats.missingVolumeCount > 1 ? "s" : ""}`
       : "";
-  return `Calculé sur ${stats.totalEligible} filleul${stats.totalEligible > 1 ? "s" : ""}${missing}`;
+  return `${stats.countedCount} consultant${stats.countedCount > 1 ? "s" : ""} actif${stats.countedCount > 1 ? "s" : ""} sur ${stats.totalEligible}${inactive}`;
 }
 
 /** Filleul parrainé compté pour le taux (inscrits, désinscrits, prospects — suspects exclus). */

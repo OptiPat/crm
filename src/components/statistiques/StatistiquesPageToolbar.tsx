@@ -4,6 +4,7 @@ import {
   ChevronsUpDown,
   Loader2,
   RefreshCw,
+  Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +18,7 @@ import {
 import type { StatistiquesSectionId } from "@/lib/statistiques/statistiques-page-preferences";
 import { cn } from "@/lib/utils";
 import { useStatistiquesPageData } from "./statistiques-page-data-context";
+import { StatistiquesBenchmarkSettingsDialog } from "./StatistiquesBenchmarkSettingsDialog";
 
 function formatLastUpdated(date: Date): string {
   return new Intl.DateTimeFormat("fr-FR", {
@@ -29,6 +31,7 @@ export function StatistiquesPageToolbar() {
   const { loading, lastUpdatedAt, refreshData } = useStatistiquesPageData();
   const [refreshing, setRefreshing] = useState(false);
   const [panelsVersion, setPanelsVersion] = useState(0);
+  const [benchmarkSettingsOpen, setBenchmarkSettingsOpen] = useState(false);
 
   const scrollToSection = useCallback((sectionId: StatistiquesSectionId) => {
     document.getElementById(statistiquesSectionAnchorId(sectionId))?.scrollIntoView({
@@ -92,6 +95,16 @@ export function StatistiquesPageToolbar() {
             variant="outline"
             size="sm"
             className="h-8 gap-1.5"
+            onClick={() => setBenchmarkSettingsOpen(true)}
+          >
+            <Settings2 className="h-3.5 w-3.5" aria-hidden />
+            Références
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5"
             disabled={loading || refreshing}
             onClick={() => void handleRefresh()}
           >
@@ -126,6 +139,11 @@ export function StatistiquesPageToolbar() {
           </Button>
         </div>
       </div>
+
+      <StatistiquesBenchmarkSettingsDialog
+        open={benchmarkSettingsOpen}
+        onOpenChange={setBenchmarkSettingsOpen}
+      />
     </div>
   );
 }

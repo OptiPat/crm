@@ -101,7 +101,7 @@ describe("contact-filleul-organisation-stats", () => {
     ).toEqual([3]);
   });
 
-  it("calcule le volume propre moyen de l'exercice", () => {
+  it("calcule le volume moyen par consultant actif (≥ 1 € sur l'exercice)", () => {
     const volumeContacts = [
       contact({ id: 1, filleul_categorie: "FILLEUL", filleul_volume: 100_000 }),
       contact({ id: 2, filleul_categorie: "FILLEUL", parrain_id: 99, filleul_volume: 300_000 }),
@@ -111,15 +111,19 @@ describe("contact-filleul-organisation-stats", () => {
         filleul_categorie: "FILLEUL_DESINSCRIT",
         filleul_volume: 500_000,
       }),
+      contact({ id: 5, filleul_categorie: "FILLEUL", filleul_volume: 0.5 }),
     ];
     const stats = computeFilleulAverageVolumeStats(volumeContacts);
-    expect(stats.totalEligible).toBe(3);
-    expect(stats.countedCount).toBe(3);
-    expect(stats.averageVolume).toBeCloseTo(400_000 / 3, 5);
-    expect(stats.missingVolumeCount).toBe(1);
+    expect(stats.totalEligible).toBe(4);
+    expect(stats.countedCount).toBe(2);
+    expect(stats.averageVolume).toBeCloseTo(200_000, 5);
+    expect(stats.missingVolumeCount).toBe(2);
+    expect(
+      filterContactsForFilleulVolumeList(volumeContacts, "withVolume").map((c) => c.id)
+    ).toEqual([1, 2]);
     expect(
       filterContactsForFilleulVolumeList(volumeContacts, "missingVolume").map((c) => c.id)
-    ).toEqual([3]);
+    ).toEqual([3, 5]);
   });
 
   it("calcule le taux de parraineurs (filleuls inscrits ayant parrainé au moins 1 filleul)", () => {
