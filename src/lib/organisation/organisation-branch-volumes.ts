@@ -244,14 +244,32 @@ export function buildOrganisationVolumeRows(
   tree: OrganisationTreeResult,
   allContacts: Contact[]
 ): OrganisationVolumeRow[] {
-  const byParrain = indexActiveFilleulsByParrain(allContacts);
   const ownById = new Map<number, number>();
   for (const c of allContacts) {
     if (c.id != null) ownById.set(c.id, contactOwnVolume(c));
   }
+  return buildOrganisationVolumeRowsWithOwnVolumes(tree, allContacts, ownById, {
+    resolveManagerVolume: contactManagerVolume,
+    selfNetworkVolumeExclSelf: computeSelfNetworkVolumeWithinDepth(tree),
+  });
+}
+
+/** Lignes volume avec volumes propres fournis (exercice historique importé). */
+export function buildOrganisationVolumeRowsWithOwnVolumes(
+  tree: OrganisationTreeResult,
+  allContacts: Contact[],
+  ownById: Map<number, number>,
+  options: {
+    resolveManagerVolume?: (contact: Contact) => number;
+    selfNetworkVolumeExclSelf?: number;
+  } = {}
+): OrganisationVolumeRow[] {
+  const resolveManagerVolume = options.resolveManagerVolume ?? contactManagerVolume;
+  const byParrain = indexActiveFilleulsByParrain(allContacts);
   const cache = new Map<number, number>();
   const rows: OrganisationVolumeRow[] = [];
-  const selfNetworkVolumeExclSelf = computeSelfNetworkVolumeWithinDepth(tree);
+  const selfNetworkVolumeExclSelf =
+    options.selfNetworkVolumeExclSelf ?? computeSelfNetworkVolumeFromOwnById(tree, ownById);
 
   const push = (contact: Contact, generation: number, label: string) => {
     if (contact.id == null) return;
@@ -259,9 +277,9 @@ export function buildOrganisationVolumeRows(
       contactId: contact.id,
       generation,
       label,
-      ownVolume: contactOwnVolume(contact),
+      ownVolume: ownById.get(contact.id) ?? 0,
       branchVolume: computeBranchVolume(contact.id, ownById, byParrain, cache),
-      managerVolume: contactManagerVolume(contact),
+      managerVolume: resolveManagerVolume(contact),
       managerObjectiveEligible: isManagerObjectiveEligible(
         contact.filleul_titre,
         contact.filleul_qualification
@@ -284,4 +302,20 @@ export function buildOrganisationVolumeRows(
     (a, b) => a.generation - b.generation || a.label.localeCompare(b.label, "fr")
   );
   return rows;
+}
+
+function computeSelfNetworkVolumeFromOwnById(
+  tree: OrganisationTreeResult,
+  ownById: Map<number, number>
+): number {
+  let total = 0;
+  for (const layer of tree.generations) {
+    for (const node of layer) {
+      if (node.generation > ORGANISATION_SELF_NETWORK_MAX_GENERATION || node.contact.id == null) {
+        continue;
+      }
+      total += ownById.get(node.contact.id) ?? 0;
+    }
+  }
+  return total;
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { GitBranch, Settings, Users2 } from "lucide-react";
+import { GitBranch, Settings, Upload, Users2 } from "lucide-react";
 import { toast } from "sonner";
 import { getAllContacts, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { contactFilleulRankUpdatePayload, contactFilleulVolumeUpdatePayload, contactFilleulManagerVolumeUpdatePayload } from "@/lib/contacts/contact-form-utils";
@@ -15,6 +15,29 @@ import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { requestOpenParametres } from "@/lib/navigation/app-navigation";
+import {
+  OrganisationExerciceSelector,
+  ORGANISATION_CURRENT_EXERCICE,
+} from "@/components/organisation/OrganisationExerciceSelector";
+import {
+  OrganisationExerciceCloseButton,
+  OrganisationExerciceCloseDialog,
+} from "@/components/organisation/OrganisationExerciceCloseDialog";
+import { buildOrganisationVolumeRows } from "@/lib/organisation/organisation-branch-volumes";
+import {
+  buildOrganisationVolumeRowsForExercice,
+  indexFilleulVolumeExercicesByContactId,
+  isCurrentOrganisationExercice,
+  resolveOrganisationExerciceLabel,
+  type OrganisationExerciceSelection,
+} from "@/lib/organisation/organisation-volume-history";
+import {
+  exerciceIsClosed,
+  getFilleulVolumeExercicesByLabel,
+  listFilleulVolumeExerciceLabels,
+} from "@/lib/api/tauri-filleul-volumes";
+import { currentFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
+import { OrganisationVolumesImportDialog } from "@/components/organisation/OrganisationVolumesImportDialog";
 
 type OrganisationProps = {
   onNavigate?: (page: string) => void;
@@ -24,15 +47,29 @@ export function Organisation({ onNavigate }: OrganisationProps) {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [cgp, setCgp] = useState<CgpConfig | null>(null);
   const [loading, setLoading] = useState(true);
+  const [closedLabels, setClosedLabels] = useState<string[]>([]);
+  const [selectedExercice, setSelectedExercice] =
+    useState<OrganisationExerciceSelection>(ORGANISATION_CURRENT_EXERCICE);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyRecords, setHistoryRecords] = useState<
+    Awaited<ReturnType<typeof getFilleulVolumeExercicesByLabel>>
+  >([]);
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [currentExerciceClosed, setCurrentExerciceClosed] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      const [loadedContacts, loadedCgp] = await Promise.all([
+      const [loadedContacts, loadedCgp, labels] = await Promise.all([
         getAllContacts(),
         getCgpConfig(),
+        listFilleulVolumeExerciceLabels(),
       ]);
       setContacts(loadedContacts);
       setCgp(loadedCgp);
+      setClosedLabels(labels);
+      const currentLabel = currentFiscalYearLabel();
+      setCurrentExerciceClosed(await exerciceIsClosed(currentLabel));
     } catch (error) {
       console.error("Error loading organisation:", error);
       toast.error("Impossible de charger l'organisation");
@@ -51,6 +88,54 @@ export function Organisation({ onNavigate }: OrganisationProps) {
     () => buildOrganisationTree(contacts, cgp ?? {}),
     [contacts, cgp]
   );
+
+  const resolvedExerciceLabel = useMemo(
+    () => resolveOrganisationExerciceLabel(selectedExercice),
+    [selectedExercice]
+  );
+
+  const viewingCurrentExercice = useMemo(
+    () =>
+      isCurrentOrganisationExercice(selectedExercice) ||
+      (selectedExercice === currentFiscalYearLabel() && !closedLabels.includes(selectedExercice)),
+    [selectedExercice, closedLabels]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadHistory = async () => {
+      if (viewingCurrentExercice) {
+        setHistoryRecords([]);
+        return;
+      }
+      setHistoryRecords([]);
+      setHistoryLoading(true);
+      try {
+        const records = await getFilleulVolumeExercicesByLabel(resolvedExerciceLabel);
+        if (!cancelled) setHistoryRecords(records);
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) toast.error("Impossible de charger l'historique des volumes");
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    };
+    void loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedExerciceLabel, viewingCurrentExercice]);
+
+  const volumeRows = useMemo(() => {
+    if (viewingCurrentExercice) {
+      return buildOrganisationVolumeRows(tree, contacts);
+    }
+    if (historyRecords.length === 0) return [];
+    return buildOrganisationVolumeRowsForExercice(tree, contacts, {
+      mode: "history",
+      recordsByContactId: indexFilleulVolumeExercicesByContactId(historyRecords),
+    });
+  }, [viewingCurrentExercice, tree, contacts, historyRecords]);
 
   const organisationContactIds = useMemo(() => collectOrganisationContactIds(tree), [tree]);
 
@@ -123,6 +208,8 @@ export function Organisation({ onNavigate }: OrganisationProps) {
   );
 
   const missingSelfContact = !loading && tree.selfContact == null;
+  const showHistoryEmpty =
+    !loading && !historyLoading && !viewingCurrentExercice && historyRecords.length === 0;
 
   return (
     <div className="space-y-4 p-3 sm:p-4">
@@ -136,16 +223,36 @@ export function Organisation({ onNavigate }: OrganisationProps) {
             Réseau filleuls et parrains.
           </p>
         </div>
-        {!loading && tree.stats.total > 0 && (
-          <div className="flex gap-1.5 text-xs shrink-0">
-            <span className="rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/70 px-2.5 py-0.5 tabular-nums">
-              {tree.stats.actifs} actif{tree.stats.actifs > 1 ? "s" : ""}
-            </span>
-            <span className="rounded-full bg-muted text-muted-foreground border px-2.5 py-0.5 tabular-nums">
-              {tree.stats.desinscrits} désinscrit{tree.stats.desinscrits > 1 ? "s" : ""}
-            </span>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <OrganisationExerciceSelector
+            closedLabels={closedLabels}
+            value={selectedExercice}
+            onValueChange={setSelectedExercice}
+          />
+          {viewingCurrentExercice && !currentExerciceClosed && tree.stats.total > 0 ? (
+            <OrganisationExerciceCloseButton onClick={() => setCloseDialogOpen(true)} />
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setImportDialogOpen(true)}
+          >
+            <Upload className="h-4 w-4" aria-hidden />
+            Importer volumes
+          </Button>
+          {!loading && tree.stats.total > 0 && (
+            <div className="flex gap-1.5 text-xs shrink-0">
+              <span className="rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/70 px-2.5 py-0.5 tabular-nums">
+                {tree.stats.actifs} actif{tree.stats.actifs > 1 ? "s" : ""}
+              </span>
+              <span className="rounded-full bg-muted text-muted-foreground border px-2.5 py-0.5 tabular-nums">
+                {tree.stats.desinscrits} désinscrit{tree.stats.desinscrits > 1 ? "s" : ""}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {missingSelfContact && (
@@ -180,6 +287,15 @@ export function Organisation({ onNavigate }: OrganisationProps) {
         </Card>
       )}
 
+      {showHistoryEmpty && (
+        <Card className="border-dashed">
+          <CardContent className="py-6 text-sm text-muted-foreground text-center">
+            Aucun snapshot pour l&apos;exercice {resolvedExerciceLabel}. Clôturez l&apos;exercice
+            ou importez les volumes historiques pour le consulter ici.
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="overflow-hidden">
         <CardHeader className="border-b bg-muted/20 py-3 px-4 space-y-0">
           <div className="flex items-center justify-between gap-3">
@@ -197,6 +313,7 @@ export function Organisation({ onNavigate }: OrganisationProps) {
           </div>
           <CardDescription className="text-xs mt-1">
             Molette = zoom · glisser le fond · niveau 5+ repliées
+            {historyLoading ? " · chargement historique…" : null}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -216,13 +333,33 @@ export function Organisation({ onNavigate }: OrganisationProps) {
               onNodeClick={handleNodeClick}
               onParrainClick={handleParrainClick}
               onRankSave={handleRankSave}
-              onVolumeSave={handleVolumeSave}
-              onManagerVolumeSave={handleManagerVolumeSave}
+              onVolumeSave={viewingCurrentExercice ? handleVolumeSave : undefined}
+              onManagerVolumeSave={viewingCurrentExercice ? handleManagerVolumeSave : undefined}
+              volumeRows={volumeRows}
+              volumeReadOnly={!viewingCurrentExercice}
+              exerciceLabel={resolvedExerciceLabel}
               selectedContactId={activeContactId}
             />
           )}
         </CardContent>
       </Card>
+
+      <OrganisationExerciceCloseDialog
+        open={closeDialogOpen}
+        onOpenChange={setCloseDialogOpen}
+        tree={tree}
+        contacts={contacts}
+        onClosed={() => {
+          setSelectedExercice(ORGANISATION_CURRENT_EXERCICE);
+          void loadData();
+        }}
+      />
+
+      <OrganisationVolumesImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onApplied={() => void loadData()}
+      />
 
       {contactDetailSheet}
     </div>

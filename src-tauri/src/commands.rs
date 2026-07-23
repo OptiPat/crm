@@ -3829,3 +3829,60 @@ pub fn is_compta_month_closed(
         .is_compta_month_closed(year, month)
         .map_err(|e| format!("Failed to check compta month closed: {}", e))
 }
+
+#[tauri::command]
+pub fn list_filleul_volume_exercice_labels(db: State<'_, DbState>) -> Result<Vec<String>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .list_filleul_volume_exercice_labels()
+        .map_err(|e| format!("Failed to list filleul volume exercice labels: {}", e))
+}
+
+#[tauri::command]
+pub fn get_filleul_volume_exercices_by_label(
+    db: State<'_, DbState>,
+    exercice_label: String,
+) -> Result<Vec<crate::database::filleul_volumes::FilleulVolumeExercice>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_filleul_volume_exercices_by_label(&exercice_label)
+        .map_err(|e| format!("Failed to get filleul volume exercices: {}", e))
+}
+
+#[tauri::command]
+pub fn exercice_is_closed(
+    db: State<'_, DbState>,
+    exercice_label: String,
+) -> Result<bool, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .exercice_is_closed(&exercice_label)
+        .map_err(|e| format!("Failed to check exercice closed: {}", e))
+}
+
+#[tauri::command]
+pub fn close_filleul_exercice(
+    db: State<'_, DbState>,
+    input: crate::database::filleul_volumes::CloseFilleulExerciceInput,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .close_filleul_exercice(input)
+        .map_err(|e| format!("Failed to close filleul exercice: {}", e))
+}
+
+#[tauri::command]
+pub fn import_filleul_volume_exercices(
+    db: State<'_, DbState>,
+    input: crate::database::filleul_volumes::ImportFilleulVolumeExercicesInput,
+) -> Result<usize, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .import_filleul_volume_exercices(input)
+        .map_err(|e| format!("Failed to import filleul volume exercices: {}", e))
+}

@@ -24,6 +24,7 @@ pub mod etiquettes;
 pub mod etiquettes_auto_engine;
 pub mod exchange_history;
 pub mod familles;
+pub mod filleul_volumes;
 pub mod filleuls;
 pub mod foyers;
 pub mod google_contact_name_dismissals;
@@ -613,6 +614,7 @@ impl Database {
         self.migrate_templates_email_ephemere_category()?;
         self.migrate_template_email_actions()?;
         self.migrate_client_onedrive_links()?;
+        self.migrate_filleul_volume_exercices_table()?;
 
         Ok(())
     }

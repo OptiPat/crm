@@ -74,6 +74,12 @@ type OrganisationTreeViewProps = {
 
   onManagerVolumeSave?: (contact: Contact, volume: number | null) => void | Promise<void>;
 
+  volumeRows?: import("@/lib/organisation/organisation-branch-volumes").OrganisationVolumeRow[];
+
+  volumeReadOnly?: boolean;
+
+  exerciceLabel?: string;
+
   selectedContactId?: number | null;
 
 };
@@ -1040,6 +1046,12 @@ export function OrganisationTreeView({
 
   onManagerVolumeSave,
 
+  volumeRows,
+
+  volumeReadOnly,
+
+  exerciceLabel,
+
   selectedContactId,
 
 }: OrganisationTreeViewProps) {
@@ -1210,23 +1222,27 @@ export function OrganisationTreeView({
 
 
 
-      {onVolumeSave && onManagerVolumeSave && (
+      {(onVolumeSave && onManagerVolumeSave && volumeRows) || (volumeReadOnly && volumeRows) ? (
 
         <OrganisationBranchVolumesPanel
 
-          tree={tree}
+          rows={volumeRows}
 
           contacts={contacts}
 
-          onVolumeSave={onVolumeSave}
+          readOnly={volumeReadOnly}
 
-          onManagerVolumeSave={onManagerVolumeSave}
+          exerciceLabel={exerciceLabel}
+
+          onVolumeSave={onVolumeSave ?? (async () => {})}
+
+          onManagerVolumeSave={onManagerVolumeSave ?? (async () => {})}
 
           onNodeClick={onNodeClick}
 
         />
 
-      )}
+      ) : null}
 
 
 

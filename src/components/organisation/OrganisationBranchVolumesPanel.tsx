@@ -1,9 +1,7 @@
 import { useMemo } from "react";
 import { BarChart3 } from "lucide-react";
 import type { Contact } from "@/lib/api/tauri-contacts";
-import type { OrganisationTreeResult } from "@/lib/organisation/organisation-tree";
 import {
-  buildOrganisationVolumeRows,
   formatFilleulVolumeDisplay,
   formatFilleulVolumeField,
   getDirectBranchVolumeStatus,
@@ -15,6 +13,7 @@ import {
   ORGANISATION_SELF_NETWORK_MAX_GENERATION,
   ORGANISATION_SELF_NETWORK_VOLUME_TARGET,
   parseFilleulVolumeField,
+  type OrganisationVolumeRow,
 } from "@/lib/organisation/organisation-branch-volumes";
 import {
   ORGANISATION_MANAGER_VOLUME_TARGET,
@@ -23,16 +22,16 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type OrganisationBranchVolumesPanelProps = {
-  tree: OrganisationTreeResult;
+  rows: OrganisationVolumeRow[];
   contacts: Contact[];
+  readOnly?: boolean;
+  exerciceLabel?: string;
   onVolumeSave: (contact: Contact, volume: number | null) => void | Promise<void>;
   onManagerVolumeSave: (contact: Contact, volume: number | null) => void | Promise<void>;
   onNodeClick?: (contact: Contact) => void;
 };
 
-function exerciceBranchCellTitle(
-  row: ReturnType<typeof buildOrganisationVolumeRows>[number]
-): string | undefined {
+function exerciceBranchCellTitle(row: OrganisationVolumeRow): string | undefined {
   if (row.generation === 0) {
     return "Volume branche exercice (propre + descendance filleuls actifs)";
   }
@@ -46,9 +45,7 @@ function exerciceBranchCellTitle(
   return "Volume branche de l'exercice en cours (propre + filleuls actifs)";
 }
 
-function managerObjectiveCellTitle(
-  row: ReturnType<typeof buildOrganisationVolumeRows>[number]
-): string | undefined {
+function managerObjectiveCellTitle(row: OrganisationVolumeRow): string | undefined {
   if (row.generation === 0 || !row.managerObjectiveEligible) return undefined;
   const ok = getManagerObjectiveColorStatus(row) === "target_met";
   return ok
@@ -65,8 +62,10 @@ function statusColorClasses(
 }
 
 export function OrganisationBranchVolumesPanel({
-  tree,
+  rows,
   contacts,
+  readOnly = false,
+  exerciceLabel,
   onVolumeSave,
   onManagerVolumeSave,
   onNodeClick,
@@ -78,11 +77,6 @@ export function OrganisationBranchVolumesPanel({
     }
     return map;
   }, [contacts]);
-
-  const rows = useMemo(
-    () => buildOrganisationVolumeRows(tree, contacts),
-    [tree, contacts]
-  );
 
   if (rows.length === 0) return null;
 
@@ -100,32 +94,41 @@ export function OrganisationBranchVolumesPanel({
             Volumes par branche
           </h3>
           <p className="text-xs text-muted-foreground mt-1 max-w-3xl space-y-1">
-            <span className="block">
-              <span className="font-medium">Vol. branche</span> : exercice en cours (le sien +
-              filleuls actifs). Code couleur filleul direct (500 k€) :{" "}
-              <span className="inline-flex items-center gap-1.5 mr-2">
-                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
-                atteint
+            {readOnly ? (
+              <span className="block">
+                Exercice {exerciceLabel ?? "sélectionné"} (lecture seule) — volume branche
+                calculé comme sur l&apos;exercice en cours.
               </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="inline-block h-2 w-2 rounded-full bg-amber-500" aria-hidden />
-                en cours
-              </span>
-              .
-            </span>
-            <span className="block">
-              <span className="font-medium">Prime de dev</span> (badge en haut) :{" "}
-              {formatFilleulVolumeDisplay(ORGANISATION_SELF_NETWORK_VOLUME_TARGET)} niv. 1–
-              {ORGANISATION_SELF_NETWORK_MAX_GENERATION}, hors votre volume perso.{" "}
-              <span className="font-medium">Filleul direct</span> — objectif branche exercice :{" "}
-              {formatFilleulVolumeDisplay(ORGANISATION_DIRECT_BRANCH_VOLUME_TARGET)}.
-            </span>
-            <span className="block">
-              <span className="font-medium">Objectif Manager (cumul)</span> : hors exercice, Junior
-              / Consultant → Manager à{" "}
-              {formatFilleulVolumeDisplay(ORGANISATION_MANAGER_VOLUME_TARGET)}, sans limite de
-              temps — colonne dédiée, distincte de la prime de dev et volume branche exercice.
-            </span>
+            ) : (
+              <>
+                <span className="block">
+                  <span className="font-medium">Vol. branche</span> : exercice en cours (le sien +
+                  filleuls actifs). Code couleur filleul direct (500 k€) :{" "}
+                  <span className="inline-flex items-center gap-1.5 mr-2">
+                    <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
+                    atteint
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block h-2 w-2 rounded-full bg-amber-500" aria-hidden />
+                    en cours
+                  </span>
+                  .
+                </span>
+                <span className="block">
+                  <span className="font-medium">Prime de dev</span> (badge en haut) :{" "}
+                  {formatFilleulVolumeDisplay(ORGANISATION_SELF_NETWORK_VOLUME_TARGET)} niv. 1–
+                  {ORGANISATION_SELF_NETWORK_MAX_GENERATION}, hors votre volume perso.{" "}
+                  <span className="font-medium">Filleul direct</span> — objectif branche exercice :{" "}
+                  {formatFilleulVolumeDisplay(ORGANISATION_DIRECT_BRANCH_VOLUME_TARGET)}.
+                </span>
+                <span className="block">
+                  <span className="font-medium">Objectif Manager (cumul)</span> : hors exercice, Junior
+                  / Consultant → Manager à{" "}
+                  {formatFilleulVolumeDisplay(ORGANISATION_MANAGER_VOLUME_TARGET)}, sans limite de
+                  temps — colonne dédiée, distincte de la prime de dev et volume branche exercice.
+                </span>
+              </>
+            )}
           </p>
         </div>
         {selfRow != null && (
@@ -201,6 +204,13 @@ export function OrganisationBranchVolumesPanel({
                   >
                     {row.generation === 0 || !row.managerObjectiveEligible ? (
                       <span className="block text-right text-muted-foreground text-xs">—</span>
+                    ) : readOnly ? (
+                      <span
+                        className="block text-right tabular-nums"
+                        title={managerObjectiveCellTitle(row)}
+                      >
+                        {formatFilleulVolumeDisplay(row.managerVolume)}
+                      </span>
                     ) : (
                       <Input
                         key={`mgr-${row.contactId}-${contact.filleul_volume_manager ?? "empty"}`}
@@ -219,19 +229,25 @@ export function OrganisationBranchVolumesPanel({
                     )}
                   </td>
                   <td className="px-3 py-2">
-                    <Input
-                      key={`vol-${row.contactId}-${contact.filleul_volume ?? "empty"}`}
-                      className={cn("h-8 w-full max-w-[8rem] ml-auto text-right tabular-nums")}
-                      inputMode="decimal"
-                      placeholder="0"
-                      defaultValue={formatFilleulVolumeField(row.ownVolume)}
-                      onBlur={(e) => {
-                        const parsed = parseFilleulVolumeField(e.target.value);
-                        if (parsed == null) return;
-                        if (parsed === row.ownVolume) return;
-                        void onVolumeSave(contact, parsed === 0 ? null : parsed);
-                      }}
-                    />
+                    {readOnly ? (
+                      <span className="block text-right tabular-nums">
+                        {formatFilleulVolumeDisplay(row.ownVolume)}
+                      </span>
+                    ) : (
+                      <Input
+                        key={`vol-${row.contactId}-${contact.filleul_volume ?? "empty"}`}
+                        className={cn("h-8 w-full max-w-[8rem] ml-auto text-right tabular-nums")}
+                        inputMode="decimal"
+                        placeholder="0"
+                        defaultValue={formatFilleulVolumeField(row.ownVolume)}
+                        onBlur={(e) => {
+                          const parsed = parseFilleulVolumeField(e.target.value);
+                          if (parsed == null) return;
+                          if (parsed === row.ownVolume) return;
+                          void onVolumeSave(contact, parsed === 0 ? null : parsed);
+                        }}
+                      />
+                    )}
                   </td>
                   <td
                     className={cn(

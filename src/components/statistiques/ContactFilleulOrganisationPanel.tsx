@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import {
   computeFilleulAverageVolumeStats,
@@ -49,6 +49,22 @@ import { ContactAgePanel } from "./ContactAgePanel";
 import { ContactGeographyPanel } from "./ContactGeographyPanel";
 import { StatistiquesPanel } from "./statistiques-ui";
 import { useStatistiquesPageData } from "./statistiques-page-data-context";
+import {
+  OrganisationExerciceSelector,
+  ORGANISATION_CURRENT_EXERCICE,
+} from "@/components/organisation/OrganisationExerciceSelector";
+import {
+  applyExerciceVolumesToContacts,
+  indexFilleulVolumeExercicesByContactId,
+  isCurrentOrganisationExercice,
+  resolveOrganisationExerciceLabel,
+  type OrganisationExerciceSelection,
+} from "@/lib/organisation/organisation-volume-history";
+import {
+  getFilleulVolumeExercicesByLabel,
+  listFilleulVolumeExerciceLabels,
+} from "@/lib/api/tauri-filleul-volumes";
+import { currentFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
 
 function OrganisationListButton({
   label,
@@ -388,6 +404,48 @@ export function ContactFilleulOrganisationPanel({
     useStatistiquesPageData();
   const [contactsSheetOpen, setContactsSheetOpen] = useState(false);
   const [drillDown, setDrillDown] = useState<OrganisationDrillDown | null>(null);
+  const [closedLabels, setClosedLabels] = useState<string[]>([]);
+  const [selectedExercice, setSelectedExercice] =
+    useState<OrganisationExerciceSelection>(ORGANISATION_CURRENT_EXERCICE);
+  const [historyRecords, setHistoryRecords] = useState<
+    Awaited<ReturnType<typeof getFilleulVolumeExercicesByLabel>>
+  >([]);
+
+  useEffect(() => {
+    void listFilleulVolumeExerciceLabels().then(setClosedLabels).catch(console.error);
+  }, [dataRefreshKey]);
+
+  const resolvedExerciceLabel = useMemo(
+    () => resolveOrganisationExerciceLabel(selectedExercice),
+    [selectedExercice]
+  );
+
+  const viewingCurrentExercice = useMemo(
+    () =>
+      isCurrentOrganisationExercice(selectedExercice) ||
+      (selectedExercice === currentFiscalYearLabel() &&
+        !closedLabels.includes(selectedExercice)),
+    [selectedExercice, closedLabels]
+  );
+
+  useEffect(() => {
+    if (viewingCurrentExercice) {
+      setHistoryRecords([]);
+      return;
+    }
+    setHistoryRecords([]);
+    void getFilleulVolumeExercicesByLabel(resolvedExerciceLabel)
+      .then(setHistoryRecords)
+      .catch(console.error);
+  }, [resolvedExerciceLabel, viewingCurrentExercice, dataRefreshKey]);
+
+  const contactsForStats = useMemo(() => {
+    if (viewingCurrentExercice) return contacts;
+    return applyExerciceVolumesToContacts(
+      contacts,
+      indexFilleulVolumeExercicesByContactId(historyRecords)
+    );
+  }, [contacts, viewingCurrentExercice, historyRecords]);
 
   const {
     openContactWithTab,
@@ -402,41 +460,47 @@ export function ContactFilleulOrganisationPanel({
 
   const statsOptions = useMemo(() => ({ selfContactId }), [selfContactId]);
 
-  const managerStats = useMemo(() => computeFilleulManagerStats(contacts), [contacts]);
-  const volumeStats = useMemo(() => computeFilleulAverageVolumeStats(contacts), [contacts]);
-  const parraineurStats = useMemo(() => computeFilleulParraineurStats(contacts), [contacts]);
-  const bridgeStats = useMemo(
-    () => computeFilleulClientBridgeStats(contacts, statsOptions),
-    [contacts, statsOptions]
+  const managerStats = useMemo(() => computeFilleulManagerStats(contactsForStats), [contactsForStats]);
+  const volumeStats = useMemo(
+    () => computeFilleulAverageVolumeStats(contactsForStats),
+    [contactsForStats]
   );
-  const filleulAttritionStats = useMemo(() => computeFilleulAttritionStats(contacts), [contacts]);
+  const parraineurStats = useMemo(() => computeFilleulParraineurStats(contactsForStats), [contactsForStats]);
+  const bridgeStats = useMemo(
+    () => computeFilleulClientBridgeStats(contactsForStats, statsOptions),
+    [contactsForStats, statsOptions]
+  );
+  const filleulAttritionStats = useMemo(
+    () => computeFilleulAttritionStats(contactsForStats),
+    [contactsForStats]
+  );
 
   const loadContactsSheet = useCallback(async () => {
     if (!drillDown) return [];
     if (drillDown.mode === "manager") {
       return toDashboardStatContactList(
-        filterContactsForFilleulOrganisationList(contacts, drillDown.kind)
+        filterContactsForFilleulOrganisationList(contactsForStats, drillDown.kind)
       );
     }
     if (drillDown.mode === "parraineur") {
       return toDashboardStatContactList(
-        filterContactsForFilleulParraineurList(contacts, drillDown.kind)
+        filterContactsForFilleulParraineurList(contactsForStats, drillDown.kind)
       );
     }
     if (drillDown.mode === "bridge") {
       return toDashboardStatContactList(
-        filterContactsForFilleulBridgeList(contacts, drillDown.kind, statsOptions)
+        filterContactsForFilleulBridgeList(contactsForStats, drillDown.kind, statsOptions)
       );
     }
     if (drillDown.mode === "attrition") {
       return toDashboardStatContactList(
-        filterContactsForFilleulAttritionLens(contacts, drillDown.kind)
+        filterContactsForFilleulAttritionLens(contactsForStats, drillDown.kind)
       );
     }
     return toDashboardStatContactList(
-      filterContactsForFilleulVolumeList(contacts, drillDown.kind)
+      filterContactsForFilleulVolumeList(contactsForStats, drillDown.kind)
     );
-  }, [contacts, drillDown, statsOptions]);
+  }, [contactsForStats, drillDown, statsOptions]);
 
   const openManagerList = useCallback((kind: FilleulOrganisationListKind) => {
     setDrillDown({ mode: "manager", kind });
@@ -519,6 +583,16 @@ export function ContactFilleulOrganisationPanel({
 
   return (
     <>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
+        <p className="text-sm text-muted-foreground">
+          Volumes et KPIs réseau pour l&apos;exercice sélectionné.
+        </p>
+        <OrganisationExerciceSelector
+          closedLabels={closedLabels}
+          value={selectedExercice}
+          onValueChange={setSelectedExercice}
+        />
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
         <ContactGeographyPanel onNavigate={onNavigate} lens="filleul" />
         <ContactAgePanel onNavigate={onNavigate} lens="filleul" />
