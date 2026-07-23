@@ -9,6 +9,7 @@ import {
   buildFoyerNomFromMembers,
   countEnfantsFoyer,
   mergeFoyerMembers,
+  resolveNombreEnfantsForContact,
 } from "./foyer-utils";
 
 function contact(partial: Partial<Contact> & Pick<Contact, "id">): Contact {
@@ -83,6 +84,22 @@ describe("countEnfantsFoyer", () => {
       contact({ id: 3, role_foyer: "ENFANT" }),
     ];
     expect(countEnfantsFoyer(members)).toBe(2);
+  });
+});
+
+describe("resolveNombreEnfantsForContact", () => {
+  const members = [
+    contact({ id: 1, role_foyer: "DECLARANT_1" }),
+    contact({ id: 2, role_foyer: "ENFANT" }),
+    contact({ id: 3, role_foyer: "ENFANT" }),
+  ];
+
+  it("retourne le décompte foyer pour un déclarant", () => {
+    expect(resolveNombreEnfantsForContact(members[0], members)).toBe(2);
+  });
+
+  it("retourne 0 si le contact sélectionné est un enfant du foyer", () => {
+    expect(resolveNombreEnfantsForContact(members[1], members)).toBe(0);
   });
 });
 

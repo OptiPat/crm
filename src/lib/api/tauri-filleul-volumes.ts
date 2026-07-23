@@ -36,6 +36,14 @@ export async function getFilleulVolumeExercicesByLabel(
   });
 }
 
+export async function getFilleulVolumeExercicesByContact(
+  contactId: number
+): Promise<FilleulVolumeExercice[]> {
+  return invoke<FilleulVolumeExercice[]>("get_filleul_volume_exercices_by_contact", {
+    contactId,
+  });
+}
+
 export async function exerciceIsClosed(exerciceLabel: string): Promise<boolean> {
   return invoke<boolean>("exercice_is_closed", { exerciceLabel });
 }

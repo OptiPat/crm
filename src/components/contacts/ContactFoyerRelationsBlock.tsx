@@ -45,6 +45,7 @@ export function ContactFoyerRelationsBlock({
   const allMembers = mergeFoyerMembers(contact, foyerMembers);
   const enfants = getEnfantsFoyer(allMembers);
   const nbEnfants = countEnfantsFoyer(allMembers);
+  const isEnfantFoyer = contact.role_foyer === "ENFANT";
   const roleLabel = contact.role_foyer
     ? formatFoyerMemberLabel(contact, contact.role_foyer).split(" · ").pop()
     : null;
@@ -62,7 +63,9 @@ export function ContactFoyerRelationsBlock({
         <div className="min-w-0 flex-1 space-y-1">
           <p className="text-sm font-medium">Couple / foyer</p>
           <p className="text-xs text-muted-foreground">
-            Nombre d&apos;enfants calculé depuis les membres du foyer (rôle « Enfant »).
+            {isEnfantFoyer
+              ? "Fratrie du foyer (rôle « Enfant ») — ce contact est lui-même un enfant."
+              : "Nombre d'enfants calculé depuis les membres du foyer (rôle « Enfant »)."}
           </p>
         </div>
       </div>
@@ -102,7 +105,9 @@ export function ContactFoyerRelationsBlock({
 
           <div className="space-y-1">
             <p className="text-sm">
-              <span className="text-muted-foreground">Nombre d&apos;enfants : </span>
+              <span className="text-muted-foreground">
+                {isEnfantFoyer ? "Enfants du foyer" : "Nombre d'enfants"} :{" "}
+              </span>
               <span className="font-medium">{nbEnfants}</span>
             </p>
             {enfants.length > 0 ? (

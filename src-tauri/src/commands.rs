@@ -3852,6 +3852,18 @@ pub fn get_filleul_volume_exercices_by_label(
 }
 
 #[tauri::command]
+pub fn get_filleul_volume_exercices_by_contact(
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<Vec<crate::database::filleul_volumes::FilleulVolumeExercice>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_filleul_volume_exercices_by_contact(contact_id)
+        .map_err(|e| format!("Failed to get filleul volume exercices for contact: {}", e))
+}
+
+#[tauri::command]
 pub fn exercice_is_closed(
     db: State<'_, DbState>,
     exercice_label: String,

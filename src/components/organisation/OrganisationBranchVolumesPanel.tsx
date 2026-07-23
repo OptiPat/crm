@@ -29,6 +29,7 @@ type OrganisationBranchVolumesPanelProps = {
   onVolumeSave: (contact: Contact, volume: number | null) => void | Promise<void>;
   onManagerVolumeSave: (contact: Contact, volume: number | null) => void | Promise<void>;
   onNodeClick?: (contact: Contact) => void;
+  showTopBorder?: boolean;
 };
 
 function exerciceBranchCellTitle(row: OrganisationVolumeRow): string | undefined {
@@ -69,6 +70,7 @@ export function OrganisationBranchVolumesPanel({
   onVolumeSave,
   onManagerVolumeSave,
   onNodeClick,
+  showTopBorder = true,
 }: OrganisationBranchVolumesPanelProps) {
   const contactsById = useMemo(() => {
     const map = new Map<number, Contact>();
@@ -86,7 +88,12 @@ export function OrganisationBranchVolumesPanel({
     selfRow != null ? getSelfNetworkVolumeStatus(selfNetworkVolume) : null;
 
   return (
-    <div className="w-full border-t border-border/60 px-3 sm:px-4 py-4">
+    <div
+      className={cn(
+        "w-full px-3 sm:px-4 py-4",
+        showTopBorder && "border-t border-border/60"
+      )}
+    >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -158,10 +165,12 @@ export function OrganisationBranchVolumesPanel({
               </th>
               <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right w-28">
                 Volume
+                <span className="block font-normal normal-case text-[10px]">perso</span>
                 <span className="block font-normal normal-case text-[10px]">exercice</span>
               </th>
               <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right w-32">
-                Vol. branche
+                Volume
+                <span className="block font-normal normal-case text-[10px]">organisation</span>
                 <span className="block font-normal normal-case text-[10px]">exercice</span>
               </th>
             </tr>

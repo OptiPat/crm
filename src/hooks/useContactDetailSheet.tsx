@@ -41,11 +41,10 @@ type LoadContactOptions = {
 
 
 export type OpenContactWithTabOptions = {
-
   /** Fiche ouverte depuis un volet liste KPI — retour liste + pas de 2ᵉ overlay. */
-
   listBack?: boolean;
-
+  /** Pas d'overlay secondaire (ex. dossier Organisation déjà ouvert). */
+  stacked?: boolean;
 };
 
 
@@ -59,6 +58,7 @@ export function useContactDetailSheet(options: UseContactDetailSheetOptions = {}
   const [open, setOpen] = useState(false);
 
   const [listBackMode, setListBackMode] = useState(false);
+  const [stackedOverlay, setStackedOverlay] = useState(false);
 
   const loadSeqRef = useRef(0);
 
@@ -105,6 +105,7 @@ export function useContactDetailSheet(options: UseContactDetailSheetOptions = {}
       try {
 
         setListBackMode(false);
+        setStackedOverlay(false);
 
         await loadContact(contactId, { applyDefaultTab: true });
 
@@ -139,6 +140,7 @@ export function useContactDetailSheet(options: UseContactDetailSheetOptions = {}
       try {
 
         setListBackMode(openOptions.listBack ?? false);
+        setStackedOverlay(openOptions.stacked ?? false);
 
         await loadContact(contactId, { tab, applyDefaultTab: !tab });
 
@@ -173,11 +175,9 @@ export function useContactDetailSheet(options: UseContactDetailSheetOptions = {}
 
 
   const closeContactDetail = useCallback(() => {
-
     setOpen(false);
-
     setContact(null);
-
+    setStackedOverlay(false);
   }, []);
 
 
@@ -242,7 +242,7 @@ export function useContactDetailSheet(options: UseContactDetailSheetOptions = {}
 
       onUpdate={onUpdate}
 
-      hideOverlay={listBackMode}
+      hideOverlay={listBackMode || stackedOverlay}
 
       onBackToList={listBackMode ? closeContactDetail : undefined}
 

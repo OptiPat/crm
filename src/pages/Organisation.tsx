@@ -8,9 +8,9 @@ import { contactFilleulRankUpdatePayload, contactFilleulVolumeUpdatePayload, con
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import {
   buildOrganisationTree,
-  collectOrganisationContactIds,
 } from "@/lib/organisation/organisation-tree";
 import { OrganisationTreeView } from "@/components/organisation/OrganisationTreeView";
+import { OrganisationBranchVolumesPanel } from "@/components/organisation/OrganisationBranchVolumesPanel";
 import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
@@ -38,6 +38,9 @@ import {
 } from "@/lib/api/tauri-filleul-volumes";
 import { currentFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
 import { OrganisationVolumesImportDialog } from "@/components/organisation/OrganisationVolumesImportDialog";
+import { OrganisationMemberSearch } from "@/components/organisation/OrganisationMemberSearch";
+import { OrganisationMemberDossierPanel } from "@/components/organisation/OrganisationMemberDossierPanel";
+import { collectOrganisationMemberRoster } from "@/lib/organisation/organisation-member-roster";
 
 type OrganisationProps = {
   onNavigate?: (page: string) => void;
@@ -57,6 +60,8 @@ export function Organisation({ onNavigate }: OrganisationProps) {
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [currentExerciceClosed, setCurrentExerciceClosed] = useState(false);
+  const [selectedDossierContactId, setSelectedDossierContactId] = useState<number | null>(null);
+  const [dataRevision, setDataRevision] = useState(0);
 
   const loadData = useCallback(async () => {
     try {
@@ -70,6 +75,7 @@ export function Organisation({ onNavigate }: OrganisationProps) {
       setClosedLabels(labels);
       const currentLabel = currentFiscalYearLabel();
       setCurrentExerciceClosed(await exerciceIsClosed(currentLabel));
+      setDataRevision((revision) => revision + 1);
     } catch (error) {
       console.error("Error loading organisation:", error);
       toast.error("Impossible de charger l'organisation");
@@ -137,26 +143,34 @@ export function Organisation({ onNavigate }: OrganisationProps) {
     });
   }, [viewingCurrentExercice, tree, contacts, historyRecords]);
 
-  const organisationContactIds = useMemo(() => collectOrganisationContactIds(tree), [tree]);
+  const showBranchVolumesPanel =
+    volumeRows.length > 0 &&
+    (viewingCurrentExercice || (!historyLoading && historyRecords.length > 0));
 
-  const { openContactSheet, sheet: contactDetailSheet, activeContactId } =
+  const memberRoster = useMemo(() => collectOrganisationMemberRoster(tree), [tree]);
+
+  const { openContactWithTab, sheet: contactDetailSheet, activeContactId } =
     useContactDetailSheet({
       onNavigate,
       onUpdate: () => void loadData(),
     });
 
-  const handleNodeClick = useCallback(
-    (contact: Contact) => {
-      void openContactSheet(contact.id, organisationContactIds);
-    },
-    [openContactSheet, organisationContactIds]
-  );
+  const handleNodeClick = useCallback((contact: Contact) => {
+    if (contact.id == null) return;
+    setSelectedDossierContactId(contact.id);
+  }, []);
 
-  const handleParrainClick = useCallback(
-    (parrainId: number) => {
-      void openContactSheet(parrainId, organisationContactIds);
+  const handleParrainClick = useCallback((parrainId: number) => {
+    setSelectedDossierContactId(parrainId);
+  }, []);
+
+  const handleOpenContactSheet = useCallback(
+    (contactId: number) => {
+      void openContactWithTab(contactId, undefined, {
+        stacked: selectedDossierContactId != null,
+      });
     },
-    [openContactSheet, organisationContactIds]
+    [openContactWithTab, selectedDossierContactId]
   );
 
   const handleRankSave = useCallback(
@@ -224,6 +238,10 @@ export function Organisation({ onNavigate }: OrganisationProps) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <OrganisationMemberSearch
+            roster={memberRoster}
+            onSelect={setSelectedDossierContactId}
+          />
           <OrganisationExerciceSelector
             closedLabels={closedLabels}
             value={selectedExercice}
@@ -296,53 +314,85 @@ export function Organisation({ onNavigate }: OrganisationProps) {
         </Card>
       )}
 
-      <Card className="overflow-hidden">
-        <CardHeader className="border-b bg-muted/20 py-3 px-4 space-y-0">
-          <div className="flex items-center justify-between gap-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Users2 className="h-4 w-4 text-primary" aria-hidden />
-              Filleuls et parrains
-            </CardTitle>
-            {!loading && tree.stats.total > 0 && (
-              <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-                {tree.stats.actifs} actif{tree.stats.actifs > 1 ? "s" : ""}
-                {tree.stats.desinscrits > 0 &&
-                  ` · ${tree.stats.desinscrits} désinscrit${tree.stats.desinscrits > 1 ? "s" : ""}`}
-              </span>
+      <div className="-mx-3 sm:-mx-4">
+        <Card className="overflow-visible border-x-0 sm:border-x rounded-none sm:rounded-lg shadow-sm">
+          <CardHeader className="border-b bg-muted/20 py-3 px-4 sm:px-6 space-y-0">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users2 className="h-4 w-4 text-primary" aria-hidden />
+                Filleuls et parrains
+              </CardTitle>
+              {!loading && tree.stats.total > 0 && (
+                <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
+                  {tree.stats.actifs} actif{tree.stats.actifs > 1 ? "s" : ""}
+                  {tree.stats.desinscrits > 0 &&
+                    ` · ${tree.stats.desinscrits} désinscrit${tree.stats.desinscrits > 1 ? "s" : ""}`}
+                </span>
+              )}
+            </div>
+            <CardDescription className="text-xs mt-1">
+              Clic sur un consultant = dossier réseau · molette = zoom · glisser le fond · niveau 5+
+              repliées
+              {historyLoading ? " · chargement historique…" : null}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0 overflow-visible">
+            {loading ? (
+              <p className="text-sm text-muted-foreground p-6 text-center">Chargement…</p>
+            ) : tree.selfContact &&
+              tree.generations.length === 0 &&
+              tree.upline.length === 0 &&
+              tree.desinscrits.length === 0 ? (
+              <p className="text-sm text-muted-foreground p-8 text-center">
+                Aucun filleul ni parrain enregistré pour le moment.
+              </p>
+            ) : (
+              <OrganisationTreeView
+                tree={tree}
+                contacts={contacts}
+                onNodeClick={handleNodeClick}
+                onParrainClick={handleParrainClick}
+                onRankSave={handleRankSave}
+                selectedContactId={selectedDossierContactId ?? activeContactId}
+                showBranchVolumesPanel={false}
+              />
             )}
-          </div>
-          <CardDescription className="text-xs mt-1">
-            Molette = zoom · glisser le fond · niveau 5+ repliées
-            {historyLoading ? " · chargement historique…" : null}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <p className="text-sm text-muted-foreground p-6 text-center">Chargement…</p>
-          ) : tree.selfContact &&
-            tree.generations.length === 0 &&
-            tree.upline.length === 0 &&
-            tree.desinscrits.length === 0 ? (
-            <p className="text-sm text-muted-foreground p-8 text-center">
-              Aucun filleul ni parrain enregistré pour le moment.
-            </p>
-          ) : (
-            <OrganisationTreeView
-              tree={tree}
+          </CardContent>
+        </Card>
+      </div>
+
+      {showBranchVolumesPanel && (
+        <Card className="overflow-hidden">
+          <CardContent className="p-0">
+            <OrganisationBranchVolumesPanel
+              rows={volumeRows}
               contacts={contacts}
-              onNodeClick={handleNodeClick}
-              onParrainClick={handleParrainClick}
-              onRankSave={handleRankSave}
-              onVolumeSave={viewingCurrentExercice ? handleVolumeSave : undefined}
-              onManagerVolumeSave={viewingCurrentExercice ? handleManagerVolumeSave : undefined}
-              volumeRows={volumeRows}
-              volumeReadOnly={!viewingCurrentExercice}
+              readOnly={!viewingCurrentExercice}
               exerciceLabel={resolvedExerciceLabel}
-              selectedContactId={activeContactId}
+              onVolumeSave={viewingCurrentExercice ? handleVolumeSave : async () => {}}
+              onManagerVolumeSave={
+                viewingCurrentExercice ? handleManagerVolumeSave : async () => {}
+              }
+              onNodeClick={handleNodeClick}
+              showTopBorder={false}
             />
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
+
+      <OrganisationMemberDossierPanel
+        contactId={selectedDossierContactId}
+        roster={memberRoster}
+        contacts={contacts}
+        cgp={cgp}
+        canEditVolumes={!currentExerciceClosed}
+        refreshKey={dataRevision}
+        onClose={() => setSelectedDossierContactId(null)}
+        onSelectMember={setSelectedDossierContactId}
+        onOpenContactSheet={handleOpenContactSheet}
+        onVolumeSave={handleVolumeSave}
+        onManagerVolumeSave={handleManagerVolumeSave}
+      />
 
       <OrganisationExerciceCloseDialog
         open={closeDialogOpen}

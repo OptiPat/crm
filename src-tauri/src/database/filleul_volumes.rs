@@ -69,6 +69,11 @@ impl super::Database {
              ON filleul_volume_exercices (exercice_label)",
             [],
         )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS filleul_volume_exercices_contact_idx
+             ON filleul_volume_exercices (contact_id)",
+            [],
+        )?;
         Ok(())
     }
 
@@ -79,6 +84,21 @@ impl super::Database {
              ORDER BY exercice_label DESC",
         )?;
         let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        rows.collect()
+    }
+
+    pub fn get_filleul_volume_exercices_by_contact(
+        &self,
+        contact_id: i64,
+    ) -> Result<Vec<FilleulVolumeExercice>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT contact_id, exercice_label, volume_propre, volume_branche,
+                    volume_manager, closed_at, source
+             FROM filleul_volume_exercices
+             WHERE contact_id = ?1
+             ORDER BY exercice_label DESC",
+        )?;
+        let rows = stmt.query_map(params![contact_id], map_filleul_volume_exercice_row)?;
         rows.collect()
     }
 
@@ -397,5 +417,34 @@ mod tests {
             .get_filleul_volume_exercices_by_label("2023-2024")
             .unwrap();
         assert_eq!(rows[0].volume_propre, Some(100_000.0));
+    }
+
+    #[test]
+    fn get_filleul_volume_exercices_by_contact_orders_desc() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        let id = seed_contact(&db, "DUPONT", "Jean", 50_000.0);
+
+        db.import_filleul_volume_exercices(ImportFilleulVolumeExercicesInput {
+            entries: vec![
+                FilleulVolumeExerciceImportEntry {
+                    contact_id: id,
+                    exercice_label: "2022-2023".to_string(),
+                    volume_propre: 80_000.0,
+                },
+                FilleulVolumeExerciceImportEntry {
+                    contact_id: id,
+                    exercice_label: "2024-2025".to_string(),
+                    volume_propre: 120_000.0,
+                },
+            ],
+            sync_current_contact_volumes: false,
+            current_exercice_label: None,
+        })
+        .unwrap();
+
+        let rows = db.get_filleul_volume_exercices_by_contact(id).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].exercice_label, "2024-2025");
+        assert_eq!(rows[1].exercice_label, "2022-2023");
     }
 }

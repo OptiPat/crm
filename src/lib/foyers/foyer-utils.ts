@@ -90,6 +90,15 @@ export function countEnfantsFoyer(members: readonly Contact[]): number {
   return getEnfantsFoyer(members).length;
 }
 
+/** Nombre d'enfants pertinent pour un contact (0 si le contact est lui-même enfant du foyer). */
+export function resolveNombreEnfantsForContact(
+  contact: Pick<Contact, "role_foyer"> | null,
+  members: readonly Contact[]
+): number {
+  if (contact?.role_foyer === "ENFANT") return 0;
+  return countEnfantsFoyer(members);
+}
+
 /** Tous les membres du foyer incluant le contact courant (sans doublon). */
 export function mergeFoyerMembers(
   contact: Contact,

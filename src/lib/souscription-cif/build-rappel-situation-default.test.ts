@@ -143,14 +143,65 @@ describe("buildDefaultRappelSituation", () => {
       },
     ];
 
-    const supplement = buildRappelSituationSupplement(members, documents);
+    const supplement = buildRappelSituationSupplement(members, documents, [], contact);
     expect(countEnfantsFoyer(members)).toBe(2);
+    expect(supplement.nombreEnfants).toBe(2);
     expect(latestQpiAppetencesEsg(documents)).toContain("10 %");
 
     const text = buildDefaultRappelSituation(contact, null, supplement);
     expect(text).toContain("Pacsé(e) — Séparation de biens");
     expect(text).toContain("➞ Nombre d'enfants : 2");
     expect(text).toContain("➞ Appétences ESG : Minimum 10 %");
+  });
+
+  it("affiche 0 enfant si le contact sélectionné est lui-même enfant du foyer", () => {
+    const enfant: Contact = {
+      ...baseContact,
+      id: 2,
+      prenom: "Emma",
+      role_foyer: "ENFANT",
+    };
+    const members: Contact[] = [
+      { ...baseContact, id: 1, role_foyer: "DECLARANT_1" },
+      enfant,
+      {
+        ...baseContact,
+        id: 3,
+        prenom: "Leo",
+        role_foyer: "ENFANT",
+      },
+    ];
+
+    const supplement = buildRappelSituationSupplement(members, [], [], enfant);
+    expect(supplement.nombreEnfants).toBe(0);
+
+    const text = buildDefaultRappelSituation(enfant, null, supplement);
+    expect(text).toContain("➞ Nombre d'enfants : 0");
+  });
+
+  it("n'hérite pas la fiscalité foyer pour un enfant du foyer", () => {
+    const enfant: Contact = {
+      ...baseContact,
+      id: 2,
+      prenom: "Emma",
+      role_foyer: "ENFANT",
+      revenus_annuels: 0,
+    };
+    const foyer: Foyer = {
+      id: 1,
+      nom: "BERNARD",
+      type_foyer: "COUPLE",
+      tranche_imposition: "30%",
+      nombre_parts_fiscales: 3,
+      ir_net_a_payer: 12_500,
+      created_at: 0,
+      updated_at: 0,
+    };
+
+    const text = buildDefaultRappelSituation(enfant, foyer);
+    expect(text).not.toContain("TMI : 30%");
+    expect(text).not.toContain("3 parts");
+    expect(text).not.toContain("IR 12");
   });
 
   it("préremplit immobilier et valeurs mobilières depuis le patrimoine", () => {

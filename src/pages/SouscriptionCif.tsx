@@ -298,7 +298,8 @@ export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProp
       const rappelSupplement = buildRappelSituationSupplement(
         foyerMembers,
         documents,
-        investissements
+        investissements,
+        contact
       );
       setDossiersByContactId((prev) => {
         const key = buildDossierStorageKey(contactId, productType);

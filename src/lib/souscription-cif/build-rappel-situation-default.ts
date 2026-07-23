@@ -4,7 +4,7 @@ import type { Foyer } from "@/lib/api/tauri-foyers";
 import { computeAgeAtDate, formatAgeLabel } from "@/lib/contacts/contact-birthday";
 import { formatSituationLabel } from "@/lib/contacts/contact-form-utils";
 import { formatFoyerCurrencyEur } from "@/lib/foyers/foyer-display";
-import { countEnfantsFoyer } from "@/lib/foyers/foyer-utils";
+import { resolveNombreEnfantsForContact } from "@/lib/foyers/foyer-utils";
 import { formatSriWithDefinition } from "@/lib/contacts/investisseur-sri";
 import {
   RM_LEGACY_PANEL_BULLET_LABEL_ALIASES,
@@ -62,10 +62,11 @@ export function latestQpiAppetencesEsg(documents: readonly Document[]): string |
 export function buildRappelSituationSupplement(
   foyerMembers: readonly Contact[],
   documents: readonly Document[],
-  investissements: readonly Investissement[] = []
+  investissements: readonly Investissement[] = [],
+  selectedContact: Pick<Contact, "role_foyer"> | null = null
 ): RappelSituationSupplement {
   return {
-    nombreEnfants: countEnfantsFoyer(foyerMembers),
+    nombreEnfants: resolveNombreEnfantsForContact(selectedContact, foyerMembers),
     appetencesEsg: latestQpiAppetencesEsg(documents),
     investissements,
   };
@@ -91,12 +92,13 @@ function formatRevenusLine(contact: Contact | null, foyer: Foyer | null): string
     const formatted = formatFoyerCurrencyEur(revenus);
     if (formatted) parts.push(formatted);
   }
-  // Fiscalité : valeur du contact (personne seule) sinon repli foyer.
+  // Fiscalité : valeur du contact (personne seule) sinon repli foyer (pas pour un enfant).
+  const isEnfantFoyer = contact?.role_foyer === "ENFANT";
   const trancheImposition =
-    contact?.tranche_imposition ?? foyer?.tranche_imposition;
+    contact?.tranche_imposition ?? (isEnfantFoyer ? null : foyer?.tranche_imposition);
   const nombreParts =
-    contact?.nombre_parts_fiscales ?? foyer?.nombre_parts_fiscales;
-  const irNet = contact?.ir_net_a_payer ?? foyer?.ir_net_a_payer;
+    contact?.nombre_parts_fiscales ?? (isEnfantFoyer ? null : foyer?.nombre_parts_fiscales);
+  const irNet = contact?.ir_net_a_payer ?? (isEnfantFoyer ? null : foyer?.ir_net_a_payer);
   if (trancheImposition?.trim()) {
     parts.push(formatTrancheImpositionForRappel(trancheImposition));
   }

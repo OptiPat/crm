@@ -82,6 +82,9 @@ type OrganisationTreeViewProps = {
 
   selectedContactId?: number | null;
 
+  /** Affiche le tableau volumes sous l'arbre (défaut : true). */
+  showBranchVolumesPanel?: boolean;
+
 };
 
 
@@ -826,7 +829,7 @@ function DesinscritsPanel({
 
   return (
 
-    <div className="w-full max-w-3xl mx-auto mt-4 border-t border-dashed border-border/60 pt-3 px-2">
+    <div className="w-full mt-2 border-t border-dashed border-border/60 pt-3 px-4 sm:px-6">
 
       <Button
 
@@ -976,7 +979,7 @@ function DesinscritsPanel({
 
                             <p className="text-[11px] text-muted-foreground/70 mt-0.5">
 
-                              Génération {entry.generation} · Parrain : {entry.parrainLabel}
+                              Niveau {entry.generation} · Parrain : {entry.parrainLabel}
 
                             </p>
 
@@ -1054,6 +1057,8 @@ export function OrganisationTreeView({
 
   selectedContactId,
 
+  showBranchVolumesPanel = true,
+
 }: OrganisationTreeViewProps) {
 
   const { selfContact, selfDisplayName, upline, generations, desinscrits, stats } = tree;
@@ -1094,7 +1099,7 @@ export function OrganisationTreeView({
 
   const treeContent = (
 
-    <div className="flex flex-col items-center w-full py-4 px-2">
+    <div className="flex flex-col items-center w-full min-w-max py-6 px-4 sm:px-8">
 
       {upline.length > 0 && (
 
@@ -1222,7 +1227,8 @@ export function OrganisationTreeView({
 
 
 
-      {(onVolumeSave && onManagerVolumeSave && volumeRows) || (volumeReadOnly && volumeRows) ? (
+      {showBranchVolumesPanel &&
+      ((onVolumeSave && onManagerVolumeSave && volumeRows) || (volumeReadOnly && volumeRows)) ? (
 
         <OrganisationBranchVolumesPanel
 
