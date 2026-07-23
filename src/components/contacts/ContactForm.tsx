@@ -599,18 +599,6 @@ export function ContactForm({
     onOpenChange(false);
   };
 
-  const handleCreateParrain = async (nom: string, prenom: string) => {
-    const newParrain = await createContact({
-      nom,
-      prenom,
-      categorie: "AUCUN",
-      filleul_categorie: "FILLEUL",
-    });
-    setAllContacts((prev) => [...prev, newParrain]);
-    setFormData((prev) => ({ ...prev, parrain_id: newParrain.id }));
-        toast.success("Parrain créé");
-  };
-
   const handleCreatePrescripteur = async (nom: string, prenom: string) => {
     const newPrescripteur = await createContact({
       nom,
@@ -1399,25 +1387,11 @@ export function ContactForm({
             {filleulActif && !filleulReseauInscrit && (
               <>
                 <Separator />
+                <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2">
+                  Dates invitation / inscription : module{" "}
+                  <span className="font-medium">Organisation</span> → dossier consultant.
+                </p>
                 <div className="grid grid-cols-2 gap-4">
-                  <DateFieldWithShortcuts
-                    id="date_invitation_filleul"
-                    label="Date d'invitation"
-                    value={formData.date_invitation_filleul ?? ""}
-                    onChange={(v) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        date_invitation_filleul: v,
-                        filleul_categorie:
-                          v &&
-                          prev.type_invitation_filleul &&
-                          (!prev.filleul_categorie ||
-                            prev.filleul_categorie === "SUSPECT_FILLEUL")
-                            ? "PROSPECT_FILLEUL"
-                            : prev.filleul_categorie,
-                      }))
-                    }
-                  />
                   <div className="space-y-2">
                     <Label>Type d&apos;invitation (JD / PO)</Label>
                     <Select
@@ -1474,17 +1448,6 @@ export function ContactForm({
                     </Select>
                   </div>
                   <DateFieldWithShortcuts
-                    id="date_inscription_filleul"
-                    label="Date d'inscription"
-                    value={formData.date_inscription_filleul ?? ""}
-                    onChange={(v) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        date_inscription_filleul: v,
-                      }))
-                    }
-                  />
-                  <DateFieldWithShortcuts
                     id="date_dernier_contact_filleul"
                     label="Dernier contact (filleul)"
                     value={formData.date_dernier_contact_filleul}
@@ -1517,10 +1480,7 @@ export function ContactForm({
               formData={formData}
               setFormData={setFormData}
               contact={contact}
-              allContacts={allContacts}
               mesFilleulsCount={mesFilleulsCount}
-              onOpenContact={onOpenContact}
-              onCreateParrain={handleCreateParrain}
             />
           </FormSection>
         </>
@@ -1541,20 +1501,10 @@ export function ContactForm({
               />
             )}
             {filleulActif && !filleulReseauInscrit && (
-              <ContactPersonSearch
-                label="Mon parrain"
-                hint="Personne qui vous a parrainé dans le réseau filleul"
-                placeholder="Rechercher un parrain..."
-                contacts={allContacts}
-                excludeId={contact?.id}
-                value={formData.parrain_id}
-                onChange={(id) => setFormData((prev) => ({ ...prev, parrain_id: id }))}
-                onOpenContact={onOpenContact}
-                badgeFn={(c) => c.filleul_categorie || c.categorie}
-                allowCreate
-                createTitle="Créer un nouveau parrain"
-                onCreate={handleCreateParrain}
-              />
+              <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2">
+                Lien parrain : module <span className="font-medium">Organisation</span> → dossier
+                consultant.
+              </p>
             )}
             {filleulActif && !filleulReseauInscrit && (
               <FilleulRankFormFields

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, forwardRef, useImperativeHandle } from "react";
 
 import { ChevronDown, ChevronRight, Crown, UserRound, UserX } from "lucide-react";
 
@@ -45,6 +45,8 @@ import { ContactInitialsAvatar } from "@/components/contacts/contacts-ui";
 import { Button } from "@/components/ui/button";
 
 import { cn } from "@/lib/utils";
+import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
+import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 
 
 
@@ -84,6 +86,8 @@ type OrganisationTreeViewProps = {
 
   /** Affiche le tableau volumes sous l'arbre (défaut : true). */
   showBranchVolumesPanel?: boolean;
+
+  dossiersByContactId?: Map<number, FilleulDossier>;
 
 };
 
@@ -795,6 +799,8 @@ function DesinscritsPanel({
 
   entries,
 
+  dossiersByContactId,
+
   onNodeClick,
 
   onParrainClick,
@@ -806,6 +812,8 @@ function DesinscritsPanel({
 }: {
 
   entries: OrganisationDesinscritEntry[];
+
+  dossiersByContactId?: Map<number, FilleulDossier>;
 
   onNodeClick: (contact: Contact) => void;
 
@@ -933,6 +941,15 @@ function DesinscritsPanel({
 
                   const isSelected = selectedContactId === entry.contact.id;
 
+                  const dossier =
+                    entry.contact.id != null
+                      ? dossiersByContactId?.get(entry.contact.id)
+                      : undefined;
+
+                  const desinscriptionLabel = dossier?.dateDesinscription
+                    ? formatCalendarDateFr(dossier.dateDesinscription)
+                    : null;
+
                   return (
 
                     <li key={entry.contact.id}>
@@ -980,6 +997,7 @@ function DesinscritsPanel({
                             <p className="text-[11px] text-muted-foreground/70 mt-0.5">
 
                               Niveau {entry.generation} · Parrain : {entry.parrainLabel}
+                              {desinscriptionLabel ? ` · Désinscrit le ${desinscriptionLabel}` : ""}
 
                             </p>
 
@@ -1033,7 +1051,8 @@ function DesinscritsPanel({
 
 
 
-export function OrganisationTreeView({
+export const OrganisationTreeView = forwardRef<OrganisationTreeViewportHandle, OrganisationTreeViewProps>(
+function OrganisationTreeView({
 
   tree,
 
@@ -1059,13 +1078,25 @@ export function OrganisationTreeView({
 
   showBranchVolumesPanel = true,
 
-}: OrganisationTreeViewProps) {
+  dossiersByContactId,
+
+}, ref) {
 
   const { selfContact, selfDisplayName, upline, generations, desinscrits, stats } = tree;
 
   const level1Count = generations[0]?.length ?? 0;
 
   const viewportRef = useRef<OrganisationTreeViewportHandle>(null);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      fitAll: () => viewportRef.current?.fitAll(),
+      resetZoom100: () => viewportRef.current?.resetZoom100(),
+      focusNode: (contactId: number) => viewportRef.current?.focusNode(contactId),
+    }),
+    []
+  );
 
   const [expandedBranches, setExpandedBranches] = useState<Set<number>>(() => new Set());
 
@@ -1256,6 +1287,8 @@ export function OrganisationTreeView({
 
         entries={desinscrits}
 
+        dossiersByContactId={dossiersByContactId}
+
         onNodeClick={onNodeClick}
 
         onParrainClick={onParrainClick}
@@ -1270,6 +1303,7 @@ export function OrganisationTreeView({
 
   );
 
-}
+});
 
+OrganisationTreeView.displayName = "OrganisationTreeView";
 

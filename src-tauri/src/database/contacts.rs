@@ -9,6 +9,8 @@ use rusqlite::{params, Result};
 #[derive(Debug, Clone, Copy, Default)]
 pub struct UpdateContactFieldPresence {
     pub birthday: bool,
+    pub date_invitation_filleul: bool,
+    pub date_inscription_filleul: bool,
     pub filleul_titre: bool,
     pub filleul_qualification: bool,
     pub filleul_volume: bool,
@@ -447,10 +449,6 @@ pub fn update_contact(
             });
 
         let date_r1_timestamp = parse_optional_date_field(&contact.date_r1);
-        let date_invitation_filleul_timestamp =
-            parse_optional_date_field(&contact.date_invitation_filleul);
-        let date_inscription_filleul_timestamp =
-            parse_optional_date_field(&contact.date_inscription_filleul);
         let type_invitation_filleul = normalize_invitation_type(&contact.type_invitation_filleul);
         let presence_invitation_filleul =
             normalize_presence(contact.presence_invitation_filleul);
@@ -462,6 +460,16 @@ pub fn update_contact(
             .unwrap_or_else(|| "ACTIF".to_string());
 
         let existing = self.get_contact_by_id(id)?;
+        let date_invitation_filleul_timestamp = if field_presence.date_invitation_filleul {
+            parse_optional_date_field(&contact.date_invitation_filleul)
+        } else {
+            existing.date_invitation_filleul
+        };
+        let date_inscription_filleul_timestamp = if field_presence.date_inscription_filleul {
+            parse_optional_date_field(&contact.date_inscription_filleul)
+        } else {
+            existing.date_inscription_filleul
+        };
         let date_naissance_timestamp = if field_presence.birthday {
             match contact.date_naissance.as_deref() {
                 None | Some("") => None,
@@ -796,6 +804,37 @@ mod tests {
         assert_eq!(reloaded.filleul_qualification.as_deref(), Some("QUALIFIE"));
         assert_eq!(reloaded.filleul_volume, Some(120_000.0));
         assert_eq!(reloaded.filleul_volume_manager, Some(450_000.0));
+    }
+
+    #[test]
+    fn update_contact_preserves_filleul_network_dates_when_not_in_payload() {
+        use crate::database::models::NewContact;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let created = db
+            .create_contact(NewContact {
+                date_invitation_filleul: Some("2024-01-15T00:00:00Z".into()),
+                date_inscription_filleul: Some("2024-02-01T00:00:00Z".into()),
+                filleul_categorie: Some("FILLEUL".into()),
+                ..sample_contact("Dupont", "Jean")
+            })
+            .unwrap();
+        let id = created.id.unwrap();
+
+        db.update_contact(
+            id,
+            &NewContact {
+                email: Some("jean@example.com".into()),
+                ..sample_contact("Dupont", "Jean")
+            },
+            UpdateContactFieldPresence::default(),
+        )
+        .unwrap();
+
+        let reloaded = db.get_contact_by_id(id).unwrap();
+        assert_eq!(reloaded.email.as_deref(), Some("jean@example.com"));
+        assert!(reloaded.date_invitation_filleul.is_some());
+        assert!(reloaded.date_inscription_filleul.is_some());
     }
 
     #[test]

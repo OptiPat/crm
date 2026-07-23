@@ -592,6 +592,27 @@ export const comptaDeplacements = sqliteTable("compta_deplacements", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
+export const filleulDossier = sqliteTable("filleul_dossier", {
+  contactId: integer("contact_id")
+    .primaryKey()
+    .references(() => contacts.id, { onDelete: "cascade" }),
+  dateInvitation: integer("date_invitation", { mode: "timestamp" }),
+  dateInscription: integer("date_inscription", { mode: "timestamp" }),
+  dateDesinscription: integer("date_desinscription", { mode: "timestamp" }),
+  datePremiereSouscriptionImo: integer("date_premiere_souscription_imo", { mode: "timestamp" }),
+  datePremiereSouscriptionPlacement: integer("date_premiere_souscription_placement", {
+    mode: "timestamp",
+  }),
+  datePremiereSouscriptionScpi: integer("date_premiere_souscription_scpi", { mode: "timestamp" }),
+  datePassageManager: integer("date_passage_manager", { mode: "timestamp" }),
+  dateHabilitationCif: integer("date_habilitation_cif", { mode: "timestamp" }),
+  datePremierVaaOuVa: integer("date_premier_vaa_ou_va", { mode: "timestamp" }),
+  notes: text("notes"),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+});
+
 // Types TypeScript pour l'utilisation dans l'application
 export type Foyer = typeof foyers.$inferSelect;
 export type NewFoyer = typeof foyers.$inferInsert;

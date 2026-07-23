@@ -353,10 +353,8 @@ export function contactToFormData(contact: Contact): NewContact {
     date_prochain_suivi_filleul: toDateInput(contact.date_prochain_suivi_filleul),
     date_r1: toDateInput(contact.date_r1),
     type_invitation_filleul: contact.type_invitation_filleul ?? undefined,
-    date_invitation_filleul: toDateInput(contact.date_invitation_filleul),
-    date_inscription_filleul:
-      toDateInput(contact.date_inscription_filleul) ||
-      toDateInput(parseDateInscriptionFromNotes(contact.notes)),
+    date_invitation_filleul: "",
+    date_inscription_filleul: "",
     presence_invitation_filleul: contact.presence_invitation_filleul ?? undefined,
     filleul_titre: contact.filleul_titre ?? undefined,
     filleul_qualification: contact.filleul_qualification ?? undefined,
@@ -434,8 +432,14 @@ export function buildSubmitPayload(
     date_naissance = birthdayRaw ? parseBirthdayFieldToIso(birthdayRaw) : undefined;
   }
 
+  const {
+    date_invitation_filleul: _omitInvitation,
+    date_inscription_filleul: _omitInscription,
+    ...formWithoutNetworkDates
+  } = formData;
+
   return {
-    ...formData,
+    ...formWithoutNetworkDates,
     nom: formData.nom.trim(),
     prenom: formData.prenom.trim(),
     email: formData.email?.trim() || undefined,
@@ -464,12 +468,6 @@ export function buildSubmitPayload(
     type_invitation_filleul: filleulActif
       ? formData.type_invitation_filleul || undefined
       : null,
-    date_invitation_filleul: filleulActif
-      ? dateFieldToIso(formData.date_invitation_filleul)
-      : "",
-    date_inscription_filleul: filleulActif
-      ? dateFieldToIso(formData.date_inscription_filleul)
-      : "",
     presence_invitation_filleul: filleulActif
       ? formData.presence_invitation_filleul === 1
         ? 1

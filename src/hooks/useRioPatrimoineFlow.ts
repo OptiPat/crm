@@ -92,13 +92,17 @@ export function useRioPatrimoineFlow(options: {
         ownerLabel: string;
         hasExistingInvestments: boolean;
         data: ExtractedData;
+        /** Chemin du PDF après enregistrement (le fichier staging est déplacé). */
+        documentFilePath?: string;
       }) => void;
     }) => {
       const { data, result, uploadedFile, formData, coupleMemberIds, onClosePreview, onClearExtractedData, onResetUpload, onWizardPatrimoineStep } =
         params;
 
+      let documentFilePath: string | undefined = uploadedFile?.path;
+
       if (uploadedFile && result.finalContactId && options.existingDocumentId == null) {
-        await createDocument(
+        const { document } = await createDocument(
           buildRioPatrimoineDocument({
             data,
             finalContactId: result.finalContactId,
@@ -109,6 +113,7 @@ export function useRioPatrimoineFlow(options: {
             formNotes: formData.notes,
           })
         );
+        documentFilePath = document.chemin_fichier;
       }
 
       if (hasPatrimoineToTri(data) && result.finalContactId) {
@@ -120,6 +125,7 @@ export function useRioPatrimoineFlow(options: {
           ownerLabel: result.displayNom,
           hasExistingInvestments: result.hasExistingInvestments,
           data,
+          documentFilePath,
         };
 
         if (onWizardPatrimoineStep) {

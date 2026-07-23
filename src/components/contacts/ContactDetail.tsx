@@ -1306,7 +1306,7 @@ export function ContactDetail({
   if (embedded) {
     return (
       <>
-        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
           <div className="shrink-0 border-b border-border/60 px-4 py-3">{headerBlock}</div>
           <div
             className={cn(

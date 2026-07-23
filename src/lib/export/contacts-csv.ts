@@ -1,5 +1,7 @@
 import type { ClientSubTab, FilleulSubTab } from "@/lib/contacts/contacts-category-match";
 import type { Contact } from "@/lib/api/tauri-contacts";
+import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
+import { resolveFilleulInscriptionTimestamp } from "@/lib/organisation/organisation-filleul-dossier";
 import type { ContactEtiquetteDetails } from "@/lib/api/tauri-etiquettes";
 import type { Foyer } from "@/lib/api/tauri-foyers";
 import type { InvestissementWithDetails } from "@/lib/api/tauri-investissements";
@@ -355,15 +357,16 @@ function indexContactsById(contacts: Contact[]): Map<number, Contact> {
 
 function filleulExtraCells(
   contact: Contact,
-  parrainById: Map<number, Contact>
+  parrainById: Map<number, Contact>,
+  dossiersByContactId?: Map<number, FilleulDossier>
 ): string[] {
   const parrain =
     contact.parrain_id != null ? parrainById.get(contact.parrain_id) : undefined;
+  const dossier = contact.id != null ? dossiersByContactId?.get(contact.id) : undefined;
+  const inscriptionTs = resolveFilleulInscriptionTimestamp(contact, dossier);
   return [
     parrain ? `${parrain.prenom} ${parrain.nom}`.trim() : "",
-    contact.date_inscription_filleul
-      ? formatCalendarDateFr(contact.date_inscription_filleul)
-      : "",
+    inscriptionTs ? formatCalendarDateFr(inscriptionTs) : "",
     getFilleulTitreLabel(contact.filleul_titre) ?? contact.filleul_titre ?? "",
     getFilleulQualificationLabel(contact.filleul_qualification) ??
       contact.filleul_qualification ??
@@ -381,7 +384,8 @@ export function buildFilleulsContactsCsv(
   contacts: Contact[],
   foyers: Foyer[],
   filleulSubTab: FilleulSubTab,
-  allContactsForParrain: Contact[] = []
+  allContactsForParrain: Contact[] = [],
+  dossiersByContactId?: Map<number, FilleulDossier>
 ): string {
   const foyerById = new Map(foyers.map((f) => [f.id, f.nom]));
   const headers = buildFilleulsExportHeaders(filleulSubTab);
@@ -402,7 +406,7 @@ export function buildFilleulsContactsCsv(
     .filter((contact) => contact.id != null)
     .map((contact) => [
       ...filleulContactRowPrefix(contact, foyerById),
-      ...filleulExtraCells(contact, parrainById),
+      ...filleulExtraCells(contact, parrainById, dossiersByContactId),
       ...suffix(contact),
     ]);
   return rowsToCsv([...headers], rows);

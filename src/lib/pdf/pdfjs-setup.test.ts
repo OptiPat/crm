@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ensurePdfJsEnvironment, loadPdfDocument } from "./pdfjs-setup";
+import { ensurePdfJsPolyfills } from "./pdfjs-polyfills";
+import { loadPdfDocument } from "./pdfjs-setup";
 
 describe("pdfjs-setup", () => {
   it("polyfill Promise.withResolvers pour WebKit", async () => {
@@ -7,7 +8,7 @@ describe("pdfjs-setup", () => {
     // @ts-expect-error — simulation WebKit sans API moderne
     Promise.withResolvers = undefined;
 
-    ensurePdfJsEnvironment();
+    ensurePdfJsPolyfills();
     expect(typeof Promise.withResolvers).toBe("function");
 
     const { promise, resolve } = Promise.withResolvers<number>();
@@ -17,7 +18,7 @@ describe("pdfjs-setup", () => {
   });
 
   it("loadPdfDocument rejette un buffer vide sans crash JS", async () => {
-    ensurePdfJsEnvironment();
+    ensurePdfJsPolyfills();
     await expect(loadPdfDocument(new Uint8Array()).promise).rejects.toBeDefined();
   });
 });

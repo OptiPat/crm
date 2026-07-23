@@ -295,7 +295,8 @@ describe("contactToFormData", () => {
       presence_invitation_filleul: 1,
     });
     expect(payload.type_invitation_filleul).toBeNull();
-    expect(payload.date_invitation_filleul).toBe("");
+    expect("date_invitation_filleul" in payload).toBe(false);
+    expect("date_inscription_filleul" in payload).toBe(false);
     expect(payload.presence_invitation_filleul).toBeNull();
   });
 });

@@ -1,8 +1,10 @@
 import { ChevronRight, TrendingUp, Users, type LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Contact } from "@/lib/api/tauri-contacts";
+import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import type { InvestissementWithDetails } from "@/lib/api/tauri-investissements";
 import type { DashboardStatContact } from "@/lib/api/tauri-dashboard";
+import { resolveFilleulInvitationTimestamp } from "@/lib/organisation/organisation-filleul-dossier";
 import { sortContactsAlphabetically } from "@/lib/contacts/contact-sort";
 import { formatDashboardPercent } from "@/components/dashboard/dashboard-format";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
@@ -83,7 +85,11 @@ export function formatConversionSubtitle(row: AttributionInvestissementStatRow):
   return `${row.signedContactCount}/${row.contactCount} soit ${pct} % de taux de conversion`;
 }
 
-export function toDashboardStatContact(contact: Contact): DashboardStatContact {
+export function toDashboardStatContact(
+  contact: Contact,
+  dossiersByContactId?: Map<number, FilleulDossier>
+): DashboardStatContact {
+  const dossier = contact.id != null ? dossiersByContactId?.get(contact.id) : undefined;
   return {
     contact_id: contact.id,
     nom: contact.nom,
@@ -91,13 +97,18 @@ export function toDashboardStatContact(contact: Contact): DashboardStatContact {
     categorie: contact.categorie,
     filleul_categorie: contact.filleul_categorie,
     date_r1: contact.date_r1,
-    date_invitation_filleul: contact.date_invitation_filleul,
+    date_invitation_filleul: resolveFilleulInvitationTimestamp(contact, dossier) ?? undefined,
   };
 }
 
 /** Liste drill-down statistiques — tri alphabétique nom, prénom. */
-export function toDashboardStatContactList(contacts: Contact[]): DashboardStatContact[] {
-  return sortContactsAlphabetically(contacts).map(toDashboardStatContact);
+export function toDashboardStatContactList(
+  contacts: Contact[],
+  dossiersByContactId?: Map<number, FilleulDossier>
+): DashboardStatContact[] {
+  return sortContactsAlphabetically(contacts).map((contact) =>
+    toDashboardStatContact(contact, dossiersByContactId)
+  );
 }
 
 export function resolveInvestissementOpenContactId(

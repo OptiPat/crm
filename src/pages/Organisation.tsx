@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { GitBranch, Settings, Upload, Users2 } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { GitBranch, ListTree, Network, Settings, Upload, Users2 } from "lucide-react";
 import { toast } from "sonner";
 import { getAllContacts, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { contactFilleulRankUpdatePayload, contactFilleulVolumeUpdatePayload, contactFilleulManagerVolumeUpdatePayload } from "@/lib/contacts/contact-form-utils";
@@ -11,6 +12,7 @@ import {
 } from "@/lib/organisation/organisation-tree";
 import { OrganisationTreeView } from "@/components/organisation/OrganisationTreeView";
 import { OrganisationBranchVolumesPanel } from "@/components/organisation/OrganisationBranchVolumesPanel";
+import { DashboardDrillDownBackdrop } from "@/components/dashboard/DashboardDrillDownBackdrop";
 import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
@@ -40,7 +42,15 @@ import { currentFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
 import { OrganisationVolumesImportDialog } from "@/components/organisation/OrganisationVolumesImportDialog";
 import { OrganisationMemberSearch } from "@/components/organisation/OrganisationMemberSearch";
 import { OrganisationMemberDossierPanel } from "@/components/organisation/OrganisationMemberDossierPanel";
+import { OrganisationHierarchyList } from "@/components/organisation/OrganisationHierarchyList";
 import { collectOrganisationMemberRoster } from "@/lib/organisation/organisation-member-roster";
+import {
+  collectOrganisationMemberContactIds,
+  indexFilleulDossiersByContactId,
+  mergeLegacyFilleulDossierView,
+} from "@/lib/organisation/organisation-filleul-dossier";
+import { getFilleulDossiersByContactIds, type FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
+import type { OrganisationTreeViewportHandle } from "@/components/organisation/OrganisationTreeViewport";
 
 type OrganisationProps = {
   onNavigate?: (page: string) => void;
@@ -61,7 +71,13 @@ export function Organisation({ onNavigate }: OrganisationProps) {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [currentExerciceClosed, setCurrentExerciceClosed] = useState(false);
   const [selectedDossierContactId, setSelectedDossierContactId] = useState<number | null>(null);
+  const [focusContactId, setFocusContactId] = useState<number | null>(null);
+  const [networkView, setNetworkView] = useState<"pilotage" | "carte">("pilotage");
   const [dataRevision, setDataRevision] = useState(0);
+  const [dossiersByContactId, setDossiersByContactId] = useState<Map<number, FilleulDossier>>(
+    new Map()
+  );
+  const treeViewportRef = useRef<OrganisationTreeViewportHandle>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -149,7 +165,39 @@ export function Organisation({ onNavigate }: OrganisationProps) {
 
   const memberRoster = useMemo(() => collectOrganisationMemberRoster(tree), [tree]);
 
-  const { openContactWithTab, sheet: contactDetailSheet, activeContactId } =
+  useEffect(() => {
+    let cancelled = false;
+    const ids = collectOrganisationMemberContactIds(memberRoster);
+    if (ids.length === 0) {
+      setDossiersByContactId(new Map());
+      return;
+    }
+    void getFilleulDossiersByContactIds(ids)
+      .then((rows) => {
+        if (!cancelled) setDossiersByContactId(indexFilleulDossiersByContactId(rows));
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) toast.error("Impossible de charger les dossiers réseau");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [memberRoster, dataRevision]);
+
+  const handleDossierChange = useCallback((next: FilleulDossier) => {
+    setDossiersByContactId((prev) => {
+      const map = new Map(prev);
+      map.set(next.contactId, next);
+      return map;
+    });
+  }, []);
+
+  const handleNetworkDataChange = useCallback(() => {
+    void loadData();
+  }, [loadData]);
+
+  const { openContactWithTab, sheet: contactDetailSheet, activeContactId, isOpen: contactDetailOpen } =
     useContactDetailSheet({
       onNavigate,
       onUpdate: () => void loadData(),
@@ -158,6 +206,20 @@ export function Organisation({ onNavigate }: OrganisationProps) {
   const handleNodeClick = useCallback((contact: Contact) => {
     if (contact.id == null) return;
     setSelectedDossierContactId(contact.id);
+  }, []);
+
+  const handleMemberSelect = useCallback((contactId: number) => {
+    setSelectedDossierContactId(contactId);
+    setFocusContactId(contactId);
+    setNetworkView("pilotage");
+  }, []);
+
+  const handleFocusInTree = useCallback((contactId: number) => {
+    setFocusContactId(contactId);
+    setNetworkView("carte");
+    requestAnimationFrame(() => {
+      treeViewportRef.current?.focusNode(contactId);
+    });
   }, []);
 
   const handleParrainClick = useCallback((parrainId: number) => {
@@ -224,9 +286,12 @@ export function Organisation({ onNavigate }: OrganisationProps) {
   const missingSelfContact = !loading && tree.selfContact == null;
   const showHistoryEmpty =
     !loading && !historyLoading && !viewingCurrentExercice && historyRecords.length === 0;
+  const organisationDrillDownOpen =
+    selectedDossierContactId != null || contactDetailOpen;
 
   return (
     <div className="space-y-4 p-3 sm:p-4">
+      {organisationDrillDownOpen ? <DashboardDrillDownBackdrop /> : null}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
@@ -240,7 +305,7 @@ export function Organisation({ onNavigate }: OrganisationProps) {
         <div className="flex flex-wrap items-center gap-2">
           <OrganisationMemberSearch
             roster={memberRoster}
-            onSelect={setSelectedDossierContactId}
+            onSelect={handleMemberSelect}
           />
           <OrganisationExerciceSelector
             closedLabels={closedLabels}
@@ -317,24 +382,44 @@ export function Organisation({ onNavigate }: OrganisationProps) {
       <div className="-mx-3 sm:-mx-4">
         <Card className="overflow-visible border-x-0 sm:border-x rounded-none sm:rounded-lg shadow-sm">
           <CardHeader className="border-b bg-muted/20 py-3 px-4 sm:px-6 space-y-0">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Users2 className="h-4 w-4 text-primary" aria-hidden />
-                Filleuls et parrains
-              </CardTitle>
-              {!loading && tree.stats.total > 0 && (
-                <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-                  {tree.stats.actifs} actif{tree.stats.actifs > 1 ? "s" : ""}
-                  {tree.stats.desinscrits > 0 &&
-                    ` · ${tree.stats.desinscrits} désinscrit${tree.stats.desinscrits > 1 ? "s" : ""}`}
-                </span>
-              )}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users2 className="h-4 w-4 text-primary" aria-hidden />
+                  Filleuls et parrains
+                </CardTitle>
+                <CardDescription className="text-xs mt-1">
+                  {networkView === "pilotage"
+                    ? "Liste hiérarchique · clic = dossier réseau · recherche = aller au membre"
+                    : "Carte relationnelle · molette = zoom · glisser le fond · niveau 5+ repliées"}
+                  {historyLoading ? " · chargement historique…" : null}
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {!loading && tree.stats.total > 0 && (
+                  <span className="text-[11px] text-muted-foreground tabular-nums">
+                    {tree.stats.actifs} actif{tree.stats.actifs > 1 ? "s" : ""}
+                    {tree.stats.desinscrits > 0 &&
+                      ` · ${tree.stats.desinscrits} désinscrit${tree.stats.desinscrits > 1 ? "s" : ""}`}
+                  </span>
+                )}
+                <Tabs
+                  value={networkView}
+                  onValueChange={(value) => setNetworkView(value as "pilotage" | "carte")}
+                >
+                  <TabsList className="h-8">
+                    <TabsTrigger value="pilotage" className="gap-1.5 text-xs px-2.5">
+                      <ListTree className="h-3.5 w-3.5" aria-hidden />
+                      Pilotage
+                    </TabsTrigger>
+                    <TabsTrigger value="carte" className="gap-1.5 text-xs px-2.5">
+                      <Network className="h-3.5 w-3.5" aria-hidden />
+                      Carte
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
             </div>
-            <CardDescription className="text-xs mt-1">
-              Clic sur un consultant = dossier réseau · molette = zoom · glisser le fond · niveau 5+
-              repliées
-              {historyLoading ? " · chargement historique…" : null}
-            </CardDescription>
           </CardHeader>
           <CardContent className="p-0 overflow-visible">
             {loading ? (
@@ -347,15 +432,32 @@ export function Organisation({ onNavigate }: OrganisationProps) {
                 Aucun filleul ni parrain enregistré pour le moment.
               </p>
             ) : (
-              <OrganisationTreeView
-                tree={tree}
-                contacts={contacts}
-                onNodeClick={handleNodeClick}
-                onParrainClick={handleParrainClick}
-                onRankSave={handleRankSave}
-                selectedContactId={selectedDossierContactId ?? activeContactId}
-                showBranchVolumesPanel={false}
-              />
+              <>
+                {networkView === "pilotage" ? (
+                  <OrganisationHierarchyList
+                    tree={tree}
+                    contacts={contacts}
+                    volumeRows={volumeRows}
+                    dossiersByContactId={dossiersByContactId}
+                    selectedContactId={selectedDossierContactId ?? activeContactId}
+                    focusContactId={focusContactId}
+                    onFocusContactHandled={() => setFocusContactId(null)}
+                    onSelect={handleNodeClick}
+                  />
+                ) : (
+                  <OrganisationTreeView
+                    ref={treeViewportRef}
+                    tree={tree}
+                    contacts={contacts}
+                    dossiersByContactId={dossiersByContactId}
+                    onNodeClick={handleNodeClick}
+                    onParrainClick={handleParrainClick}
+                    onRankSave={handleRankSave}
+                    selectedContactId={selectedDossierContactId ?? activeContactId}
+                    showBranchVolumesPanel={false}
+                  />
+                )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -387,11 +489,29 @@ export function Organisation({ onNavigate }: OrganisationProps) {
         cgp={cgp}
         canEditVolumes={!currentExerciceClosed}
         refreshKey={dataRevision}
+        dossier={
+          selectedDossierContactId != null
+            ? mergeLegacyFilleulDossierView(
+                contacts.find((c) => c.id === selectedDossierContactId) ?? {
+                  id: selectedDossierContactId,
+                },
+                dossiersByContactId.get(selectedDossierContactId)
+              )
+            : null
+        }
+        onDossierChange={handleDossierChange}
+        onNetworkDataChange={handleNetworkDataChange}
         onClose={() => setSelectedDossierContactId(null)}
-        onSelectMember={setSelectedDossierContactId}
+        onSelectMember={(contactId) => {
+          setSelectedDossierContactId(contactId);
+          setFocusContactId(contactId);
+        }}
+        onFocusInTree={handleFocusInTree}
         onOpenContactSheet={handleOpenContactSheet}
         onVolumeSave={handleVolumeSave}
         onManagerVolumeSave={handleManagerVolumeSave}
+        onRankSave={handleRankSave}
+        stackedContactOpen={contactDetailOpen}
       />
 
       <OrganisationExerciceCloseDialog

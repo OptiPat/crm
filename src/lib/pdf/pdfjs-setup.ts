@@ -1,63 +1,59 @@
 /**
- * PDF.js — compatibilité Tauri / WebKit (macOS) : polyfills + build legacy.
- * pdfjs-dist 5.x utilise Promise.withResolvers, absent sur plusieurs WebKit.
+ * PDF.js — compatibilité Tauri / WebKit (macOS).
+ * Worker statique .js (public/pdfjs) — WKWebView rejette souvent les .mjs en worker.
  */
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
-import pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
+import { ensurePdfJsPolyfills } from "./pdfjs-polyfills";
 
+type PdfJsModule = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
+
+let pdfjsLibPromise: Promise<PdfJsModule> | null = null;
 let configured = false;
 
-function ensurePromiseWithResolvers(): void {
-  if (typeof Promise.withResolvers === "function") return;
+const PDFJS_ASSET_BASE = `${import.meta.env.BASE_URL}pdfjs/`;
 
-  Promise.withResolvers = function withResolvers<T>() {
-    let resolve!: (value: T | PromiseLike<T>) => void;
-    let reject!: (reason?: unknown) => void;
-    const promise = new Promise<T>((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
-    return { promise, resolve, reject };
-  };
+/** Worker servi depuis public/pdfjs/ (dev Vite + prod Tauri). */
+function resolvePdfWorkerSrc(): string {
+  return `${PDFJS_ASSET_BASE}pdf.worker.min.js`;
 }
 
-function ensureDomMatrix(): void {
-  if (typeof globalThis.DOMMatrix !== "undefined") return;
-
-  globalThis.DOMMatrix = class DOMMatrix {
-    a = 1;
-    b = 0;
-    c = 0;
-    d = 1;
-    e = 0;
-    f = 0;
-    is2D = true;
-    isIdentity = true;
-  } as typeof DOMMatrix;
-}
-
-/** À appeler au démarrage (main.tsx) avant tout import PDF. */
-export function ensurePdfJsEnvironment(): void {
-  ensurePromiseWithResolvers();
-  ensureDomMatrix();
-}
-
-function configurePdfJsOnce(): typeof pdfjsLib {
-  ensurePdfJsEnvironment();
-  if (!configured) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
-    configured = true;
-  }
-  return pdfjsLib;
-}
-
-export function loadPdfDocument(data: Uint8Array | ArrayBuffer) {
-  const pdfjs = configurePdfJsOnce();
-  const bytes = data instanceof Uint8Array ? data.slice() : new Uint8Array(data);
-
-  return pdfjs.getDocument({
+function documentInitOptions(bytes: Uint8Array) {
+  return {
     data: bytes,
     useWorkerFetch: false,
     isEvalSupported: false,
-  });
+    standardFontDataUrl: `${PDFJS_ASSET_BASE}standard_fonts/`,
+    cMapUrl: `${PDFJS_ASSET_BASE}cmaps/`,
+    wasmUrl: `${PDFJS_ASSET_BASE}wasm/`,
+  };
 }
+
+async function getPdfJsLib(): Promise<PdfJsModule> {
+  ensurePdfJsPolyfills();
+  if (!pdfjsLibPromise) {
+    pdfjsLibPromise = import("pdfjs-dist/legacy/build/pdf.mjs");
+  }
+  return pdfjsLibPromise;
+}
+
+function configurePdfJsOnce(pdfjs: PdfJsModule): void {
+  if (configured) return;
+  pdfjs.GlobalWorkerOptions.workerSrc = resolvePdfWorkerSrc();
+  configured = true;
+}
+
+function normalizePdfBytes(data: Uint8Array | ArrayBuffer): Uint8Array {
+  if (data instanceof Uint8Array) return data.slice();
+  return new Uint8Array(data);
+}
+
+export function loadPdfDocument(data: Uint8Array | ArrayBuffer) {
+  const bytes = normalizePdfBytes(data);
+  const promise = (async () => {
+    const pdfjs = await getPdfJsLib();
+    configurePdfJsOnce(pdfjs);
+    return pdfjs.getDocument(documentInitOptions(bytes)).promise;
+  })();
+  return { promise };
+}
+
+export { ensurePdfJsPolyfills, ensurePdfJsEnvironment } from "./pdfjs-polyfills";

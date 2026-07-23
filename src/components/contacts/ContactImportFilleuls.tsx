@@ -37,6 +37,7 @@ import {
 } from "@/lib/api/tauri-import-transaction";
 import { parseImportDate } from "@/lib/contacts/parse-import-date";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
+import { upsertFilleulDossierDatesFromImport } from "@/lib/organisation/organisation-filleul-dossier";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
@@ -302,6 +303,7 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
       rowIndex: number;
       nom: string;
       prenom: string;
+      dateInscription?: string;
       newContact: NewContact;
     };
     const pendingCreates: PendingCreate[] = [];
@@ -364,6 +366,7 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
           rowIndex: i,
           nom,
           prenom,
+          dateInscription: dateInscription ? dateInscription.slice(0, 10) : undefined,
           newContact: {
             nom,
             prenom,
@@ -373,9 +376,6 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
             categorie: "AUCUN",
             filleul_categorie: filleulCategorie,
             date_dernier_contact_filleul: dateDernierContact,
-            date_inscription_filleul: dateInscription
-              ? dateInscription.slice(0, 10)
-              : undefined,
             statut_suivi: "ACTIF",
             notes,
           },
@@ -392,8 +392,14 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
           IMPORT_SAVE_OPTS
         );
         for (let j = 0; j < created.length; j++) {
-          const { rowIndex, nom, prenom } = pendingCreates[j];
+          const pending = pendingCreates[j];
+          const { rowIndex, nom, prenom } = pending;
           const createdContact = created[j];
+          if (pending.dateInscription && createdContact.id != null) {
+            await upsertFilleulDossierDatesFromImport(createdContact.id, {
+              dateInscription: pending.dateInscription,
+            });
+          }
           const row = updatedRows[rowIndex];
           const directKey = contactNameKey(nom, prenom);
           contactsMap.set(directKey, createdContact.id!);
@@ -477,6 +483,9 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
       }
       
       const dateDernierContactFilleul = parseImportDate(row.data.date_dernier_suivi);
+      const dateInscription = row.data.date_inscription
+        ? parseImportDate(String(row.data.date_inscription).trim())
+        : undefined;
       
       // Chercher le parrain si nom/prénom fournis
       let parrainId: number | undefined = contact.parrain_id;
@@ -517,6 +526,12 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
           }),
           IMPORT_SAVE_OPTS
         );
+
+        if (dateInscription) {
+          await upsertFilleulDossierDatesFromImport(contactId, {
+            dateInscription: dateInscription.slice(0, 10),
+          });
+        }
         
         const prefix = alreadyExists ? "✓ Existant" : "✓ Créé";
         const categorieLabel = filleulCategorieForContact === "FILLEUL" ? "Filleul" 

@@ -51,6 +51,8 @@ type PatrimoineWizardState = {
   ownerLabel: string;
   hasExistingInvestments: boolean;
   data: ExtractedData;
+  /** Chemin du PDF après enregistrement document (staging déplacé). */
+  documentFilePath?: string;
 };
 
 export interface RioImportWizardProps {
@@ -381,6 +383,11 @@ export function RioImportWizard({
       onWizardPatrimoineStep: (state) => {
         setPatrimoineState(state);
         setExtractedData(state.data);
+        if (state.documentFilePath) {
+          setUploadedFile((prev) =>
+            prev ? { ...prev, path: state.documentFilePath! } : prev
+          );
+        }
         setStep(3);
       },
     });
@@ -697,7 +704,10 @@ export function RioImportWizard({
 
           {step === 3 && patrimoineState && uploadedFile && (
             <div className="grid lg:grid-cols-2 gap-4 flex-1 min-h-0 overflow-hidden">
-              <RioPdfPreviewPanel pdfPath={uploadedFile.path} active={open && step === 3} />
+              <RioPdfPreviewPanel
+                pdfPath={patrimoineState.documentFilePath ?? uploadedFile.path}
+                active={open && step === 3}
+              />
               <div className="min-w-0 flex flex-col min-h-0 overflow-hidden">
                 <RioPatrimoineReviewStep
                 extractedData={patrimoineState.data}

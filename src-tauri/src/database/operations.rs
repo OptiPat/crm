@@ -1381,7 +1381,10 @@ mod database_integration_tests {
                 filleul_categorie: Some("PROSPECT_FILLEUL".into()),
                 ..sample_contact("Legrand", "Paul")
             },
-            UpdateContactFieldPresence::default(),
+            UpdateContactFieldPresence {
+                date_invitation_filleul: true,
+                ..Default::default()
+            },
         )
         .unwrap();
 
@@ -1477,7 +1480,10 @@ mod database_integration_tests {
                 filleul_categorie: Some("PROSPECT_FILLEUL".into()),
                 ..sample_contact("Legrand", "Paul")
             },
-            UpdateContactFieldPresence::default(),
+            UpdateContactFieldPresence {
+                date_invitation_filleul: true,
+                ..Default::default()
+            },
         )
         .unwrap();
         db.update_contact(
@@ -1489,7 +1495,10 @@ mod database_integration_tests {
                 filleul_categorie: Some("FILLEUL".into()),
                 ..sample_contact("Bernard", "Luc")
             },
-            UpdateContactFieldPresence::default(),
+            UpdateContactFieldPresence {
+                date_invitation_filleul: true,
+                ..Default::default()
+            },
         )
         .unwrap();
 

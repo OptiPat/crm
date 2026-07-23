@@ -1,6 +1,5 @@
 import {
-  getPdfPageCount,
-  renderPdfPageToDataUrl,
+  renderAllPdfPagesToDataUrls,
 } from "@/lib/documents/extraction/pdf-render";
 import {
   localImageToDataUrl,
@@ -32,6 +31,16 @@ function labelForPage(
   return `Page ${pageNum}`;
 }
 
+export class IdentityDocumentPreviewError extends Error {
+  readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = "IdentityDocumentPreviewError";
+    this.cause = cause;
+  }
+}
+
 /** Charge toutes les pages d'un fichier (PDF multi-pages ou image unique). */
 export async function loadIdentityDocumentPreviewPages(
   filePath: string,
@@ -42,16 +51,14 @@ export async function loadIdentityDocumentPreviewPages(
 
   try {
     if (isPdfPath(path)) {
-      const pageCount = await getPdfPageCount(path);
-      const pages: IdentityPreviewPage[] = [];
-      for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-        const dataUrl = await renderPdfPageToDataUrl(path, pageNum, 1.5);
-        pages.push({
-          label: labelForPage(pageNum, pageCount, side),
-          dataUrl,
-        });
+      const dataUrls = await renderAllPdfPagesToDataUrls(path, 1.5);
+      if (dataUrls.length === 0) {
+        throw new IdentityDocumentPreviewError("Le PDF ne contient aucune page lisible.");
       }
-      return pages;
+      return dataUrls.map((dataUrl, index) => ({
+        label: labelForPage(index + 1, dataUrls.length, side),
+        dataUrl,
+      }));
     }
 
     const image = await readLocalImageFile(path);
@@ -63,7 +70,9 @@ export async function loadIdentityDocumentPreviewPages(
     ];
   } catch (error) {
     console.error("Impossible de charger l'aperçu pièce d'identité:", error);
-    return [];
+    const message =
+      error instanceof Error ? error.message : "Erreur inconnue lors du rendu du PDF.";
+    throw new IdentityDocumentPreviewError(message, error);
   }
 }
 
@@ -76,11 +85,19 @@ export async function loadIdentityPreviewPages(
 
   if (rectoPath?.trim()) {
     const side = versoPath?.trim() ? ("recto" as const) : undefined;
-    pages.push(...(await loadIdentityDocumentPreviewPages(rectoPath, side)));
+    try {
+      pages.push(...(await loadIdentityDocumentPreviewPages(rectoPath, side)));
+    } catch (error) {
+      console.error("Aperçu recto indisponible:", error);
+    }
   }
 
   if (versoPath?.trim()) {
-    pages.push(...(await loadIdentityDocumentPreviewPages(versoPath, "verso")));
+    try {
+      pages.push(...(await loadIdentityDocumentPreviewPages(versoPath, "verso")));
+    } catch (error) {
+      console.error("Aperçu verso indisponible:", error);
+    }
   }
 
   return pages;

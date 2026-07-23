@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { loadIdentityDocumentPreviewPages } from "@/lib/documents/identity-document-preview";
+import {
+  IdentityDocumentPreviewError,
+  loadIdentityDocumentPreviewPages,
+} from "@/lib/documents/identity-document-preview";
 
 interface RioPdfPreviewPanelProps {
   pdfPath?: string;
@@ -10,10 +13,12 @@ interface RioPdfPreviewPanelProps {
 export function RioPdfPreviewPanel({ pdfPath, active = true }: RioPdfPreviewPanelProps) {
   const [pages, setPages] = useState<Awaited<ReturnType<typeof loadIdentityDocumentPreviewPages>>>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!active || !pdfPath?.trim()) {
       setPages([]);
+      setError(null);
       return;
     }
 
@@ -23,9 +28,24 @@ export function RioPdfPreviewPanel({ pdfPath, active = true }: RioPdfPreviewPane
 
     async function load() {
       setLoading(true);
+      setError(null);
       try {
         const loaded = await loadIdentityDocumentPreviewPages(path);
-        if (!cancelled) setPages(loaded);
+        if (!cancelled) {
+          setPages(loaded);
+          setError(null);
+        }
+      } catch (previewError) {
+        if (!cancelled) {
+          setPages([]);
+          const message =
+            previewError instanceof IdentityDocumentPreviewError
+              ? previewError.message
+              : previewError instanceof Error
+                ? previewError.message
+                : "Erreur inconnue lors du rendu du PDF.";
+          setError(message);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -76,8 +96,11 @@ export function RioPdfPreviewPanel({ pdfPath, active = true }: RioPdfPreviewPane
       )}
 
       {!loading && pages.length === 0 && (
-        <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-          Impossible d&apos;afficher l&apos;aperçu PDF
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+          <p>Impossible d&apos;afficher l&apos;aperçu PDF</p>
+          {error && (
+            <p className="max-w-md text-center text-xs text-destructive/90">{error}</p>
+          )}
         </div>
       )}
     </div>

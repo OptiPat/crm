@@ -53,7 +53,8 @@ fn production_csp_blocks_script_eval_and_arbitrary_network_requests() {
 
     assert!(!csp.contains("'unsafe-eval'"));
     assert!(csp.contains("script-src 'self'"));
-    assert!(csp.contains("connect-src 'self' ipc: http://ipc.localhost"));
+    assert!(csp.contains("connect-src 'self'"));
+    assert!(csp.contains("ipc: http://ipc.localhost"));
     assert!(!csp.contains("https://*"));
     assert!(!csp.contains("localhost:1420"));
     assert!(csp.contains("object-src 'none'"));

@@ -133,7 +133,7 @@ fn activity_period_summary_sql(with_period: bool) -> String {
 
 fn activity_bucket_contacts_sql(bucket_fmt: &str) -> String {
     format!(
-        "SELECT DISTINCT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, c.date_invitation_filleul
+        "SELECT DISTINCT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, {FILLEUL_INVITATION_DATE_C} AS date_invitation_filleul
          FROM contacts c
          INNER JOIN ({}) flows ON flows.contact_id = c.id AND flows.bucket = ?3
          ORDER BY c.nom COLLATE NOCASE ASC, c.prenom COLLATE NOCASE ASC",
@@ -148,6 +148,21 @@ fn conversion_period_clause(column: &str, with_period: bool) -> String {
         String::new()
     }
 }
+
+/// Date invitation filleul : dossier prioritaire ; repli legacy seulement sans ligne dossier.
+const FILLEUL_INVITATION_DATE_COL: &str = "\
+CASE \
+  WHEN EXISTS (SELECT 1 FROM filleul_dossier fd WHERE fd.contact_id = contacts.id) \
+  THEN (SELECT fd.date_invitation FROM filleul_dossier fd WHERE fd.contact_id = contacts.id) \
+  ELSE contacts.date_invitation_filleul \
+END";
+
+const FILLEUL_INVITATION_DATE_C: &str = "\
+CASE \
+  WHEN EXISTS (SELECT 1 FROM filleul_dossier fd WHERE fd.contact_id = c.id) \
+  THEN (SELECT fd.date_invitation FROM filleul_dossier fd WHERE fd.contact_id = c.id) \
+  ELSE c.date_invitation_filleul \
+END";
 
 
 impl super::Database {
@@ -598,7 +613,7 @@ impl super::Database {
         period_end: Option<i64>,
     ) -> Result<super::models::ConversionFilleulStats> {
         let with_period = matches!((period_start, period_end), (Some(_), Some(_)));
-        let invite_period = conversion_period_clause("date_invitation_filleul", with_period);
+        let invite_period = conversion_period_clause(FILLEUL_INVITATION_DATE_COL, with_period);
 
         let invites: i64 = if with_period {
             let start = period_start.unwrap();
@@ -606,14 +621,16 @@ impl super::Database {
             self.conn.query_row(
                 &format!(
                     "SELECT COUNT(*) FROM contacts
-                     WHERE date_invitation_filleul IS NOT NULL{invite_period}"
+                     WHERE {FILLEUL_INVITATION_DATE_COL} IS NOT NULL{invite_period}"
                 ),
                 params![start, end],
                 |row| row.get(0),
             )?
         } else {
             self.conn.query_row(
-                "SELECT COUNT(*) FROM contacts WHERE date_invitation_filleul IS NOT NULL",
+                &format!(
+                    "SELECT COUNT(*) FROM contacts WHERE {FILLEUL_INVITATION_DATE_COL} IS NOT NULL"
+                ),
                 [],
                 |row| row.get(0),
             )?
@@ -626,16 +643,18 @@ impl super::Database {
                 &format!(
                     "SELECT COUNT(*) FROM contacts
                      WHERE presence_invitation_filleul = 1
-                       AND date_invitation_filleul IS NOT NULL{invite_period}"
+                       AND {FILLEUL_INVITATION_DATE_COL} IS NOT NULL{invite_period}"
                 ),
                 params![start, end],
                 |row| row.get(0),
             )?
         } else {
             self.conn.query_row(
-                "SELECT COUNT(*) FROM contacts
+                &format!(
+                    "SELECT COUNT(*) FROM contacts
                  WHERE presence_invitation_filleul = 1
-                   AND date_invitation_filleul IS NOT NULL",
+                   AND {FILLEUL_INVITATION_DATE_COL} IS NOT NULL"
+                ),
                 [],
                 |row| row.get(0),
             )?
@@ -648,16 +667,18 @@ impl super::Database {
                 &format!(
                     "SELECT COUNT(*) FROM contacts
                      WHERE filleul_categorie = 'FILLEUL'
-                       AND date_invitation_filleul IS NOT NULL{invite_period}"
+                       AND {FILLEUL_INVITATION_DATE_COL} IS NOT NULL{invite_period}"
                 ),
                 params![start, end],
                 |row| row.get(0),
             )?
         } else {
             self.conn.query_row(
-                "SELECT COUNT(*) FROM contacts
+                &format!(
+                    "SELECT COUNT(*) FROM contacts
                  WHERE filleul_categorie = 'FILLEUL'
-                   AND date_invitation_filleul IS NOT NULL",
+                   AND {FILLEUL_INVITATION_DATE_COL} IS NOT NULL"
+                ),
                 [],
                 |row| row.get(0),
             )?
@@ -774,26 +795,26 @@ impl super::Database {
         period_end: i64,
         segment: &str,
     ) -> Result<Vec<super::models::DashboardStatContact>> {
-        let invite_period = conversion_period_clause("date_invitation_filleul", true);
+        let invite_period = conversion_period_clause(FILLEUL_INVITATION_DATE_C, true);
         let sql = match segment {
             "invites" => format!(
-                "SELECT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, c.date_invitation_filleul
+                "SELECT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, {FILLEUL_INVITATION_DATE_C} AS date_invitation_filleul
                  FROM contacts c
-                 WHERE c.date_invitation_filleul IS NOT NULL{invite_period}
+                 WHERE {FILLEUL_INVITATION_DATE_C} IS NOT NULL{invite_period}
                  ORDER BY c.nom COLLATE NOCASE ASC, c.prenom COLLATE NOCASE ASC"
             ),
             "presents" => format!(
-                "SELECT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, c.date_invitation_filleul
+                "SELECT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, {FILLEUL_INVITATION_DATE_C} AS date_invitation_filleul
                  FROM contacts c
                  WHERE c.presence_invitation_filleul = 1
-                   AND c.date_invitation_filleul IS NOT NULL{invite_period}
+                   AND {FILLEUL_INVITATION_DATE_C} IS NOT NULL{invite_period}
                  ORDER BY c.nom COLLATE NOCASE ASC, c.prenom COLLATE NOCASE ASC"
             ),
             "convertis" => format!(
-                "SELECT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, c.date_invitation_filleul
+                "SELECT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, {FILLEUL_INVITATION_DATE_C} AS date_invitation_filleul
                  FROM contacts c
                  WHERE c.filleul_categorie = 'FILLEUL'
-                   AND c.date_invitation_filleul IS NOT NULL{invite_period}
+                   AND {FILLEUL_INVITATION_DATE_C} IS NOT NULL{invite_period}
                  ORDER BY c.nom COLLATE NOCASE ASC, c.prenom COLLATE NOCASE ASC"
             ),
             _ => return Ok(Vec::new()),

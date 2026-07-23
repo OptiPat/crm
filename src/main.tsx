@@ -3,11 +3,11 @@ import { createRoot } from "react-dom/client";
 import "@fontsource-variable/comfortaa";
 import "@fontsource-variable/playfair-display";
 import "@fontsource-variable/plus-jakarta-sans";
-import { ensurePdfJsEnvironment } from "@/lib/pdf/pdfjs-setup";
+import { ensurePdfJsPolyfills } from "@/lib/pdf/pdfjs-polyfills";
 import App from "./App";
 import "./styles/globals.css";
 
-ensurePdfJsEnvironment();
+ensurePdfJsPolyfills();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

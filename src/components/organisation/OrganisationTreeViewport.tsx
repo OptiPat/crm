@@ -10,11 +10,15 @@ import {
 } from "react";
 import { Maximize2, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  clampOrganisationTreeViewportPan,
+  ORGANISATION_TREE_VIEWPORT_PADDING,
+} from "@/lib/organisation/organisation-tree-viewport-bounds";
 import { cn } from "@/lib/utils";
 
 const MIN_SCALE = 0.08;
 const MAX_SCALE = 1.5;
-const FIT_PADDING = 24;
+const FIT_PADDING = ORGANISATION_TREE_VIEWPORT_PADDING;
 const WHEEL_ZOOM_FACTOR = 1.08;
 
 export type OrganisationTreeViewportHandle = {
@@ -30,17 +34,57 @@ type OrganisationTreeViewportProps = {
   containerClassName?: string;
 };
 
+type PanZoomState = {
+  scale: number;
+  panX: number;
+  panY: number;
+};
+
 export const OrganisationTreeViewport = forwardRef<
   OrganisationTreeViewportHandle,
   OrganisationTreeViewportProps
 >(function OrganisationTreeViewport({ children, layoutKey, className, containerClassName }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-  const [panX, setPanX] = useState(0);
-  const [panY, setPanY] = useState(0);
+  const [{ scale, panX, panY }, setPanZoom] = useState<PanZoomState>({
+    scale: 1,
+    panX: 0,
+    panY: 0,
+  });
   const [dragging, setDragging] = useState(false);
   const panStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const panZoomRef = useRef<PanZoomState>({ scale: 1, panX: 0, panY: 0 });
+
+  const clampPanZoom = useCallback((next: PanZoomState): PanZoomState => {
+    const container = containerRef.current;
+    const content = contentRef.current;
+    if (!container || !content) return next;
+
+    const { panX: clampedPanX, panY: clampedPanY } = clampOrganisationTreeViewportPan(
+      next.panX,
+      next.panY,
+      next.scale,
+      container.clientWidth,
+      container.clientHeight,
+      content.offsetWidth,
+      content.offsetHeight
+    );
+
+    return {
+      scale: next.scale,
+      panX: clampedPanX,
+      panY: clampedPanY,
+    };
+  }, []);
+
+  const applyPanZoom = useCallback(
+    (next: PanZoomState) => {
+      const clamped = clampPanZoom(next);
+      panZoomRef.current = clamped;
+      setPanZoom(clamped);
+    },
+    [clampPanZoom]
+  );
 
   const computeFitScale = useCallback(() => {
     const container = containerRef.current;
@@ -57,7 +101,6 @@ export const OrganisationTreeViewport = forwardRef<
     return Math.max(MIN_SCALE, Math.min(availableW / contentW, availableH / contentH, 1));
   }, []);
 
-  /** Pan pour centrer horizontalement et aligner en bas (origine transform 0,0). */
   const computePanForScale = useCallback((targetScale: number) => {
     const container = containerRef.current;
     const content = contentRef.current;
@@ -68,26 +111,27 @@ export const OrganisationTreeViewport = forwardRef<
     const contentW = content.offsetWidth;
     const contentH = content.offsetHeight;
 
-    return {
-      panX: (cw - contentW * targetScale) / 2,
-      panY: ch - FIT_PADDING - contentH * targetScale,
-    };
+    return clampOrganisationTreeViewportPan(
+      (cw - contentW * targetScale) / 2,
+      ch - FIT_PADDING - contentH * targetScale,
+      targetScale,
+      cw,
+      ch,
+      contentW,
+      contentH
+    );
   }, []);
 
   const applyFitAll = useCallback(() => {
     const nextScale = computeFitScale();
     const { panX: nextPanX, panY: nextPanY } = computePanForScale(nextScale);
-    setScale(nextScale);
-    setPanX(nextPanX);
-    setPanY(nextPanY);
-  }, [computeFitScale, computePanForScale]);
+    applyPanZoom({ scale: nextScale, panX: nextPanX, panY: nextPanY });
+  }, [applyPanZoom, computeFitScale, computePanForScale]);
 
   const applyZoom100 = useCallback(() => {
     const { panX: nextPanX, panY: nextPanY } = computePanForScale(1);
-    setScale(1);
-    setPanX(nextPanX);
-    setPanY(nextPanY);
-  }, [computePanForScale]);
+    applyPanZoom({ scale: 1, panX: nextPanX, panY: nextPanY });
+  }, [applyPanZoom, computePanForScale]);
 
   const focusNode = useCallback(
     (contactId: number) => {
@@ -98,9 +142,10 @@ export const OrganisationTreeViewport = forwardRef<
       const node = content.querySelector<HTMLElement>(`[data-org-node-id="${contactId}"]`);
       if (!node) return;
 
+      const current = panZoomRef.current;
       const nextScale = Math.min(
         MAX_SCALE,
-        Math.max(0.5, scale < 0.9 ? scale * 1.5 : Math.min(1, scale * 1.2))
+        Math.max(0.5, current.scale < 0.9 ? current.scale * 1.5 : Math.min(1, current.scale * 1.2))
       );
 
       const cr = container.getBoundingClientRect();
@@ -110,11 +155,13 @@ export const OrganisationTreeViewport = forwardRef<
       const nodeCenterX = nr.left + nr.width / 2;
       const nodeCenterY = nr.top + nr.height / 2;
 
-      setPanX((p) => p + (viewCenterX - nodeCenterX));
-      setPanY((p) => p + (viewCenterY - nodeCenterY));
-      setScale(nextScale);
+      applyPanZoom({
+        scale: nextScale,
+        panX: current.panX + (viewCenterX - nodeCenterX),
+        panY: current.panY + (viewCenterY - nodeCenterY),
+      });
     },
-    [scale]
+    [applyPanZoom]
   );
 
   useImperativeHandle(
@@ -133,6 +180,19 @@ export const OrganisationTreeViewport = forwardRef<
     return () => cancelAnimationFrame(id);
   }, [applyFitAll, layoutKey]);
 
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const reclamp = () => {
+      applyPanZoom(panZoomRef.current);
+    };
+
+    const observer = new ResizeObserver(reclamp);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [applyPanZoom, layoutKey]);
+
   const viewportCenter = useCallback(() => {
     const container = containerRef.current;
     if (!container) return { x: 0, y: 0 };
@@ -140,23 +200,27 @@ export const OrganisationTreeViewport = forwardRef<
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   }, []);
 
-  const zoomAtPoint = useCallback((clientX: number, clientY: number, factor: number) => {
-    const container = containerRef.current;
-    if (!container) return;
+  const zoomAtPoint = useCallback(
+    (clientX: number, clientY: number, factor: number) => {
+      const container = containerRef.current;
+      if (!container) return;
 
-    const rect = container.getBoundingClientRect();
-    const px = clientX - rect.left;
-    const py = clientY - rect.top;
+      const rect = container.getBoundingClientRect();
+      const px = clientX - rect.left;
+      const py = clientY - rect.top;
+      const current = panZoomRef.current;
+      const nextScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, current.scale * factor));
+      if (nextScale === current.scale) return;
 
-    setScale((prevScale) => {
-      const nextScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prevScale * factor));
-      if (nextScale === prevScale) return prevScale;
-      const ratio = nextScale / prevScale;
-      setPanX((prevPanX) => px - (px - prevPanX) * ratio);
-      setPanY((prevPanY) => py - (py - prevPanY) * ratio);
-      return nextScale;
-    });
-  }, []);
+      const ratio = nextScale / current.scale;
+      applyPanZoom({
+        scale: nextScale,
+        panX: px - (px - current.panX) * ratio,
+        panY: py - (py - current.panY) * ratio,
+      });
+    },
+    [applyPanZoom]
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -195,21 +259,41 @@ export const OrganisationTreeViewport = forwardRef<
     [panX, panY]
   );
 
-  const handlePointerMove = useCallback((event: React.PointerEvent) => {
-    if (!panStart.current) return;
-    setPanX(panStart.current.panX + (event.clientX - panStart.current.x));
-    setPanY(panStart.current.panY + (event.clientY - panStart.current.y));
-  }, []);
+  const handlePointerMove = useCallback(
+    (event: React.PointerEvent) => {
+      if (!panStart.current) return;
+      applyPanZoom({
+        scale: panZoomRef.current.scale,
+        panX: panStart.current.panX + (event.clientX - panStart.current.x),
+        panY: panStart.current.panY + (event.clientY - panStart.current.y),
+      });
+    },
+    [applyPanZoom]
+  );
 
-  const endDrag = useCallback((event: React.PointerEvent) => {
-    setDragging(false);
-    panStart.current = null;
-    try {
-      (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  const endDrag = useCallback(
+    (event: React.PointerEvent) => {
+      setDragging(false);
+      if (panStart.current) {
+        applyPanZoom({
+          scale: panZoomRef.current.scale,
+          panX: panStart.current.panX + (event.clientX - panStart.current.x),
+          panY: panStart.current.panY + (event.clientY - panStart.current.y),
+        });
+      }
+      panStart.current = null;
+      try {
+        (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+      } catch {
+        /* ignore */
+      }
+    },
+    [applyPanZoom]
+  );
+
+  useEffect(() => {
+    panZoomRef.current = { scale, panX, panY };
+  }, [scale, panX, panY]);
 
   return (
     <div className={cn("relative", className)}>
@@ -292,4 +376,3 @@ export const OrganisationTreeViewport = forwardRef<
     </div>
   );
 });
-

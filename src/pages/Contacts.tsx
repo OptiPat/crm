@@ -31,6 +31,8 @@ import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import { downloadCsvFile } from "@/lib/export/csv-export";
 import { buildClientsContactsCsv, buildContactsExportFilename, buildFilleulsContactsCsv, clientExportIncludesPatrimoine } from "@/lib/export/contacts-csv";
+import { getFilleulDossiersByContactIds } from "@/lib/api/tauri-filleul-dossier";
+import { indexFilleulDossiersByContactId } from "@/lib/organisation/organisation-filleul-dossier";
 import { getInvestissementsWithDetails } from "@/lib/api/tauri-investissements";
 import { getAllEtiquettes, getAllContactEtiquettesDetails, type ContactEtiquetteDetails, type Etiquette } from "@/lib/api/tauri-etiquettes";
 import { getAllSegments, getContactsMatchingSegment, type Segment } from "@/lib/api/tauri-segments";
@@ -669,9 +671,20 @@ export function Contacts({ onNavigate }: ContactsProps) {
           )
         );
       } else {
+        const ids = filteredContacts
+          .map((contact) => contact.id)
+          .filter((id): id is number => id != null);
+        const dossiers =
+          ids.length > 0 ? await getFilleulDossiersByContactIds(ids) : [];
         downloadCsvFile(
           filename,
-          buildFilleulsContactsCsv(filteredContacts, foyers, filleulSubTab, contacts)
+          buildFilleulsContactsCsv(
+            filteredContacts,
+            foyers,
+            filleulSubTab,
+            contacts,
+            indexFilleulDossiersByContactId(dossiers)
+          )
         );
       }
       toast.success(`${filteredContacts.length} contact(s) exporté(s)`);

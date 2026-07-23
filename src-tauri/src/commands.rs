@@ -208,6 +208,8 @@ pub fn update_contact(
             .map_or(UpdateContactFieldPresence::default(), |fields| {
                 UpdateContactFieldPresence {
                     birthday: fields.contains_key("date_naissance"),
+                    date_invitation_filleul: fields.contains_key("date_invitation_filleul"),
+                    date_inscription_filleul: fields.contains_key("date_inscription_filleul"),
                     filleul_titre: fields.contains_key("filleul_titre"),
                     filleul_qualification: fields.contains_key("filleul_qualification"),
                     filleul_volume: fields.contains_key("filleul_volume"),
@@ -3897,4 +3899,40 @@ pub fn import_filleul_volume_exercices(
     database
         .import_filleul_volume_exercices(input)
         .map_err(|e| format!("Failed to import filleul volume exercices: {}", e))
+}
+
+#[tauri::command]
+pub fn get_filleul_dossier(
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<crate::database::filleul_dossier::FilleulDossier, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_filleul_dossier(contact_id)
+        .map_err(|e| format!("Failed to get filleul dossier: {}", e))
+}
+
+#[tauri::command]
+pub fn get_filleul_dossiers_by_contact_ids(
+    db: State<'_, DbState>,
+    contact_ids: Vec<i64>,
+) -> Result<Vec<crate::database::filleul_dossier::FilleulDossier>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_filleul_dossiers_by_contact_ids(&contact_ids)
+        .map_err(|e| format!("Failed to get filleul dossiers: {}", e))
+}
+
+#[tauri::command]
+pub fn upsert_filleul_dossier(
+    db: State<'_, DbState>,
+    input: crate::database::filleul_dossier::UpsertFilleulDossierInput,
+) -> Result<crate::database::filleul_dossier::FilleulDossier, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .upsert_filleul_dossier(input)
+        .map_err(|e| format!("Failed to upsert filleul dossier: {}", e))
 }

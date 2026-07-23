@@ -552,10 +552,7 @@ export function ContactDetailSyntheseTab({
       {filleulReseauInscrit && (
         <ContactDetailSyntheseParrainageCard
           contact={contact}
-          parrain={parrain}
-          loadingParrain={loadingParrain}
           mesFilleulsCount={mesFilleulsCount}
-          onOpenContact={onOpenContact}
           header={
             <SyntheseCardHeader
               sectionKey="parrainage"

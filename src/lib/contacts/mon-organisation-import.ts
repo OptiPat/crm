@@ -16,8 +16,8 @@ import {
   normalizeImportTelephone,
   normalizeImportPlaceName,
   parseDateInscriptionFromNotes,
-  setDateInscriptionInNotes,
 } from "@/lib/contacts/contact-form-utils";
+import { upsertFilleulDossierDatesFromImport } from "@/lib/organisation/organisation-filleul-dossier";
 import { unwrapImportCell } from "@/lib/contacts/import-row";
 import { parseNomCompletInvestisseur } from "@/lib/contacts/investor-name-parse";
 import {
@@ -654,11 +654,6 @@ function buildMonOrganisationEnrichPayload(
     payload.date_dernier_contact_filleul = isoToDateInput(line.dateDernierContactFilleulIso);
   }
 
-  if (line.dateInscriptionIso) {
-    payload.date_inscription_filleul = isoToDateInput(line.dateInscriptionIso);
-    payload.notes = setDateInscriptionInNotes(existing.notes, line.dateInscriptionIso);
-  }
-
   if (line.parrainNom && line.parrainPrenom && parrainId) {
     payload.parrain_id = parrainId;
   }
@@ -683,10 +678,6 @@ function buildNewContactPayload(line: MonOrganisationPreviewLine): NewContact {
       ? isoToDateInput(line.dateDernierContactFilleulIso)
       : undefined,
     type_invitation_filleul: undefined,
-    date_invitation_filleul: undefined,
-    date_inscription_filleul: line.dateInscriptionIso
-      ? isoToDateInput(line.dateInscriptionIso)
-      : undefined,
     presence_invitation_filleul: undefined,
     notes: undefined,
   };
@@ -767,6 +758,12 @@ async function applyMonOrganisationEnrichLine(
   );
   await upgradeParrainFilleulCategorie(parrainId, allContacts);
 
+  if (line.dateInscriptionIso && existing.id != null) {
+    await upsertFilleulDossierDatesFromImport(existing.id, {
+      dateInscription: isoToDateInput(line.dateInscriptionIso),
+    });
+  }
+
   return {
     ...line,
     status: "imported",
@@ -791,6 +788,12 @@ async function applyMonOrganisationLine(
   allContacts.push(created);
 
   await upgradeParrainFilleulCategorie(parrainId, allContacts);
+
+  if (line.dateInscriptionIso) {
+    await upsertFilleulDossierDatesFromImport(id, {
+      dateInscription: isoToDateInput(line.dateInscriptionIso),
+    });
+  }
 
   return {
     ...line,

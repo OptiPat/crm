@@ -24,6 +24,7 @@ pub mod etiquettes;
 pub mod etiquettes_auto_engine;
 pub mod exchange_history;
 pub mod familles;
+pub mod filleul_dossier;
 pub mod filleul_volumes;
 pub mod filleuls;
 pub mod foyers;
@@ -615,6 +616,7 @@ impl Database {
         self.migrate_template_email_actions()?;
         self.migrate_client_onedrive_links()?;
         self.migrate_filleul_volume_exercices_table()?;
+        self.migrate_filleul_dossier_table()?;
 
         Ok(())
     }
