@@ -20,8 +20,8 @@ import {
   defaultSelectedOrganisationVolumeLineKeys,
   flattenOrganisationVolumesImportEntries,
   buildOrganisationVolumesImportPreview,
-  parseOrganisationVolumesRows,
-  pickOrganisationVolumesSheetName,
+  formatOrganisationVolumeImportCellPreview,
+  parseOrganisationVolumesWorkbookSheets,
   summarizeOrganisationVolumesImportPreview,
   type OrganisationVolumeImportPreviewLine,
 } from "@/lib/organisation/organisation-volumes-import";
@@ -29,18 +29,34 @@ import { formatFilleulVolumeDisplay } from "@/lib/organisation/organisation-bran
 
 type Step = "pick" | "preview";
 
-function readOrganisationVolumesWorkbookRows(
-  file: File
-): Promise<Record<string, unknown>[]> {
+function readOrganisationVolumesWorkbook(file: File) {
   return file.arrayBuffer().then((data) => {
     const workbook = XLSX.read(data, { type: "array", cellDates: false });
-    const sheetName = pickOrganisationVolumesSheetName(workbook.SheetNames);
-    if (!sheetName) return [];
-    return XLSX.utils.sheet_to_json<Record<string, unknown>>(
-      workbook.Sheets[sheetName]!,
-      { defval: "", raw: true }
-    );
+    const sheets = workbook.SheetNames.map((sheetName) => ({
+      sheetName,
+      rawRows: XLSX.utils.sheet_to_json<Record<string, unknown>>(
+        workbook.Sheets[sheetName]!,
+        { defval: "", raw: true }
+      ),
+    }));
+    return parseOrganisationVolumesWorkbookSheets(sheets);
   });
+}
+
+function formatCellPreview(cell: OrganisationVolumeImportPreviewLine["cells"][number]): string {
+  const raw = formatOrganisationVolumeImportCellPreview(cell);
+  const [label, values] = raw.split(": ");
+  if (!values) return raw;
+  return `${label}: ${values
+    .split(" / ")
+    .map((part) => {
+      const [kind, amount] = part.split(" ");
+      const value = Number(amount);
+      if (!Number.isFinite(value)) return part;
+      const prefix = kind === "P" ? "perso " : kind === "O" ? "orga " : "";
+      return `${prefix}${formatFilleulVolumeDisplay(value)}`;
+    })
+    .join(" · ")}`;
 }
 
 export function OrganisationVolumesImportDialog({
@@ -79,12 +95,11 @@ export function OrganisationVolumesImportDialog({
   const handleFile = async (file: File) => {
     setBusy(true);
     try {
-      const rawRows = await readOrganisationVolumesWorkbookRows(file);
-      if (rawRows.length === 0) {
-        toast.error("Feuille Excel vide ou non reconnue");
+      const parsed = await readOrganisationVolumesWorkbook(file);
+      if (parsed.length === 0) {
+        toast.error("Feuille Excel vide ou non reconnue (Perso ou 4 niveaux)");
         return;
       }
-      const parsed = parseOrganisationVolumesRows(rawRows);
       const contacts = await getAllContacts();
       const preview = buildOrganisationVolumesImportPreview(parsed, contacts);
       setFileName(file.name);
@@ -138,9 +153,9 @@ export function OrganisationVolumesImportDialog({
         <DialogHeader>
           <DialogTitle>Importer volumes historiques</DialogTitle>
           <DialogDescription>
-            Export « Historique des VAVC Perso » (colonnes par exercice). Les volumes propres
-            sont enregistrés dans l&apos;historique ; le volume branche est recalculé
-            automatiquement (propre + descendance).
+            Exports Finzzle « Historique des VAVC Perso » et/ou « Historique des VAVC 4 niveaux ».
+            Le volume perso et le volume organisation (branche Finzzle) sont enregistrés par
+            exercice ; l&apos;exercice en cours reste calculé en live.
           </DialogDescription>
         </DialogHeader>
 
@@ -204,10 +219,10 @@ export function OrganisationVolumesImportDialog({
                       {line.cells.length > 0 && (
                         <p className="text-xs text-muted-foreground mt-1 tabular-nums">
                           {line.cells
-                            .slice(0, 4)
-                            .map((cell) => `${cell.exerciceLabel}: ${formatFilleulVolumeDisplay(cell.volumePropre)}`)
+                            .slice(0, 3)
+                            .map((cell) => formatCellPreview(cell))
                             .join(" · ")}
-                          {line.cells.length > 4 ? ` · +${line.cells.length - 4}` : ""}
+                          {line.cells.length > 3 ? ` · +${line.cells.length - 3}` : ""}
                         </p>
                       )}
                     </div>

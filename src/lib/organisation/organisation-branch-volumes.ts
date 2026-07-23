@@ -262,23 +262,31 @@ export function buildOrganisationVolumeRowsWithOwnVolumes(
   options: {
     resolveManagerVolume?: (contact: Contact) => number;
     selfNetworkVolumeExclSelf?: number;
+    branchById?: Map<number, number>;
   } = {}
 ): OrganisationVolumeRow[] {
   const resolveManagerVolume = options.resolveManagerVolume ?? contactManagerVolume;
   const byParrain = indexActiveFilleulsByParrain(allContacts);
   const cache = new Map<number, number>();
   const rows: OrganisationVolumeRow[] = [];
+  const branchById = options.branchById;
   const selfNetworkVolumeExclSelf =
     options.selfNetworkVolumeExclSelf ?? computeSelfNetworkVolumeFromOwnById(tree, ownById);
 
   const push = (contact: Contact, generation: number, label: string) => {
     if (contact.id == null) return;
+    const storedBranch =
+      contact.id != null && branchById?.has(contact.id)
+        ? branchById.get(contact.id)!
+        : null;
     rows.push({
       contactId: contact.id,
       generation,
       label,
       ownVolume: ownById.get(contact.id) ?? 0,
-      branchVolume: computeBranchVolume(contact.id, ownById, byParrain, cache),
+      branchVolume:
+        storedBranch ??
+        computeBranchVolume(contact.id, ownById, byParrain, cache),
       managerVolume: resolveManagerVolume(contact),
       managerObjectiveEligible: isManagerObjectiveEligible(
         contact.filleul_titre,

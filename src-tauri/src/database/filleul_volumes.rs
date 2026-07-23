@@ -36,7 +36,10 @@ pub struct CloseFilleulExerciceInput {
 pub struct FilleulVolumeExerciceImportEntry {
     pub contact_id: i64,
     pub exercice_label: String,
-    pub volume_propre: f64,
+    #[serde(default)]
+    pub volume_propre: Option<f64>,
+    #[serde(default)]
+    pub volume_branche: Option<f64>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -144,25 +147,36 @@ impl super::Database {
                 if label.is_empty() {
                     continue;
                 }
+                if entry.volume_propre.is_none() && entry.volume_branche.is_none() {
+                    continue;
+                }
                 self.conn.execute(
                     "INSERT INTO filleul_volume_exercices (
-                        contact_id, exercice_label, volume_propre, source
-                     ) VALUES (?1, ?2, ?3, 'import')
+                        contact_id, exercice_label, volume_propre, volume_branche, source
+                     ) VALUES (?1, ?2, ?3, ?4, 'import')
                      ON CONFLICT(contact_id, exercice_label) DO UPDATE SET
-                        volume_propre = excluded.volume_propre,
+                        volume_propre = COALESCE(excluded.volume_propre, filleul_volume_exercices.volume_propre),
+                        volume_branche = COALESCE(excluded.volume_branche, filleul_volume_exercices.volume_branche),
                         source = 'import'
                      WHERE filleul_volume_exercices.closed_at IS NULL",
-                    params![entry.contact_id, label, entry.volume_propre],
+                    params![
+                        entry.contact_id,
+                        label,
+                        entry.volume_propre,
+                        entry.volume_branche
+                    ],
                 )?;
                 applied += self.conn.changes() as usize;
 
                 if input.sync_current_contact_volumes {
                     if let Some(current_label) = input.current_exercice_label.as_deref() {
                         if current_label == label {
-                            self.conn.execute(
-                                "UPDATE contacts SET filleul_volume = ?1 WHERE id = ?2",
-                                params![entry.volume_propre, entry.contact_id],
-                            )?;
+                            if let Some(volume_propre) = entry.volume_propre {
+                                self.conn.execute(
+                                    "UPDATE contacts SET filleul_volume = ?1 WHERE id = ?2",
+                                    params![volume_propre, entry.contact_id],
+                                )?;
+                            }
                         }
                     }
                 }
@@ -321,12 +335,14 @@ mod tests {
                     FilleulVolumeExerciceImportEntry {
                         contact_id: id,
                         exercice_label: "2023-2024".to_string(),
-                        volume_propre: 150_000.0,
+                        volume_propre: Some(150_000.0),
+                        volume_branche: None,
                     },
                     FilleulVolumeExerciceImportEntry {
                         contact_id: id,
                         exercice_label: "2024-2025".to_string(),
-                        volume_propre: 220_000.0,
+                        volume_propre: Some(220_000.0),
+                        volume_branche: None,
                     },
                 ],
                 sync_current_contact_volumes: true,
@@ -355,7 +371,8 @@ mod tests {
             entries: vec![FilleulVolumeExerciceImportEntry {
                 contact_id: id,
                 exercice_label: "2024-2025".to_string(),
-                volume_propre: 150_000.0,
+                volume_propre: Some(150_000.0),
+                volume_branche: None,
             }],
             sync_current_contact_volumes: false,
             current_exercice_label: None,
@@ -405,7 +422,8 @@ mod tests {
                 entries: vec![FilleulVolumeExerciceImportEntry {
                     contact_id: id,
                     exercice_label: "2023-2024".to_string(),
-                    volume_propre: 999_000.0,
+                    volume_propre: Some(999_000.0),
+                    volume_branche: None,
                 }],
                 sync_current_contact_volumes: false,
                 current_exercice_label: None,
@@ -429,12 +447,14 @@ mod tests {
                 FilleulVolumeExerciceImportEntry {
                     contact_id: id,
                     exercice_label: "2022-2023".to_string(),
-                    volume_propre: 80_000.0,
+                    volume_propre: Some(80_000.0),
+                    volume_branche: None,
                 },
                 FilleulVolumeExerciceImportEntry {
                     contact_id: id,
                     exercice_label: "2024-2025".to_string(),
-                    volume_propre: 120_000.0,
+                    volume_propre: Some(120_000.0),
+                    volume_branche: None,
                 },
             ],
             sync_current_contact_volumes: false,
@@ -446,5 +466,43 @@ mod tests {
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].exercice_label, "2024-2025");
         assert_eq!(rows[1].exercice_label, "2022-2023");
+    }
+
+    #[test]
+    fn import_filleul_volume_exercices_merges_propre_and_branche() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        let id = seed_contact(&db, "DUPONT", "Jean", 10_000.0);
+
+        db.import_filleul_volume_exercices(ImportFilleulVolumeExercicesInput {
+            entries: vec![FilleulVolumeExerciceImportEntry {
+                contact_id: id,
+                exercice_label: "2023-2024".to_string(),
+                volume_propre: Some(150_000.0),
+                volume_branche: None,
+            }],
+            sync_current_contact_volumes: false,
+            current_exercice_label: None,
+        })
+        .unwrap();
+
+        let applied = db
+            .import_filleul_volume_exercices(ImportFilleulVolumeExercicesInput {
+                entries: vec![FilleulVolumeExerciceImportEntry {
+                    contact_id: id,
+                    exercice_label: "2023-2024".to_string(),
+                    volume_propre: None,
+                    volume_branche: Some(600_000.0),
+                }],
+                sync_current_contact_volumes: false,
+                current_exercice_label: None,
+            })
+            .unwrap();
+        assert_eq!(applied, 1);
+
+        let rows = db
+            .get_filleul_volume_exercices_by_label("2023-2024")
+            .unwrap();
+        assert_eq!(rows[0].volume_propre, Some(150_000.0));
+        assert_eq!(rows[0].volume_branche, Some(600_000.0));
     }
 }

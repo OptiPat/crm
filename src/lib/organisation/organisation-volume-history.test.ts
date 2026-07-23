@@ -72,11 +72,11 @@ describe("organisation-volume-history", () => {
     });
     const filleul = rows.find((row) => row.contactId === 2);
     expect(filleul?.ownVolume).toBe(180_000);
-    expect(filleul?.branchVolume).toBe(180_000);
+    expect(filleul?.branchVolume).toBe(600_000);
     expect(filleul?.managerVolume).toBe(900_000);
   });
 
-  it("calcule le volume branche historique comme somme propre + descendance", () => {
+  it("privilégie le volume branche stocké sur l'historique importé", () => {
     const contacts = [
       ...baseContacts,
       {
@@ -126,7 +126,7 @@ describe("organisation-volume-history", () => {
       ]),
     });
     const filleul = rows.find((row) => row.contactId === 2);
-    expect(filleul?.branchVolume).toBe(150_000);
+    expect(filleul?.branchVolume).toBe(999_999);
   });
 
   it("résout le label courant", () => {

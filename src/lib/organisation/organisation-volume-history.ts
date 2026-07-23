@@ -115,6 +115,7 @@ export function buildOrganisationVolumeRowsForExercice(
   }
 
   const ownById = new Map<number, number>();
+  const branchById = new Map<number, number>();
   for (const contact of allContacts) {
     if (contact.id == null) continue;
     const record = options.recordsByContactId.get(contact.id);
@@ -122,9 +123,13 @@ export function buildOrganisationVolumeRowsForExercice(
       contact.id,
       record?.volumePropre != null ? readStoredVolume(record.volumePropre) : 0
     );
+    if (record?.volumeBranche != null) {
+      branchById.set(contact.id, readStoredVolume(record.volumeBranche));
+    }
   }
 
   return buildOrganisationVolumeRowsWithOwnVolumes(tree, allContacts, ownById, {
+    branchById,
     resolveManagerVolume: (contact) => {
       if (contact.id == null) return 0;
       const record = options.recordsByContactId.get(contact.id);

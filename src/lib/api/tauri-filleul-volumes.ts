@@ -58,7 +58,8 @@ export async function closeFilleulExercice(
 export interface FilleulVolumeExerciceImportEntry {
   contactId: number;
   exerciceLabel: string;
-  volumePropre: number;
+  volumePropre?: number;
+  volumeBranche?: number;
 }
 
 export interface ImportFilleulVolumeExercicesInput {
