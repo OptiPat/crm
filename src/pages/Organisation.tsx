@@ -9,6 +9,8 @@ import { contactFilleulRankUpdatePayload, contactFilleulVolumeUpdatePayload, con
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import {
   buildOrganisationTree,
+  collectOrganisationDossierContactIds,
+  resolveOrganisationSelfContact,
 } from "@/lib/organisation/organisation-tree";
 import { OrganisationTreeView } from "@/components/organisation/OrganisationTreeView";
 import { OrganisationBranchVolumesPanel } from "@/components/organisation/OrganisationBranchVolumesPanel";
@@ -45,7 +47,6 @@ import { OrganisationMemberDossierPanel } from "@/components/organisation/Organi
 import { OrganisationHierarchyList } from "@/components/organisation/OrganisationHierarchyList";
 import { collectOrganisationMemberRoster } from "@/lib/organisation/organisation-member-roster";
 import {
-  collectOrganisationMemberContactIds,
   indexFilleulDossiersByContactId,
   mergeLegacyFilleulDossierView,
 } from "@/lib/organisation/organisation-filleul-dossier";
@@ -106,14 +107,30 @@ export function Organisation({ onNavigate }: OrganisationProps) {
 
   useEventAutoRefresh(loadData, subscribeContactsChanged);
 
-  const tree = useMemo(
-    () => buildOrganisationTree(contacts, cgp ?? {}),
-    [contacts, cgp]
-  );
-
   const resolvedExerciceLabel = useMemo(
     () => resolveOrganisationExerciceLabel(selectedExercice),
     [selectedExercice]
+  );
+
+  const selfContact = useMemo(
+    () => resolveOrganisationSelfContact(contacts, cgp ?? {}),
+    [contacts, cgp]
+  );
+
+  const [hideDesinscritsInTree, setHideDesinscritsInTree] = useState(false);
+
+  const treeVisibilityOptions = useMemo(
+    () => ({
+      exerciceLabel: resolvedExerciceLabel,
+      dossiersByContactId,
+      hideDesinscrits: hideDesinscritsInTree,
+    }),
+    [resolvedExerciceLabel, dossiersByContactId, hideDesinscritsInTree]
+  );
+
+  const tree = useMemo(
+    () => buildOrganisationTree(contacts, cgp ?? {}, treeVisibilityOptions),
+    [contacts, cgp, treeVisibilityOptions]
   );
 
   const viewingCurrentExercice = useMemo(
@@ -165,16 +182,37 @@ export function Organisation({ onNavigate }: OrganisationProps) {
 
   const memberRoster = useMemo(() => collectOrganisationMemberRoster(tree), [tree]);
 
+  const dossierMemberIdsKey = useMemo(() => {
+    const ids = collectOrganisationDossierContactIds(contacts, selfContact);
+    if (ids.length === 0) return "";
+    return ids.slice().sort((a, b) => a - b).join(",");
+  }, [contacts, selfContact]);
+
   useEffect(() => {
     let cancelled = false;
-    const ids = collectOrganisationMemberContactIds(memberRoster);
-    if (ids.length === 0) {
-      setDossiersByContactId(new Map());
+    if (!dossierMemberIdsKey) {
+      setDossiersByContactId((prev) => (prev.size === 0 ? prev : new Map()));
       return;
     }
+    const ids = dossierMemberIdsKey.split(",").map((id) => Number(id));
     void getFilleulDossiersByContactIds(ids)
       .then((rows) => {
-        if (!cancelled) setDossiersByContactId(indexFilleulDossiersByContactId(rows));
+        if (cancelled) return;
+        const next = indexFilleulDossiersByContactId(rows);
+        setDossiersByContactId((prev) => {
+          if (prev.size === next.size) {
+            let same = true;
+            for (const [id, dossier] of next) {
+              const existing = prev.get(id);
+              if (!existing || existing.updatedAt !== dossier.updatedAt) {
+                same = false;
+                break;
+              }
+            }
+            if (same) return prev;
+          }
+          return next;
+        });
       })
       .catch((error) => {
         console.error(error);
@@ -183,7 +221,7 @@ export function Organisation({ onNavigate }: OrganisationProps) {
     return () => {
       cancelled = true;
     };
-  }, [memberRoster, dataRevision]);
+  }, [dossierMemberIdsKey, dataRevision]);
 
   const handleDossierChange = useCallback((next: FilleulDossier) => {
     setDossiersByContactId((prev) => {
@@ -424,10 +462,7 @@ export function Organisation({ onNavigate }: OrganisationProps) {
           <CardContent className="p-0 overflow-visible">
             {loading ? (
               <p className="text-sm text-muted-foreground p-6 text-center">Chargement…</p>
-            ) : tree.selfContact &&
-              tree.generations.length === 0 &&
-              tree.upline.length === 0 &&
-              tree.desinscrits.length === 0 ? (
+            ) : tree.selfContact && tree.stats.total === 0 && tree.upline.length === 0 ? (
               <p className="text-sm text-muted-foreground p-8 text-center">
                 Aucun filleul ni parrain enregistré pour le moment.
               </p>
@@ -439,6 +474,10 @@ export function Organisation({ onNavigate }: OrganisationProps) {
                     contacts={contacts}
                     volumeRows={volumeRows}
                     dossiersByContactId={dossiersByContactId}
+                    treeVisibilityOptions={treeVisibilityOptions}
+                    hideDesinscrits={hideDesinscritsInTree}
+                    desinscritCountInExercice={tree.stats.desinscrits}
+                    onHideDesinscritsChange={setHideDesinscritsInTree}
                     selectedContactId={selectedDossierContactId ?? activeContactId}
                     focusContactId={focusContactId}
                     onFocusContactHandled={() => setFocusContactId(null)}
@@ -450,6 +489,10 @@ export function Organisation({ onNavigate }: OrganisationProps) {
                     tree={tree}
                     contacts={contacts}
                     dossiersByContactId={dossiersByContactId}
+                    treeVisibilityOptions={treeVisibilityOptions}
+                    hideDesinscrits={hideDesinscritsInTree}
+                    desinscritCountInExercice={tree.stats.desinscrits}
+                    onHideDesinscritsChange={setHideDesinscritsInTree}
                     onNodeClick={handleNodeClick}
                     onParrainClick={handleParrainClick}
                     onRankSave={handleRankSave}

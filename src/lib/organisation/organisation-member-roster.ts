@@ -56,7 +56,7 @@ export function collectOrganisationMemberRoster(
     for (const node of layer) {
       push({
         contact: node.contact,
-        status: "actif",
+        status: node.isDesinscrit ? "desinscrit" : "actif",
         generation: node.generation,
         parrainLabel: node.parrainLabel,
         label: memberLabel(node.contact),

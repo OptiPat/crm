@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, forwardRef, useImperativeHandle } from "react";
+import { useCallback, useRef, useState, forwardRef, useImperativeHandle, useMemo } from "react";
 
 import { ChevronDown, ChevronRight, Crown, UserRound, UserX } from "lucide-react";
 
@@ -16,7 +16,13 @@ import type {
 
 } from "@/lib/organisation/organisation-tree";
 
-import { groupDesinscritsByParrain, isOrganisationActifFilleul } from "@/lib/organisation/organisation-tree";
+import { groupDesinscritsByParrain, isOrganisationDesinscrit } from "@/lib/organisation/organisation-tree";
+
+import {
+  buildVisibleDownlineByParrain,
+  countVisibleDownlineDescendants,
+} from "@/lib/organisation/organisation-downline-children";
+import type { OrganisationExerciceVisibilityOptions } from "@/lib/organisation/organisation-exercice-visibility";
 
 import {
 
@@ -35,6 +41,8 @@ import { OrganisationTreeViewport,
 } from "@/components/organisation/OrganisationTreeViewport";
 
 import { OrganisationBranchVolumesPanel } from "@/components/organisation/OrganisationBranchVolumesPanel";
+
+import { OrganisationHideDesinscritsToggle } from "@/components/organisation/OrganisationHideDesinscritsToggle";
 
 import { FilleulRankBadges } from "@/components/organisation/FilleulRankBadges";
 
@@ -88,6 +96,14 @@ type OrganisationTreeViewProps = {
   showBranchVolumesPanel?: boolean;
 
   dossiersByContactId?: Map<number, FilleulDossier>;
+
+  treeVisibilityOptions?: OrganisationExerciceVisibilityOptions;
+
+  hideDesinscrits?: boolean;
+
+  desinscritCountInExercice?: number;
+
+  onHideDesinscritsChange?: (hide: boolean) => void;
 
 };
 
@@ -239,32 +255,19 @@ function CollapsedBranchChip({
 
 
 
-function indexActiveDownlineByParrain(
-
+function indexDownlineByParrainFromGenerations(
   generations: OrganisationDownlineNode[][]
-
 ): Map<number, Contact[]> {
-
   const map = new Map<number, Contact[]>();
-
   for (const layer of generations) {
-
     for (const node of layer) {
-
       if (node.parrainId == null) continue;
-
       const list = map.get(node.parrainId) ?? [];
-
       list.push(node.contact);
-
       map.set(node.parrainId, list);
-
     }
-
   }
-
   return map;
-
 }
 
 
@@ -274,6 +277,12 @@ function FilleulSubtree({
   contact,
 
   byParrain,
+
+  contacts,
+
+  selfContactId,
+
+  treeVisibilityOptions,
 
   depth,
 
@@ -295,6 +304,12 @@ function FilleulSubtree({
 
   byParrain: Map<number, Contact[]>;
 
+  contacts: Contact[];
+
+  selfContactId: number;
+
+  treeVisibilityOptions?: OrganisationExerciceVisibilityOptions;
+
   depth: number;
 
   expandedBranches: Set<number>;
@@ -311,11 +326,13 @@ function FilleulSubtree({
 
 }) {
 
-  const children = (byParrain.get(contact.id) ?? []).filter(isOrganisationActifFilleul);
+  const children = byParrain.get(contact.id) ?? [];
 
   const name = `${contact.prenom} ${contact.nom}`.trim();
 
-  const descendantCount = countActiveDescendants(contact.id, byParrain);
+  const descendantCount = treeVisibilityOptions?.exerciceLabel
+    ? countVisibleDownlineDescendants(contact.id, contacts, selfContactId, treeVisibilityOptions)
+    : countActiveDescendants(contact.id, byParrain);
 
   const isDeepBranchAnchor = depth === ORGANISATION_COLLAPSE_DEPTH - 1 && descendantCount > 0;
 
@@ -352,6 +369,12 @@ function FilleulSubtree({
                   contact={child}
 
                   byParrain={byParrain}
+
+                  contacts={contacts}
+
+                  selfContactId={selfContactId}
+
+                  treeVisibilityOptions={treeVisibilityOptions}
 
                   depth={depth + 1}
 
@@ -401,6 +424,8 @@ function FilleulSubtree({
 
         displayName={name}
 
+        isDesinscrit={isOrganisationDesinscrit(contact)}
+
         onClick={() => onNodeClick(contact)}
 
         onDoubleClick={() => onNodeDoubleClick(contact.id)}
@@ -423,7 +448,13 @@ function DownlineForest({
 
   selfContact,
 
-  generations,
+  byParrain,
+
+  contacts,
+
+  selfContactId,
+
+  treeVisibilityOptions,
 
   expandedBranches,
 
@@ -441,7 +472,13 @@ function DownlineForest({
 
   selfContact: Contact;
 
-  generations: OrganisationDownlineNode[][];
+  byParrain: Map<number, Contact[]>;
+
+  contacts: Contact[];
+
+  selfContactId: number;
+
+  treeVisibilityOptions?: OrganisationExerciceVisibilityOptions;
 
   expandedBranches: Set<number>;
 
@@ -456,8 +493,6 @@ function DownlineForest({
   selectedContactId?: number | null;
 
 }) {
-
-  const byParrain = indexActiveDownlineByParrain(generations);
 
   const directs = byParrain.get(selfContact.id) ?? [];
 
@@ -482,6 +517,12 @@ function DownlineForest({
               contact={contact}
 
               byParrain={byParrain}
+
+              contacts={contacts}
+
+              selfContactId={selfContactId}
+
+              treeVisibilityOptions={treeVisibilityOptions}
 
               depth={1}
 
@@ -533,6 +574,8 @@ function OrganisationNodeCard({
 
   compact,
 
+  isDesinscrit,
+
   onRankSave,
 
 }: {
@@ -552,6 +595,8 @@ function OrganisationNodeCard({
   isSelected?: boolean;
 
   compact?: boolean;
+
+  isDesinscrit?: boolean;
 
   onRankSave?: RankSaveHandler;
 
@@ -637,7 +682,11 @@ function OrganisationNodeCard({
 
               ? "border-border/50 bg-background px-2 py-1.5 min-w-0 max-w-[9rem]"
 
-              : "border-emerald-200/70 bg-emerald-50/60 hover:bg-emerald-50 hover:border-emerald-300/80 hover:shadow-sm px-3 py-2 min-w-[8.5rem]",
+              : isDesinscrit
+
+                ? "border-muted-foreground/25 bg-muted/40 hover:bg-muted/55 hover:border-muted-foreground/35 px-3 py-2 min-w-[8.5rem] opacity-90"
+
+                : "border-emerald-200/70 bg-emerald-50/60 hover:bg-emerald-50 hover:border-emerald-300/80 hover:shadow-sm px-3 py-2 min-w-[8.5rem]",
 
           clickable &&
 
@@ -1080,11 +1129,27 @@ function OrganisationTreeView({
 
   dossiersByContactId,
 
+  treeVisibilityOptions,
+
+  hideDesinscrits = false,
+
+  desinscritCountInExercice = 0,
+
+  onHideDesinscritsChange,
+
 }, ref) {
 
   const { selfContact, selfDisplayName, upline, generations, desinscrits, stats } = tree;
 
   const level1Count = generations[0]?.length ?? 0;
+
+  const visibleByParrain = useMemo(() => {
+    if (!selfContact) return new Map<number, Contact[]>();
+    if (treeVisibilityOptions?.exerciceLabel) {
+      return buildVisibleDownlineByParrain(contacts, selfContact.id, treeVisibilityOptions);
+    }
+    return indexDownlineByParrainFromGenerations(generations);
+  }, [selfContact, contacts, treeVisibilityOptions, generations]);
 
   const viewportRef = useRef<OrganisationTreeViewportHandle>(null);
 
@@ -1166,7 +1231,13 @@ function OrganisationTreeView({
 
           selfContact={selfContact}
 
-          generations={generations}
+          byParrain={visibleByParrain}
+
+          contacts={contacts}
+
+          selfContactId={selfContact.id}
+
+          treeVisibilityOptions={treeVisibilityOptions}
 
           expandedBranches={expandedBranches}
 
@@ -1244,6 +1315,16 @@ function OrganisationTreeView({
 
     <div className="flex flex-col w-full">
 
+      {treeVisibilityOptions?.exerciceLabel ? (
+        <div className="flex flex-wrap items-center gap-1 border-b border-border/60 px-3 py-2">
+          <OrganisationHideDesinscritsToggle
+            desinscritCount={desinscritCountInExercice}
+            hideDesinscrits={hideDesinscrits}
+            onHideDesinscritsChange={onHideDesinscritsChange}
+          />
+        </div>
+      ) : null}
+
       <OrganisationTreeViewport
 
         ref={viewportRef}
@@ -1283,21 +1364,23 @@ function OrganisationTreeView({
 
 
 
-      <DesinscritsPanel
+      {!treeVisibilityOptions?.exerciceLabel ? (
+        <DesinscritsPanel
 
-        entries={desinscrits}
+          entries={desinscrits}
 
-        dossiersByContactId={dossiersByContactId}
+          dossiersByContactId={dossiersByContactId}
 
-        onNodeClick={onNodeClick}
+          onNodeClick={onNodeClick}
 
-        onParrainClick={onParrainClick}
+          onParrainClick={onParrainClick}
 
-        onRankSave={onRankSave}
+          onRankSave={onRankSave}
 
-        selectedContactId={selectedContactId}
+          selectedContactId={selectedContactId}
 
-      />
+        />
+      ) : null}
 
     </div>
 

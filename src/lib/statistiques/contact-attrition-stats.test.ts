@@ -3,11 +3,14 @@ import type { Contact } from "@/lib/api/tauri-contacts";
 import {
   computeClientAttritionStats,
   computeFilleulAttritionStats,
+  computeFilleulAttritionExerciceStats,
   filterContactsForClientAttritionLens,
   filterContactsForFilleulAttritionLens,
+  filterContactsForFilleulAttritionExerciceLens,
   isContactEligibleForClientAttritionStats,
   isContactEligibleForFilleulAttritionStats,
 } from "./contact-attrition-stats";
+import { fiscalYearStartUnix } from "@/lib/pipe/remuneration-fiscal-year";
 
 function contact(partial: Partial<Contact> & Pick<Contact, "id">): Contact {
   return {
@@ -83,6 +86,91 @@ describe("contact-attrition-stats", () => {
     expect(stats.activeCount).toBe(2);
     expect(stats.attritedCount).toBe(1);
     expect(stats.attritionPercent).toBeCloseTo(33.3, 1);
+  });
+
+  it("calcule l'attrition filleul sur l'exercice (désinscriptions / cohorte au 01/08)", () => {
+    const exercice = "2025-2026";
+    const start = fiscalYearStartUnix(exercice) ?? 0;
+    const inExercice = start + 86_400 * 30;
+    const beforeStart = start - 86_400 * 30;
+
+    const contacts = [
+      contact({
+        id: 1,
+        categorie: "AUCUN",
+        filleul_categorie: "FILLEUL",
+        date_inscription_filleul: beforeStart,
+      }),
+      contact({
+        id: 2,
+        categorie: "AUCUN",
+        filleul_categorie: "FILLEUL_DESINSCRIT",
+        date_inscription_filleul: beforeStart,
+      }),
+      contact({
+        id: 3,
+        categorie: "AUCUN",
+        filleul_categorie: "FILLEUL_DESINSCRIT",
+        date_inscription_filleul: beforeStart,
+      }),
+      contact({
+        id: 4,
+        categorie: "AUCUN",
+        filleul_categorie: "FILLEUL",
+        date_inscription_filleul: start + 86_400 * 10,
+      }),
+    ];
+
+    const dossiersByContactId = new Map([
+      [
+        2,
+        {
+          contactId: 2,
+          dateInvitation: null,
+          dateInscription: beforeStart,
+          dateDesinscription: inExercice,
+          datePremiereSouscriptionImo: null,
+          datePremiereSouscriptionPlacement: null,
+          datePremiereSouscriptionScpi: null,
+          datePassageManager: null,
+          dateHabilitationCif: null,
+          datePremierVaaOuVa: null,
+          notes: null,
+          updatedAt: 1,
+        },
+      ],
+      [
+        3,
+        {
+          contactId: 3,
+          dateInvitation: null,
+          dateInscription: beforeStart,
+          dateDesinscription: beforeStart,
+          datePremiereSouscriptionImo: null,
+          datePremiereSouscriptionPlacement: null,
+          datePremiereSouscriptionScpi: null,
+          datePassageManager: null,
+          dateHabilitationCif: null,
+          datePremierVaaOuVa: null,
+          notes: null,
+          updatedAt: 1,
+        },
+      ],
+    ]);
+
+    const stats = computeFilleulAttritionExerciceStats(contacts, exercice, {
+      dossiersByContactId,
+    });
+    expect(stats.totalCount).toBe(2);
+    expect(stats.attritedCount).toBe(1);
+    expect(stats.activeCount).toBe(1);
+    expect(stats.attritionPercent).toBe(50);
+
+    expect(
+      filterContactsForFilleulAttritionExerciceLens(contacts, "attrited", exercice, {
+        dossiersByContactId,
+      }).map((c) => c.id)
+    ).toEqual([2]);
   });
 
   it("inclut un client aussi filleul inscrit dans les deux lentilles", () => {

@@ -1,7 +1,15 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
+import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import { isDeFactoManagerFilleul } from "@/lib/contacts/contact-filleul-rank-match";
 import { isFilleulStatut, isPrescripteurCategorie } from "@/lib/contacts/contact-form-utils";
 import { contactOwnVolume } from "@/lib/organisation/organisation-branch-volumes";
+import { wasConsultantInNetworkDuringExercice } from "@/lib/organisation/organisation-exercice-membership";
+import {
+  resolveFilleulInscriptionTimestamp,
+  resolveFilleulInvitationTimestamp,
+  resolveFilleulDesinscriptionTimestamp,
+} from "@/lib/organisation/organisation-filleul-dossier";
+import { fiscalYearEndUnix, fiscalYearStartUnix } from "@/lib/pipe/remuneration-fiscal-year";
 
 export type FilleulOrganisationListKind = "manager" | "other";
 export type FilleulVolumeListKind = "withVolume" | "missingVolume";
@@ -37,6 +45,13 @@ export type FilleulParraineurStatResult = {
   otherContactIds: number[];
 };
 
+export type FilleulParraineurStatsOptions = {
+  /** Dossiers filleul pour dates d'inscription / invitation (downlines). */
+  dossiersByContactId?: Map<number, FilleulDossier>;
+};
+
+export type FilleulExerciceStatsOptions = FilleulParraineurStatsOptions;
+
 export type FilleulBridgeStatResult = {
   totalCount: number;
   bridgeCount: number;
@@ -59,6 +74,15 @@ export function isContactEligibleForFilleulOrganisationStats(
 ): boolean {
   if (isPrescripteurCategorie(contact.categorie)) return false;
   return contactEffectiveFilleulCategorie(contact) === "FILLEUL";
+}
+
+/** Base taux de parrainage : inscrits + désinscrits (tous parrains, suspects exclus). */
+export function isContactEligibleForFilleulParraineurStats(
+  contact: Pick<Contact, "categorie" | "filleul_categorie">
+): boolean {
+  if (isPrescripteurCategorie(contact.categorie)) return false;
+  const filleulCat = contactEffectiveFilleulCategorie(contact);
+  return filleulCat === "FILLEUL" || filleulCat === "FILLEUL_DESINSCRIT";
 }
 
 export function isFilleulManagerInOrganisation(
@@ -126,10 +150,9 @@ export function isFilleulActiveConsultantForVolume(
 }
 
 /** Volume propre moyen par consultant actif — filleuls inscrits, tous parrains. */
-export function computeFilleulAverageVolumeStats(contacts: Contact[]): FilleulAverageVolumeStatResult {
-  const eligible = contacts.filter(
-    (contact) => contact.id != null && isContactEligibleForFilleulOrganisationStats(contact)
-  ) as Contact[];
+function computeAverageVolumeFromEligibleContacts(
+  eligible: Contact[]
+): FilleulAverageVolumeStatResult {
   const totalEligible = eligible.length;
 
   if (totalEligible === 0) {
@@ -167,6 +190,31 @@ export function computeFilleulAverageVolumeStats(contacts: Contact[]): FilleulAv
   };
 }
 
+export function computeFilleulAverageVolumeStats(contacts: Contact[]): FilleulAverageVolumeStatResult {
+  const eligible = contacts.filter(
+    (contact) => contact.id != null && isContactEligibleForFilleulOrganisationStats(contact)
+  ) as Contact[];
+  return computeAverageVolumeFromEligibleContacts(eligible);
+}
+
+/**
+ * Volume propre moyen sur l'exercice : uniquement les consultants présents sur la période
+ * (inscrits ou désinscrits selon dates dossier), actifs = ≥ 1 € de volume propre.
+ */
+export function computeFilleulAverageVolumeExerciceStats(
+  contacts: Contact[],
+  exerciceLabel: string,
+  options?: FilleulExerciceStatsOptions
+): FilleulAverageVolumeStatResult {
+  const dossiersByContactId = options?.dossiersByContactId;
+  const eligible = contacts.filter(
+    (contact) =>
+      contact.id != null &&
+      wasConsultantInNetworkDuringExercice(contact, exerciceLabel, dossiersByContactId)
+  ) as Contact[];
+  return computeAverageVolumeFromEligibleContacts(eligible);
+}
+
 export function filterContactsForFilleulVolumeList(
   contacts: Contact[],
   kind: FilleulVolumeListKind
@@ -178,16 +226,43 @@ export function filterContactsForFilleulVolumeList(
   });
 }
 
+export function filterContactsForFilleulVolumeExerciceList(
+  contacts: Contact[],
+  kind: FilleulVolumeListKind,
+  exerciceLabel: string,
+  options?: FilleulExerciceStatsOptions
+): Contact[] {
+  const dossiersByContactId = options?.dossiersByContactId;
+  return contacts.filter((contact) => {
+    if (
+      !wasConsultantInNetworkDuringExercice(contact, exerciceLabel, dossiersByContactId)
+    ) {
+      return false;
+    }
+    const isActive = isFilleulActiveConsultantForVolume(contact);
+    return kind === "withVolume" ? isActive : !isActive;
+  });
+}
+
 export function formatFilleulAverageVolumeSubtitle(stats: FilleulAverageVolumeStatResult): string {
-  if (stats.totalEligible === 0) return "Aucun filleul inscrit";
+  if (stats.totalEligible === 0) return "Aucun consultant éligible";
   if (stats.countedCount === 0) {
-    return `Aucun consultant actif sur ${stats.totalEligible} filleul${stats.totalEligible > 1 ? "s" : ""} inscrit${stats.totalEligible > 1 ? "s" : ""}`;
+    return `Aucun consultant actif sur ${stats.totalEligible} consultant${stats.totalEligible > 1 ? "s" : ""}`;
   }
   const inactive =
     stats.missingVolumeCount > 0
       ? ` · ${stats.missingVolumeCount} inactif${stats.missingVolumeCount > 1 ? "s" : ""}`
       : "";
   return `${stats.countedCount} consultant${stats.countedCount > 1 ? "s" : ""} actif${stats.countedCount > 1 ? "s" : ""} sur ${stats.totalEligible}${inactive}`;
+}
+
+export function formatFilleulAverageVolumeExerciceSubtitle(
+  stats: FilleulAverageVolumeStatResult,
+  exerciceLabel: string
+): string {
+  if (stats.totalEligible === 0) return `Aucun consultant sur l'exercice ${exerciceLabel}`;
+  const base = formatFilleulAverageVolumeSubtitle(stats);
+  return `${base} · ${exerciceLabel}`;
 }
 
 /** Filleul parrainé compté pour le taux (inscrits, désinscrits, prospects — suspects exclus). */
@@ -212,14 +287,90 @@ function buildParrainIdsWithFilleulDownline(contacts: Contact[]): Set<number> {
   return parrainIds;
 }
 
-/** Taux de parraineurs = filleuls inscrits ayant parrainé au moins 1 filleul (désinscrits inclus). */
-export function computeFilleulParraineurStats(contacts: Contact[]): FilleulParraineurStatResult {
-  const parrainIdsWithDownline = buildParrainIdsWithFilleulDownline(contacts);
+/** Date d'affiliation réseau du filleul parrainé (inscription, ou invitation si prospect sans inscription). */
+export function resolveDownlineAffiliationUnix(
+  contact: Pick<
+    Contact,
+    "id" | "date_inscription_filleul" | "date_invitation_filleul" | "filleul_categorie" | "categorie"
+  >,
+  dossiersByContactId?: Map<number, FilleulDossier>
+): number | null {
+  const dossier = contact.id != null ? dossiersByContactId?.get(contact.id) : undefined;
+  const inscription = resolveFilleulInscriptionTimestamp(contact, dossier);
+  if (inscription != null) return inscription;
+  const filleulCat = contactEffectiveFilleulCategorie(contact);
+  if (filleulCat === "PROSPECT_FILLEUL") {
+    const invitation = resolveFilleulInvitationTimestamp(contact, dossier);
+    return invitation ?? null;
+  }
+  return null;
+}
+
+export function isAffiliationInExercice(
+  affiliationUnix: number | null | undefined,
+  exerciceLabel: string
+): boolean {
+  if (affiliationUnix == null || !Number.isFinite(affiliationUnix)) return false;
+  const start = fiscalYearStartUnix(exerciceLabel);
+  const end = fiscalYearEndUnix(exerciceLabel);
+  if (start == null || end == null) return false;
+  return affiliationUnix >= start && affiliationUnix <= end;
+}
+
+export { wasConsultantInNetworkDuringExercice };
+
+/**
+ * Consultant dans la cohorte au 1er jour de l'exercice : inscrit au plus tard ce jour-là,
+ * et pas encore désinscrit avant le début de l'exercice.
+ */
+export function wasConsultantPresentAtExerciceStart(
+  contact: Pick<
+    Contact,
+    "id" | "categorie" | "filleul_categorie" | "date_inscription_filleul"
+  >,
+  exerciceLabel: string,
+  dossiersByContactId?: Map<number, FilleulDossier>
+): boolean {
+  if (!isContactEligibleForFilleulParraineurStats(contact)) return false;
+
+  const start = fiscalYearStartUnix(exerciceLabel);
+  if (start == null) return true;
+
+  const dossier = contact.id != null ? dossiersByContactId?.get(contact.id) : undefined;
+  const inscription = resolveFilleulInscriptionTimestamp(contact, dossier);
+  if (inscription != null && inscription > start) return false;
+
+  const desinscription = resolveFilleulDesinscriptionTimestamp(dossier);
+  if (desinscription != null && desinscription < start) return false;
+
+  return true;
+}
+
+function buildParrainIdsWithExerciceDownline(
+  contacts: Contact[],
+  exerciceLabel: string,
+  dossiersByContactId?: Map<number, FilleulDossier>
+): Set<number> {
+  const parrainIds = new Set<number>();
+  for (const contact of contacts) {
+    if (contact.parrain_id == null || !isFilleulParrainableDownline(contact)) continue;
+    const affiliation = resolveDownlineAffiliationUnix(contact, dossiersByContactId);
+    if (!isAffiliationInExercice(affiliation, exerciceLabel)) continue;
+    parrainIds.add(contact.parrain_id);
+  }
+  return parrainIds;
+}
+
+function computeParraineurStatsFromParrainIds(
+  contacts: Contact[],
+  parrainIdsWithDownline: Set<number>,
+  isEligible: (contact: Contact) => boolean
+): FilleulParraineurStatResult {
   const parraineurContactIds: number[] = [];
   const otherContactIds: number[] = [];
 
   for (const contact of contacts) {
-    if (!isContactEligibleForFilleulOrganisationStats(contact) || contact.id == null) continue;
+    if (!isEligible(contact) || contact.id == null) continue;
     if (parrainIdsWithDownline.has(contact.id)) {
       parraineurContactIds.push(contact.id);
     } else {
@@ -239,20 +390,85 @@ export function computeFilleulParraineurStats(contacts: Contact[]): FilleulParra
   };
 }
 
+/** Taux cumulé (historique) = consultants réseau ayant parrainé au moins 1 filleul (toutes périodes). */
+export function computeFilleulParraineurStats(contacts: Contact[]): FilleulParraineurStatResult {
+  return computeParraineurStatsFromParrainIds(
+    contacts,
+    buildParrainIdsWithFilleulDownline(contacts),
+    isContactEligibleForFilleulParraineurStats
+  );
+}
+
+/**
+ * Taux de parrainage sur l'exercice : consultants présents sur l'exercice ayant parrainé
+ * au moins une personne dont la date d'inscription (ou d'invitation prospect) tombe dans
+ * l'exercice fiscal (filleuls parrainés désinscrits inclus).
+ */
+export function computeFilleulParraineurExerciceStats(
+  contacts: Contact[],
+  exerciceLabel: string,
+  options?: FilleulParraineurStatsOptions
+): FilleulParraineurStatResult {
+  const dossiersByContactId = options?.dossiersByContactId;
+  const parrainIds = buildParrainIdsWithExerciceDownline(
+    contacts,
+    exerciceLabel,
+    dossiersByContactId
+  );
+  const isEligible = (contact: Contact) =>
+    wasConsultantInNetworkDuringExercice(contact, exerciceLabel, dossiersByContactId);
+  return computeParraineurStatsFromParrainIds(contacts, parrainIds, isEligible);
+}
+
 export function filterContactsForFilleulParraineurList(
   contacts: Contact[],
   kind: FilleulParraineurListKind
 ): Contact[] {
   const parrainIdsWithDownline = buildParrainIdsWithFilleulDownline(contacts);
   return contacts.filter((contact) => {
-    if (!isContactEligibleForFilleulOrganisationStats(contact) || contact.id == null) return false;
+    if (!isContactEligibleForFilleulParraineurStats(contact) || contact.id == null) return false;
+    const isParraineur = parrainIdsWithDownline.has(contact.id);
+    return kind === "parraineur" ? isParraineur : !isParraineur;
+  });
+}
+
+export function filterContactsForFilleulParraineurExerciceList(
+  contacts: Contact[],
+  kind: FilleulParraineurListKind,
+  exerciceLabel: string,
+  options?: FilleulParraineurStatsOptions
+): Contact[] {
+  const dossiersByContactId = options?.dossiersByContactId;
+  const parrainIdsWithDownline = buildParrainIdsWithExerciceDownline(
+    contacts,
+    exerciceLabel,
+    dossiersByContactId
+  );
+  return contacts.filter((contact) => {
+    if (
+      !wasConsultantInNetworkDuringExercice(contact, exerciceLabel, dossiersByContactId) ||
+      contact.id == null
+    ) {
+      return false;
+    }
     const isParraineur = parrainIdsWithDownline.has(contact.id);
     return kind === "parraineur" ? isParraineur : !isParraineur;
   });
 }
 
 export function formatFilleulParraineurSubtitle(stats: FilleulParraineurStatResult): string {
-  return `${stats.parraineurCount}/${stats.totalCount} filleuls inscrits`;
+  return `${stats.parraineurCount}/${stats.totalCount} consultants réseau`;
+}
+
+export function formatFilleulParraineurExerciceSubtitle(
+  stats: FilleulParraineurStatResult,
+  exerciceLabel: string
+): string {
+  return `${stats.parraineurCount}/${stats.totalCount} consultants sur l'exercice · ${exerciceLabel}`;
+}
+
+export function formatFilleulParraineurCumulativeIndex(stats: FilleulParraineurStatResult): string {
+  return `${formatFilleulManagerPercent(stats.parraineurPercent)} — ${formatFilleulParraineurSubtitle(stats)} (toutes périodes)`;
 }
 
 /** Filleul inscrit ou désinscrit du réseau direct (parrain = CGP). */

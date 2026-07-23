@@ -1,6 +1,11 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { findContactByNameKeyWithSwap } from "@/lib/contacts/name-match";
+import { buildVisibleDownlineByParrain } from "@/lib/organisation/organisation-downline-children";
+import {
+  type OrganisationExerciceVisibilityOptions,
+} from "@/lib/organisation/organisation-exercice-visibility";
+export type OrganisationTreeOptions = OrganisationExerciceVisibilityOptions;
 
 /** Filleuls visibles dans l'arbre (pas les prospects / suspects). */
 export function isOrganisationDownlineMember(contact: Contact): boolean {
@@ -23,6 +28,7 @@ export type OrganisationDownlineNode = {
   generation: number;
   parrainId: number | null;
   parrainLabel: string;
+  isDesinscrit: boolean;
 };
 
 export type OrganisationUplineNode = {
@@ -172,6 +178,7 @@ export function buildActifGenerationLayers(
             selfContact.id,
             byId
           ),
+          isDesinscrit: false,
         });
         nextParrainIds.push(child.id);
       }
@@ -191,6 +198,73 @@ export function buildActifGenerationLayers(
   return layers;
 }
 
+/** Couches incluant actifs et désinscrits visibles pour l'exercice (promotion parrain). */
+export type ExerciceGenerationLayersResult = {
+  layers: OrganisationDownlineNode[][];
+  actifsCount: number;
+  desinscritCount: number;
+};
+
+export function buildExerciceGenerationLayers(
+  selfContact: Contact,
+  contacts: Contact[],
+  byId: Map<number, Contact>,
+  options: OrganisationTreeOptions
+): ExerciceGenerationLayersResult {
+  const byParrain = buildVisibleDownlineByParrain(contacts, selfContact.id, {
+    ...options,
+    hideDesinscrits: false,
+  });
+
+  const layers: OrganisationDownlineNode[][] = [];
+  let actifsCount = 0;
+  let desinscritCount = 0;
+  let currentParrainIds = [selfContact.id];
+  let generation = 1;
+  const visited = new Set<number>([selfContact.id]);
+
+  while (currentParrainIds.length > 0) {
+    const layer: OrganisationDownlineNode[] = [];
+    const nextParrainIds: number[] = [];
+
+    for (const parrainId of currentParrainIds) {
+      for (const child of byParrain.get(parrainId) ?? []) {
+        if (visited.has(child.id)) continue;
+        visited.add(child.id);
+        nextParrainIds.push(child.id);
+
+        const isDesinscrit = isOrganisationDesinscrit(child);
+        if (isDesinscrit) desinscritCount += 1;
+        else actifsCount += 1;
+
+        if (options.hideDesinscrits && isDesinscrit) continue;
+
+        layer.push({
+          contact: child,
+          generation,
+          parrainId,
+          parrainLabel: resolveParrainLabel(parrainId, selfContact.id, byId),
+          isDesinscrit,
+        });
+      }
+    }
+
+    if (layer.length > 0) {
+      layer.sort((a, b) => {
+        const parrainCmp = a.parrainLabel.localeCompare(b.parrainLabel, "fr");
+        if (parrainCmp !== 0) return parrainCmp;
+        return compareOrganisationContactsByPrenom(a.contact, b.contact);
+      });
+      layers.push(layer);
+    }
+
+    currentParrainIds = nextParrainIds;
+    generation += 1;
+    if (nextParrainIds.length === 0) break;
+  }
+
+  return { layers, actifsCount, desinscritCount };
+}
 /** Tous les désinscrits sous moi (toutes générations), hors arbre principal. */
 export function collectOrganisationDesinscrits(
   selfContact: Contact,
@@ -291,7 +365,8 @@ export function groupDesinscritsByParrain(
 
 export function buildOrganisationTree(
   contacts: Contact[],
-  cgp: Pick<CgpConfig, "nom" | "prenom">
+  cgp: Pick<CgpConfig, "nom" | "prenom">,
+  options?: OrganisationTreeOptions
 ): OrganisationTreeResult {
   const selfContact = resolveOrganisationSelfContact(contacts, cgp);
   const selfDisplayName = buildOrganisationSelfDisplayName(cgp, selfContact);
@@ -310,10 +385,19 @@ export function buildOrganisationTree(
   }
 
   const upline = buildOrganisationUpline(selfContact, byId);
-  const generations = buildActifGenerationLayers(selfContact, byParrain, byId);
-  const desinscrits = collectOrganisationDesinscrits(selfContact, byParrain, byId);
-  const actifs = generations.reduce((sum, layer) => sum + layer.length, 0);
-
+  const exerciceLayers = options?.exerciceLabel
+    ? buildExerciceGenerationLayers(selfContact, contacts, byId, options)
+    : null;
+  const generations =
+    exerciceLayers?.layers ?? buildActifGenerationLayers(selfContact, byParrain, byId);
+  const desinscrits = options?.exerciceLabel
+    ? []
+    : collectOrganisationDesinscrits(selfContact, byParrain, byId);
+  const actifs = exerciceLayers?.actifsCount ?? generations.reduce(
+    (sum, layer) => sum + layer.filter((node) => !node.isDesinscrit).length,
+    0
+  );
+  const desinscritCount = exerciceLayers?.desinscritCount ?? desinscrits.length;
   return {
     selfContact,
     selfDisplayName,
@@ -322,8 +406,8 @@ export function buildOrganisationTree(
     desinscrits,
     stats: {
       actifs,
-      desinscrits: desinscrits.length,
-      total: actifs + desinscrits.length,
+      desinscrits: desinscritCount,
+      total: actifs + desinscritCount,
     },
   };
 }
@@ -349,4 +433,38 @@ export function collectOrganisationContactIds(tree: OrganisationTreeResult): num
   }
 
   return [...new Set(ids)];
+}
+
+/** IDs stables pour charger les dossiers réseau (tout le downline, hors filtre exercice). */
+export function collectOrganisationDossierContactIds(
+  contacts: Contact[],
+  selfContact: Contact | null
+): number[] {
+  if (!selfContact) return [];
+
+  const byId = indexContactsById(contacts);
+  const byParrain = indexDownlineByParrain(contacts);
+  const ids = new Set<number>([selfContact.id]);
+
+  let currentId = selfContact.parrain_id ?? null;
+  const visitedUpline = new Set<number>();
+  while (currentId != null && !visitedUpline.has(currentId)) {
+    visitedUpline.add(currentId);
+    ids.add(currentId);
+    currentId = byId.get(currentId)?.parrain_id ?? null;
+  }
+
+  const queue = [selfContact.id];
+  const visitedDownline = new Set<number>([selfContact.id]);
+  while (queue.length > 0) {
+    const parrainId = queue.shift()!;
+    for (const child of byParrain.get(parrainId) ?? []) {
+      if (visitedDownline.has(child.id)) continue;
+      visitedDownline.add(child.id);
+      ids.add(child.id);
+      queue.push(child.id);
+    }
+  }
+
+  return [...ids];
 }

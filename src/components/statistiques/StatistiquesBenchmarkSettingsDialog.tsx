@@ -62,6 +62,7 @@ export function StatistiquesBenchmarkSettingsDialog({
   onOpenChange,
 }: StatistiquesBenchmarkSettingsDialogProps) {
   const [referenceEuros, setReferenceEuros] = useState("");
+  const [sponsorRatePercent, setSponsorRatePercent] = useState("");
   const [nearPercent, setNearPercent] = useState("80");
   const [error, setError] = useState<string | null>(null);
 
@@ -69,6 +70,7 @@ export function StatistiquesBenchmarkSettingsDialog({
     if (!open) return;
     const settings = loadStatistiquesBenchmarkSettings();
     setReferenceEuros(formatFilleulVolumeField(settings.groupActiveConsultantVolumeEuros));
+    setSponsorRatePercent(String(settings.groupSponsorRatePercent).replace(".", ","));
     setNearPercent(String(Math.round(settings.nearGroupBenchmarkRatio * 100)));
     setError(null);
   }, [open]);
@@ -76,6 +78,7 @@ export function StatistiquesBenchmarkSettingsDialog({
   const handleReset = () => {
     const defaults = defaultStatistiquesBenchmarkSettings();
     setReferenceEuros(formatFilleulVolumeField(defaults.groupActiveConsultantVolumeEuros));
+    setSponsorRatePercent(String(defaults.groupSponsorRatePercent).replace(".", ","));
     setNearPercent(String(Math.round(defaults.nearGroupBenchmarkRatio * 100)));
     setError(null);
   };
@@ -86,6 +89,11 @@ export function StatistiquesBenchmarkSettingsDialog({
       setError("Saisissez un montant de référence strictement positif.");
       return;
     }
+    const parsedSponsorRate = Number.parseFloat(sponsorRatePercent.trim().replace(",", "."));
+    if (!Number.isFinite(parsedSponsorRate) || parsedSponsorRate <= 0 || parsedSponsorRate > 100) {
+      setError("Le taux de parrainage de référence doit être entre 0 et 100 %.");
+      return;
+    }
     const pct = Number.parseInt(nearPercent.trim(), 10);
     if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) {
       setError("Le seuil « proche » doit être entre 1 et 99 %.");
@@ -93,12 +101,14 @@ export function StatistiquesBenchmarkSettingsDialog({
     }
     saveStatistiquesBenchmarkSettings({
       groupActiveConsultantVolumeEuros: parsedReference,
+      groupSponsorRatePercent: parsedSponsorRate,
       nearGroupBenchmarkRatio: pct / 100,
     });
     onOpenChange(false);
   };
 
   const previewReference = parseFilleulVolumeField(referenceEuros.replace(/\s/g, ""));
+  const previewSponsorRate = Number.parseFloat(sponsorRatePercent.trim().replace(",", "."));
   const previewPct = Number.parseInt(nearPercent.trim(), 10);
   const previewFloor =
     previewReference != null &&
@@ -107,6 +117,14 @@ export function StatistiquesBenchmarkSettingsDialog({
     previewPct > 0 &&
     previewPct < 100
       ? previewReference * (previewPct / 100)
+      : null;
+  const previewSponsorFloor =
+    Number.isFinite(previewSponsorRate) &&
+    previewSponsorRate > 0 &&
+    Number.isFinite(previewPct) &&
+    previewPct > 0 &&
+    previewPct < 100
+      ? previewSponsorRate * (previewPct / 100)
       : null;
 
   return (
@@ -124,7 +142,7 @@ export function StatistiquesBenchmarkSettingsDialog({
           <div className="space-y-5">
             <BenchmarkSection
               title="Organisation filleuls"
-              description="Panneau « Volume moyen / consultant actif » — comparaison à la moyenne groupe."
+              description="Panneaux « Volume moyen / consultant actif » et « Taux de parrainage » — comparaison à la moyenne groupe."
             >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2 sm:col-span-2">
@@ -148,6 +166,27 @@ export function StatistiquesBenchmarkSettingsDialog({
                   </p>
                 </div>
 
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="stat-benchmark-sponsor-rate">
+                    Taux de parrainage — référence groupe (%)
+                  </Label>
+                  <Input
+                    id="stat-benchmark-sponsor-rate"
+                    inputMode="decimal"
+                    placeholder="26,5"
+                    className="h-10"
+                    value={sponsorRatePercent}
+                    onChange={(event) => {
+                      setSponsorRatePercent(event.target.value);
+                      setError(null);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Moyenne nationale : part des consultants réseau (présents sur l&apos;exercice)
+                    ayant parrainé au moins une personne affiliée durant la période.
+                  </p>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="stat-benchmark-near">Seuil « proche » (% de la référence)</Label>
                   <Input
@@ -166,25 +205,45 @@ export function StatistiquesBenchmarkSettingsDialog({
                   </p>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 sm:col-span-2">
                   <Label className="text-muted-foreground">Aperçu des seuils</Label>
                   <div className="rounded-lg border border-border/60 bg-background px-3 py-2.5 text-xs text-muted-foreground space-y-1.5 min-h-[2.5rem]">
                     {previewReference != null && previewReference > 0 ? (
                       <>
                         <p>
-                          Référence :{" "}
+                          Volume — réf. :{" "}
                           <span className="font-medium text-foreground tabular-nums">
                             {formatFilleulVolumeDisplay(previewReference)}
                           </span>
+                          {previewFloor != null ? (
+                            <>
+                              {" · "}
+                              zone orange{" "}
+                              <span className="font-medium text-foreground tabular-nums">
+                                {formatFilleulVolumeDisplay(previewFloor)}
+                              </span>
+                              {" → "}
+                              {formatFilleulVolumeDisplay(previewReference)}
+                            </>
+                          ) : null}
                         </p>
-                        {previewFloor != null ? (
+                        {Number.isFinite(previewSponsorRate) && previewSponsorRate > 0 ? (
                           <p>
-                            Zone orange :{" "}
+                            Parrainage — réf. :{" "}
                             <span className="font-medium text-foreground tabular-nums">
-                              {formatFilleulVolumeDisplay(previewFloor)}
+                              {previewSponsorRate.toString().replace(".", ",")} %
                             </span>
-                            {" → "}
-                            {formatFilleulVolumeDisplay(previewReference)}
+                            {previewSponsorFloor != null ? (
+                              <>
+                                {" · "}
+                                zone orange{" "}
+                                <span className="font-medium text-foreground tabular-nums">
+                                  {previewSponsorFloor.toFixed(1).replace(".", ",")} %
+                                </span>
+                                {" → "}
+                                {previewSponsorRate.toString().replace(".", ",")} %
+                              </>
+                            ) : null}
                           </p>
                         ) : null}
                       </>

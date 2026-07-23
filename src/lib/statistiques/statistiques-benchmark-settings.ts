@@ -1,6 +1,9 @@
 /** Référence groupe par défaut — volume moyen / consultant actif (exercice). */
 export const DEFAULT_GROUP_ACTIVE_CONSULTANT_VOLUME_BENCHMARK_EUROS = 547_000;
 
+/** Référence groupe par défaut — taux de parrainage sur exercice (consultants réseau). */
+export const DEFAULT_GROUP_SPONSOR_RATE_BENCHMARK_PERCENT = 26.5;
+
 /** En dessous de ce ratio (ex. 0,8 = 80 %), la carte passe au rouge. */
 export const DEFAULT_NEAR_GROUP_BENCHMARK_RATIO = 0.8;
 
@@ -9,6 +12,8 @@ export type FilleulVolumeBenchmarkStatus = "above_group" | "near_group" | "below
 export type StatistiquesBenchmarkSettings = {
   /** Volume moyen consultant actif — référence nationale / groupe (€). */
   groupActiveConsultantVolumeEuros: number;
+  /** Taux de parrainage — référence nationale / groupe (%). */
+  groupSponsorRatePercent: number;
   /**
    * Seuil minimal (ratio 0–1) pour la zone orange.
    * Orange : [ratio × référence, référence[ ; vert au-dessus ; rouge en dessous.
@@ -23,6 +28,7 @@ export const STATISTIQUES_BENCHMARK_SETTINGS_CHANGED = "statistiques-benchmark-s
 export function defaultStatistiquesBenchmarkSettings(): StatistiquesBenchmarkSettings {
   return {
     groupActiveConsultantVolumeEuros: DEFAULT_GROUP_ACTIVE_CONSULTANT_VOLUME_BENCHMARK_EUROS,
+    groupSponsorRatePercent: DEFAULT_GROUP_SPONSOR_RATE_BENCHMARK_PERCENT,
     nearGroupBenchmarkRatio: DEFAULT_NEAR_GROUP_BENCHMARK_RATIO,
   };
 }
@@ -32,17 +38,23 @@ function normalizeBenchmarkSettings(
 ): StatistiquesBenchmarkSettings {
   const defaults = defaultStatistiquesBenchmarkSettings();
   const euros = raw?.groupActiveConsultantVolumeEuros;
+  const sponsorRate = raw?.groupSponsorRatePercent;
   const ratio = raw?.nearGroupBenchmarkRatio;
 
   const groupActiveConsultantVolumeEuros =
     typeof euros === "number" && Number.isFinite(euros) && euros > 0 ? euros : defaults.groupActiveConsultantVolumeEuros;
+
+  const groupSponsorRatePercent =
+    typeof sponsorRate === "number" && Number.isFinite(sponsorRate) && sponsorRate > 0 && sponsorRate <= 100
+      ? sponsorRate
+      : defaults.groupSponsorRatePercent;
 
   const nearGroupBenchmarkRatio =
     typeof ratio === "number" && Number.isFinite(ratio) && ratio > 0 && ratio < 1
       ? ratio
       : defaults.nearGroupBenchmarkRatio;
 
-  return { groupActiveConsultantVolumeEuros, nearGroupBenchmarkRatio };
+  return { groupActiveConsultantVolumeEuros, groupSponsorRatePercent, nearGroupBenchmarkRatio };
 }
 
 export function loadStatistiquesBenchmarkSettings(): StatistiquesBenchmarkSettings {
@@ -67,30 +79,62 @@ export function saveStatistiquesBenchmarkSettings(settings: StatistiquesBenchmar
   }
 }
 
+export function getGroupBenchmarkStatus(
+  value: number,
+  reference: number,
+  nearRatio: number
+): FilleulVolumeBenchmarkStatus {
+  if (!Number.isFinite(value) || reference <= 0) return "below_group";
+  if (value >= reference) return "above_group";
+  const floor = reference * nearRatio;
+  if (value >= floor) return "near_group";
+  return "below_group";
+}
+
 export function getFilleulVolumeBenchmarkStatus(
   averageVolume: number,
   settings: StatistiquesBenchmarkSettings
 ): FilleulVolumeBenchmarkStatus {
-  const reference = settings.groupActiveConsultantVolumeEuros;
-  if (!Number.isFinite(averageVolume) || reference <= 0) return "below_group";
-  if (averageVolume >= reference) return "above_group";
-  const floor = reference * settings.nearGroupBenchmarkRatio;
-  if (averageVolume >= floor) return "near_group";
-  return "below_group";
+  return getGroupBenchmarkStatus(
+    averageVolume,
+    settings.groupActiveConsultantVolumeEuros,
+    settings.nearGroupBenchmarkRatio
+  );
+}
+
+export function getFilleulSponsorRateBenchmarkStatus(
+  sponsorRatePercent: number,
+  settings: StatistiquesBenchmarkSettings
+): FilleulVolumeBenchmarkStatus {
+  return getGroupBenchmarkStatus(
+    sponsorRatePercent,
+    settings.groupSponsorRatePercent,
+    settings.nearGroupBenchmarkRatio
+  );
 }
 
 /** Écart relatif vs référence groupe (ex. +12 % ou −23 %). */
-export function formatVolumeVsGroupBenchmarkPercent(
-  averageVolume: number,
-  settings: StatistiquesBenchmarkSettings
-): string {
-  const reference = settings.groupActiveConsultantVolumeEuros;
-  if (reference <= 0 || !Number.isFinite(averageVolume)) return "—";
-  const pct = ((averageVolume - reference) / reference) * 100;
+export function formatVsGroupBenchmarkPercent(value: number, reference: number): string {
+  if (reference <= 0 || !Number.isFinite(value)) return "—";
+  const pct = ((value - reference) / reference) * 100;
   const rounded = Math.round(pct);
   if (rounded === 0) return "≈ référence";
   const sign = rounded > 0 ? "+" : "";
   return `${sign}${rounded} % vs réf.`;
+}
+
+export function formatVolumeVsGroupBenchmarkPercent(
+  averageVolume: number,
+  settings: StatistiquesBenchmarkSettings
+): string {
+  return formatVsGroupBenchmarkPercent(averageVolume, settings.groupActiveConsultantVolumeEuros);
+}
+
+export function formatSponsorRateVsGroupBenchmarkPercent(
+  sponsorRatePercent: number,
+  settings: StatistiquesBenchmarkSettings
+): string {
+  return formatVsGroupBenchmarkPercent(sponsorRatePercent, settings.groupSponsorRatePercent);
 }
 
 export function filleulVolumeBenchmarkStatusBoxClasses(status: FilleulVolumeBenchmarkStatus): string {

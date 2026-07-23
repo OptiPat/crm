@@ -51,6 +51,10 @@ type AttritionKpiPanelProps = {
   attritedLabel: string;
   hint: string;
   onOpenList: (kind: "active" | "attrited") => void;
+  exerciceLabel?: string;
+  cumulativeStats?: ContactAttritionStatResult;
+  formatExerciceSubtitle?: (stats: ContactAttritionStatResult, exerciceLabel: string) => string;
+  formatCumulativeIndex?: (stats: ContactAttritionStatResult) => string;
 };
 
 export function AttritionKpiPanel({
@@ -63,26 +67,52 @@ export function AttritionKpiPanel({
   attritedLabel,
   hint,
   onOpenList,
+  exerciceLabel,
+  cumulativeStats,
+  formatExerciceSubtitle,
+  formatCumulativeIndex,
 }: AttritionKpiPanelProps) {
   const pctLabel = stats.attritionPercent.toFixed(1).replace(".0", "");
+  const subtitle =
+    exerciceLabel && formatExerciceSubtitle
+      ? formatExerciceSubtitle(stats, exerciceLabel)
+      : formatAttritionSubtitle(stats);
 
   return (
     <StatistiquesPanel title={title} description={description} collapsible panelId={panelId}>
       {loading ? (
         <ChartLoading />
-      ) : stats.totalCount === 0 ? (
+      ) : stats.totalCount === 0 && stats.attritedCount === 0 ? (
         <ChartEmpty title="Aucun contact éligible pour cette statistique." height={180} />
       ) : (
         <div className="space-y-4">
           <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Attrition</p>
+              {exerciceLabel ? (
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Exercice {exerciceLabel}
+                </p>
+              ) : (
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Attrition</p>
+              )}
               <p className="text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5 text-primary">
                 {pctLabel} %
               </p>
+              {exerciceLabel ? (
+                <p className="text-sm text-muted-foreground tabular-nums mt-1">
+                  {stats.attritedCount} désinscription{stats.attritedCount > 1 ? "s" : ""}
+                </p>
+              ) : null}
             </div>
-            <p className="text-xs text-muted-foreground text-right max-w-xs">{formatAttritionSubtitle(stats)}</p>
+            <p className="text-xs text-muted-foreground text-right max-w-xs">{subtitle}</p>
           </div>
+
+          {cumulativeStats && formatCumulativeIndex ? (
+            <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
+              <p className="font-medium text-foreground/80">Indice historique (cumul)</p>
+              <p className="tabular-nums mt-0.5">{formatCumulativeIndex(cumulativeStats)}</p>
+            </div>
+          ) : null}
 
           <p className="text-xs text-muted-foreground">{hint}</p>
 

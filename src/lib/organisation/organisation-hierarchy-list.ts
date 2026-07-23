@@ -1,9 +1,10 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { OrganisationVolumeRow } from "@/lib/organisation/organisation-branch-volumes";
+import { buildVisibleDownlineByParrain } from "@/lib/organisation/organisation-downline-children";
+import type { OrganisationExerciceVisibilityOptions } from "@/lib/organisation/organisation-exercice-visibility";
 import {
   indexContactsById,
-  indexDownlineByParrain,
-  isOrganisationActifFilleul,
+  isOrganisationDesinscrit,
   type OrganisationTreeResult,
 } from "@/lib/organisation/organisation-tree";
 
@@ -23,6 +24,7 @@ export type OrganisationHierarchyNode = {
 export type OrganisationHierarchyList = {
   upline: OrganisationHierarchyNode[];
   root: OrganisationHierarchyNode | null;
+  /** Toujours vide lorsque l'arbre intègre les désinscrits par exercice. */
   desinscrits: OrganisationHierarchyNode[];
 };
 
@@ -31,45 +33,43 @@ function contactLabel(contact: Contact, suffix = ""): string {
   return suffix ? `${base} ${suffix}` : base;
 }
 
-function compareContactsByPrenom(a: Contact, b: Contact): number {
-  const prenomA = a.prenom.toLocaleLowerCase("fr");
-  const prenomB = b.prenom.toLocaleLowerCase("fr");
-  if (prenomA !== prenomB) return prenomA.localeCompare(prenomB, "fr");
-  return a.nom.toLocaleLowerCase("fr").localeCompare(b.nom.toLocaleLowerCase("fr"), "fr");
+function countHierarchyDescendants(node: OrganisationHierarchyNode): number {
+  return node.children.reduce((sum, child) => sum + 1 + countHierarchyDescendants(child), 0);
 }
 
-function countDescendants(node: OrganisationHierarchyNode): number {
-  return node.children.reduce((sum, child) => sum + 1 + countDescendants(child), 0);
-}
-
-function buildActiveChildNodes(
+function buildOrganisationDownlineHierarchyChildren(
   parrainId: number,
   generation: number,
   byParrain: Map<number, Contact[]>,
-  volumeByContactId: Map<number, OrganisationVolumeRow>
+  volumeByContactId: Map<number, OrganisationVolumeRow>,
+  visiting: Set<number> = new Set()
 ): OrganisationHierarchyNode[] {
-  const children = (byParrain.get(parrainId) ?? []).filter(isOrganisationActifFilleul);
-  children.sort(compareContactsByPrenom);
+  if (visiting.has(parrainId)) return [];
+  const nextVisiting = new Set(visiting);
+  nextVisiting.add(parrainId);
+
+  const children = byParrain.get(parrainId) ?? [];
 
   return children.map((contact) => {
-    const childNodes = buildActiveChildNodes(
+    const childNodes = buildOrganisationDownlineHierarchyChildren(
       contact.id,
       generation + 1,
       byParrain,
-      volumeByContactId
+      volumeByContactId,
+      nextVisiting
     );
     const volumes = volumeByContactId.get(contact.id);
     const node: OrganisationHierarchyNode = {
       contact,
       generation,
-      status: "actif",
+      status: isOrganisationDesinscrit(contact) ? "desinscrit" : "actif",
       label: contactLabel(contact),
       ownVolume: volumes?.ownVolume ?? 0,
       branchVolume: volumes?.branchVolume ?? 0,
       descendantCount: 0,
       children: childNodes,
     };
-    node.descendantCount = countDescendants(node);
+    node.descendantCount = countHierarchyDescendants(node);
     return node;
   });
 }
@@ -87,10 +87,10 @@ export function indexOrganisationVolumeRowsByContactId(
 export function buildOrganisationHierarchyList(
   tree: OrganisationTreeResult,
   contacts: Contact[],
-  volumeRows: OrganisationVolumeRow[]
+  volumeRows: OrganisationVolumeRow[],
+  options?: OrganisationExerciceVisibilityOptions
 ): OrganisationHierarchyList {
   const volumeByContactId = indexOrganisationVolumeRowsByContactId(volumeRows);
-  const byParrain = indexDownlineByParrain(contacts);
 
   const upline: OrganisationHierarchyNode[] = tree.upline.map((node) => {
     const volumes = volumeByContactId.get(node.contact.id);
@@ -109,7 +109,12 @@ export function buildOrganisationHierarchyList(
   let root: OrganisationHierarchyNode | null = null;
   if (tree.selfContact) {
     const selfVolumes = volumeByContactId.get(tree.selfContact.id);
-    const children = buildActiveChildNodes(
+    const byParrain = buildVisibleDownlineByParrain(
+      contacts,
+      tree.selfContact.id,
+      options
+    );
+    const children = buildOrganisationDownlineHierarchyChildren(
       tree.selfContact.id,
       1,
       byParrain,
@@ -125,22 +130,28 @@ export function buildOrganisationHierarchyList(
       descendantCount: 0,
       children,
     };
-    root.descendantCount = countDescendants(root);
+    root.descendantCount = children.reduce(
+      (sum, child) => sum + 1 + child.descendantCount,
+      0
+    );
   }
 
-  const desinscrits: OrganisationHierarchyNode[] = tree.desinscrits.map((entry) => {
-    const volumes = volumeByContactId.get(entry.contact.id);
-    return {
-      contact: entry.contact,
-      generation: entry.generation,
-      status: "desinscrit",
-      label: contactLabel(entry.contact),
-      ownVolume: volumes?.ownVolume ?? 0,
-      branchVolume: volumes?.branchVolume ?? 0,
-      descendantCount: 0,
-      children: [],
-    };
-  });
+  const desinscrits: OrganisationHierarchyNode[] =
+    options?.exerciceLabel != null
+      ? []
+      : tree.desinscrits.map((entry) => {
+          const volumes = volumeByContactId.get(entry.contact.id);
+          return {
+            contact: entry.contact,
+            generation: entry.generation,
+            status: "desinscrit" as const,
+            label: contactLabel(entry.contact),
+            ownVolume: volumes?.ownVolume ?? 0,
+            branchVolume: volumes?.branchVolume ?? 0,
+            descendantCount: 0,
+            children: [],
+          };
+        });
 
   return { upline, root, desinscrits };
 }
@@ -170,6 +181,14 @@ export function collectHierarchyExpandIdsToContact(
 
 export type HierarchyFocusZone = "active" | "upline" | "desinscrit";
 
+function hierarchyContainsContact(
+  node: OrganisationHierarchyNode,
+  contactId: number
+): boolean {
+  if (node.contact.id === contactId) return true;
+  return node.children.some((child) => hierarchyContainsContact(child, contactId));
+}
+
 /** Zone d'affichage d'un contact dans la liste pilotage. */
 export function resolveHierarchyFocusZone(
   contactId: number,
@@ -178,11 +197,7 @@ export function resolveHierarchyFocusZone(
   if (list.upline.some((node) => node.contact.id === contactId)) return "upline";
   if (list.desinscrits.some((node) => node.contact.id === contactId)) return "desinscrit";
   if (contactId === list.root?.contact.id) return "active";
-  const walk = (node: OrganisationHierarchyNode): boolean => {
-    if (node.contact.id === contactId) return true;
-    return node.children.some(walk);
-  };
-  if (list.root && walk(list.root)) return "active";
+  if (list.root && hierarchyContainsContact(list.root, contactId)) return "active";
   return null;
 }
 

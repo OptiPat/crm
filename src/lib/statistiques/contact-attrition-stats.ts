@@ -1,6 +1,15 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
+import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import { isAncienClient } from "@/lib/contacts/contacts-category-match";
 import { isFilleulStatut, isPrescripteurCategorie } from "@/lib/contacts/contact-form-utils";
+import {
+  resolveFilleulInscriptionTimestamp,
+  resolveFilleulDesinscriptionTimestamp,
+} from "@/lib/organisation/organisation-filleul-dossier";
+import {
+  isAffiliationInExercice,
+  wasConsultantPresentAtExerciceStart,
+} from "@/lib/statistiques/contact-filleul-organisation-stats";
 
 export type ContactAttritionStatResult = {
   activeCount: number;
@@ -9,6 +18,10 @@ export type ContactAttritionStatResult = {
   attritionPercent: number;
   activeContactIds: number[];
   attritedContactIds: number[];
+};
+
+export type FilleulAttritionExerciceStatsOptions = {
+  dossiersByContactId?: Map<number, FilleulDossier>;
 };
 
 function contactEffectiveFilleulCategorie(
@@ -88,6 +101,82 @@ export function computeFilleulAttritionStats(contacts: Contact[]): ContactAttrit
   return buildAttritionResult(activeContactIds, attritedContactIds);
 }
 
+/** Désinscription du filleul tombant dans l'exercice fiscal (date dossier). */
+export function isFilleulDesinscriptionInExercice(
+  contact: Pick<Contact, "id" | "categorie" | "filleul_categorie" | "date_inscription_filleul">,
+  exerciceLabel: string,
+  dossiersByContactId?: Map<number, FilleulDossier>
+): boolean {
+  if (!isContactEligibleForFilleulAttritionStats(contact)) return false;
+  const dossier = contact.id != null ? dossiersByContactId?.get(contact.id) : undefined;
+  const desinscription = resolveFilleulDesinscriptionTimestamp(dossier);
+  if (!isAffiliationInExercice(desinscription, exerciceLabel)) return false;
+  const inscription = resolveFilleulInscriptionTimestamp(contact, dossier);
+  if (
+    inscription != null &&
+    desinscription != null &&
+    inscription > desinscription
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Attrition filleul sur l'exercice : désinscriptions de la période parmi la cohorte
+ * présente au 1er jour de l'exercice (inscrits + désinscrits selon dates dossier).
+ */
+export function computeFilleulAttritionExerciceStats(
+  contacts: Contact[],
+  exerciceLabel: string,
+  options?: FilleulAttritionExerciceStatsOptions
+): ContactAttritionStatResult {
+  const dossiersByContactId = options?.dossiersByContactId;
+  const cohortContactIds: number[] = [];
+  const attritedContactIds: number[] = [];
+  const activeContactIds: number[] = [];
+
+  for (const contact of contacts) {
+    if (contact.id == null) continue;
+    if (!wasConsultantPresentAtExerciceStart(contact, exerciceLabel, dossiersByContactId)) {
+      continue;
+    }
+    cohortContactIds.push(contact.id);
+    if (isFilleulDesinscriptionInExercice(contact, exerciceLabel, dossiersByContactId)) {
+      attritedContactIds.push(contact.id);
+    } else {
+      activeContactIds.push(contact.id);
+    }
+  }
+
+  const totalCount = cohortContactIds.length;
+  const attritedCount = attritedContactIds.length;
+
+  return {
+    activeCount: activeContactIds.length,
+    attritedCount,
+    totalCount,
+    attritionPercent: totalCount > 0 ? (attritedCount / totalCount) * 100 : 0,
+    activeContactIds,
+    attritedContactIds,
+  };
+}
+
+export function formatFilleulAttritionExerciceSubtitle(
+  stats: ContactAttritionStatResult,
+  exerciceLabel: string
+): string {
+  const pct = stats.attritionPercent.toFixed(1).replace(".0", "");
+  return `${stats.attritedCount} désinscription${stats.attritedCount > 1 ? "s" : ""} · ${pct} % · cohorte ${stats.totalCount} au 01/08 · ${exerciceLabel}`;
+}
+
+export function formatFilleulAttritionCumulativeIndex(
+  stats: ContactAttritionStatResult
+): string {
+  const pct = stats.attritionPercent.toFixed(1).replace(".0", "");
+  return `${pct} % — ${stats.attritedCount}/${stats.totalCount} désinscrits (état actuel)`;
+}
+
 export function filterContactsForClientAttritionLens(
   contacts: Contact[],
   lens: "active" | "attrited"
@@ -108,5 +197,25 @@ export function filterContactsForFilleulAttritionLens(
     return lens === "attrited"
       ? filleulCat === "FILLEUL_DESINSCRIT"
       : filleulCat === "FILLEUL";
+  });
+}
+
+export function filterContactsForFilleulAttritionExerciceLens(
+  contacts: Contact[],
+  lens: "active" | "attrited",
+  exerciceLabel: string,
+  options?: FilleulAttritionExerciceStatsOptions
+): Contact[] {
+  const dossiersByContactId = options?.dossiersByContactId;
+  return contacts.filter((contact) => {
+    if (!wasConsultantPresentAtExerciceStart(contact, exerciceLabel, dossiersByContactId)) {
+      return false;
+    }
+    const departed = isFilleulDesinscriptionInExercice(
+      contact,
+      exerciceLabel,
+      dossiersByContactId
+    );
+    return lens === "attrited" ? departed : !departed;
   });
 }

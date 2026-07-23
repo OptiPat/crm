@@ -154,6 +154,13 @@ export function resolveFilleulInscriptionTimestamp(
   return contact.date_inscription_filleul ?? null;
 }
 
+/** Date désinscription : dossier uniquement. */
+export function resolveFilleulDesinscriptionTimestamp(
+  dossier?: FilleulDossier | null
+): number | null | undefined {
+  return dossier?.dateDesinscription ?? null;
+}
+
 export async function upsertFilleulDossierDatesFromImport(
   contactId: number,
   dates: { dateInvitation?: string; dateInscription?: string }

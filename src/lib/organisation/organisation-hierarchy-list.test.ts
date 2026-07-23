@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Contact } from "@/lib/api/tauri-contacts";
+import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import { buildOrganisationTree } from "@/lib/organisation/organisation-tree";
 import { buildOrganisationVolumeRows } from "@/lib/organisation/organisation-branch-volumes";
+import { fiscalYearStartUnix } from "@/lib/pipe/remuneration-fiscal-year";
 import {
   buildOrganisationHierarchyList,
   collectHierarchyExpandIdsToContact,
@@ -65,7 +67,7 @@ describe("organisation-hierarchy-list", () => {
   const volumeRows = buildOrganisationVolumeRows(tree, contacts);
   const list = buildOrganisationHierarchyList(tree, contacts, volumeRows);
 
-  it("construit une arborescence active sous le CGP", () => {
+  it("construit une arborescence active sous le CGP (mode legacy)", () => {
     expect(list.root?.contact.id).toBe(2);
     expect(list.root?.children.map((n) => n.contact.id).sort()).toEqual([3, 4]);
     expect(list.root?.children[0]?.children[0]?.contact.id).toBe(7);
@@ -98,6 +100,47 @@ describe("organisation-hierarchy-list", () => {
     expect(expanded.has(2)).toBe(true);
     expect(expanded.has(3)).toBe(true);
     expect(expanded.has(7)).toBe(true);
+  });
+
+  it("intègre un désinscrit de l'exercice sous son parrain", () => {
+    const exercice = "2024-2025";
+    const inExercice = (fiscalYearStartUnix(exercice) ?? 0) + 86_400 * 30;
+    const dossiers = new Map<number, FilleulDossier>([
+      [
+        5,
+        {
+          contactId: 5,
+          dateInvitation: null,
+          dateInscription: inExercice - 86_400 * 200,
+          dateDesinscription: inExercice,
+          datePremiereSouscriptionImo: null,
+          datePremiereSouscriptionPlacement: null,
+          datePremiereSouscriptionScpi: null,
+          datePassageManager: null,
+          dateHabilitationCif: null,
+          datePremierVaaOuVa: null,
+          notes: null,
+          updatedAt: 0,
+        },
+      ],
+    ]);
+    const exerciceTree = buildOrganisationTree(contacts, { nom: "CGP", prenom: "Moi" }, {
+      exerciceLabel: exercice,
+      dossiersByContactId: dossiers,
+    });
+    const exerciceList = buildOrganisationHierarchyList(
+      exerciceTree,
+      contacts,
+      volumeRows,
+      { exerciceLabel: exercice, dossiersByContactId: dossiers }
+    );
+
+    expect(exerciceList.desinscrits).toHaveLength(0);
+    expect(exerciceList.root?.children.map((n) => n.contact.id).sort()).toEqual([3, 4, 5]);
+    expect(
+      exerciceList.root?.children.find((n) => n.contact.id === 5)?.status
+    ).toBe("desinscrit");
+    expect(resolveHierarchyFocusZone(5, exerciceList)).toBe("active");
   });
 
   it("résout la zone de focus pour actifs, upline et désinscrits", () => {

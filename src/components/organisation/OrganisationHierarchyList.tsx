@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, UserX } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { OrganisationVolumeRow } from "@/lib/organisation/organisation-branch-volumes";
 import { formatFilleulVolumeDisplay } from "@/lib/organisation/organisation-branch-volumes";
@@ -14,10 +14,12 @@ import {
   resolveHierarchyFocusZone,
   type OrganisationHierarchyNode,
 } from "@/lib/organisation/organisation-hierarchy-list";
+import type { OrganisationExerciceVisibilityOptions } from "@/lib/organisation/organisation-exercice-visibility";
 import { organisationMemberLevelLabel } from "@/lib/organisation/organisation-member-roster";
 import type { OrganisationTreeResult } from "@/lib/organisation/organisation-tree";
 import { ContactInitialsAvatar } from "@/components/contacts/contacts-ui";
 import { FilleulRankBadges } from "@/components/organisation/FilleulRankBadges";
+import { OrganisationHideDesinscritsToggle } from "@/components/organisation/OrganisationHideDesinscritsToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +28,10 @@ type OrganisationHierarchyListProps = {
   contacts: Contact[];
   volumeRows: OrganisationVolumeRow[];
   dossiersByContactId: Map<number, FilleulDossier>;
+  treeVisibilityOptions?: OrganisationExerciceVisibilityOptions;
+  hideDesinscrits?: boolean;
+  desinscritCountInExercice?: number;
+  onHideDesinscritsChange?: (hide: boolean) => void;
   selectedContactId?: number | null;
   focusContactId?: number | null;
   onFocusContactHandled?: () => void;
@@ -38,6 +44,7 @@ function HierarchyRow({
   expandedIds,
   selectedContactId,
   focusContactId,
+  dossiersByContactId,
   onToggle,
   onSelect,
 }: {
@@ -46,6 +53,7 @@ function HierarchyRow({
   expandedIds: Set<number>;
   selectedContactId?: number | null;
   focusContactId?: number | null;
+  dossiersByContactId: Map<number, FilleulDossier>;
   onToggle: (contactId: number) => void;
   onSelect: (contact: Contact) => void;
 }) {
@@ -56,6 +64,10 @@ function HierarchyRow({
   const isSelected = contactId != null && selectedContactId === contactId;
   const levelLabel = organisationMemberLevelLabel(node.generation);
   const isFocusTarget = contactId != null && focusContactId === contactId;
+  const dossier = contactId != null ? dossiersByContactId.get(contactId) : undefined;
+  const desinscriptionLabel = dossier?.dateDesinscription
+    ? formatCalendarDateFr(dossier.dateDesinscription)
+    : null;
 
   useEffect(() => {
     if (!isFocusTarget) return;
@@ -70,6 +82,7 @@ function HierarchyRow({
         data-hierarchy-contact-id={contactId ?? undefined}
         className={cn(
           "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted/70",
+          node.status === "desinscrit" && "opacity-75",
           isSelected && "bg-primary/10 ring-1 ring-primary/20",
           isFocusTarget && "ring-2 ring-primary/40"
         )}
@@ -117,7 +130,7 @@ function HierarchyRow({
 
         {node.status === "desinscrit" ? (
           <span className="text-[10px] rounded-full border border-muted-foreground/30 px-1.5 py-0.5 text-muted-foreground shrink-0">
-            Désinscrit
+            {desinscriptionLabel ? `Sorti ${desinscriptionLabel}` : "Désinscrit"}
           </span>
         ) : null}
 
@@ -146,6 +159,7 @@ function HierarchyRow({
               expandedIds={expandedIds}
               selectedContactId={selectedContactId}
               focusContactId={focusContactId}
+              dossiersByContactId={dossiersByContactId}
               onToggle={onToggle}
               onSelect={onSelect}
             />
@@ -335,24 +349,28 @@ export function OrganisationHierarchyList({
   contacts,
   volumeRows,
   dossiersByContactId,
+  treeVisibilityOptions,
+  hideDesinscrits = false,
+  desinscritCountInExercice = 0,
+  onHideDesinscritsChange,
   selectedContactId,
   focusContactId,
   onFocusContactHandled,
   onSelect,
 }: OrganisationHierarchyListProps) {
   const list = useMemo(
-    () => buildOrganisationHierarchyList(tree, contacts, volumeRows),
-    [tree, contacts, volumeRows]
+    () => buildOrganisationHierarchyList(tree, contacts, volumeRows, treeVisibilityOptions),
+    [tree, contacts, volumeRows, treeVisibilityOptions]
   );
 
   const [expandedIds, setExpandedIds] = useState<Set<number>>(() =>
     defaultHierarchyExpandedIds(list)
   );
-  const [showDesinscrits, setShowDesinscrits] = useState(false);
 
   const listLayoutKey = useMemo(
-    () => `${tree.stats.actifs}-${tree.stats.desinscrits}-${volumeRows.length}`,
-    [tree.stats.actifs, tree.stats.desinscrits, volumeRows.length]
+    () =>
+      `${tree.stats.actifs}-${desinscritCountInExercice}-${volumeRows.length}-${treeVisibilityOptions?.exerciceLabel ?? ""}`,
+    [tree.stats.actifs, desinscritCountInExercice, volumeRows.length, treeVisibilityOptions?.exerciceLabel]
   );
 
   useEffect(() => {
@@ -380,10 +398,6 @@ export function OrganisationHierarchyList({
     if (focusContactId == null) return;
 
     const zone = resolveHierarchyFocusZone(focusContactId, list);
-    if (zone === "desinscrit") {
-      setShowDesinscrits(true);
-    }
-
     if (zone === "active") {
       const pathIds = collectHierarchyExpandIdsToContact(
         focusContactId,
@@ -467,16 +481,11 @@ export function OrganisationHierarchyList({
           Replier
         </Button>
 
-        <Button
-          type="button"
-          variant={showDesinscrits ? "secondary" : "ghost"}
-          size="sm"
-          className="h-7 gap-1 text-xs"
-          onClick={() => setShowDesinscrits((value) => !value)}
-        >
-          <UserX className="h-3.5 w-3.5" aria-hidden />
-          Désinscrits ({list.desinscrits.length})
-        </Button>
+        <OrganisationHideDesinscritsToggle
+          desinscritCount={desinscritCountInExercice}
+          hideDesinscrits={hideDesinscrits}
+          onHideDesinscritsChange={onHideDesinscritsChange}
+        />
 
         <div className="ml-auto hidden lg:flex items-center gap-4 pr-2 text-[10px] uppercase tracking-wide text-muted-foreground">
           <span className="w-[4.5rem] text-right">Perso</span>
@@ -495,18 +504,21 @@ export function OrganisationHierarchyList({
       />
 
       <div className="max-h-[min(72vh,calc(100vh-12rem))] overflow-y-auto px-1 py-2">
-        <HierarchyRow
-          node={list.root}
-          depth={0}
-          expandedIds={expandedIds}
-          selectedContactId={selectedContactId}
-          focusContactId={focusContactId}
-          onToggle={handleToggle}
-          onSelect={onSelect}
-        />
+        {list.root ? (
+          <HierarchyRow
+            node={list.root}
+            depth={0}
+            expandedIds={expandedIds}
+            selectedContactId={selectedContactId}
+            focusContactId={focusContactId}
+            dossiersByContactId={dossiersByContactId}
+            onToggle={handleToggle}
+            onSelect={onSelect}
+          />
+        ) : null}
       </div>
 
-      {showDesinscrits ? (
+      {list.desinscrits.length > 0 ? (
         <DesinscritsSection
           nodes={list.desinscrits}
           dossiersByContactId={dossiersByContactId}
