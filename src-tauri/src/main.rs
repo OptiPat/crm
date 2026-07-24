@@ -104,6 +104,7 @@ use workspace::sync::commands::{
     resolve_team_sync_conflict_accept_remote_cmd, resolve_team_sync_conflict_keep_local_cmd,
     team_sync_once_cmd,
 };
+use workspace::sync::rebuild::rebuild_team_cache_from_sharepoint_cmd;
 
 fn main() {
     tauri::Builder::default()
@@ -403,6 +404,7 @@ fn main() {
             get_system_auth_status,
             configure_system_auth,
             recover_without_system_auth,
+            recover_missing_team_cache_cmd,
             lock,
             change_master_password,
             get_license_status_cmd,
@@ -557,6 +559,7 @@ fn main() {
             validate_team_remote_snapshot_cmd,
             activate_team_sync_cmd,
             bootstrap_team_sync_cmd,
+            rebuild_team_cache_from_sharepoint_cmd,
             team_sync_once_cmd,
             list_team_sync_conflicts_cmd,
             resolve_team_sync_conflict_keep_local_cmd,

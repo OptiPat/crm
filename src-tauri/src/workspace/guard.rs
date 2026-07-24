@@ -5,7 +5,7 @@ use crate::database::workspace::WorkspaceConfig;
 use crate::database::Database;
 use crate::workspace::identity::{
     can_export_with_resolved_role, can_manage_team_with_resolved_role,
-    require_sensitive_team_authority,
+    require_fresh_sensitive_team_authority,
 };
 use crate::workspace::enrollment::validate_workspace_enrollment;
 use crate::workspace::sharepoint::SharePointSiteRef;
@@ -17,7 +17,7 @@ const EXPORT_DENIED_MESSAGE: &str =
 pub fn require_export_permission(app: &AppHandle, db: &Database) -> Result<(), String> {
     let config = workspace_config_from_db(db)?;
     validate_workspace_enrollment(app, &config)?;
-    let authority = require_sensitive_team_authority(app, &config)?;
+    let authority = require_fresh_sensitive_team_authority(app, &config)?;
     if can_export_with_resolved_role(authority.role) {
         Ok(())
     } else {
@@ -64,7 +64,7 @@ pub fn resolve_sharepoint_site_ref(config: &WorkspaceConfig) -> Result<SharePoin
 pub fn require_team_management_permission(app: &AppHandle, db: &Database) -> Result<(), String> {
     let config = workspace_config_from_db(db)?;
     validate_workspace_enrollment(app, &config)?;
-    let authority = require_sensitive_team_authority(app, &config)?;
+    let authority = require_fresh_sensitive_team_authority(app, &config)?;
     if can_manage_team_with_resolved_role(authority.role) {
         Ok(())
     } else {

@@ -3,7 +3,9 @@
 
 use super::Database;
 use crate::workspace::mode::WorkspaceMode;
-use crate::workspace::team::{capabilities_for_role, TeamCapabilities, TeamRole};
+use crate::workspace::team::TeamRole;
+#[cfg(test)]
+use crate::workspace::team::{capabilities_for_role, TeamCapabilities};
 use rusqlite::Result;
 use serde::{Deserialize, Serialize};
 
@@ -63,6 +65,7 @@ impl WorkspaceConfig {
         }
     }
 
+    #[cfg(test)]
     pub fn effective_capabilities(&self) -> TeamCapabilities {
         capabilities_for_role(self.effective_role())
     }

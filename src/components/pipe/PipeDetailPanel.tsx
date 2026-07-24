@@ -114,7 +114,13 @@ export function PipeDetailPanel({
       setConfirmArchive(false);
       onArchived?.();
     } catch (err) {
-      toast.error(String(err));
+      const raw = String(err);
+      const fr = raw.includes("actes Stellium")
+        ? "Des actes Stellium sont encore ouverts — retirez-les du tableau avant d'archiver."
+        : raw.includes("éléments rattachés")
+          ? "Des éléments rattachés sont encore actifs — archivez-les ou supprimez-les d'abord."
+          : raw;
+      toast.error(fr);
     } finally {
       setArchiving(false);
     }
@@ -590,7 +596,7 @@ export function PipeDetailPanel({
             <AlertDialogDescription>
               {isArchived
                 ? "Le pipe redeviendra actif et réapparaîtra dans le board et la liste."
-                : "Il disparaîtra du pipe actif (board et liste). L’historique reste visible dans l’onglet Relation de la fiche contact."}
+                : "Il disparaîtra du pipe actif (board et liste). Impossible s’il reste des actes Stellium ouverts — retirez-les du tableau d’abord. L’historique reste dans l’onglet Relation de la fiche contact."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

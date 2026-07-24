@@ -98,6 +98,12 @@ export interface TeamSyncActivationReport {
   reservedIdBlocks: number;
 }
 
+export interface TeamCacheRebuildReport {
+  rebuilt: boolean;
+  synchronizedRecords: number;
+  reservedIdBlocks: number;
+}
+
 export interface TeamSyncOnceReport {
   pulled: number;
   pushed: number;

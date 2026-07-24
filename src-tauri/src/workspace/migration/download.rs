@@ -58,6 +58,18 @@ fn field_bool(fields: &Value, name: &str) -> bool {
     }
 }
 
+pub(crate) fn remote_item_record_identity(
+    item: &ParsedSharePointListItem,
+) -> Option<(String, String)> {
+    if field_bool(&item.fields, "Deleted") {
+        return None;
+    }
+    Some((
+        field_string(&item.fields, "TableName")?,
+        field_string(&item.fields, "RecordKey")?,
+    ))
+}
+
 fn parse_payload_map(payload_json: &str, sync_key: &str) -> Result<Map<String, Value>, String> {
     let parsed: Value = serde_json::from_str(payload_json).map_err(|error| {
         format!("PayloadJson illisible (SyncKey {sync_key}) : {error}")
@@ -69,6 +81,7 @@ fn parse_payload_map(payload_json: &str, sync_key: &str) -> Result<Map<String, V
 }
 
 /// Simule des éléments CRM_Data distants à partir d'un snapshot local (tests).
+#[cfg(test)]
 pub fn snapshot_to_crm_data_items(
     snapshot: &TeamMigrationSnapshot,
 ) -> Result<Vec<ParsedSharePointListItem>, String> {

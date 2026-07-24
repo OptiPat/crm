@@ -249,12 +249,14 @@ pub const TEAM_WORKSPACE_LISTS: &[ListDef] = &[
     },
 ];
 
+#[cfg(test)]
 pub fn list_def_by_display_name(name: &str) -> Option<&'static ListDef> {
     TEAM_WORKSPACE_LISTS
         .iter()
         .find(|list| list.display_name == name)
 }
 
+#[cfg(test)]
 pub fn field_name(list_display_name: &str, logical: &str) -> Option<&'static str> {
     let list = list_def_by_display_name(list_display_name)?;
     list.columns

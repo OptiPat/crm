@@ -26,14 +26,17 @@ pub enum GraphWriteOutcome {
     Conflict(GraphWriteConflict),
 }
 
+#[cfg(test)]
 pub fn etag_matches(left: &str, right: &str) -> bool {
     normalize_etag(left) == normalize_etag(right)
 }
 
+#[cfg(test)]
 pub fn normalize_etag(raw: &str) -> String {
     raw.trim().trim_matches('"').to_string()
 }
 
+#[cfg(test)]
 pub fn evaluate_update(
     expected_etag: &str,
     current_remote_etag: &str,

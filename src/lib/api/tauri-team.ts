@@ -5,6 +5,7 @@ import type {
   TeamMigrationPreview,
   TeamMigrationUploadReport,
   TeamMigrationValidateReport,
+  TeamCacheRebuildReport,
   TeamSyncActivationReport,
   TeamSyncConflict,
   TeamSyncOnceReport,
@@ -20,6 +21,7 @@ export type {
   TeamMigrationUploadError,
   TeamMigrationUploadReport,
   TeamMigrationValidateReport,
+  TeamCacheRebuildReport,
   TeamMigrationTableCount,
   TeamRole,
   TeamSyncActivationReport,
@@ -127,6 +129,14 @@ export async function activateTeamSync(): Promise<TeamSyncActivationReport> {
 export async function bootstrapTeamSync(): Promise<TeamSyncActivationReport> {
   const report = await invoke<TeamSyncActivationReport>("bootstrap_team_sync_cmd");
   notifyTeamWorkspaceChanged();
+  return report;
+}
+
+export async function rebuildTeamCacheFromSharePoint(): Promise<TeamCacheRebuildReport> {
+  const report = await invoke<TeamCacheRebuildReport>(
+    "rebuild_team_cache_from_sharepoint_cmd"
+  );
+  notifySharedCrmDataChanged();
   return report;
 }
 

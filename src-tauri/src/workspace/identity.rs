@@ -367,14 +367,36 @@ fn fetch_authoritative_identity_cached(
     app: &AppHandle,
     config: &WorkspaceConfig,
 ) -> Result<AuthoritativeTeamIdentity, String> {
+    fetch_authoritative_identity(app, config, true)
+}
+
+fn fetch_authoritative_identity_fresh(
+    app: &AppHandle,
+    config: &WorkspaceConfig,
+) -> Result<AuthoritativeTeamIdentity, String> {
+    fetch_authoritative_identity(app, config, false)
+}
+
+fn fetch_authoritative_identity(
+    app: &AppHandle,
+    config: &WorkspaceConfig,
+    allow_cache: bool,
+) -> Result<AuthoritativeTeamIdentity, String> {
     let mut connection = resolve_microsoft_team_connection(app)?
         .ok_or_else(|| "Connectez d'abord un compte Microsoft équipe.".to_string())?;
     refresh_oauth_connection_if_needed(app, &mut connection, OAuthConnectionSlot::MicrosoftTeam)?;
     let key = cache_key(config, &connection.email);
-    if let Ok(guard) = identity_cache().lock() {
-        if let Some(entry) = guard.as_ref() {
-            if entry.cache_key == key && entry.fetched_at.elapsed() < IDENTITY_CACHE_TTL {
-                return Ok(entry.identity.clone());
+    if !allow_cache {
+        if let Ok(mut guard) = identity_cache().lock() {
+            *guard = None;
+        }
+    }
+    if allow_cache {
+        if let Ok(guard) = identity_cache().lock() {
+            if let Some(entry) = guard.as_ref() {
+                if entry.cache_key == key && entry.fetched_at.elapsed() < IDENTITY_CACHE_TTL {
+                    return Ok(entry.identity.clone());
+                }
             }
         }
     }
@@ -480,6 +502,54 @@ pub fn require_sensitive_team_authority(
         });
     }
     resolve_authoritative_team_identity(app, config)
+}
+
+pub fn require_fresh_sensitive_team_authority(
+    app: &AppHandle,
+    config: &WorkspaceConfig,
+) -> Result<WorkspaceAuthority, String> {
+    if !config.mode.is_team() {
+        crate::licensing::set_workspace_write_allowed(true);
+        return resolve_authoritative_team_identity(app, config);
+    }
+    if is_team_workspace_provisioned(config) && !entra_groups_configured(config) {
+        crate::licensing::set_workspace_write_allowed(false);
+        return Err(ENTRA_GROUPS_REQUIRED_MESSAGE.to_string());
+    }
+    if !entra_groups_configured(config) {
+        crate::licensing::set_workspace_write_allowed(true);
+        return resolve_authoritative_team_identity(app, config);
+    }
+    match fetch_authoritative_identity_fresh(app, config) {
+        Ok(identity) => {
+            crate::licensing::set_workspace_write_allowed(true);
+            let role = identity.role;
+            Ok(WorkspaceAuthority {
+                role,
+                capabilities: capabilities_for_role(role),
+                identity: Some(identity),
+                role_source: RoleSource::EntraGroups,
+            })
+        }
+        Err(error) => {
+            crate::licensing::set_workspace_write_allowed(false);
+            Err(error)
+        }
+    }
+}
+
+pub fn initialize_workspace_write_gate(
+    app: &AppHandle,
+    config: &WorkspaceConfig,
+) -> Result<(), String> {
+    let sync_activated = crate::workspace::enrollment::load_workspace_enrollment(app)?
+        .is_some_and(|enrollment| enrollment.sync_activated);
+    if config.mode.is_team() && sync_activated {
+        require_fresh_sensitive_team_authority(app, config)?;
+    } else {
+        crate::licensing::set_workspace_write_allowed(true);
+    }
+    Ok(())
 }
 
 pub fn can_export_with_resolved_role(role: TeamRole) -> bool {

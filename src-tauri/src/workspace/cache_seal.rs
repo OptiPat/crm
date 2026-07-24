@@ -220,6 +220,7 @@ fn remove_plaintext_cache_artifacts_checked(path: &Path) -> Result<(), String> {
         PathBuf::from(format!("{}-wal", path.display())),
         PathBuf::from(format!("{}-shm", path.display())),
         PathBuf::from(format!("{}-journal", path.display())),
+        path.with_extension("db.before-rebuild"),
         path.to_path_buf(),
     ] {
         if candidate.exists() {
@@ -234,6 +235,33 @@ fn remove_plaintext_cache_artifacts_checked(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn latest_plaintext_modified(path: &Path) -> Option<std::time::SystemTime> {
+    [
+        path.to_path_buf(),
+        PathBuf::from(format!("{}-wal", path.display())),
+        PathBuf::from(format!("{}-shm", path.display())),
+        PathBuf::from(format!("{}-journal", path.display())),
+    ]
+    .into_iter()
+    .filter_map(|candidate| fs::metadata(candidate).ok()?.modified().ok())
+    .max()
+}
+
+fn plaintext_is_at_least_as_recent(
+    clear_modified: Option<std::time::SystemTime>,
+    sealed_modified: Option<std::time::SystemTime>,
+) -> bool {
+    matches!(
+        (clear_modified, sealed_modified),
+        (Some(clear), Some(sealed)) if clear >= sealed
+    )
+}
+
+fn validate_plaintext_cache(path: &Path) -> Result<(), String> {
+    crate::export_archive::validate_database_file(path)
+        .map_err(|error| format!("Cache équipe clair invalide : {error}"))
+}
+
 pub fn unseal_team_cache_if_needed(app: &AppHandle) -> Result<(), String> {
     let Some(enrollment) = load_workspace_enrollment(app)? else {
         return Ok(());
@@ -242,12 +270,23 @@ pub fn unseal_team_cache_if_needed(app: &AppHandle) -> Result<(), String> {
         return Ok(());
     }
     let database_path = team_cache_database_path(app)?;
-    if database_path.is_file() {
-        return Ok(());
-    }
     let sealed_path = team_cache_sealed_path(app)?;
     if !sealed_path.is_file() {
+        if database_path.is_file() {
+            validate_plaintext_cache(&database_path)?;
+            return Ok(());
+        }
         return Err("Cache équipe absent : ni base locale ni copie scellée disponible.".into());
+    }
+    if database_path.is_file() {
+        let clear_modified = latest_plaintext_modified(&database_path);
+        let sealed_modified = fs::metadata(&sealed_path)
+            .ok()
+            .and_then(|metadata| metadata.modified().ok());
+        if plaintext_is_at_least_as_recent(clear_modified, sealed_modified) {
+            validate_plaintext_cache(&database_path)?;
+            return Ok(());
+        }
     }
     let key = load_storage_key(app)?
         .ok_or_else(|| "Clé protégée du cache équipe indisponible.".to_string())?;
@@ -256,6 +295,9 @@ pub fn unseal_team_cache_if_needed(app: &AppHandle) -> Result<(), String> {
     let result = (|| {
         decrypt_database_file(&sealed_path, &unsealed_path, &key)?;
         crate::export_archive::validate_database_file(&unsealed_path)?;
+        if database_path.is_file() {
+            remove_plaintext_cache_artifacts_checked(&database_path)?;
+        }
         fs::rename(&unsealed_path, &database_path)
             .map_err(|error| format!("Activation du cache déchiffré impossible : {error}"))
     })();
@@ -336,6 +378,29 @@ mod tests {
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::Relaxed)
         ))
+    }
+
+    #[test]
+    fn newer_plaintext_wins_over_a_stale_sealed_copy() {
+        let old = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1);
+        let recent = std::time::UNIX_EPOCH + std::time::Duration::from_secs(2);
+        assert!(plaintext_is_at_least_as_recent(Some(recent), Some(old)));
+        assert!(plaintext_is_at_least_as_recent(
+            Some(recent),
+            Some(recent)
+        ));
+        assert!(!plaintext_is_at_least_as_recent(Some(old), Some(recent)));
+    }
+
+    #[test]
+    fn corrupted_plaintext_cache_is_rejected_before_opening() {
+        let dir = temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("cache.db");
+        fs::write(&source, b"not-a-sqlite-database").unwrap();
+
+        assert!(validate_plaintext_cache(&source).is_err());
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

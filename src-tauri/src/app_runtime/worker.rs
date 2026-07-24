@@ -177,12 +177,15 @@ fn lock_ui_if_due(app: &AppHandle) {
     }
     let timeout = Duration::from_secs(u64::from(prefs.auto_lock_minutes) * 60);
     if app.state::<UiSessionState>().lock_if_idle(timeout) {
-        if let Err(error) =
-            crate::auth::commands::close_database(app, app.state::<DbState>().inner())
-        {
-            eprintln!("⚠️ Scellement du cache au verrouillage automatique : {error}");
+        match crate::auth::commands::close_database(app, app.state::<DbState>().inner()) {
+            Ok(()) => {
+                let _ = app.emit(UI_SESSION_LOCKED_EVENT, ());
+            }
+            Err(error) => {
+                app.state::<UiSessionState>().unlock();
+                eprintln!("⚠️ Verrouillage différé, scellement impossible : {error}");
+            }
         }
-        let _ = app.emit(UI_SESSION_LOCKED_EVENT, ());
     }
 }
 

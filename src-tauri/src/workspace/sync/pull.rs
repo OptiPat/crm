@@ -147,6 +147,8 @@ pub fn apply_pull_batch(db: &Database, batch: &PreparedPullBatch) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::workspace::sharepoint::test_server::{ScriptedGraphServer, ScriptedResponse};
+    use crate::workspace::sharepoint::{SharePointGraphClient, SharePointSiteRef};
 
     fn live_item(payload_json: &str) -> ParsedSharePointDeltaItem {
         let record_key = r#"[{"column":"id","kind":"integer","value":1}]"#;
@@ -203,5 +205,63 @@ mod tests {
         assert_eq!(batch.changes.len(), 1);
         assert!(batch.changes[0].deleted);
         assert_eq!(batch.changes[0].table_name, "contacts");
+    }
+
+    #[test]
+    fn graph_delta_is_parsed_and_applied_without_local_outbox() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.workspace_sync_set_capture_enabled(true).unwrap();
+        let record_key = r#"[{"column":"id","kind":"integer","value":1}]"#;
+        let payload_json = serde_json::json!({
+            "id": {"kind":"integer","value":1},
+            "nom": {"kind":"text","value":"DUPONT"},
+            "prenom": {"kind":"text","value":"Jean"},
+            "categorie": {"kind":"text","value":"CLIENT"}
+        })
+        .to_string();
+        let response = serde_json::json!({
+            "value": [{
+                "id": "sp-1",
+                "@odata.etag": "\"2\"",
+                "fields": {
+                    "SyncKey": compute_sync_key("contacts", record_key),
+                    "TableName": "contacts",
+                    "RecordKey": record_key,
+                    "PayloadJson": payload_json,
+                    "PayloadChecksum": compute_payload_checksum(&payload_json),
+                    "SchemaVersion": WORKSPACE_SYNC_SCHEMA_VERSION,
+                    "Deleted": false
+                }
+            }],
+            "@odata.deltaLink": "{{BASE_URL}}/v1.0/delta?token=2"
+        });
+        let server =
+            ScriptedGraphServer::spawn(vec![ScriptedResponse::json(200, response.to_string())]);
+        let client = SharePointGraphClient::new(SharePointSiteRef {
+            hostname: "example.sharepoint.com".into(),
+            site_path: "/sites/crm".into(),
+        })
+        .with_graph_host(&server.base_url);
+
+        let delta = client
+            .list_items_delta_blocking("token", "site-1", "data-list", None)
+            .unwrap();
+        let batch = prepare_pull_batch(&db, delta).unwrap();
+        apply_pull_batch(&db, &batch).unwrap();
+
+        let name: String = db
+            .connection()
+            .query_row("SELECT nom FROM contacts WHERE id = 1", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(name, "DUPONT");
+        assert!(db.workspace_sync_list_pending().unwrap().is_empty());
+        let expected_delta_link = format!("{}/v1.0/delta?token=2", server.base_url);
+        assert_eq!(
+            db.workspace_sync_get_state("crm_data_delta_link")
+                .unwrap()
+                .as_deref(),
+            Some(expected_delta_link.as_str())
+        );
+        assert_eq!(server.finish().len(), 1);
     }
 }

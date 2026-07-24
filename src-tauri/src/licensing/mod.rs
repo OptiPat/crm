@@ -9,7 +9,7 @@ pub use commands::{
     activate_license_cmd, get_license_status_cmd, needs_license_activation_cmd,
     start_license_trial_cmd,
 };
-pub use gate::{install_authorizer, refresh_write_gate};
+pub use gate::{install_authorizer, refresh_write_gate, set_workspace_write_allowed};
 pub use state::{LicenseState, LicenseStatus, LicenseStatusView, LICENSE_LEGACY_MIGRATED_KEY, LICENSE_STATE_KEY};
 
 use crate::database::Database;

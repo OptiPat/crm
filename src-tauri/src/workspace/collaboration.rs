@@ -652,18 +652,22 @@ pub fn team_append_audit(
 pub fn team_list_audit(
     app: &AppHandle,
     config: &WorkspaceConfig,
-    entity_type: &str,
-    entity_id: &str,
+    entity_type: Option<&str>,
+    entity_id: Option<&str>,
     limit: Option<u32>,
 ) -> Result<Vec<TeamAuditView>, String> {
     let session = open_collaboration_session(app, config)?;
     let list_id = resolve_list_id(&session, LIST_CRM_AUDIT)?;
-    let filter = entity_filter(entity_type, entity_id);
+    let filter = match (entity_type, entity_id) {
+        (Some(entity_type), Some(entity_id)) => Some(entity_filter(entity_type, entity_id)),
+        (None, None) => None,
+        _ => return Err("Les filtres d'audit doivent être fournis ensemble.".into()),
+    };
     let items = session.client.list_items_all_blocking(
         &session.access_token,
         &session.site_id,
         &list_id,
-        Some(&filter),
+        filter.as_deref(),
     )?;
     let max = limit.unwrap_or(50) as usize;
     let mut views: Vec<TeamAuditView> = items

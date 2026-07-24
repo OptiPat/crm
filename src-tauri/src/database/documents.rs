@@ -255,6 +255,7 @@ impl super::Database {
         id: i64,
         chemin_fichier: &str,
         taille_fichier: i64,
+        sha256: &str,
     ) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
         tx.execute(
@@ -264,13 +265,55 @@ impl super::Database {
             [],
         )?;
         tx.execute(
-            "UPDATE documents SET chemin_fichier = ?1, taille_fichier = ?2 WHERE id = ?3",
-            params![chemin_fichier, taille_fichier, id],
+            "UPDATE documents
+             SET chemin_fichier = ?1, taille_fichier = ?2, workspace_blob_sha256 = ?3
+             WHERE id = ?4",
+            params![chemin_fichier, taille_fichier, sha256, id],
         )?;
         tx.execute(
             "UPDATE workspace_sync_state SET value = 'local' WHERE key = 'apply_origin'",
             [],
         )?;
         tx.commit()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::Database;
+
+    #[test]
+    fn downloaded_document_path_persists_computed_sha_without_outbox() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO documents
+                 (id, type_document, nom_fichier, chemin_fichier, taille_fichier)
+                 VALUES (1, 'AUTRE', 'document.pdf', 'workspace-document://1', 0)",
+                [],
+            )
+            .unwrap();
+
+        db.workspace_set_downloaded_document_path(1, "cache/document.pdf", 42, "sha256-test")
+            .unwrap();
+
+        let stored: (String, i64, Option<String>) = db
+            .connection()
+            .query_row(
+                "SELECT chemin_fichier, taille_fichier, workspace_blob_sha256
+                 FROM documents WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            stored,
+            (
+                "cache/document.pdf".to_string(),
+                42,
+                Some("sha256-test".to_string())
+            )
+        );
+        assert!(db.workspace_sync_list_pending().unwrap().is_empty());
     }
 }

@@ -21,7 +21,7 @@ use crate::workspace::enrollment::{
     load_workspace_enrollment, mark_workspace_sync_activated, validate_workspace_enrollment,
 };
 use crate::workspace::guard::{resolve_sharepoint_site_ref, workspace_config_from_db};
-use crate::workspace::identity::require_sensitive_team_authority;
+use crate::workspace::identity::require_fresh_sensitive_team_authority;
 use crate::workspace::migration::{
     compute_mutation_id, compute_sync_key, validate_team_remote_snapshot,
 };
@@ -73,6 +73,26 @@ fn create_team_cache_copy(
     Ok((temp_path, team_database))
 }
 
+fn activate_manifest_with_rollback(
+    mark_activated: impl FnOnce() -> Result<(), String>,
+    save_manifest: impl FnOnce() -> Result<(), String>,
+    rollback_activation: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    mark_activated()?;
+    if let Err(manifest_error) = save_manifest() {
+        return match rollback_activation() {
+            Ok(()) => Err(format!(
+                "Activation du manifeste cache impossible, enrôlement restauré : {manifest_error}"
+            )),
+            Err(rollback_error) => Err(format!(
+                "Activation du manifeste cache impossible : {manifest_error}. \
+                 Le rollback de l'enrôlement a aussi échoué : {rollback_error}"
+            )),
+        };
+    }
+    Ok(())
+}
+
 fn finalize_team_cache(
     app: &AppHandle,
     temp_path: &Path,
@@ -87,11 +107,13 @@ fn finalize_team_cache(
         .map_err(|error| format!("Réouverture du cache équipe impossible : {error}"))?;
     let enrollment = load_workspace_enrollment(app)?
         .ok_or_else(|| "Enrôlement équipe absent lors du cutover.".to_string())?;
-    mark_workspace_sync_activated(app)?;
-    // L'enrôlement est marqué avant le manifeste : si la seconde écriture
-    // échoue, le prochain démarrage reste bloqué au lieu de rouvrir la base
-    // personnelle et de créer une divergence silencieuse.
-    save_workspace_cache_manifest(app, &enrollment.workspace_id)?;
+    activate_manifest_with_rollback(
+        || mark_workspace_sync_activated(app).map(|_| ()),
+        || save_workspace_cache_manifest(app, &enrollment.workspace_id).map(|_| ()),
+        || {
+            crate::workspace::enrollment::set_workspace_sync_activated(app, false).map(|_| ())
+        },
+    )?;
     let sealed_path = crate::workspace::cache::team_cache_sealed_path(app)?;
     if sealed_path.exists() {
         std::fs::remove_file(&sealed_path)
@@ -100,7 +122,7 @@ fn finalize_team_cache(
     Ok(active_database)
 }
 
-fn reserve_and_install_id_blocks(
+pub(super) fn reserve_and_install_id_blocks(
     database: &Database,
     client: &SharePointGraphClient,
     access_token: &str,
@@ -169,7 +191,7 @@ pub fn list_team_sync_conflicts_cmd(
         workspace_config_from_db(database)?
     };
     validate_workspace_enrollment(&app_handle, &config)?;
-    require_sensitive_team_authority(&app_handle, &config)?;
+    require_fresh_sensitive_team_authority(&app_handle, &config)?;
     let guard = db
         .lock()
         .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
@@ -195,7 +217,7 @@ pub fn resolve_team_sync_conflict_keep_local_cmd(
         workspace_config_from_db(database)?
     };
     validate_workspace_enrollment(&app_handle, &config)?;
-    require_sensitive_team_authority(&app_handle, &config)?;
+    require_fresh_sensitive_team_authority(&app_handle, &config)?;
     let guard = db
         .lock()
         .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
@@ -221,7 +243,7 @@ pub fn resolve_team_sync_conflict_accept_remote_cmd(
         workspace_config_from_db(database)?
     };
     validate_workspace_enrollment(&app_handle, &config)?;
-    require_sensitive_team_authority(&app_handle, &config)?;
+    require_fresh_sensitive_team_authority(&app_handle, &config)?;
     let guard = db
         .lock()
         .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
@@ -244,7 +266,7 @@ pub fn activate_team_sync_cmd(
         workspace_config_from_db(database)?
     };
     validate_workspace_enrollment(&app_handle, &config)?;
-    let authority = require_sensitive_team_authority(&app_handle, &config)?;
+    let authority = require_fresh_sensitive_team_authority(&app_handle, &config)?;
     if !authority.capabilities.can_manage_members {
         return Err("Seul le conseiller peut activer la synchronisation équipe.".into());
     }
@@ -331,7 +353,7 @@ pub fn bootstrap_team_sync_cmd(
         workspace_config_from_db(database)?
     };
     validate_workspace_enrollment(&app_handle, &config)?;
-    let authority = require_sensitive_team_authority(&app_handle, &config)?;
+    let authority = require_fresh_sensitive_team_authority(&app_handle, &config)?;
     if authority.identity.is_none() {
         return Err("Identité Microsoft équipe indisponible.".into());
     }
@@ -424,7 +446,7 @@ pub fn team_sync_once_cmd(
         )
     };
     validate_workspace_enrollment(&app_handle, &config)?;
-    let authority = require_sensitive_team_authority(&app_handle, &config)?;
+    let authority = require_fresh_sensitive_team_authority(&app_handle, &config)?;
     let actor_id = authority
         .identity
         .as_ref()
@@ -462,6 +484,9 @@ pub fn team_sync_once_cmd(
         let database = guard.as_ref().ok_or("Base non initialisée")?;
         let batch = prepare_pull_batch(database, remote_delta)?;
         apply_pull_batch(database, &batch)?;
+        database
+            .workspace_sync_mark_online()
+            .map_err(|error| error.to_string())?;
     }
 
     let mut pushed = 0;
@@ -629,4 +654,42 @@ pub fn team_sync_once_cmd(
         pending,
         delta_link_updated: true,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::activate_manifest_with_rollback;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[test]
+    fn failed_manifest_write_rolls_back_sync_activation() {
+        let rolled_back = AtomicBool::new(false);
+        let error = activate_manifest_with_rollback(
+            || Ok(()),
+            || Err("disque plein".into()),
+            || {
+                rolled_back.store(true, Ordering::SeqCst);
+                Ok(())
+            },
+        )
+        .unwrap_err();
+
+        assert!(rolled_back.load(Ordering::SeqCst));
+        assert!(error.contains("enrôlement restauré"));
+    }
+
+    #[test]
+    fn successful_manifest_write_does_not_run_rollback() {
+        let rolled_back = AtomicBool::new(false);
+        activate_manifest_with_rollback(
+            || Ok(()),
+            || Ok(()),
+            || {
+                rolled_back.store(true, Ordering::SeqCst);
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(!rolled_back.load(Ordering::SeqCst));
+    }
 }

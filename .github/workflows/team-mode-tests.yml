@@ -1,0 +1,56 @@
+name: Mode équipe — Windows et macOS
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - ".github/workflows/team-mode-tests.yml"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  team-mode:
+    name: Tests équipe (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: TypeScript et ESLint
+        run: |
+          npx tsc --noEmit
+          npm run lint
+
+      - name: Tests frontend
+        run: npm run test
+
+      - name: Tests Rust complets
+        run: cargo test --manifest-path src-tauri/Cargo.toml -j 1

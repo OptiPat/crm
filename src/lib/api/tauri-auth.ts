@@ -70,6 +70,10 @@ export async function recoverWithoutSystemAuth(password: string): Promise<void> 
   await invoke<boolean>("recover_without_system_auth", { password });
 }
 
+export async function recoverMissingTeamCache(password: string): Promise<void> {
+  await invoke("recover_missing_team_cache_cmd", { password });
+}
+
 export async function getSystemAuthStatus(): Promise<SystemAuthStatus> {
   return invoke<SystemAuthStatus>("get_system_auth_status");
 }

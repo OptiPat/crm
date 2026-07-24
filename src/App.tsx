@@ -6,6 +6,7 @@ import { SetupPassword } from "@/pages/SetupPassword";
 import { SetupWizard } from "@/pages/SetupWizard";
 import { UnlockScreen } from "@/pages/UnlockScreen";
 import { Layout } from "@/components/layout/Layout";
+import { TeamWorkspaceStatusBanner } from "@/components/team/TeamWorkspaceStatusBanner";
 import { Dashboard } from "@/pages/Dashboard";
 import { Statistiques } from "@/pages/Statistiques";
 import { Contacts } from "@/pages/Contacts";
@@ -359,6 +360,7 @@ function AppInner() {
             onPageChange={setCurrentPage}
             onLogout={handleLogout}
           >
+            <TeamWorkspaceStatusBanner onOpenSettings={() => setCurrentPage("parametres")} />
             {renderPage()}
           </Layout>
         </AppUpdateProvider>

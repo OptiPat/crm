@@ -5,19 +5,24 @@ mod plan;
 mod sync_key;
 mod upload;
 
-pub use plan::{
+#[cfg(test)]
+use plan::{
     plan_migration_item_action, remote_payload_matches, MigrationItemAction, RemoteCrmDataItem,
 };
 pub use sync_key::{compute_mutation_id, compute_payload_checksum, compute_sync_key};
 pub use download::{
+    rebuild_snapshot_from_remote_items, validate_rebuilt_snapshot_in_memory,
     validate_team_remote_snapshot, TeamMigrationValidateReport,
 };
+pub(crate) use download::remote_item_record_identity;
 #[cfg(test)]
-pub use download::{rebuild_snapshot_from_remote_items, snapshot_to_crm_data_items};
+pub use download::snapshot_to_crm_data_items;
 pub use upload::{
-    payload_json_string, upload_team_migration_snapshot, validate_expected_checksum,
-    TeamMigrationUploadError, TeamMigrationUploadReport, MAX_SHAREPOINT_PAYLOAD_JSON_BYTES,
+    payload_json_string, upload_team_migration_snapshot, TeamMigrationUploadReport,
+    MAX_SHAREPOINT_PAYLOAD_JSON_BYTES,
 };
+#[cfg(test)]
+use upload::validate_expected_checksum;
 
 pub fn oversized_payload_warnings(
     records: &[crate::database::workspace_sync::SnapshotRecord],

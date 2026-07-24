@@ -330,6 +330,8 @@ pub fn ensure_remote_audit_entry(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::workspace::sharepoint::test_server::{ScriptedGraphServer, ScriptedResponse};
+    use crate::workspace::sharepoint::SharePointSiteRef;
 
     fn queue_item(operation: &str, payload: Option<&str>) -> WorkspaceSyncQueueItem {
         WorkspaceSyncQueueItem {
@@ -446,5 +448,78 @@ mod tests {
                 .unwrap();
         assert!(second.queue_item.revision > first.queue_item.revision);
         assert_ne!(first_fields["MutationId"], second_fields["MutationId"]);
+    }
+
+    #[test]
+    fn remote_push_treats_matching_mutation_after_412_as_applied() {
+        let queue_item = queue_item("upsert", Some(r#"{"v":1}"#));
+        let mutation_id = build_crm_data_mutation_fields(
+            &queue_item,
+            "actor",
+            "2026-07-24T05:00:00Z",
+        )
+        .unwrap()["MutationId"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let plan = PendingPushPlan {
+            queue_item,
+            remote_mapping: Some(WorkspaceRemoteRecord {
+                table_name: "contacts".into(),
+                record_key: r#"[{"column":"id","kind":"integer","value":42}]"#.into(),
+                remote_item_id: Some("remote-42".into()),
+                remote_etag: Some("\"1\"".into()),
+                last_synced_at: None,
+            }),
+        };
+        let remote = serde_json::json!({
+            "id": "remote-42",
+            "@odata.etag": "\"2\"",
+            "fields": {
+                "MutationId": mutation_id,
+                "PayloadJson": "{\"v\":1}",
+                "Deleted": false
+            }
+        });
+        let server = ScriptedGraphServer::spawn(vec![
+            ScriptedResponse::json(
+                412,
+                r#"{"error":{"code":"preconditionFailed","message":"etag mismatch"}}"#,
+            ),
+            ScriptedResponse::json(200, remote.to_string()),
+        ]);
+        let client = SharePointGraphClient::new(SharePointSiteRef {
+            hostname: "example.sharepoint.com".into(),
+            site_path: "/sites/crm".into(),
+        })
+        .with_graph_host(&server.base_url);
+
+        let result = execute_remote_push(
+            &client,
+            "token",
+            "site-1",
+            "data-list",
+            "actor",
+            "2026-07-24T05:00:00Z",
+            &plan,
+        )
+        .unwrap();
+
+        assert!(matches!(
+            result,
+            RemotePushResult::Applied {
+                remote_item_id,
+                remote_etag,
+                ..
+            } if remote_item_id == "remote-42" && remote_etag == "\"2\""
+        ));
+        let requests = server.finish();
+        assert_eq!(requests.len(), 2);
+        assert!(requests[0].starts_with(
+            "PATCH /v1.0/sites/site-1/lists/data-list/items/remote-42/fields "
+        ));
+        assert!(requests[1].starts_with(
+            "GET /v1.0/sites/site-1/lists/data-list/items/remote-42"
+        ));
     }
 }

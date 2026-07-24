@@ -130,6 +130,8 @@ pub fn reserve_remote_id_block(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::workspace::sharepoint::test_server::{ScriptedGraphServer, ScriptedResponse};
+    use crate::workspace::sharepoint::SharePointSiteRef;
 
     #[test]
     fn sequence_block_starts_after_existing_ids() {
@@ -145,5 +147,47 @@ mod tests {
             fields: json!({ "NextValue": 12.5 }),
         };
         assert!(next_value(&item).is_err());
+    }
+
+    #[test]
+    fn remote_sequence_retries_412_and_reserves_the_refreshed_range() {
+        let server = ScriptedGraphServer::spawn(vec![
+            ScriptedResponse::json(
+                200,
+                r#"{"value":[{"id":"seq-1","@odata.etag":"\"1\"","fields":{"SequenceKey":"contacts","NextValue":100}}]}"#,
+            ),
+            ScriptedResponse::json(
+                412,
+                r#"{"error":{"code":"preconditionFailed","message":"concurrent reservation"}}"#,
+            ),
+            ScriptedResponse::json(
+                200,
+                r#"{"value":[{"id":"seq-1","@odata.etag":"\"2\"","fields":{"SequenceKey":"contacts","NextValue":200}}]}"#,
+            ),
+            ScriptedResponse::json(204, ""),
+            ScriptedResponse::json(
+                200,
+                r#"{"id":"seq-1","@odata.etag":"\"3\"","fields":{"SequenceKey":"contacts","NextValue":300}}"#,
+            ),
+        ]);
+        let client = SharePointGraphClient::new(SharePointSiteRef {
+            hostname: "example.sharepoint.com".into(),
+            site_path: "/sites/crm".into(),
+        })
+        .with_graph_host(&server.base_url);
+
+        let block =
+            reserve_remote_id_block(&client, "token", "site-1", "sequences", "contacts", 1, 100)
+                .unwrap();
+
+        assert_eq!((block.start_id, block.end_id), (200, 299));
+        assert_eq!(block.remote_etag, "\"3\"");
+        let requests = server.finish();
+        assert_eq!(requests.len(), 5);
+        assert!(requests[0].starts_with("GET /v1.0/sites/site-1/lists/sequences/items?"));
+        assert!(requests[1].starts_with(
+            "PATCH /v1.0/sites/site-1/lists/sequences/items/seq-1/fields "
+        ));
+        assert!(requests[2].starts_with("GET /v1.0/sites/site-1/lists/sequences/items?"));
     }
 }

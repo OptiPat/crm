@@ -279,6 +279,64 @@ pub fn table_counts_for_snapshot_records(
     Ok(counts)
 }
 
+pub fn restore_snapshot_into_database(
+    db: &Database,
+    snapshot: &TeamMigrationSnapshot,
+) -> Result<(), String> {
+    if snapshot.schema_version != WORKSPACE_SYNC_SCHEMA_VERSION {
+        return Err(format!(
+            "Version de schéma snapshot incompatible (attendu v{WORKSPACE_SYNC_SCHEMA_VERSION}, reçu v{}).",
+            snapshot.schema_version
+        ));
+    }
+    let conn = db.connection();
+    let normalized_counts = table_counts_for_snapshot_records(conn, &snapshot.records)?;
+    if normalized_counts != snapshot.table_counts {
+        return Err("Comptages du snapshot distant incohérents.".into());
+    }
+    conn.execute("PRAGMA foreign_keys = OFF", [])
+        .map_err(|error| format!("PRAGMA foreign_keys OFF : {error}"))?;
+    let restore_result = (|| {
+        db.begin_import_transaction()
+            .map_err(|error| format!("Transaction reconstruction : {error}"))?;
+        let schema =
+            SchemaCache::build(conn).map_err(|error| format!("Cache schéma : {error}"))?;
+        if let Err(error) = clear_exportable_table_rows(conn) {
+            let _ = db.rollback_import_transaction();
+            return Err(error);
+        }
+        for record in &snapshot.records {
+            if let Err(error) = insert_snapshot_record(conn, &schema, record) {
+                let _ = db.rollback_import_transaction();
+                return Err(error);
+            }
+        }
+        db.commit_import_transaction()
+            .map_err(|error| format!("Commit reconstruction : {error}"))
+    })();
+    let foreign_keys_result = conn
+        .execute("PRAGMA foreign_keys = ON", [])
+        .map_err(|error| format!("PRAGMA foreign_keys ON : {error}"));
+    restore_result?;
+    foreign_keys_result?;
+    let violations = foreign_key_violations(conn)
+        .map_err(|error| format!("PRAGMA foreign_key_check : {error}"))?;
+    if !violations.is_empty() {
+        return Err(format!(
+            "Clés étrangères invalides après reconstruction : {}",
+            violations.join("; ")
+        ));
+    }
+    let integrity =
+        integrity_check_message(conn).map_err(|error| format!("PRAGMA integrity_check : {error}"))?;
+    if !integrity.eq_ignore_ascii_case("ok") {
+        return Err(format!(
+            "Intégrité SQLite invalide après reconstruction : {integrity}"
+        ));
+    }
+    Ok(())
+}
+
 pub fn validate_snapshot_in_memory(
     snapshot: &TeamMigrationSnapshot,
     expected_checksum: &str,
@@ -609,6 +667,24 @@ mod tests {
         assert!(report.checksum_match);
         assert!(report.foreign_key_ok);
         assert!(report.integrity_ok);
+    }
+
+    #[test]
+    fn restores_snapshot_into_a_fresh_workspace_database() {
+        let source_db = test_db();
+        seed_roundtrip_fixtures(&source_db);
+        let snapshot = build_team_migration_snapshot(&source_db).unwrap();
+        let target_db = test_db();
+
+        restore_snapshot_into_database(&target_db, &snapshot).unwrap();
+
+        let restored = build_team_migration_snapshot(&target_db).unwrap();
+        assert_eq!(snapshot_checksum(&restored), snapshot_checksum(&snapshot));
+        let contact_count: i64 = target_db
+            .connection()
+            .query_row("SELECT COUNT(*) FROM contacts", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(contact_count, 1);
     }
 
     #[test]

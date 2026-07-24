@@ -10,6 +10,7 @@ use crate::workspace::guard::{require_team_management_permission, workspace_conf
 use crate::workspace::identity::{
     entra_groups_configured, require_sensitive_team_authority, ENTRA_GROUPS_REQUIRED_MESSAGE,
 };
+#[cfg(test)]
 use crate::workspace::mode::WorkspaceMode;
 use crate::workspace::sharepoint::{SharePointGraphClient, TEAM_WORKSPACE_LISTS};
 use tauri::{AppHandle, State};
@@ -237,13 +238,19 @@ pub async fn team_list_audit_cmd(
     app_handle: AppHandle,
     db: State<'_, DbState>,
     session: State<'_, UiSessionState>,
-    entity_type: String,
-    entity_id: String,
+    entity_type: Option<String>,
+    entity_id: Option<String>,
     limit: Option<u32>,
 ) -> Result<Vec<TeamAuditView>, String> {
     let config = require_team_collaboration_config(&db, &session)?;
     tauri::async_runtime::spawn_blocking(move || {
-        team_list_audit(&app_handle, &config, &entity_type, &entity_id, limit)
+        team_list_audit(
+            &app_handle,
+            &config,
+            entity_type.as_deref(),
+            entity_id.as_deref(),
+            limit,
+        )
     })
     .await
     .map_err(|error| format!("Lecture audit interrompue : {error}"))?

@@ -112,13 +112,13 @@ export async function teamAppendAudit(options: {
 }
 
 export async function teamListAudit(options: {
-  entityType: string;
-  entityId: string;
+  entityType?: string;
+  entityId?: string;
   limit?: number;
 }): Promise<TeamAuditEntry[]> {
   return invoke<TeamAuditEntry[]>("team_list_audit_cmd", {
-    entityType: options.entityType,
-    entityId: options.entityId,
+    entityType: options.entityType ?? null,
+    entityId: options.entityId ?? null,
     limit: options.limit ?? null,
   });
 }

@@ -104,23 +104,46 @@ pub fn ensure_local_document(
                 .map_err(|error| error.to_string())?,
         )
     };
+    if config.mode.is_team() {
+        crate::workspace::enrollment::validate_workspace_enrollment(app, &config)?;
+        crate::workspace::identity::require_fresh_sensitive_team_authority(app, &config)?;
+    }
     let existing = Path::new(&document.chemin_fichier);
     if existing.is_file() {
-        let is_current = match document.workspace_blob_sha256.as_deref() {
-            Some(expected) => file_sha256(existing)
+        if let Some(expected) = document.workspace_blob_sha256.as_deref() {
+            if file_sha256(existing)
                 .map(|actual| actual.eq_ignore_ascii_case(expected))
-                .unwrap_or(false),
-            None => true,
-        };
-        if is_current {
+                .unwrap_or(false)
+            {
+                return Ok(existing.to_path_buf());
+            }
+        } else if !config.mode.is_team() {
+            return Ok(existing.to_path_buf());
+        } else {
+            let sha256 = file_sha256(existing)?;
+            let size = std::fs::metadata(existing)
+                .map_err(|error| format!("Métadonnées du document local inaccessibles : {error}"))?
+                .len()
+                .try_into()
+                .map_err(|_| "Document local trop volumineux.".to_string())?;
+            let guard = db
+                .lock()
+                .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
+            let database = guard.as_ref().ok_or("Base non initialisée")?;
+            database
+                .workspace_set_downloaded_document_path(
+                    document.id,
+                    &document.chemin_fichier,
+                    size,
+                    &sha256,
+                )
+                .map_err(|error| error.to_string())?;
             return Ok(existing.to_path_buf());
         }
     }
     if !config.mode.is_team() {
         return Err("Fichier introuvable sur ce PC.".into());
     }
-    crate::workspace::enrollment::validate_workspace_enrollment(app, &config)?;
-    crate::workspace::identity::require_sensitive_team_authority(app, &config)?;
     let (bytes, expected_sha256) = if let Some((bytes, sha256)) = pending_content {
         (bytes, Some(sha256))
     } else {
@@ -185,6 +208,7 @@ pub fn ensure_local_document(
                 document.id,
                 &target.to_string_lossy(),
                 bytes.len() as i64,
+                &downloaded_sha256,
             )
             .map_err(|error| error.to_string())?;
     }

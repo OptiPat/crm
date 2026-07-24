@@ -21,9 +21,3 @@ pub mod team;
 pub mod team_connection;
 
 pub use guard::require_export_permission_state;
-pub use mode::WorkspaceMode;
-pub use oauth::{
-    microsoft_team_flow_provider, microsoft_team_oauth_scopes, microsoft_team_oauth_tenant,
-};
-pub use sharepoint::SharePointGraphClient;
-pub use team::{capabilities_for_role, TeamCapabilities, TeamMember, TeamRole};

@@ -4,6 +4,7 @@ use rusqlite::Connection;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static WRITE_ALLOWED: AtomicBool = AtomicBool::new(true);
+static WORKSPACE_WRITE_ALLOWED: AtomicBool = AtomicBool::new(true);
 static BYPASS_AUTHORIZER: AtomicBool = AtomicBool::new(false);
 
 pub fn is_write_allowed(db: &Database) -> bool {
@@ -23,6 +24,10 @@ pub fn is_write_allowed(db: &Database) -> bool {
 
 pub fn refresh_write_gate(db: &Database) {
     WRITE_ALLOWED.store(is_write_allowed(db), Ordering::SeqCst);
+}
+
+pub fn set_workspace_write_allowed(allowed: bool) {
+    WORKSPACE_WRITE_ALLOWED.store(allowed, Ordering::SeqCst);
 }
 
 pub fn bypass_authorizer<R>(f: impl FnOnce() -> R) -> R {
@@ -48,9 +53,55 @@ fn license_authorizer(ctx: AuthContext<'_>) -> Authorization {
     };
     if table_name == "settings" {
         Authorization::Allow
-    } else if WRITE_ALLOWED.load(Ordering::SeqCst) {
+    } else if WRITE_ALLOWED.load(Ordering::SeqCst)
+        && WORKSPACE_WRITE_ALLOWED.load(Ordering::SeqCst)
+    {
         Authorization::Allow
     } else {
         Authorization::Deny
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+    use std::process::Command;
+
+    const CHILD_ENV: &str = "CRM_WORKSPACE_GATE_CHILD";
+
+    #[test]
+    fn revoked_team_identity_denies_crm_writes_at_sqlite_level() {
+        if std::env::var_os(CHILD_ENV).is_none() {
+            let status = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "licensing::gate::tests::revoked_team_identity_denies_crm_writes_at_sqlite_level",
+                    "--nocapture",
+                ])
+                .env(CHILD_ENV, "1")
+                .status()
+                .unwrap();
+            assert!(status.success());
+            return;
+        }
+
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE contacts (id INTEGER PRIMARY KEY, nom TEXT);
+                 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT);",
+            )
+            .unwrap();
+        WRITE_ALLOWED.store(true, Ordering::SeqCst);
+        WORKSPACE_WRITE_ALLOWED.store(false, Ordering::SeqCst);
+        install_authorizer(&connection);
+
+        assert!(connection
+            .execute("INSERT INTO contacts (nom) VALUES ('DUPONT')", [])
+            .is_err());
+        assert!(connection
+            .execute("INSERT INTO settings (key, value) VALUES ('ui', 'ok')", [])
+            .is_ok());
     }
 }

@@ -7,6 +7,7 @@ import {
   formatRetryDelay,
   getSystemAuthStatus,
   parseAuthCommandError,
+  recoverMissingTeamCache,
   recoverWithoutSystemAuth,
   type SystemAuthStatus,
   unlockWithPassword,
@@ -25,6 +26,7 @@ export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
   const [loading, setLoading] = useState(false);
   const [systemAuth, setSystemAuth] = useState<SystemAuthStatus | null>(null);
   const [recoveryAvailable, setRecoveryAvailable] = useState(false);
+  const [teamCacheRecoveryAvailable, setTeamCacheRecoveryAvailable] = useState(false);
   const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
 
@@ -58,6 +60,7 @@ export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
     if (remainingSeconds > 0) return;
     setError("");
     setRecoveryAvailable(false);
+    setTeamCacheRecoveryAvailable(false);
     setLoading(true);
 
     try {
@@ -71,8 +74,32 @@ export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
       }
       if (authError.code === "system_auth_unavailable") {
         setRecoveryAvailable(true);
+      } else if (
+        authError.message.includes("Cache équipe") ||
+        authError.message.includes("manifeste local absent")
+      ) {
+        setTeamCacheRecoveryAvailable(true);
       } else {
         setPassword("");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTeamCacheRecovery = async () => {
+    if (remainingSeconds > 0) return;
+    setError("");
+    setLoading(true);
+    try {
+      await recoverMissingTeamCache(password);
+      setTeamCacheRecoveryAvailable(false);
+      setError("Cache équipe restauré. Vous pouvez maintenant déverrouiller le CRM.");
+    } catch (caught) {
+      const authError = parseAuthCommandError(caught);
+      setError(authError.message);
+      if (authError.code === "rate_limited" && authError.retryAfterSeconds) {
+        setBlockedUntil(Date.now() + authError.retryAfterSeconds * 1000);
       }
     } finally {
       setLoading(false);
@@ -185,6 +212,23 @@ export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
                             disabled={loading || !password}
                           >
                             Accès de récupération
+                          </Button>
+                        </div>
+                      )}
+                      {teamCacheRecoveryAvailable && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-red-700">
+                            Le cache local peut être reconstruit depuis les données SharePoint
+                            après vérification de votre identité.
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleTeamCacheRecovery}
+                            disabled={loading || !password}
+                          >
+                            Restaurer le cache équipe
                           </Button>
                         </div>
                       )}

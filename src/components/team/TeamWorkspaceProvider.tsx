@@ -63,7 +63,7 @@ export function TeamWorkspaceProvider({
   const [syncError, setSyncError] = useState<string | null>(null);
   const syncInFlight = useRef(false);
 
-  const refresh = useCallback(async () => {
+  const loadWorkspaceState = useCallback(async () => {
     if (!enabled) {
       setState({
         config: DEFAULT_WORKSPACE_CONFIG,
@@ -75,10 +75,8 @@ export function TeamWorkspaceProvider({
         authorityError: null,
         syncActivated: false,
       });
-      setLoading(false);
       return;
     }
-    setLoading(true);
     try {
       const next = await getWorkspaceConfig();
       setState(next);
@@ -89,10 +87,17 @@ export function TeamWorkspaceProvider({
         capabilities: FAIL_CLOSED_CAPABILITIES,
         authorityError: "Identité d’équipe non vérifiée. Les actions sensibles sont bloquées.",
       }));
+    }
+  }, [enabled]);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      await loadWorkspaceState();
     } finally {
       setLoading(false);
     }
-  }, [enabled]);
+  }, [loadWorkspaceState]);
 
   useEffect(() => {
     void refresh();
@@ -129,6 +134,9 @@ export function TeamWorkspaceProvider({
           setSyncError(error instanceof Error ? error.message : String(error));
         }
       } finally {
+        if (!cancelled) {
+          await loadWorkspaceState();
+        }
         syncInFlight.current = false;
       }
     };
@@ -143,7 +151,7 @@ export function TeamWorkspaceProvider({
       window.removeEventListener("online", onWake);
       window.removeEventListener("focus", onWake);
     };
-  }, [enabled, state.syncActivated]);
+  }, [enabled, loadWorkspaceState, state.syncActivated]);
 
   const value = useMemo<TeamWorkspaceContextValue>(
     () => ({

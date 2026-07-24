@@ -14,6 +14,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
 import { useTeamWorkspace } from "@/components/team/TeamWorkspaceProvider";
+import { TeamAuditList } from "@/components/team/TeamAuditList";
 import {
   activateTeamSync,
   bootstrapTeamSync,
@@ -22,6 +23,7 @@ import {
   getMicrosoftTeamConnectionStatus,
   listTeamSyncConflicts,
   previewTeamMigration,
+  rebuildTeamCacheFromSharePoint,
   resolveTeamSyncConflictAcceptRemote,
   resolveTeamSyncConflictKeepLocal,
   saveWorkspaceConfig,
@@ -33,6 +35,8 @@ import {
 import {
   joinTeamWorkspace,
   provisionTeamWorkspace,
+  teamListAudit,
+  type TeamAuditEntry,
 } from "@/lib/api/tauri-team-collaboration";
 import { getOAuthAppSettings, saveMicrosoftOAuthClientId } from "@/lib/api/tauri-email-oauth";
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
@@ -73,6 +77,7 @@ export function TeamWorkspaceSettingsPanel() {
   const [validatingRestore, setValidatingRestore] = useState(false);
   const [activatingSync, setActivatingSync] = useState(false);
   const [joiningTeam, setJoiningTeam] = useState(false);
+  const [rebuildingCache, setRebuildingCache] = useState(false);
   const [migrationPreview, setMigrationPreview] = useState<TeamMigrationPreview | null>(null);
   const [migrationUploadReport, setMigrationUploadReport] =
     useState<TeamMigrationUploadReport | null>(null);
@@ -81,6 +86,7 @@ export function TeamWorkspaceSettingsPanel() {
   const [syncActivationReport, setSyncActivationReport] =
     useState<TeamSyncActivationReport | null>(null);
   const [syncConflicts, setSyncConflicts] = useState<TeamSyncConflict[]>([]);
+  const [auditEntries, setAuditEntries] = useState<TeamAuditEntry[]>([]);
   const [resolvingConflictId, setResolvingConflictId] = useState<number | null>(null);
 
   const [teamEnabled, setTeamEnabled] = useState(false);
@@ -133,11 +139,15 @@ export function TeamWorkspaceSettingsPanel() {
   useEffect(() => {
     if (!syncActivated) {
       setSyncConflicts([]);
+      setAuditEntries([]);
       return;
     }
-    void listTeamSyncConflicts()
-      .then(setSyncConflicts)
-      .catch((error) => console.warn("Lecture conflits équipe :", error));
+    void Promise.all([listTeamSyncConflicts(), teamListAudit({ limit: 20 })])
+      .then(([conflicts, audit]) => {
+        setSyncConflicts(conflicts);
+        setAuditEntries(audit);
+      })
+      .catch((error) => console.warn("Lecture collaboration équipe :", error));
   }, [syncActivated, syncError]);
 
   const handleSaveClientId = async () => {
@@ -426,6 +436,27 @@ export function TeamWorkspaceSettingsPanel() {
       toast.error(invokeErrorMessage(error) || "Impossible de rejoindre l'espace équipe.");
     } finally {
       setJoiningTeam(false);
+    }
+  };
+
+  const handleRebuildCache = async () => {
+    const confirmed = window.confirm(
+      "Reconstruire entièrement le cache local depuis SharePoint ?\n\n" +
+        "Cette opération est autorisée uniquement lorsque toutes les modifications locales sont synchronisées."
+    );
+    if (!confirmed) return;
+    setRebuildingCache(true);
+    try {
+      const report = await rebuildTeamCacheFromSharePoint();
+      await refresh();
+      toast.success(
+        `Cache reconstruit — ${report.synchronizedRecords} enregistrement(s), ` +
+          `${report.reservedIdBlocks} plage(s) d’identifiants.`
+      );
+    } catch (error) {
+      toast.error(invokeErrorMessage(error) || "Reconstruction du cache impossible.");
+    } finally {
+      setRebuildingCache(false);
     }
   };
 
@@ -944,6 +975,22 @@ export function TeamWorkspaceSettingsPanel() {
                     ? "Synchronisation automatique active toutes les 10 secondes."
                     : "Aucune bascule automatique avant validation et activation explicite."}
                 </p>
+                {syncActivated && canManage ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleRebuildCache()}
+                    disabled={rebuildingCache}
+                    className="gap-2"
+                  >
+                    {rebuildingCache ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Database className="h-4 w-4" />
+                    )}
+                    Reconstruire le cache depuis SharePoint
+                  </Button>
+                ) : null}
                 {syncActivationReport ? (
                   <p className="text-xs text-emerald-700 dark:text-emerald-300">
                     Cache équipe actif — {syncActivationReport.synchronizedRecords} enregistrement(s)
@@ -995,6 +1042,7 @@ export function TeamWorkspaceSettingsPanel() {
                     ))}
                   </div>
                 ) : null}
+                <TeamAuditList entries={auditEntries} />
               </div>
             ) : null}
             {!config.siteId?.trim() ? (

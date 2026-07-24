@@ -102,41 +102,60 @@ pub struct SharePointConnectionTestResult {
 pub struct SharePointGraphClient {
     pub site: SharePointSiteRef,
     pub api_version: String,
-    http_client: Option<BlockingClient>,
+    #[cfg(test)]
+    graph_host: Option<String>,
 }
 
 const GRAPH_RATE_LIMIT_RETRIES: u32 = 3;
+#[cfg(not(test))]
 const GRAPH_RATE_LIMIT_PAUSE_SECS: u64 = 2;
+
+fn graph_rate_limit_pause() -> Duration {
+    #[cfg(test)]
+    {
+        Duration::from_millis(5)
+    }
+    #[cfg(not(test))]
+    {
+        Duration::from_secs(GRAPH_RATE_LIMIT_PAUSE_SECS)
+    }
+}
 
 impl SharePointGraphClient {
     pub fn new(site: SharePointSiteRef) -> Self {
         Self {
             site,
             api_version: "v1.0".into(),
-            http_client: None,
+            #[cfg(test)]
+            graph_host: None,
         }
     }
 
-    pub fn with_http_client(mut self, client: BlockingClient) -> Self {
-        self.http_client = Some(client);
+    #[cfg(test)]
+    pub fn with_graph_host(mut self, graph_host: impl Into<String>) -> Self {
+        self.graph_host = Some(graph_host.into());
         self
     }
 
     fn http_client(&self) -> &BlockingClient {
         static DEFAULT: OnceLock<BlockingClient> = OnceLock::new();
-        self.http_client.as_ref().unwrap_or_else(|| {
-            DEFAULT.get_or_init(|| {
-                BlockingClient::builder()
-                    .connect_timeout(Duration::from_secs(10))
-                    .timeout(Duration::from_secs(30))
-                    .build()
-                    .expect("Client HTTP Microsoft Graph")
-            })
+        DEFAULT.get_or_init(|| {
+            BlockingClient::builder()
+                .connect_timeout(Duration::from_secs(10))
+                .timeout(Duration::from_secs(30))
+                .build()
+                .expect("Client HTTP Microsoft Graph")
         })
     }
 
     pub fn urls(&self) -> super::SharePointGraphUrls {
-        super::SharePointGraphUrls::new(self.site.clone()).with_api_version(&self.api_version)
+        let urls =
+            super::SharePointGraphUrls::new(self.site.clone()).with_api_version(&self.api_version);
+        #[cfg(test)]
+        if let Some(graph_host) = self.graph_host.as_ref() {
+            return urls.with_graph_host(graph_host);
+        }
+        urls
     }
 
     pub fn resolve_site_blocking(
@@ -256,7 +275,7 @@ impl SharePointGraphClient {
             let status = response.status().as_u16();
             let body = response.text().unwrap_or_default();
             if status == 429 && attempt + 1 < GRAPH_RATE_LIMIT_RETRIES {
-                thread::sleep(Duration::from_secs(GRAPH_RATE_LIMIT_PAUSE_SECS));
+                thread::sleep(graph_rate_limit_pause());
                 continue;
             }
             if status >= 400 {
@@ -889,7 +908,7 @@ fn graph_get_with_retry(
     for attempt in 0..GRAPH_RATE_LIMIT_RETRIES {
         let (status, body) = graph_get_blocking(client, url, access_token)?;
         if status == 429 && attempt + 1 < GRAPH_RATE_LIMIT_RETRIES {
-            thread::sleep(Duration::from_secs(GRAPH_RATE_LIMIT_PAUSE_SECS));
+            thread::sleep(graph_rate_limit_pause());
             continue;
         }
         if status == 429 {
@@ -1097,7 +1116,7 @@ fn graph_write_with_retry(
             )?,
         };
         if status == 429 && attempt + 1 < GRAPH_RATE_LIMIT_RETRIES {
-            thread::sleep(Duration::from_secs(GRAPH_RATE_LIMIT_PAUSE_SECS));
+            thread::sleep(graph_rate_limit_pause());
             continue;
         }
         if status == 429 {
@@ -1113,6 +1132,7 @@ fn graph_write_with_retry(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::workspace::sharepoint::test_server::{ScriptedGraphServer, ScriptedResponse};
 
     fn client() -> SharePointGraphClient {
         SharePointGraphClient::new(SharePointSiteRef {
@@ -1242,5 +1262,190 @@ mod tests {
         let body = r#"{"error":{"code":"Authorization_RequestDenied"}}"#;
         assert!(is_sites_selected_access_denied(403, body));
         assert!(!is_sites_selected_access_denied(404, body));
+    }
+
+    #[test]
+    fn fake_graph_retries_429_then_succeeds_with_bearer_token() {
+        let server = ScriptedGraphServer::spawn(vec![
+            ScriptedResponse::json(
+                429,
+                r#"{"error":{"code":"tooManyRequests","message":"retry"}}"#,
+            ),
+            ScriptedResponse::json(200, r#"{"value":[{"id":"list-1"}]}"#),
+        ]);
+        let graph = client().with_graph_host(&server.base_url);
+
+        assert_eq!(graph.count_site_lists_blocking("token-test", "site-1").unwrap(), 1);
+        let requests = server.finish();
+        assert_eq!(requests.len(), 2);
+        assert!(requests
+            .iter()
+            .all(|request| request.contains("authorization: Bearer token-test")
+                || request.contains("Authorization: Bearer token-test")));
+    }
+
+    #[test]
+    fn fake_graph_follows_odata_pagination() {
+        let server = ScriptedGraphServer::spawn(vec![
+            ScriptedResponse::json(
+                200,
+                r#"{"value":[{"id":"1"}],"@odata.nextLink":"{{BASE_URL}}/v1.0/page-2"}"#,
+            ),
+            ScriptedResponse::json(200, r#"{"value":[{"id":"2"},{"id":"3"}]}"#),
+        ]);
+        let graph = client().with_graph_host(&server.base_url);
+
+        assert_eq!(graph.count_site_lists_blocking("token", "site-1").unwrap(), 3);
+        let requests = server.finish();
+        assert!(requests[0].starts_with("GET /v1.0/sites/site-1/lists "));
+        assert!(requests[1].starts_with("GET /v1.0/page-2 "));
+    }
+
+    #[test]
+    fn fake_graph_follows_delta_pagination_and_keeps_final_token() {
+        let server = ScriptedGraphServer::spawn(vec![
+            ScriptedResponse::json(
+                200,
+                r#"{"value":[{"id":"1","@odata.etag":"\"1\"","fields":{"Title":"A"}}],"@odata.nextLink":"{{BASE_URL}}/v1.0/delta-page-2"}"#,
+            ),
+            ScriptedResponse::json(
+                200,
+                r#"{"value":[{"id":"2","deleted":{"state":"deleted"}}],"@odata.deltaLink":"{{BASE_URL}}/v1.0/delta?token=final"}"#,
+            ),
+        ]);
+        let graph = client().with_graph_host(&server.base_url);
+
+        let delta = graph
+            .list_items_delta_blocking("token", "site-1", "list-1", None)
+            .unwrap();
+        assert_eq!(delta.items.len(), 2);
+        assert_eq!(
+            delta.delta_link,
+            format!("{}/v1.0/delta?token=final", server.base_url)
+        );
+        assert!(!delta.items[0].deleted);
+        assert!(delta.items[1].deleted);
+        let requests = server.finish();
+        assert!(requests[0]
+            .starts_with("GET /v1.0/sites/site-1/lists/list-1/items/delta?"));
+        assert!(requests[1].starts_with("GET /v1.0/delta-page-2 "));
+    }
+
+    #[test]
+    fn fake_graph_maps_401_without_retrying() {
+        let server = ScriptedGraphServer::spawn(vec![ScriptedResponse::json(
+            401,
+            r#"{"error":{"code":"InvalidAuthenticationToken"}}"#,
+        )]);
+        let graph = client().with_graph_host(&server.base_url);
+
+        let error = graph
+            .count_site_lists_blocking("expired", "site-1")
+            .unwrap_err();
+        assert!(error.contains("expirée"), "{error}");
+        assert_eq!(server.finish().len(), 1);
+    }
+
+    #[test]
+    fn fake_graph_reports_a_network_disconnect() {
+        let server = ScriptedGraphServer::spawn(vec![ScriptedResponse::disconnect()]);
+        let graph = client().with_graph_host(&server.base_url);
+
+        let error = graph
+            .count_site_lists_blocking("token", "site-1")
+            .unwrap_err();
+        assert!(!error.trim().is_empty());
+        assert_eq!(server.finish().len(), 1);
+    }
+
+    #[test]
+    fn fake_graph_exposes_etag_conflict_and_if_match_header() {
+        let server = ScriptedGraphServer::spawn(vec![ScriptedResponse::json(
+            412,
+            r#"{"error":{"code":"preconditionFailed","message":"etag mismatch"}}"#,
+        )]);
+        let graph = client().with_graph_host(&server.base_url);
+
+        let outcome = graph
+            .patch_list_item_fields_blocking(
+                "token",
+                "site-1",
+                "list-1",
+                "item-1",
+                "\"etag-old\"",
+                serde_json::json!({"Title":"Nouveau"}),
+            )
+            .unwrap();
+        assert!(matches!(outcome, GraphWriteOutcome::Conflict(_)));
+        let request = server.finish().remove(0);
+        assert!(request.contains("if-match: \"etag-old\"") || request.contains("If-Match: \"etag-old\""));
+    }
+
+    #[test]
+    fn fake_graph_refreshes_etag_after_successful_patch() {
+        let server = ScriptedGraphServer::spawn(vec![
+            ScriptedResponse::json(204, ""),
+            ScriptedResponse::json(
+                200,
+                r#"{"id":"item-1","@odata.etag":"\"etag-new\"","fields":{"Title":"Nouveau"}}"#,
+            ),
+        ]);
+        let graph = client().with_graph_host(&server.base_url);
+
+        let outcome = graph
+            .patch_list_item_fields_blocking(
+                "token",
+                "site-1",
+                "list-1",
+                "item-1",
+                "\"etag-old\"",
+                serde_json::json!({"Title":"Nouveau"}),
+            )
+            .unwrap();
+        assert!(matches!(
+            outcome,
+            GraphWriteOutcome::Applied {
+                entity: GraphEntityVersion { ref etag, .. }
+            } if etag == "\"etag-new\""
+        ));
+        let requests = server.finish();
+        assert!(requests[0].starts_with(
+            "PATCH /v1.0/sites/site-1/lists/list-1/items/item-1/fields "
+        ));
+        assert!(requests[1]
+            .starts_with("GET /v1.0/sites/site-1/lists/list-1/items/item-1?"));
+    }
+
+    #[test]
+    fn fake_graph_uploads_then_downloads_binary_content() {
+        let server = ScriptedGraphServer::spawn(vec![
+            ScriptedResponse::json(
+                201,
+                r#"{"id":"file-1","name":"CRM_Document_1.pdf","eTag":"\"1\"","file":{}}"#,
+            ),
+            ScriptedResponse::bytes(200, b"contenu-binaire".to_vec()),
+        ]);
+        let graph = client().with_graph_host(&server.base_url);
+
+        let uploaded = graph
+            .upload_drive_file_blocking(
+                "token",
+                "drive-1",
+                None,
+                None,
+                "CRM_Document_1.pdf",
+                b"contenu-binaire".to_vec(),
+                Some("application/pdf"),
+            )
+            .unwrap();
+        assert_eq!(uploaded.id, "file-1");
+        let downloaded = graph
+            .download_drive_file_blocking("token", "drive-1", "file-1")
+            .unwrap();
+        assert_eq!(downloaded, b"contenu-binaire");
+        let requests = server.finish();
+        assert!(requests[0].starts_with("PUT /v1.0/drives/drive-1/root:/CRM_Document_1.pdf:/content "));
+        assert!(requests[0].contains("contenu-binaire"));
+        assert!(requests[1].starts_with("GET /v1.0/drives/drive-1/items/file-1/content "));
     }
 }

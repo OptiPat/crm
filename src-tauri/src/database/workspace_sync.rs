@@ -450,6 +450,20 @@ fn canonical_record_key_from_payload(
 }
 
 impl Database {
+    pub fn workspace_sync_reset_for_rebuild(&self) -> Result<()> {
+        self.conn.execute_batch(
+            "BEGIN IMMEDIATE;
+             DELETE FROM workspace_sync_queue;
+             DELETE FROM workspace_remote_records;
+             DELETE FROM workspace_sync_state;
+             DELETE FROM workspace_inbound_stage;
+             DELETE FROM workspace_conflicts;
+             DELETE FROM workspace_id_blocks;
+             DELETE FROM workspace_blob_queue;
+             COMMIT;",
+        )
+    }
+
     pub(crate) fn migrate_workspace_sync_tables(&self) -> Result<()> {
         self.conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS workspace_remote_records (
@@ -491,6 +505,7 @@ impl Database {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn workspace_sync_enqueue(
         &self,
         table_name: &str,
@@ -530,6 +545,7 @@ impl Database {
         )
     }
 
+    #[cfg(test)]
     pub fn workspace_sync_mark_synced(&self, queue_id: i64, revision: i64) -> Result<()> {
         let updated = self.conn.execute(
             "UPDATE workspace_sync_queue
@@ -801,6 +817,32 @@ mod tests {
                contact_id, gmail_message_id, gmail_thread_id, direction, subject, snippet, sent_at
              ) VALUES (1, 'msg-1', 'thread-1', 'IN', 'Sujet', 'Extrait', 1);",
         )
+    }
+
+    #[test]
+    fn rebuild_reset_clears_sync_metadata_but_preserves_local_settings() {
+        let db = test_db();
+        db.set_setting("ui_preference", "compact").unwrap();
+        db.workspace_sync_enqueue("contacts", "1", "upsert", Some("{}"))
+            .unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO workspace_sync_state (key, value) VALUES ('crm_data_delta_link', 'delta-old')",
+                [],
+            )
+            .unwrap();
+
+        db.workspace_sync_reset_for_rebuild().unwrap();
+
+        assert!(db.workspace_sync_list_pending().unwrap().is_empty());
+        assert_eq!(
+            db.workspace_sync_get_state("crm_data_delta_link").unwrap(),
+            None
+        );
+        assert_eq!(
+            db.get_setting("ui_preference").unwrap().as_deref(),
+            Some("compact")
+        );
     }
 
     #[test]

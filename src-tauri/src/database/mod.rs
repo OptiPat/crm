@@ -175,6 +175,26 @@ impl Database {
         Ok(db)
     }
 
+    pub(crate) fn create_workspace_cache_at_path(
+        app_handle: &AppHandle,
+        db_path: &std::path::Path,
+        workspace_config: &workspace::WorkspaceConfig,
+    ) -> Result<Self> {
+        let conn = Connection::open(db_path)?;
+        conn.execute("PRAGMA foreign_keys = ON", [])?;
+        crate::licensing::install_authorizer(&conn);
+        let db = Database { conn };
+        db.init_tables()?;
+        db.save_workspace_config(workspace_config)?;
+        crate::workspace::enrollment::validate_workspace_enrollment(
+            app_handle,
+            workspace_config,
+        )
+        .map_err(rusqlite::Error::InvalidParameterName)?;
+        crate::licensing::refresh_write_gate(&db);
+        Ok(db)
+    }
+
     pub(crate) fn backup_to_path(&self, path: &std::path::Path) -> Result<()> {
         let mut destination = Connection::open(path)?;
         let backup = rusqlite::backup::Backup::new(&self.conn, &mut destination)?;

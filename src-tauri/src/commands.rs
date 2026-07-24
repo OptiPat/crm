@@ -3393,31 +3393,103 @@ pub fn update_wizard_step(db: State<'_, DbState>, step: i64) -> Result<(), Strin
 
 // ========== IMPORT TRANSACTION (atomique) ==========
 
+fn acquire_team_import_lock(
+    app: &AppHandle,
+    config: &crate::database::workspace::WorkspaceConfig,
+) -> Result<Option<crate::database::workspace::WorkspaceConfig>, String> {
+    if !config.mode.is_team() {
+        return Ok(None);
+    }
+    let response = crate::workspace::collaboration::team_acquire_lock_with_ttl(
+        app,
+        &config,
+        "import",
+        "contacts",
+        900,
+    )?;
+    if !response.acquired {
+        return Err(format!(
+            "Un autre poste exécute déjà un import{}.",
+            response
+                .held_by
+                .as_deref()
+                .map(|holder| format!(" ({holder})"))
+                .unwrap_or_default()
+        ));
+    }
+    Ok(Some(config.clone()))
+}
+
+fn release_team_import_lock(
+    app: &AppHandle,
+    config: &crate::database::workspace::WorkspaceConfig,
+) {
+    if config.mode.is_team() {
+        let _ = crate::workspace::collaboration::team_release_lock(
+            app,
+            &config,
+            "import",
+            "contacts",
+        );
+    }
+}
+
 #[tauri::command]
-pub fn begin_import_transaction(db: State<'_, DbState>) -> Result<(), String> {
+pub fn begin_import_transaction(app: AppHandle, db: State<'_, DbState>) -> Result<(), String> {
+    let config = {
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        database
+            .get_workspace_config()
+            .map_err(|error| format!("Configuration workspace inaccessible : {error}"))?
+    };
+    let team_config = acquire_team_import_lock(&app, &config)?;
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    database
+    let result = database
         .begin_import_transaction()
-        .map_err(|e| format!("Failed to begin import transaction: {}", e))
+        .map_err(|e| format!("Failed to begin import transaction: {}", e));
+    if result.is_err() {
+        drop(db_guard);
+        if let Some(config) = team_config.as_ref() {
+            release_team_import_lock(&app, config);
+        }
+    }
+    result
 }
 
 #[tauri::command]
-pub fn commit_import_transaction(db: State<'_, DbState>) -> Result<(), String> {
+pub fn commit_import_transaction(app: AppHandle, db: State<'_, DbState>) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    database
+    let config = database.get_workspace_config().ok();
+    let result = database
         .commit_import_transaction()
-        .map_err(|e| format!("Failed to commit import transaction: {}", e))
+        .map_err(|e| format!("Failed to commit import transaction: {}", e));
+    drop(db_guard);
+    if result.is_ok() {
+        if let Some(config) = config.as_ref() {
+            release_team_import_lock(&app, config);
+        }
+    }
+    result
 }
 
 #[tauri::command]
-pub fn rollback_import_transaction(db: State<'_, DbState>) -> Result<(), String> {
+pub fn rollback_import_transaction(app: AppHandle, db: State<'_, DbState>) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    database
+    let config = database.get_workspace_config().ok();
+    let result = database
         .rollback_import_transaction()
-        .map_err(|e| format!("Failed to rollback import transaction: {}", e))
+        .map_err(|e| format!("Failed to rollback import transaction: {}", e));
+    drop(db_guard);
+    if result.is_ok() {
+        if let Some(config) = config.as_ref() {
+            release_team_import_lock(&app, config);
+        }
+    }
+    result
 }
 
 // ========== INTERACTIONS ==========

@@ -23,6 +23,10 @@ pub struct WorkspaceEnrollment {
     pub site_id: String,
     pub site_hostname: String,
     pub site_path: String,
+    #[serde(default)]
+    pub site_name: Option<String>,
+    #[serde(default)]
+    pub office_mailbox_email: Option<String>,
     pub advisor_group_id: String,
     pub secretary_group_id: String,
     #[serde(default)]
@@ -74,6 +78,8 @@ impl WorkspaceEnrollment {
                 config.site_path.as_deref(),
                 "chemin SharePoint",
             )?),
+            site_name: config.site_name.clone(),
+            office_mailbox_email: config.office_mailbox_email.clone(),
             advisor_group_id: required(
                 config.advisor_group_id.as_deref(),
                 "groupe conseiller",
@@ -171,9 +177,16 @@ pub fn save_workspace_enrollment(
 pub fn mark_workspace_sync_activated(
     app: &AppHandle,
 ) -> Result<WorkspaceEnrollment, String> {
+    set_workspace_sync_activated(app, true)
+}
+
+pub fn set_workspace_sync_activated(
+    app: &AppHandle,
+    activated: bool,
+) -> Result<WorkspaceEnrollment, String> {
     let mut enrollment = load_workspace_enrollment(app)?
         .ok_or_else(|| "Enrôlement équipe absent lors de l'activation.".to_string())?;
-    enrollment.sync_activated = true;
+    enrollment.sync_activated = activated;
     let payload = serde_json::to_string(&enrollment)
         .map_err(|error| format!("Sérialisation enrôlement équipe : {error}"))?;
     let key = load_storage_key(app)?
@@ -220,6 +233,8 @@ mod tests {
             site_hostname: Some("Contoso.SharePoint.com".into()),
             site_path: Some("sites/crm".into()),
             site_id: Some("site-1".into()),
+            site_name: Some("CRM".into()),
+            office_mailbox_email: Some("cabinet@example.com".into()),
             advisor_group_id: Some("11111111-1111-1111-1111-111111111111".into()),
             secretary_group_id: Some("22222222-2222-2222-2222-222222222222".into()),
             ..WorkspaceConfig::default()
@@ -231,6 +246,11 @@ mod tests {
         let config = config();
         let enrollment = WorkspaceEnrollment::from_config(&config).unwrap();
         assert!(enrollment.matches_config(&config));
+        assert_eq!(enrollment.site_name.as_deref(), Some("CRM"));
+        assert_eq!(
+            enrollment.office_mailbox_email.as_deref(),
+            Some("cabinet@example.com")
+        );
     }
 
     #[test]

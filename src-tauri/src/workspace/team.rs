@@ -7,15 +7,6 @@ pub enum TeamRole {
     Secretary,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TeamMember {
-    pub microsoft_oid: String,
-    pub email: String,
-    pub display_name: Option<String>,
-    pub role: TeamRole,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamCapabilities {

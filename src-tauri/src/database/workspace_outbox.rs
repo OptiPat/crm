@@ -358,6 +358,7 @@ impl Database {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn workspace_sync_set_capture_enabled(&self, enabled: bool) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
         tx.execute(
@@ -387,6 +388,7 @@ impl Database {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn workspace_sync_set_apply_origin(&self, origin: &str) -> Result<()> {
         if origin != "local" && origin != "remote" {
             return Err(rusqlite::Error::InvalidParameterName(format!(

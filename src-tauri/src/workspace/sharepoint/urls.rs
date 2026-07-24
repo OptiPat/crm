@@ -6,6 +6,7 @@ const GRAPH_HOST: &str = "https://graph.microsoft.com";
 pub struct SharePointGraphUrls {
     pub api_version: String,
     pub site: SharePointSiteRef,
+    graph_host: String,
 }
 
 impl SharePointGraphUrls {
@@ -13,6 +14,7 @@ impl SharePointGraphUrls {
         Self {
             api_version: "v1.0".into(),
             site,
+            graph_host: GRAPH_HOST.into(),
         }
     }
 
@@ -21,8 +23,14 @@ impl SharePointGraphUrls {
         self
     }
 
+    #[cfg(test)]
+    pub fn with_graph_host(mut self, graph_host: impl Into<String>) -> Self {
+        self.graph_host = graph_host.into().trim_end_matches('/').to_string();
+        self
+    }
+
     fn base(&self) -> String {
-        format!("{GRAPH_HOST}/{}", self.api_version)
+        format!("{}/{}", self.graph_host, self.api_version)
     }
 
     /// Résout un site SharePoint par hostname et chemin (`/sites/crm`).
@@ -55,10 +63,6 @@ impl SharePointGraphUrls {
         format!("{}/sites/{site_id}/lists/{list_id}/columns", self.base())
     }
 
-    pub fn list_by_name(&self, site_id: &str, list_name: &str) -> String {
-        format!("{}/sites/{site_id}/lists/{list_name}", self.base())
-    }
-
     pub fn list_items(&self, site_id: &str, list_id: &str) -> String {
         format!(
             "{}/sites/{site_id}/lists/{list_id}/items?expand=fields",
@@ -77,13 +81,6 @@ impl SharePointGraphUrls {
     pub fn list_items_delta(&self, site_id: &str, list_id: &str) -> String {
         format!(
             "{}/sites/{site_id}/lists/{list_id}/items/delta?$expand=fields",
-            self.base()
-        )
-    }
-
-    pub fn list_items_delta_latest(&self, site_id: &str, list_id: &str) -> String {
-        format!(
-            "{}/sites/{site_id}/lists/{list_id}/items/delta?token=latest",
             self.base()
         )
     }
@@ -113,12 +110,9 @@ impl SharePointGraphUrls {
         format!("{}/sites/{site_id}/drives", self.base())
     }
 
+    #[cfg(test)]
     pub fn drive_root_children(&self, drive_id: &str) -> String {
         format!("{}/drives/{drive_id}/root/children", self.base())
-    }
-
-    pub fn drive_item_children(&self, drive_id: &str, item_id: &str) -> String {
-        format!("{}/drives/{drive_id}/items/{item_id}/children", self.base())
     }
 
     pub fn drive_root_file_content(&self, drive_id: &str, file_name: &str) -> String {
