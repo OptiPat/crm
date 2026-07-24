@@ -27,6 +27,8 @@ type FilleulRankEditorProps = {
     contact: Contact,
     ranks: { filleul_titre?: string | null; filleul_qualification?: string | null }
   ) => void | Promise<void>;
+  /** `node` = crayon au survol (carte) ; `panel` = bouton visible (dossier consultant). */
+  variant?: "node" | "panel";
   className?: string;
 };
 
@@ -91,7 +93,12 @@ function RankOptionList<T extends string>({
   );
 }
 
-export function FilleulRankEditor({ contact, onSave, className }: FilleulRankEditorProps) {
+export function FilleulRankEditor({
+  contact,
+  onSave,
+  variant = "node",
+  className,
+}: FilleulRankEditorProps) {
   const [open, setOpen] = useState(false);
   const [titre, setTitre] = useState<FilleulTitre | undefined>(
     () => parseFilleulTitre(contact.filleul_titre) ?? undefined
@@ -127,21 +134,34 @@ export function FilleulRankEditor({ contact, onSave, className }: FilleulRankEdi
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          title="Titre et qualification"
-          aria-label="Modifier titre et qualification"
-          className={cn(
-            "absolute top-1 right-1 z-10 flex h-5 w-5 items-center justify-center rounded-md",
-            "text-muted-foreground/70 hover:text-foreground hover:bg-background/90",
-            "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-            "transition-opacity",
-            className
-          )}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Pencil className="h-3 w-3" aria-hidden />
-        </button>
+        {variant === "panel" ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn("h-8 gap-1.5 text-xs", className)}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Pencil className="h-3.5 w-3.5" aria-hidden />
+            Modifier titre et qualification
+          </Button>
+        ) : (
+          <button
+            type="button"
+            title="Titre et qualification"
+            aria-label="Modifier titre et qualification"
+            className={cn(
+              "absolute top-1 right-1 z-10 flex h-5 w-5 items-center justify-center rounded-md",
+              "text-muted-foreground/70 hover:text-foreground hover:bg-background/90",
+              "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+              "transition-opacity",
+              className
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Pencil className="h-3 w-3" aria-hidden />
+          </button>
+        )}
       </PopoverTrigger>
       <PopoverContent
         className="w-72 p-3 space-y-3"

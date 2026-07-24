@@ -254,7 +254,7 @@ export function OrganisationMemberDossierPanel({
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     Titre et qualification
                   </h4>
-                  <FilleulRankEditor contact={contact} onSave={onRankSave} />
+                  <FilleulRankEditor contact={contact} onSave={onRankSave} variant="panel" />
                 </section>
               ) : null}
 
