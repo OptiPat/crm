@@ -109,6 +109,7 @@ import { navigateToPartenaires } from "@/lib/navigation/partenaires-navigation";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
+import { useCanExport } from "@/components/team/TeamWorkspaceProvider";
 import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
@@ -156,6 +157,7 @@ function OrigineFilterPill({
 }
 
 export function Investissements({ onNavigate }: InvestissementsProps) {
+  const canExport = useCanExport();
   const [investissements, setInvestissements] = useState<InvestissementWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -744,7 +746,7 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
             <FileUp className="h-4 w-4" />
             Import Stellium
           </Button>
-          {filteredInvestissements.length > 0 && (
+          {canExport && filteredInvestissements.length > 0 && (
             <Button variant="outline" className="gap-2" onClick={handleExportCsv}>
               <Download className="h-4 w-4" />
               Exporter CSV

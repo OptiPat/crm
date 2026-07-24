@@ -63,6 +63,9 @@ pub mod template_email_trigger;
 pub mod template_formality_sql;
 pub mod templates_email;
 pub mod type_produit_condition;
+pub mod workspace;
+pub mod workspace_restore;
+pub mod workspace_sync;
 
 pub struct Database {
     conn: Connection,
@@ -617,6 +620,7 @@ impl Database {
         self.migrate_client_onedrive_links()?;
         self.migrate_filleul_volume_exercices_table()?;
         self.migrate_filleul_dossier_table()?;
+        self.migrate_workspace_sync_tables()?;
 
         Ok(())
     }

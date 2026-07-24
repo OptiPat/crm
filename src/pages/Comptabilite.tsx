@@ -33,12 +33,15 @@ import { getCgpConfig } from "@/lib/api/tauri-settings";
 import { isComptaMonthClosed, setComptaMonthClosed } from "@/lib/api/tauri-compta";
 import { exportComptaJournalCsv } from "@/lib/compta/compta-csv-export";
 import { exportComptaJournalPdf } from "@/lib/compta/compta-pdf-export";
+import { assertCanExport } from "@/lib/export/assert-can-export";
+import { useCanExport } from "@/components/team/TeamWorkspaceProvider";
 import { computeComptaAnnualSummary } from "@/lib/compta/compta-bilan";
 import { isComptaDriveConfigured } from "@/lib/compta/compta-month-reminder";
 import { formatComptaMonthLabel, shiftComptaMonth } from "@/lib/compta/compta-month";
 import { toast } from "sonner";
 
 export function Comptabilite() {
+  const canExport = useCanExport();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -115,6 +118,7 @@ export function Comptabilite() {
   const handleExportPdf = async () => {
     setExportBusy(true);
     try {
+      assertCanExport(canExport);
       const cgp = await getCgpConfig();
       const owner = [cgp.prenom, cgp.nom].filter(Boolean).join(" ").trim() || "Cabinet";
       exportComptaJournalPdf({
@@ -134,8 +138,13 @@ export function Comptabilite() {
   };
 
   const handleExportCsv = () => {
-    exportComptaJournalCsv({ year, month, depenses, encaissements, deplacements });
-    toast.success("CSV exporté");
+    try {
+      assertCanExport(canExport);
+      exportComptaJournalCsv({ year, month, depenses, encaissements, deplacements });
+      toast.success("CSV exporté");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Export non autorisé");
+    }
   };
 
   const toggleMonthClosed = async () => {
@@ -227,30 +236,34 @@ export function Comptabilite() {
               ) : null}
             </PopoverContent>
           </Popover>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={exportBusy || loading}
-            onClick={handleExportCsv}
-          >
-            <FileSpreadsheet className="mr-2 h-4 w-4" />
-            CSV
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={exportBusy || loading}
-            onClick={() => void handleExportPdf()}
-          >
-            {exportBusy ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <FileDown className="mr-2 h-4 w-4" />
-            )}
-            PDF
-          </Button>
+          {canExport && (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={exportBusy || loading}
+                onClick={handleExportCsv}
+              >
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                CSV
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={exportBusy || loading}
+                onClick={() => void handleExportPdf()}
+              >
+                {exportBusy ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileDown className="mr-2 h-4 w-4" />
+                )}
+                PDF
+              </Button>
+            </>
+          )}
           {driveConfigured ? (
             <Button
               type="button"

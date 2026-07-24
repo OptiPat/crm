@@ -25,6 +25,7 @@ mod scpi_bulletin;
 mod secure_files;
 mod system_commands;
 mod template_email_attachments;
+mod workspace;
 
 use app_branding::commands::{apply_app_branding_os, get_app_branding, save_app_branding};
 use app_runtime::{
@@ -85,6 +86,17 @@ use std::sync::Mutex;
 use system_commands::*;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
+use workspace::collaboration_commands::{
+    provision_team_workspace_cmd, team_acquire_lock_cmd, team_append_audit_cmd, team_list_audit_cmd,
+    team_list_presence_cmd, team_presence_heartbeat_cmd, team_release_lock_cmd, team_renew_lock_cmd,
+};
+use workspace::commands::{
+    connect_microsoft_team_oauth_cmd, disconnect_microsoft_team_oauth_cmd,
+    get_microsoft_team_connection_status, get_workspace_config_cmd,
+    preview_team_migration_cmd, save_workspace_config_cmd,
+    test_microsoft_team_sharepoint_connection_cmd, upload_team_migration_snapshot_cmd,
+    validate_team_remote_snapshot_cmd,
+};
 
 fn main() {
     tauri::Builder::default()
@@ -526,6 +538,23 @@ fn main() {
             create_contact_onedrive_folder_cmd,
             propose_client_onedrive_folder_matches,
             apply_client_onedrive_folder_proposal,
+            get_microsoft_team_connection_status,
+            connect_microsoft_team_oauth_cmd,
+            disconnect_microsoft_team_oauth_cmd,
+            get_workspace_config_cmd,
+            save_workspace_config_cmd,
+            test_microsoft_team_sharepoint_connection_cmd,
+            preview_team_migration_cmd,
+            upload_team_migration_snapshot_cmd,
+            validate_team_remote_snapshot_cmd,
+            provision_team_workspace_cmd,
+            team_presence_heartbeat_cmd,
+            team_list_presence_cmd,
+            team_acquire_lock_cmd,
+            team_renew_lock_cmd,
+            team_release_lock_cmd,
+            team_append_audit_cmd,
+            team_list_audit_cmd,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

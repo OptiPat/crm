@@ -28,6 +28,7 @@ import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import { getAllInvestissements } from "@/lib/api/tauri-investissements";
 import { buildPatrimoineMaps } from "@/lib/investissements/bulk-patrimoine";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
+import { useCanExport } from "@/components/team/TeamWorkspaceProvider";
 import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import { downloadCsvFile } from "@/lib/export/csv-export";
 import { buildClientsContactsCsv, buildContactsExportFilename, buildFilleulsContactsCsv, clientExportIncludesPatrimoine } from "@/lib/export/contacts-csv";
@@ -126,6 +127,7 @@ interface ContactsProps {
 }
 
 export function Contacts({ onNavigate }: ContactsProps) {
+  const canExport = useCanExport();
   const [initialListState] = useState(() => getContactsListInitialState());
   const [contacts, setContacts] = useState<Contact[]>(initialListState.contacts);
   const [foyers, setFoyers] = useState<Foyer[]>(initialListState.foyers);
@@ -841,7 +843,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
           onDeduplicate={() => setShowDeduplicate(true)}
           onDeleteAll={() => setShowDeleteAllDialog(true)}
         />
-        {filteredContacts.length > 0 && (
+        {canExport && filteredContacts.length > 0 && (
           <Button
             variant="outline"
             className="gap-2 shrink-0"

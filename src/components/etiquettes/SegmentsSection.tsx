@@ -9,6 +9,8 @@ import {
 } from "@/lib/api/tauri-segments";
 import type { EtiquetteWithCount } from "@/lib/api/tauri-etiquettes";
 import { exportSegmentToCsv } from "@/lib/export/segment-export";
+import { assertCanExport } from "@/lib/export/assert-can-export";
+import { useCanExport } from "@/components/team/TeamWorkspaceProvider";
 import { SegmentForm } from "@/components/etiquettes/SegmentForm";
 import { formatSegmentRuleHint } from "@/lib/etiquettes/etiquette-card-summary";
 import { toast } from "sonner";
@@ -28,6 +30,7 @@ interface SegmentsSectionProps {
 }
 
 export function SegmentsSection({ etiquettes = [] }: SegmentsSectionProps) {
+  const canExport = useCanExport();
   const [segments, setSegments] = useState<SegmentWithCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
@@ -64,6 +67,7 @@ export function SegmentsSection({ etiquettes = [] }: SegmentsSectionProps) {
   const handleExport = async (segment: SegmentWithCount) => {
     setExportingId(segment.id);
     try {
+      assertCanExport(canExport);
       const count = await exportSegmentToCsv(segment.id, segment.nom);
       toast.success(
         count > 0
@@ -169,16 +173,18 @@ export function SegmentsSection({ etiquettes = [] }: SegmentsSectionProps) {
                     )}
                   </div>
                   <div className="flex gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      title="Exporter les contacts (CSV/Excel)"
-                      disabled={exportingId === s.id || s.contact_count === 0}
-                      onClick={() => void handleExport(s)}
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
+                    {canExport && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        title="Exporter les contacts (CSV/Excel)"
+                        disabled={exportingId === s.id || s.contact_count === 0}
+                        onClick={() => void handleExport(s)}
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       variant="ghost"

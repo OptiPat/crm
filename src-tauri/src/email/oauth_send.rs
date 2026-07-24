@@ -27,11 +27,10 @@ fn encode_mime_subject(subject: &str) -> String {
 fn load_cgp_config(app: &AppHandle) -> CgpConfig {
     app.try_state::<DbState>()
         .and_then(|state| {
-            state.lock().ok().and_then(|guard| {
-                guard
-                    .as_ref()
-                    .and_then(|db| db.get_cgp_config().ok())
-            })
+            state
+                .lock()
+                .ok()
+                .and_then(|guard| guard.as_ref().and_then(|db| db.get_cgp_config().ok()))
         })
         .unwrap_or_default()
 }
@@ -56,8 +55,7 @@ pub fn resolve_google_calendar_connection(
 }
 
 pub fn resolve_google_calendar_access_token(app: &AppHandle) -> Result<Option<String>, String> {
-    Ok(resolve_google_calendar_connection(app)?
-        .map(|c| c.access_token))
+    Ok(resolve_google_calendar_connection(app)?.map(|c| c.access_token))
 }
 
 pub fn refresh_connection_if_needed(
@@ -71,6 +69,7 @@ pub enum OAuthConnectionSlot {
     Primary,
     GoogleCalendar,
     MicrosoftOnedrive,
+    MicrosoftTeam,
 }
 
 pub fn refresh_oauth_connection_if_needed(
@@ -90,6 +89,10 @@ pub fn refresh_oauth_connection_if_needed(
                     "Session OneDrive expirée. Reconnectez Microsoft dans Paramètres → Intégrations → Dossiers clients."
                         .into()
                 }
+                OAuthConnectionSlot::MicrosoftTeam => {
+                    "Session mode équipe expirée. Reconnectez Microsoft 365 dans Paramètres → Mode équipe."
+                        .into()
+                }
                 OAuthConnectionSlot::GoogleCalendar => {
                     "Session Google Agenda expirée. Reconnectez Google dans Paramètres → Emails & envois → Connexion."
                         .into()
@@ -104,6 +107,7 @@ pub fn refresh_oauth_connection_if_needed(
     let store = EmailOAuthStore::load(app)?;
     let flow_provider = match slot {
         OAuthConnectionSlot::MicrosoftOnedrive => "microsoft_onedrive",
+        OAuthConnectionSlot::MicrosoftTeam => "microsoft_team",
         OAuthConnectionSlot::GoogleCalendar => "google_calendar",
         OAuthConnectionSlot::Primary => conn.provider.as_str(),
     };
@@ -131,6 +135,9 @@ pub fn refresh_oauth_connection_if_needed(
         }
         OAuthConnectionSlot::MicrosoftOnedrive => {
             store.microsoft_onedrive_connection = Some(conn.clone());
+        }
+        OAuthConnectionSlot::MicrosoftTeam => {
+            store.microsoft_team_connection = Some(conn.clone());
         }
     }
     store.save(app)?;
@@ -169,12 +176,7 @@ fn format_addresses(
     (from, to)
 }
 
-fn build_rfc2822_plain(
-    from: &str,
-    to: &str,
-    subject: &str,
-    body: &str,
-) -> String {
+fn build_rfc2822_plain(from: &str, to: &str, subject: &str, body: &str) -> String {
     format!(
         "From: {}\r\nTo: {}\r\nSubject: {}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{}",
         from, to, subject, body
@@ -239,8 +241,9 @@ fn build_rfc2822_with_attachments(
     message.push_str(&body_part);
 
     for att in attachments {
-        let filename = crate::template_email_attachments::sanitize_attachment_filename(&att.filename)
-            .unwrap_or_else(|_| "attachment".to_string());
+        let filename =
+            crate::template_email_attachments::sanitize_attachment_filename(&att.filename)
+                .unwrap_or_else(|_| "attachment".to_string());
         let mime_type = crate::template_email_attachments::sanitize_mime_type(&att.mime_type)
             .unwrap_or_else(|_| "application/octet-stream".to_string());
         let b64 = base64::engine::general_purpose::STANDARD.encode(&att.data);
@@ -331,7 +334,15 @@ fn send_via_gmail(
     attachments: &[OutgoingEmailAttachment],
 ) -> Result<Option<(String, String)>, String> {
     let raw = build_rfc2822(
-        &conn.email, from_name, to_email, to_name, subject, body, body_html, reply, attachments,
+        &conn.email,
+        from_name,
+        to_email,
+        to_name,
+        subject,
+        body,
+        body_html,
+        reply,
+        attachments,
     );
     let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw.as_bytes());
     let mut payload = serde_json::json!({ "raw": encoded });
@@ -357,6 +368,7 @@ fn send_via_gmail(
 
 fn send_via_microsoft(
     conn: &EmailOAuthConnection,
+    send_mail_url: &str,
     to_email: &str,
     to_name: Option<&str>,
     subject: &str,
@@ -395,7 +407,7 @@ fn send_via_microsoft(
     }
     let client = reqwest::blocking::Client::new();
     let res = client
-        .post("https://graph.microsoft.com/v1.0/me/sendMail")
+        .post(send_mail_url)
         .bearer_auth(&conn.access_token)
         .json(&serde_json::json!({
             "message": message,
@@ -414,6 +426,87 @@ fn send_via_microsoft(
 pub struct OAuthSendResult {
     pub gmail_message_id: Option<String>,
     pub gmail_thread_id: Option<String>,
+}
+
+pub fn send_with_resolved_identity(
+    app: &AppHandle,
+    identity: &crate::workspace::mailbox::ResolvedSendIdentity,
+    to_email: &str,
+    to_name: Option<&str>,
+    subject: &str,
+    body: &str,
+    body_html: Option<&str>,
+    reply: Option<&GmailThreadReply>,
+    attachments: &[OutgoingEmailAttachment],
+) -> Result<OAuthSendResult, String> {
+    use crate::workspace::commands::resolve_microsoft_team_connection;
+    use crate::workspace::mailbox::{microsoft_graph_send_mail_url, SendMailboxRoute};
+
+    let from_name = cgp_sender_display_name(&load_cgp_config(app));
+
+    match identity.route {
+        SendMailboxRoute::Primary => {
+            let store = EmailOAuthStore::load(app)?;
+            let mut conn = store
+                .connection
+                .clone()
+                .ok_or("Aucun compte connecté (Google/Microsoft). Paramètres → Emails & envois → Connexion : connectez votre boîte.")?;
+            refresh_connection_if_needed(app, &mut conn)?;
+            match conn.provider.as_str() {
+                "google" => {
+                    let ids = send_via_gmail(
+                        &conn,
+                        from_name.as_deref(),
+                        to_email,
+                        to_name,
+                        subject,
+                        body,
+                        body_html,
+                        reply,
+                        attachments,
+                    )?;
+                    Ok(OAuthSendResult {
+                        gmail_message_id: ids.as_ref().map(|(m, _)| m.clone()),
+                        gmail_thread_id: ids.map(|(_, t)| t),
+                    })
+                }
+                "microsoft" => {
+                    let send_mail_url =
+                        microsoft_graph_send_mail_url(SendMailboxRoute::Primary, &conn.email);
+                    send_via_microsoft(
+                        &conn,
+                        &send_mail_url,
+                        to_email,
+                        to_name,
+                        subject,
+                        body,
+                        body_html,
+                        attachments,
+                    )?;
+                    Ok(OAuthSendResult::default())
+                }
+                _ => Err("Fournisseur OAuth non supporté".into()),
+            }
+        }
+        SendMailboxRoute::OfficeShared => {
+            let conn = resolve_microsoft_team_connection(app)?.ok_or_else(|| {
+                "Connectez un compte Microsoft équipe (Paramètres → Mode équipe).".to_string()
+            })?;
+            let send_mail_url =
+                microsoft_graph_send_mail_url(SendMailboxRoute::OfficeShared, &identity.sender_email);
+            send_via_microsoft(
+                &conn,
+                &send_mail_url,
+                to_email,
+                to_name,
+                subject,
+                body,
+                body_html,
+                attachments,
+            )?;
+            Ok(OAuthSendResult::default())
+        }
+    }
 }
 
 pub fn send_with_oauth(
@@ -455,7 +548,20 @@ pub fn send_with_oauth(
             })
         }
         "microsoft" => {
-            send_via_microsoft(&conn, to_email, to_name, subject, body, body_html, attachments)?;
+            let send_mail_url = crate::workspace::mailbox::microsoft_graph_send_mail_url(
+                crate::workspace::mailbox::SendMailboxRoute::Primary,
+                &conn.email,
+            );
+            send_via_microsoft(
+                &conn,
+                &send_mail_url,
+                to_email,
+                to_name,
+                subject,
+                body,
+                body_html,
+                attachments,
+            )?;
             Ok(OAuthSendResult::default())
         }
         _ => Err("Fournisseur OAuth non supporté".into()),
@@ -552,8 +658,14 @@ pub fn send_test_to_self(app: &AppHandle) -> Result<String, String> {
         None,
         &[],
     )?;
-    let sig_note = if cgp.email_signature_html.as_deref().is_some_and(|s| !s.trim().is_empty())
-        || cgp.email_signature.as_deref().is_some_and(|s| !s.trim().is_empty())
+    let sig_note = if cgp
+        .email_signature_html
+        .as_deref()
+        .is_some_and(|s| !s.trim().is_empty())
+        || cgp
+            .email_signature
+            .as_deref()
+            .is_some_and(|s| !s.trim().is_empty())
     {
         " (avec signature du profil)"
     } else {

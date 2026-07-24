@@ -29,6 +29,7 @@ import { Pipe } from "@/pages/Pipe";
 import { Agenda } from "@/pages/Agenda";
 import { Newsletter } from "@/pages/Newsletter";
 import { AppBrandingProvider } from "@/components/app-branding/AppBrandingProvider";
+import { TeamWorkspaceProvider } from "@/components/team/TeamWorkspaceProvider";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
 import { AppUpdateProvider } from "@/components/system/app-update-context";
 import { isWizardCompleted } from "@/lib/api/tauri-settings";
@@ -351,7 +352,7 @@ function AppInner() {
   // Afficher l'application avec le layout
   try {
     return (
-      <>
+      <TeamWorkspaceProvider enabled={isEngineAvailable}>
         <AppUpdateProvider>
           <Layout
             currentPage={currentPage}
@@ -362,7 +363,7 @@ function AppInner() {
           </Layout>
         </AppUpdateProvider>
         <Toaster richColors position="top-right" visibleToasts={4} expand />
-      </>
+      </TeamWorkspaceProvider>
     );
   } catch (error) {
     console.error("Error rendering app:", error);

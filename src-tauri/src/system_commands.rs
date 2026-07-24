@@ -1,5 +1,6 @@
 use crate::auth::session::{require_ui_session, UiSessionState};
 use crate::commands::DbState;
+use crate::workspace::require_export_permission_state;
 use serde::Serialize;
 use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Manager, State};
@@ -81,6 +82,7 @@ pub fn restore_db_backup(
     backup_filename: String,
 ) -> Result<RestoreDbBackupResult, String> {
     require_ui_session(&session)?;
+    require_export_permission_state(&app, &db)?;
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let db_path = app_data_dir.join("patrimoine-crm.db");
     let backup_guard = crate::backup::lock_backup_operations()
@@ -146,6 +148,7 @@ pub fn create_manual_db_backup(
     session: State<'_, UiSessionState>,
 ) -> Result<String, String> {
     require_ui_session(&session)?;
+    require_export_permission_state(&app, &db)?;
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let db_path = app_data_dir.join("patrimoine-crm.db");
     if !db_path.exists() {
@@ -262,10 +265,12 @@ pub fn get_external_backup_settings(
 #[tauri::command]
 pub fn set_external_backup_directory(
     app: AppHandle,
+    db: State<'_, DbState>,
     session: State<'_, UiSessionState>,
     directory: Option<String>,
 ) -> Result<ExternalBackupSettings, String> {
     require_ui_session(&session)?;
+    require_export_permission_state(&app, &db)?;
     let mut prefs = crate::app_runtime::load_runtime_prefs(&app);
     prefs.external_backup_directory = match directory {
         Some(directory) if !directory.trim().is_empty() => {
@@ -317,6 +322,7 @@ pub fn create_external_backup_now(
     session: State<'_, UiSessionState>,
 ) -> Result<ExportFullArchiveResult, String> {
     require_ui_session(&session)?;
+    require_export_permission_state(&app, &db)?;
     let settings = external_backup_settings(&app)?;
     let directory = settings
         .directory
@@ -360,6 +366,7 @@ pub fn export_full_archive(
     destination_dir: String,
 ) -> Result<ExportFullArchiveResult, String> {
     require_ui_session(&session)?;
+    require_export_permission_state(&app, &db)?;
     let dest = std::path::Path::new(destination_dir.trim());
     if destination_dir.trim().is_empty() {
         return Err("Choisissez un dossier de destination.".into());

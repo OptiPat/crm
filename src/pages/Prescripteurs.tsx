@@ -43,6 +43,8 @@ import {
   savePrescripteursPagePreferences,
   type PrescripteursPagePreferences,
 } from "@/lib/prescripteurs/prescripteurs-page-preferences";
+import { useCanExport } from "@/components/team/TeamWorkspaceProvider";
+import { assertCanExport } from "@/lib/export/assert-can-export";
 import { downloadPrescripteurNetworkCsv } from "@/lib/prescripteurs/prescripteurs-export";
 import {
   consumePrescripteursNavigationIntent,
@@ -69,6 +71,7 @@ type PrescripteursProps = {
 };
 
 export function Prescripteurs({ onNavigate }: PrescripteursProps) {
+  const canExport = useCanExport();
   const [prefs, setPrefs] = useState<PrescripteursPagePreferences>(() =>
     loadPrescripteursPagePreferences()
   );
@@ -489,8 +492,15 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
         onExpandAll={expandAllInTree}
         onCollapseAll={collapseTree}
         onExportCsv={
-          expandedTree
-            ? () => downloadPrescripteurNetworkCsv(expandedTree, foyersInfo)
+          canExport && expandedTree
+            ? () => {
+                try {
+                  assertCanExport(canExport);
+                  downloadPrescripteurNetworkCsv(expandedTree, foyersInfo);
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Export non autorisé");
+                }
+              }
             : undefined
         }
         showTreeControls={expandedIsVisible && expandedTree != null}

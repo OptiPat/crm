@@ -30,6 +30,8 @@ pub struct EmailOAuthStore {
     pub google_calendar_connection: Option<EmailOAuthConnection>,
     /// OneDrive personnel (fichiers) en complément d'une boîte Gmail.
     pub microsoft_onedrive_connection: Option<EmailOAuthConnection>,
+    /// Microsoft 365 organisations — mode équipe SharePoint (distinct de mail/OneDrive perso).
+    pub microsoft_team_connection: Option<EmailOAuthConnection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -45,6 +47,8 @@ struct PersistedOAuthStore {
     google_calendar_connection: Option<PersistedOAuthConnection>,
     #[serde(default)]
     microsoft_onedrive_connection: Option<PersistedOAuthConnection>,
+    #[serde(default)]
+    microsoft_team_connection: Option<PersistedOAuthConnection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,10 +152,12 @@ impl EmailOAuthStore {
             .microsoft_onedrive_connection
             .map(|c| persisted_connection_to_runtime(c, storage_key))
             .transpose()?;
-        let google_client_secret = match (
-            persisted.google_client_secret_enc.as_ref(),
-            storage_key,
-        ) {
+        let microsoft_team_connection = persisted
+            .microsoft_team_connection
+            .map(|c| persisted_connection_to_runtime(c, storage_key))
+            .transpose()?;
+        let google_client_secret = match (persisted.google_client_secret_enc.as_ref(), storage_key)
+        {
             (Some(enc), Some(key)) => Some(decrypt_secret(enc, key)?),
             (Some(_), None) => {
                 return Err("Code secret Google illisible (clé de stockage indisponible).".into());
@@ -165,6 +171,7 @@ impl EmailOAuthStore {
             connection,
             google_calendar_connection,
             microsoft_onedrive_connection,
+            microsoft_team_connection,
         })
     }
 
@@ -181,6 +188,11 @@ impl EmailOAuthStore {
             .transpose()?;
         let microsoft_onedrive_connection = self
             .microsoft_onedrive_connection
+            .as_ref()
+            .map(|c| runtime_connection_to_persisted(c, storage_key))
+            .transpose()?;
+        let microsoft_team_connection = self
+            .microsoft_team_connection
             .as_ref()
             .map(|c| runtime_connection_to_persisted(c, storage_key))
             .transpose()?;
@@ -204,14 +216,12 @@ impl EmailOAuthStore {
             connection,
             google_calendar_connection,
             microsoft_onedrive_connection,
+            microsoft_team_connection,
         })
     }
 
     pub fn path(app: &AppHandle) -> Result<PathBuf, String> {
-        let dir = app
-            .path()
-            .app_data_dir()
-            .map_err(|e| e.to_string())?;
+        let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
         Ok(dir.join("email_oauth.json"))
     }
 
@@ -244,6 +254,10 @@ impl PersistedOAuthStore {
                 .is_some_and(PersistedOAuthConnection::needs_secret_migration)
             || self
                 .microsoft_onedrive_connection
+                .as_ref()
+                .is_some_and(PersistedOAuthConnection::needs_secret_migration)
+            || self
+                .microsoft_team_connection
                 .as_ref()
                 .is_some_and(PersistedOAuthConnection::needs_secret_migration)
     }
@@ -372,5 +386,42 @@ mod tests {
             .access_token_enc
             .unwrap()
             .starts_with("v2:"));
+    }
+
+    #[test]
+    fn microsoft_team_connection_round_trips_encrypted_store() {
+        let key = [0x22; 32];
+        let runtime = EmailOAuthStore {
+            microsoft_team_connection: Some(EmailOAuthConnection {
+                provider: "microsoft".into(),
+                email: "advisor@example.com".into(),
+                access_token: "team-access".into(),
+                refresh_token: Some("team-refresh".into()),
+                expires_at: 456,
+            }),
+            ..Default::default()
+        };
+
+        let persisted = runtime.to_persisted(Some(&key)).unwrap();
+        assert!(persisted.microsoft_team_connection.is_some());
+        let loaded = EmailOAuthStore::from_persisted(persisted, Some(&key)).unwrap();
+        let conn = loaded.microsoft_team_connection.unwrap();
+        assert_eq!(conn.email, "advisor@example.com");
+        assert_eq!(conn.access_token, "team-access");
+        assert_eq!(conn.refresh_token.as_deref(), Some("team-refresh"));
+    }
+
+    #[test]
+    fn legacy_store_without_team_slot_deserializes_with_default_none() {
+        let raw = r#"{
+            "version": 3,
+            "microsoft_client_id": "app-id",
+            "connection": null,
+            "google_calendar_connection": null,
+            "microsoft_onedrive_connection": null
+        }"#;
+        let persisted: PersistedOAuthStore = serde_json::from_str(raw).unwrap();
+        let store = EmailOAuthStore::from_persisted(persisted, None).unwrap();
+        assert!(store.microsoft_team_connection.is_none());
     }
 }

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
+import { useCanExport } from "@/components/team/TeamWorkspaceProvider";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -69,6 +70,7 @@ export function ParametresDatabaseSection({
   onBackupsChanged,
   onSecretsProtectionCleaned,
 }: ParametresDatabaseSectionProps) {
+  const canExport = useCanExport();
   const [cleaningUp, setCleaningUp] = useState(false);
   const [cleaningSecretKey, setCleaningSecretKey] = useState(false);
   const [creatingBackup, setCreatingBackup] = useState(false);
@@ -374,14 +376,20 @@ export function ParametresDatabaseSection({
               variant="outline"
               size="sm"
               className="gap-2"
-              disabled={creatingBackup || exportingArchive || !dbPath}
+              disabled={!canExport || creatingBackup || exportingArchive || !dbPath}
               onClick={() => void handleCreateBackup()}
             >
               <Archive className="h-4 w-4" />
               {creatingBackup ? "Copie en cours…" : "Créer une copie de secours maintenant"}
             </Button>
+            {!canExport ? (
+              <p className="text-xs text-muted-foreground">
+                Export et restauration complets indisponibles en mode secrétaire équipe.
+              </p>
+            ) : null}
           </div>
 
+          {canExport ? (
           <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
             <div>
               <div className="flex items-center gap-2 text-sm font-medium mb-1">
@@ -409,7 +417,9 @@ export function ParametresDatabaseSection({
               {exportingArchive ? "Export en cours…" : "Exporter vers un dossier externe…"}
             </Button>
           </div>
+          ) : null}
 
+          {canExport ? (
           <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
             <div>
               <div className="flex items-center gap-2 text-sm font-medium mb-1">
@@ -498,8 +508,9 @@ export function ParametresDatabaseSection({
               </Button>
             )}
           </div>
+          ) : null}
 
-          {backups.length > 0 && (
+          {canExport && backups.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium">Copies automatiques de secours</p>
             <Explainer>

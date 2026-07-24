@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
 import { readRichTextEditorHtml } from "@/components/emails/rich-text-email-editor-utils";
+import { SendFromSelector } from "@/components/team/SendFromSelector";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { sendEmail } from "@/lib/api/tauri-email";
 import { dismissEmailCampaignFollowup } from "@/lib/api/tauri-etiquettes";
@@ -31,6 +32,7 @@ export function ExchangeEmailReplyForm({
   const [bodyHtml, setBodyHtml] = useState("");
   const [cgpConfig, setCgpConfig] = useState<CgpConfig | null>(null);
   const [sending, setSending] = useState(false);
+  const [senderEmail, setSenderEmail] = useState<string | null>(null);
   const editorElementRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -76,6 +78,8 @@ export function ExchangeEmailReplyForm({
           entry.email_reponse_gmail_message_id ??
           entry.email_gmail_message_id ??
           null,
+        sender_email: senderEmail,
+        audit_contact_id: entry.contact_id,
       });
       if (entry.contact_etiquette_id != null) {
         await dismissEmailCampaignFollowup(entry.contact_etiquette_id, queueRowKind);
@@ -115,6 +119,11 @@ export function ExchangeEmailReplyForm({
           disabled={!canSend || sending}
         />
       </div>
+      <SendFromSelector
+        value={senderEmail}
+        onChange={setSenderEmail}
+        disabled={!canSend || sending}
+      />
       <div className="space-y-2">
         <Label htmlFor="reply-body-html">Votre message</Label>
         <RichTextEmailEditor

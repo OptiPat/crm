@@ -32,6 +32,8 @@ import {
   saveFoyersPagePreferences,
   type FoyersPagePreferences,
 } from "@/lib/foyers/foyers-page-preferences";
+import { useCanExport } from "@/components/team/TeamWorkspaceProvider";
+import { assertCanExport } from "@/lib/export/assert-can-export";
 import { downloadFoyerMembersCsv } from "@/lib/foyers/foyers-export";
 import { buildFoyerMembersWithInvestments } from "@/lib/foyers/foyers-member-patrimoine";
 import {
@@ -51,6 +53,7 @@ type FoyersProps = {
 };
 
 export function Foyers({ onNavigate }: FoyersProps) {
+  const canExport = useCanExport();
   const [prefs, setPrefs] = useState<FoyersPagePreferences>(() =>
     loadFoyersPagePreferences()
   );
@@ -362,9 +365,18 @@ export function Foyers({ onNavigate }: FoyersProps) {
         statFilter={prefs.statFilter}
         onClearStatFilter={() => updatePrefs({ statFilter: null })}
         onExportCsv={
-          expandedRow ? () => downloadFoyerMembersCsv(expandedRow) : undefined
+          expandedRow
+            ? () => {
+                try {
+                  assertCanExport(canExport);
+                  downloadFoyerMembersCsv(expandedRow);
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Export non autorisé");
+                }
+              }
+            : undefined
         }
-        showExport={expandedIsVisible && expandedRow != null}
+        showExport={canExport && expandedIsVisible && expandedRow != null}
       />
 
       <Card className="border-border/70 shadow-sm">

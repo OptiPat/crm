@@ -147,6 +147,8 @@ export function startIndividualEtiquetteEmailSend(input: {
   subject: string;
   body: string;
   body_html?: string | null;
+  sender_email?: string | null;
+  audit_contact_id?: number | null;
   onSent?: (meta: {
     subject: string;
     sentAtSec: number;
@@ -171,6 +173,8 @@ export function startIndividualEtiquetteEmailSend(input: {
         subject: input.subject,
         body: input.body,
         body_html: input.body_html ?? undefined,
+        sender_email: input.sender_email ?? undefined,
+        audit_contact_id: input.audit_contact_id ?? item.contact_id,
         attachments: buildSendEmailAttachmentsFromTemplate(item.template_variables),
       });
       try {

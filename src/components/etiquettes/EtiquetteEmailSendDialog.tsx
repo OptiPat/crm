@@ -18,6 +18,7 @@ import { CheckCircle2 } from "lucide-react";
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { ContactRegistreBadge } from "@/components/contacts/ContactRegistreSwitch";
+import { SendFromSelector } from "@/components/team/SendFromSelector";
 import {
   getCampaignTemplateSendBlockReason,
   renderEtiquetteEmailPreview,
@@ -58,6 +59,7 @@ export function EtiquetteEmailSendDialog({
   const [bodyPlain, setBodyPlain] = useState("");
   const [htmlMode, setHtmlMode] = useState(true);
   const [cgpConfig, setCgpConfig] = useState<CgpConfig | null>(cgpConfigProp ?? null);
+  const [senderEmail, setSenderEmail] = useState<string | null>(null);
   const editorElementRef = useRef<HTMLDivElement>(null);
   const bodyDirtyRef = useRef(false);
 
@@ -177,6 +179,8 @@ export function EtiquetteEmailSendDialog({
         subject: subjectTrim,
         body,
         body_html,
+        sender_email: senderEmail,
+        audit_contact_id: item.contact_id,
         onSent: (meta) => onSent?.(meta),
       });
     } catch (error) {
@@ -262,6 +266,12 @@ export function EtiquetteEmailSendDialog({
                 ? null
                 : cgpConfig?.email_signature
             }
+          />
+
+          <SendFromSelector
+            value={senderEmail}
+            onChange={setSenderEmail}
+            disabled={sendBlocked || !item?.contact_email}
           />
         </div>
         <DialogFooter>

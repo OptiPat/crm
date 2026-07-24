@@ -2,9 +2,14 @@ use crate::auth::session::{require_ui_session, UiSessionState};
 use super::google_calendar_probe::probe_google_calendar_access;
 use super::oauth_flow::{disconnect_google_calendar_oauth, disconnect_oauth, run_oauth_connect};
 use super::oauth_send::{
-    fetch_gmail_signature, send_test_to_self, send_with_oauth, ImportedGmailSignature, OAuthSendResult,
+    fetch_gmail_signature, send_test_to_self, send_with_resolved_identity,
+    ImportedGmailSignature, OAuthSendResult,
 };
 use super::oauth_store::EmailOAuthStore;
+use crate::database::workspace::WorkspaceConfig;
+use crate::workspace::collaboration::team_append_audit;
+use crate::workspace::identity::resolve_authoritative_team_identity;
+use crate::workspace::mailbox::resolve_send_identity;
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
@@ -216,6 +221,7 @@ pub fn test_email_connection(
 
 pub fn send_email_unified(
     app_handle: &AppHandle,
+    workspace_config: &WorkspaceConfig,
     to_email: &str,
     to_name: Option<&str>,
     subject: &str,
@@ -224,28 +230,51 @@ pub fn send_email_unified(
     thread_id: Option<&str>,
     in_reply_to_message_id: Option<&str>,
     attachments: &[super::oauth_send::OutgoingEmailAttachment],
+    sender_email: Option<&str>,
+    audit_contact_id: Option<i64>,
 ) -> Result<OAuthSendResult, String> {
     let oauth = EmailOAuthStore::load(app_handle)?;
-    if oauth.connection.is_some() {
-        let reply = super::oauth_send::GmailThreadReply {
-            thread_id: thread_id.map(|s| s.to_string()),
-            in_reply_to_message_id: in_reply_to_message_id.map(|s| s.to_string()),
-        };
-        let reply_ref = if reply.thread_id.is_some() || reply.in_reply_to_message_id.is_some() {
-            Some(&reply)
-        } else {
-            None
-        };
-        return send_with_oauth(
-            app_handle,
-            to_email,
-            to_name,
-            subject,
-            body,
-            body_html,
-            reply_ref,
-            attachments,
-        );
+    let primary_email = oauth.connection.as_ref().map(|c| c.email.as_str());
+    let authority = resolve_authoritative_team_identity(app_handle, workspace_config)?;
+    let mut config_for_send = workspace_config.clone();
+    config_for_send.role = Some(authority.role);
+    let identity = resolve_send_identity(&config_for_send, primary_email, sender_email)?;
+
+    let reply = super::oauth_send::GmailThreadReply {
+        thread_id: thread_id.map(|s| s.to_string()),
+        in_reply_to_message_id: in_reply_to_message_id.map(|s| s.to_string()),
+    };
+    let reply_ref = if reply.thread_id.is_some() || reply.in_reply_to_message_id.is_some() {
+        Some(&reply)
+    } else {
+        None
+    };
+
+    let result = send_with_resolved_identity(
+        app_handle,
+        &identity,
+        to_email,
+        to_name,
+        subject,
+        body,
+        body_html,
+        reply_ref,
+        attachments,
+    )?;
+
+    if workspace_config.mode.is_team() {
+        if let Some(contact_id) = audit_contact_id {
+            let detail = format!("sender={}", identity.sender_email);
+            let _ = team_append_audit(
+                app_handle,
+                workspace_config,
+                "contact",
+                &contact_id.to_string(),
+                "email_send",
+                Some(&detail),
+            );
+        }
     }
-    Err("Aucune connexion email. Paramètres → Emails & envois → Connexion : connectez Google ou Microsoft.".into())
+
+    Ok(result)
 }

@@ -38,6 +38,8 @@ import {
   savePartenairesPagePreferences,
   type PartenairesPagePreferences,
 } from "@/lib/partenaires/partenaires-page-preferences";
+import { useCanExport } from "@/components/team/TeamWorkspaceProvider";
+import { assertCanExport } from "@/lib/export/assert-can-export";
 import { downloadPartenaireProductsCsv } from "@/lib/partenaires/partenaires-export";
 import {
   consumePartenairesNavigationIntent,
@@ -60,6 +62,7 @@ type PartenairesProps = {
 };
 
 export function Partenaires({ onNavigate }: PartenairesProps) {
+  const canExport = useCanExport();
   const [prefs, setPrefs] = useState<PartenairesPagePreferences>(() =>
     loadPartenairesPagePreferences()
   );
@@ -412,10 +415,17 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
         onClearStatFilter={() => updatePrefs({ statFilter: null })}
         onExportCsv={
           expandedRow
-            ? () => downloadPartenaireProductsCsv(expandedRow, contactLabelById, foyerLabelById)
+            ? () => {
+                try {
+                  assertCanExport(canExport);
+                  downloadPartenaireProductsCsv(expandedRow, contactLabelById, foyerLabelById);
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Export non autorisé");
+                }
+              }
             : undefined
         }
-        showExport={expandedIsVisible && expandedRow != null}
+        showExport={canExport && expandedIsVisible && expandedRow != null}
       />
 
       <Card className="border-border/70 shadow-sm">

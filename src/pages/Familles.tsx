@@ -42,6 +42,8 @@ import {
   saveFamillesPagePreferences,
   type FamillesPagePreferences,
 } from "@/lib/familles/familles-page-preferences";
+import { useCanExport } from "@/components/team/TeamWorkspaceProvider";
+import { assertCanExport } from "@/lib/export/assert-can-export";
 import { downloadFamilleMembersCsv } from "@/lib/familles/familles-export";
 import {
   consumeFamillesNavigationIntent,
@@ -73,6 +75,7 @@ type PendingMemberAction =
   | { type: "exclude_auto"; contact: Contact };
 
 export function Familles({ onNavigate }: FamillesProps) {
+  const canExport = useCanExport();
   const [prefs, setPrefs] = useState<FamillesPagePreferences>(() =>
     loadFamillesPagePreferences()
   );
@@ -469,10 +472,17 @@ export function Familles({ onNavigate }: FamillesProps) {
         onClearStatFilter={() => updatePrefs({ statFilter: null })}
         onExportCsv={
           expandedFamille
-            ? () => downloadFamilleMembersCsv(expandedFamille)
+            ? () => {
+                try {
+                  assertCanExport(canExport);
+                  downloadFamilleMembersCsv(expandedFamille);
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Export non autorisé");
+                }
+              }
             : undefined
         }
-        showExport={expandedIsVisible && expandedFamille != null}
+        showExport={canExport && expandedIsVisible && expandedFamille != null}
       />
 
       {excludedHomonyms.length > 0 && (

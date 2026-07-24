@@ -111,6 +111,11 @@ import { subscribeInvestissementsChanged } from "@/lib/investissements/investiss
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { subscribeEtiquettesChangedDebounced } from "@/lib/etiquettes/etiquette-events";
+import { useTeamWorkspace } from "@/components/team/TeamWorkspaceProvider";
+import { TeamPresenceBanner } from "@/components/team/TeamPresenceBanner";
+import { TeamLockBanner } from "@/components/team/TeamLockBanner";
+import { useTeamPresence } from "@/hooks/useTeamPresence";
+import { useRecordLock } from "@/hooks/useRecordLock";
 
 interface ContactDetailProps {
   open: boolean;
@@ -187,6 +192,20 @@ export function ContactDetail({
   );
   const contactRef = useRef(contact);
   contactRef.current = contact;
+  const { teamConfigured, config: teamConfig } = useTeamWorkspace();
+  const teamCollaborationEnabled =
+    teamConfigured && Boolean(teamConfig.siteId?.trim());
+  const teamPresence = useTeamPresence({
+    enabled: teamCollaborationEnabled && open && contact?.id != null,
+    entityType: "contact",
+    entityId: contact?.id,
+  });
+  const recordLock = useRecordLock({
+    enabled: teamCollaborationEnabled,
+    entityType: "contact",
+    entityId: contact?.id,
+    editing: showEditForm,
+  });
   const investissementFormOpenRef = useRef(false);
   investissementFormOpenRef.current = showInvestissementForm;
   const nestedSheetLocksContactScroll =
@@ -202,7 +221,11 @@ export function ContactDetail({
       interactionFormOpen ||
       tacheFormOpen);
 
-  const openEditForm = (sectionId?: ContactFormSectionId) => {
+  const openEditForm = async (sectionId?: ContactFormSectionId) => {
+    if (teamCollaborationEnabled && contact?.id != null) {
+      const acquired = await recordLock.acquire();
+      if (!acquired) return;
+    }
     if (contact) {
       identityBeforeEditRef.current = {
         nom: contact.nom,
@@ -847,6 +870,16 @@ export function ContactDetail({
           )}
         </div>
       </div>
+
+      {(teamPresence.banner || recordLock.heldBy || recordLock.loading) && (
+        <div className="space-y-2">
+          <TeamPresenceBanner message={teamPresence.banner} />
+          <TeamLockBanner
+            heldBy={recordLock.heldBy}
+            loading={recordLock.loading && !showEditForm}
+          />
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-muted-foreground">
         {(formatCiviliteLabel(contact.civilite) ||

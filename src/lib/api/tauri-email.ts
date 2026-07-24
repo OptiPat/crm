@@ -9,6 +9,10 @@ export interface SendEmailInput {
   body_html?: string | null;
   thread_id?: string | null;
   in_reply_to_message_id?: string | null;
+  /** Adresse d'envoi (validée côté Rust). */
+  sender_email?: string | null;
+  /** Contact CRM pour audit équipe (best-effort). */
+  audit_contact_id?: number | null;
   /** Pièces jointes du modèle (mêmes fichiers pour tous les destinataires). */
   attachments?: SendEmailAttachmentInput[];
 }

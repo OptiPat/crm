@@ -1,5 +1,6 @@
 use super::oauth_client::build_basic_client;
 use super::oauth_store::{EmailOAuthConnection, EmailOAuthStore, OAUTH_REDIRECT_URI};
+use crate::workspace::oauth::{microsoft_team_flow_provider, microsoft_team_oauth_scopes};
 use oauth2::reqwest::http_client;
 use oauth2::{
     AuthorizationCode, CsrfToken, PkceCodeChallenge, RedirectUrl, RequestTokenError, Scope,
@@ -55,6 +56,9 @@ fn provider_config(provider: &str) -> Result<ProviderOAuth, String> {
                 "https://graph.microsoft.com/Files.ReadWrite",
                 "https://graph.microsoft.com/User.Read",
             ],
+        }),
+        provider if provider == microsoft_team_flow_provider() => Ok(ProviderOAuth {
+            scopes: microsoft_team_oauth_scopes(),
         }),
         _ => Err(format!("Fournisseur OAuth inconnu: {}", provider)),
     }
@@ -126,10 +130,7 @@ fn try_read_oauth_callback(
         .map_err(|e| format!("Lecture callback OAuth: {}", e))?;
     let req = String::from_utf8_lossy(&buf[..n]);
     let request_line = req.lines().next().unwrap_or("");
-    let path = request_line
-        .split_whitespace()
-        .nth(1)
-        .unwrap_or("/");
+    let path = request_line.split_whitespace().nth(1).unwrap_or("/");
 
     if !path.starts_with("/callback") {
         write_http_response(stream, "404 Not Found", "");
@@ -164,9 +165,7 @@ fn try_read_oauth_callback(
     };
 
     if let Some(e) = err {
-        let desc = err_desc
-            .map(|d| format!(" — {d}"))
-            .unwrap_or_default();
+        let desc = err_desc.map(|d| format!(" — {d}")).unwrap_or_default();
         let hint = if e == "invalid_request" {
             " Vérifiez Azure → Authentication : plateforme « Applications clientes publiques/mobiles et de bureau », URI http://127.0.0.1:3847/callback, flux client public activé."
         } else {
@@ -227,12 +226,10 @@ fn wait_for_callback(listener: &TcpListener, expected_state: &str) -> Result<Str
             );
         }
         match listener.accept() {
-            Ok((mut stream, _)) => {
-                match try_read_oauth_callback(&mut stream, expected_state)? {
-                    Some(code) => return Ok(code),
-                    None => continue,
-                }
-            }
+            Ok((mut stream, _)) => match try_read_oauth_callback(&mut stream, expected_state)? {
+                Some(code) => return Ok(code),
+                None => continue,
+            },
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 std::thread::sleep(Duration::from_millis(150));
             }
@@ -284,9 +281,10 @@ pub fn run_oauth_connect(
 ) -> Result<EmailOAuthConnection, String> {
     let calendar_only = provider == "google_calendar";
     let onedrive_only = provider == "microsoft_onedrive";
+    let team_only = provider == microsoft_team_flow_provider();
     let oauth_provider = if calendar_only {
         "google"
-    } else if onedrive_only {
+    } else if onedrive_only || team_only {
         "microsoft"
     } else {
         provider
@@ -294,8 +292,9 @@ pub fn run_oauth_connect(
     let mut store = EmailOAuthStore::load(app)?;
     let cfg = provider_config(provider)?;
 
-    let oauth_client = build_basic_client(provider, &store)?
-        .set_redirect_uri(RedirectUrl::new(OAUTH_REDIRECT_URI.to_string()).map_err(|e| e.to_string())?);
+    let oauth_client = build_basic_client(provider, &store)?.set_redirect_uri(
+        RedirectUrl::new(OAUTH_REDIRECT_URI.to_string()).map_err(|e| e.to_string())?,
+    );
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
     let scopes: Vec<Scope> = cfg
@@ -406,6 +405,8 @@ pub fn run_oauth_connect(
         store.google_calendar_connection = Some(connection.clone());
     } else if onedrive_only {
         store.microsoft_onedrive_connection = Some(connection.clone());
+    } else if team_only {
+        store.microsoft_team_connection = Some(connection.clone());
     } else {
         store.connection = Some(connection.clone());
     }
@@ -433,9 +434,17 @@ pub fn disconnect_microsoft_onedrive_oauth(app: &AppHandle) -> Result<(), String
     store.save(app)
 }
 
+pub fn disconnect_microsoft_team_oauth(app: &AppHandle) -> Result<(), String> {
+    let mut store = EmailOAuthStore::load(app)?;
+    store.microsoft_team_connection = None;
+    store.save(app)
+}
+
 #[cfg(test)]
 mod tests {
     use super::escape_html_text;
+    use super::provider_config;
+    use crate::workspace::oauth::microsoft_team_flow_provider;
 
     #[test]
     fn oauth_error_text_is_escaped_before_html_rendering() {
@@ -443,5 +452,25 @@ mod tests {
             escape_html_text(r#"<script>alert("x")</script> & 'test'"#),
             "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;test&#39;"
         );
+    }
+
+    #[test]
+    fn microsoft_team_provider_has_sharepoint_scopes_distinct_from_onedrive() {
+        let team = provider_config(microsoft_team_flow_provider()).unwrap();
+        let onedrive = provider_config("microsoft_onedrive").unwrap();
+        assert!(team.scopes.iter().any(|s| s.contains("Sites.Selected")));
+        assert!(team.scopes.iter().any(|s| s.contains("GroupMember.Read.All")));
+        assert!(!onedrive
+            .scopes
+            .iter()
+            .any(|s| s.contains("Sites.Selected")));
+        assert!(onedrive
+            .scopes
+            .iter()
+            .any(|s| s.contains("Files.ReadWrite")));
+        assert!(!team
+            .scopes
+            .iter()
+            .any(|s| s.contains("Sites.ReadWrite.All")));
     }
 }

@@ -14,6 +14,7 @@ import {
 import { MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { ClientOneDriveSettingsPanel } from "@/components/client-onedrive/ClientOneDriveSettingsPanel";
+import { TeamWorkspaceSettingsPanel } from "@/components/settings/TeamWorkspaceSettingsPanel";
 
 export function ParametresIntegrationsSection() {
   const [birthdaySettings, setBirthdaySettings] = useState<BirthdayTelegramSettings | null>(null);
@@ -112,6 +113,7 @@ export function ParametresIntegrationsSection() {
 
   return (
     <div className="space-y-6">
+      <TeamWorkspaceSettingsPanel />
       <ClientOneDriveSettingsPanel />
       <SettingsPanel
         title="Anniversaires — Telegram"
