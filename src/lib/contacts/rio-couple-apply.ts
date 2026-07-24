@@ -122,22 +122,26 @@ async function upsertCoupleMember(
     );
 
   if (existing && identityConflicts && identityConflicts.length > 0) {
-    const confirmMerge = await Promise.resolve(
-      ctx.confirmIdentityMerge(
-      [
-        "Conflit d'identité :",
-        identityConflicts.join(", "),
-        "",
-        "Fiche en base :",
-        formatIdentityLine(existing),
-        "Document :",
-        formatIdentityLine({ email: member.email, telephone: member.telephone }),
-        "",
-        "Fusionner sur la fiche existante ?",
-        "(Annuler = créer une nouvelle fiche)",
-      ].join("\n")
-      )
-    );
+    const autoMergeOnPreferred =
+      options.preferredContact != null && existing.id === options.preferredContact.id;
+    const confirmMerge =
+      autoMergeOnPreferred ||
+      (await Promise.resolve(
+        ctx.confirmIdentityMerge(
+          [
+            "Conflit d'identité :",
+            identityConflicts.join(", "),
+            "",
+            "Fiche en base :",
+            formatIdentityLine(existing),
+            "Document :",
+            formatIdentityLine({ email: member.email, telephone: member.telephone }),
+            "",
+            "Fusionner sur la fiche existante ?",
+            "(Annuler = créer une nouvelle fiche)",
+          ].join("\n")
+        )
+      ));
     if (!confirmMerge) {
       existing = null;
     }

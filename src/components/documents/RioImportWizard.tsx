@@ -117,15 +117,22 @@ export function RioImportWizard({
 
   const confirmIdentityMerge = useCallback((message: string) => {
     return new Promise<boolean>((resolve) => {
-      mergeResolverRef.current = resolve;
+      // Retirer le spinner pendant la confirmation (sinon overlay opaque +
+      // ancien Dialog imbriqué = chargement infini sans bouton cliquable).
+      setLoading(false);
+      mergeResolverRef.current = (accepted: boolean) => {
+        setLoading(true);
+        resolve(accepted);
+      };
       setMergePrompt(message);
     });
   }, []);
 
   const resolveIdentityMerge = useCallback((accepted: boolean) => {
-    mergeResolverRef.current?.(accepted);
+    const resolver = mergeResolverRef.current;
     mergeResolverRef.current = null;
     setMergePrompt(null);
+    resolver?.(accepted);
   }, []);
 
   const contactLocked = contactId != null;
@@ -727,8 +734,8 @@ export function RioImportWizard({
             </div>
           )}
 
-        {loading && step === 2 && (
-          <div className="absolute inset-0 bg-background/60 flex items-center justify-center z-50 rounded-lg">
+        {loading && step === 2 && mergePrompt == null && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center rounded-lg bg-background/60">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         )}

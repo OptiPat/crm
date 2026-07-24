@@ -146,22 +146,28 @@ export async function applySoloRioImport(
     );
 
   if (existingContact && identityConflicts && identityConflicts.length > 0) {
-    const confirmMerge = await Promise.resolve(
-      ctx.confirmIdentityMerge(
-      [
-        "Conflit d'identité :",
-        identityConflicts.join(", "),
-        "",
-        "Fiche en base :",
-        formatIdentityLine(existingContact),
-        "Document :",
-        formatIdentityLine({ email: data.email, telephone: data.telephone }),
-        "",
-        "Fusionner sur la fiche existante ?",
-        "(Annuler = créer une nouvelle fiche)",
-      ].join("\n")
-      )
-    );
+    // Import depuis la fiche déjà ouverte : fusionner sans 2ᵉ dialogue
+    // (évite un Dialog imbriqué qui bloque le wizard + spinner infini).
+    const autoMergeOnOpenContact =
+      ctx.effectiveContactId != null && existingContact.id === ctx.effectiveContactId;
+    const confirmMerge =
+      autoMergeOnOpenContact ||
+      (await Promise.resolve(
+        ctx.confirmIdentityMerge(
+          [
+            "Conflit d'identité :",
+            identityConflicts.join(", "),
+            "",
+            "Fiche en base :",
+            formatIdentityLine(existingContact),
+            "Document :",
+            formatIdentityLine({ email: data.email, telephone: data.telephone }),
+            "",
+            "Fusionner sur la fiche existante ?",
+            "(Annuler = créer une nouvelle fiche)",
+          ].join("\n")
+        )
+      ));
     if (!confirmMerge) {
       existingContact = null;
     }

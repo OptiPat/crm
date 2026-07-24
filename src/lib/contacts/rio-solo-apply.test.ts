@@ -140,6 +140,34 @@ describe("applySoloRioImport", () => {
     expect(payload?.charges_emprunts).toBe(2_400);
   });
 
+  it("fusionne sans prompt si la fiche ouverte a un email différent du RIO", async () => {
+    vi.mocked(getContactById).mockResolvedValue({
+      ...baseContact,
+      email: "ancien@example.com",
+      telephone: "+33600000001",
+    });
+    const confirmIdentityMerge = vi.fn(() => false);
+
+    const result = await applySoloRioImport(
+      {
+        typeDocument: "RIO",
+        nom: "DUPONT",
+        prenom: "Jean",
+        email: "nouveau@example.com",
+        telephone: "+33600000002",
+      },
+      {
+        effectiveContactId: 42,
+        confirmIdentityMerge,
+        onMissingIdentity: vi.fn(),
+      }
+    );
+
+    expect(confirmIdentityMerge).not.toHaveBeenCalled();
+    expect(result?.finalContactId).toBe(42);
+    expect(updateContact).toHaveBeenCalled();
+  });
+
   it("crée un foyer pour appliquer la fiscalité solo sans enfants", async () => {
     vi.mocked(getContactById).mockResolvedValue({ ...baseContact, foyer_id: undefined });
     vi.mocked(ensureDeclarantFoyer).mockResolvedValue({
