@@ -140,6 +140,21 @@ const DATA_COLUMNS: &[ListColumnDef] = &[
         kind: ColumnKind::MultilineText,
     },
     ListColumnDef {
+        name: "PayloadChecksum",
+        display_name: "Payload checksum",
+        kind: ColumnKind::Text,
+    },
+    ListColumnDef {
+        name: "MutationId",
+        display_name: "Mutation id",
+        kind: ColumnKind::Text,
+    },
+    ListColumnDef {
+        name: "SchemaVersion",
+        display_name: "Schema version",
+        kind: ColumnKind::Number,
+    },
+    ListColumnDef {
         name: "Deleted",
         display_name: "Deleted",
         kind: ColumnKind::Boolean,
@@ -170,6 +185,11 @@ const SEQUENCES_COLUMNS: &[ListColumnDef] = &[
 ];
 
 const AUDIT_COLUMNS: &[ListColumnDef] = &[
+    ListColumnDef {
+        name: "MutationId",
+        display_name: "Mutation id",
+        kind: ColumnKind::Text,
+    },
     ListColumnDef {
         name: "EntityType",
         display_name: "Entity type",

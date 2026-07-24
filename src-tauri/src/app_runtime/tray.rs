@@ -35,7 +35,11 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id.as_ref() {
             MENU_OPEN_ID => focus_main_window(app),
-            MENU_QUIT_ID => quit_app_fully(app),
+            MENU_QUIT_ID => {
+                if let Err(error) = quit_app_fully(app) {
+                    eprintln!("⚠️ Fermeture sécurisée refusée : {error}");
+                }
+            }
             _ => {}
         })
         .on_tray_icon_event(move |tray, event| {
@@ -65,9 +69,11 @@ pub fn focus_main_window(app: &AppHandle) {
     }
 }
 
-pub fn quit_app_fully(app: &AppHandle) {
+pub fn quit_app_fully(app: &AppHandle) -> Result<(), String> {
+    crate::auth::commands::close_database(app, app.state::<crate::commands::DbState>().inner())?;
     request_force_quit();
     app.exit(0);
+    Ok(())
 }
 
 fn attach_close_to_tray_handler(app: &AppHandle, window: WebviewWindow) {
@@ -82,7 +88,9 @@ fn attach_close_to_tray_handler(app: &AppHandle, window: WebviewWindow) {
                     emit_main_window_background(&app_handle);
                 }
             } else {
-                quit_app_fully(&app_handle);
+                if let Err(error) = quit_app_fully(&app_handle) {
+                    eprintln!("⚠️ Fermeture sécurisée refusée : {error}");
+                }
             }
         }
     });

@@ -105,14 +105,30 @@ fn should_skip_entry(name: &str, is_dir: bool, has_protected_key: bool) -> bool 
             && (name == "secrets.key" || name.starts_with("secrets.key.conflict-")))
 }
 
-/// Copie tout AppData dans temp, sauf la base live (snapshot separe) et backups/.
-fn copy_app_data_tree(app_data_dir: &Path, temp_dir: &Path) -> Result<(), String> {
+/// Copie tout AppData dans temp, sauf la base active (snapshot séparé), ses
+/// fichiers WAL/SHM et les caches temporaires.
+fn copy_app_data_tree(
+    app_data_dir: &Path,
+    temp_dir: &Path,
+    active_db_name: &str,
+) -> Result<(), String> {
     let has_protected_key = app_data_dir.join("secrets.key.os").is_file();
     for entry in fs::read_dir(app_data_dir).map_err(|e| format!("Lecture AppData : {e}"))? {
         let entry = entry.map_err(|e| format!("Entree AppData : {e}"))?;
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
-        if name_str == "patrimoine-crm.db" {
+        if name_str == active_db_name
+            || name_str == format!("{active_db_name}-wal")
+            || name_str == format!("{active_db_name}-shm")
+            || name_str == crate::workspace::cache::TEAM_CACHE_TEMP_FILE
+            || name_str == format!("{}-wal", crate::workspace::cache::TEAM_CACHE_TEMP_FILE)
+            || name_str == format!("{}-shm", crate::workspace::cache::TEAM_CACHE_TEMP_FILE)
+            || name_str == crate::workspace::cache::TEAM_CACHE_SEALED_FILE
+            || name_str.starts_with(&format!(
+                "{}.",
+                crate::workspace::cache::TEAM_CACHE_DATABASE_FILE
+            ))
+        {
             continue;
         }
         let file_type = entry
@@ -327,7 +343,23 @@ fn export_archive_named(
     }
     cleanup_stale_partial_archives(input.destination_dir)?;
 
-    let live_db_path = input.app_data_dir.join("patrimoine-crm.db");
+    let source_path: String = input
+        .source_db
+        .query_row(
+            "SELECT file FROM pragma_database_list WHERE name = 'main'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("Chemin de la base active introuvable : {error}"))?;
+    let active_db_name = Path::new(&source_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| {
+            *name == "patrimoine-crm.db"
+                || *name == crate::workspace::cache::TEAM_CACHE_DATABASE_FILE
+        })
+        .ok_or_else(|| "Nom de base active non autorisé pour l'archive.".to_string())?;
+    let live_db_path = input.app_data_dir.join(active_db_name);
     if !live_db_path.is_file() {
         return Err("Base de donnees introuvable.".into());
     }
@@ -356,12 +388,12 @@ fn export_archive_named(
         let _ = fs::remove_dir_all(&temp_dir);
     };
 
-    if let Err(e) = copy_app_data_tree(input.app_data_dir, &temp_dir) {
+    if let Err(e) = copy_app_data_tree(input.app_data_dir, &temp_dir, active_db_name) {
         cleanup();
         return Err(e);
     }
 
-    let snapshot_db = temp_dir.join("patrimoine-crm.db");
+    let snapshot_db = temp_dir.join(active_db_name);
     if let Err(e) = create_consistent_db_snapshot(input.source_db, &snapshot_db) {
         cleanup();
         return Err(e);
@@ -502,7 +534,7 @@ mod tests {
 
         let temp = unique_temp_dir();
         fs::create_dir_all(&temp).expect("temp");
-        copy_app_data_tree(&app_data, &temp).expect("copy tree");
+        copy_app_data_tree(&app_data, &temp, "patrimoine-crm.db").expect("copy tree");
 
         assert!(temp.join("secrets.key.os").is_file());
         assert!(!temp.join("secrets.key").exists());
@@ -577,6 +609,36 @@ mod tests {
 
         let _ = fs::remove_dir_all(&app_data);
         let _ = fs::remove_dir_all(&dest);
+    }
+
+    #[test]
+    fn team_archive_snapshots_active_cache_and_keeps_historical_database() {
+        let app_data = unique_temp_dir();
+        fs::create_dir_all(&app_data).expect("app data");
+        let historical_db = app_data.join("patrimoine-crm.db");
+        let team_db = app_data.join(crate::workspace::cache::TEAM_CACHE_DATABASE_FILE);
+        write_marker_db(&historical_db, "historical");
+        write_marker_db(&team_db, "team-active");
+        let destination = unique_temp_dir();
+        fs::create_dir_all(&destination).expect("destination");
+
+        let source = Connection::open(&team_db).expect("open team cache");
+        let result = export_full_archive(ExportArchiveInput {
+            source_db: &source,
+            app_data_dir: &app_data,
+            destination_dir: &destination,
+        })
+        .expect("team export");
+
+        let file = File::open(&result.zip_path).expect("open zip");
+        let mut archive = zip::read::ZipArchive::new(file).expect("read zip");
+        assert!(archive
+            .by_name(crate::workspace::cache::TEAM_CACHE_DATABASE_FILE)
+            .is_ok());
+        assert!(archive.by_name("patrimoine-crm.db").is_ok());
+
+        let _ = fs::remove_dir_all(&app_data);
+        let _ = fs::remove_dir_all(&destination);
     }
 
     #[test]

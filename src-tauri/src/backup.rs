@@ -79,13 +79,14 @@ fn save_external_backup_status(app_data_dir: &Path, status: &ExternalBackupStatu
     }
 }
 
-pub fn spawn_external_backup_if_configured(app_data_dir: &Path) {
+pub fn spawn_external_backup_if_configured(app_data_dir: &Path, db_path: &Path) {
     let prefs_path = app_data_dir.join(crate::app_runtime::RUNTIME_PREFS_FILE);
     let prefs = crate::app_runtime::load_runtime_prefs_from_path(&prefs_path);
     let Some(directory) = prefs.external_backup_directory else {
         return;
     };
     let app_data_dir = app_data_dir.to_path_buf();
+    let db_path = db_path.to_path_buf();
     let _ = std::thread::Builder::new()
         .name("external-backup".into())
         .spawn(move || {
@@ -96,7 +97,6 @@ pub fn spawn_external_backup_if_configured(app_data_dir: &Path) {
                     return;
                 }
             };
-            let db_path = app_data_dir.join("patrimoine-crm.db");
             let source = match Connection::open_with_flags(
                 &db_path,
                 rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,

@@ -271,6 +271,19 @@ pub struct GmailThreadReply {
     pub in_reply_to_message_id: Option<String>,
 }
 
+fn has_gmail_reply_context(reply: Option<&GmailThreadReply>) -> bool {
+    reply.is_some_and(|reply| {
+        reply
+            .thread_id
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+            || reply
+                .in_reply_to_message_id
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
+    })
+}
+
 fn append_reply_headers(base: &str, reply: Option<&GmailThreadReply>) -> String {
     let Some(reply) = reply else {
         return base.to_string();
@@ -441,6 +454,14 @@ pub fn send_with_resolved_identity(
 ) -> Result<OAuthSendResult, String> {
     use crate::workspace::commands::resolve_microsoft_team_connection;
     use crate::workspace::mailbox::{microsoft_graph_send_mail_url, SendMailboxRoute};
+
+    if identity.route == SendMailboxRoute::OfficeShared && has_gmail_reply_context(reply) {
+        return Err(
+            "La boîte cabinet Microsoft ne peut pas répondre dans un fil Gmail. \
+             Envoyez un nouveau message ou utilisez le compte Google d'origine."
+                .into(),
+        );
+    }
 
     let from_name = cgp_sender_display_name(&load_cgp_config(app));
 
@@ -755,5 +776,26 @@ mod tests {
         assert!(raw.contains("multipart/mixed"));
         assert!(raw.contains("Content-Disposition: attachment"));
         assert!(raw.contains("application/pdf"));
+    }
+
+    #[test]
+    fn detects_non_empty_gmail_reply_context() {
+        assert!(has_gmail_reply_context(Some(&GmailThreadReply {
+            thread_id: Some("thread-1".into()),
+            in_reply_to_message_id: None,
+        })));
+        assert!(has_gmail_reply_context(Some(&GmailThreadReply {
+            thread_id: None,
+            in_reply_to_message_id: Some("message-1".into()),
+        })));
+    }
+
+    #[test]
+    fn ignores_empty_gmail_reply_context() {
+        assert!(!has_gmail_reply_context(None));
+        assert!(!has_gmail_reply_context(Some(&GmailThreadReply {
+            thread_id: Some("  ".into()),
+            in_reply_to_message_id: None,
+        })));
     }
 }

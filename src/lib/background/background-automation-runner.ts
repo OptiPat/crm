@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listBirthdaysToday } from "@/lib/api/tauri-birthday-telegram";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import {
+  claimBackgroundAutomationLease,
   getAppRuntimePrefs,
   type AppRuntimePrefs,
   trayAutomationTickEnabled,
@@ -539,6 +540,7 @@ async function runBackgroundAutomationCycleInner(
 
   const prefs = await getAppRuntimePrefs();
   if (isTray(options.surface) && !trayAutomationTickEnabled(prefs)) return;
+  if (!(await claimBackgroundAutomationLease())) return;
 
   if (shouldRunJob("relation", prefs, options)) {
     await runRelationJob(options.surface);

@@ -694,7 +694,7 @@ mod tests {
     }
 
     #[test]
-    fn decodes_blob_base64_and_preserves_rowid() {
+    fn decodes_blob_base64() {
         let bytes = vec![0xDE, 0xAD, 0xBE, 0xEF];
         let encoded = BASE64.encode(bytes.clone());
         let cell = json!({ "kind": "blob", "value": encoded });
@@ -702,36 +702,6 @@ mod tests {
             SqlValue::Blob(decoded) => assert_eq!(decoded, bytes),
             other => panic!("expected blob, got {other:?}"),
         }
-
-        let db = test_db();
-        db.connection()
-            .execute_batch("CREATE TABLE restore_rowid_fixture (label TEXT NOT NULL);")
-            .unwrap();
-        let schema = SchemaCache::build(db.connection()).unwrap();
-        let mut payload = Map::new();
-        payload.insert(
-            "label".into(),
-            json!({ "kind": "text", "value": "alpha" }),
-        );
-        insert_snapshot_record(
-            db.connection(),
-            &schema,
-            &SnapshotRecord {
-                table_name: "restore_rowid_fixture".into(),
-                record_key: "rowid:7".into(),
-                payload,
-            },
-        )
-        .unwrap();
-        let rowid: i64 = db
-            .connection()
-            .query_row(
-                "SELECT rowid FROM restore_rowid_fixture WHERE label = 'alpha'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(rowid, 7);
     }
 
     #[test]

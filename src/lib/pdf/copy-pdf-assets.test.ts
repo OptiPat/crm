@@ -11,4 +11,11 @@ describe("copy-pdf-assets output", () => {
     expect(head).toContain("Promise.withResolvers");
     expect(head.startsWith("(function(){")).toBe(true);
   });
+
+  it("worker classic sans export ESM (compat WKWebView / importScripts)", () => {
+    const body = fs.readFileSync(workerPath, "utf8");
+    expect(body).toContain("globalThis.pdfjsWorker");
+    expect(body).not.toMatch(/\bexport\s*\{/);
+    expect(body).not.toMatch(/\bexport\s+default\b/);
+  });
 });

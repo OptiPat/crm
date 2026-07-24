@@ -1,5 +1,5 @@
-use super::{AuthManager, PasswordAttemptOutcome};
 use super::session::{require_ui_session, UiSessionState, UI_SESSION_LOCKED_EVENT};
+use super::{AuthManager, PasswordAttemptOutcome};
 use crate::commands::DbState;
 use crate::database::Database;
 use serde::Serialize;
@@ -90,10 +90,7 @@ fn format_delay(seconds: u64) -> String {
     }
 }
 
-fn verify_password(
-    auth: &State<'_, AuthState>,
-    password: &str,
-) -> Result<(), AuthCommandError> {
+fn verify_password(auth: &State<'_, AuthState>, password: &str) -> Result<(), AuthCommandError> {
     let mut guard = auth
         .lock()
         .map_err(|_| AuthCommandError::internal("État d'authentification inaccessible"))?;
@@ -106,9 +103,10 @@ fn verify_password(
         .map_err(AuthCommandError::internal)?
     {
         PasswordAttemptOutcome::Verified => Ok(()),
-        PasswordAttemptOutcome::Invalid => {
-            Err(AuthCommandError::new("invalid_password", "Mot de passe incorrect"))
-        }
+        PasswordAttemptOutcome::Invalid => Err(AuthCommandError::new(
+            "invalid_password",
+            "Mot de passe incorrect",
+        )),
         PasswordAttemptOutcome::Blocked {
             retry_after_seconds,
         } => Err(AuthCommandError::rate_limited(retry_after_seconds)),
@@ -156,11 +154,29 @@ fn require_database_unlocked(db: &State<'_, DbState>) -> Result<(), AuthCommandE
     }
 }
 
-fn require_active_ui_session(
-    session: &State<'_, UiSessionState>,
-) -> Result<(), AuthCommandError> {
-    require_ui_session(session)
-        .map_err(|message| AuthCommandError::new("session_locked", message))
+fn take_database(db: &DbState) -> Result<Option<Database>, String> {
+    let mut guard = db
+        .lock()
+        .map_err(|_| "État de la base inaccessible".to_string())?;
+    Ok(guard.take())
+}
+
+pub(crate) fn close_database(app: &AppHandle, db: &DbState) -> Result<(), String> {
+    let Some(database) = take_database(db)? else {
+        return Ok(());
+    };
+    database
+        .workspace_blob_stash_pending_content()
+        .map_err(|error| format!("Protection des documents en attente impossible : {error}"))?;
+    let team_cache_sealed = crate::workspace::cache_seal::seal_team_cache_database(app, database)?;
+    if team_cache_sealed {
+        crate::workspace::documents::purge_local_team_document_cache(app)?;
+    }
+    Ok(())
+}
+
+fn require_active_ui_session(session: &State<'_, UiSessionState>) -> Result<(), AuthCommandError> {
+    require_ui_session(session).map_err(|message| AuthCommandError::new("session_locked", message))
 }
 
 fn platform_system_auth_status(app: &AppHandle) -> (bool, bool, String, Option<String>) {
@@ -201,7 +217,9 @@ fn platform_system_auth_status(app: &AppHandle) -> (bool, bool, String, Option<S
                     Some("biometryLockout") => {
                         "L'authentification système est temporairement verrouillée.".to_string()
                     }
-                    _ => "L'authentification système n'est pas disponible sur ce poste.".to_string(),
+                    _ => {
+                        "L'authentification système n'est pas disponible sur ce poste.".to_string()
+                    }
                 })
             },
         ),
@@ -216,10 +234,7 @@ fn platform_system_auth_status(app: &AppHandle) -> (bool, bool, String, Option<S
 
 fn classify_system_auth_error(plugin_error: &str) -> AuthCommandError {
     if plugin_error.starts_with("[userCancel]") {
-        AuthCommandError::new(
-            "system_auth_cancelled",
-            "Authentification système annulée",
-        )
+        AuthCommandError::new("system_auth_cancelled", "Authentification système annulée")
     } else if plugin_error.starts_with("[biometryLockout]") {
         AuthCommandError::new(
             "system_auth_locked",
@@ -287,6 +302,7 @@ fn open_database(
         }
     }
 
+    crate::workspace::cache_seal::unseal_team_cache_if_needed(app)?;
     let database = Database::open(app).map_err(|e| {
         eprintln!("❌ open_database: échec ouverture base : {e}");
         format!("Échec d'ouverture de la base : {e}")
@@ -363,11 +379,13 @@ pub fn is_ui_session_unlocked(session: State<'_, UiSessionState>) -> bool {
 pub fn touch_ui_session_activity(
     app: AppHandle,
     session: State<'_, UiSessionState>,
+    db: State<'_, DbState>,
 ) -> bool {
     let minutes = crate::app_runtime::load_runtime_prefs(&app).auto_lock_minutes;
     let was_unlocked = session.is_unlocked();
     let active = session.touch_or_lock_if_idle(Duration::from_secs(u64::from(minutes) * 60));
     if was_unlocked && !active {
+        let _ = close_database(&app, db.inner());
         let _ = app.emit(UI_SESSION_LOCKED_EVENT, ());
     }
     active
@@ -470,10 +488,15 @@ pub async fn recover_without_system_auth(
     Ok(true)
 }
 
-/// Verrouille uniquement l'interface. La base reste ouverte pour les workers tray.
+/// Verrouille l'interface et ferme la base pour rendre les commandes IPC inopérantes.
 #[tauri::command]
-pub fn lock(session: State<'_, UiSessionState>) {
+pub fn lock(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+) -> Result<(), String> {
     session.lock();
+    close_database(&app, db.inner())
 }
 
 /// Change le mot de passe d'accès (la base reste ouverte).
@@ -507,8 +530,10 @@ pub fn change_master_password(
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_system_auth_error, SystemAuthGuard};
+    use super::{classify_system_auth_error, take_database, SystemAuthGuard};
+    use crate::database::Database;
     use std::sync::atomic::AtomicBool;
+    use std::sync::Mutex;
 
     #[test]
     fn classifies_system_auth_errors_from_stable_display_codes() {
@@ -538,5 +563,12 @@ mod tests {
         assert_eq!(second.code, "system_auth_in_progress");
         drop(first);
         assert!(SystemAuthGuard::acquire(&FLAG).is_ok());
+    }
+
+    #[test]
+    fn locking_drops_the_open_database() {
+        let db = Mutex::new(Some(Database::open_in_memory_for_tests().unwrap()));
+        drop(take_database(&db).unwrap());
+        assert!(db.lock().unwrap().is_none());
     }
 }

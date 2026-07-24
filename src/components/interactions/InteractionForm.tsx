@@ -39,6 +39,8 @@ import {
   useLockAppMainScroll,
 } from "@/lib/ui/nested-sheet-scroll";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
+import { TeamLockBanner } from "@/components/team/TeamLockBanner";
+import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
 
 interface InteractionFormProps {
   open: boolean;
@@ -81,6 +83,12 @@ export function InteractionForm({
   const [loading, setLoading] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [formData, setFormData] = useState(emptyForm(defaultContactId));
+  const teamLock = useTeamFormRecordLock({
+    open,
+    onOpenChange,
+    entityType: "interaction",
+    entityId: interaction?.id,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -121,6 +129,7 @@ export function InteractionForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!teamLock.ready) return;
     if (!formData.contact_id) {
       alert("Sélectionnez un contact");
       return;
@@ -178,6 +187,11 @@ export function InteractionForm({
             Enregistrez un échange avec un contact (appel, RDV, note…)
           </DialogDescription>
         </DialogHeader>
+        <TeamLockBanner
+          heldBy={teamLock.heldBy}
+          loading={teamLock.loading}
+          message={teamLock.error}
+        />
 
         <div
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
@@ -261,7 +275,10 @@ export function InteractionForm({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Annuler
             </Button>
-            <Button type="submit" disabled={loading || contacts.length === 0}>
+            <Button
+              type="submit"
+              disabled={loading || contacts.length === 0 || !teamLock.ready}
+            >
               {loading ? "Enregistrement…" : "Enregistrer"}
             </Button>
           </DialogFooter>

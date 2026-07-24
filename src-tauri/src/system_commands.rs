@@ -7,6 +7,10 @@ use tauri::{AppHandle, Manager, State};
 
 static LEGACY_KEY_CLEANUP_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
+fn active_database_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    crate::workspace::cache::active_database_path(app)
+}
+
 fn open_backup_source(
     db: &State<'_, DbState>,
     db_path: &std::path::Path,
@@ -19,11 +23,8 @@ fn open_backup_source(
             return Err("Base non initialisée".to_string());
         }
     }
-    rusqlite::Connection::open_with_flags(
-        db_path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .map_err(|error| format!("Ouverture de la base pour sauvegarde impossible : {error}"))
+    rusqlite::Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|error| format!("Ouverture de la base pour sauvegarde impossible : {error}"))
 }
 
 #[derive(Serialize)]
@@ -37,17 +38,16 @@ pub struct AppInfo {
 #[tauri::command]
 pub fn get_app_info(
     app: AppHandle,
+    db: State<'_, DbState>,
     session: State<'_, UiSessionState>,
 ) -> Result<AppInfo, String> {
     require_ui_session(&session)?;
     let version = app.package_info().version.to_string();
-    let db_path = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("patrimoine-crm.db")
-        .to_string_lossy()
-        .into_owned();
+    let db_path = if require_export_permission_state(&app, &db).is_ok() {
+        active_database_path(&app)?.to_string_lossy().into_owned()
+    } else {
+        String::new()
+    };
 
     Ok(AppInfo {
         version,
@@ -84,7 +84,16 @@ pub fn restore_db_backup(
     require_ui_session(&session)?;
     require_export_permission_state(&app, &db)?;
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db_path = app_data_dir.join("patrimoine-crm.db");
+    if crate::workspace::enrollment::load_workspace_enrollment(&app)?
+        .is_some_and(|enrollment| enrollment.sync_activated)
+    {
+        return Err(
+            "La restauration directe d'une copie SQLite est interdite en mode équipe actif. \
+             Utilisez une restauration SharePoint réconciliée."
+                .into(),
+        );
+    }
+    let db_path = active_database_path(&app)?;
     let backup_guard = crate::backup::lock_backup_operations()
         .map_err(|error| format!("Restauration impossible : {error}"))?;
     crate::backup::validate_db_backup(&app_data_dir, &backup_filename)
@@ -97,11 +106,8 @@ pub fn restore_db_backup(
         *guard = None;
     }
 
-    let restore_result = crate::backup::restore_db_from_backup(
-        &app_data_dir,
-        &db_path,
-        &backup_filename,
-    );
+    let restore_result =
+        crate::backup::restore_db_from_backup(&app_data_dir, &db_path, &backup_filename);
     let (restored, safety) = match restore_result {
         Ok(result) => result,
         Err(error) => {
@@ -134,10 +140,7 @@ pub fn restore_db_backup(
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| backup_filename.clone()),
-        safety_backup: safety.and_then(|p| {
-            p.file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-        }),
+        safety_backup: safety.and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())),
     })
 }
 
@@ -150,15 +153,15 @@ pub fn create_manual_db_backup(
     require_ui_session(&session)?;
     require_export_permission_state(&app, &db)?;
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db_path = app_data_dir.join("patrimoine-crm.db");
+    let db_path = active_database_path(&app)?;
     if !db_path.exists() {
         return Err("Fichier de base introuvable.".to_string());
     }
     let _backup_guard =
         crate::backup::lock_backup_operations().map_err(|error| error.to_string())?;
     let source = open_backup_source(&db, &db_path)?;
-    let dest = crate::backup::create_manual_backup(&app_data_dir, &source)
-        .map_err(|e| e.to_string())?;
+    let dest =
+        crate::backup::create_manual_backup(&app_data_dir, &source).map_err(|e| e.to_string())?;
     Ok(dest.to_string_lossy().into_owned())
 }
 
@@ -191,7 +194,7 @@ pub fn cleanup_legacy_secret_key(
     }
 
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let db_path = app_data_dir.join("patrimoine-crm.db");
+    let db_path = active_database_path(&app)?;
     let backup_path = {
         let source = open_backup_source(&db, &db_path)?;
         crate::backup::create_manual_backup(&app_data_dir, &source)
@@ -207,10 +210,7 @@ pub fn cleanup_legacy_secret_key(
             .lock()
             .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
         let database = guard.as_ref().ok_or("Base non initialisée")?;
-        crate::birthday_notifications::validate_stored_bot_token_key(
-            database,
-            &keys.protected,
-        )?;
+        crate::birthday_notifications::validate_stored_bot_token_key(database, &keys.protected)?;
     }
     if !crate::email::oauth_secrets::finalize_validated_legacy_key_cleanup(&app, keys)? {
         return Err("L'ancienne clé n'est plus présente ; aucun fichier supprimé.".into());
@@ -243,7 +243,11 @@ fn external_backup_settings(app: &AppHandle) -> Result<ExternalBackupSettings, S
     let last_backup_path = directory
         .as_deref()
         .map(std::path::Path::new)
-        .and_then(|path| crate::export_archive::latest_automatic_archive(path).ok().flatten())
+        .and_then(|path| {
+            crate::export_archive::latest_automatic_archive(path)
+                .ok()
+                .flatten()
+        })
         .map(|path| path.to_string_lossy().into_owned());
     Ok(ExternalBackupSettings {
         directory,
@@ -287,9 +291,7 @@ pub fn set_external_backup_directory(
                 .map_err(|error| error.to_string())?;
             let app_data = app_data.canonicalize().unwrap_or(app_data);
             if selected.starts_with(&app_data) {
-                return Err(
-                    "Choisissez un dossier hors des données internes du CRM.".to_string(),
-                );
+                return Err("Choisissez un dossier hors des données internes du CRM.".to_string());
             }
             let probe = selected.join(format!(
                 ".patrimoine-crm-write-test-{}-{}",
@@ -330,7 +332,7 @@ pub fn create_external_backup_now(
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let _backup_guard =
         crate::backup::lock_backup_operations().map_err(|error| error.to_string())?;
-    let db_path = app_data_dir.join("patrimoine-crm.db");
+    let db_path = active_database_path(&app)?;
     let source = open_backup_source(&db, &db_path)?;
     let export_result = crate::export_archive::export_automatic_archive_if_due(
         crate::export_archive::ExportArchiveInput {
@@ -378,16 +380,15 @@ pub fn export_full_archive(
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let _backup_guard =
         crate::backup::lock_backup_operations().map_err(|error| error.to_string())?;
-    let db_path = app_data_dir.join("patrimoine-crm.db");
+    let db_path = active_database_path(&app)?;
     let source = open_backup_source(&db, &db_path)?;
 
-    let output = crate::export_archive::export_full_archive(
-        crate::export_archive::ExportArchiveInput {
+    let output =
+        crate::export_archive::export_full_archive(crate::export_archive::ExportArchiveInput {
             source_db: &source,
             app_data_dir: &app_data_dir,
             destination_dir: dest,
-        },
-    )?;
+        })?;
 
     Ok(ExportFullArchiveResult {
         zip_path: output.zip_path.to_string_lossy().into_owned(),
@@ -399,6 +400,7 @@ pub fn export_full_archive(
 #[tauri::command]
 pub fn open_document_file(
     app: AppHandle,
+    db: State<'_, DbState>,
     session: State<'_, UiSessionState>,
     path: String,
 ) -> Result<(), String> {
@@ -407,7 +409,21 @@ pub fn open_document_file(
     let managed = crate::documents_storage::validate_managed_document_file(
         &app_data_dir,
         std::path::Path::new(&path),
-    )?;
+    )
+    .or_else(|initial_error| {
+        let document_id = crate::workspace::documents::logical_document_id(&path).or_else(|| {
+            db.lock().ok().and_then(|guard| {
+                guard
+                    .as_ref()?
+                    .get_document_id_by_path(&path)
+                    .ok()
+                    .flatten()
+            })
+        });
+        document_id
+            .ok_or(initial_error)
+            .and_then(|id| crate::workspace::documents::ensure_local_document(&app, &db, id))
+    })?;
     open_path_with_system_default(&managed).map_err(|e| e.to_string())
 }
 
@@ -438,10 +454,7 @@ pub fn open_gmail_message(
 }
 
 #[tauri::command]
-pub fn open_external_url(
-    session: State<'_, UiSessionState>,
-    url: String,
-) -> Result<(), String> {
+pub fn open_external_url(session: State<'_, UiSessionState>, url: String) -> Result<(), String> {
     require_ui_session(&session)?;
     let u = url.trim();
     if !is_allowed_external_url(u) {
@@ -536,7 +549,9 @@ mod open_external_url_tests {
     #[test]
     fn allows_http_notes_but_rejects_credentials_and_invalid_urls() {
         assert!(is_allowed_external_url("http://example.com"));
-        assert!(!is_allowed_external_url("https://user:password@example.com"));
+        assert!(!is_allowed_external_url(
+            "https://user:password@example.com"
+        ));
         assert!(!is_allowed_external_url("http://user:password@example.com"));
         assert!(!is_allowed_external_url("https://"));
         assert!(is_allowed_external_url("https://example.com/path?q=1"));

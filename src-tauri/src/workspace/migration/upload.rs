@@ -1,10 +1,11 @@
 //! Orchestration upload snapshot → CRM_Data SharePoint.
 
 use super::plan::{plan_migration_item_action, MigrationItemAction, RemoteCrmDataItem};
-use super::sync_key::compute_sync_key;
+use super::sync_key::{compute_mutation_id, compute_payload_checksum, compute_sync_key};
 use crate::commands::DbState;
 use crate::database::workspace_sync::{
     build_team_migration_snapshot, snapshot_checksum, SnapshotRecord, TeamMigrationSnapshot,
+    WORKSPACE_SYNC_SCHEMA_VERSION,
 };
 use crate::database::Database;
 use crate::workspace::collaboration::require_provisioned_team_workspace;
@@ -118,6 +119,9 @@ fn build_crm_data_fields(
         "TableName": record.table_name,
         "RecordKey": record.record_key,
         "PayloadJson": payload_json,
+        "PayloadChecksum": compute_payload_checksum(payload_json),
+        "MutationId": compute_mutation_id(sync_key, 0),
+        "SchemaVersion": WORKSPACE_SYNC_SCHEMA_VERSION,
         "Deleted": false,
         "UpdatedAt": updated_at,
         "UpdatedBy": updated_by,

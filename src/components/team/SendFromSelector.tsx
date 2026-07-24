@@ -38,7 +38,10 @@ export function SendFromSelector({
 
   useEffect(() => {
     if (!visible) {
-      onChange(null);
+      const fallback = defaultSendFromEmail(config, primaryEmail);
+      if (value !== fallback) {
+        onChange(fallback);
+      }
       return;
     }
     const fallback = defaultSendFromEmail(config, primaryEmail);

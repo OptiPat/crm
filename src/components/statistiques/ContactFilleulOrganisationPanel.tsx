@@ -537,7 +537,11 @@ export function ContactFilleulOrganisationPanel({
       })
       .catch((error) => {
         console.error(error);
-        if (!cancelled) setDossiersLoading(false);
+        if (!cancelled) {
+          setDossiersByContactId(new Map());
+          setDossiersReadyKey(requestKey);
+          setDossiersLoading(false);
+        }
       });
     return () => {
       cancelled = true;

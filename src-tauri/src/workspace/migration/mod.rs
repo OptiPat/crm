@@ -8,7 +8,7 @@ mod upload;
 pub use plan::{
     plan_migration_item_action, remote_payload_matches, MigrationItemAction, RemoteCrmDataItem,
 };
-pub use sync_key::compute_sync_key;
+pub use sync_key::{compute_mutation_id, compute_payload_checksum, compute_sync_key};
 pub use download::{
     validate_team_remote_snapshot, TeamMigrationValidateReport,
 };

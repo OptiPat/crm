@@ -32,6 +32,8 @@ import {
   useLockAppMainScroll,
 } from "@/lib/ui/nested-sheet-scroll";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
+import { TeamLockBanner } from "@/components/team/TeamLockBanner";
+import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
 
 const FOYER_TYPE_OPTIONS = [
   "CELIBATAIRE",
@@ -69,6 +71,12 @@ export function FoyerForm({
     objectifs_patrimoniaux: "",
     notes: "",
   });
+  const teamLock = useTeamFormRecordLock({
+    open,
+    onOpenChange,
+    entityType: "foyer",
+    entityId: foyer?.id,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -88,6 +96,7 @@ export function FoyerForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!teamLock.ready) return;
     setLoading(true);
 
     try {
@@ -140,6 +149,11 @@ export function FoyerForm({
             Remplissez les informations du foyer fiscal
           </DialogDescription>
         </DialogHeader>
+        <TeamLockBanner
+          heldBy={teamLock.heldBy}
+          loading={teamLock.loading}
+          message={teamLock.error}
+        />
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div
@@ -309,7 +323,7 @@ export function FoyerForm({
             >
               Annuler
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !teamLock.ready}>
               {loading ? "Enregistrement..." : foyer ? "Modifier" : "Créer"}
             </Button>
           </DialogFooter>

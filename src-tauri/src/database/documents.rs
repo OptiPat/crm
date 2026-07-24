@@ -1,6 +1,6 @@
 //! Documents rattachés à un contact / foyer. Extrait de `operations.rs`.
 
-use rusqlite::{params, Result};
+use rusqlite::{params, OptionalExtension, Result};
 
 fn map_document_row(row: &rusqlite::Row<'_>) -> Result<super::models::Document> {
     Ok(super::models::Document {
@@ -16,14 +16,20 @@ fn map_document_row(row: &rusqlite::Row<'_>) -> Result<super::models::Document> 
         notes: row.get(9)?,
         sensibilite_extra_financiere: row.get(10)?,
         experience_investissement: row.get(11)?,
-        created_at: row.get(12)?,
-        updated_at: row.get(13)?,
+        workspace_blob_drive_id: row.get(12)?,
+        workspace_blob_item_id: row.get(13)?,
+        workspace_blob_etag: row.get(14)?,
+        workspace_blob_sha256: row.get(15)?,
+        created_at: row.get(16)?,
+        updated_at: row.get(17)?,
     })
 }
 
-const DOCUMENT_SELECT: &str = "SELECT id, contact_id, foyer_id, type_document, nom_fichier, chemin_fichier,
+const DOCUMENT_SELECT: &str =
+    "SELECT id, contact_id, foyer_id, type_document, nom_fichier, chemin_fichier,
                     taille_fichier, mime_type, date_document, notes, sensibilite_extra_financiere,
-                    experience_investissement, created_at, updated_at
+                    experience_investissement, workspace_blob_drive_id, workspace_blob_item_id,
+                    workspace_blob_etag, workspace_blob_sha256, created_at, updated_at
              FROM documents";
 
 impl super::Database {
@@ -41,7 +47,10 @@ impl super::Database {
         Ok(result)
     }
 
-    pub fn get_documents_by_contact(&self, contact_id: i64) -> Result<Vec<super::models::Document>> {
+    pub fn get_documents_by_contact(
+        &self,
+        contact_id: i64,
+    ) -> Result<Vec<super::models::Document>> {
         let mut stmt = self.conn.prepare(&format!(
             "{DOCUMENT_SELECT} WHERE contact_id = ?1 ORDER BY created_at DESC"
         ))?;
@@ -59,7 +68,32 @@ impl super::Database {
         &self,
         document: super::models::NewDocument,
     ) -> Result<super::models::Document> {
-        self.conn.execute(
+        let capture_enabled = self
+            .conn
+            .query_row(
+                "SELECT value = '1' FROM workspace_sync_state WHERE key = 'capture_enabled'",
+                [],
+                |row| row.get::<_, bool>(0),
+            )
+            .optional()?
+            .unwrap_or(false);
+        let content_sha256 = if capture_enabled {
+            Some(
+                crate::workspace::documents::file_sha256(std::path::Path::new(
+                    &document.chemin_fichier,
+                ))
+                .map_err(|message| {
+                    rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        message,
+                    )))
+                })?,
+            )
+        } else {
+            None
+        };
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
             "INSERT INTO documents (contact_id, foyer_id, type_document, nom_fichier, chemin_fichier,
                                    taille_fichier, mime_type, date_document, notes,
                                    sensibilite_extra_financiere, experience_investissement) 
@@ -79,7 +113,16 @@ impl super::Database {
             ],
         )?;
 
-        let id = self.conn.last_insert_rowid();
+        let id = tx.last_insert_rowid();
+        if let Some(content_sha256) = content_sha256 {
+            tx.execute(
+                "INSERT INTO workspace_blob_queue
+                    (document_id, operation, local_path, content_sha256)
+                 VALUES (?1, 'upsert', ?2, ?3)",
+                params![id, &document.chemin_fichier, content_sha256],
+            )?;
+        }
+        tx.commit()?;
         self.get_document_by_id(id)
     }
 
@@ -89,6 +132,16 @@ impl super::Database {
             params![id],
             map_document_row,
         )
+    }
+
+    pub fn get_document_id_by_path(&self, path: &str) -> Result<Option<i64>> {
+        self.conn
+            .query_row(
+                "SELECT id FROM documents WHERE chemin_fichier = ?1",
+                params![path],
+                |row| row.get(0),
+            )
+            .optional()
     }
 
     pub fn update_document(
@@ -157,9 +210,31 @@ impl super::Database {
     }
 
     pub fn delete_document(&self, id: i64) -> Result<()> {
-        self.conn
-            .execute("DELETE FROM documents WHERE id = ?1", params![id])?;
-        Ok(())
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "INSERT INTO workspace_blob_queue
+                (document_id, operation, remote_drive_id, remote_item_id, remote_etag)
+             SELECT id, 'delete', workspace_blob_drive_id, workspace_blob_item_id,
+                    workspace_blob_etag
+             FROM documents
+             WHERE id = ?1
+               AND COALESCE((
+                 SELECT value FROM workspace_sync_state WHERE key = 'capture_enabled'
+               ), '0') = '1'
+             ON CONFLICT(document_id) WHERE synced_at IS NULL DO UPDATE SET
+                operation = 'delete',
+                local_path = NULL,
+                content_sha256 = NULL,
+                remote_drive_id = excluded.remote_drive_id,
+                remote_item_id = excluded.remote_item_id,
+                remote_etag = excluded.remote_etag,
+                revision = workspace_blob_queue.revision + 1,
+                enqueued_at = unixepoch(),
+                error_message = NULL",
+            params![id],
+        )?;
+        tx.execute("DELETE FROM documents WHERE id = ?1", params![id])?;
+        tx.commit()
     }
 
     pub fn update_document_file_path(
@@ -173,5 +248,29 @@ impl super::Database {
             params![chemin_fichier, taille_fichier, id],
         )?;
         Ok(())
+    }
+
+    pub fn workspace_set_downloaded_document_path(
+        &self,
+        id: i64,
+        chemin_fichier: &str,
+        taille_fichier: i64,
+    ) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "INSERT INTO workspace_sync_state(key, value)
+             VALUES ('apply_origin', 'remote')
+             ON CONFLICT(key) DO UPDATE SET value = 'remote'",
+            [],
+        )?;
+        tx.execute(
+            "UPDATE documents SET chemin_fichier = ?1, taille_fichier = ?2 WHERE id = ?3",
+            params![chemin_fichier, taille_fichier, id],
+        )?;
+        tx.execute(
+            "UPDATE workspace_sync_state SET value = 'local' WHERE key = 'apply_origin'",
+            [],
+        )?;
+        tx.commit()
     }
 }

@@ -5,6 +5,7 @@ use crate::database::workspace_sync::{build_team_migration_preview, TeamMigratio
 use crate::email::oauth_flow::{disconnect_microsoft_team_oauth, run_oauth_connect};
 use crate::email::oauth_store::EmailOAuthStore;
 use crate::workspace::collaboration::require_provisioned_team_workspace;
+use crate::workspace::enrollment::validate_workspace_enrollment;
 use crate::workspace::migration::{
     upload_team_migration_snapshot, validate_team_remote_snapshot, TeamMigrationUploadReport,
     TeamMigrationValidateReport,
@@ -41,6 +42,7 @@ pub struct WorkspaceConfigResponse {
     pub identity_email: Option<String>,
     pub identity_display_name: Option<String>,
     pub authority_error: Option<String>,
+    pub sync_activated: bool,
 }
 
 pub fn resolve_microsoft_team_connection(
@@ -53,6 +55,8 @@ fn workspace_response(
     app: &AppHandle,
     config: WorkspaceConfig,
 ) -> Result<WorkspaceConfigResponse, String> {
+    let sync_activated = crate::workspace::enrollment::load_workspace_enrollment(app)?
+        .is_some_and(|enrollment| enrollment.sync_activated);
     let authority = if config.mode.is_team() {
         match require_sensitive_team_authority(app, &config) {
             Ok(authority) => authority,
@@ -69,6 +73,7 @@ fn workspace_response(
                     identity_email: None,
                     identity_display_name: None,
                     authority_error: Some(error),
+                    sync_activated,
                 });
             }
         }
@@ -92,6 +97,7 @@ fn workspace_response(
         identity_email,
         identity_display_name,
         authority_error: None,
+        sync_activated,
     })
 }
 
@@ -127,6 +133,7 @@ pub fn save_workspace_config_cmd(
         .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
     let database = guard.as_ref().ok_or("Base non initialisée")?;
     let current = workspace_config_from_db(database)?;
+    validate_workspace_enrollment(&app_handle, &current)?;
     let authority = require_sensitive_team_authority(&app_handle, &current)?;
     validate_workspace_config_save_with_authority(&current, &config, Some(authority.role))?;
     database
@@ -142,7 +149,9 @@ pub fn save_workspace_config_cmd(
 #[tauri::command]
 pub fn get_microsoft_team_connection_status(
     app_handle: AppHandle,
+    session: State<'_, UiSessionState>,
 ) -> Result<MicrosoftTeamConnectionStatus, String> {
+    require_ui_session(&session)?;
     let store = EmailOAuthStore::load(&app_handle)?;
     if let Some(ref conn) = store.microsoft_team_connection {
         return Ok(MicrosoftTeamConnectionStatus {
@@ -169,7 +178,18 @@ pub async fn connect_microsoft_team_oauth_cmd(
     tauri::async_runtime::spawn_blocking(move || {
         run_oauth_connect(&app_handle, microsoft_team_flow_provider(), force)?;
         clear_authoritative_identity_cache();
-        get_microsoft_team_connection_status(app_handle)
+        let store = EmailOAuthStore::load(&app_handle)?;
+        Ok(MicrosoftTeamConnectionStatus {
+            connected: store.microsoft_team_connection.is_some(),
+            email: store
+                .microsoft_team_connection
+                .as_ref()
+                .map(|connection| connection.email.clone()),
+            expires_at: store
+                .microsoft_team_connection
+                .as_ref()
+                .map(|connection| connection.expires_at),
+        })
     })
     .await
     .map_err(|e| format!("OAuth mode équipe interrompu: {e}"))?

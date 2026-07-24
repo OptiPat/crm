@@ -1,6 +1,7 @@
 /**
  * PDF.js — compatibilité Tauri / WebKit (macOS).
- * Worker statique .js (public/pdfjs) — WKWebView rejette souvent les .mjs en worker.
+ * Worker statique classic .js (public/pdfjs) — WKWebView rejette souvent les modules workers.
+ * Préchargement du worker sur le thread principal = filet fake-worker si Worker échoue.
  */
 import { ensurePdfJsPolyfills } from "./pdfjs-polyfills";
 
@@ -27,10 +28,32 @@ function documentInitOptions(bytes: Uint8Array) {
   };
 }
 
+/**
+ * Enregistre WorkerMessageHandler sur globalThis (fake-worker) si le
+ * Worker dédié ne démarre pas sous WKWebView.
+ */
+async function ensureFakeWorkerFallback(): Promise<void> {
+  const g = globalThis as typeof globalThis & {
+    pdfjsWorker?: { WorkerMessageHandler?: unknown };
+  };
+  if (g.pdfjsWorker?.WorkerMessageHandler) return;
+  try {
+    await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs");
+  } catch (error) {
+    console.warn("PDF.js: préchargement fake-worker impossible", error);
+  }
+}
+
 async function getPdfJsLib(): Promise<PdfJsModule> {
   ensurePdfJsPolyfills();
   if (!pdfjsLibPromise) {
-    pdfjsLibPromise = import("pdfjs-dist/legacy/build/pdf.mjs");
+    pdfjsLibPromise = (async () => {
+      const [pdfjs] = await Promise.all([
+        import("pdfjs-dist/legacy/build/pdf.mjs"),
+        ensureFakeWorkerFallback(),
+      ]);
+      return pdfjs;
+    })();
   }
   return pdfjsLibPromise;
 }

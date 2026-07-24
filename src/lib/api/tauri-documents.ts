@@ -18,6 +18,10 @@ export interface Document {
   sensibilite_extra_financiere?: string;
   /** Niveau QPI extrait du document (Novice, Informé, Expérimenté). */
   experience_investissement?: string;
+  workspace_blob_drive_id?: string;
+  workspace_blob_item_id?: string;
+  workspace_blob_etag?: string;
+  workspace_blob_sha256?: string;
   created_at: number;
   updated_at: number;
 }

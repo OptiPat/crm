@@ -33,4 +33,21 @@ describe("pdfjs-polyfills", () => {
 
     globalThis.DOMMatrix = previous;
   });
+
+  it("remplace un DOMMatrix incomplet (sans transformPoint)", () => {
+    const previous = globalThis.DOMMatrix;
+    globalThis.DOMMatrix = class IncompleteMatrix {
+      constructor(_init?: number[]) {}
+      multiply() {
+        return this;
+      }
+    } as unknown as typeof DOMMatrix;
+
+    ensurePdfJsPolyfills();
+    const matrix = new globalThis.DOMMatrix([1, 0, 0, 1, 3, 4]);
+    expect(typeof matrix.transformPoint).toBe("function");
+    expect(matrix.transformPoint({ x: 1, y: 1 }).x).toBe(4);
+
+    globalThis.DOMMatrix = previous;
+  });
 });

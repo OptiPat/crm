@@ -154,6 +154,8 @@ import { cn } from "@/lib/utils";
 import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 import { preventStackedSheetOutsideDismiss } from "@/lib/ui/radix-outside-interaction";
+import { TeamLockBanner } from "@/components/team/TeamLockBanner";
+import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
 import {
   stopWheelPropagation,
   useLockAppMainScroll,
@@ -308,6 +310,12 @@ export function InvestissementForm({
     null
   );
   const [showPartenaireForm, setShowPartenaireForm] = useState(false);
+  const recordLock = useTeamFormRecordLock({
+    open,
+    onOpenChange,
+    entityType: "investissement",
+    entityId: investissement?.id,
+  });
 
   const editingInvestissement = liveInvestissement ?? investissement ?? null;
   const isActifEncours = editingInvestissement
@@ -1602,6 +1610,18 @@ export function InvestissementForm({
       )}
     </form>
   );
+  const securedFormBody =
+    recordLock.ready ? (
+      formBody
+    ) : (
+      <div className="p-6">
+        <TeamLockBanner
+          heldBy={recordLock.heldBy}
+          loading={recordLock.loading}
+          message={recordLock.error}
+        />
+      </div>
+    );
 
   const partenaireFormModal = (
     <PartenaireForm
@@ -1650,7 +1670,7 @@ export function InvestissementForm({
               </SheetHeader>
             </div>
             <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
-              {formBody}
+              {securedFormBody}
             </PortalLayerProvider>
           </SheetContent>
         </Sheet>
@@ -1662,7 +1682,7 @@ export function InvestissementForm({
                 <DialogTitle>{formTitle}</DialogTitle>
                 <DialogDescription>{formDescription}</DialogDescription>
               </DialogHeader>
-              {formBody}
+              {securedFormBody}
             </PortalLayerProvider>
           </DialogContent>
         </Dialog>

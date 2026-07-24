@@ -15,17 +15,25 @@ import { Switch } from "@/components/ui/switch";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
 import { useTeamWorkspace } from "@/components/team/TeamWorkspaceProvider";
 import {
+  activateTeamSync,
+  bootstrapTeamSync,
   connectMicrosoftTeamOAuth,
   disconnectMicrosoftTeamOAuth,
   getMicrosoftTeamConnectionStatus,
+  listTeamSyncConflicts,
   previewTeamMigration,
+  resolveTeamSyncConflictAcceptRemote,
+  resolveTeamSyncConflictKeepLocal,
   saveWorkspaceConfig,
   testMicrosoftTeamSharePointConnection,
   uploadTeamMigrationSnapshot,
   validateTeamRemoteSnapshot,
   type MicrosoftTeamConnectionStatus,
 } from "@/lib/api/tauri-team";
-import { provisionTeamWorkspace } from "@/lib/api/tauri-team-collaboration";
+import {
+  joinTeamWorkspace,
+  provisionTeamWorkspace,
+} from "@/lib/api/tauri-team-collaboration";
 import { getOAuthAppSettings, saveMicrosoftOAuthClientId } from "@/lib/api/tauri-email-oauth";
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
 import type {
@@ -33,12 +41,22 @@ import type {
   TeamMigrationPreview,
   TeamMigrationUploadReport,
   TeamMigrationValidateReport,
+  TeamSyncActivationReport,
+  TeamSyncConflict,
   WorkspaceConfig,
 } from "@/lib/team/team-capabilities";
 import { toast } from "sonner";
 
 export function TeamWorkspaceSettingsPanel() {
-  const { config, teamConfigured, capabilities, authorityError, refresh } = useTeamWorkspace();
+  const {
+    config,
+    teamConfigured,
+    capabilities,
+    authorityError,
+    syncActivated,
+    syncError,
+    refresh,
+  } = useTeamWorkspace();
   const canManage = capabilities.canManageMembers;
 
   const [connection, setConnection] = useState<MicrosoftTeamConnectionStatus | null>(null);
@@ -53,11 +71,17 @@ export function TeamWorkspaceSettingsPanel() {
   const [preparingMigration, setPreparingMigration] = useState(false);
   const [uploadingMigration, setUploadingMigration] = useState(false);
   const [validatingRestore, setValidatingRestore] = useState(false);
+  const [activatingSync, setActivatingSync] = useState(false);
+  const [joiningTeam, setJoiningTeam] = useState(false);
   const [migrationPreview, setMigrationPreview] = useState<TeamMigrationPreview | null>(null);
   const [migrationUploadReport, setMigrationUploadReport] =
     useState<TeamMigrationUploadReport | null>(null);
   const [migrationValidateReport, setMigrationValidateReport] =
     useState<TeamMigrationValidateReport | null>(null);
+  const [syncActivationReport, setSyncActivationReport] =
+    useState<TeamSyncActivationReport | null>(null);
+  const [syncConflicts, setSyncConflicts] = useState<TeamSyncConflict[]>([]);
+  const [resolvingConflictId, setResolvingConflictId] = useState<number | null>(null);
 
   const [teamEnabled, setTeamEnabled] = useState(false);
   const [role, setRole] = useState<TeamRole>("advisor");
@@ -105,6 +129,16 @@ export function TeamWorkspaceSettingsPanel() {
   useEffect(() => {
     void refreshAll();
   }, [refreshAll]);
+
+  useEffect(() => {
+    if (!syncActivated) {
+      setSyncConflicts([]);
+      return;
+    }
+    void listTeamSyncConflicts()
+      .then(setSyncConflicts)
+      .catch((error) => console.warn("Lecture conflits équipe :", error));
+  }, [syncActivated, syncError]);
 
   const handleSaveClientId = async () => {
     const trimmed = microsoftClientId.trim();
@@ -341,6 +375,89 @@ export function TeamWorkspaceSettingsPanel() {
       toast.error(invokeErrorMessage(error) || "Validation restauration impossible.");
     } finally {
       setValidatingRestore(false);
+    }
+  };
+
+  const handleActivateSync = async () => {
+    if (!migrationValidateReport?.valid || !migrationValidateReport.checksumMatch) {
+      toast.error("Validez d'abord la restauration SharePoint et son checksum.");
+      return;
+    }
+    const confirmed = window.confirm(
+      "Activer définitivement le cache équipe sur ce poste ?\n\n" +
+        "La base historique patrimoine-crm.db restera intacte. Le CRM créera un cache équipe séparé, " +
+        "réservera des plages d'identifiants et synchronisera ensuite SharePoint automatiquement.\n\n" +
+        "Ne fermez pas l'application pendant cette opération."
+    );
+    if (!confirmed) return;
+    setActivatingSync(true);
+    try {
+      const report = await activateTeamSync();
+      setSyncActivationReport(report);
+      await refresh();
+      toast.success(
+        `Synchronisation équipe activée — ${report.synchronizedRecords} enregistrement(s), ` +
+          `${report.reservedIdBlocks} plage(s) d'identifiants.`
+      );
+    } catch (error) {
+      toast.error(invokeErrorMessage(error) || "Activation de la synchronisation impossible.");
+    } finally {
+      setActivatingSync(false);
+    }
+  };
+
+  const handleJoinTeam = async () => {
+    const confirmed = window.confirm(
+      "Rejoindre l'espace équipe et télécharger le CRM partagé sur ce poste ?\n\n" +
+        "Cette action est réservée à un poste local vide. Le CRM vérifiera votre compte Microsoft, " +
+        "créera un cache séparé et conservera la base locale historique intacte."
+    );
+    if (!confirmed) return;
+    setJoiningTeam(true);
+    try {
+      await joinTeamWorkspace();
+      const report = await bootstrapTeamSync();
+      setSyncActivationReport(report);
+      await refresh();
+      toast.success(
+        `Espace équipe rejoint — ${report.synchronizedRecords} enregistrement(s) téléchargé(s).`
+      );
+    } catch (error) {
+      toast.error(invokeErrorMessage(error) || "Impossible de rejoindre l'espace équipe.");
+    } finally {
+      setJoiningTeam(false);
+    }
+  };
+
+  const handleKeepLocalConflict = async (conflictId: number) => {
+    setResolvingConflictId(conflictId);
+    try {
+      await resolveTeamSyncConflictKeepLocal(conflictId);
+      setSyncConflicts((current) => current.filter((conflict) => conflict.id !== conflictId));
+      toast.success("Conflit résolu : la version locale sera renvoyée vers SharePoint.");
+    } catch (error) {
+      toast.error(invokeErrorMessage(error) || "Impossible de résoudre le conflit.");
+    } finally {
+      setResolvingConflictId(null);
+    }
+  };
+
+  const handleAcceptRemoteConflict = async (conflict: TeamSyncConflict) => {
+    const confirmed = window.confirm(
+      conflict.remoteDeleted
+        ? "La version SharePoint supprime cet enregistrement. Abandonner votre modification locale et accepter la suppression ?"
+        : "Abandonner votre modification locale et conserver la version SharePoint ?"
+    );
+    if (!confirmed) return;
+    setResolvingConflictId(conflict.id);
+    try {
+      await resolveTeamSyncConflictAcceptRemote(conflict.id);
+      setSyncConflicts((current) => current.filter((entry) => entry.id !== conflict.id));
+      toast.success("Conflit résolu avec la version SharePoint.");
+    } catch (error) {
+      toast.error(invokeErrorMessage(error) || "Impossible d'appliquer la version SharePoint.");
+    } finally {
+      setResolvingConflictId(null);
     }
   };
 
@@ -592,6 +709,27 @@ export function TeamWorkspaceSettingsPanel() {
                 )}
                 Tester SharePoint
               </Button>
+              {!syncActivated ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleJoinTeam()}
+                  disabled={
+                    joiningTeam ||
+                    !connection?.connected ||
+                    !teamConfigured ||
+                    !config.siteId?.trim()
+                  }
+                  className="gap-2"
+                >
+                  {joiningTeam ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Users className="h-4 w-4" />
+                  )}
+                  Rejoindre sur ce poste
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 onClick={() => void handleProvisionSharePoint()}
@@ -782,11 +920,81 @@ export function TeamWorkspaceSettingsPanel() {
                         ))}
                       </ul>
                     ) : null}
+                    {migrationValidateReport.valid &&
+                    migrationValidateReport.checksumMatch &&
+                    !syncActivated ? (
+                      <Button
+                        type="button"
+                        onClick={() => void handleActivateSync()}
+                        disabled={activatingSync || !canManage}
+                        className="gap-2"
+                      >
+                        {activatingSync ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Cloud className="h-4 w-4" />
+                        )}
+                        Activer la synchronisation équipe
+                      </Button>
+                    ) : null}
                   </div>
                 ) : null}
                 <p className="text-xs text-muted-foreground">
-                  Aucune bascule sync automatique. Relancez l&apos;envoi pour reprendre après échec.
+                  {syncActivated
+                    ? "Synchronisation automatique active toutes les 10 secondes."
+                    : "Aucune bascule automatique avant validation et activation explicite."}
                 </p>
+                {syncActivationReport ? (
+                  <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                    Cache équipe actif — {syncActivationReport.synchronizedRecords} enregistrement(s)
+                    synchronisé(s), {syncActivationReport.reservedIdBlocks} plage(s)
+                    d&apos;identifiants.
+                  </p>
+                ) : null}
+                {syncError ? (
+                  <p className="text-xs text-destructive">
+                    Synchronisation suspendue : {syncError}
+                  </p>
+                ) : null}
+                {syncConflicts.length > 0 ? (
+                  <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+                    <p className="font-medium">
+                      {syncConflicts.length} conflit(s) à confirmer
+                    </p>
+                    {syncConflicts.map((conflict) => (
+                      <div
+                        key={conflict.id}
+                        className="flex flex-wrap items-center justify-between gap-2"
+                      >
+                        <span className="font-mono">
+                          {conflict.tableName} · {conflict.recordKey}
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={resolvingConflictId != null}
+                            onClick={() => void handleAcceptRemoteConflict(conflict)}
+                          >
+                            Version SharePoint
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={resolvingConflictId != null}
+                            onClick={() => void handleKeepLocalConflict(conflict.id)}
+                          >
+                            {resolvingConflictId === conflict.id
+                              ? "Résolution…"
+                              : "Conserver ma version"}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {!config.siteId?.trim() ? (

@@ -10,6 +10,7 @@ declare module "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url" {
   export default src;
 }
 
+declare module "pdfjs-dist/legacy/build/pdf.worker.min.mjs";
 declare module "pdfjs-dist/legacy/build/pdf.mjs";
 
 interface PromiseConstructor {

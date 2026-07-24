@@ -19,14 +19,11 @@ use crate::database::{
         NewPartenaire, NewPipe, NewPipeTimelineEntry, NewSegment, NewTache, NewTemplateEmail,
         NomProduitSuggestion, Partenaire, Pipe, PipeContactTimelineEntry, PipeR1DocumentChecklist,
         PipeR1MissingDocsSummary, PipeR3DocumentChecklist, PipeR3ImmoDocumentChecklist,
-        PipeR3MissingDocsSummary,
-        PipeTimelineEntry,
-        PipelineStats, ProductStats,
-        Segment, SegmentWithCount, SetTacheStatutResult, Setting, Tache, TemplateEmail,
-        TemplateEmailAction, UpdateCustomFieldDef, UpdatePipe, UpdatePipeR1DocumentChecklistInput,
+        PipeR3MissingDocsSummary, PipeTimelineEntry, PipelineStats, ProductStats, Segment,
+        SegmentWithCount, SetTacheStatutResult, Setting, Tache, TemplateEmail, TemplateEmailAction,
+        UpdateCustomFieldDef, UpdatePipe, UpdatePipeR1DocumentChecklistInput,
         UpdatePipeR3DocumentChecklistInput, UpdatePipeR3ImmoDocumentChecklistInput,
-        UpdatePipeTimelineEntry,
-        YearlyActivityStats,
+        UpdatePipeTimelineEntry, YearlyActivityStats,
     },
     Database,
 };
@@ -141,8 +138,7 @@ pub fn create_contacts_bulk(
     let contact_ids: Vec<i64> = contacts
         .iter()
         .filter(|c| {
-            c.id
-                .is_some_and(|_| crate::client_onedrive::hooks::is_client_category(&c.categorie))
+            c.id.is_some_and(|_| crate::client_onedrive::hooks::is_client_category(&c.categorie))
         })
         .filter_map(|c| c.id)
         .collect();
@@ -891,13 +887,26 @@ pub fn create_document(
         .path()
         .app_data_dir()
         .map_err(|e| format!("App data introuvable : {e}"))?;
+    let team_mode = {
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        database
+            .get_workspace_config()
+            .map_err(|e| format!("Failed to get workspace config: {e}"))?
+            .mode
+            .is_team()
+    };
     let source = std::path::Path::new(&new_document.chemin_fichier);
-    let (stored_path, size) = crate::documents_storage::ensure_document_stored(
-        &app_data_dir,
-        source,
-        new_document.contact_id,
-        true,
-    )
+    let (stored_path, size) = if team_mode {
+        crate::documents_storage::ensure_team_document_stored(&app_data_dir, source)
+    } else {
+        crate::documents_storage::ensure_document_stored(
+            &app_data_dir,
+            source,
+            new_document.contact_id,
+            true,
+        )
+    }
     .map_err(|e| format!("Impossible de stocker le document : {e}"))?;
     new_document.chemin_fichier = stored_path.to_string_lossy().into_owned();
     new_document.taille_fichier = size as i64;
@@ -943,20 +952,25 @@ pub fn update_document(
         .app_data_dir()
         .map_err(|e| format!("App data introuvable : {e}"))?;
 
-    let (existing, contact_changed) = {
+    let (existing, contact_changed, team_mode) = {
         let db_guard = db.lock().unwrap();
         let database = db_guard.as_ref().ok_or("Database not initialized")?;
         let existing = database
             .get_document_by_id(id)
             .map_err(|e| format!("Failed to get document: {}", e))?;
         let contact_changed = existing.contact_id != document.contact_id;
-        (existing, contact_changed)
+        let team_mode = database
+            .get_workspace_config()
+            .map_err(|e| format!("Failed to get workspace config: {e}"))?
+            .mode
+            .is_team();
+        (existing, contact_changed, team_mode)
     };
 
     let mut file_relocation: Option<(std::path::PathBuf, u64)> = None;
     let mut previous_managed_path: Option<String> = None;
 
-    if contact_changed {
+    if contact_changed && !team_mode {
         let source = std::path::Path::new(&existing.chemin_fichier);
         if !source.is_file() {
             return Err(format!(
@@ -977,12 +991,9 @@ pub fn update_document(
         file_relocation = Some((stored_path, size));
     }
 
-    let relocation_for_db = file_relocation.as_ref().map(|(path, size)| {
-        (
-            path.to_string_lossy().into_owned(),
-            *size as i64,
-        )
-    });
+    let relocation_for_db = file_relocation
+        .as_ref()
+        .map(|(path, size)| (path.to_string_lossy().into_owned(), *size as i64));
 
     let updated = {
         let db_guard = db.lock().unwrap();
@@ -1961,6 +1972,7 @@ pub fn check_and_create_demembrement_alerts(db: State<'_, DbState>) -> Result<Ve
 #[tauri::command]
 pub fn read_pdf_file(
     app: AppHandle,
+    db: State<'_, DbState>,
     session: State<'_, UiSessionState>,
     file_path: String,
 ) -> Result<Vec<u8>, String> {
@@ -1969,15 +1981,28 @@ pub fn read_pdf_file(
     require_ui_session(&session)?;
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let app_cache_dir = app.path().app_cache_dir().map_err(|e| e.to_string())?;
+    let requested_path = std::path::Path::new(&file_path);
     let managed = crate::documents_storage::validate_document_or_compta_cache_file(
         &app_data_dir,
         &app_cache_dir,
-        std::path::Path::new(&file_path),
-    )?;
-    crate::secure_files::ensure_file_size(
-        &managed,
-        crate::secure_files::MAX_DOCUMENT_BYTES,
-    )?;
+        requested_path,
+    )
+    .or_else(|initial_error| {
+        let document_id =
+            crate::workspace::documents::logical_document_id(&file_path).or_else(|| {
+                db.lock().ok().and_then(|guard| {
+                    guard
+                        .as_ref()?
+                        .get_document_id_by_path(&file_path)
+                        .ok()
+                        .flatten()
+                })
+            });
+        document_id
+            .ok_or(initial_error)
+            .and_then(|id| crate::workspace::documents::ensure_local_document(&app, &db, id))
+    })?;
+    crate::secure_files::ensure_file_size(&managed, crate::secure_files::MAX_DOCUMENT_BYTES)?;
     fs::read(managed).map_err(|e| format!("Lecture du document impossible : {e}"))
 }
 
@@ -3212,8 +3237,44 @@ pub fn get_placement_open_counts_by_pipe(
 
 // ========== SETTINGS ==========
 
+fn is_protected_generic_setting_key(key: &str) -> bool {
+    matches!(
+        key.trim(),
+        crate::database::workspace::WORKSPACE_CONFIG_SETTING_KEY
+            | crate::licensing::LICENSE_STATE_KEY
+            | crate::licensing::LICENSE_LEGACY_MIGRATED_KEY
+    )
+}
+
+#[cfg(test)]
+mod generic_setting_guard_tests {
+    use super::is_protected_generic_setting_key;
+
+    #[test]
+    fn protects_workspace_and_license_settings_from_generic_ipc() {
+        assert!(is_protected_generic_setting_key("workspace_config"));
+        assert!(is_protected_generic_setting_key(
+            crate::licensing::LICENSE_STATE_KEY
+        ));
+        assert!(is_protected_generic_setting_key(
+            crate::licensing::LICENSE_LEGACY_MIGRATED_KEY
+        ));
+        assert!(!is_protected_generic_setting_key(
+            "pipe.r1_checklist_item_labels"
+        ));
+    }
+}
+
 #[tauri::command]
-pub fn get_setting(db: State<'_, DbState>, key: String) -> Result<Option<String>, String> {
+pub fn get_setting(
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+    key: String,
+) -> Result<Option<String>, String> {
+    require_ui_session(&session)?;
+    if is_protected_generic_setting_key(&key) {
+        return Err("Ce réglage interne n'est pas accessible par l'API générique.".into());
+    }
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
@@ -3223,12 +3284,15 @@ pub fn get_setting(db: State<'_, DbState>, key: String) -> Result<Option<String>
 }
 
 #[tauri::command]
-pub fn set_setting(db: State<'_, DbState>, key: String, value: String) -> Result<(), String> {
-    if key == crate::licensing::LICENSE_STATE_KEY {
-        return Err(
-            "La licence ne peut pas être modifiée manuellement. Utilisez l'écran d'activation."
-                .to_string(),
-        );
+pub fn set_setting(
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    require_ui_session(&session)?;
+    if is_protected_generic_setting_key(&key) {
+        return Err("Ce réglage interne ne peut pas être modifié par l'API générique.".into());
     }
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -3239,14 +3303,14 @@ pub fn set_setting(db: State<'_, DbState>, key: String, value: String) -> Result
 }
 
 #[tauri::command]
-pub fn delete_setting(db: State<'_, DbState>, key: String) -> Result<(), String> {
-    if key == crate::licensing::LICENSE_STATE_KEY
-        || key == crate::licensing::LICENSE_LEGACY_MIGRATED_KEY
-    {
-        return Err(
-            "La licence ne peut pas être supprimée manuellement. Utilisez l'écran d'activation."
-                .to_string(),
-        );
+pub fn delete_setting(
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+    key: String,
+) -> Result<(), String> {
+    require_ui_session(&session)?;
+    if is_protected_generic_setting_key(&key) {
+        return Err("Ce réglage interne ne peut pas être supprimé par l'API générique.".into());
     }
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -3257,13 +3321,19 @@ pub fn delete_setting(db: State<'_, DbState>, key: String) -> Result<(), String>
 }
 
 #[tauri::command]
-pub fn get_all_settings(db: State<'_, DbState>) -> Result<Vec<Setting>, String> {
+pub fn get_all_settings(
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+) -> Result<Vec<Setting>, String> {
+    require_ui_session(&session)?;
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
-    database
+    let mut settings = database
         .get_all_settings()
-        .map_err(|e| format!("Failed to get all settings: {}", e))
+        .map_err(|e| format!("Failed to get all settings: {}", e))?;
+    settings.retain(|setting| !is_protected_generic_setting_key(&setting.key));
+    Ok(settings)
 }
 
 #[tauri::command]
@@ -3866,10 +3936,7 @@ pub fn get_filleul_volume_exercices_by_contact(
 }
 
 #[tauri::command]
-pub fn exercice_is_closed(
-    db: State<'_, DbState>,
-    exercice_label: String,
-) -> Result<bool, String> {
+pub fn exercice_is_closed(db: State<'_, DbState>, exercice_label: String) -> Result<bool, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database

@@ -11,6 +11,20 @@ pub fn compute_sync_key(table_name: &str, record_key: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+pub fn compute_payload_checksum(payload_json: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(payload_json.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+pub fn compute_mutation_id(sync_key: &str, revision: i64) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(sync_key.as_bytes());
+    hasher.update([0_u8]);
+    hasher.update(revision.to_be_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

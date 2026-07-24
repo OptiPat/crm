@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSendFromOptions,
   defaultSendFromEmail,
+  isOfficeMailboxSender,
   shouldShowSendFromSelector,
 } from "./send-from-options";
 import type { WorkspaceConfig } from "./team-capabilities";
@@ -54,5 +55,19 @@ describe("send-from-options", () => {
       { value: "cgp@example.com", label: "Personnel (cgp@example.com)" },
     ]);
     expect(shouldShowSendFromSelector(config, "cgp@example.com")).toBe(false);
+  });
+
+  it("conseiller sans boîte personnelle : la boîte cabinet devient le choix par défaut", () => {
+    expect(buildSendFromOptions(teamAdvisor, null)).toEqual([
+      { value: "cabinet@example.com", label: "Cabinet (cabinet@example.com)" },
+    ]);
+    expect(defaultSendFromEmail(teamAdvisor, null)).toBe("cabinet@example.com");
+    expect(shouldShowSendFromSelector(teamAdvisor, null)).toBe(false);
+  });
+
+  it("identifie la boîte cabinet indépendamment de la casse", () => {
+    expect(isOfficeMailboxSender(teamAdvisor, "CABINET@EXAMPLE.COM")).toBe(true);
+    expect(isOfficeMailboxSender(teamAdvisor, "cgp@example.com")).toBe(false);
+    expect(isOfficeMailboxSender({ mode: "local" }, "cabinet@example.com")).toBe(false);
   });
 });

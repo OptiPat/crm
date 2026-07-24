@@ -18,6 +18,10 @@ pub fn orphan_documents_dir(app_data_dir: &Path) -> PathBuf {
     documents_dir(app_data_dir).join(ORPHAN_CONTACT_DIR)
 }
 
+pub fn team_documents_cache_dir(app_data_dir: &Path) -> PathBuf {
+    documents_dir(app_data_dir).join("_team_cache")
+}
+
 fn target_documents_dir(app_data_dir: &Path, contact_id: Option<i64>) -> PathBuf {
     match contact_id {
         Some(id) if id > 0 => contact_documents_dir(app_data_dir, id),
@@ -54,7 +58,9 @@ pub fn validate_managed_document_file(
         return Err("Fichier introuvable sur ce PC.".into());
     }
     if !is_managed_document_path(app_data_dir, file_path) {
-        return Err("Accès refusé : ce fichier n'appartient pas au stockage documentaire du CRM.".into());
+        return Err(
+            "Accès refusé : ce fichier n'appartient pas au stockage documentaire du CRM.".into(),
+        );
     }
     file_path
         .canonicalize()
@@ -119,10 +125,7 @@ fn store_file_in_dir(
     Ok((dest, size))
 }
 
-pub fn stage_document_file(
-    app_data_dir: &Path,
-    source: &Path,
-) -> std::io::Result<(PathBuf, u64)> {
+pub fn stage_document_file(app_data_dir: &Path, source: &Path) -> std::io::Result<(PathBuf, u64)> {
     if !source.is_file() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -161,6 +164,20 @@ pub fn ensure_document_stored(
     }
 
     Ok((dest, size))
+}
+
+pub fn ensure_team_document_stored(
+    app_data_dir: &Path,
+    source: &Path,
+) -> std::io::Result<(PathBuf, u64)> {
+    if !source.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Fichier introuvable : {}", source.display()),
+        ));
+    }
+    let was_managed = is_managed_document_path(app_data_dir, source);
+    store_file_in_dir(source, &team_documents_cache_dir(app_data_dir), was_managed)
 }
 
 /// Supprime le fichier s'il est géré par l'application (sous `documents/`).
@@ -233,6 +250,9 @@ pub fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
+        if entry.file_name() == "_team_cache" {
+            continue;
+        }
         let file_type = entry.file_type()?;
         let from = entry.path();
         let to = dst.join(entry.file_name());
@@ -253,6 +273,9 @@ fn dir_has_files(path: &Path) -> bool {
         return false;
     };
     for entry in entries.flatten() {
+        if entry.file_name() == "_team_cache" {
+            continue;
+        }
         let p = entry.path();
         if p.is_file() {
             return true;
@@ -302,7 +325,9 @@ pub fn restore_documents_from_backup(
     let nonce = format!(
         "{}-{}",
         std::process::id(),
-        chrono::Local::now().timestamp_nanos_opt().unwrap_or_default()
+        chrono::Local::now()
+            .timestamp_nanos_opt()
+            .unwrap_or_default()
     );
     let staged = app_data_dir.join(format!(".documents-restore-{nonce}"));
     let previous = app_data_dir.join(format!(".documents-rollback-{nonce}"));
@@ -353,7 +378,9 @@ pub fn remove_documents_for_restore(app_data_dir: &Path) -> std::io::Result<()> 
     let removed = app_data_dir.join(format!(
         ".documents-removed-{}-{}",
         std::process::id(),
-        chrono::Local::now().timestamp_nanos_opt().unwrap_or_default()
+        chrono::Local::now()
+            .timestamp_nanos_opt()
+            .unwrap_or_default()
     ));
     fs::rename(&live, &removed)?;
     fs::remove_dir_all(removed)
@@ -437,8 +464,9 @@ pub fn migrate_documents_to_contact_folders(
         if !source.is_file() {
             continue;
         }
-        let (stored_path, size) = ensure_document_stored(app_data_dir, source, doc.contact_id, false)
-            .map_err(|e| format!("Migration document #{} : {e}", doc.id))?;
+        let (stored_path, size) =
+            ensure_document_stored(app_data_dir, source, doc.contact_id, false)
+                .map_err(|e| format!("Migration document #{} : {e}", doc.id))?;
         if stored_path != source {
             database
                 .update_document_file_path(doc.id, &stored_path.to_string_lossy(), size as i64)
@@ -500,9 +528,7 @@ mod tests {
         assert!(validate_managed_document_file(&app_data, &prefixed).is_err());
         assert!(validate_document_or_compta_cache_file(&app_data, &app_cache, &managed).is_ok());
         assert!(validate_document_or_compta_cache_file(&app_data, &app_cache, &cached).is_ok());
-        assert!(
-            validate_document_or_compta_cache_file(&app_data, &app_cache, &external).is_err()
-        );
+        assert!(validate_document_or_compta_cache_file(&app_data, &app_cache, &external).is_err());
 
         let _ = fs::remove_dir_all(app_data);
         let _ = fs::remove_dir_all(app_cache);
@@ -515,14 +541,48 @@ mod tests {
         let external = app_data.join("external.pdf");
         fs::write(&external, b"pdf-content").expect("write external");
 
-        let (stored, size) =
-            ensure_document_stored(&app_data, &external, Some(42), true).expect("store for contact");
+        let (stored, size) = ensure_document_stored(&app_data, &external, Some(42), true)
+            .expect("store for contact");
         assert!(is_in_target_dir(&app_data, &stored, Some(42)));
         assert!(stored.starts_with(contact_documents_dir(&app_data, 42)));
         assert_eq!(size, 11);
         assert!(external.exists());
 
         let _ = fs::remove_dir_all(&app_data);
+    }
+
+    #[test]
+    fn team_document_is_stored_only_in_the_purgeable_cache() {
+        let app_data = unique_temp_dir();
+        fs::create_dir_all(&app_data).unwrap();
+        let external = app_data.join("source.pdf");
+        fs::write(&external, b"contenu").unwrap();
+
+        let (stored, _) = ensure_team_document_stored(&app_data, &external).unwrap();
+        assert!(stored.starts_with(team_documents_cache_dir(&app_data)));
+        assert!(external.exists());
+
+        let _ = fs::remove_dir_all(&app_data);
+    }
+
+    #[test]
+    fn document_backups_skip_the_reconstructible_team_cache() {
+        let source = unique_temp_dir();
+        let destination = unique_temp_dir();
+        fs::create_dir_all(team_documents_cache_dir(&source)).unwrap();
+        fs::write(source.join("historique.pdf"), b"historique").unwrap();
+        fs::write(
+            team_documents_cache_dir(&source).join("cache.pdf"),
+            b"cache",
+        )
+        .unwrap();
+
+        copy_dir_all(&source, &destination).unwrap();
+        assert!(destination.join("historique.pdf").is_file());
+        assert!(!destination.join("_team_cache").exists());
+
+        let _ = fs::remove_dir_all(source);
+        let _ = fs::remove_dir_all(destination);
     }
 
     #[test]
@@ -534,8 +594,8 @@ mod tests {
         let flat = docs.join("20250718_rio.pdf");
         fs::write(&flat, b"rio").expect("write flat");
 
-        let (stored, _) =
-            ensure_document_stored(&app_data, &flat, Some(7), true).expect("move to contact folder");
+        let (stored, _) = ensure_document_stored(&app_data, &flat, Some(7), true)
+            .expect("move to contact folder");
         assert!(is_in_target_dir(&app_data, &stored, Some(7)));
         assert!(!flat.exists());
 
@@ -666,10 +726,7 @@ mod tests {
 
         let updated = db.get_document_by_id(created.id).expect("read doc");
         let contact_dir = contact_documents_dir(&app_data, contact_id);
-        assert!(
-            Path::new(&updated.chemin_fichier)
-                .starts_with(&contact_dir)
-        );
+        assert!(Path::new(&updated.chemin_fichier).starts_with(&contact_dir));
         assert!(!flat.exists());
 
         let _ = fs::remove_dir_all(&app_data);

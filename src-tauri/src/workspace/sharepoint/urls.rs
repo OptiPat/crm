@@ -74,6 +74,20 @@ impl SharePointGraphUrls {
         )
     }
 
+    pub fn list_items_delta(&self, site_id: &str, list_id: &str) -> String {
+        format!(
+            "{}/sites/{site_id}/lists/{list_id}/items/delta?$expand=fields",
+            self.base()
+        )
+    }
+
+    pub fn list_items_delta_latest(&self, site_id: &str, list_id: &str) -> String {
+        format!(
+            "{}/sites/{site_id}/lists/{list_id}/items/delta?token=latest",
+            self.base()
+        )
+    }
+
     pub fn list_item(&self, site_id: &str, list_id: &str, item_id: &str) -> String {
         format!(
             "{}/sites/{site_id}/lists/{list_id}/items/{item_id}?expand=fields",
@@ -105,6 +119,21 @@ impl SharePointGraphUrls {
 
     pub fn drive_item_children(&self, drive_id: &str, item_id: &str) -> String {
         format!("{}/drives/{drive_id}/items/{item_id}/children", self.base())
+    }
+
+    pub fn drive_root_file_content(&self, drive_id: &str, file_name: &str) -> String {
+        format!(
+            "{}/drives/{drive_id}/root:/{file_name}:/content",
+            self.base()
+        )
+    }
+
+    pub fn drive_item_content(&self, drive_id: &str, item_id: &str) -> String {
+        format!("{}/drives/{drive_id}/items/{item_id}/content", self.base())
+    }
+
+    pub fn drive_item(&self, drive_id: &str, item_id: &str) -> String {
+        format!("{}/drives/{drive_id}/items/{item_id}", self.base())
     }
 }
 
@@ -158,6 +187,14 @@ mod tests {
         assert_eq!(
             urls.drive_root_children("drive-xyz"),
             "https://graph.microsoft.com/v1.0/drives/drive-xyz/root/children"
+        );
+        assert_eq!(
+            urls.drive_root_file_content("drive-xyz", "CRM_Document_7_test.pdf"),
+            "https://graph.microsoft.com/v1.0/drives/drive-xyz/root:/CRM_Document_7_test.pdf:/content"
+        );
+        assert_eq!(
+            urls.drive_item_content("drive-xyz", "item-7"),
+            "https://graph.microsoft.com/v1.0/drives/drive-xyz/items/item-7/content"
         );
     }
 }

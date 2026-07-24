@@ -195,6 +195,8 @@ import {
   stampNewEphemeralTemplateMeta,
   type EphemeralCampaignConfig,
 } from "@/lib/emails/template-email-ephemeral";
+import { TeamLockBanner } from "@/components/team/TeamLockBanner";
+import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
 
 export type TemplateEmailFormMode = "permanent" | "ephemeral";
 
@@ -228,6 +230,12 @@ export function TemplateEmailForm({
     | "audience"
     | "destinataires";
   const [loading, setLoading] = useState(false);
+  const teamLock = useTeamFormRecordLock({
+    open,
+    onOpenChange,
+    entityType: "templates_email",
+    entityId: template?.id,
+  });
   const [formTab, setFormTab] = useState<FormTab>("message");
   const [relanceDraft, setRelanceDraft] = useState<TemplateRelanceDraft>({
     enabled: false,
@@ -928,6 +936,7 @@ export function TemplateEmailForm({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!teamLock.ready) return;
     const corpsHtmlForSave = canonicalizeCorpsHtmlForSave(corpsHtml);
     const plainCorps = htmlToPlainEmail(corpsHtmlForSave) || formData.corps.trim();
     if (!formData.nom.trim() || !formData.sujet.trim() || !plainCorps) {
@@ -2044,6 +2053,13 @@ export function TemplateEmailForm({
               : "Message, déclencheur, étiquettes et mise en forme — aperçu à droite."}
           </DialogDescription>
         </DialogHeader>
+        <div className="px-6">
+          <TeamLockBanner
+            heldBy={teamLock.heldBy}
+            loading={teamLock.loading}
+            message={teamLock.error}
+          />
+        </div>
 
         <form ref={formRef} noValidate onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
@@ -2564,7 +2580,7 @@ export function TemplateEmailForm({
             <Button type="button" variant="outline" onClick={handleRequestClose}>
               {shouldConfirmAbandonEphemeral() ? "Abandonner" : "Annuler"}
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !teamLock.ready}>
               {loading ? "Enregistrement…" : "Enregistrer"}
             </Button>
           </DialogFooter>

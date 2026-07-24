@@ -116,6 +116,14 @@ fn secretary_restricted_fields_changed(current: &WorkspaceConfig, next: &Workspa
         || current.secretary_group_id != next.secretary_group_id
 }
 
+fn enrollment_identity_changed(current: &WorkspaceConfig, next: &WorkspaceConfig) -> bool {
+    current.site_hostname != next.site_hostname
+        || current.site_path != next.site_path
+        || current.site_id != next.site_id
+        || current.advisor_group_id != next.advisor_group_id
+        || current.secretary_group_id != next.secretary_group_id
+}
+
 pub fn validate_workspace_config_save(
     current: &WorkspaceConfig,
     next: &WorkspaceConfig,
@@ -128,6 +136,26 @@ pub fn validate_workspace_config_save_with_authority(
     next: &WorkspaceConfig,
     resolved_role: Option<TeamRole>,
 ) -> Result<(), String> {
+    let current_is_provisioned = current.mode.is_team()
+        && current
+            .site_id
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty());
+    if current_is_provisioned {
+        if next.mode != WorkspaceMode::TeamSharepoint {
+            return Err(
+                "Un espace équipe provisionné ne peut pas redevenir local par une simple modification de réglage."
+                    .into(),
+            );
+        }
+        if enrollment_identity_changed(current, next) {
+            return Err(
+                "Le site et les groupes d'un espace enrôlé ne peuvent pas être modifiés sans procédure de migration dédiée."
+                    .into(),
+            );
+        }
+    }
+
     if let Some(TeamRole::Secretary) = resolved_role {
         if next.mode != WorkspaceMode::TeamSharepoint {
             return Err("En mode secrétaire, vous ne pouvez pas désactiver le mode équipe.".into());
@@ -343,5 +371,39 @@ mod tests {
             db.get_workspace_config().unwrap().mode,
             WorkspaceMode::Local
         );
+    }
+
+    #[test]
+    fn provisioned_workspace_cannot_fall_back_to_local_or_change_authority() {
+        let current = WorkspaceConfig {
+            mode: WorkspaceMode::TeamSharepoint,
+            role: Some(TeamRole::Advisor),
+            site_hostname: Some("contoso.sharepoint.com".into()),
+            site_path: Some("/sites/crm".into()),
+            site_id: Some("site-123".into()),
+            advisor_group_id: Some("11111111-1111-1111-1111-111111111111".into()),
+            secretary_group_id: Some("22222222-2222-2222-2222-222222222222".into()),
+            ..Default::default()
+        };
+
+        let local_error =
+            validate_workspace_config_save_with_authority(
+                &current,
+                &WorkspaceConfig::default(),
+                Some(TeamRole::Advisor),
+            )
+            .unwrap_err();
+        assert!(local_error.contains("provisionné"));
+
+        let mut tampered = current.clone();
+        tampered.secretary_group_id =
+            Some("33333333-3333-3333-3333-333333333333".into());
+        let group_error = validate_workspace_config_save_with_authority(
+            &current,
+            &tampered,
+            Some(TeamRole::Advisor),
+        )
+        .unwrap_err();
+        assert!(group_error.contains("groupes"));
     }
 }

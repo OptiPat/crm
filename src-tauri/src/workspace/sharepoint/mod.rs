@@ -4,9 +4,10 @@ mod schema;
 mod urls;
 
 pub use client::{
-    GraphEntityVersion, ParsedDriveItem, ParsedSharePointColumn, ParsedSharePointList,
+    map_graph_http_error, GraphEntityVersion, ParsedDriveItem, ParsedSharePointColumn,
+    ParsedSharePointDeltaItem, ParsedSharePointDrive, ParsedSharePointList,
     ParsedSharePointListItem, ParsedSharePointSite, SharePointConnectionTestResult,
-    SharePointGraphClient, SharePointSiteRef, map_graph_http_error,
+    SharePointDeltaResult, SharePointGraphClient, SharePointSiteRef,
 };
 pub use conflict::{GraphWriteConflict, GraphWriteOutcome, PreconditionFailedDetails};
 pub use schema::{

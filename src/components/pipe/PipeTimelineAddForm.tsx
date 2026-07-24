@@ -34,6 +34,8 @@ import {
   type PipeRdvPlanOption,
 } from "@/lib/pipe/pipe-rdv-plan-option";
 import { toast } from "sonner";
+import { TeamLockBanner } from "@/components/team/TeamLockBanner";
+import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
 
 export interface PipeRdvSubmitPayload {
   occurredAtUnix: number;
@@ -101,6 +103,14 @@ export function PipeTimelineAddForm({
   onSubmit,
   submitLabel = "Ajouter",
 }: PipeTimelineAddFormProps) {
+  const recordLock = useTeamFormRecordLock({
+    open: true,
+    onOpenChange: (open) => {
+      if (!open) onCancel();
+    },
+    entityType: pipe?.id ? "pipe" : "contact",
+    entityId: pipe?.id ?? (contactId > 0 ? contactId : null),
+  });
   const isRdv = type === "RDV";
   const rdvLocation = useRdvVisioLocation(contactId > 0 ? contactId : undefined, isRdv);
   const showAffaireRdvStage = isRdv && !suiviRdv;
@@ -180,6 +190,16 @@ export function PipeTimelineAddForm({
     }
     onSubmit(e);
   };
+
+  if (!recordLock.ready) {
+    return (
+      <TeamLockBanner
+        heldBy={recordLock.heldBy}
+        loading={recordLock.loading}
+        message={recordLock.error}
+      />
+    );
+  }
 
   return (
     <form onSubmit={handleFormSubmit} className="rounded-lg border bg-muted/20 p-4 space-y-3">

@@ -378,7 +378,40 @@ pub fn team_acquire_lock(
     entity_type: &str,
     entity_id: &str,
 ) -> Result<TeamLockAcquireResponse, String> {
+    team_acquire_lock_with_ttl(
+        app,
+        config,
+        entity_type,
+        entity_id,
+        DEFAULT_LOCK_TTL_SECS,
+    )
+}
+
+pub fn team_acquire_lock_with_ttl(
+    app: &AppHandle,
+    config: &WorkspaceConfig,
+    entity_type: &str,
+    entity_id: &str,
+    ttl_secs: i64,
+) -> Result<TeamLockAcquireResponse, String> {
+    team_acquire_lock_with_ttl_as(app, config, entity_type, entity_id, ttl_secs, None)
+}
+
+pub(crate) fn team_acquire_lock_with_ttl_as(
+    app: &AppHandle,
+    config: &WorkspaceConfig,
+    entity_type: &str,
+    entity_id: &str,
+    ttl_secs: i64,
+    holder_suffix: Option<&str>,
+) -> Result<TeamLockAcquireResponse, String> {
+    if !(30..=900).contains(&ttl_secs) {
+        return Err("Durée du bail collaboratif invalide.".into());
+    }
     let session = open_collaboration_session(app, config)?;
+    let holder_id = holder_suffix
+        .map(|suffix| format!("{}#{suffix}", session.actor_id))
+        .unwrap_or_else(|| session.actor_id.clone());
     let list_id = resolve_list_id(&session, LIST_CRM_LOCKS)?;
     let lock_key = super::lock::lock_key(entity_type, entity_id);
     let filter = format!("fields/LockKey eq '{}'", odata_quote(&lock_key));
@@ -392,11 +425,11 @@ pub fn team_acquire_lock(
     let now = Utc::now();
     let decision = evaluate_lock_acquire(
         existing.as_ref(),
-        &session.actor_id,
+        &holder_id,
         now,
         entity_type,
         entity_id,
-        DEFAULT_LOCK_TTL_SECS,
+        ttl_secs,
     );
 
     match decision {
@@ -421,7 +454,7 @@ pub fn team_acquire_lock(
                 lock_fields(
                     entity_type,
                     entity_id,
-                    &session.actor_id,
+                    &holder_id,
                     &session.actor_display_name,
                     &expires_at,
                     &acquired_at,
@@ -454,6 +487,7 @@ pub fn team_acquire_lock(
                 &etag,
                 &expires_at,
                 &acquired_at,
+                &holder_id,
             )
         }
         LockAcquireDecision::Takeover {
@@ -471,6 +505,7 @@ pub fn team_acquire_lock(
             &etag,
             &expires_at,
             &acquired_at,
+            &holder_id,
         ),
     }
 }
@@ -485,6 +520,7 @@ fn patch_existing_lock(
     etag: &str,
     expires_at: &str,
     acquired_at: &str,
+    holder_id: &str,
 ) -> Result<TeamLockAcquireResponse, String> {
     let outcome = session.client.patch_list_item_fields_blocking(
         &session.access_token,
@@ -495,7 +531,7 @@ fn patch_existing_lock(
         lock_fields(
             entity_type,
             entity_id,
-            &session.actor_id,
+            holder_id,
             &session.actor_display_name,
             expires_at,
             acquired_at,
@@ -508,7 +544,7 @@ fn patch_existing_lock(
                 lock_key: lock_key.to_string(),
                 entity_type: entity_type.trim().to_string(),
                 entity_id: entity_id.trim().to_string(),
-                holder_id: session.actor_id.clone(),
+                holder_id: holder_id.to_string(),
                 holder_display_name: session.actor_display_name.clone(),
                 expires_at: expires_at.to_string(),
                 acquired_at: acquired_at.to_string(),

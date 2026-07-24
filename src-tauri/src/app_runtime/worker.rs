@@ -1,8 +1,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use tauri::{AppHandle, Emitter, Manager};
+use rand::RngCore;
 
 use crate::auth::session::{UiSessionState, UI_SESSION_LOCKED_EVENT};
 use crate::commands::DbState;
@@ -16,6 +18,16 @@ const RESUME_GAP_SECS: u64 = 5;
 const BACKGROUND_AUTOMATION_TICK: &str = "background-automation-tick";
 
 static WORKER_STARTED: AtomicBool = AtomicBool::new(false);
+static AUTOMATION_INSTANCE_ID: OnceLock<String> = OnceLock::new();
+
+/// Distingue deux postes/processus connectés avec le même compte Microsoft.
+fn automation_instance_id() -> &'static str {
+    AUTOMATION_INSTANCE_ID.get_or_init(|| {
+        let mut value = [0_u8; 16];
+        rand::thread_rng().fill_bytes(&mut value);
+        value.iter().map(|byte| format!("{byte:02x}")).collect()
+    })
+}
 
 /// Réveille la boucle JS du webview (limité throttling macOS / veille).
 fn wake_main_webview(app: &AppHandle) {
@@ -27,17 +39,57 @@ fn wake_main_webview(app: &AppHandle) {
     });
 }
 
+pub(super) fn automation_tick_allowed(app: &AppHandle) -> bool {
+    let db = app.state::<DbState>();
+    let config = {
+        let Ok(guard) = db.try_lock() else {
+            return false;
+        };
+        let Some(database) = guard.as_ref() else {
+            return false;
+        };
+        match database.get_workspace_config() {
+            Ok(config) => config,
+            Err(error) => {
+                eprintln!("⚠️ Lecture du workspace pour le bail d'automatisation : {error}");
+                return false;
+            }
+        }
+    };
+    if !config.mode.is_team() {
+        return true;
+    }
+    match crate::workspace::collaboration::team_acquire_lock_with_ttl_as(
+        app,
+        &config,
+        "automation",
+        "background-workers",
+        420,
+        Some(automation_instance_id()),
+    ) {
+        Ok(response) => response.acquired,
+        Err(error) => {
+            eprintln!("⚠️ Bail SharePoint des automatisations indisponible : {error}");
+            false
+        }
+    }
+}
+
 fn emit_tick_if_enabled(app: &AppHandle) {
     create_daily_backup_if_due(app);
     let prefs = load_runtime_prefs(app);
-    if prefs.tray_tick_enabled() {
-        wake_main_webview(app);
-        let _ = app.emit(BACKGROUND_AUTOMATION_TICK, ());
+    if !prefs.tray_tick_enabled() {
+        return;
     }
+    wake_main_webview(app);
+    let _ = app.emit(BACKGROUND_AUTOMATION_TICK, ());
 }
 
 fn create_daily_backup_if_due(app: &AppHandle) {
     let db = app.state::<DbState>();
+    if crate::workspace::require_export_permission_state(app, db.inner()).is_err() {
+        return;
+    }
     let guard = match db.try_lock() {
         Ok(guard) => guard,
         Err(std::sync::TryLockError::WouldBlock) => return,
@@ -66,7 +118,13 @@ fn create_daily_backup_if_due(app: &AppHandle) {
             return;
         }
     };
-    let db_path = app_data_dir.join("patrimoine-crm.db");
+    let db_path = match crate::workspace::cache::active_database_path(app) {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("⚠️ Résolution de la base active pour sauvegarde tray : {error}");
+            return;
+        }
+    };
     let source = match rusqlite::Connection::open_with_flags(
         &db_path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
@@ -119,6 +177,11 @@ fn lock_ui_if_due(app: &AppHandle) {
     }
     let timeout = Duration::from_secs(u64::from(prefs.auto_lock_minutes) * 60);
     if app.state::<UiSessionState>().lock_if_idle(timeout) {
+        if let Err(error) =
+            crate::auth::commands::close_database(app, app.state::<DbState>().inner())
+        {
+            eprintln!("⚠️ Scellement du cache au verrouillage automatique : {error}");
+        }
         let _ = app.emit(UI_SESSION_LOCKED_EVENT, ());
     }
 }

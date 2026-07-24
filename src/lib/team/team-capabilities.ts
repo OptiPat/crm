@@ -31,6 +31,7 @@ export interface WorkspaceConfigResponse {
   identityEmail?: string | null;
   identityDisplayName?: string | null;
   authorityError?: string | null;
+  syncActivated: boolean;
 }
 
 export interface MicrosoftTeamConnectionStatus {
@@ -89,6 +90,30 @@ export interface TeamMigrationValidateReport {
   foreignKeyOk: boolean;
   integrityOk: boolean;
   errors: string[];
+}
+
+export interface TeamSyncActivationReport {
+  activated: boolean;
+  synchronizedRecords: number;
+  reservedIdBlocks: number;
+}
+
+export interface TeamSyncOnceReport {
+  pulled: number;
+  pushed: number;
+  conflicts: number;
+  pending: number;
+  deltaLinkUpdated: boolean;
+}
+
+export interface TeamSyncConflict {
+  id: number;
+  tableName: string;
+  recordKey: string;
+  localPayloadJson: string | null;
+  remotePayloadJson: string | null;
+  remoteDeleted: boolean;
+  createdAt: number;
 }
 
 const ADVISOR_CAPABILITIES: TeamCapabilities = {

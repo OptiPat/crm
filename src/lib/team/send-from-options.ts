@@ -58,3 +58,13 @@ export function shouldShowSendFromSelector(
 ): boolean {
   return buildSendFromOptions(config, primaryEmail).length > 1;
 }
+
+export function isOfficeMailboxSender(
+  config: WorkspaceConfig,
+  senderEmail: string | null | undefined
+): boolean {
+  if (!isTeamConfigured(config)) return false;
+  const office = normalizeEmail(config.officeMailboxEmail);
+  const sender = normalizeEmail(senderEmail);
+  return Boolean(office && sender === office);
+}

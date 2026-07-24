@@ -5,8 +5,8 @@ mod tray;
 mod worker;
 
 pub use commands::{
-    focus_main_window_cmd, get_app_runtime_prefs, quit_app_fully_cmd, save_app_runtime_prefs,
-    save_auto_lock_minutes,
+    claim_background_automation_lease_cmd, focus_main_window_cmd, get_app_runtime_prefs,
+    quit_app_fully_cmd, save_app_runtime_prefs, save_auto_lock_minutes,
 };
 pub use prefs::{
     guard_dev_autostart_boot, load_runtime_prefs, load_runtime_prefs_from_path,

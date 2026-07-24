@@ -41,6 +41,10 @@ export async function provisionTeamWorkspace(): Promise<void> {
   await invoke("provision_team_workspace_cmd");
 }
 
+export async function joinTeamWorkspace(): Promise<void> {
+  await invoke("join_team_workspace_cmd");
+}
+
 export async function teamPresenceHeartbeat(options: {
   entityType: string;
   entityId: string;

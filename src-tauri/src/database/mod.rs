@@ -41,11 +41,11 @@ pub mod partenaires;
 pub mod pipe;
 pub mod pipe_contact_sync;
 pub mod pipe_contact_timeline;
-pub mod pipe_rdv_google_sync;
-pub mod pipe_rdv_scheduled_emails;
 pub mod pipe_r1_checklist;
 pub mod pipe_r3_checklist;
 pub mod pipe_r3_immo_checklist;
+pub mod pipe_rdv_google_sync;
+pub mod pipe_rdv_scheduled_emails;
 pub mod pipe_remuneration;
 pub mod pipe_timeline;
 pub mod placement_operations;
@@ -64,6 +64,9 @@ pub mod template_formality_sql;
 pub mod templates_email;
 pub mod type_produit_condition;
 pub mod workspace;
+pub mod workspace_blob;
+pub mod workspace_delta;
+pub mod workspace_outbox;
 pub mod workspace_restore;
 pub mod workspace_sync;
 
@@ -90,11 +93,12 @@ impl Database {
             .expect("Failed to get app data directory");
         std::fs::create_dir_all(&app_data_dir).expect("Failed to create app data directory");
 
-        let db_path = app_data_dir.join("patrimoine-crm.db");
+        let db_path = crate::workspace::cache::active_database_path(app_handle)
+            .map_err(rusqlite::Error::InvalidParameterName)?;
         let db_existed = db_path.exists();
         println!("Database path: {:?}", db_path);
 
-        if db_existed {
+        if db_existed && !crate::workspace::cache::is_team_cache_path(&db_path) {
             match crate::backup::lock_backup_operations() {
                 Ok(_backup_guard) => {
                     if let Err(e) =
@@ -116,6 +120,9 @@ impl Database {
             eprintln!("❌ Échec init_tables / migration : {e}");
             e
         })?;
+        let workspace_config = db.get_workspace_config()?;
+        crate::workspace::enrollment::validate_workspace_enrollment(app_handle, &workspace_config)
+            .map_err(rusqlite::Error::InvalidParameterName)?;
 
         if let Err(e) =
             crate::documents_storage::migrate_documents_to_contact_folders(&app_data_dir, &db)
@@ -133,21 +140,45 @@ impl Database {
             _ => {}
         }
 
-        match crate::backup::lock_backup_operations() {
-            Ok(_backup_guard) => {
-                if let Err(e) =
-                    crate::backup::create_daily_backup_if_needed(&app_data_dir, db.connection())
-                {
-                    eprintln!("⚠️ Sauvegarde automatique échouée : {e}");
+        if crate::workspace::guard::require_export_permission(app_handle, &db).is_ok() {
+            match crate::backup::lock_backup_operations() {
+                Ok(_backup_guard) => {
+                    if let Err(e) =
+                        crate::backup::create_daily_backup_if_needed(&app_data_dir, db.connection())
+                    {
+                        eprintln!("⚠️ Sauvegarde automatique échouée : {e}");
+                    }
                 }
+                Err(e) => eprintln!("⚠️ Verrou sauvegarde automatique inaccessible : {e}"),
             }
-            Err(e) => eprintln!("⚠️ Verrou sauvegarde automatique inaccessible : {e}"),
+            crate::backup::spawn_external_backup_if_configured(&app_data_dir, &db_path);
         }
-        crate::backup::spawn_external_backup_if_configured(&app_data_dir);
 
         crate::licensing::refresh_write_gate(&db);
 
         Ok(db)
+    }
+
+    pub(crate) fn open_workspace_cache_at_path(
+        app_handle: &AppHandle,
+        db_path: &std::path::Path,
+    ) -> Result<Self> {
+        let conn = Connection::open(db_path)?;
+        conn.execute("PRAGMA foreign_keys = ON", [])?;
+        crate::licensing::install_authorizer(&conn);
+        let db = Database { conn };
+        db.init_tables()?;
+        let workspace_config = db.get_workspace_config()?;
+        crate::workspace::enrollment::validate_workspace_enrollment(app_handle, &workspace_config)
+            .map_err(rusqlite::Error::InvalidParameterName)?;
+        crate::licensing::refresh_write_gate(&db);
+        Ok(db)
+    }
+
+    pub(crate) fn backup_to_path(&self, path: &std::path::Path) -> Result<()> {
+        let mut destination = Connection::open(path)?;
+        let backup = rusqlite::backup::Backup::new(&self.conn, &mut destination)?;
+        backup.run_to_completion(64, std::time::Duration::from_millis(10), None)
     }
 
     fn init_tables(&self) -> Result<()> {
@@ -621,6 +652,8 @@ impl Database {
         self.migrate_filleul_volume_exercices_table()?;
         self.migrate_filleul_dossier_table()?;
         self.migrate_workspace_sync_tables()?;
+        self.migrate_workspace_blob()?;
+        self.migrate_workspace_outbox()?;
 
         Ok(())
     }

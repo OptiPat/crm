@@ -14,6 +14,8 @@ import { buildEditedHtmlEmailSendBodies } from "@/lib/etiquettes/etiquette-email
 import { exchangeContactName } from "@/lib/interactions/exchange-history-display";
 import { htmlToPlainEmail } from "@/lib/emails/template-email-html";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
+import { useTeamWorkspace } from "@/components/team/TeamWorkspaceProvider";
+import { isOfficeMailboxSender } from "@/lib/team/send-from-options";
 import { Loader2, Mail } from "lucide-react";
 import { toast } from "sonner";
 
@@ -34,6 +36,7 @@ export function ExchangeEmailReplyForm({
   const [sending, setSending] = useState(false);
   const [senderEmail, setSenderEmail] = useState<string | null>(null);
   const editorElementRef = useRef<HTMLDivElement>(null);
+  const { config: workspaceConfig } = useTeamWorkspace();
 
   useEffect(() => {
     setSubject(defaultCampaignReplySubject(entry));
@@ -47,6 +50,7 @@ export function ExchangeEmailReplyForm({
   const contactEmail = entry.contact_email?.trim();
   const canSend = Boolean(contactEmail);
   const messageReady = htmlToPlainEmail(bodyHtml).trim().length > 0;
+  const sendsFromOfficeMailbox = isOfficeMailboxSender(workspaceConfig, senderEmail);
 
   const handleSend = async () => {
     if (!contactEmail) {
@@ -73,11 +77,13 @@ export function ExchangeEmailReplyForm({
         subject: subject.trim(),
         body: plainBody,
         body_html,
-        thread_id: entry.email_gmail_thread_id ?? null,
+        thread_id: sendsFromOfficeMailbox ? null : entry.email_gmail_thread_id ?? null,
         in_reply_to_message_id:
-          entry.email_reponse_gmail_message_id ??
-          entry.email_gmail_message_id ??
-          null,
+          sendsFromOfficeMailbox
+            ? null
+            : entry.email_reponse_gmail_message_id ??
+              entry.email_gmail_message_id ??
+              null,
         sender_email: senderEmail,
         audit_contact_id: entry.contact_id,
       });
@@ -136,7 +142,9 @@ export function ExchangeEmailReplyForm({
           ariaLabel="Réponse au client"
         />
         <p className="text-[11px] text-muted-foreground">
-          Gras, listes et liens — rendu identique à Gmail. La signature est ajoutée à l&apos;envoi.
+          {sendsFromOfficeMailbox
+            ? "La boîte cabinet Microsoft ne peut pas prolonger un fil Gmail : un nouveau message sera envoyé."
+            : "Gras, listes et liens — rendu identique à Gmail. La signature est ajoutée à l’envoi."}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -153,7 +161,7 @@ export function ExchangeEmailReplyForm({
             ) : (
               <Mail className="h-4 w-4" />
             )}
-            Envoyer la réponse
+            {sendsFromOfficeMailbox ? "Envoyer un nouveau message" : "Envoyer la réponse"}
           </span>
         </Button>
       </div>

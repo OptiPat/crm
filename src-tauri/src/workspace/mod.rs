@@ -1,8 +1,12 @@
 pub mod actor;
 pub mod audit;
+pub mod cache;
+pub mod cache_seal;
 pub mod collaboration;
 pub mod collaboration_commands;
 pub mod commands;
+pub mod documents;
+pub mod enrollment;
 pub mod guard;
 pub mod identity;
 pub mod lock;
@@ -12,6 +16,7 @@ pub mod mode;
 pub mod oauth;
 pub mod presence;
 pub mod sharepoint;
+pub mod sync;
 pub mod team;
 pub mod team_connection;
 

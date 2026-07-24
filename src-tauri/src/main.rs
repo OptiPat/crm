@@ -29,10 +29,11 @@ mod workspace;
 
 use app_branding::commands::{apply_app_branding_os, get_app_branding, save_app_branding};
 use app_runtime::{
-    apply_startup_launch_prefs, focus_main_window, focus_main_window_cmd, get_app_runtime_prefs,
-    guard_dev_autostart_boot, hide_main_window_if_minimized_arg, is_force_quit_requested,
-    load_runtime_prefs, quit_app_fully_cmd, save_app_runtime_prefs, save_auto_lock_minutes,
-    setup_tray, start_background_automation_worker,
+    apply_startup_launch_prefs, claim_background_automation_lease_cmd, focus_main_window,
+    focus_main_window_cmd, get_app_runtime_prefs, guard_dev_autostart_boot,
+    hide_main_window_if_minimized_arg, is_force_quit_requested, load_runtime_prefs,
+    quit_app_fully_cmd, save_app_runtime_prefs, save_auto_lock_minutes, setup_tray,
+    start_background_automation_worker,
 };
 use auth::commands::*;
 use auth::session::UiSessionState;
@@ -87,8 +88,9 @@ use system_commands::*;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
 use workspace::collaboration_commands::{
-    provision_team_workspace_cmd, team_acquire_lock_cmd, team_append_audit_cmd, team_list_audit_cmd,
-    team_list_presence_cmd, team_presence_heartbeat_cmd, team_release_lock_cmd, team_renew_lock_cmd,
+    join_team_workspace_cmd, provision_team_workspace_cmd, team_acquire_lock_cmd,
+    team_append_audit_cmd, team_list_audit_cmd, team_list_presence_cmd,
+    team_presence_heartbeat_cmd, team_release_lock_cmd, team_renew_lock_cmd,
 };
 use workspace::commands::{
     connect_microsoft_team_oauth_cmd, disconnect_microsoft_team_oauth_cmd,
@@ -96,6 +98,11 @@ use workspace::commands::{
     preview_team_migration_cmd, save_workspace_config_cmd,
     test_microsoft_team_sharepoint_connection_cmd, upload_team_migration_snapshot_cmd,
     validate_team_remote_snapshot_cmd,
+};
+use workspace::sync::commands::{
+    activate_team_sync_cmd, bootstrap_team_sync_cmd, list_team_sync_conflicts_cmd,
+    resolve_team_sync_conflict_accept_remote_cmd, resolve_team_sync_conflict_keep_local_cmd,
+    team_sync_once_cmd,
 };
 
 fn main() {
@@ -388,6 +395,7 @@ fn main() {
             save_auto_lock_minutes,
             quit_app_fully_cmd,
             focus_main_window_cmd,
+            claim_background_automation_lease_cmd,
             send_automation_desktop_toast_cmd,
             take_pending_automation_notification_nav_cmd,
             create_master_password,
@@ -547,7 +555,14 @@ fn main() {
             preview_team_migration_cmd,
             upload_team_migration_snapshot_cmd,
             validate_team_remote_snapshot_cmd,
+            activate_team_sync_cmd,
+            bootstrap_team_sync_cmd,
+            team_sync_once_cmd,
+            list_team_sync_conflicts_cmd,
+            resolve_team_sync_conflict_keep_local_cmd,
+            resolve_team_sync_conflict_accept_remote_cmd,
             provision_team_workspace_cmd,
+            join_team_workspace_cmd,
             team_presence_heartbeat_cmd,
             team_list_presence_cmd,
             team_acquire_lock_cmd,
@@ -562,6 +577,12 @@ fn main() {
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
                 let prefs = load_runtime_prefs(app_handle);
                 if prefs.close_to_tray && !is_force_quit_requested() {
+                    api.prevent_exit();
+                } else if let Err(error) = crate::auth::commands::close_database(
+                    app_handle,
+                    app_handle.state::<DbState>().inner(),
+                ) {
+                    eprintln!("⚠️ Arrêt bloqué pour préserver le cache équipe : {error}");
                     api.prevent_exit();
                 }
             }

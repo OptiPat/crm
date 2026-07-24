@@ -28,6 +28,8 @@ import {
   useLockAppMainScroll,
 } from "@/lib/ui/nested-sheet-scroll";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
+import { TeamLockBanner } from "@/components/team/TeamLockBanner";
+import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
 
 interface PartenaireFormProps {
   open: boolean;
@@ -52,6 +54,12 @@ export function PartenaireForm({
     type_partenaire: partenaire?.type_partenaire || "SOCIETE_GESTION_SCPI",
     raison_sociale: partenaire?.raison_sociale || "",
   });
+  const teamLock = useTeamFormRecordLock({
+    open,
+    onOpenChange,
+    entityType: "partenaire",
+    entityId: partenaire?.id,
+  });
 
   useLockAppMainScroll(open && nestedSheet);
 
@@ -70,6 +78,7 @@ export function PartenaireForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!teamLock.ready) return;
     setLoading(true);
 
     try {
@@ -106,6 +115,11 @@ export function PartenaireForm({
             Ajoutez un assureur, une société de gestion ou un promoteur
           </DialogDescription>
         </DialogHeader>
+        <TeamLockBanner
+          heldBy={teamLock.heldBy}
+          loading={teamLock.loading}
+          message={teamLock.error}
+        />
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -150,7 +164,7 @@ export function PartenaireForm({
             >
               Annuler
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !teamLock.ready}>
               {loading ? "Enregistrement..." : partenaire ? "Modifier" : "Créer"}
             </Button>
           </DialogFooter>

@@ -109,6 +109,10 @@ export async function getAppRuntimePrefs(): Promise<AppRuntimePrefs> {
   );
 }
 
+export async function claimBackgroundAutomationLease(): Promise<boolean> {
+  return invoke<boolean>("claim_background_automation_lease_cmd");
+}
+
 export async function saveAppRuntimePrefs(
   prefs: AppRuntimePrefs
 ): Promise<AppRuntimePrefs> {

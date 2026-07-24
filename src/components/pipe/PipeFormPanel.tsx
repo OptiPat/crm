@@ -58,6 +58,8 @@ import {
 } from "@/lib/placement/suivi-stellium-acts";
 import { parseMontantEurosToCentimes } from "@/lib/pipe/placement-montant";
 import { toast } from "sonner";
+import { TeamLockBanner } from "@/components/team/TeamLockBanner";
+import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
 
 const TYPE_ICONS = {
   AFFAIRE: Briefcase,
@@ -168,6 +170,14 @@ export function PipeFormPanel({
   const titreEditedRef = useRef(false);
   /** Contact pour lequel l'utilisateur a retiré le co-contact foyer (évite le re-remplissage auto). */
   const foyerCoContactDismissedRef = useRef<number | null>(null);
+  const recordLock = useTeamFormRecordLock({
+    open: true,
+    onOpenChange: (open) => {
+      if (!open) onCancel();
+    },
+    entityType: "pipe",
+    entityId: pipe?.id,
+  });
 
   const initialFormRef = useRef<PipeFormSnapshot>(
     buildFormState(pipe, initialType, defaultContactId, buildOptions)
@@ -482,6 +492,16 @@ export function PipeFormPanel({
       setLoading(false);
     }
   };
+
+  if (!recordLock.ready) {
+    return (
+      <TeamLockBanner
+        heldBy={recordLock.heldBy}
+        loading={recordLock.loading}
+        message={recordLock.error}
+      />
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="flex h-full flex-col">

@@ -31,6 +31,8 @@ import {
 } from "@/lib/etiquettes/rule-ast";
 import { getAllEtiquettes, type Etiquette } from "@/lib/api/tauri-etiquettes";
 import { getCustomFieldDefs, type CustomFieldDef } from "@/lib/api/tauri-custom-fields";
+import { TeamLockBanner } from "@/components/team/TeamLockBanner";
+import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
 
 interface SegmentFormProps {
   open: boolean;
@@ -50,6 +52,12 @@ export function SegmentForm({ open, onOpenChange, segment, onSuccess }: SegmentF
   ]);
   const [etiquettes, setEtiquettes] = useState<Etiquette[]>([]);
   const [customFields, setCustomFields] = useState<CustomFieldDef[]>([]);
+  const teamLock = useTeamFormRecordLock({
+    open,
+    onOpenChange,
+    entityType: "segment",
+    entityId: segment?.id,
+  });
 
   useEffect(() => {
     if (open) {
@@ -82,6 +90,7 @@ export function SegmentForm({ open, onOpenChange, segment, onSuccess }: SegmentF
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!teamLock.ready) return;
     if (!nom.trim()) {
       toast.error("Nom obligatoire");
       return;
@@ -125,6 +134,11 @@ export function SegmentForm({ open, onOpenChange, segment, onSuccess }: SegmentF
               {segment ? "Modifier le groupe de contacts" : "Nouveau groupe de contacts"}
             </DialogTitle>
           </DialogHeader>
+          <TeamLockBanner
+            heldBy={teamLock.heldBy}
+            loading={teamLock.loading}
+            message={teamLock.error}
+          />
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Nom *</Label>
@@ -157,7 +171,7 @@ export function SegmentForm({ open, onOpenChange, segment, onSuccess }: SegmentF
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Annuler
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !teamLock.ready}>
               {loading ? "Enregistrement…" : "Enregistrer"}
             </Button>
           </DialogFooter>

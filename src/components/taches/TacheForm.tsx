@@ -60,6 +60,8 @@ import {
   useLockAppMainScroll,
 } from "@/lib/ui/nested-sheet-scroll";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
+import { TeamLockBanner } from "@/components/team/TeamLockBanner";
+import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
 
 interface TacheFormProps {
   open: boolean;
@@ -165,6 +167,12 @@ export function TacheForm({
   const [form, setForm] = useState<FormState>(
     buildState(tache, fixedContactId, fixedContactIds, defaultTitle, defaultDateEcheance),
   );
+  const teamLock = useTeamFormRecordLock({
+    open,
+    onOpenChange,
+    entityType: "tache",
+    entityId: tache?.id,
+  });
   const fixedContactIdsKey = fixedContactIds?.join(",") ?? "";
   const isCreate = !tache;
   const contactFirst = isGlobalTacheCreate({ tache, fixedContactId, fixedContactIds });
@@ -243,6 +251,7 @@ export function TacheForm({
   };
 
   const persist = async (createAnother: boolean) => {
+    if (!teamLock.ready) return;
     const titre = form.titre.trim();
     if (!titre) {
       toast.error("Le titre est obligatoire");
@@ -398,6 +407,11 @@ export function TacheForm({
               : "Modifiez le rappel, sa récurrence et ses contacts liés."}
           </DialogDescription>
         </DialogHeader>
+        <TeamLockBanner
+          heldBy={teamLock.heldBy}
+          loading={teamLock.loading}
+          message={teamLock.error}
+        />
 
         {contextBanner && (
           <div className="flex items-start gap-2 rounded-lg border border-blue-200/80 bg-blue-50/60 px-3 py-2 text-xs text-blue-950">
@@ -471,7 +485,7 @@ export function TacheForm({
                 {loading ? "Enregistrement…" : "Enregistrer et en créer une autre"}
               </Button>
             )}
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !teamLock.ready}>
               {loading ? "Enregistrement…" : "Enregistrer"}
             </Button>
           </DialogFooter>

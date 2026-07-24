@@ -4,25 +4,90 @@
 use super::Database;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use chrono::Utc;
-use rusqlite::{params, Connection, Result, Row};
 use rusqlite::types::ValueRef;
+use rusqlite::{params, Connection, Result, Row};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
-pub const WORKSPACE_SYNC_SCHEMA_VERSION: u32 = 1;
+pub const WORKSPACE_SYNC_SCHEMA_VERSION: u32 = 2;
 
-/// Tables explicitement exclues de l'export (settings, caches, secrets locaux).
-const EXCLUDED_TABLES: &[&str] = &[
-    "settings",
-    "contact_gmail_messages",
-    "contact_mail_sync_state",
-    "shared_notes_cache",
-    "shared_note_contributions_cache",
-    "email_send_log",
-    "google_contact_name_proposal_dismissals",
-    "contact_etiquette_auto_log",
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkspaceTablePolicy {
+    Shared,
+    LocalOnly,
+    Derived,
+    ExternalBlob,
+}
+
+/// Classification exhaustive des tables applicatives.
+///
+/// Une nouvelle table non déclarée fait échouer le snapshot au lieu d'être
+/// envoyée silencieusement vers SharePoint avec d'éventuels secrets.
+const TABLE_POLICIES: &[(&str, WorkspaceTablePolicy)] = &[
+    ("familles", WorkspaceTablePolicy::Shared),
+    ("foyers", WorkspaceTablePolicy::Shared),
+    ("contacts", WorkspaceTablePolicy::Shared),
+    ("partenaires", WorkspaceTablePolicy::Shared),
+    ("documents", WorkspaceTablePolicy::ExternalBlob),
+    ("investissements", WorkspaceTablePolicy::Shared),
+    ("alertes", WorkspaceTablePolicy::Shared),
+    ("templates_email", WorkspaceTablePolicy::Shared),
+    ("etiquettes", WorkspaceTablePolicy::Shared),
+    ("contact_etiquettes", WorkspaceTablePolicy::Shared),
+    ("etiquette_actions", WorkspaceTablePolicy::Shared),
+    ("interactions", WorkspaceTablePolicy::Shared),
+    ("settings", WorkspaceTablePolicy::LocalOnly),
+    ("taches", WorkspaceTablePolicy::Shared),
+    ("tache_contacts", WorkspaceTablePolicy::Shared),
+    ("custom_field_defs", WorkspaceTablePolicy::Shared),
+    ("custom_field_values", WorkspaceTablePolicy::Shared),
+    ("compta_depenses", WorkspaceTablePolicy::Shared),
+    ("compta_encaissements", WorkspaceTablePolicy::Shared),
+    ("compta_deplacements", WorkspaceTablePolicy::Shared),
+    (
+        "google_contact_name_proposal_dismissals",
+        WorkspaceTablePolicy::LocalOnly,
+    ),
+    ("email_send_log", WorkspaceTablePolicy::Shared),
+    ("calendar_events", WorkspaceTablePolicy::Derived),
+    ("contact_gmail_messages", WorkspaceTablePolicy::Derived),
+    ("contact_mail_sync_state", WorkspaceTablePolicy::LocalOnly),
+    (
+        "contact_etiquette_auto_exclusions",
+        WorkspaceTablePolicy::Shared,
+    ),
+    ("segments", WorkspaceTablePolicy::Shared),
+    ("alerte_segment_links", WorkspaceTablePolicy::Shared),
+    ("contact_etiquette_auto_log", WorkspaceTablePolicy::Shared),
+    ("newsletter_editions", WorkspaceTablePolicy::Shared),
+    (
+        "newsletter_edition_recipients",
+        WorkspaceTablePolicy::Shared,
+    ),
+    ("investissement_versements", WorkspaceTablePolicy::Shared),
+    ("investissement_valorisations", WorkspaceTablePolicy::Shared),
+    ("contact_template_envois", WorkspaceTablePolicy::Shared),
+    ("template_email_actions", WorkspaceTablePolicy::Shared),
+    ("placement_operations", WorkspaceTablePolicy::Shared),
+    ("pipe_timeline_entries", WorkspaceTablePolicy::Shared),
+    ("pipe_rdv_scheduled_emails", WorkspaceTablePolicy::Shared),
+    (
+        "pipe_r3_immo_document_checklists",
+        WorkspaceTablePolicy::Shared,
+    ),
+    ("pipe_r3_document_checklists", WorkspaceTablePolicy::Shared),
+    ("pipe_r1_document_checklists", WorkspaceTablePolicy::Shared),
+    ("pipes", WorkspaceTablePolicy::Shared),
+    ("personal_notes", WorkspaceTablePolicy::LocalOnly),
+    ("shared_notes_cache", WorkspaceTablePolicy::Derived),
+    (
+        "shared_note_contributions_cache",
+        WorkspaceTablePolicy::Derived,
+    ),
+    ("filleul_volume_exercices", WorkspaceTablePolicy::Shared),
+    ("filleul_dossier", WorkspaceTablePolicy::Shared),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,6 +128,7 @@ pub struct TableRecordCount {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceSyncQueueItem {
     pub id: i64,
+    pub revision: i64,
     pub table_name: String,
     pub record_key: String,
     pub operation: String,
@@ -79,21 +145,39 @@ pub struct WorkspaceRemoteRecord {
     pub last_synced_at: Option<i64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceSyncConflict {
+    pub id: i64,
+    pub table_name: String,
+    pub record_key: String,
+    pub local_payload_json: Option<String>,
+    pub remote_payload_json: Option<String>,
+    pub remote_deleted: bool,
+    pub created_at: i64,
+}
+
 #[derive(Debug, Clone)]
 struct ColumnMeta {
     name: String,
     pk_rank: u32,
 }
 
-/// Indique si une table utilisateur peut être exportée vers SharePoint.
-pub fn is_table_exportable(name: &str) -> bool {
-    if name.starts_with("sqlite_") {
-        return false;
-    }
+pub fn workspace_table_policy(name: &str) -> Option<WorkspaceTablePolicy> {
     if name.starts_with("workspace_") {
-        return false;
+        return Some(WorkspaceTablePolicy::LocalOnly);
     }
-    !EXCLUDED_TABLES.contains(&name)
+    TABLE_POLICIES
+        .iter()
+        .find_map(|(table, policy)| (*table == name).then_some(*policy))
+}
+
+/// Indique si une table utilisateur fait partie des données partagées.
+pub fn is_table_exportable(name: &str) -> bool {
+    matches!(
+        workspace_table_policy(name),
+        Some(WorkspaceTablePolicy::Shared | WorkspaceTablePolicy::ExternalBlob)
+    )
 }
 
 pub fn build_team_migration_snapshot(db: &Database) -> Result<TeamMigrationSnapshot> {
@@ -164,15 +248,20 @@ pub fn snapshot_checksum(snapshot: &TeamMigrationSnapshot) -> String {
 
 fn collect_migration_warnings(conn: &Connection) -> Result<Vec<String>> {
     let mut warnings = Vec::new();
-    for table in EXCLUDED_TABLES {
+    for (table, policy) in TABLE_POLICIES {
+        if matches!(
+            policy,
+            WorkspaceTablePolicy::Shared | WorkspaceTablePolicy::ExternalBlob
+        ) {
+            continue;
+        }
         if !table_exists(conn, table)? {
             continue;
         }
-        let count: i64 = conn.query_row(
-            &format!("SELECT COUNT(*) FROM \"{table}\""),
-            [],
-            |row| row.get(0),
-        )?;
+        let count: i64 =
+            conn.query_row(&format!("SELECT COUNT(*) FROM \"{table}\""), [], |row| {
+                row.get(0)
+            })?;
         if count > 0 {
             warnings.push(format!(
                 "Table locale « {table} » ({count} ligne(s)) exclue de la migration."
@@ -180,9 +269,8 @@ fn collect_migration_warnings(conn: &Connection) -> Result<Vec<String>> {
         }
     }
     if table_exists(conn, "documents")? {
-        let doc_count: i64 = conn.query_row("SELECT COUNT(*) FROM documents", [], |row| {
-            row.get(0)
-        })?;
+        let doc_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))?;
         if doc_count > 0 {
             warnings.push(format!(
                 "Documents : {doc_count} métadonnée(s) exportée(s) — les fichiers sur disque ne sont pas inclus."
@@ -204,7 +292,15 @@ fn list_exportable_tables(conn: &Connection) -> Result<Vec<String>> {
     let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
     for table in rows {
         let table = table?;
-        if is_table_exportable(&table) {
+        let policy = workspace_table_policy(&table).ok_or_else(|| {
+            rusqlite::Error::InvalidParameterName(format!(
+                "Table workspace non classifiée : {table}"
+            ))
+        })?;
+        if matches!(
+            policy,
+            WorkspaceTablePolicy::Shared | WorkspaceTablePolicy::ExternalBlob
+        ) {
             tables.push(table);
         }
     }
@@ -237,10 +333,7 @@ fn discover_columns(conn: &Connection, table: &str) -> Result<Vec<ColumnMeta>> {
 }
 
 fn primary_key_columns(columns: &[ColumnMeta]) -> Vec<String> {
-    let mut pk: Vec<_> = columns
-        .iter()
-        .filter(|column| column.pk_rank > 0)
-        .collect();
+    let mut pk: Vec<_> = columns.iter().filter(|column| column.pk_rank > 0).collect();
     pk.sort_by_key(|column| column.pk_rank);
     pk.into_iter().map(|column| column.name.clone()).collect()
 }
@@ -251,18 +344,18 @@ fn export_table_records(conn: &Connection, table: &str) -> Result<Vec<SnapshotRe
         return Ok(Vec::new());
     }
     let pk_columns = primary_key_columns(&columns);
-    let order_clause = if pk_columns.is_empty() {
-        "rowid".to_string()
-    } else {
-        pk_columns
-            .iter()
-            .map(|name| format!("\"{name}\""))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-    let sql = format!(
-        "SELECT rowid AS \"__crm_rowid__\", * FROM \"{table}\" ORDER BY {order_clause}"
-    );
+    if pk_columns.is_empty() {
+        return Err(rusqlite::Error::InvalidParameterName(format!(
+            "Table partagée sans clé primaire stable : {table}"
+        )));
+    }
+    let order_clause = pk_columns
+        .iter()
+        .map(|name| format!("\"{name}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql =
+        format!("SELECT rowid AS \"__crm_rowid__\", * FROM \"{table}\" ORDER BY {order_clause}");
     let mut stmt = conn.prepare(&sql)?;
     let column_names: Vec<String> = columns.iter().map(|column| column.name.clone()).collect();
     let rows = stmt.query_map([], |row| {
@@ -273,12 +366,11 @@ fn export_table_records(conn: &Connection, table: &str) -> Result<Vec<SnapshotRe
 
     let mut records = Vec::new();
     for row_result in rows {
-        let (rowid, payload) = row_result?;
-        let record_key = if pk_columns.is_empty() {
-            format!("rowid:{rowid}")
-        } else {
-            canonical_record_key_from_payload(&payload, &pk_columns)?
-        };
+        let (_rowid, mut payload) = row_result?;
+        if table == "documents" {
+            sanitize_document_payload(&mut payload)?;
+        }
+        let record_key = canonical_record_key_from_payload(&payload, &pk_columns)?;
         records.push(SnapshotRecord {
             table_name: table.to_string(),
             record_key,
@@ -286,6 +378,24 @@ fn export_table_records(conn: &Connection, table: &str) -> Result<Vec<SnapshotRe
         });
     }
     Ok(records)
+}
+
+fn sanitize_document_payload(payload: &mut Map<String, Value>) -> Result<()> {
+    let document_id = payload
+        .get("id")
+        .and_then(|cell| cell.get("value"))
+        .and_then(Value::as_i64)
+        .ok_or_else(|| {
+            rusqlite::Error::InvalidParameterName("Document sans identifiant stable".into())
+        })?;
+    payload.insert(
+        "chemin_fichier".into(),
+        serde_json::json!({
+            "kind": "text",
+            "value": crate::workspace::documents::logical_document_uri(document_id)
+        }),
+    );
+    Ok(())
 }
 
 fn export_row_as_payload(
@@ -324,7 +434,9 @@ fn canonical_record_key_from_payload(
     let mut parts = Vec::with_capacity(pk_columns.len());
     for pk_name in pk_columns {
         let cell = payload.get(pk_name).ok_or_else(|| {
-            rusqlite::Error::InvalidParameterName(format!("PK column missing in payload: {pk_name}"))
+            rusqlite::Error::InvalidParameterName(format!(
+                "PK column missing in payload: {pk_name}"
+            ))
         })?;
         parts.push(serde_json::json!({
             "column": pk_name,
@@ -392,24 +504,38 @@ impl Database {
             )));
         }
         self.conn.execute(
-            "DELETE FROM workspace_sync_queue
-             WHERE table_name = ?1 AND record_key = ?2 AND synced_at IS NULL",
-            params![table_name, record_key],
-        )?;
-        self.conn.execute(
-            "INSERT INTO workspace_sync_queue (table_name, record_key, operation, payload_json)
-             VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO workspace_sync_queue
+                (table_name, record_key, operation, payload_json, enqueued_at, revision, synced_at, error_message)
+             VALUES (
+                ?1, ?2, ?3, ?4, unixepoch(),
+                COALESCE((
+                    SELECT MAX(revision) + 1 FROM workspace_sync_queue
+                    WHERE table_name = ?1 AND record_key = ?2
+                ), 1),
+                NULL, NULL
+             )
+             ON CONFLICT(table_name, record_key) WHERE synced_at IS NULL DO UPDATE SET
+                operation = excluded.operation,
+                payload_json = excluded.payload_json,
+                enqueued_at = excluded.enqueued_at,
+                revision = workspace_sync_queue.revision + 1,
+                error_message = NULL",
             params![table_name, record_key, operation, payload_json],
         )?;
-        Ok(self.conn.last_insert_rowid())
+        self.conn.query_row(
+            "SELECT id FROM workspace_sync_queue
+             WHERE table_name = ?1 AND record_key = ?2 AND synced_at IS NULL",
+            params![table_name, record_key],
+            |row| row.get(0),
+        )
     }
 
-    pub fn workspace_sync_mark_synced(&self, queue_id: i64) -> Result<()> {
+    pub fn workspace_sync_mark_synced(&self, queue_id: i64, revision: i64) -> Result<()> {
         let updated = self.conn.execute(
             "UPDATE workspace_sync_queue
              SET synced_at = unixepoch(), error_message = NULL
-             WHERE id = ?1 AND synced_at IS NULL",
-            params![queue_id],
+             WHERE id = ?1 AND revision = ?2 AND synced_at IS NULL",
+            params![queue_id, revision],
         )?;
         if updated == 0 {
             return Err(rusqlite::Error::QueryReturnedNoRows);
@@ -419,7 +545,7 @@ impl Database {
 
     pub fn workspace_sync_list_pending(&self) -> Result<Vec<WorkspaceSyncQueueItem>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, table_name, record_key, operation, payload_json, enqueued_at
+            "SELECT id, revision, table_name, record_key, operation, payload_json, enqueued_at
              FROM workspace_sync_queue
              WHERE synced_at IS NULL
              ORDER BY enqueued_at ASC, id ASC",
@@ -427,11 +553,12 @@ impl Database {
         let rows = stmt.query_map([], |row| {
             Ok(WorkspaceSyncQueueItem {
                 id: row.get(0)?,
-                table_name: row.get(1)?,
-                record_key: row.get(2)?,
-                operation: row.get(3)?,
-                payload_json: row.get(4)?,
-                enqueued_at: row.get(5)?,
+                revision: row.get(1)?,
+                table_name: row.get(2)?,
+                record_key: row.get(3)?,
+                operation: row.get(4)?,
+                payload_json: row.get(5)?,
+                enqueued_at: row.get(6)?,
             })
         })?;
         rows.collect()
@@ -458,6 +585,39 @@ impl Database {
         Ok(())
     }
 
+    pub fn workspace_sync_complete_push(
+        &self,
+        queue_item: &WorkspaceSyncQueueItem,
+        remote_item_id: &str,
+        remote_etag: &str,
+    ) -> Result<bool> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "INSERT INTO workspace_remote_records
+                (table_name, record_key, remote_item_id, remote_etag, last_synced_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, unixepoch(), unixepoch())
+             ON CONFLICT(table_name, record_key) DO UPDATE SET
+                remote_item_id = excluded.remote_item_id,
+                remote_etag = excluded.remote_etag,
+                last_synced_at = excluded.last_synced_at,
+                updated_at = excluded.updated_at",
+            params![
+                &queue_item.table_name,
+                &queue_item.record_key,
+                remote_item_id,
+                remote_etag
+            ],
+        )?;
+        let acknowledged = tx.execute(
+            "UPDATE workspace_sync_queue
+             SET synced_at = unixepoch(), error_message = NULL
+             WHERE id = ?1 AND revision = ?2 AND synced_at IS NULL",
+            params![queue_item.id, queue_item.revision],
+        )? == 1;
+        tx.commit()?;
+        Ok(acknowledged)
+    }
+
     pub fn workspace_sync_get_remote_mapping(
         &self,
         table_name: &str,
@@ -481,6 +641,135 @@ impl Database {
             Some(row) => Ok(Some(row?)),
             None => Ok(None),
         }
+    }
+
+    pub fn workspace_sync_get_remote_mapping_by_item_id(
+        &self,
+        remote_item_id: &str,
+    ) -> Result<Option<WorkspaceRemoteRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT table_name, record_key, remote_item_id, remote_etag, last_synced_at
+             FROM workspace_remote_records
+             WHERE remote_item_id = ?1",
+        )?;
+        let mut rows = stmt.query_map(params![remote_item_id], |row| {
+            Ok(WorkspaceRemoteRecord {
+                table_name: row.get(0)?,
+                record_key: row.get(1)?,
+                remote_item_id: row.get(2)?,
+                remote_etag: row.get(3)?,
+                last_synced_at: row.get(4)?,
+            })
+        })?;
+        match rows.next() {
+            Some(row) => Ok(Some(row?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn workspace_sync_get_state(&self, key: &str) -> Result<Option<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT value FROM workspace_sync_state WHERE key = ?1")?;
+        let mut rows = stmt.query_map(params![key], |row| row.get::<_, String>(0))?;
+        match rows.next() {
+            Some(row) => Ok(Some(row?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn workspace_sync_has_open_conflict(
+        &self,
+        table_name: &str,
+        record_key: &str,
+    ) -> Result<bool> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM workspace_conflicts
+             WHERE table_name = ?1 AND record_key = ?2 AND status = 'open'",
+            params![table_name, record_key],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn workspace_sync_open_conflict_count(&self) -> Result<usize> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM workspace_conflicts WHERE status = 'open'",
+            [],
+            |row| row.get(0),
+        )?;
+        usize::try_from(count).map_err(|_| {
+            rusqlite::Error::InvalidParameterName("Nombre de conflits hors limites".into())
+        })
+    }
+
+    pub fn workspace_sync_list_open_conflicts(&self) -> Result<Vec<WorkspaceSyncConflict>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, table_name, record_key, local_payload_json,
+                    remote_payload_json, remote_deleted, created_at
+             FROM workspace_conflicts
+             WHERE status = 'open'
+             ORDER BY created_at ASC, id ASC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(WorkspaceSyncConflict {
+                id: row.get(0)?,
+                table_name: row.get(1)?,
+                record_key: row.get(2)?,
+                local_payload_json: row.get(3)?,
+                remote_payload_json: row.get(4)?,
+                remote_deleted: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn workspace_sync_resolve_conflict_keep_local(&self, conflict_id: i64) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        let (table_name, record_key, remote_etag, remote_deleted): (
+            String,
+            String,
+            Option<String>,
+            bool,
+        ) = tx.query_row(
+            "SELECT table_name, record_key, remote_etag, remote_deleted
+                 FROM workspace_conflicts
+                 WHERE id = ?1 AND status = 'open'",
+            params![conflict_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+        if remote_deleted {
+            tx.execute(
+                "DELETE FROM workspace_remote_records
+                 WHERE table_name = ?1 AND record_key = ?2",
+                params![table_name, record_key],
+            )?;
+            tx.execute(
+                "UPDATE workspace_sync_queue
+                 SET synced_at = unixepoch(), error_message = NULL
+                 WHERE table_name = ?1 AND record_key = ?2
+                   AND operation = 'delete' AND synced_at IS NULL",
+                params![table_name, record_key],
+            )?;
+        } else if let Some(remote_etag) = remote_etag {
+            tx.execute(
+                "UPDATE workspace_remote_records
+                 SET remote_etag = ?3, updated_at = unixepoch()
+                 WHERE table_name = ?1 AND record_key = ?2",
+                params![table_name, record_key, remote_etag],
+            )?;
+        }
+        let updated = tx.execute(
+            "UPDATE workspace_conflicts
+             SET status = 'resolved_keep_local', resolved_at = unixepoch()
+             WHERE id = ?1 AND status = 'open'",
+            params![conflict_id],
+        )?;
+        if updated != 1 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        tx.commit()
     }
 }
 
@@ -520,6 +809,33 @@ mod tests {
         assert!(!is_table_exportable("settings"));
         assert!(!is_table_exportable("workspace_sync_queue"));
         assert!(is_table_exportable("contacts"));
+        assert!(is_table_exportable("email_send_log"));
+    }
+
+    #[test]
+    fn every_application_table_has_an_explicit_workspace_policy() {
+        let db = test_db();
+        let mut stmt = db
+            .connection()
+            .prepare(
+                "SELECT name FROM sqlite_master
+                 WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+                 ORDER BY name",
+            )
+            .unwrap();
+        let tables = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+        let unclassified = tables
+            .into_iter()
+            .filter(|table| workspace_table_policy(table).is_none())
+            .collect::<Vec<_>>();
+        assert!(
+            unclassified.is_empty(),
+            "Tables workspace non classifiées : {unclassified:?}"
+        );
     }
 
     #[test]
@@ -612,7 +928,8 @@ mod tests {
         assert_eq!(mapping.remote_item_id.as_deref(), Some("sp-item-1"));
         assert_eq!(mapping.remote_etag.as_deref(), Some("etag-1"));
 
-        db.workspace_sync_mark_synced(pending[0].id).unwrap();
+        db.workspace_sync_mark_synced(pending[0].id, pending[0].revision)
+            .unwrap();
         assert!(db.workspace_sync_list_pending().unwrap().is_empty());
     }
 
@@ -626,6 +943,114 @@ mod tests {
         let pending = db.workspace_sync_list_pending().unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].operation, "delete");
+        assert_eq!(pending[0].revision, 2);
+    }
+
+    #[test]
+    fn stale_sync_ack_does_not_erase_a_newer_local_mutation() {
+        let db = test_db();
+        db.workspace_sync_enqueue("contacts", "42", "upsert", Some(r#"{"v":1}"#))
+            .unwrap();
+        let first = db.workspace_sync_list_pending().unwrap().remove(0);
+
+        db.workspace_sync_enqueue("contacts", "42", "upsert", Some(r#"{"v":2}"#))
+            .unwrap();
+        assert!(db
+            .workspace_sync_mark_synced(first.id, first.revision)
+            .is_err());
+
+        let pending = db.workspace_sync_list_pending().unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].revision, first.revision + 1);
+        assert_eq!(pending[0].payload_json.as_deref(), Some(r#"{"v":2}"#));
+    }
+
+    #[test]
+    fn resolving_conflict_keeps_queue_and_advances_mapping_etag() {
+        let db = test_db();
+        db.workspace_sync_enqueue("contacts", "42", "upsert", Some(r#"{"v":2}"#))
+            .unwrap();
+        db.workspace_sync_upsert_remote_mapping("contacts", "42", "sp-42", "\"1\"")
+            .unwrap();
+        db.workspace_sync_record_push_conflict(
+            "contacts",
+            "42",
+            "sp-42",
+            Some(r#"{"v":3}"#),
+            Some("\"2\""),
+            false,
+        )
+        .unwrap();
+        let conflict = db.workspace_sync_list_open_conflicts().unwrap().remove(0);
+
+        db.workspace_sync_resolve_conflict_keep_local(conflict.id)
+            .unwrap();
+
+        assert!(db.workspace_sync_list_open_conflicts().unwrap().is_empty());
+        assert_eq!(db.workspace_sync_list_pending().unwrap().len(), 1);
+        let mapping = db
+            .workspace_sync_get_remote_mapping("contacts", "42")
+            .unwrap()
+            .unwrap();
+        assert_eq!(mapping.remote_etag.as_deref(), Some("\"2\""));
+    }
+
+    #[test]
+    fn keeping_local_after_remote_delete_recreates_only_local_upserts() {
+        let upsert_db = test_db();
+        upsert_db
+            .workspace_sync_enqueue("contacts", "42", "upsert", Some(r#"{"v":2}"#))
+            .unwrap();
+        upsert_db
+            .workspace_sync_upsert_remote_mapping("contacts", "42", "sp-42", "\"1\"")
+            .unwrap();
+        upsert_db
+            .workspace_sync_record_push_conflict(
+                "contacts",
+                "42",
+                "sp-42",
+                None,
+                Some("\"2\""),
+                true,
+            )
+            .unwrap();
+        let conflict_id = upsert_db
+            .workspace_sync_list_open_conflicts()
+            .unwrap()
+            .remove(0)
+            .id;
+        upsert_db
+            .workspace_sync_resolve_conflict_keep_local(conflict_id)
+            .unwrap();
+        assert!(upsert_db
+            .workspace_sync_get_remote_mapping("contacts", "42")
+            .unwrap()
+            .is_none());
+        assert_eq!(upsert_db.workspace_sync_list_pending().unwrap().len(), 1);
+
+        let delete_db = test_db();
+        delete_db
+            .workspace_sync_enqueue("contacts", "42", "delete", None)
+            .unwrap();
+        delete_db
+            .workspace_sync_record_push_conflict(
+                "contacts",
+                "42",
+                "sp-42",
+                None,
+                Some("\"2\""),
+                true,
+            )
+            .unwrap();
+        let conflict_id = delete_db
+            .workspace_sync_list_open_conflicts()
+            .unwrap()
+            .remove(0)
+            .id;
+        delete_db
+            .workspace_sync_resolve_conflict_keep_local(conflict_id)
+            .unwrap();
+        assert!(delete_db.workspace_sync_list_pending().unwrap().is_empty());
     }
 
     #[test]

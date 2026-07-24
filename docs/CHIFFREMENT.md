@@ -1,7 +1,7 @@
 # Sécurité des données (au repos)
 
 > **Important** : le chiffrement applicatif de la base a été **retiré**. La base
-> `patrimoine-crm.db` est désormais en **SQLite simple (non chiffré)**. Ce choix est
+> La base individuelle `patrimoine-crm.db` reste en **SQLite simple (non chiffré)**. Ce choix est
 > assumé : une base en clair s'ouvre **toujours**, donc **aucune clé ne peut être perdue
 > ou écrasée** et entraîner une perte définitive des données (ce qui était le risque du
 > chiffrement par enveloppe précédent).
@@ -11,6 +11,8 @@
 | Élément | État | Détail |
 |--------|------|--------|
 | Base `patrimoine-crm.db` | **En clair** | `rusqlite` feature `bundled` (SQLite standard). Ouverte par `Database::open`, sans clé. |
+| Cache `workspace-team-cache.db` | **Scellé au verrouillage** | SQLite standard pendant la session ; snapshot chiffré XChaCha20-Poly1305 après contrôle d'intégrité lors du verrouillage ou de la fermeture. |
+| Documents téléchargés en mode équipe | **Cache temporaire purgé** | Les fichiers sont contrôlés par SHA-256 puis conservés sous `documents/_team_cache` uniquement pendant la session. Les nouveaux fichiers non encore envoyés sont intégrés à la base avant son scellement, puis le cache clair est supprimé. |
 | Accès au CRM | **Verrou local** | Mot de passe Argon2id, avec Windows Hello ou Touch ID en second facteur optionnel. Ne chiffre pas la base. |
 | Secrets applicatifs | **Chiffrés au repos** | Tokens OAuth, clé API Mistral et token Telegram — XChaCha20-Poly1305 avec une clé protégée par DPAPI/Trousseau. |
 
@@ -18,7 +20,13 @@
 
 - **Oublier le mot de passe ≠ perte de données** : il suffit de supprimer/réinitialiser
   `auth.json` pour redéfinir un mot de passe. La base reste lisible.
-- **Plus de clé de récupération** : inutile, puisque la base n'est plus chiffrée.
+- **Mode individuel sans clé de récupération** : la base historique reste toujours lisible.
+- **Mode équipe reconstructible** : le cache scellé dépend du coffre OS, tandis que SharePoint
+  reste la source partagée. Le fichier clair n'est supprimé qu'après déchiffrement de contrôle,
+  comparaison binaire et `PRAGMA integrity_check`.
+- **Aucune perte lors d'une fermeture hors ligne** : le contenu d'un document encore en attente
+  d'envoi est placé dans l'outbox SQLite avant le scellement. Il repart vers SharePoint après
+  le prochain déverrouillage.
 - **Protection au repos** : si tu veux protéger le fichier en cas de vol du poste, active
   le **chiffrement disque de l'OS** (BitLocker sur Windows). C'est le niveau recommandé.
 
@@ -56,12 +64,11 @@ devient indisponible sur un nouveau poste, un accès de récupération par mot d
 explicitement : aucune panne biométrique ne peut rendre les données inaccessibles définitivement.
 
 La base n'est **pas** ouverte au démarrage : elle ne l'est qu'après le premier déverrouillage.
-Lors d'un verrouillage automatique, elle reste ouverte dans le processus afin que les workers tray
-continuent. Un état de session séparé interdit alors les commandes IPC sensibles (sauvegarde,
-restauration, export, lecture de documents et configuration de secrets) jusqu'au prochain
-déverrouillage. Les commandes métier nécessaires aux automatisations tray restent utilisables :
-ce mécanisme est un verrou d'interface renforcé, pas une isolation complète contre un webview ou
-un poste déjà compromis.
+Tout verrouillage ferme la connexion et rend les commandes IPC métier inopérantes. En mode équipe,
+un snapshot SQLite cohérent est alors chiffré par blocs ; le `.db` clair n'est effacé qu'après
+avoir déchiffré et validé une copie de contrôle. Au déverrouillage, le cache est déchiffré dans un
+fichier temporaire, validé, puis activé par renommage atomique. Pendant une session déverrouillée,
+le cache reste nécessairement un SQLite clair ; BitLocker/FileVault demeure donc complémentaire.
 
 ## Secrets applicatifs (DPAPI / Trousseau)
 
@@ -86,8 +93,10 @@ et authentifiés au repos** :
 - Si le coffre OS est temporairement indisponible, le CRM conserve l'accès avec la clé legacy,
   réessaie au prochain chargement et affiche un avertissement dans **Paramètres > Données**.
 
-La base, les documents et les fiches restent récupérables indépendamment de cette clé. Une
-clé de secrets perdue impose seulement de reconnecter OAuth et de ressaisir les clés API.
+La base individuelle, ses documents et les fiches historiques restent récupérables indépendamment
+de cette clé. En mode équipe, perdre le coffre OS impose de reconstruire le cache depuis SharePoint ;
+les mutations encore uniquement présentes dans l'outbox locale doivent donc être synchronisées
+avant toute migration de compte OS.
 
 ## Sauvegardes
 
@@ -100,9 +109,9 @@ reconfigurer. Sur macOS, une perte ou réinitialisation du Trousseau impose éga
 reconfiguration, même si les fichiers de sauvegarde ont été conservés.
 Les exports ZIP n'incluent pas de clé legacy brute lorsqu'une clé protégée OS est présente.
 
-Le worker Rust vérifie toutes les trois minutes si la sauvegarde quotidienne manque, y compris
-quand l'interface est verrouillée, en tenant le mutex SQLite pendant la copie. En revanche, lister,
-créer, exporter ou restaurer manuellement une sauvegarde exige une session CRM déverrouillée.
+Le worker Rust vérifie toutes les trois minutes si la sauvegarde quotidienne manque lorsque la
+base est ouverte. Quand l'interface est verrouillée, aucune copie SQLite claire n'est créée.
+Lister, créer, exporter ou restaurer manuellement une sauvegarde exige une session CRM déverrouillée.
 
 ## Build
 

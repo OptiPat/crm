@@ -41,10 +41,15 @@ atomic-write-file = "0.3.0"
 open = { version = "5.4.0", features = ["shellexecute-on-windows"] }
 
 [profile.dev]
-# debug = 0 evite LNK1318 ; codegen-units = 1 limite le pic RAM au link (Windows)
+# debug = 0 évite LNK1318 ; plusieurs unités réduisent le pic mémoire LLVM sous Windows.
 incremental = true
 debug = 0
-codegen-units = 1
+codegen-units = 16
+
+[profile.test]
+incremental = true
+debug = 0
+codegen-units = 16
 
 [profile.release]
 panic = "abort"

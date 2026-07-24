@@ -52,6 +52,7 @@ import { PipeR3ImmoMissingDocsBadge } from "@/components/pipe/PipeR3ImmoMissingD
 import { useGlobalContactDetailSheet } from "@/components/layout/ContactDetailSheetProvider";
 import type { PipeRdvPlanOption } from "@/lib/pipe/pipe-rdv-plan-option";
 import { toast } from "sonner";
+import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
 
 interface PipeDetailPanelProps {
   pipe: PipeRecord;
@@ -88,6 +89,17 @@ export function PipeDetailPanel({
   const [contactInfo, setContactInfo] = useState<Pick<Contact, "email" | "telephone"> | null>(
     null
   );
+  const mutationLock = useTeamFormRecordLock({
+    open: confirmDelete || confirmArchive,
+    onOpenChange: (open) => {
+      if (!open) {
+        setConfirmDelete(false);
+        setConfirmArchive(false);
+      }
+    },
+    entityType: "pipe",
+    entityId: pipe.id,
+  });
   const timeline = usePipeTimeline(pipe.id);
 
   usePipeRdvStageSync(pipe, timeline.entries, timeline.loading);
@@ -113,6 +125,7 @@ export function PipeDetailPanel({
     try {
       const updated = await unarchivePipe(pipe.id);
       toast.success("Pipe réactivé");
+      setConfirmArchive(false);
       onRefreshed?.(updated);
     } catch (err) {
       toast.error(String(err));
@@ -382,7 +395,7 @@ export function PipeDetailPanel({
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() => void handleUnarchive()}
+                onClick={() => setConfirmArchive(true)}
                 disabled={archiving}
                 aria-label="Réactiver"
                 title="Réactiver ce pipe"
@@ -571,16 +584,22 @@ export function PipeDetailPanel({
       <AlertDialog open={confirmArchive} onOpenChange={setConfirmArchive}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Archiver ce pipe ?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {isArchived ? "Réactiver ce pipe ?" : "Archiver ce pipe ?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Il disparaîtra du pipe actif (board et liste). L&apos;historique reste visible dans
-              l&apos;onglet Relation de la fiche contact. Vous pourrez le réactiver plus tard.
+              {isArchived
+                ? "Le pipe redeviendra actif et réapparaîtra dans le board et la liste."
+                : "Il disparaîtra du pipe actif (board et liste). L’historique reste visible dans l’onglet Relation de la fiche contact."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={archiving}>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void handleArchive()} disabled={archiving}>
-              {archiving ? "Archivage…" : "Archiver"}
+            <AlertDialogAction
+              onClick={() => void (isArchived ? handleUnarchive() : handleArchive())}
+              disabled={archiving || !mutationLock.ready}
+            >
+              {archiving ? "Enregistrement…" : isArchived ? "Réactiver" : "Archiver"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -598,7 +617,10 @@ export function PipeDetailPanel({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void handleDelete()} disabled={deleting}>
+            <AlertDialogAction
+              onClick={() => void handleDelete()}
+              disabled={deleting || !mutationLock.ready}
+            >
               {deleting ? "Suppression…" : "Supprimer"}
             </AlertDialogAction>
           </AlertDialogFooter>

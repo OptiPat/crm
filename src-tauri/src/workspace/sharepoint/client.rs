@@ -1,8 +1,10 @@
-use reqwest::blocking::Client as BlockingClient;
 use super::conflict::{parse_http_write_result, GraphWriteOutcome};
 use super::schema::{ColumnKind, ListColumnDef, ListDef};
+use reqwest::blocking::Client as BlockingClient;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
+use std::io::Read;
 use std::sync::OnceLock;
 use std::thread;
 use std::time::Duration;
@@ -39,6 +41,22 @@ pub struct ParsedSharePointListItem {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ParsedSharePointDeltaItem {
+    pub id: String,
+    pub etag: Option<String>,
+    pub fields: Value,
+    pub deleted: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharePointDeltaResult {
+    pub items: Vec<ParsedSharePointDeltaItem>,
+    pub delta_link: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ParsedSharePointList {
     pub id: String,
     pub display_name: String,
@@ -61,6 +79,13 @@ pub struct ParsedDriveItem {
     pub etag: Option<String>,
     pub web_url: Option<String>,
     pub is_folder: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParsedSharePointDrive {
+    pub id: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,7 +125,13 @@ impl SharePointGraphClient {
     fn http_client(&self) -> &BlockingClient {
         static DEFAULT: OnceLock<BlockingClient> = OnceLock::new();
         self.http_client.as_ref().unwrap_or_else(|| {
-            DEFAULT.get_or_init(|| BlockingClient::new())
+            DEFAULT.get_or_init(|| {
+                BlockingClient::builder()
+                    .connect_timeout(Duration::from_secs(10))
+                    .timeout(Duration::from_secs(30))
+                    .build()
+                    .expect("Client HTTP Microsoft Graph")
+            })
         })
     }
 
@@ -108,10 +139,17 @@ impl SharePointGraphClient {
         super::SharePointGraphUrls::new(self.site.clone()).with_api_version(&self.api_version)
     }
 
-    pub fn resolve_site_blocking(&self, access_token: &str) -> Result<ParsedSharePointSite, String> {
+    pub fn resolve_site_blocking(
+        &self,
+        access_token: &str,
+    ) -> Result<ParsedSharePointSite, String> {
         let url = self.urls().site_by_path();
-        let (status, body) =
-            graph_get_with_retry(self.http_client(), &url, access_token, "Résolution site SharePoint")?;
+        let (status, body) = graph_get_with_retry(
+            self.http_client(),
+            &url,
+            access_token,
+            "Résolution site SharePoint",
+        )?;
         if status != 200 {
             return Err(map_graph_http_error(status, &body));
         }
@@ -142,6 +180,156 @@ impl SharePointGraphClient {
             access_token,
             "Bibliothèques SharePoint",
         )
+    }
+
+    pub fn resolve_documents_drive_blocking(
+        &self,
+        access_token: &str,
+        site_id: &str,
+    ) -> Result<ParsedSharePointDrive, String> {
+        let (_, body) = graph_get_with_retry(
+            self.http_client(),
+            &self.urls().site_drives(site_id),
+            access_token,
+            "Bibliothèques SharePoint",
+        )?;
+        let value: Value = serde_json::from_str(&body).map_err(|error| error.to_string())?;
+        let drives = value
+            .get("value")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "Réponse Graph sans bibliothèques SharePoint.".to_string())?
+            .iter()
+            .map(|drive| {
+                Ok(ParsedSharePointDrive {
+                    id: required_string(drive, "id")?,
+                    name: required_string(drive, "name")?,
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        let preferred = drives.iter().find(|drive| {
+            matches!(
+                drive.name.to_lowercase().as_str(),
+                "documents" | "shared documents" | "documents partagés"
+            )
+        });
+        preferred
+            .cloned()
+            .or_else(|| (drives.len() == 1).then(|| drives[0].clone()))
+            .ok_or_else(|| {
+                "Bibliothèque documentaire SharePoint ambiguë : utilisez la bibliothèque « Documents » du site CRM."
+                    .to_string()
+            })
+    }
+
+    pub fn upload_drive_file_blocking(
+        &self,
+        access_token: &str,
+        drive_id: &str,
+        existing_item_id: Option<&str>,
+        existing_etag: Option<&str>,
+        remote_name: &str,
+        bytes: Vec<u8>,
+        mime_type: Option<&str>,
+    ) -> Result<ParsedDriveItem, String> {
+        let url = existing_item_id
+            .map(|item_id| self.urls().drive_item_content(drive_id, item_id))
+            .unwrap_or_else(|| self.urls().drive_root_file_content(drive_id, remote_name));
+        for attempt in 0..GRAPH_RATE_LIMIT_RETRIES {
+            let mut request = self
+                .http_client()
+                .put(&url)
+                .bearer_auth(access_token)
+                .header(
+                    reqwest::header::CONTENT_TYPE,
+                    mime_type.unwrap_or("application/octet-stream"),
+                )
+                .timeout(Duration::from_secs(120))
+                .body(bytes.clone());
+            if existing_item_id.is_some() {
+                if let Some(etag) = existing_etag {
+                    request = request.header("If-Match", etag);
+                }
+            }
+            let response = request.send().map_err(|error| {
+                format!("Envoi du document vers SharePoint impossible : {error}")
+            })?;
+            let status = response.status().as_u16();
+            let body = response.text().unwrap_or_default();
+            if status == 429 && attempt + 1 < GRAPH_RATE_LIMIT_RETRIES {
+                thread::sleep(Duration::from_secs(GRAPH_RATE_LIMIT_PAUSE_SECS));
+                continue;
+            }
+            if status >= 400 {
+                return Err(map_graph_http_error(status, &body));
+            }
+            return Self::parse_drive_item_response(&body);
+        }
+        Err("Quota Microsoft Graph dépassé pendant l'envoi du document.".into())
+    }
+
+    pub fn download_drive_file_blocking(
+        &self,
+        access_token: &str,
+        drive_id: &str,
+        item_id: &str,
+    ) -> Result<Vec<u8>, String> {
+        let response = self
+            .http_client()
+            .get(self.urls().drive_item_content(drive_id, item_id))
+            .bearer_auth(access_token)
+            .timeout(Duration::from_secs(120))
+            .send()
+            .map_err(|error| format!("Téléchargement SharePoint impossible : {error}"))?;
+        let status = response.status().as_u16();
+        if status >= 400 {
+            let body = response.text().unwrap_or_default();
+            return Err(map_graph_http_error(status, &body));
+        }
+        if response
+            .content_length()
+            .is_some_and(|size| size > crate::secure_files::MAX_DOCUMENT_BYTES)
+        {
+            return Err("Document SharePoint trop volumineux.".into());
+        }
+        let mut bytes = Vec::new();
+        response
+            .take(crate::secure_files::MAX_DOCUMENT_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|error| format!("Lecture du document SharePoint impossible : {error}"))?;
+        if bytes.len() as u64 > crate::secure_files::MAX_DOCUMENT_BYTES {
+            return Err("Document SharePoint trop volumineux.".into());
+        }
+        Ok(bytes)
+    }
+
+    pub fn delete_drive_item_blocking(
+        &self,
+        access_token: &str,
+        drive_id: &str,
+        item_id: &str,
+        etag: Option<&str>,
+    ) -> Result<(), String> {
+        let mut request = self
+            .http_client()
+            .delete(self.urls().drive_item(drive_id, item_id))
+            .bearer_auth(access_token);
+        if let Some(etag) = etag {
+            request = request.header("If-Match", etag);
+        }
+        let response = request
+            .send()
+            .map_err(|error| format!("Suppression SharePoint impossible : {error}"))?;
+        let status = response.status().as_u16();
+        if status == 404 {
+            return Ok(());
+        }
+        if status >= 400 {
+            return Err(map_graph_http_error(
+                status,
+                &response.text().unwrap_or_default(),
+            ));
+        }
+        Ok(())
     }
 
     pub fn test_connection_blocking(
@@ -201,9 +389,30 @@ impl SharePointGraphClient {
             .get("value")
             .and_then(|v| v.as_array())
             .ok_or_else(|| "Réponse Graph liste sans tableau value".to_string())?;
+        items.iter().map(parse_list_item_value).collect()
+    }
+
+    pub fn parse_list_items_delta_page(
+        json: &str,
+    ) -> Result<Vec<ParsedSharePointDeltaItem>, String> {
+        let value: Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        let items = value
+            .get("value")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "Réponse delta SharePoint sans tableau value".to_string())?;
         items
             .iter()
-            .map(parse_list_item_value)
+            .map(|item| {
+                Ok(ParsedSharePointDeltaItem {
+                    id: required_string(item, "id")?,
+                    etag: extract_etag(item),
+                    fields: item
+                        .get("fields")
+                        .cloned()
+                        .unwrap_or(Value::Object(Default::default())),
+                    deleted: item.get("deleted").is_some(),
+                })
+            })
             .collect()
     }
 
@@ -249,8 +458,12 @@ impl SharePointGraphClient {
         let escaped = display_name.replace('\'', "''");
         let filter = format!("displayName eq '{escaped}'");
         let url = self.urls().site_lists_filtered(site_id, &filter);
-        let (status, body) =
-            graph_get_with_retry(self.http_client(), &url, access_token, "Recherche liste SharePoint")?;
+        let (status, body) = graph_get_with_retry(
+            self.http_client(),
+            &url,
+            access_token,
+            "Recherche liste SharePoint",
+        )?;
         if status != 200 {
             return Err(map_graph_http_error(status, &body));
         }
@@ -290,8 +503,12 @@ impl SharePointGraphClient {
         columns: &[ListColumnDef],
     ) -> Result<(), String> {
         let url = self.urls().list_columns(site_id, list_id);
-        let (status, body) =
-            graph_get_with_retry(self.http_client(), &url, access_token, "Colonnes SharePoint")?;
+        let (status, body) = graph_get_with_retry(
+            self.http_client(),
+            &url,
+            access_token,
+            "Colonnes SharePoint",
+        )?;
         if status != 200 {
             return Err(map_graph_http_error(status, &body));
         }
@@ -324,7 +541,11 @@ impl SharePointGraphClient {
         site_id: &str,
         list_def: &ListDef,
     ) -> Result<ParsedSharePointList, String> {
-        let list = match self.find_list_by_display_name_blocking(access_token, site_id, list_def.display_name)? {
+        let list = match self.find_list_by_display_name_blocking(
+            access_token,
+            site_id,
+            list_def.display_name,
+        )? {
             Some(list) => list,
             None => self.create_list_blocking(access_token, site_id, list_def.display_name)?,
         };
@@ -343,7 +564,51 @@ impl SharePointGraphClient {
             Some(filter) => self.urls().list_items_filtered(site_id, list_id, filter),
             None => self.urls().list_items(site_id, list_id),
         };
-        paginate_list_items(self.http_client(), &initial_url, access_token, "Éléments SharePoint")
+        paginate_list_items(
+            self.http_client(),
+            &initial_url,
+            access_token,
+            "Éléments SharePoint",
+        )
+    }
+
+    pub fn list_items_delta_blocking(
+        &self,
+        access_token: &str,
+        site_id: &str,
+        list_id: &str,
+        previous_delta_link: Option<&str>,
+    ) -> Result<SharePointDeltaResult, String> {
+        let mut url = previous_delta_link
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| self.urls().list_items_delta(site_id, list_id));
+        let mut by_id: HashMap<String, ParsedSharePointDeltaItem> = HashMap::new();
+        loop {
+            let (status, body) = graph_get_with_retry(
+                self.http_client(),
+                &url,
+                access_token,
+                "Delta éléments SharePoint",
+            )?;
+            if status != 200 {
+                return Err(map_graph_http_error(status, &body));
+            }
+            for item in Self::parse_list_items_delta_page(&body)? {
+                by_id.insert(item.id.clone(), item);
+            }
+            if let Some(next) = extract_odata_next_link(&body) {
+                url = next;
+                continue;
+            }
+            let delta_link = extract_odata_delta_link(&body).ok_or_else(|| {
+                "Réponse delta SharePoint sans @odata.nextLink ni @odata.deltaLink.".to_string()
+            })?;
+            let mut items = by_id.into_values().collect::<Vec<_>>();
+            items.sort_by(|left, right| left.id.cmp(&right.id));
+            return Ok(SharePointDeltaResult { items, delta_link });
+        }
     }
 
     pub fn create_list_item_blocking(
@@ -368,6 +633,26 @@ impl SharePointGraphClient {
         Self::parse_list_item_response(&body)
     }
 
+    pub fn get_list_item_blocking(
+        &self,
+        access_token: &str,
+        site_id: &str,
+        list_id: &str,
+        item_id: &str,
+    ) -> Result<ParsedSharePointListItem, String> {
+        let url = self.urls().list_item(site_id, list_id, item_id);
+        let (status, body) = graph_get_with_retry(
+            self.http_client(),
+            &url,
+            access_token,
+            "Lecture élément SharePoint",
+        )?;
+        if status != 200 {
+            return Err(map_graph_http_error(status, &body));
+        }
+        Self::parse_list_item_response(&body)
+    }
+
     pub fn patch_list_item_fields_blocking(
         &self,
         access_token: &str,
@@ -387,7 +672,20 @@ impl SharePointGraphClient {
             &fields,
             "Mise à jour élément SharePoint",
         )?;
-        Ok(parse_http_write_result(status, &body, etag))
+        let outcome = parse_http_write_result(status, &body, etag);
+        match outcome {
+            GraphWriteOutcome::Applied { .. } => {
+                let refreshed =
+                    self.get_list_item_blocking(access_token, site_id, list_id, item_id)?;
+                Ok(GraphWriteOutcome::Applied {
+                    entity: GraphEntityVersion {
+                        id: refreshed.id,
+                        etag: refreshed.etag,
+                    },
+                })
+            }
+            conflict => Ok(conflict),
+        }
     }
 
     pub fn delete_list_item_blocking(
@@ -412,8 +710,8 @@ impl SharePointGraphClient {
 }
 
 fn parse_list_item_value(item: &Value) -> Result<ParsedSharePointListItem, String> {
-    let etag = extract_etag(item)
-        .ok_or_else(|| "ETag absent dans un élément de liste".to_string())?;
+    let etag =
+        extract_etag(item).ok_or_else(|| "ETag absent dans un élément de liste".to_string())?;
     Ok(ParsedSharePointListItem {
         id: required_string(item, "id")?,
         etag,
@@ -435,7 +733,10 @@ fn parse_list_value(value: &Value) -> Result<ParsedSharePointList, String> {
 fn column_definition_payload(column: &ListColumnDef) -> Value {
     // SharePoint doit arbitrer deux créations simultanées d'un même verrou.
     // Sans unicité serveur, deux clients pourraient créer chacun une ligne LockKey.
-    let unique = matches!(column.name, "LockKey" | "SyncKey" | "SequenceKey");
+    let unique = matches!(
+        column.name,
+        "LockKey" | "SyncKey" | "SequenceKey" | "MutationId"
+    );
     let mut payload = serde_json::json!({
         "name": column.name,
         "displayName": column.display_name,
@@ -494,14 +795,12 @@ fn extract_etag(value: &Value) -> Option<String> {
 }
 
 pub fn graph_error_code(body: &str) -> Option<String> {
-    serde_json::from_str::<Value>(body)
-        .ok()
-        .and_then(|json| {
-            json.get("error")
-                .and_then(|error| error.get("code"))
-                .and_then(|code| code.as_str())
-                .map(str::to_string)
-        })
+    serde_json::from_str::<Value>(body).ok().and_then(|json| {
+        json.get("error")
+            .and_then(|error| error.get("code"))
+            .and_then(|code| code.as_str())
+            .map(str::to_string)
+    })
 }
 
 pub fn is_sites_selected_access_denied(status: u16, body: &str) -> bool {
@@ -522,13 +821,12 @@ pub fn is_sites_selected_access_denied(status: u16, body: &str) -> bool {
 pub fn map_graph_http_error(status: u16, body: &str) -> String {
     if is_sites_selected_access_denied(status, body) {
         return "Accès SharePoint refusé : avec le scope Sites.Selected, l'administrateur Microsoft 365 \
-                doit accorder explicitement l'application CRM au site (rôle write)."
+                doit accorder explicitement l'application CRM au site (rôle manage pour \
+                provisionner les listes, puis write en exploitation)."
             .into();
     }
     match status {
-        401 => {
-            "Session Microsoft expirée ou invalide. Reconnectez le compte équipe.".into()
-        }
+        401 => "Session Microsoft expirée ou invalide. Reconnectez le compte équipe.".into(),
         403 => "Accès SharePoint refusé pour ce compte ou ce site.".into(),
         404 => "Site SharePoint introuvable : vérifiez le hostname et le chemin.".into(),
         429 => "Quota Microsoft Graph dépassé — réessayez dans quelques instants.".into(),
@@ -548,15 +846,23 @@ pub fn count_odata_value_array(json: &str) -> Result<usize, String> {
 }
 
 pub fn extract_odata_next_link(json: &str) -> Option<String> {
-    serde_json::from_str::<Value>(json)
-        .ok()
-        .and_then(|value| {
-            value
-                .get("@odata.nextLink")
-                .and_then(|link| link.as_str())
-                .filter(|link| !link.is_empty())
-                .map(str::to_string)
-        })
+    serde_json::from_str::<Value>(json).ok().and_then(|value| {
+        value
+            .get("@odata.nextLink")
+            .and_then(|link| link.as_str())
+            .filter(|link| !link.is_empty())
+            .map(str::to_string)
+    })
+}
+
+pub fn extract_odata_delta_link(json: &str) -> Option<String> {
+    serde_json::from_str::<Value>(json).ok().and_then(|value| {
+        value
+            .get("@odata.deltaLink")
+            .and_then(Value::as_str)
+            .filter(|link| !link.is_empty())
+            .map(str::to_string)
+    })
 }
 
 fn graph_get_blocking(
@@ -657,7 +963,10 @@ fn graph_post_blocking(
         .json(payload)
         .send()
         .map_err(|error| format!("Requête Microsoft Graph impossible : {error}"))?;
-    Ok((response.status().as_u16(), response.text().unwrap_or_default()))
+    Ok((
+        response.status().as_u16(),
+        response.text().unwrap_or_default(),
+    ))
 }
 
 fn graph_patch_blocking(
@@ -674,7 +983,10 @@ fn graph_patch_blocking(
         .json(payload)
         .send()
         .map_err(|error| format!("Requête Microsoft Graph impossible : {error}"))?;
-    Ok((response.status().as_u16(), response.text().unwrap_or_default()))
+    Ok((
+        response.status().as_u16(),
+        response.text().unwrap_or_default(),
+    ))
 }
 
 fn graph_delete_blocking(
@@ -689,7 +1001,10 @@ fn graph_delete_blocking(
         .header("If-Match", etag)
         .send()
         .map_err(|error| format!("Requête Microsoft Graph impossible : {error}"))?;
-    Ok((response.status().as_u16(), response.text().unwrap_or_default()))
+    Ok((
+        response.status().as_u16(),
+        response.text().unwrap_or_default(),
+    ))
 }
 
 fn graph_post_with_retry(
@@ -699,7 +1014,15 @@ fn graph_post_with_retry(
     payload: &Value,
     label: &str,
 ) -> Result<(u16, String), String> {
-    graph_write_with_retry(client, url, access_token, None, Some(payload), label, GraphWriteMethod::Post)
+    graph_write_with_retry(
+        client,
+        url,
+        access_token,
+        None,
+        Some(payload),
+        label,
+        GraphWriteMethod::Post,
+    )
 }
 
 fn graph_patch_with_retry(
@@ -766,11 +1089,12 @@ fn graph_write_with_retry(
                 etag.ok_or_else(|| format!("{label} : ETag obligatoire."))?,
                 payload.unwrap_or(&Value::Null),
             )?,
-            GraphWriteMethod::Delete => {
-                graph_delete_blocking(client, url, access_token, etag.ok_or_else(|| {
-                    format!("{label} : ETag obligatoire.")
-                })?)?
-            }
+            GraphWriteMethod::Delete => graph_delete_blocking(
+                client,
+                url,
+                access_token,
+                etag.ok_or_else(|| format!("{label} : ETag obligatoire."))?,
+            )?,
         };
         if status == 429 && attempt + 1 < GRAPH_RATE_LIMIT_RETRIES {
             thread::sleep(Duration::from_secs(GRAPH_RATE_LIMIT_PAUSE_SECS));
@@ -886,6 +1210,31 @@ mod tests {
             Some("https://graph.microsoft.com/v1.0/next")
         );
         assert!(extract_odata_next_link(r#"{"value":[]}"#).is_none());
+    }
+
+    #[test]
+    fn delta_page_accepts_updates_and_tombstones() {
+        let page = r#"{
+            "value": [
+                {
+                    "id": "10",
+                    "eTag": "\"4\"",
+                    "fields": {"SyncKey": "abc", "PayloadJson": "{}"}
+                },
+                {"id": "11", "deleted": {"state": "deleted"}}
+            ],
+            "@odata.deltaLink": "https://graph.microsoft.com/v1.0/delta?token=next"
+        }"#;
+        let items = SharePointGraphClient::parse_list_items_delta_page(page).unwrap();
+        assert_eq!(items.len(), 2);
+        assert!(!items[0].deleted);
+        assert_eq!(items[0].etag.as_deref(), Some("\"4\""));
+        assert!(items[1].deleted);
+        assert!(items[1].etag.is_none());
+        assert_eq!(
+            extract_odata_delta_link(page).as_deref(),
+            Some("https://graph.microsoft.com/v1.0/delta?token=next")
+        );
     }
 
     #[test]

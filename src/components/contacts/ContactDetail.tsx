@@ -206,6 +206,12 @@ export function ContactDetail({
     entityId: contact?.id,
     editing: showEditForm,
   });
+  useEffect(() => {
+    if (!showEditForm || !recordLock.readOnly) return;
+    setShowEditForm(false);
+    setEditSectionId(null);
+    toast.error(recordLock.error ?? "Le verrou d’édition a été perdu. Modifications annulées.");
+  }, [recordLock.error, recordLock.readOnly, showEditForm]);
   const investissementFormOpenRef = useRef(false);
   investissementFormOpenRef.current = showInvestissementForm;
   const nestedSheetLocksContactScroll =
@@ -871,12 +877,13 @@ export function ContactDetail({
         </div>
       </div>
 
-      {(teamPresence.banner || recordLock.heldBy || recordLock.loading) && (
+      {(teamPresence.banner || recordLock.heldBy || recordLock.loading || recordLock.error) && (
         <div className="space-y-2">
           <TeamPresenceBanner message={teamPresence.banner} />
           <TeamLockBanner
             heldBy={recordLock.heldBy}
             loading={recordLock.loading && !showEditForm}
+            message={recordLock.error}
           />
         </div>
       )}

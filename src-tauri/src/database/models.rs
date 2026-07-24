@@ -299,6 +299,10 @@ pub struct Document {
     pub sensibilite_extra_financiere: Option<String>,
     /// Niveau QPI extrait du document (Novice, Informé, Expérimenté).
     pub experience_investissement: Option<String>,
+    pub workspace_blob_drive_id: Option<String>,
+    pub workspace_blob_item_id: Option<String>,
+    pub workspace_blob_etag: Option<String>,
+    pub workspace_blob_sha256: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -656,7 +660,7 @@ pub struct Etiquette {
     /// PERIODE_ANNEE, TYPE_PRODUIT, AGE_APPROCHE
     pub auto_condition_type: Option<String>,
     pub auto_condition_config: Option<String>, // JSON avec les paramètres
-    pub auto_categories: Option<String>,     // JSON array des catégories concernées
+    pub auto_categories: Option<String>,       // JSON array des catégories concernées
     // Action email
     pub email_template_id: Option<i64>,
     pub email_delai_jours: i64,
@@ -698,7 +702,7 @@ pub struct NewEtiquette {
     pub email_envoi_prevu: Option<i64>,
     pub email_envoi_heure: Option<String>,
     pub email_envoi_jours_semaine: Option<String>,
-    pub email_actif: Option<bool>,      // Défaut: false
+    pub email_actif: Option<bool>, // Défaut: false
     // Système
     pub is_default: Option<bool>, // Défaut: false
     pub actif: Option<bool>,      // Défaut: true

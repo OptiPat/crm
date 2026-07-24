@@ -116,6 +116,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Plus, Tag, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TeamLockBanner } from "@/components/team/TeamLockBanner";
+import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
 
 interface EtiquetteFormProps {
   open: boolean;
@@ -162,6 +164,12 @@ export function EtiquetteForm({
   const [fieldHighlight, setFieldHighlight] = useState<EtiquetteFormFieldId | null>(null);
   const [highlightRuleLeafIndex, setHighlightRuleLeafIndex] = useState<number | null>(null);
   const [segmentFormOpen, setSegmentFormOpen] = useState(false);
+  const teamLock = useTeamFormRecordLock({
+    open,
+    onOpenChange,
+    entityType: "etiquette",
+    entityId: etiquette?.id,
+  });
   
   // État du formulaire
   const [nom, setNom] = useState("");
@@ -662,6 +670,7 @@ export function EtiquetteForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!teamLock.ready) return;
 
     const validationError = validateEtiquetteFormDetailed({
       nom,
@@ -874,6 +883,13 @@ export function EtiquetteForm({
                 : "Commencez par choisir le type, puis complétez le formulaire"}
           </DialogDescription>
         </DialogHeader>
+        <div className="px-6">
+          <TeamLockBanner
+            heldBy={teamLock.heldBy}
+            loading={teamLock.loading}
+            message={teamLock.error}
+          />
+        </div>
 
         <div
           className={cn(
@@ -1703,7 +1719,7 @@ export function EtiquetteForm({
               Annuler
             </Button>
             {formUnlocked && (
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !teamLock.ready}>
               {loading ? "Enregistrement..." : etiquette ? "Enregistrer" : "Créer"}
             </Button>
             )}

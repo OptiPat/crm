@@ -381,6 +381,10 @@ export const documents = sqliteTable("documents", {
   dateDocument: integer("date_document", { mode: "timestamp" }),
   sensibiliteExtraFinanciere: text("sensibilite_extra_financiere"),
   experienceInvestissement: text("experience_investissement"),
+  workspaceBlobDriveId: text("workspace_blob_drive_id"),
+  workspaceBlobItemId: text("workspace_blob_item_id"),
+  workspaceBlobEtag: text("workspace_blob_etag"),
+  workspaceBlobSha256: text("workspace_blob_sha256"),
   hashFichier: text("hash_fichier"), // Pour vérifier l'intégrité
   
   createdAt: integer("created_at", { mode: "timestamp" })

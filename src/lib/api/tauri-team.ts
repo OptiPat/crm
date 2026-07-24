@@ -5,6 +5,9 @@ import type {
   TeamMigrationPreview,
   TeamMigrationUploadReport,
   TeamMigrationValidateReport,
+  TeamSyncActivationReport,
+  TeamSyncConflict,
+  TeamSyncOnceReport,
   WorkspaceConfig,
   WorkspaceConfigResponse,
 } from "@/lib/team/team-capabilities";
@@ -19,6 +22,9 @@ export type {
   TeamMigrationValidateReport,
   TeamMigrationTableCount,
   TeamRole,
+  TeamSyncActivationReport,
+  TeamSyncConflict,
+  TeamSyncOnceReport,
   WorkspaceConfig,
   WorkspaceConfigResponse,
   WorkspaceMode,
@@ -28,6 +34,25 @@ export const TEAM_WORKSPACE_CHANGED_EVENT = "team-workspace-changed";
 
 export function notifyTeamWorkspaceChanged(): void {
   window.dispatchEvent(new CustomEvent(TEAM_WORKSPACE_CHANGED_EVENT));
+}
+
+export function notifySharedCrmDataChanged(): void {
+  [
+    "crm:contacts-changed",
+    "crm:foyers-changed",
+    "crm:partenaires-changed",
+    "crm:investissements-changed",
+    "crm:documents-changed",
+    "crm:custom-fields-changed",
+    "crm:taches-changed",
+    "crm:templates-email-changed",
+    "crm:interactions-changed",
+    "crm:alertes-changed",
+    "crm:etiquettes-changed",
+    "crm:pipe-changed",
+    "crm-notes-changed",
+    "placement-operations-changed",
+  ].forEach((eventName) => window.dispatchEvent(new CustomEvent(eventName)));
 }
 
 export async function getWorkspaceConfig(): Promise<WorkspaceConfigResponse> {
@@ -91,4 +116,32 @@ export async function validateTeamRemoteSnapshot(
   return invoke<TeamMigrationValidateReport>("validate_team_remote_snapshot_cmd", {
     expectedChecksum,
   });
+}
+
+export async function activateTeamSync(): Promise<TeamSyncActivationReport> {
+  const report = await invoke<TeamSyncActivationReport>("activate_team_sync_cmd");
+  notifyTeamWorkspaceChanged();
+  return report;
+}
+
+export async function bootstrapTeamSync(): Promise<TeamSyncActivationReport> {
+  const report = await invoke<TeamSyncActivationReport>("bootstrap_team_sync_cmd");
+  notifyTeamWorkspaceChanged();
+  return report;
+}
+
+export async function syncTeamWorkspaceOnce(): Promise<TeamSyncOnceReport> {
+  return invoke<TeamSyncOnceReport>("team_sync_once_cmd");
+}
+
+export async function listTeamSyncConflicts(): Promise<TeamSyncConflict[]> {
+  return invoke<TeamSyncConflict[]>("list_team_sync_conflicts_cmd");
+}
+
+export async function resolveTeamSyncConflictKeepLocal(conflictId: number): Promise<void> {
+  await invoke<void>("resolve_team_sync_conflict_keep_local_cmd", { conflictId });
+}
+
+export async function resolveTeamSyncConflictAcceptRemote(conflictId: number): Promise<void> {
+  await invoke<void>("resolve_team_sync_conflict_accept_remote_cmd", { conflictId });
 }

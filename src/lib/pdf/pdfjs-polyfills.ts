@@ -96,8 +96,22 @@ class DomMatrixPolyfill {
   }
 }
 
+function domMatrixLooksComplete(): boolean {
+  if (typeof globalThis.DOMMatrix === "undefined") return false;
+  try {
+    const matrix = new globalThis.DOMMatrix([1, 0, 0, 1, 0, 0]);
+    return (
+      typeof matrix.multiply === "function" &&
+      typeof matrix.transformPoint === "function" &&
+      typeof matrix.inverse === "function"
+    );
+  } catch {
+    return false;
+  }
+}
+
 function ensureDomMatrix(): void {
-  if (typeof globalThis.DOMMatrix !== "undefined") return;
+  if (domMatrixLooksComplete()) return;
   globalThis.DOMMatrix = DomMatrixPolyfill as unknown as typeof DOMMatrix;
 }
 

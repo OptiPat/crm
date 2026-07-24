@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
+import { TeamLockBanner } from "@/components/team/TeamLockBanner";
+import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -358,6 +360,12 @@ export function ContactForm({
   nestedSheet = false,
 }: ContactFormProps) {
   const isEdit = !!contact;
+  const recordLock = useTeamFormRecordLock({
+    open,
+    onOpenChange,
+    entityType: "contact",
+    entityId: contact?.id,
+  });
   useLockAppMainScroll(open && nestedSheet);
   const [loading, setLoading] = useState(false);
   const [allContacts, setAllContacts] = useState<Contact[]>([]);
@@ -1621,6 +1629,17 @@ export function ContactForm({
       </SheetFooter>
     </form>
   );
+  const securedFormBody = recordLock.ready ? (
+    formBody
+  ) : (
+    <div className="p-6">
+      <TeamLockBanner
+        heldBy={recordLock.heldBy}
+        loading={recordLock.loading}
+        message={recordLock.error}
+      />
+    </div>
+  );
 
   const title = isEdit
     ? isPrescripteurCategorie(formData.categorie)
@@ -1661,7 +1680,7 @@ export function ContactForm({
             </SheetHeader>
           </div>
           <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
-            {formBody}
+            {securedFormBody}
           </PortalLayerProvider>
         </SheetContent>
       </Sheet>
