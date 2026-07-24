@@ -63,6 +63,8 @@ export function StatistiquesBenchmarkSettingsDialog({
 }: StatistiquesBenchmarkSettingsDialogProps) {
   const [referenceEuros, setReferenceEuros] = useState("");
   const [sponsorRatePercent, setSponsorRatePercent] = useState("");
+  const [vaaDurationMonths, setVaaDurationMonths] = useState("");
+  const [habilitationDurationMonths, setHabilitationDurationMonths] = useState("");
   const [nearPercent, setNearPercent] = useState("80");
   const [error, setError] = useState<string | null>(null);
 
@@ -71,6 +73,10 @@ export function StatistiquesBenchmarkSettingsDialog({
     const settings = loadStatistiquesBenchmarkSettings();
     setReferenceEuros(formatFilleulVolumeField(settings.groupActiveConsultantVolumeEuros));
     setSponsorRatePercent(String(settings.groupSponsorRatePercent).replace(".", ","));
+    setVaaDurationMonths(String(settings.groupVaaDurationMonths).replace(".", ","));
+    setHabilitationDurationMonths(
+      String(settings.groupHabilitationDurationMonths).replace(".", ",")
+    );
     setNearPercent(String(Math.round(settings.nearGroupBenchmarkRatio * 100)));
     setError(null);
   }, [open]);
@@ -79,6 +85,10 @@ export function StatistiquesBenchmarkSettingsDialog({
     const defaults = defaultStatistiquesBenchmarkSettings();
     setReferenceEuros(formatFilleulVolumeField(defaults.groupActiveConsultantVolumeEuros));
     setSponsorRatePercent(String(defaults.groupSponsorRatePercent).replace(".", ","));
+    setVaaDurationMonths(String(defaults.groupVaaDurationMonths).replace(".", ","));
+    setHabilitationDurationMonths(
+      String(defaults.groupHabilitationDurationMonths).replace(".", ",")
+    );
     setNearPercent(String(Math.round(defaults.nearGroupBenchmarkRatio * 100)));
     setError(null);
   };
@@ -94,6 +104,18 @@ export function StatistiquesBenchmarkSettingsDialog({
       setError("Le taux de parrainage de référence doit être entre 0 et 100 %.");
       return;
     }
+    const parsedVaaDuration = Number.parseFloat(vaaDurationMonths.trim().replace(",", "."));
+    if (!Number.isFinite(parsedVaaDuration) || parsedVaaDuration <= 0) {
+      setError("Le délai VAA/VA de référence doit être strictement positif (en mois).");
+      return;
+    }
+    const parsedHabilitationDuration = Number.parseFloat(
+      habilitationDurationMonths.trim().replace(",", ".")
+    );
+    if (!Number.isFinite(parsedHabilitationDuration) || parsedHabilitationDuration <= 0) {
+      setError("Le délai habilitation de référence doit être strictement positif (en mois).");
+      return;
+    }
     const pct = Number.parseInt(nearPercent.trim(), 10);
     if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) {
       setError("Le seuil « proche » doit être entre 1 et 99 %.");
@@ -102,6 +124,8 @@ export function StatistiquesBenchmarkSettingsDialog({
     saveStatistiquesBenchmarkSettings({
       groupActiveConsultantVolumeEuros: parsedReference,
       groupSponsorRatePercent: parsedSponsorRate,
+      groupVaaDurationMonths: parsedVaaDuration,
+      groupHabilitationDurationMonths: parsedHabilitationDuration,
       nearGroupBenchmarkRatio: pct / 100,
     });
     onOpenChange(false);
@@ -109,6 +133,10 @@ export function StatistiquesBenchmarkSettingsDialog({
 
   const previewReference = parseFilleulVolumeField(referenceEuros.replace(/\s/g, ""));
   const previewSponsorRate = Number.parseFloat(sponsorRatePercent.trim().replace(",", "."));
+  const previewVaaDuration = Number.parseFloat(vaaDurationMonths.trim().replace(",", "."));
+  const previewHabilitationDuration = Number.parseFloat(
+    habilitationDurationMonths.trim().replace(",", ".")
+  );
   const previewPct = Number.parseInt(nearPercent.trim(), 10);
   const previewFloor =
     previewReference != null &&
@@ -126,6 +154,22 @@ export function StatistiquesBenchmarkSettingsDialog({
     previewPct < 100
       ? previewSponsorRate * (previewPct / 100)
       : null;
+  const previewVaaCeiling =
+    Number.isFinite(previewVaaDuration) &&
+    previewVaaDuration > 0 &&
+    Number.isFinite(previewPct) &&
+    previewPct > 0 &&
+    previewPct < 100
+      ? previewVaaDuration / (previewPct / 100)
+      : null;
+  const previewHabilitationCeiling =
+    Number.isFinite(previewHabilitationDuration) &&
+    previewHabilitationDuration > 0 &&
+    Number.isFinite(previewPct) &&
+    previewPct > 0 &&
+    previewPct < 100
+      ? previewHabilitationDuration / (previewPct / 100)
+      : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -142,7 +186,7 @@ export function StatistiquesBenchmarkSettingsDialog({
           <div className="space-y-5">
             <BenchmarkSection
               title="Organisation filleuls"
-              description="Panneaux « Volume moyen / consultant actif » et « Taux de parrainage » — comparaison à la moyenne groupe."
+              description="Panneaux volume, parrainage, délai VAA/VA et délai habilitation — comparaison à la moyenne groupe."
             >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2 sm:col-span-2">
@@ -184,6 +228,49 @@ export function StatistiquesBenchmarkSettingsDialog({
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     Moyenne nationale : part des consultants réseau (présents sur l&apos;exercice)
                     ayant parrainé au moins une personne affiliée durant la période.
+                  </p>
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="stat-benchmark-vaa-duration">
+                    Délai avant 1er VAA ou VA — référence groupe (mois)
+                  </Label>
+                  <Input
+                    id="stat-benchmark-vaa-duration"
+                    inputMode="decimal"
+                    placeholder="14,62"
+                    className="h-10"
+                    value={vaaDurationMonths}
+                    onChange={(event) => {
+                      setVaaDurationMonths(event.target.value);
+                      setError(null);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Moyenne nationale : mois entre inscription et premier VAA ou VA (consultants
+                    avec date renseignée). Un délai plus court est favorable.
+                  </p>
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="stat-benchmark-habilitation-duration">
+                    Délai 1ère habilitation — référence groupe (mois)
+                  </Label>
+                  <Input
+                    id="stat-benchmark-habilitation-duration"
+                    inputMode="decimal"
+                    placeholder="8,7"
+                    className="h-10"
+                    value={habilitationDurationMonths}
+                    onChange={(event) => {
+                      setHabilitationDurationMonths(event.target.value);
+                      setError(null);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Moyenne nationale : mois entre inscription et première habilitation (MIOBSP, MIA
+                    ou Agent Lié — la plus proche de l&apos;inscription). Un délai plus court est
+                    favorable.
                   </p>
                 </div>
 
@@ -242,6 +329,67 @@ export function StatistiquesBenchmarkSettingsDialog({
                                 </span>
                                 {" → "}
                                 {previewSponsorRate.toString().replace(".", ",")} %
+                              </>
+                            ) : null}
+                          </p>
+                        ) : null}
+                        {Number.isFinite(previewVaaDuration) && previewVaaDuration > 0 ? (
+                          <p>
+                            Délai VAA/VA — réf. :{" "}
+                            <span className="font-medium text-foreground tabular-nums">
+                              {previewVaaDuration.toLocaleString("fr-FR", {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 2,
+                              })}{" "}
+                              mois
+                            </span>
+                            {previewVaaCeiling != null ? (
+                              <>
+                                {" · "}
+                                zone orange{" "}
+                                <span className="font-medium text-foreground tabular-nums">
+                                  {previewVaaDuration.toLocaleString("fr-FR", {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </span>
+                                {" → "}
+                                {previewVaaCeiling.toLocaleString("fr-FR", {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 2,
+                                })}{" "}
+                                mois
+                              </>
+                            ) : null}
+                          </p>
+                        ) : null}
+                        {Number.isFinite(previewHabilitationDuration) &&
+                        previewHabilitationDuration > 0 ? (
+                          <p>
+                            Habilitation — réf. :{" "}
+                            <span className="font-medium text-foreground tabular-nums">
+                              {previewHabilitationDuration.toLocaleString("fr-FR", {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 2,
+                              })}{" "}
+                              mois
+                            </span>
+                            {previewHabilitationCeiling != null ? (
+                              <>
+                                {" · "}
+                                zone orange{" "}
+                                <span className="font-medium text-foreground tabular-nums">
+                                  {previewHabilitationDuration.toLocaleString("fr-FR", {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </span>
+                                {" → "}
+                                {previewHabilitationCeiling.toLocaleString("fr-FR", {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 2,
+                                })}{" "}
+                                mois
                               </>
                             ) : null}
                           </p>

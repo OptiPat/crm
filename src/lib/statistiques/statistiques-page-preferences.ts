@@ -32,6 +32,9 @@ export type StatistiquesPanelId =
   | "filleul_org_manager"
   | "filleul_org_volume"
   | "filleul_org_parraineur"
+  | "filleul_org_vaa_duration"
+  | "filleul_org_habilitation_duration"
+  | "filleul_org_manager_duration"
   | "filleul_org_bridge";
 
 type StatistiquesCollapsibleId = StatistiquesSectionId | StatistiquesPanelId;
@@ -111,6 +114,9 @@ export const ALL_STATISTIQUES_PANEL_IDS: StatistiquesPanelId[] = [
   "filleul_org_manager",
   "filleul_org_volume",
   "filleul_org_parraineur",
+  "filleul_org_vaa_duration",
+  "filleul_org_habilitation_duration",
+  "filleul_org_manager_duration",
   "filleul_org_bridge",
 ];
 

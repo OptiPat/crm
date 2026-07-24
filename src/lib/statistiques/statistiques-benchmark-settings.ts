@@ -4,6 +4,12 @@ export const DEFAULT_GROUP_ACTIVE_CONSULTANT_VOLUME_BENCHMARK_EUROS = 547_000;
 /** Référence groupe par défaut — taux de parrainage sur exercice (consultants réseau). */
 export const DEFAULT_GROUP_SPONSOR_RATE_BENCHMARK_PERCENT = 26.5;
 
+/** Référence groupe par défaut — délai moyen avant 1er VAA ou VA (mois). */
+export const DEFAULT_GROUP_VAA_DURATION_BENCHMARK_MONTHS = 14.62;
+
+/** Référence groupe par défaut — délai moyen avant 1ère habilitation (mois). */
+export const DEFAULT_GROUP_HABILITATION_DURATION_BENCHMARK_MONTHS = 8.7;
+
 /** En dessous de ce ratio (ex. 0,8 = 80 %), la carte passe au rouge. */
 export const DEFAULT_NEAR_GROUP_BENCHMARK_RATIO = 0.8;
 
@@ -14,6 +20,10 @@ export type StatistiquesBenchmarkSettings = {
   groupActiveConsultantVolumeEuros: number;
   /** Taux de parrainage — référence nationale / groupe (%). */
   groupSponsorRatePercent: number;
+  /** Délai moyen avant 1er VAA ou VA — référence nationale / groupe (mois). */
+  groupVaaDurationMonths: number;
+  /** Délai moyen avant 1ère habilitation — référence nationale / groupe (mois). */
+  groupHabilitationDurationMonths: number;
   /**
    * Seuil minimal (ratio 0–1) pour la zone orange.
    * Orange : [ratio × référence, référence[ ; vert au-dessus ; rouge en dessous.
@@ -29,6 +39,8 @@ export function defaultStatistiquesBenchmarkSettings(): StatistiquesBenchmarkSet
   return {
     groupActiveConsultantVolumeEuros: DEFAULT_GROUP_ACTIVE_CONSULTANT_VOLUME_BENCHMARK_EUROS,
     groupSponsorRatePercent: DEFAULT_GROUP_SPONSOR_RATE_BENCHMARK_PERCENT,
+    groupVaaDurationMonths: DEFAULT_GROUP_VAA_DURATION_BENCHMARK_MONTHS,
+    groupHabilitationDurationMonths: DEFAULT_GROUP_HABILITATION_DURATION_BENCHMARK_MONTHS,
     nearGroupBenchmarkRatio: DEFAULT_NEAR_GROUP_BENCHMARK_RATIO,
   };
 }
@@ -39,6 +51,8 @@ function normalizeBenchmarkSettings(
   const defaults = defaultStatistiquesBenchmarkSettings();
   const euros = raw?.groupActiveConsultantVolumeEuros;
   const sponsorRate = raw?.groupSponsorRatePercent;
+  const vaaDurationMonths = raw?.groupVaaDurationMonths;
+  const habilitationDurationMonths = raw?.groupHabilitationDurationMonths;
   const ratio = raw?.nearGroupBenchmarkRatio;
 
   const groupActiveConsultantVolumeEuros =
@@ -49,12 +63,32 @@ function normalizeBenchmarkSettings(
       ? sponsorRate
       : defaults.groupSponsorRatePercent;
 
+  const groupVaaDurationMonths =
+    typeof vaaDurationMonths === "number" &&
+    Number.isFinite(vaaDurationMonths) &&
+    vaaDurationMonths > 0
+      ? vaaDurationMonths
+      : defaults.groupVaaDurationMonths;
+
+  const groupHabilitationDurationMonths =
+    typeof habilitationDurationMonths === "number" &&
+    Number.isFinite(habilitationDurationMonths) &&
+    habilitationDurationMonths > 0
+      ? habilitationDurationMonths
+      : defaults.groupHabilitationDurationMonths;
+
   const nearGroupBenchmarkRatio =
     typeof ratio === "number" && Number.isFinite(ratio) && ratio > 0 && ratio < 1
       ? ratio
       : defaults.nearGroupBenchmarkRatio;
 
-  return { groupActiveConsultantVolumeEuros, groupSponsorRatePercent, nearGroupBenchmarkRatio };
+  return {
+    groupActiveConsultantVolumeEuros,
+    groupSponsorRatePercent,
+    groupVaaDurationMonths,
+    groupHabilitationDurationMonths,
+    nearGroupBenchmarkRatio,
+  };
 }
 
 export function loadStatistiquesBenchmarkSettings(): StatistiquesBenchmarkSettings {
@@ -113,6 +147,38 @@ export function getFilleulSponsorRateBenchmarkStatus(
   );
 }
 
+/** Délai plus court = mieux : vert ≤ réf., orange juste au-dessus, rouge au-delà. */
+export function getFilleulVaaDurationBenchmarkStatus(
+  averageMonths: number,
+  settings: StatistiquesBenchmarkSettings
+): FilleulVolumeBenchmarkStatus {
+  return getLowerIsBetterDurationBenchmarkStatus(averageMonths, settings.groupVaaDurationMonths, settings);
+}
+
+export function getFilleulHabilitationDurationBenchmarkStatus(
+  averageMonths: number,
+  settings: StatistiquesBenchmarkSettings
+): FilleulVolumeBenchmarkStatus {
+  return getLowerIsBetterDurationBenchmarkStatus(
+    averageMonths,
+    settings.groupHabilitationDurationMonths,
+    settings
+  );
+}
+
+function getLowerIsBetterDurationBenchmarkStatus(
+  averageMonths: number,
+  reference: number,
+  settings: StatistiquesBenchmarkSettings
+): FilleulVolumeBenchmarkStatus {
+  const ratio = settings.nearGroupBenchmarkRatio;
+  if (!Number.isFinite(averageMonths) || reference <= 0) return "below_group";
+  if (averageMonths <= reference) return "above_group";
+  const ceiling = reference / ratio;
+  if (averageMonths <= ceiling) return "near_group";
+  return "below_group";
+}
+
 /** Écart relatif vs référence groupe (ex. +12 % ou −23 %). */
 export function formatVsGroupBenchmarkPercent(value: number, reference: number): string {
   if (reference <= 0 || !Number.isFinite(value)) return "—";
@@ -137,6 +203,20 @@ export function formatSponsorRateVsGroupBenchmarkPercent(
   return formatVsGroupBenchmarkPercent(sponsorRatePercent, settings.groupSponsorRatePercent);
 }
 
+export function formatVaaDurationVsGroupBenchmarkPercent(
+  averageMonths: number,
+  settings: StatistiquesBenchmarkSettings
+): string {
+  return formatVsGroupBenchmarkPercent(averageMonths, settings.groupVaaDurationMonths);
+}
+
+export function formatHabilitationDurationVsGroupBenchmarkPercent(
+  averageMonths: number,
+  settings: StatistiquesBenchmarkSettings
+): string {
+  return formatVsGroupBenchmarkPercent(averageMonths, settings.groupHabilitationDurationMonths);
+}
+
 export function filleulVolumeBenchmarkStatusBoxClasses(status: FilleulVolumeBenchmarkStatus): string {
   if (status === "above_group") {
     return "border-emerald-200/80 bg-emerald-50/90";
@@ -157,4 +237,16 @@ export function filleulVolumeBenchmarkStatusLabel(status: FilleulVolumeBenchmark
   if (status === "above_group") return "Au-dessus de la référence groupe";
   if (status === "near_group") return "Proche de la référence groupe";
   return "Sous la référence groupe";
+}
+
+export function filleulVaaDurationBenchmarkStatusLabel(status: FilleulVolumeBenchmarkStatus): string {
+  if (status === "above_group") return "Délai inférieur à la référence groupe";
+  if (status === "near_group") return "Délai proche de la référence groupe";
+  return "Délai supérieur à la référence groupe";
+}
+
+export function filleulHabilitationDurationBenchmarkStatusLabel(
+  status: FilleulVolumeBenchmarkStatus
+): string {
+  return filleulVaaDurationBenchmarkStatusLabel(status);
 }

@@ -161,6 +161,51 @@ export function resolveFilleulDesinscriptionTimestamp(
   return dossier?.dateDesinscription ?? null;
 }
 
+/** Date 1er VAA ou VA : dossier uniquement. */
+export function resolveFilleulPremierVaaOuVaTimestamp(
+  dossier?: FilleulDossier | null
+): number | null | undefined {
+  return dossier?.datePremierVaaOuVa ?? null;
+}
+
+/** Date qualification Manager : dossier uniquement. */
+export function resolveFilleulPassageManagerTimestamp(
+  dossier?: FilleulDossier | null
+): number | null | undefined {
+  return dossier?.datePassageManager ?? null;
+}
+
+/** Dates habilitation MIOBSP, MIA et Agent Lié (hors CIF). */
+export function collectFilleulHabilitationTimestamps(
+  dossier?: FilleulDossier | null
+): number[] {
+  if (!dossier) return [];
+  return [
+    dossier.datePremiereSouscriptionImo,
+    dossier.datePremiereSouscriptionPlacement,
+    dossier.datePremiereSouscriptionScpi,
+  ].filter((ts): ts is number => ts != null && Number.isFinite(ts));
+}
+
+/**
+ * Première habilitation : parmi MIOBSP / MIA / Agent Lié renseignées,
+ * la date la plus proche de l'inscription (la plus tôt après inscription si possible).
+ */
+export function resolveFilleulPremiereHabilitationTimestamp(
+  inscriptionUnix: number | null | undefined,
+  dossier?: FilleulDossier | null
+): number | null {
+  const candidates = collectFilleulHabilitationTimestamps(dossier);
+  if (candidates.length === 0) return null;
+  if (inscriptionUnix == null || !Number.isFinite(inscriptionUnix)) {
+    return Math.min(...candidates);
+  }
+  const onOrAfterInscription = candidates.filter((ts) => ts >= inscriptionUnix);
+  return onOrAfterInscription.length > 0
+    ? Math.min(...onOrAfterInscription)
+    : Math.min(...candidates);
+}
+
 export async function upsertFilleulDossierDatesFromImport(
   contactId: number,
   dates: { dateInvitation?: string; dateInscription?: string }

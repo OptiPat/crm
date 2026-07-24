@@ -43,8 +43,14 @@ import {
   filleulVolumeBenchmarkStatusValueClasses,
   formatSponsorRateVsGroupBenchmarkPercent,
   formatVolumeVsGroupBenchmarkPercent,
+  formatVaaDurationVsGroupBenchmarkPercent,
+  formatHabilitationDurationVsGroupBenchmarkPercent,
   getFilleulSponsorRateBenchmarkStatus,
+  getFilleulVaaDurationBenchmarkStatus,
+  getFilleulHabilitationDurationBenchmarkStatus,
   getFilleulVolumeBenchmarkStatus,
+  filleulVaaDurationBenchmarkStatusLabel,
+  filleulHabilitationDurationBenchmarkStatusLabel,
 } from "@/lib/statistiques/statistiques-benchmark-settings";
 import { useStatistiquesBenchmarkSettings } from "@/hooks/useStatistiquesBenchmarkSettings";
 import { DashboardDrillDownBackdrop } from "@/components/dashboard/DashboardDrillDownBackdrop";
@@ -77,6 +83,36 @@ import {
   listFilleulVolumeExerciceLabels,
 } from "@/lib/api/tauri-filleul-volumes";
 import { currentFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
+import {
+  computeFilleulVaaDurationExerciceStats,
+  computeFilleulVaaDurationStats,
+  filterContactsForFilleulVaaDurationExerciceList,
+  formatFilleulVaaDurationCumulativeIndex,
+  formatFilleulVaaDurationExerciceSubtitle,
+  formatFilleulVaaDurationMonths,
+  type FilleulVaaDurationListKind,
+  type FilleulVaaDurationStatResult,
+} from "@/lib/statistiques/filleul-vaa-duration-stats";
+import {
+  computeFilleulHabilitationDurationExerciceStats,
+  computeFilleulHabilitationDurationStats,
+  filterContactsForFilleulHabilitationDurationExerciceList,
+  formatFilleulHabilitationDurationCumulativeIndex,
+  formatFilleulHabilitationDurationExerciceSubtitle,
+  formatFilleulHabilitationDurationMonths,
+  type FilleulHabilitationDurationListKind,
+  type FilleulHabilitationDurationStatResult,
+} from "@/lib/statistiques/filleul-habilitation-duration-stats";
+import {
+  computeFilleulManagerDurationExerciceStats,
+  computeFilleulManagerDurationStats,
+  filterContactsForFilleulManagerDurationExerciceList,
+  formatFilleulManagerDurationCumulativeIndex,
+  formatFilleulManagerDurationExerciceSubtitle,
+  formatFilleulManagerDurationMonths,
+  type FilleulManagerDurationListKind,
+  type FilleulManagerDurationStatResult,
+} from "@/lib/statistiques/filleul-manager-duration-stats";
 
 function OrganisationListButton({
   label,
@@ -115,6 +151,9 @@ type OrganisationDrillDown =
   | { mode: "manager"; kind: FilleulOrganisationListKind }
   | { mode: "volume"; kind: FilleulVolumeListKind }
   | { mode: "parraineur"; kind: FilleulParraineurListKind }
+  | { mode: "vaaDuration"; kind: FilleulVaaDurationListKind }
+  | { mode: "habilitationDuration"; kind: FilleulHabilitationDurationListKind }
+  | { mode: "managerDuration"; kind: FilleulManagerDurationListKind }
   | { mode: "bridge"; kind: FilleulBridgeListKind }
   | { mode: "attrition"; kind: "active" | "attrited"; count: number };
 
@@ -263,6 +302,375 @@ function VolumeKpiPanel({
               onClick={() => onOpenList("missingVolume")}
             />
           </div>
+        </div>
+      )}
+    </StatistiquesPanel>
+  );
+}
+
+function VaaDurationKpiPanel({
+  loading,
+  exerciceLabel,
+  exerciceStats,
+  cumulativeStats,
+  onOpenList,
+}: {
+  loading: boolean;
+  exerciceLabel: string;
+  exerciceStats: FilleulVaaDurationStatResult;
+  cumulativeStats: FilleulVaaDurationStatResult;
+  onOpenList: (kind: FilleulVaaDurationListKind) => void;
+}) {
+  const benchmarkSettings = useStatistiquesBenchmarkSettings();
+  const benchmarkStatus =
+    exerciceStats.averageMonths != null
+      ? getFilleulVaaDurationBenchmarkStatus(exerciceStats.averageMonths, benchmarkSettings)
+      : null;
+
+  return (
+    <StatistiquesPanel
+      title="Délai avant 1er VAA ou VA"
+      description={`Sur l'exercice ${exerciceLabel}, durée moyenne en mois entre la date d'inscription et la date du premier VAA ou VA (dossier filleul), pour les consultants inscrits durant la période — désinscrits inclus.`}
+      collapsible
+      panelId="filleul_org_vaa_duration"
+    >
+      {loading ? (
+        <ChartLoading />
+      ) : (
+        <div className="space-y-4">
+          {exerciceStats.totalEligible === 0 ? (
+            <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2.5">
+              Aucune inscription réseau sur l&apos;exercice {exerciceLabel}.
+            </p>
+          ) : exerciceStats.averageMonths == null ? (
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Exercice {exerciceLabel}
+                </p>
+                <p className="text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5 text-muted-foreground">
+                  —
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground text-right max-w-xs">
+                Aucune date 1er VAA ou VA sur les inscriptions de l&apos;exercice.
+                <br />
+                {formatFilleulVaaDurationExerciceSubtitle(exerciceStats, exerciceLabel)}
+              </p>
+            </div>
+          ) : (
+            <div
+              className={cn(
+                "rounded-xl border px-4 py-3 flex items-center justify-between gap-4 transition-colors",
+                benchmarkStatus
+                  ? filleulVolumeBenchmarkStatusBoxClasses(benchmarkStatus)
+                  : "border-border/60 bg-muted/20"
+              )}
+              title={
+                benchmarkStatus ? filleulVaaDurationBenchmarkStatusLabel(benchmarkStatus) : undefined
+              }
+            >
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Exercice {exerciceLabel}
+                </p>
+                <p
+                  className={cn(
+                    "text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5",
+                    benchmarkStatus
+                      ? filleulVolumeBenchmarkStatusValueClasses(benchmarkStatus)
+                      : "text-primary"
+                  )}
+                >
+                  {formatFilleulVaaDurationMonths(exerciceStats.averageMonths)}
+                </p>
+              </div>
+              <div className="text-xs text-muted-foreground text-right max-w-xs space-y-0.5">
+                <p>{formatFilleulVaaDurationExerciceSubtitle(exerciceStats, exerciceLabel)}</p>
+                <p className="tabular-nums">
+                  Réf. groupe{" "}
+                  {formatFilleulVaaDurationMonths(benchmarkSettings.groupVaaDurationMonths)}
+                </p>
+                <p className="font-medium text-foreground tabular-nums">
+                  {formatVaaDurationVsGroupBenchmarkPercent(
+                    exerciceStats.averageMonths,
+                    benchmarkSettings
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2.5">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Indice historique (cumul)
+            </p>
+            <p className="text-sm font-medium tabular-nums text-foreground mt-0.5">
+              {formatFilleulVaaDurationCumulativeIndex(cumulativeStats)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              Consultants réseau (inscrits et désinscrits) avec date 1er VAA/VA renseignée — toutes
+              périodes, indépendant de l&apos;exercice sélectionné.
+            </p>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Hors consultants sans « Date 1er VAA ou VA » dans le dossier. Mois calendaires entre
+            inscription et premier VAA/VA. Référence groupe via « Références » en haut de page.
+          </p>
+
+          {exerciceStats.totalEligible > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <OrganisationListButton
+                label="Avec date 1er VAA/VA"
+                count={exerciceStats.countedCount}
+                onClick={() => onOpenList("withDuration")}
+              />
+              <OrganisationListButton
+                label="Sans date 1er VAA/VA"
+                count={exerciceStats.missingVaaCount}
+                onClick={() => onOpenList("missingVaa")}
+              />
+            </div>
+          ) : null}
+        </div>
+      )}
+    </StatistiquesPanel>
+  );
+}
+
+function HabilitationDurationKpiPanel({
+  loading,
+  exerciceLabel,
+  exerciceStats,
+  cumulativeStats,
+  onOpenList,
+}: {
+  loading: boolean;
+  exerciceLabel: string;
+  exerciceStats: FilleulHabilitationDurationStatResult;
+  cumulativeStats: FilleulHabilitationDurationStatResult;
+  onOpenList: (kind: FilleulHabilitationDurationListKind) => void;
+}) {
+  const benchmarkSettings = useStatistiquesBenchmarkSettings();
+  const benchmarkStatus =
+    exerciceStats.averageMonths != null
+      ? getFilleulHabilitationDurationBenchmarkStatus(
+          exerciceStats.averageMonths,
+          benchmarkSettings
+        )
+      : null;
+
+  return (
+    <StatistiquesPanel
+      title="Délai 1ère habilitation"
+      description={`Sur l'exercice ${exerciceLabel}, durée moyenne en mois entre l'inscription et la première habilitation (MIOBSP, MIA ou Agent Lié — la date renseignée la plus proche de l'inscription), pour les consultants inscrits durant la période — désinscrits inclus.`}
+      collapsible
+      panelId="filleul_org_habilitation_duration"
+    >
+      {loading ? (
+        <ChartLoading />
+      ) : (
+        <div className="space-y-4">
+          {exerciceStats.totalEligible === 0 ? (
+            <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2.5">
+              Aucune inscription réseau sur l&apos;exercice {exerciceLabel}.
+            </p>
+          ) : exerciceStats.averageMonths == null ? (
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Exercice {exerciceLabel}
+                </p>
+                <p className="text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5 text-muted-foreground">
+                  —
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground text-right max-w-xs">
+                Aucune habilitation sur les inscriptions de l&apos;exercice.
+                <br />
+                {formatFilleulHabilitationDurationExerciceSubtitle(exerciceStats, exerciceLabel)}
+              </p>
+            </div>
+          ) : (
+            <div
+              className={cn(
+                "rounded-xl border px-4 py-3 flex items-center justify-between gap-4 transition-colors",
+                benchmarkStatus
+                  ? filleulVolumeBenchmarkStatusBoxClasses(benchmarkStatus)
+                  : "border-border/60 bg-muted/20"
+              )}
+              title={
+                benchmarkStatus
+                  ? filleulHabilitationDurationBenchmarkStatusLabel(benchmarkStatus)
+                  : undefined
+              }
+            >
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Exercice {exerciceLabel}
+                </p>
+                <p
+                  className={cn(
+                    "text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5",
+                    benchmarkStatus
+                      ? filleulVolumeBenchmarkStatusValueClasses(benchmarkStatus)
+                      : "text-primary"
+                  )}
+                >
+                  {formatFilleulHabilitationDurationMonths(exerciceStats.averageMonths)}
+                </p>
+              </div>
+              <div className="text-xs text-muted-foreground text-right max-w-xs space-y-0.5">
+                <p>
+                  {formatFilleulHabilitationDurationExerciceSubtitle(exerciceStats, exerciceLabel)}
+                </p>
+                <p className="tabular-nums">
+                  Réf. groupe{" "}
+                  {formatFilleulHabilitationDurationMonths(
+                    benchmarkSettings.groupHabilitationDurationMonths
+                  )}
+                </p>
+                <p className="font-medium text-foreground tabular-nums">
+                  {formatHabilitationDurationVsGroupBenchmarkPercent(
+                    exerciceStats.averageMonths,
+                    benchmarkSettings
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2.5">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Indice historique (cumul)
+            </p>
+            <p className="text-sm font-medium tabular-nums text-foreground mt-0.5">
+              {formatFilleulHabilitationDurationCumulativeIndex(cumulativeStats)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              Consultants réseau avec au moins une habilitation renseignée — toutes périodes,
+              indépendant de l&apos;exercice sélectionné.
+            </p>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Hors consultants sans date MIOBSP, MIA ou Agent Lié. CIF exclu. Référence groupe via
+            « Références » en haut de page.
+          </p>
+
+          {exerciceStats.totalEligible > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <OrganisationListButton
+                label="Avec habilitation"
+                count={exerciceStats.countedCount}
+                onClick={() => onOpenList("withDuration")}
+              />
+              <OrganisationListButton
+                label="Sans habilitation"
+                count={exerciceStats.missingHabilitationCount}
+                onClick={() => onOpenList("missingHabilitation")}
+              />
+            </div>
+          ) : null}
+        </div>
+      )}
+    </StatistiquesPanel>
+  );
+}
+
+function ManagerDurationKpiPanel({
+  loading,
+  exerciceLabel,
+  exerciceStats,
+  cumulativeStats,
+  onOpenList,
+}: {
+  loading: boolean;
+  exerciceLabel: string;
+  exerciceStats: FilleulManagerDurationStatResult;
+  cumulativeStats: FilleulManagerDurationStatResult;
+  onOpenList: (kind: FilleulManagerDurationListKind) => void;
+}) {
+  return (
+    <StatistiquesPanel
+      title="Délai passage Manager"
+      description={`Sur l'exercice ${exerciceLabel}, durée moyenne en mois entre l'inscription et la date de qualification Manager (dossier filleul), pour les consultants inscrits durant la période — désinscrits inclus.`}
+      collapsible
+      panelId="filleul_org_manager_duration"
+    >
+      {loading ? (
+        <ChartLoading />
+      ) : (
+        <div className="space-y-4">
+          {exerciceStats.totalEligible === 0 ? (
+            <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2.5">
+              Aucune inscription réseau sur l&apos;exercice {exerciceLabel}.
+            </p>
+          ) : exerciceStats.averageMonths == null ? (
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Exercice {exerciceLabel}
+                </p>
+                <p className="text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5 text-muted-foreground">
+                  —
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground text-right max-w-xs">
+                Aucune date qualification Manager sur les inscriptions de l&apos;exercice.
+                <br />
+                {formatFilleulManagerDurationExerciceSubtitle(exerciceStats, exerciceLabel)}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Exercice {exerciceLabel}
+                </p>
+                <p className="text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5 text-primary">
+                  {formatFilleulManagerDurationMonths(exerciceStats.averageMonths)}
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground text-right max-w-xs">
+                {formatFilleulManagerDurationExerciceSubtitle(exerciceStats, exerciceLabel)}
+              </p>
+            </div>
+          )}
+
+          <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2.5">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Indice historique (cumul)
+            </p>
+            <p className="text-sm font-medium tabular-nums text-foreground mt-0.5">
+              {formatFilleulManagerDurationCumulativeIndex(cumulativeStats)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              Consultants réseau avec date qualification Manager renseignée — toutes périodes,
+              indépendant de l&apos;exercice sélectionné.
+            </p>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Hors consultants sans « Date qualification Manager » dans le dossier. Mois calendaires
+            entre inscription et passage Manager.
+          </p>
+
+          {exerciceStats.totalEligible > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <OrganisationListButton
+                label="Avec qualification Manager"
+                count={exerciceStats.countedCount}
+                onClick={() => onOpenList("withDuration")}
+              />
+              <OrganisationListButton
+                label="Sans qualification Manager"
+                count={exerciceStats.missingManagerCount}
+                onClick={() => onOpenList("missingManager")}
+              />
+            </div>
+          ) : null}
         </div>
       )}
     </StatistiquesPanel>
@@ -609,6 +1017,45 @@ export function ContactFilleulOrganisationPanel({
     () => computeFilleulAttritionStats(contactsForStats),
     [contactsForStats]
   );
+  const vaaDurationExerciceStats = useMemo(
+    () =>
+      computeFilleulVaaDurationExerciceStats(
+        contactsForStats,
+        resolvedExerciceLabel,
+        parraineurStatsOptions
+      ),
+    [contactsForStats, resolvedExerciceLabel, parraineurStatsOptions]
+  );
+  const vaaDurationCumulativeStats = useMemo(
+    () => computeFilleulVaaDurationStats(contactsForStats, parraineurStatsOptions),
+    [contactsForStats, parraineurStatsOptions]
+  );
+  const habilitationDurationExerciceStats = useMemo(
+    () =>
+      computeFilleulHabilitationDurationExerciceStats(
+        contactsForStats,
+        resolvedExerciceLabel,
+        parraineurStatsOptions
+      ),
+    [contactsForStats, resolvedExerciceLabel, parraineurStatsOptions]
+  );
+  const habilitationDurationCumulativeStats = useMemo(
+    () => computeFilleulHabilitationDurationStats(contactsForStats, parraineurStatsOptions),
+    [contactsForStats, parraineurStatsOptions]
+  );
+  const managerDurationExerciceStats = useMemo(
+    () =>
+      computeFilleulManagerDurationExerciceStats(
+        contactsForStats,
+        resolvedExerciceLabel,
+        parraineurStatsOptions
+      ),
+    [contactsForStats, resolvedExerciceLabel, parraineurStatsOptions]
+  );
+  const managerDurationCumulativeStats = useMemo(
+    () => computeFilleulManagerDurationStats(contactsForStats, parraineurStatsOptions),
+    [contactsForStats, parraineurStatsOptions]
+  );
 
   const loadContactsSheet = useCallback(async () => {
     if (!drillDown) return [];
@@ -652,6 +1099,36 @@ export function ContactFilleulOrganisationPanel({
         )
       );
     }
+    if (drillDown.mode === "vaaDuration") {
+      return toDashboardStatContactList(
+        filterContactsForFilleulVaaDurationExerciceList(
+          contactsForStats,
+          drillDown.kind,
+          resolvedExerciceLabel,
+          parraineurStatsOptions
+        )
+      );
+    }
+    if (drillDown.mode === "habilitationDuration") {
+      return toDashboardStatContactList(
+        filterContactsForFilleulHabilitationDurationExerciceList(
+          contactsForStats,
+          drillDown.kind,
+          resolvedExerciceLabel,
+          parraineurStatsOptions
+        )
+      );
+    }
+    if (drillDown.mode === "managerDuration") {
+      return toDashboardStatContactList(
+        filterContactsForFilleulManagerDurationExerciceList(
+          contactsForStats,
+          drillDown.kind,
+          resolvedExerciceLabel,
+          parraineurStatsOptions
+        )
+      );
+    }
     return [];
   }, [contactsForStats, drillDown, statsOptions, parraineurStatsOptions, resolvedExerciceLabel]);
 
@@ -667,6 +1144,24 @@ export function ContactFilleulOrganisationPanel({
 
   const openParraineurList = useCallback((kind: FilleulParraineurListKind) => {
     setDrillDown({ mode: "parraineur", kind });
+    setContactsSheetOpen(true);
+  }, []);
+
+  const openVaaDurationList = useCallback((kind: FilleulVaaDurationListKind) => {
+    setDrillDown({ mode: "vaaDuration", kind });
+    setContactsSheetOpen(true);
+  }, []);
+
+  const openHabilitationDurationList = useCallback(
+    (kind: FilleulHabilitationDurationListKind) => {
+      setDrillDown({ mode: "habilitationDuration", kind });
+      setContactsSheetOpen(true);
+    },
+    []
+  );
+
+  const openManagerDurationList = useCallback((kind: FilleulManagerDurationListKind) => {
+    setDrillDown({ mode: "managerDuration", kind });
     setContactsSheetOpen(true);
   }, []);
 
@@ -707,6 +1202,21 @@ export function ContactFilleulOrganisationPanel({
           ? `Désinscriptions exercice ${resolvedExerciceLabel}`
           : `Cohorte au 01/08 — sans départ exercice ${resolvedExerciceLabel}`;
       }
+      if (dd.mode === "vaaDuration") {
+        return dd.kind === "withDuration"
+          ? `Inscriptions exercice — avec date 1er VAA/VA (${resolvedExerciceLabel})`
+          : `Inscriptions exercice — sans date 1er VAA/VA (${resolvedExerciceLabel})`;
+      }
+      if (dd.mode === "habilitationDuration") {
+        return dd.kind === "withDuration"
+          ? `Inscriptions exercice — avec habilitation (${resolvedExerciceLabel})`
+          : `Inscriptions exercice — sans habilitation (${resolvedExerciceLabel})`;
+      }
+      if (dd.mode === "managerDuration") {
+        return dd.kind === "withDuration"
+          ? `Inscriptions exercice — avec qualification Manager (${resolvedExerciceLabel})`
+          : `Inscriptions exercice — sans qualification Manager (${resolvedExerciceLabel})`;
+      }
       return dd.kind === "withVolume"
         ? `Consultants actifs (≥ 1 €) — exercice ${resolvedExerciceLabel}`
         : `Consultants inactifs — exercice ${resolvedExerciceLabel}`;
@@ -734,10 +1244,34 @@ export function ContactFilleulOrganisationPanel({
     if (drillDown.mode === "attrition") {
       return drillDown.count;
     }
+    if (drillDown.mode === "vaaDuration") {
+      return drillDown.kind === "withDuration"
+        ? vaaDurationExerciceStats.countedCount
+        : vaaDurationExerciceStats.missingVaaCount;
+    }
+    if (drillDown.mode === "habilitationDuration") {
+      return drillDown.kind === "withDuration"
+        ? habilitationDurationExerciceStats.countedCount
+        : habilitationDurationExerciceStats.missingHabilitationCount;
+    }
+    if (drillDown.mode === "managerDuration") {
+      return drillDown.kind === "withDuration"
+        ? managerDurationExerciceStats.countedCount
+        : managerDurationExerciceStats.missingManagerCount;
+    }
     return drillDown.kind === "withVolume"
       ? volumeStats.countedCount
       : volumeStats.missingVolumeCount;
-  }, [drillDown, managerStats, parraineurExerciceStats, bridgeStats, volumeStats]);
+  }, [
+    drillDown,
+    managerStats,
+    parraineurExerciceStats,
+    bridgeStats,
+    volumeStats,
+    vaaDurationExerciceStats,
+    habilitationDurationExerciceStats,
+    managerDurationExerciceStats,
+  ]);
 
   const sheetDescription = useMemo(() => {
     if (!drillDown || sheetCount === 0) return undefined;
@@ -756,11 +1290,47 @@ export function ContactFilleulOrganisationPanel({
         filleulAttritionExerciceStats.totalCount
       )} de la cohorte exercice ${resolvedExerciceLabel}`;
     }
+    if (drillDown.mode === "vaaDuration") {
+      const avg =
+        vaaDurationExerciceStats.averageMonths != null
+          ? formatFilleulVaaDurationMonths(vaaDurationExerciceStats.averageMonths)
+          : "—";
+      return `${sheetCount} inscription${sheetCount > 1 ? "s" : ""} exercice · délai moyen ${avg}`;
+    }
+    if (drillDown.mode === "habilitationDuration") {
+      const avg =
+        habilitationDurationExerciceStats.averageMonths != null
+          ? formatFilleulHabilitationDurationMonths(
+              habilitationDurationExerciceStats.averageMonths
+            )
+          : "—";
+      return `${sheetCount} inscription${sheetCount > 1 ? "s" : ""} exercice · délai moyen ${avg}`;
+    }
+    if (drillDown.mode === "managerDuration") {
+      const avg =
+        managerDurationExerciceStats.averageMonths != null
+          ? formatFilleulManagerDurationMonths(managerDurationExerciceStats.averageMonths)
+          : "—";
+      return `${sheetCount} inscription${sheetCount > 1 ? "s" : ""} exercice · délai moyen ${avg}`;
+    }
     if (drillDown.kind === "withVolume" && volumeStats.averageVolume != null) {
       return `${sheetCount} filleul${sheetCount > 1 ? "s" : ""} · volume moyen ${formatFilleulVolumeDisplay(volumeStats.averageVolume)}`;
     }
     return `${sheetCount} filleul${sheetCount > 1 ? "s" : ""}`;
-  }, [drillDown, sheetCount, managerStats.managerPercent, parraineurExerciceStats.parraineurPercent, parraineurCumulativeStats.parraineurPercent, bridgeStats.bridgePercent, filleulAttritionExerciceStats.totalCount, volumeStats.averageVolume, resolvedExerciceLabel]);
+  }, [
+    drillDown,
+    sheetCount,
+    managerStats.managerPercent,
+    parraineurExerciceStats.parraineurPercent,
+    parraineurCumulativeStats.parraineurPercent,
+    bridgeStats.bridgePercent,
+    filleulAttritionExerciceStats.totalCount,
+    volumeStats.averageVolume,
+    vaaDurationExerciceStats.averageMonths,
+    habilitationDurationExerciceStats.averageMonths,
+    managerDurationExerciceStats.averageMonths,
+    resolvedExerciceLabel,
+  ]);
 
   return (
     <>
@@ -790,6 +1360,27 @@ export function ContactFilleulOrganisationPanel({
           exerciceStats={parraineurExerciceStats}
           cumulativeStats={parraineurCumulativeStats}
           onOpenList={openParraineurList}
+        />
+        <VaaDurationKpiPanel
+          loading={exerciceKpisLoading}
+          exerciceLabel={resolvedExerciceLabel}
+          exerciceStats={vaaDurationExerciceStats}
+          cumulativeStats={vaaDurationCumulativeStats}
+          onOpenList={openVaaDurationList}
+        />
+        <HabilitationDurationKpiPanel
+          loading={exerciceKpisLoading}
+          exerciceLabel={resolvedExerciceLabel}
+          exerciceStats={habilitationDurationExerciceStats}
+          cumulativeStats={habilitationDurationCumulativeStats}
+          onOpenList={openHabilitationDurationList}
+        />
+        <ManagerDurationKpiPanel
+          loading={exerciceKpisLoading}
+          exerciceLabel={resolvedExerciceLabel}
+          exerciceStats={managerDurationExerciceStats}
+          cumulativeStats={managerDurationCumulativeStats}
+          onOpenList={openManagerDurationList}
         />
         <BridgeKpiPanel loading={loading} stats={bridgeStats} onOpenList={openBridgeList} />
         <div className="lg:col-span-2">

@@ -2,10 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_GROUP_ACTIVE_CONSULTANT_VOLUME_BENCHMARK_EUROS,
   DEFAULT_GROUP_SPONSOR_RATE_BENCHMARK_PERCENT,
+  DEFAULT_GROUP_VAA_DURATION_BENCHMARK_MONTHS,
+  DEFAULT_GROUP_HABILITATION_DURATION_BENCHMARK_MONTHS,
   defaultStatistiquesBenchmarkSettings,
+  formatHabilitationDurationVsGroupBenchmarkPercent,
   formatSponsorRateVsGroupBenchmarkPercent,
+  formatVaaDurationVsGroupBenchmarkPercent,
   formatVolumeVsGroupBenchmarkPercent,
+  getFilleulHabilitationDurationBenchmarkStatus,
   getFilleulSponsorRateBenchmarkStatus,
+  getFilleulVaaDurationBenchmarkStatus,
   getFilleulVolumeBenchmarkStatus,
   loadStatistiquesBenchmarkSettings,
   saveStatistiquesBenchmarkSettings,
@@ -36,6 +42,10 @@ describe("statistiques-benchmark-settings", () => {
       DEFAULT_GROUP_ACTIVE_CONSULTANT_VOLUME_BENCHMARK_EUROS
     );
     expect(settings.groupSponsorRatePercent).toBe(DEFAULT_GROUP_SPONSOR_RATE_BENCHMARK_PERCENT);
+    expect(settings.groupVaaDurationMonths).toBe(DEFAULT_GROUP_VAA_DURATION_BENCHMARK_MONTHS);
+    expect(settings.groupHabilitationDurationMonths).toBe(
+      DEFAULT_GROUP_HABILITATION_DURATION_BENCHMARK_MONTHS
+    );
     expect(settings.nearGroupBenchmarkRatio).toBe(0.8);
   });
 
@@ -43,11 +53,15 @@ describe("statistiques-benchmark-settings", () => {
     saveStatistiquesBenchmarkSettings({
       groupActiveConsultantVolumeEuros: 600_000,
       groupSponsorRatePercent: 30,
+      groupVaaDurationMonths: 12,
+      groupHabilitationDurationMonths: 7,
       nearGroupBenchmarkRatio: 0.75,
     });
     const loaded = loadStatistiquesBenchmarkSettings();
     expect(loaded.groupActiveConsultantVolumeEuros).toBe(600_000);
     expect(loaded.groupSponsorRatePercent).toBe(30);
+    expect(loaded.groupVaaDurationMonths).toBe(12);
+    expect(loaded.groupHabilitationDurationMonths).toBe(7);
     expect(loaded.nearGroupBenchmarkRatio).toBe(0.75);
   });
 
@@ -75,5 +89,23 @@ describe("statistiques-benchmark-settings", () => {
     expect(getFilleulSponsorRateBenchmarkStatus(21.3, settings)).toBe("near_group");
     expect(getFilleulSponsorRateBenchmarkStatus(20, settings)).toBe("below_group");
     expect(formatSponsorRateVsGroupBenchmarkPercent(30, settings)).toBe("+13 % vs réf.");
+  });
+
+  it("classe le délai VAA/VA vs référence groupe (plus court = mieux)", () => {
+    const settings = defaultStatistiquesBenchmarkSettings();
+    expect(getFilleulVaaDurationBenchmarkStatus(12, settings)).toBe("above_group");
+    expect(getFilleulVaaDurationBenchmarkStatus(14.62, settings)).toBe("above_group");
+    expect(getFilleulVaaDurationBenchmarkStatus(16, settings)).toBe("near_group");
+    expect(getFilleulVaaDurationBenchmarkStatus(18.275, settings)).toBe("near_group");
+    expect(getFilleulVaaDurationBenchmarkStatus(19, settings)).toBe("below_group");
+    expect(formatVaaDurationVsGroupBenchmarkPercent(12, settings)).toBe("-18 % vs réf.");
+  });
+
+  it("classe le délai habilitation vs référence groupe (plus court = mieux)", () => {
+    const settings = defaultStatistiquesBenchmarkSettings();
+    expect(getFilleulHabilitationDurationBenchmarkStatus(7, settings)).toBe("above_group");
+    expect(getFilleulHabilitationDurationBenchmarkStatus(8.7, settings)).toBe("above_group");
+    expect(getFilleulHabilitationDurationBenchmarkStatus(10, settings)).toBe("near_group");
+    expect(formatHabilitationDurationVsGroupBenchmarkPercent(7, settings)).toBe("-20 % vs réf.");
   });
 });
