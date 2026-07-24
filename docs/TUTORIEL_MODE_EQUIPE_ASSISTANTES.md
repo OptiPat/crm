@@ -3,6 +3,28 @@
 Ce guide décrit la configuration d'un conseiller et de deux assistantes, chacune avec son propre
 compte Microsoft 365 et sa propre installation du CRM.
 
+## Comment utiliser cette documentation
+
+Ce document est le guide technique complet destiné à l'administrateur Microsoft 365 et au
+conseiller. Deux supports courts l'accompagnent :
+
+- [`FICHE_CONFIGURATION_MODE_EQUIPE.md`](FICHE_CONFIGURATION_MODE_EQUIPE.md) : fiche à compléter
+  avant l'installation ;
+- [`FICHE_BRANCHEMENT_ASSISTANTE.md`](FICHE_BRANCHEMENT_ASSISTANTE.md) : procédure à remettre à
+  chaque assistante ;
+- [`CHECKLIST_PILOTE_MODE_EQUIPE.md`](CHECKLIST_PILOTE_MODE_EQUIPE.md) : recette GO/STOP avant
+  l'utilisation de données réelles.
+
+Ordre recommandé :
+
+1. l'administrateur et le conseiller remplissent la fiche de configuration ;
+2. ils suivent les sections 2 à 12 de ce guide ;
+3. chaque assistante suit uniquement sa fiche de branchement ;
+4. les trois personnes exécutent ensemble la checklist pilote.
+
+Les intitulés en gras correspondent aux libellés du CRM. Les écrans Microsoft 365 peuvent varier
+selon le tenant et la langue ; les chemins de navigation et les résultats attendus font foi.
+
 ## 1. Répartition des tâches
 
 - **Administrateur Microsoft 365** : comptes, MFA, groupes Entra, application Entra, site
