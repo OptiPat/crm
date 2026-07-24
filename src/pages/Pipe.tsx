@@ -434,14 +434,23 @@ export function Pipe() {
       return;
     }
     const pipe = pipes.find((p) => p.id === pipeId);
-    if (!pipe) {
-      toast.warning("Suivi introuvable — actualisez la page.");
-      setPanelMode("empty");
-      setSelectedPipe(null);
+    if (pipe) {
+      setSelectedPipe(pipe);
+      setPanelMode("view");
       return;
     }
-    setSelectedPipe(pipe);
-    setPanelMode("view");
+    // Suivi archivé hors liste active : ouvrir quand même (acte Stellium encore ouvert).
+    void (async () => {
+      try {
+        const archivedOrMissing = await getPipeById(pipeId);
+        setSelectedPipe(archivedOrMissing);
+        setPanelMode("view");
+      } catch {
+        toast.warning("Suivi introuvable — actualisez la page.");
+        setPanelMode("empty");
+        setSelectedPipe(null);
+      }
+    })();
   };
 
   const handleDismissPlacementOperation = async (row: PlacementOperationWithContact) => {
@@ -523,6 +532,11 @@ export function Pipe() {
         setSelectedPipe(null);
         setPanelMode("empty");
       }
+    }
+    // Rechargement explicite avec la valeur demandée (évite une course sur le closure showArchived).
+    void loadPipes({ includeArchived: value });
+    if (pipeSectionNeedsPlacementBoard(section)) {
+      void loadPlacementBoardRows({ includeArchived: value, silent: true });
     }
   };
 

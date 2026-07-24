@@ -1471,6 +1471,66 @@ mod tests {
     }
 
     #[test]
+    fn archive_pipe_blocked_while_open_placement_ops_remain() {
+        use crate::database::pipe::PIPE_TYPE_ACTE_GESTION;
+
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        db.migrate_pipes_table().unwrap();
+        let contact = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let suivi = db
+            .create_pipe(super::super::models::NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
+                parent_pipe_id: None,
+                titre: "Suivi multi-actes".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+        let arbitrage = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(suivi.id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_ARBITRAGE.into(),
+                product_label: Some("Cristalliance Evoluvie".into()),
+                stellium_label: Some("Arbitrage libre".into()),
+                ..Default::default()
+            })
+            .unwrap();
+        let vp = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(suivi.id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_VERSEMENT.into(),
+                product_label: Some("Cristalliance Evoluvie".into()),
+                stellium_label: Some("Versements programmés : Modification".into()),
+                ..Default::default()
+            })
+            .unwrap();
+
+        db.dismiss_placement_operation(arbitrage.id).unwrap();
+        let blocked = db.archive_pipe(suivi.id);
+        assert!(blocked.is_err(), "archivage bloqué tant que le VP est ouvert");
+
+        db.dismiss_placement_operation(vp.id).unwrap();
+        let archived = db.archive_pipe(suivi.id).unwrap();
+        assert!(archived.archived_at.unwrap() > 0);
+
+        let active = db.list_placement_operations_with_contacts(false).unwrap();
+        assert!(
+            active.iter().all(|r| r.operation.pipe_id != Some(suivi.id)),
+            "actes d'un pipe archivé masqués hors mode Voir archivés"
+        );
+        let with_archived = db.list_placement_operations_with_contacts(true).unwrap();
+        assert!(with_archived.iter().any(|r| r.operation.id == vp.id));
+    }
+
+    #[test]
     fn reserve_placement_client_notification_is_exclusive() {
         let db = super::super::Database::open_in_memory_for_tests().unwrap();
         db.migrate_placement_operations_table().unwrap();
