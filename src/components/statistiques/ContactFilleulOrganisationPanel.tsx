@@ -113,6 +113,16 @@ import {
   type FilleulManagerDurationListKind,
   type FilleulManagerDurationStatResult,
 } from "@/lib/statistiques/filleul-manager-duration-stats";
+import {
+  computeFilleulParrainageDurationExerciceStats,
+  computeFilleulParrainageDurationStats,
+  filterContactsForFilleulParrainageDurationExerciceList,
+  formatFilleulParrainageDurationCumulativeIndex,
+  formatFilleulParrainageDurationExerciceSubtitle,
+  formatFilleulParrainageDurationMonths,
+  type FilleulParrainageDurationListKind,
+  type FilleulParrainageDurationStatResult,
+} from "@/lib/statistiques/filleul-parrainage-duration-stats";
 
 function OrganisationListButton({
   label,
@@ -154,6 +164,7 @@ type OrganisationDrillDown =
   | { mode: "vaaDuration"; kind: FilleulVaaDurationListKind }
   | { mode: "habilitationDuration"; kind: FilleulHabilitationDurationListKind }
   | { mode: "managerDuration"; kind: FilleulManagerDurationListKind }
+  | { mode: "parrainageDuration"; kind: FilleulParrainageDurationListKind }
   | { mode: "bridge"; kind: FilleulBridgeListKind }
   | { mode: "attrition"; kind: "active" | "attrited"; count: number };
 
@@ -784,6 +795,105 @@ function ParraineurKpiPanel({
   );
 }
 
+function ParrainageDurationKpiPanel({
+  loading,
+  exerciceLabel,
+  exerciceStats,
+  cumulativeStats,
+  onOpenList,
+}: {
+  loading: boolean;
+  exerciceLabel: string;
+  exerciceStats: FilleulParrainageDurationStatResult;
+  cumulativeStats: FilleulParrainageDurationStatResult;
+  onOpenList: (kind: FilleulParrainageDurationListKind) => void;
+}) {
+  return (
+    <StatistiquesPanel
+      title="Délai avant 1er parrainage"
+      description={`Sur l'exercice ${exerciceLabel}, durée moyenne en mois entre l'inscription du consultant et la date d'inscription de son premier filleul parrainé, pour les consultants inscrits durant la période — désinscrits inclus.`}
+      collapsible
+      panelId="filleul_org_parrainage_duration"
+    >
+      {loading ? (
+        <ChartLoading />
+      ) : (
+        <div className="space-y-4">
+          {exerciceStats.totalEligible === 0 ? (
+            <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2.5">
+              Aucune inscription réseau sur l&apos;exercice {exerciceLabel}.
+            </p>
+          ) : exerciceStats.averageMonths == null ? (
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Exercice {exerciceLabel}
+                </p>
+                <p className="text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5 text-muted-foreground">
+                  —
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground text-right max-w-xs">
+                Aucun parrainage enregistré sur les inscriptions de l&apos;exercice.
+                <br />
+                {formatFilleulParrainageDurationExerciceSubtitle(exerciceStats, exerciceLabel)}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Exercice {exerciceLabel}
+                </p>
+                <p className="text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5 text-primary">
+                  {formatFilleulParrainageDurationMonths(exerciceStats.averageMonths)}
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground text-right max-w-xs">
+                {formatFilleulParrainageDurationExerciceSubtitle(exerciceStats, exerciceLabel)}
+              </p>
+            </div>
+          )}
+
+          <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2.5">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Indice historique (cumul)
+            </p>
+            <p className="text-sm font-medium tabular-nums text-foreground mt-0.5">
+              {formatFilleulParrainageDurationCumulativeIndex(cumulativeStats)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              Consultants réseau ayant parrainé au moins une fois — toutes périodes, indépendant de
+              l&apos;exercice sélectionné.
+            </p>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Hors consultants sans filleul parrainé inscrit. Date du 1er parrainage = inscription la
+            plus ancienne d&apos;un filleul parrainé. Mois calendaires entre inscription du
+            consultant et ce premier parrainage.
+          </p>
+
+          {exerciceStats.totalEligible > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <OrganisationListButton
+                label="Avec parrainage"
+                count={exerciceStats.countedCount}
+                onClick={() => onOpenList("withDuration")}
+              />
+              <OrganisationListButton
+                label="Sans parrainage"
+                count={exerciceStats.missingParrainageCount}
+                onClick={() => onOpenList("missingParrainage")}
+              />
+            </div>
+          ) : null}
+        </div>
+      )}
+    </StatistiquesPanel>
+  );
+}
+
 function BridgeKpiPanel({
   loading,
   stats,
@@ -1056,6 +1166,19 @@ export function ContactFilleulOrganisationPanel({
     () => computeFilleulManagerDurationStats(contactsForStats, parraineurStatsOptions),
     [contactsForStats, parraineurStatsOptions]
   );
+  const parrainageDurationExerciceStats = useMemo(
+    () =>
+      computeFilleulParrainageDurationExerciceStats(
+        contactsForStats,
+        resolvedExerciceLabel,
+        parraineurStatsOptions
+      ),
+    [contactsForStats, resolvedExerciceLabel, parraineurStatsOptions]
+  );
+  const parrainageDurationCumulativeStats = useMemo(
+    () => computeFilleulParrainageDurationStats(contactsForStats, parraineurStatsOptions),
+    [contactsForStats, parraineurStatsOptions]
+  );
 
   const loadContactsSheet = useCallback(async () => {
     if (!drillDown) return [];
@@ -1129,6 +1252,16 @@ export function ContactFilleulOrganisationPanel({
         )
       );
     }
+    if (drillDown.mode === "parrainageDuration") {
+      return toDashboardStatContactList(
+        filterContactsForFilleulParrainageDurationExerciceList(
+          contactsForStats,
+          drillDown.kind,
+          resolvedExerciceLabel,
+          parraineurStatsOptions
+        )
+      );
+    }
     return [];
   }, [contactsForStats, drillDown, statsOptions, parraineurStatsOptions, resolvedExerciceLabel]);
 
@@ -1162,6 +1295,11 @@ export function ContactFilleulOrganisationPanel({
 
   const openManagerDurationList = useCallback((kind: FilleulManagerDurationListKind) => {
     setDrillDown({ mode: "managerDuration", kind });
+    setContactsSheetOpen(true);
+  }, []);
+
+  const openParrainageDurationList = useCallback((kind: FilleulParrainageDurationListKind) => {
+    setDrillDown({ mode: "parrainageDuration", kind });
     setContactsSheetOpen(true);
   }, []);
 
@@ -1217,6 +1355,11 @@ export function ContactFilleulOrganisationPanel({
           ? `Inscriptions exercice — avec qualification Manager (${resolvedExerciceLabel})`
           : `Inscriptions exercice — sans qualification Manager (${resolvedExerciceLabel})`;
       }
+      if (dd.mode === "parrainageDuration") {
+        return dd.kind === "withDuration"
+          ? `Inscriptions exercice — avec parrainage (${resolvedExerciceLabel})`
+          : `Inscriptions exercice — sans parrainage (${resolvedExerciceLabel})`;
+      }
       return dd.kind === "withVolume"
         ? `Consultants actifs (≥ 1 €) — exercice ${resolvedExerciceLabel}`
         : `Consultants inactifs — exercice ${resolvedExerciceLabel}`;
@@ -1259,6 +1402,11 @@ export function ContactFilleulOrganisationPanel({
         ? managerDurationExerciceStats.countedCount
         : managerDurationExerciceStats.missingManagerCount;
     }
+    if (drillDown.mode === "parrainageDuration") {
+      return drillDown.kind === "withDuration"
+        ? parrainageDurationExerciceStats.countedCount
+        : parrainageDurationExerciceStats.missingParrainageCount;
+    }
     return drillDown.kind === "withVolume"
       ? volumeStats.countedCount
       : volumeStats.missingVolumeCount;
@@ -1271,6 +1419,7 @@ export function ContactFilleulOrganisationPanel({
     vaaDurationExerciceStats,
     habilitationDurationExerciceStats,
     managerDurationExerciceStats,
+    parrainageDurationExerciceStats,
   ]);
 
   const sheetDescription = useMemo(() => {
@@ -1313,6 +1462,13 @@ export function ContactFilleulOrganisationPanel({
           : "—";
       return `${sheetCount} inscription${sheetCount > 1 ? "s" : ""} exercice · délai moyen ${avg}`;
     }
+    if (drillDown.mode === "parrainageDuration") {
+      const avg =
+        parrainageDurationExerciceStats.averageMonths != null
+          ? formatFilleulParrainageDurationMonths(parrainageDurationExerciceStats.averageMonths)
+          : "—";
+      return `${sheetCount} inscription${sheetCount > 1 ? "s" : ""} exercice · délai moyen ${avg}`;
+    }
     if (drillDown.kind === "withVolume" && volumeStats.averageVolume != null) {
       return `${sheetCount} filleul${sheetCount > 1 ? "s" : ""} · volume moyen ${formatFilleulVolumeDisplay(volumeStats.averageVolume)}`;
     }
@@ -1329,6 +1485,7 @@ export function ContactFilleulOrganisationPanel({
     vaaDurationExerciceStats.averageMonths,
     habilitationDurationExerciceStats.averageMonths,
     managerDurationExerciceStats.averageMonths,
+    parrainageDurationExerciceStats.averageMonths,
     resolvedExerciceLabel,
   ]);
 
@@ -1360,6 +1517,13 @@ export function ContactFilleulOrganisationPanel({
           exerciceStats={parraineurExerciceStats}
           cumulativeStats={parraineurCumulativeStats}
           onOpenList={openParraineurList}
+        />
+        <ParrainageDurationKpiPanel
+          loading={exerciceKpisLoading}
+          exerciceLabel={resolvedExerciceLabel}
+          exerciceStats={parrainageDurationExerciceStats}
+          cumulativeStats={parrainageDurationCumulativeStats}
+          onOpenList={openParrainageDurationList}
         />
         <VaaDurationKpiPanel
           loading={exerciceKpisLoading}

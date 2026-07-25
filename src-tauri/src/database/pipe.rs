@@ -599,18 +599,17 @@ impl super::Database {
                 "impossible d'archiver un pipe avec des éléments rattachés actifs".into(),
             ));
         }
-        // Même logique que les affaires enfants : un acte Stellium encore ouvert
-        // (ex. versements programmés) ne doit pas disparaître avec l'archivage du suivi.
-        let open_placements: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM placement_operations
-             WHERE pipe_id = ?1
-               AND (dismissed_at IS NULL OR dismissed_at <= 0)",
-            params![id],
-            |row| row.get(0),
-        )?;
-        if open_placements > 0 {
+        // Acte Stellium encore en cours sur ce suivi (brouillon, attente partenaire, NC, mail client).
+        let blocking = self
+            .list_placement_operations_for_pipe(id)?
+            .iter()
+            .filter(|op| {
+                crate::database::placement_operations::placement_operation_blocks_pipe_archive(op)
+            })
+            .count();
+        if blocking > 0 {
             return Err(rusqlite::Error::InvalidParameterName(
-                "impossible d'archiver : des actes Stellium sont encore ouverts — retirez-les du tableau (ou terminez-les) d'abord".into(),
+                "impossible d'archiver : des actes Stellium sont encore en cours — terminez-les ou retirez-les du tableau d'abord".into(),
             ));
         }
         let now = now_unix();

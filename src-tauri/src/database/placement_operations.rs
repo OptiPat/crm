@@ -129,6 +129,47 @@ pub fn placement_operation_is_dismissed(op: &super::models::PlacementOperation) 
     op.dismissed_at.map(|t| t > 0).unwrap_or(false)
 }
 
+fn placement_ts(value: Option<i64>) -> bool {
+    value.map(|t| t > 0).unwrap_or(false)
+}
+
+/// Brouillon suivi : acte sur le pipe, pas encore confirmé envoyé chez Stellium.
+pub fn placement_operation_is_suivi_draft(op: &super::models::PlacementOperation) -> bool {
+    if placement_operation_is_dismissed(op) {
+        return false;
+    }
+    if op.status != STATUS_PENDING {
+        return false;
+    }
+    if !op.pipe_id.map(|id| id > 0).unwrap_or(false) {
+        return false;
+    }
+    if placement_operation_is_pipe_tracked(op) {
+        return false;
+    }
+    !placement_ts(op.email_received_at)
+}
+
+/// Bloque l'archivage du pipe suivi : acte encore en cours (pas un acte terminé non retiré).
+pub fn placement_operation_blocks_pipe_archive(op: &super::models::PlacementOperation) -> bool {
+    if placement_operation_is_dismissed(op) {
+        return false;
+    }
+    if op.status == STATUS_NON_CONFORME {
+        return true;
+    }
+    if placement_operation_is_suivi_draft(op) {
+        return true;
+    }
+    if op.status == STATUS_PENDING && placement_operation_is_pipe_tracked(op) {
+        return true;
+    }
+    if placement_conforme_needs_client_notify(op) {
+        return true;
+    }
+    false
+}
+
 pub fn normalize_stellium_label(value: &str) -> String {
     value
         .trim()
@@ -1528,6 +1569,116 @@ mod tests {
         );
         let with_archived = db.list_placement_operations_with_contacts(true).unwrap();
         assert!(with_archived.iter().any(|r| r.operation.id == vp.id));
+    }
+
+    #[test]
+    fn archive_pipe_allowed_when_placement_finished_without_dismiss() {
+        use crate::database::pipe::PIPE_TYPE_ACTE_GESTION;
+        use crate::database::pipe_timeline::TIMELINE_APPEL;
+
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        db.migrate_pipes_table().unwrap();
+        db.migrate_pipe_timeline_table().unwrap();
+        let contact = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let suivi = db
+            .create_pipe(super::super::models::NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
+                parent_pipe_id: None,
+                titre: "Suivi terminé".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+        let entry = db
+            .create_pipe_timeline_entry(super::super::models::NewPipeTimelineEntry {
+                pipe_id: suivi.id,
+                entry_type: TIMELINE_APPEL.into(),
+                titre: Some("Arbitrage libre".into()),
+                contenu: None,
+                occurred_at: Some(1_700_000_000),
+            })
+            .unwrap();
+        let op = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(suivi.id),
+                pipe_timeline_entry_id: Some(entry.id),
+                operation_type: OP_ARBITRAGE.into(),
+                product_label: Some("Cristalliance Evoluvie".into()),
+                stellium_label: Some("Arbitrage libre".into()),
+                ..Default::default()
+            })
+            .unwrap();
+        let conforme = db
+            .update_placement_operation_status(op.id, STATUS_CONFORME)
+            .unwrap();
+        assert!(db.reserve_placement_client_notification(conforme.id).unwrap());
+        assert!(!placement_operation_blocks_pipe_archive(
+            &db.get_placement_operation_by_id(conforme.id).unwrap()
+        ));
+
+        let archived = db.archive_pipe(suivi.id).unwrap();
+        assert!(archived.archived_at.unwrap() > 0);
+        let refreshed = db.get_placement_operation_by_id(conforme.id).unwrap();
+        assert!(refreshed.dismissed_at.is_none() || refreshed.dismissed_at.unwrap() <= 0);
+    }
+
+    #[test]
+    fn placement_operation_blocks_pipe_archive_matches_workflow_states() {
+        let mut op = super::super::models::PlacementOperation {
+            id: 1,
+            contact_id: 1,
+            pipe_id: Some(10),
+            pipe_timeline_entry_id: None,
+            operation_type: OP_ARBITRAGE.into(),
+            product_label: None,
+            stellium_label: Some("Arbitrage libre".into()),
+            status: STATUS_PENDING.into(),
+            gmail_message_id: None,
+            email_subject: None,
+            email_received_at: None,
+            created_at: 1,
+            updated_at: 1,
+            client_notified_at: None,
+            non_conforme_at: None,
+            partner_resent_at: None,
+            dismissed_at: None,
+            montant_centimes: None,
+            type_produit: None,
+            investissement_id: None,
+            pv_manual: None,
+        };
+
+        assert!(placement_operation_blocks_pipe_archive(&op), "brouillon suivi");
+
+        op.pipe_timeline_entry_id = Some(99);
+        assert!(
+            placement_operation_blocks_pipe_archive(&op),
+            "en attente partenaire"
+        );
+
+        op.status = STATUS_CONFORME.into();
+        assert!(
+            placement_operation_blocks_pipe_archive(&op),
+            "conforme sans mail client"
+        );
+
+        op.client_notified_at = Some(1_700_000_100);
+        assert!(
+            !placement_operation_blocks_pipe_archive(&op),
+            "terminé (mail client) sans retrait"
+        );
+
+        op.status = STATUS_NON_CONFORME.into();
+        op.client_notified_at = None;
+        assert!(placement_operation_blocks_pipe_archive(&op), "non conforme");
+
+        op.dismissed_at = Some(1_700_000_200);
+        assert!(!placement_operation_blocks_pipe_archive(&op), "retiré du tableau");
     }
 
     #[test]

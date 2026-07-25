@@ -22,6 +22,10 @@ function documentInitOptions(bytes: Uint8Array) {
     data: bytes,
     useWorkerFetch: false,
     isEvalSupported: false,
+    // WebKit/macOS bloque ou perturbe souvent WebAssembly.instantiate sous CSP stricte
+    // (JBIG2/OpenJPEG/qcms/fonctions PostScript) → on force les repli JS de pdf.js pour
+    // un comportement identique Windows/Mac plutôt que de dépendre du wasm + fallback.
+    useWasm: false,
     standardFontDataUrl: `${PDFJS_ASSET_BASE}standard_fonts/`,
     cMapUrl: `${PDFJS_ASSET_BASE}cmaps/`,
     wasmUrl: `${PDFJS_ASSET_BASE}wasm/`,

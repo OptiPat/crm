@@ -23,7 +23,7 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "test:rust": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/test-rust.ps1",
     "test:all": "npm run test && npm run test:rust",
     "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File ./verify.ps1",
     "verify:quick": "powershell -NoProfile -ExecutionPolicy Bypass -File ./verify.ps1 -Quick",

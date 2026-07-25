@@ -26,9 +26,12 @@ function extractPageText(textContent: { items: unknown[] }): string {
 export async function extractTextFromPDFPath(
   filePath: string
 ): Promise<ExtractedText> {
+  let stage = "lecture du fichier";
   try {
     // Lire le fichier via Tauri
     const uint8Array = await readPdfFile(filePath);
+
+    stage = "chargement du document";
     const pdf = await loadPdfDocument(uint8Array).promise;
 
     let fullText = "";
@@ -36,11 +39,13 @@ export async function extractTextFromPDFPath(
 
     // Extraire le texte de chaque page
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      stage = `page ${pageNum}/${numPages}`;
       const page = await pdf.getPage(pageNum);
       const textContent = await page.getTextContent();
       fullText += extractPageText(textContent) + "\n\n";
     }
 
+    stage = "métadonnées";
     // Extraire les métadonnées
     const metadata = await pdf.getMetadata();
     const info = metadata.info as Record<string, string> | undefined;
@@ -62,9 +67,9 @@ export async function extractTextFromPDFPath(
       },
     };
   } catch (error) {
-    console.error("Erreur lors de l'extraction du PDF:", error);
+    console.error(`Erreur lors de l'extraction du PDF (étape: ${stage}):`, error);
     throw new Error(
-      `Impossible d'extraire le texte du PDF: ${
+      `Impossible d'extraire le texte du PDF [${stage}]: ${
         error instanceof Error ? error.message : String(error)
       }`
     );

@@ -38,6 +38,7 @@ Arbre de décision complet : **`verification-automatique.mdc`** (source canoniqu
 | Vitest watch | `npm run test:watch` |
 | Un fichier | `npx vitest run src/lib/etiquettes/etiquettes-filter.test.ts` |
 | Rust (intégration SQLite mémoire) | `npm run test:rust` |
+| Rust (filtre) | `.\scripts\test-rust.ps1 nom_du_test` |
 | Les deux | `npm run test:all` |
 | TypeScript seul | `npx tsc --noEmit` |
 
@@ -59,6 +60,9 @@ Ne pas lancer plusieurs `dev.ps1` en parallèle.
 cd D:\crm\src-tauri; cargo test
 cd D:\crm\src-tauri; cargo build
 ```
+
+- **Tests Rust** : préférer `npm run test:rust` ou `.\scripts\test-rust.ps1` (target `target-cargo-verify` à la racine, comme `verify.ps1`) — compatible avec `dev.ps1` lancé.
+- **Ne pas** définir `CARGO_TARGET_DIR` sous `src-tauri/` (ex. `target-agent-test*`) : conflits, artefacts non ignorés, cache incrémental corrompu.
 
 Éviter `cargo clean` sauf dernier recours (rebuild long).
 
