@@ -1,6 +1,6 @@
 [package]
 name = "patrimoine-crm"
-version = "0.4.91"
+version = "0.4.92"
 description = "CRM Desktop pour Conseillers en Gestion de Patrimoine"
 authors = ["you"]
 edition = "2021"
@@ -41,7 +41,7 @@ atomic-write-file = "0.3.0"
 open = { version = "5.4.0", features = ["shellexecute-on-windows"] }
 
 [profile.dev]
-# debug = 0 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©vite LNK1318 ; plusieurs unitÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©s rÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©duisent le pic mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©moire LLVM sous Windows.
+# debug = 0 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â©vite LNK1318 ; plusieurs unitÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â©s rÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â©duisent le pic mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â©moire LLVM sous Windows.
 incremental = true
 debug = 0
 codegen-units = 16
