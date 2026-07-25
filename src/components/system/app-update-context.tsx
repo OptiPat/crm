@@ -34,6 +34,17 @@ interface AppUpdateContextValue {
 
 const AppUpdateContext = createContext<AppUpdateContextValue | null>(null);
 
+function formatUpdateCheckError(detail: string): string {
+  const lower = detail.toLowerCase();
+  if (lower.includes("could not fetch a valid release json")) {
+    return "fichier de mise à jour indisponible (publication en cours ou réseau). Réessayez dans quelques minutes, ou téléchargez le DMG sur GitHub Releases.";
+  }
+  if (lower.includes("was not found in the response `platforms`")) {
+    return "cette version Mac n'est pas encore publiée pour la mise à jour automatique. Téléchargez le DMG sur GitHub Releases.";
+  }
+  return detail;
+}
+
 export function useAppUpdate() {
   const ctx = useContext(AppUpdateContext);
   if (!ctx) {
@@ -89,7 +100,7 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
         console.error("Vérification MAJ:", error);
         if (!silent) {
           const detail = error instanceof Error ? error.message : String(error);
-          toast.error(`Impossible de vérifier les mises à jour : ${detail}`);
+          toast.error(`Impossible de vérifier les mises à jour : ${formatUpdateCheckError(detail)}`);
         }
         return false;
       }

@@ -101,7 +101,11 @@ Puis release GitHub à la main (voir ancienne procédure ci-dessous).
 
 **macOS** : l’updater in-app utilise le **`.app.tar.gz`**, pas le `.dmg` (install initiale seulement). Sans entrée `darwin-aarch64` dans `latest.json`, le bouton « Rechercher mise à jour » échoue sur Mac.
 
-Le workflow CI (`release.yml`) génère ce fichier via `scripts/ci-merge-latest-json.mjs` après les builds Windows et macOS.
+Le workflow CI (`release.yml`) génère ce fichier via `scripts/ci-merge-latest-json.mjs` :
+1. **Dès le build macOS** : `latest.json` avec entrées `darwin-*` (MAJ auto Mac disponible tout de suite).
+2. **Après le build Windows** : régénération complète (Windows + macOS).
+
+**Fenêtre sans `latest.json`** : si la release GitHub est marquée « Latest » avant l'upload du JSON (~20 min sans correctif), le bouton « Rechercher mise à jour » renvoie *could not fetch a valid release JSON* — réessayer plus tard ou installer le DMG.
 
 La `signature` est le **contenu texte** du fichier `.sig` généré au build, pas une URL.
 

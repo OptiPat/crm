@@ -100,6 +100,17 @@ jobs:
           tauriScript: npm run tauri
           args: --target universal-apple-darwin --bundles app,dmg
 
+      # latest.json macOS dès la fin du build : évite 404 sur /releases/latest/download/
+      # pendant le build Windows (~20 min). finalize-updater-json le régénère ensuite complet.
+      - name: Publier latest.json macOS (MAJ auto Mac avant build Windows)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          node scripts/ci-merge-latest-json.mjs
+          gh release upload "${{ github.ref_name }}" latest.json --clobber
+
   publish-windows:
     needs: publish-macos
     runs-on: windows-latest
