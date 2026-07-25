@@ -2507,7 +2507,7 @@ mod database_integration_tests {
         let contact_etiq = db
             .create_contact(NewContact {
                 email: Some("akim@example.com".into()),
-                ..sample_contact("SEKKAI", "Akim")
+                ..sample_contact("Faure", "Akim")
             })
             .unwrap();
         db.attribuer_etiquette(contact_etiq.id.unwrap(), etiqu.id, Some("MANUEL".into()), None)
@@ -2516,7 +2516,7 @@ mod database_integration_tests {
         let contact_scpi = db
             .create_contact(NewContact {
                 email: Some("nicolas@example.com".into()),
-                ..sample_contact("CHOUX", "Nicolas")
+                ..sample_contact("Girard", "Nicolas")
             })
             .unwrap();
         let scpi_cid = contact_scpi.id.unwrap();
@@ -2642,7 +2642,7 @@ mod database_integration_tests {
         let contact_etiq = db
             .create_contact(NewContact {
                 email: Some("akim@example.com".into()),
-                ..sample_contact("SEKKAI", "Akim")
+                ..sample_contact("Faure", "Akim")
             })
             .unwrap();
         db.attribuer_etiquette(contact_etiq.id.unwrap(), etiqu.id, Some("MANUEL".into()), None)
@@ -2651,7 +2651,7 @@ mod database_integration_tests {
         let contact_scpi = db
             .create_contact(NewContact {
                 email: Some("nicolas@example.com".into()),
-                ..sample_contact("CHOUX", "Nicolas")
+                ..sample_contact("Girard", "Nicolas")
             })
             .unwrap();
         db.create_investissement(NewInvestissement {
@@ -2785,7 +2785,7 @@ mod database_integration_tests {
         let contact = db
             .create_contact(NewContact {
                 email: Some("exceltis@example.com".into()),
-                ..sample_contact("SEKKAI", "Maelys")
+                ..sample_contact("Faure", "Maelys")
             })
             .unwrap();
 
@@ -3670,7 +3670,7 @@ mod database_integration_tests {
                 date_dernier_contact: Some(old_iso),
                 registre: Some("VOUS".into()),
                 email: Some("vous.restore@example.com".into()),
-                ..sample_contact("Boller", "Myriam")
+                ..sample_contact("Rousseau", "Camille")
             })
             .unwrap()
             .id
@@ -3768,7 +3768,7 @@ mod database_integration_tests {
             .create_contact(NewContact {
                 date_dernier_contact: Some(old_iso),
                 email: Some("dismiss.cancel@example.com".into()),
-                ..sample_contact("Laplace", "Philippe")
+                ..sample_contact("Fontaine", "Philippe")
             })
             .unwrap()
             .id
@@ -3853,7 +3853,7 @@ mod database_integration_tests {
         let contact = db
             .create_contact(NewContact {
                 email: None,
-                ..sample_contact("Pinto", "Rafael")
+                ..sample_contact("Roche", "Rafael")
             })
             .unwrap();
         let cid = contact.id.unwrap();
@@ -3904,7 +3904,7 @@ mod database_integration_tests {
             .create_contact(NewContact {
                 email: None,
                 registre: Some("VOUS".into()),
-                ..sample_contact("Pinto", "Rafael")
+                ..sample_contact("Roche", "Rafael")
             })
             .unwrap();
         let cid = contact.id.unwrap();
@@ -4716,7 +4716,7 @@ mod database_integration_tests {
                 date_dernier_contact: Some(old_iso),
                 registre: Some("TU".into()),
                 email: Some("tu.client@example.com".into()),
-                ..sample_contact("Amari", "Rayane")
+                ..sample_contact("Girard", "Rayane")
             })
             .unwrap()
             .id
