@@ -7,6 +7,22 @@ import {
 } from "./pdf-layout";
 import { loadPdfDocument } from "./pdfjs-setup";
 
+/**
+ * Extrait les premières lignes "at ..." de la stack (sans le message, déjà inclus
+ * séparément) — utile pour localiser un crash WebKit/macOS sans accès aux devtools
+ * (désactivés en prod pour la sécurité, cf. tauri_security_config.rs).
+ */
+function firstStackFrames(error: unknown, maxFrames = 2): string {
+  if (!(error instanceof Error) || !error.stack) return "";
+  const frames = error.stack
+    .split("\n")
+    .slice(1)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, maxFrames);
+  return frames.length ? ` — ${frames.join(" | ")}` : "";
+}
+
 function extractPageText(textContent: { items: unknown[] }): string {
   const items = textContent.items.filter(
     (item): item is PdfTextItemLike =>
@@ -71,7 +87,7 @@ export async function extractTextFromPDFPath(
     throw new Error(
       `Impossible d'extraire le texte du PDF [${stage}]: ${
         error instanceof Error ? error.message : String(error)
-      }`
+      }${firstStackFrames(error)}`
     );
   }
 }
