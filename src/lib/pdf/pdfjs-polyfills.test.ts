@@ -50,4 +50,30 @@ describe("pdfjs-polyfills", () => {
 
     globalThis.DOMMatrix = previous;
   });
+
+  it("polyfill structuredClone clone objets/tableaux/TypedArray/Map/Set imbriqués", () => {
+    const previous = globalThis.structuredClone;
+    // @ts-expect-error — simulation WebKit sans structuredClone (LoopbackPort pdf.js)
+    globalThis.structuredClone = undefined;
+
+    ensurePdfJsPolyfills();
+    expect(typeof globalThis.structuredClone).toBe("function");
+
+    const bytes = new Uint8Array([1, 2, 3]);
+    const original = {
+      bytes,
+      list: [1, "a", { nested: true }],
+      map: new Map([["k", 1]]),
+      set: new Set([1, 2]),
+    };
+    const clone = globalThis.structuredClone(original);
+
+    expect(clone).toEqual(original);
+    expect(clone.bytes).not.toBe(bytes);
+    expect(clone.bytes instanceof Uint8Array).toBe(true);
+    expect(clone.map instanceof Map).toBe(true);
+    expect(clone.set instanceof Set).toBe(true);
+
+    globalThis.structuredClone = previous;
+  });
 });

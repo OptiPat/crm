@@ -16,6 +16,70 @@ function ensurePromiseWithResolvers(): void {
   };
 }
 
+/**
+ * Clone récursif minimal (objets/tableaux/TypedArray/ArrayBuffer/Map/Set/Date/RegExp) —
+ * suffisant pour les messages internes de pdf.js (LoopbackPort, cf. pdf.mjs).
+ * Le "transfer" (options.transfer) n'est pas honoré : on reste dans la même
+ * réalité JS (pas de vrai thread), donc une copie sans détachement est sûre.
+ */
+function structuredCloneFallback<T>(value: T): T {
+  const seen = new WeakMap<object, unknown>();
+  function clone(v: unknown): unknown {
+    if (v === null || typeof v !== "object") return v;
+    if (seen.has(v)) return seen.get(v);
+    if (v instanceof ArrayBuffer) return v.slice(0);
+    if (ArrayBuffer.isView(v)) {
+      const Ctor = v.constructor as new (
+        buffer: ArrayBufferLike,
+        byteOffset: number,
+        length?: number
+      ) => ArrayBufferView;
+      const length =
+        "length" in v
+          ? (v as unknown as { length: number }).length
+          : v.byteLength / ((v as unknown as { BYTES_PER_ELEMENT?: number }).BYTES_PER_ELEMENT ?? 1);
+      return new Ctor(clone(v.buffer) as ArrayBufferLike, v.byteOffset, length);
+    }
+    if (v instanceof Date) return new Date(v.getTime());
+    if (v instanceof RegExp) return new RegExp(v.source, v.flags);
+    if (v instanceof Map) {
+      const copy = new Map();
+      seen.set(v, copy);
+      for (const [k, val] of v) copy.set(clone(k), clone(val));
+      return copy;
+    }
+    if (v instanceof Set) {
+      const copy = new Set();
+      seen.set(v, copy);
+      for (const item of v) copy.add(clone(item));
+      return copy;
+    }
+    if (Array.isArray(v)) {
+      const copy: unknown[] = [];
+      seen.set(v, copy);
+      for (let i = 0; i < v.length; i++) copy[i] = clone(v[i]);
+      return copy;
+    }
+    const copy: Record<string, unknown> = {};
+    seen.set(v, copy);
+    for (const key of Object.keys(v)) copy[key] = clone((v as Record<string, unknown>)[key]);
+    return copy;
+  }
+  return clone(value) as T;
+}
+
+/**
+ * WebKit peut exposer `structuredClone` sur `window` mais pas dans le contexte
+ * "fake-worker" (`LoopbackPort`) que pdf.js utilise en repli quand le vrai
+ * Worker échoue — ou l'API peut simplement être absente sur un WebKit ancien.
+ * pdf.js l'appelle sans filet (pdf.mjs `LoopbackPort.postMessage`), d'où un
+ * crash "undefined is not a function" reproductible sur les PDF Stellium.
+ */
+function ensureStructuredClone(): void {
+  if (typeof globalThis.structuredClone === "function") return;
+  globalThis.structuredClone = structuredCloneFallback;
+}
+
 /** Matrice 2D minimale — le rendu canvas PDF.js appelle multiply / inverse / transformPoint. */
 class DomMatrixPolyfill {
   a: number;
@@ -119,6 +183,7 @@ function ensureDomMatrix(): void {
 export function ensurePdfJsPolyfills(): void {
   ensurePromiseWithResolvers();
   ensureDomMatrix();
+  ensureStructuredClone();
 }
 
 /** Alias conservé pour les imports existants. */
