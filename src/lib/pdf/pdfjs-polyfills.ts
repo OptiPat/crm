@@ -80,6 +80,39 @@ function ensureStructuredClone(): void {
   globalThis.structuredClone = structuredCloneFallback;
 }
 
+/**
+ * WebKit n'a ajouté l'itération asynchrone native des `ReadableStream`
+ * (`Symbol.asyncIterator`) que dans Safari 16.4 (mars 2023). Sur un WebKit
+ * plus ancien, `PDFPageProxy.getTextContent()` de pdf.js (qui fait
+ * `for await (const value of readableStream)`) plante avec
+ * "undefined is not a function" — confirmé via la stack trace macOS
+ * (`getTextContent@.../pdf-*.js`) et reproduit sur des PDF Stellium réels.
+ * Repli via `getReader()`, disponible sur tous les WebKit ciblés.
+ */
+function ensureReadableStreamAsyncIterator(): void {
+  if (typeof globalThis.ReadableStream === "undefined") return;
+  const proto = globalThis.ReadableStream.prototype as ReadableStream<unknown> & {
+    [Symbol.asyncIterator]?: () => AsyncIterator<unknown>;
+  };
+  if (typeof proto[Symbol.asyncIterator] === "function") return;
+
+  proto[Symbol.asyncIterator] = function (this: ReadableStream<unknown>) {
+    const reader = this.getReader();
+    return {
+      async next() {
+        return await reader.read();
+      },
+      async return(value?: unknown) {
+        await reader.cancel();
+        return { done: true as const, value };
+      },
+      [Symbol.asyncIterator]() {
+        return this;
+      },
+    };
+  };
+}
+
 /** Matrice 2D minimale — le rendu canvas PDF.js appelle multiply / inverse / transformPoint. */
 class DomMatrixPolyfill {
   a: number;
@@ -184,6 +217,7 @@ export function ensurePdfJsPolyfills(): void {
   ensurePromiseWithResolvers();
   ensureDomMatrix();
   ensureStructuredClone();
+  ensureReadableStreamAsyncIterator();
 }
 
 /** Alias conservé pour les imports existants. */

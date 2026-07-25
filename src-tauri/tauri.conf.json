@@ -49,7 +49,7 @@
       "timestampUrl": ""
     },
     "macOS": {
-      "signingIdentity": "-"
+      "signingIdentity": null
     }
   },
   "plugins": {

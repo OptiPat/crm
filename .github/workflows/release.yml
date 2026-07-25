@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Vérifier tag vs version (3 fichiers)
         shell: bash
@@ -42,7 +42,7 @@ jobs:
           done
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -64,10 +64,40 @@ jobs:
         working-directory: src-tauri
         run: cargo test email::secret_storage::macos_tests
 
+      - name: Importer le certificat Developer ID
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY}.p8"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
+          printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$API_KEY_PATH"
+          chmod 600 "$API_KEY_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          CERT_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F '"' '/Developer ID Application/ { print $2; exit }')
+          test -n "$CERT_IDENTITY"
+          echo "APPLE_SIGNING_IDENTITY=$CERT_IDENTITY" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY_PATH=$API_KEY_PATH" >> "$GITHUB_ENV"
+          rm -f "$CERTIFICATE_PATH"
+
       - name: Build & publish release (macOS)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           LICENSE_REGISTRY_URL: ${{ secrets.LICENSE_REGISTRY_URL }}
@@ -88,7 +118,7 @@ jobs:
             ## Installation macOS
             - Télécharger **CRM.W.Y.S_*_universal.dmg** ci-dessous
             - Ouvrir le DMG, glisser **CRM W.Y.S** dans Applications
-            - Premier lancement : clic droit → **Ouvrir** (app non notarisée, équivalent Windows)
+            - Application signée et notarisée par Apple
 
             ## Fichiers updater
             - `latest.json` + `.sig` : mises à jour automatiques dans l'app
@@ -99,6 +129,24 @@ jobs:
           retryAttempts: 3
           tauriScript: npm run tauri
           args: --target universal-apple-darwin --bundles app,dmg
+
+      - name: Vérifier la signature Developer ID
+        run: |
+          APP_PATH="src-tauri/target/universal-apple-darwin/release/bundle/macos/CRM W.Y.S.app"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign -dv --verbose=4 "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+          DMG_PATH=(src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          test "${#DMG_PATH[@]}" -eq 1
+          xcrun stapler validate "${DMG_PATH[0]}"
+
+      - name: Supprimer le Trousseau temporaire
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/build.keychain-db" || true
+          if [ -n "${APPLE_API_KEY_PATH:-}" ]; then
+            rm -f "$APPLE_API_KEY_PATH"
+          fi
 
       # latest.json macOS dès la fin du build : évite 404 sur /releases/latest/download/
       # pendant le build Windows (~20 min). finalize-updater-json le régénère ensuite complet.
@@ -118,10 +166,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -183,7 +231,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Générer latest.json multi-plateformes
         env:

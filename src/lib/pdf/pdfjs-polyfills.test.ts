@@ -76,4 +76,32 @@ describe("pdfjs-polyfills", () => {
 
     globalThis.structuredClone = previous;
   });
+
+  it("polyfill ReadableStream[Symbol.asyncIterator] permet for-await-of", async () => {
+    const proto = globalThis.ReadableStream.prototype as ReadableStream<unknown> & {
+      [Symbol.asyncIterator]?: () => AsyncIterator<unknown>;
+    };
+    const previous = proto[Symbol.asyncIterator];
+    delete proto[Symbol.asyncIterator];
+
+    ensurePdfJsPolyfills();
+    expect(typeof proto[Symbol.asyncIterator]).toBe("function");
+
+    const stream = new ReadableStream<number>({
+      start(controller) {
+        controller.enqueue(1);
+        controller.enqueue(2);
+        controller.close();
+      },
+    });
+    const values: number[] = [];
+    // Cast requis : le lib TS ciblé ne déclare pas ReadableStream comme AsyncIterable
+    // (justement l'API dont on teste ici le polyfill runtime).
+    for await (const value of stream as unknown as AsyncIterable<number>) {
+      values.push(value);
+    }
+    expect(values).toEqual([1, 2]);
+
+    if (previous) proto[Symbol.asyncIterator] = previous;
+  });
 });
