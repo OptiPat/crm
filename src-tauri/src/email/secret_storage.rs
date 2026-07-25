@@ -296,8 +296,10 @@ mod platform {
 
 #[cfg(target_os = "macos")]
 mod platform {
+    #[cfg(test)]
+    use security_framework::passwords::delete_generic_password;
     use security_framework::passwords::{
-        delete_generic_password, generic_password, set_generic_password_options, PasswordOptions,
+        generic_password, set_generic_password_options, PasswordOptions,
     };
 
     const MAGIC: &[u8] = b"PCRM-KEYCHAIN-V1\0";

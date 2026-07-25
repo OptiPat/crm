@@ -15,7 +15,8 @@ permissions:
 jobs:
   publish-macos:
     runs-on: macos-latest
-    timeout-minutes: 90
+    # Une première notarisation Apple peut être retenue plusieurs heures pour analyse approfondie.
+    timeout-minutes: 240
     env:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
