@@ -239,7 +239,7 @@ mod database_integration_tests {
     use chrono::TimeZone;
     use crate::database::contacts::UpdateContactFieldPresence;
     use crate::database::models::{
-        NewContact, NewFoyer, NewInvestissement, NewInvestissementValorisation,
+        CgpConfig, NewContact, NewFoyer, NewInvestissement, NewInvestissementValorisation,
         NewInvestissementVersement,
     };
     use crate::database::Database;
@@ -256,6 +256,18 @@ mod database_integration_tests {
             statut_suivi: Some("ACTIF".into()),
             ..Default::default()
         }
+    }
+
+    fn setup_self_parrain(db: &Database, nom: &str, prenom: &str) -> i64 {
+        let self_contact = db.create_contact(sample_contact(nom, prenom)).unwrap();
+        let id = self_contact.id.unwrap();
+        db.save_cgp_config(&CgpConfig {
+            nom: Some(nom.into()),
+            prenom: Some(prenom.into()),
+            ..Default::default()
+        })
+        .unwrap();
+        id
     }
 
     #[test]
@@ -1359,9 +1371,11 @@ mod database_integration_tests {
     #[test]
     fn get_conversion_filleul_contacts_invites_matches_funnel_count() {
         let db = test_db();
+        let self_id = setup_self_parrain(&db, "Moi", "CGP");
         let f1 = db
             .create_contact(NewContact {
                 filleul_categorie: Some("PROSPECT_FILLEUL".into()),
+                parrain_id: Some(self_id),
                 ..sample_contact("Legrand", "Paul")
             })
             .unwrap();
@@ -1379,6 +1393,7 @@ mod database_integration_tests {
                 date_invitation_filleul: Some("2024-03-10T00:00:00+00:00".into()),
                 presence_invitation_filleul: Some(1),
                 filleul_categorie: Some("PROSPECT_FILLEUL".into()),
+                parrain_id: Some(self_id),
                 ..sample_contact("Legrand", "Paul")
             },
             UpdateContactFieldPresence {
@@ -1458,15 +1473,18 @@ mod database_integration_tests {
     #[test]
     fn get_conversion_filleul_stats_filters_by_invitation_period() {
         let db = test_db();
+        let self_id = setup_self_parrain(&db, "Moi", "CGP");
         let f1 = db
             .create_contact(NewContact {
                 filleul_categorie: Some("PROSPECT_FILLEUL".into()),
+                parrain_id: Some(self_id),
                 ..sample_contact("Legrand", "Paul")
             })
             .unwrap();
         let f2 = db
             .create_contact(NewContact {
                 filleul_categorie: Some("FILLEUL".into()),
+                parrain_id: Some(self_id),
                 ..sample_contact("Bernard", "Luc")
             })
             .unwrap();
@@ -1478,6 +1496,7 @@ mod database_integration_tests {
                 date_invitation_filleul: Some("2024-03-10T00:00:00+00:00".into()),
                 presence_invitation_filleul: Some(1),
                 filleul_categorie: Some("PROSPECT_FILLEUL".into()),
+                parrain_id: Some(self_id),
                 ..sample_contact("Legrand", "Paul")
             },
             UpdateContactFieldPresence {
@@ -1493,6 +1512,7 @@ mod database_integration_tests {
                 date_invitation_filleul: Some("2025-01-15T00:00:00+00:00".into()),
                 presence_invitation_filleul: Some(1),
                 filleul_categorie: Some("FILLEUL".into()),
+                parrain_id: Some(self_id),
                 ..sample_contact("Bernard", "Luc")
             },
             UpdateContactFieldPresence {
@@ -1517,6 +1537,119 @@ mod database_integration_tests {
         assert_eq!(stats.invites, 1);
         assert_eq!(stats.presents, 1);
         assert_eq!(stats.convertis, 0);
+    }
+
+    #[test]
+    fn get_conversion_filleul_stats_includes_prospect_without_parrain() {
+        let db = test_db();
+        setup_self_parrain(&db, "Moi", "CGP");
+        let prospect = db
+            .create_contact(NewContact {
+                filleul_categorie: Some("PROSPECT_FILLEUL".into()),
+                ..sample_contact("Durand", "Marie")
+            })
+            .unwrap();
+
+        db.update_contact(
+            prospect.id.unwrap(),
+            &NewContact {
+                type_invitation_filleul: Some("JD".into()),
+                date_invitation_filleul: Some("2024-03-10T00:00:00+00:00".into()),
+                presence_invitation_filleul: Some(1),
+                filleul_categorie: Some("PROSPECT_FILLEUL".into()),
+                ..sample_contact("Durand", "Marie")
+            },
+            UpdateContactFieldPresence {
+                date_invitation_filleul: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let start = chrono::Utc
+            .with_ymd_and_hms(2024, 1, 1, 0, 0, 0)
+            .unwrap()
+            .timestamp();
+        let end = chrono::Utc
+            .with_ymd_and_hms(2024, 12, 31, 23, 59, 59)
+            .unwrap()
+            .timestamp();
+
+        let stats = db
+            .get_conversion_filleul_stats(Some(start), Some(end))
+            .unwrap();
+        assert_eq!(stats.invites, 1);
+        assert_eq!(stats.presents, 1);
+        assert_eq!(stats.convertis, 0);
+
+        let contacts = db
+            .get_conversion_filleul_contacts(start, end, "invites")
+            .unwrap();
+        assert_eq!(contacts.len(), 1);
+        assert_eq!(contacts[0].nom, "Durand");
+    }
+
+    #[test]
+    fn get_conversion_filleul_stats_excludes_filleuls_not_parrained_by_self() {
+        let db = test_db();
+        let self_id = setup_self_parrain(&db, "Moi", "CGP");
+        let other_parrain = db.create_contact(sample_contact("Autre", "Parrain")).unwrap();
+        let other_id = other_parrain.id.unwrap();
+
+        let mine = db
+            .create_contact(NewContact {
+                filleul_categorie: Some("PROSPECT_FILLEUL".into()),
+                parrain_id: Some(self_id),
+                ..sample_contact("Legrand", "Paul")
+            })
+            .unwrap();
+        let other = db
+            .create_contact(NewContact {
+                filleul_categorie: Some("PROSPECT_FILLEUL".into()),
+                parrain_id: Some(other_id),
+                ..sample_contact("Bernard", "Luc")
+            })
+            .unwrap();
+
+        for contact in [mine, other] {
+            db.update_contact(
+                contact.id.unwrap(),
+                &NewContact {
+                    type_invitation_filleul: Some("JD".into()),
+                    date_invitation_filleul: Some("2024-03-10T00:00:00+00:00".into()),
+                    presence_invitation_filleul: Some(1),
+                    filleul_categorie: Some("PROSPECT_FILLEUL".into()),
+                    parrain_id: contact.parrain_id,
+                    ..sample_contact(&contact.nom, &contact.prenom)
+                },
+                UpdateContactFieldPresence {
+                    date_invitation_filleul: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+
+        let start = chrono::Utc
+            .with_ymd_and_hms(2024, 1, 1, 0, 0, 0)
+            .unwrap()
+            .timestamp();
+        let end = chrono::Utc
+            .with_ymd_and_hms(2024, 12, 31, 23, 59, 59)
+            .unwrap()
+            .timestamp();
+
+        let stats = db
+            .get_conversion_filleul_stats(Some(start), Some(end))
+            .unwrap();
+        assert_eq!(stats.invites, 1);
+        assert_eq!(stats.presents, 1);
+
+        let contacts = db
+            .get_conversion_filleul_contacts(start, end, "invites")
+            .unwrap();
+        assert_eq!(contacts.len(), 1);
+        assert_eq!(contacts[0].nom, "Legrand");
     }
 
     #[test]

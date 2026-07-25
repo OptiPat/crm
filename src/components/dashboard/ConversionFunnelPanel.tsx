@@ -333,7 +333,7 @@ function FilleulConversionCard({
         <ChartEmpty
           height={220}
           title="Aucune invitation sur la période"
-          subtitle="Indiquez une invitation JD ou PO sur vos contacts filleuls."
+          subtitle="Indiquez une invitation JD ou PO sur vos filleuls parrainés par vous."
         />
       </DashboardPanel>
     );
@@ -345,7 +345,7 @@ function FilleulConversionCard({
         title="Conversion filleul"
         description={
           onOpenContact
-            ? `Invitation → filleul · ${periodLabel} — cliquer une étape pour la liste`
+            ? `Invitation → filleul · filleuls parrainés par vous · ${periodLabel} — cliquer une étape pour la liste`
             : `Invitation → présence → statut filleul · ${periodLabel}`
         }
       >

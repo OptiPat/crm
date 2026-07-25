@@ -149,6 +149,43 @@ fn conversion_period_clause(column: &str, with_period: bool) -> String {
     }
 }
 
+fn filleul_effective_categorie_sql(alias: &str) -> String {
+    format!(
+        "COALESCE(
+          NULLIF({alias}.filleul_categorie, ''),
+          CASE WHEN {alias}.categorie IN ('PROSPECT_FILLEUL', 'SUSPECT_FILLEUL', 'FILLEUL', 'FILLEUL_DESINSCRIT')
+               THEN {alias}.categorie END
+        )"
+    )
+}
+
+/// Invitations / présences : prospect filleul sans parrain (= CGP) ou parrain explicite = Moi ; inscrits = Moi uniquement.
+fn filleul_parrain_eligible_clause(alias: &str, self_param: &str) -> String {
+    let effective = filleul_effective_categorie_sql(alias);
+    format!(
+        " AND {effective} != 'SUSPECT_FILLEUL'
+          AND (
+            ({effective} = 'PROSPECT_FILLEUL' AND ({alias}.parrain_id IS NULL OR {alias}.parrain_id = {self_param}))
+            OR ({effective} IN ('FILLEUL', 'FILLEUL_DESINSCRIT') AND {alias}.parrain_id = {self_param})
+          )"
+    )
+}
+
+/// Filleuls inscrits : parrain explicite = Moi uniquement.
+fn filleul_parrain_inscrit_clause(alias: &str, self_param: &str) -> String {
+    format!(" AND {alias}.parrain_id = {self_param}")
+}
+
+fn empty_conversion_filleul_stats() -> super::models::ConversionFilleulStats {
+    super::models::ConversionFilleulStats {
+        invites: 0,
+        presents: 0,
+        convertis: 0,
+        taux_presence: 0.0,
+        taux_conversion: 0.0,
+    }
+}
+
 /// Date invitation filleul : dossier prioritaire ; repli legacy seulement sans ligne dossier.
 const FILLEUL_INVITATION_DATE_COL: &str = "\
 CASE \
@@ -612,8 +649,22 @@ impl super::Database {
         period_start: Option<i64>,
         period_end: Option<i64>,
     ) -> Result<super::models::ConversionFilleulStats> {
+        let Some(self_id) = self.resolve_organisation_self_contact_id()? else {
+            return Ok(empty_conversion_filleul_stats());
+        };
+
         let with_period = matches!((period_start, period_end), (Some(_), Some(_)));
         let invite_period = conversion_period_clause(FILLEUL_INVITATION_DATE_COL, with_period);
+        let parrain_eligible = if with_period {
+            filleul_parrain_eligible_clause("contacts", "?3")
+        } else {
+            filleul_parrain_eligible_clause("contacts", "?1")
+        };
+        let parrain_inscrit = if with_period {
+            filleul_parrain_inscrit_clause("contacts", "?3")
+        } else {
+            filleul_parrain_inscrit_clause("contacts", "?1")
+        };
 
         let invites: i64 = if with_period {
             let start = period_start.unwrap();
@@ -621,17 +672,18 @@ impl super::Database {
             self.conn.query_row(
                 &format!(
                     "SELECT COUNT(*) FROM contacts
-                     WHERE {FILLEUL_INVITATION_DATE_COL} IS NOT NULL{invite_period}"
+                     WHERE {FILLEUL_INVITATION_DATE_COL} IS NOT NULL{invite_period}{parrain_eligible}"
                 ),
-                params![start, end],
+                params![start, end, self_id],
                 |row| row.get(0),
             )?
         } else {
             self.conn.query_row(
                 &format!(
-                    "SELECT COUNT(*) FROM contacts WHERE {FILLEUL_INVITATION_DATE_COL} IS NOT NULL"
+                    "SELECT COUNT(*) FROM contacts
+                     WHERE {FILLEUL_INVITATION_DATE_COL} IS NOT NULL{parrain_eligible}"
                 ),
-                [],
+                params![self_id],
                 |row| row.get(0),
             )?
         };
@@ -643,19 +695,19 @@ impl super::Database {
                 &format!(
                     "SELECT COUNT(*) FROM contacts
                      WHERE presence_invitation_filleul = 1
-                       AND {FILLEUL_INVITATION_DATE_COL} IS NOT NULL{invite_period}"
+                       AND {FILLEUL_INVITATION_DATE_COL} IS NOT NULL{invite_period}{parrain_eligible}"
                 ),
-                params![start, end],
+                params![start, end, self_id],
                 |row| row.get(0),
             )?
         } else {
             self.conn.query_row(
                 &format!(
                     "SELECT COUNT(*) FROM contacts
-                 WHERE presence_invitation_filleul = 1
-                   AND {FILLEUL_INVITATION_DATE_COL} IS NOT NULL"
+                     WHERE presence_invitation_filleul = 1
+                       AND {FILLEUL_INVITATION_DATE_COL} IS NOT NULL{parrain_eligible}"
                 ),
-                [],
+                params![self_id],
                 |row| row.get(0),
             )?
         };
@@ -667,19 +719,19 @@ impl super::Database {
                 &format!(
                     "SELECT COUNT(*) FROM contacts
                      WHERE filleul_categorie = 'FILLEUL'
-                       AND {FILLEUL_INVITATION_DATE_COL} IS NOT NULL{invite_period}"
+                       AND {FILLEUL_INVITATION_DATE_COL} IS NOT NULL{invite_period}{parrain_inscrit}"
                 ),
-                params![start, end],
+                params![start, end, self_id],
                 |row| row.get(0),
             )?
         } else {
             self.conn.query_row(
                 &format!(
                     "SELECT COUNT(*) FROM contacts
-                 WHERE filleul_categorie = 'FILLEUL'
-                   AND {FILLEUL_INVITATION_DATE_COL} IS NOT NULL"
+                     WHERE filleul_categorie = 'FILLEUL'
+                       AND {FILLEUL_INVITATION_DATE_COL} IS NOT NULL{parrain_inscrit}"
                 ),
-                [],
+                params![self_id],
                 |row| row.get(0),
             )?
         };
@@ -795,26 +847,32 @@ impl super::Database {
         period_end: i64,
         segment: &str,
     ) -> Result<Vec<super::models::DashboardStatContact>> {
+        let Some(self_id) = self.resolve_organisation_self_contact_id()? else {
+            return Ok(Vec::new());
+        };
+
         let invite_period = conversion_period_clause(FILLEUL_INVITATION_DATE_C, true);
+        let parrain_eligible = filleul_parrain_eligible_clause("c", "?3");
+        let parrain_inscrit = filleul_parrain_inscrit_clause("c", "?3");
         let sql = match segment {
             "invites" => format!(
                 "SELECT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, {FILLEUL_INVITATION_DATE_C} AS date_invitation_filleul
                  FROM contacts c
-                 WHERE {FILLEUL_INVITATION_DATE_C} IS NOT NULL{invite_period}
+                 WHERE {FILLEUL_INVITATION_DATE_C} IS NOT NULL{invite_period}{parrain_eligible}
                  ORDER BY c.nom COLLATE NOCASE ASC, c.prenom COLLATE NOCASE ASC"
             ),
             "presents" => format!(
                 "SELECT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, {FILLEUL_INVITATION_DATE_C} AS date_invitation_filleul
                  FROM contacts c
                  WHERE c.presence_invitation_filleul = 1
-                   AND {FILLEUL_INVITATION_DATE_C} IS NOT NULL{invite_period}
+                   AND {FILLEUL_INVITATION_DATE_C} IS NOT NULL{invite_period}{parrain_eligible}
                  ORDER BY c.nom COLLATE NOCASE ASC, c.prenom COLLATE NOCASE ASC"
             ),
             "convertis" => format!(
                 "SELECT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, {FILLEUL_INVITATION_DATE_C} AS date_invitation_filleul
                  FROM contacts c
                  WHERE c.filleul_categorie = 'FILLEUL'
-                   AND {FILLEUL_INVITATION_DATE_C} IS NOT NULL{invite_period}
+                   AND {FILLEUL_INVITATION_DATE_C} IS NOT NULL{invite_period}{parrain_inscrit}
                  ORDER BY c.nom COLLATE NOCASE ASC, c.prenom COLLATE NOCASE ASC"
             ),
             _ => return Ok(Vec::new()),
@@ -824,6 +882,7 @@ impl super::Database {
             &[
                 &period_start as &dyn rusqlite::ToSql,
                 &period_end,
+                &self_id,
             ],
         )
     }
