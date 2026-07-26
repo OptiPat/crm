@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
+import { toast } from "sonner";
+import { updateContact, type Contact } from "@/lib/api/tauri-contacts";
+import {
+  contactFilleulManagerVolumeUpdatePayload,
+  contactFilleulRankUpdatePayload,
+  contactFilleulVolumeUpdatePayload,
+} from "@/lib/contacts/contact-form-utils";
+import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import {
   computeFilleulAverageVolumeExerciceStats,
   computeFilleulClientBridgeStats,
@@ -42,13 +50,19 @@ import {
   filleulVolumeBenchmarkStatusLabel,
   filleulVolumeBenchmarkStatusValueClasses,
   formatSponsorRateVsGroupBenchmarkPercent,
+  formatParrainagePerParraineurVsGroupBenchmarkPercent,
+  formatNetGrowthVsGroupBenchmarkPercent,
   formatVolumeVsGroupBenchmarkPercent,
+  formatActiveConsultantRateVsGroupBenchmarkPercent,
   formatVaaDurationVsGroupBenchmarkPercent,
   formatHabilitationDurationVsGroupBenchmarkPercent,
   getFilleulSponsorRateBenchmarkStatus,
+  getFilleulParrainagePerParraineurBenchmarkStatus,
+  getFilleulNetGrowthBenchmarkStatus,
   getFilleulVaaDurationBenchmarkStatus,
   getFilleulHabilitationDurationBenchmarkStatus,
   getFilleulVolumeBenchmarkStatus,
+  getFilleulActiveConsultantRateBenchmarkStatus,
   filleulVaaDurationBenchmarkStatusLabel,
   filleulHabilitationDurationBenchmarkStatusLabel,
 } from "@/lib/statistiques/statistiques-benchmark-settings";
@@ -75,14 +89,22 @@ import {
   resolveOrganisationExerciceLabel,
   type OrganisationExerciceSelection,
 } from "@/lib/organisation/organisation-volume-history";
-import { indexFilleulDossiersByContactId } from "@/lib/organisation/organisation-filleul-dossier";
-import { collectOrganisationDossierContactIds } from "@/lib/organisation/organisation-tree";
+import { OrganisationMemberDossierPanel } from "@/components/organisation/OrganisationMemberDossierPanel";
+import { collectOrganisationMemberRoster } from "@/lib/organisation/organisation-member-roster";
+import {
+  buildOrganisationTree,
+  collectOrganisationDossierContactIds,
+} from "@/lib/organisation/organisation-tree";
+import {
+  indexFilleulDossiersByContactId,
+  mergeLegacyFilleulDossierView,
+} from "@/lib/organisation/organisation-filleul-dossier";
 import { getFilleulDossiersByContactIds, type FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import {
   getFilleulVolumeExercicesByLabel,
   listFilleulVolumeExerciceLabels,
 } from "@/lib/api/tauri-filleul-volumes";
-import { currentFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
+import { currentFiscalYearLabel, previousFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
 import {
   computeFilleulVaaDurationExerciceStats,
   computeFilleulVaaDurationStats,
@@ -123,14 +145,47 @@ import {
   type FilleulParrainageDurationListKind,
   type FilleulParrainageDurationStatResult,
 } from "@/lib/statistiques/filleul-parrainage-duration-stats";
+import {
+  computeFilleulParrainagePerParraineurExerciceStats,
+  computeFilleulParrainagePerParraineurStats,
+  filterContactsForFilleulParrainagePerParraineurExerciceList,
+  formatFilleulParrainagePerParraineur,
+  formatFilleulParrainagePerParraineurCumulativeIndex,
+  formatFilleulParrainagePerParraineurExerciceSubtitle,
+  type FilleulParrainagePerParraineurListKind,
+  type FilleulParrainagePerParraineurStatResult,
+} from "@/lib/statistiques/filleul-parrainage-per-parraineur-stats";
+import {
+  computeFilleulNetGrowthExerciceStats,
+  filterContactsForFilleulNetGrowthExerciceList,
+  formatFilleulNetGrowthExerciceSubtitle,
+  formatFilleulNetGrowthPercent,
+  formatFilleulNetGrowthSigned,
+  type FilleulNetGrowthListKind,
+  type FilleulNetGrowthStatResult,
+} from "@/lib/statistiques/filleul-net-growth-stats";
+
+type OrganisationListCountUnit = "filleul" | "consultant" | "inscription";
+
+function formatOrganisationListCount(count: number, unit: OrganisationListCountUnit): string {
+  if (unit === "consultant") {
+    return `${count} consultant${count > 1 ? "s" : ""}`;
+  }
+  if (unit === "inscription") {
+    return `${count} inscription${count > 1 ? "s" : ""}`;
+  }
+  return `${count} filleul${count > 1 ? "s" : ""}`;
+}
 
 function OrganisationListButton({
   label,
   count,
+  countUnit = "filleul",
   onClick,
 }: {
   label: string;
   count: number;
+  countUnit?: OrganisationListCountUnit;
   onClick: () => void;
 }) {
   const interactive = count > 0;
@@ -147,7 +202,7 @@ function OrganisationListButton({
       <div className="min-w-0">
         <p className="text-sm font-medium truncate">{label}</p>
         <p className="text-xs text-muted-foreground tabular-nums">
-          {count} filleul{count > 1 ? "s" : ""}
+          {formatOrganisationListCount(count, countUnit)}
         </p>
       </div>
       {interactive ? (
@@ -161,11 +216,13 @@ type OrganisationDrillDown =
   | { mode: "manager"; kind: FilleulOrganisationListKind }
   | { mode: "volume"; kind: FilleulVolumeListKind }
   | { mode: "parraineur"; kind: FilleulParraineurListKind }
+  | { mode: "parrainagePerParraineur"; kind: FilleulParrainagePerParraineurListKind }
   | { mode: "vaaDuration"; kind: FilleulVaaDurationListKind }
   | { mode: "habilitationDuration"; kind: FilleulHabilitationDurationListKind }
   | { mode: "managerDuration"; kind: FilleulManagerDurationListKind }
   | { mode: "parrainageDuration"; kind: FilleulParrainageDurationListKind }
   | { mode: "bridge"; kind: FilleulBridgeListKind }
+  | { mode: "netGrowth"; kind: FilleulNetGrowthListKind }
   | { mode: "attrition"; kind: "active" | "attrited"; count: number };
 
 function ManagerKpiPanel({
@@ -237,15 +294,19 @@ function VolumeKpiPanel({
   onOpenList: (kind: FilleulVolumeListKind) => void;
 }) {
   const benchmarkSettings = useStatistiquesBenchmarkSettings();
-  const benchmarkStatus =
+  const volumeBenchmarkStatus =
     stats.averageVolume != null
       ? getFilleulVolumeBenchmarkStatus(stats.averageVolume, benchmarkSettings)
+      : null;
+  const activeRateBenchmarkStatus =
+    stats.totalEligible > 0
+      ? getFilleulActiveConsultantRateBenchmarkStatus(stats.activePercent, benchmarkSettings)
       : null;
 
   return (
     <StatistiquesPanel
-      title="Volume moyen / consultant actif"
-      description={`Volume propre moyen sur l'exercice ${exerciceLabel}, calculé sur les consultants présents sur la période (inscrits ou désinscrits selon dates dossier) ayant au moins 1 € de volume propre.`}
+      title="Volume et taux d'actifs"
+      description={`Sur l'exercice ${exerciceLabel} : volume propre moyen des consultants actifs (≥ 1 €) et part des consultants présents sur la période ayant au moins 1 € de volume propre (inscrits ou désinscrits selon dates dossier).`}
       collapsible
       panelId="filleul_org_volume"
     >
@@ -253,63 +314,102 @@ function VolumeKpiPanel({
         <ChartLoading />
       ) : stats.totalEligible === 0 ? (
         <ChartEmpty title="Aucun consultant présent sur cet exercice." height={180} />
-      ) : stats.averageVolume == null ? (
-        <ChartEmpty
-          title="Aucun consultant actif (volume propre inférieur à 1 € sur l'exercice)."
-          height={180}
-        />
       ) : (
         <div className="space-y-4">
-          <div
-            className={cn(
-              "rounded-xl border px-4 py-3 flex items-center justify-between gap-4 transition-colors",
-              benchmarkStatus
-                ? filleulVolumeBenchmarkStatusBoxClasses(benchmarkStatus)
-                : "border-border/60 bg-muted/20"
-            )}
-            title={benchmarkStatus ? filleulVolumeBenchmarkStatusLabel(benchmarkStatus) : undefined}
-          >
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                Exercice {exerciceLabel}
-              </p>
-              <p
-                className={cn(
-                  "text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5",
-                  benchmarkStatus
-                    ? filleulVolumeBenchmarkStatusValueClasses(benchmarkStatus)
-                    : "text-primary"
-                )}
-              >
-                {formatFilleulVolumeDisplay(stats.averageVolume)}
-              </p>
+          <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 space-y-3">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Exercice {exerciceLabel}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  Volume moyen (actifs)
+                </p>
+                <p
+                  className={cn(
+                    "text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5",
+                    volumeBenchmarkStatus
+                      ? filleulVolumeBenchmarkStatusValueClasses(volumeBenchmarkStatus)
+                      : stats.averageVolume != null
+                        ? "text-primary"
+                        : "text-muted-foreground"
+                  )}
+                  title={
+                    volumeBenchmarkStatus
+                      ? filleulVolumeBenchmarkStatusLabel(volumeBenchmarkStatus)
+                      : undefined
+                  }
+                >
+                  {stats.averageVolume != null
+                    ? formatFilleulVolumeDisplay(stats.averageVolume)
+                    : "—"}
+                </p>
+                <p className="text-xs text-muted-foreground tabular-nums mt-1">
+                  Réf. {formatFilleulVolumeDisplay(benchmarkSettings.groupActiveConsultantVolumeEuros)}
+                  {stats.averageVolume != null ? (
+                    <>
+                      {" · "}
+                      <span className="font-medium text-foreground">
+                        {formatVolumeVsGroupBenchmarkPercent(stats.averageVolume, benchmarkSettings)}
+                      </span>
+                    </>
+                  ) : null}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  Taux d&apos;actifs
+                </p>
+                <p
+                  className={cn(
+                    "text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5",
+                    activeRateBenchmarkStatus
+                      ? filleulVolumeBenchmarkStatusValueClasses(activeRateBenchmarkStatus)
+                      : "text-primary"
+                  )}
+                  title={
+                    activeRateBenchmarkStatus
+                      ? filleulVolumeBenchmarkStatusLabel(activeRateBenchmarkStatus)
+                      : undefined
+                  }
+                >
+                  {formatFilleulManagerPercent(stats.activePercent)}
+                </p>
+                <p className="text-xs text-muted-foreground tabular-nums mt-1">
+                  Réf.{" "}
+                  {benchmarkSettings.groupActiveConsultantRatePercent.toString().replace(".", ",")} %
+                  {" · "}
+                  <span className="font-medium text-foreground">
+                    {formatActiveConsultantRateVsGroupBenchmarkPercent(
+                      stats.activePercent,
+                      benchmarkSettings
+                    )}
+                  </span>
+                </p>
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground text-right max-w-xs space-y-0.5">
-              <p>{formatFilleulAverageVolumeExerciceSubtitle(stats, exerciceLabel)}</p>
-              <p className="tabular-nums">
-                Réf. groupe {formatFilleulVolumeDisplay(benchmarkSettings.groupActiveConsultantVolumeEuros)}
-              </p>
-              <p className="font-medium text-foreground tabular-nums">
-                {formatVolumeVsGroupBenchmarkPercent(stats.averageVolume, benchmarkSettings)}
-              </p>
-            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {formatFilleulAverageVolumeExerciceSubtitle(stats, exerciceLabel)}
+            </p>
           </div>
 
           <p className="text-xs text-muted-foreground">
             Consultants présents sur l&apos;exercice uniquement — hors ceux partis avant la période ou
-            inscrits après. Consultant actif = au moins 1 € de volume propre. Référence groupe
-            modifiable via « Références » en haut de page.
+            inscrits après. Actif = volume propre ≥ 1 €. Références groupe via « Références » en haut de
+            page.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <OrganisationListButton
               label="Consultants actifs (≥ 1 €)"
               count={stats.countedCount}
+              countUnit="consultant"
               onClick={() => onOpenList("withVolume")}
             />
             <OrganisationListButton
               label="Consultants inactifs"
               count={stats.missingVolumeCount}
+              countUnit="consultant"
               onClick={() => onOpenList("missingVolume")}
             />
           </div>
@@ -435,11 +535,13 @@ function VaaDurationKpiPanel({
               <OrganisationListButton
                 label="Avec date 1er VAA/VA"
                 count={exerciceStats.countedCount}
+                countUnit="inscription"
                 onClick={() => onOpenList("withDuration")}
               />
               <OrganisationListButton
                 label="Sans date 1er VAA/VA"
                 count={exerciceStats.missingVaaCount}
+                countUnit="inscription"
                 onClick={() => onOpenList("missingVaa")}
               />
             </div>
@@ -575,11 +677,13 @@ function HabilitationDurationKpiPanel({
               <OrganisationListButton
                 label="Avec habilitation"
                 count={exerciceStats.countedCount}
+                countUnit="inscription"
                 onClick={() => onOpenList("withDuration")}
               />
               <OrganisationListButton
                 label="Sans habilitation"
                 count={exerciceStats.missingHabilitationCount}
+                countUnit="inscription"
                 onClick={() => onOpenList("missingHabilitation")}
               />
             </div>
@@ -673,11 +777,13 @@ function ManagerDurationKpiPanel({
               <OrganisationListButton
                 label="Avec qualification Manager"
                 count={exerciceStats.countedCount}
+                countUnit="inscription"
                 onClick={() => onOpenList("withDuration")}
               />
               <OrganisationListButton
                 label="Sans qualification Manager"
                 count={exerciceStats.missingManagerCount}
+                countUnit="inscription"
                 onClick={() => onOpenList("missingManager")}
               />
             </div>
@@ -709,7 +815,7 @@ function ParraineurKpiPanel({
 
   return (
     <StatistiquesPanel
-      title="Taux de parrainage"
+      title="Taux de parraineurs"
       description={`Sur l'exercice ${exerciceLabel}, part des consultants réseau (inscrits ou désinscrits sur la période) ayant parrainé au moins une personne affiliée durant l'exercice (01/08–31/07), y compris filleuls parrainés désinscrits depuis.`}
       collapsible
       panelId="filleul_org_parraineur"
@@ -781,13 +887,288 @@ function ParraineurKpiPanel({
             <OrganisationListButton
               label="Parraineurs (exercice)"
               count={exerciceStats.parraineurCount}
+              countUnit="consultant"
               onClick={() => onOpenList("parraineur")}
             />
             <OrganisationListButton
               label="Sans parrainage (exercice)"
               count={exerciceStats.otherContactIds.length}
+              countUnit="consultant"
               onClick={() => onOpenList("other")}
             />
+          </div>
+        </div>
+      )}
+    </StatistiquesPanel>
+  );
+}
+
+function ParrainagePerParraineurKpiPanel({
+  loading,
+  exerciceLabel,
+  exerciceStats,
+  cumulativeStats,
+  onOpenList,
+}: {
+  loading: boolean;
+  exerciceLabel: string;
+  exerciceStats: FilleulParrainagePerParraineurStatResult;
+  cumulativeStats: FilleulParrainagePerParraineurStatResult;
+  onOpenList: (kind: FilleulParrainagePerParraineurListKind) => void;
+}) {
+  const benchmarkSettings = useStatistiquesBenchmarkSettings();
+  const benchmarkStatus =
+    exerciceStats.parraineurCount > 0 && exerciceStats.averagePerParraineur != null
+      ? getFilleulParrainagePerParraineurBenchmarkStatus(
+          exerciceStats.averagePerParraineur,
+          benchmarkSettings
+        )
+      : null;
+
+  return (
+    <StatistiquesPanel
+      title="Parrainages / parraineur"
+      description={`Sur l'exercice ${exerciceLabel}, nombre moyen de filleuls parrainés par consultant parraineur — affiliations durant l'exercice (inscription du filleul, ou invitation si prospect), parmi les consultants présents sur la période.`}
+      collapsible
+      panelId="filleul_org_parrainage_per_parraineur"
+    >
+      {loading ? (
+        <ChartLoading />
+      ) : exerciceStats.totalEligible === 0 ? (
+        <ChartEmpty title="Aucun consultant réseau sur cet exercice." height={180} />
+      ) : (
+        <div className="space-y-4">
+          {exerciceStats.parraineurCount === 0 ? (
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Exercice {exerciceLabel}
+                </p>
+                <p className="text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5 text-muted-foreground">
+                  —
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground text-right max-w-xs">
+                Aucun parrainage sur l&apos;exercice.
+                <br />
+                {formatFilleulParrainagePerParraineurExerciceSubtitle(
+                  exerciceStats,
+                  exerciceLabel
+                )}
+              </p>
+            </div>
+          ) : (
+            <div
+              className={cn(
+                "rounded-xl border px-4 py-3 flex items-center justify-between gap-4 transition-colors",
+                benchmarkStatus
+                  ? filleulVolumeBenchmarkStatusBoxClasses(benchmarkStatus)
+                  : "border-border/60 bg-muted/20"
+              )}
+              title={benchmarkStatus ? filleulVolumeBenchmarkStatusLabel(benchmarkStatus) : undefined}
+            >
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Exercice {exerciceLabel}
+                </p>
+                <p
+                  className={cn(
+                    "text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5",
+                    benchmarkStatus
+                      ? filleulVolumeBenchmarkStatusValueClasses(benchmarkStatus)
+                      : "text-primary"
+                  )}
+                >
+                  {formatFilleulParrainagePerParraineur(exerciceStats.averagePerParraineur!)}
+                </p>
+              </div>
+              <div className="text-xs text-muted-foreground text-right max-w-xs space-y-0.5">
+                <p>
+                  {formatFilleulParrainagePerParraineurExerciceSubtitle(
+                    exerciceStats,
+                    exerciceLabel
+                  )}
+                </p>
+                <p className="tabular-nums">
+                  Réf. groupe{" "}
+                  {formatFilleulParrainagePerParraineur(
+                    benchmarkSettings.groupParrainagesPerParraineur
+                  )}
+                </p>
+                <p className="font-medium text-foreground tabular-nums">
+                  {formatParrainagePerParraineurVsGroupBenchmarkPercent(
+                    exerciceStats.averagePerParraineur!,
+                    benchmarkSettings
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2.5">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Indice historique (cumul)
+            </p>
+            <p className="text-sm font-medium tabular-nums text-foreground mt-0.5">
+              {formatFilleulParrainagePerParraineurCumulativeIndex(cumulativeStats)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              Moyenne parmi les consultants réseau ayant parrainé au moins une fois — toutes
+              périodes, indépendant de l&apos;exercice sélectionné.
+            </p>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Moyenne = parrainages de l&apos;exercice ÷ parraineurs de l&apos;exercice. Un
+            parrainage compte si la date d&apos;inscription du filleul parrainé (ou son invitation
+            prospect) tombe dans l&apos;exercice — aligné avec le taux de parraineurs. Référence
+            groupe via « Références » en haut de page.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <OrganisationListButton
+              label="Filleuls parrainés (exercice)"
+              count={exerciceStats.totalParrainages}
+              onClick={() => onOpenList("parraines")}
+            />
+            <OrganisationListButton
+              label="Parraineurs (exercice)"
+              count={exerciceStats.parraineurCount}
+              countUnit="consultant"
+              onClick={() => onOpenList("parraineur")}
+            />
+          </div>
+        </div>
+      )}
+    </StatistiquesPanel>
+  );
+}
+
+function NetGrowthKpiPanel({
+  loading,
+  exerciceLabel,
+  stats,
+  onOpenList,
+}: {
+  loading: boolean;
+  exerciceLabel: string;
+  stats: FilleulNetGrowthStatResult;
+  onOpenList: (kind: FilleulNetGrowthListKind) => void;
+}) {
+  const benchmarkSettings = useStatistiquesBenchmarkSettings();
+  const benchmarkStatus =
+    stats.growthPercent != null
+      ? getFilleulNetGrowthBenchmarkStatus(stats.growthPercent, benchmarkSettings)
+      : null;
+
+  return (
+    <StatistiquesPanel
+      title="Croissance nette"
+      description={`Variation en % du nombre de consultants présents sur l'exercice ${exerciceLabel} par rapport à l'exercice précédent (même règle de présence que le volume : inscrits ou désinscrits selon dates dossier).`}
+      collapsible
+      panelId="filleul_org_net_growth"
+    >
+      {loading ? (
+        <ChartLoading />
+      ) : stats.currentCount === 0 && stats.previousCount === 0 ? (
+        <ChartEmpty title="Aucun consultant présent sur ces exercices." height={180} />
+      ) : stats.growthPercent == null ? (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Exercice {exerciceLabel}
+              </p>
+              <p className="text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5 text-muted-foreground">
+                —
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground text-right max-w-xs">
+              Aucun consultant sur l&apos;exercice précédent — croissance non calculée.
+              <br />
+              {formatFilleulNetGrowthExerciceSubtitle(stats, exerciceLabel)}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <OrganisationListButton
+              label="Consultants (exercice)"
+              count={stats.currentCount}
+              countUnit="consultant"
+              onClick={() => onOpenList("current")}
+            />
+            {stats.previousExerciceLabel != null ? (
+              <OrganisationListButton
+                label={`Consultants (${stats.previousExerciceLabel})`}
+                count={stats.previousCount}
+                countUnit="consultant"
+                onClick={() => onOpenList("previous")}
+              />
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div
+            className={cn(
+              "rounded-xl border px-4 py-3 flex items-center justify-between gap-4 transition-colors",
+              benchmarkStatus
+                ? filleulVolumeBenchmarkStatusBoxClasses(benchmarkStatus)
+                : "border-border/60 bg-muted/20"
+            )}
+            title={benchmarkStatus ? filleulVolumeBenchmarkStatusLabel(benchmarkStatus) : undefined}
+          >
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Exercice {exerciceLabel}
+              </p>
+              <p
+                className={cn(
+                  "text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5",
+                  benchmarkStatus
+                    ? filleulVolumeBenchmarkStatusValueClasses(benchmarkStatus)
+                    : stats.growthPercent >= 0
+                      ? "text-primary"
+                      : "text-red-800"
+                )}
+              >
+                {formatFilleulNetGrowthPercent(stats.growthPercent)}
+              </p>
+              <p className="text-xs text-muted-foreground tabular-nums mt-1">
+                {formatFilleulNetGrowthSigned(stats.netGrowth)} consultant
+                {stats.netGrowth !== 1 && stats.netGrowth !== -1 ? "s" : ""}
+              </p>
+            </div>
+            <div className="text-xs text-muted-foreground text-right max-w-xs space-y-0.5">
+              <p>{formatFilleulNetGrowthExerciceSubtitle(stats, exerciceLabel)}</p>
+              <p className="tabular-nums">
+                Réf. groupe +{benchmarkSettings.groupNetGrowthPercent} %
+              </p>
+              <p className="font-medium text-foreground tabular-nums">
+                {formatNetGrowthVsGroupBenchmarkPercent(stats.growthPercent, benchmarkSettings)}
+              </p>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Consultants présents sur chaque exercice (inscription avant fin de période, pas encore
+            désinscrit au début). Référence groupe via « Références » en haut de page.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <OrganisationListButton
+              label="Consultants (exercice)"
+              count={stats.currentCount}
+              countUnit="consultant"
+              onClick={() => onOpenList("current")}
+            />
+            {stats.previousExerciceLabel != null ? (
+              <OrganisationListButton
+                label={`Consultants (${stats.previousExerciceLabel})`}
+                count={stats.previousCount}
+                countUnit="consultant"
+                onClick={() => onOpenList("previous")}
+              />
+            ) : null}
           </div>
         </div>
       )}
@@ -879,11 +1260,13 @@ function ParrainageDurationKpiPanel({
               <OrganisationListButton
                 label="Avec parrainage"
                 count={exerciceStats.countedCount}
+                countUnit="consultant"
                 onClick={() => onOpenList("withDuration")}
               />
               <OrganisationListButton
                 label="Sans parrainage"
                 count={exerciceStats.missingParrainageCount}
+                countUnit="consultant"
                 onClick={() => onOpenList("missingParrainage")}
               />
             </div>
@@ -963,6 +1346,8 @@ export function ContactFilleulOrganisationPanel({
   const { contacts, selfContactId, loading, dataRefreshKey, refreshData } =
     useStatistiquesPageData();
   const [contactsSheetOpen, setContactsSheetOpen] = useState(false);
+  const [selectedDossierContactId, setSelectedDossierContactId] = useState<number | null>(null);
+  const [cgp, setCgp] = useState<CgpConfig | null>(null);
   const [drillDown, setDrillDown] = useState<OrganisationDrillDown | null>(null);
   const [closedLabels, setClosedLabels] = useState<string[]>([]);
   const [selectedExercice, setSelectedExercice] =
@@ -978,6 +1363,10 @@ export function ContactFilleulOrganisationPanel({
 
   useEffect(() => {
     void listFilleulVolumeExerciceLabels().then(setClosedLabels).catch(console.error);
+  }, [dataRefreshKey]);
+
+  useEffect(() => {
+    void getCgpConfig().then(setCgp).catch(console.error);
   }, [dataRefreshKey]);
 
   const resolvedExerciceLabel = useMemo(
@@ -1016,6 +1405,24 @@ export function ContactFilleulOrganisationPanel({
     () => contactsForStats.find((contact) => contact.id === selfContactId) ?? null,
     [contactsForStats, selfContactId]
   );
+
+  const organisationTree = useMemo(
+    () =>
+      buildOrganisationTree(contactsForStats, cgp ?? {}, {
+        exerciceLabel: resolvedExerciceLabel,
+        dossiersByContactId,
+        hideDesinscrits: false,
+      }),
+    [contactsForStats, cgp, resolvedExerciceLabel, dossiersByContactId]
+  );
+
+  const memberRoster = useMemo(
+    () => collectOrganisationMemberRoster(organisationTree),
+    [organisationTree]
+  );
+
+  const currentExerciceClosed = closedLabels.includes(currentFiscalYearLabel());
+  const canEditOrganisationVolumes = !currentExerciceClosed;
 
   const dossierContactIds = useMemo(() => {
     const ids = new Set(collectOrganisationDossierContactIds(contactsForStats, selfContact));
@@ -1085,6 +1492,65 @@ export function ContactFilleulOrganisationPanel({
     onUpdate: () => void refreshData({ silent: true }),
   });
 
+  const handleDossierChange = useCallback((next: FilleulDossier) => {
+    setDossiersByContactId((prev) => {
+      const map = new Map(prev);
+      map.set(next.contactId, next);
+      return map;
+    });
+  }, []);
+
+  const handleOpenContactSheetFromDossier = useCallback(
+    (contactId: number) => {
+      void openContactWithTab(contactId, undefined, {
+        stacked: selectedDossierContactId != null,
+      });
+    },
+    [openContactWithTab, selectedDossierContactId]
+  );
+
+  const handleVolumeSave = useCallback(async (contact: Contact, volume: number | null) => {
+    try {
+      await updateContact(contact.id, contactFilleulVolumeUpdatePayload(contact, volume));
+      toast.success("Volume exercice enregistré");
+    } catch (error) {
+      console.error("Error saving filleul volume:", error);
+      toast.error("Impossible d'enregistrer le volume");
+      throw error;
+    }
+  }, []);
+
+  const handleManagerVolumeSave = useCallback(async (contact: Contact, volume: number | null) => {
+    try {
+      await updateContact(
+        contact.id,
+        contactFilleulManagerVolumeUpdatePayload(contact, volume)
+      );
+      toast.success("Objectif Manager enregistré");
+    } catch (error) {
+      console.error("Error saving manager volume:", error);
+      toast.error("Impossible d'enregistrer l'objectif Manager");
+      throw error;
+    }
+  }, []);
+
+  const handleRankSave = useCallback(
+    async (
+      contact: Contact,
+      ranks: { filleul_titre?: string | null; filleul_qualification?: string | null }
+    ) => {
+      try {
+        await updateContact(contact.id, contactFilleulRankUpdatePayload(contact, ranks));
+        toast.success("Titre et qualification enregistrés");
+      } catch (error) {
+        console.error("Error saving filleul ranks:", error);
+        toast.error("Impossible d'enregistrer le titre");
+        throw error;
+      }
+    },
+    []
+  );
+
   const statsOptions = useMemo(() => ({ selfContactId }), [selfContactId]);
 
   const managerStats = useMemo(() => computeFilleulManagerStats(contactsForStats), [contactsForStats]);
@@ -1126,6 +1592,15 @@ export function ContactFilleulOrganisationPanel({
   const filleulAttritionCumulativeStats = useMemo(
     () => computeFilleulAttritionStats(contactsForStats),
     [contactsForStats]
+  );
+  const filleulNetGrowthExerciceStats = useMemo(
+    () =>
+      computeFilleulNetGrowthExerciceStats(
+        contactsForStats,
+        resolvedExerciceLabel,
+        parraineurStatsOptions
+      ),
+    [contactsForStats, resolvedExerciceLabel, parraineurStatsOptions]
   );
   const vaaDurationExerciceStats = useMemo(
     () =>
@@ -1179,6 +1654,19 @@ export function ContactFilleulOrganisationPanel({
     () => computeFilleulParrainageDurationStats(contactsForStats, parraineurStatsOptions),
     [contactsForStats, parraineurStatsOptions]
   );
+  const parrainagePerParraineurExerciceStats = useMemo(
+    () =>
+      computeFilleulParrainagePerParraineurExerciceStats(
+        contactsForStats,
+        resolvedExerciceLabel,
+        parraineurStatsOptions
+      ),
+    [contactsForStats, resolvedExerciceLabel, parraineurStatsOptions]
+  );
+  const parrainagePerParraineurCumulativeStats = useMemo(
+    () => computeFilleulParrainagePerParraineurStats(contactsForStats),
+    [contactsForStats]
+  );
 
   const loadContactsSheet = useCallback(async () => {
     if (!drillDown) return [];
@@ -1197,9 +1685,30 @@ export function ContactFilleulOrganisationPanel({
         )
       );
     }
+    if (drillDown.mode === "parrainagePerParraineur") {
+      return toDashboardStatContactList(
+        filterContactsForFilleulParrainagePerParraineurExerciceList(
+          contactsForStats,
+          drillDown.kind,
+          resolvedExerciceLabel,
+          parraineurStatsOptions
+        )
+      );
+    }
     if (drillDown.mode === "bridge") {
       return toDashboardStatContactList(
         filterContactsForFilleulBridgeList(contactsForStats, drillDown.kind, statsOptions)
+      );
+    }
+    if (drillDown.mode === "netGrowth") {
+      return toDashboardStatContactList(
+        filterContactsForFilleulNetGrowthExerciceList(
+          contactsForStats,
+          drillDown.kind,
+          resolvedExerciceLabel,
+          previousFiscalYearLabel(resolvedExerciceLabel),
+          parraineurStatsOptions
+        )
       );
     }
     if (drillDown.mode === "attrition") {
@@ -1280,6 +1789,14 @@ export function ContactFilleulOrganisationPanel({
     setContactsSheetOpen(true);
   }, []);
 
+  const openParrainagePerParraineurList = useCallback(
+    (kind: FilleulParrainagePerParraineurListKind) => {
+      setDrillDown({ mode: "parrainagePerParraineur", kind });
+      setContactsSheetOpen(true);
+    },
+    []
+  );
+
   const openVaaDurationList = useCallback((kind: FilleulVaaDurationListKind) => {
     setDrillDown({ mode: "vaaDuration", kind });
     setContactsSheetOpen(true);
@@ -1308,6 +1825,11 @@ export function ContactFilleulOrganisationPanel({
     setContactsSheetOpen(true);
   }, []);
 
+  const openNetGrowthList = useCallback((kind: FilleulNetGrowthListKind) => {
+    setDrillDown({ mode: "netGrowth", kind });
+    setContactsSheetOpen(true);
+  }, []);
+
   const openFilleulAttritionList = useCallback(
     (kind: "active" | "attrited", stats: ContactAttritionStatResult) => {
       const count = kind === "active" ? stats.activeCount : stats.attritedCount;
@@ -1330,10 +1852,20 @@ export function ContactFilleulOrganisationPanel({
           ? `Consultants réseau — parraineurs exercice ${resolvedExerciceLabel}`
           : `Consultants réseau — sans parrainage exercice ${resolvedExerciceLabel}`;
       }
+      if (dd.mode === "parrainagePerParraineur") {
+        return dd.kind === "parraines"
+          ? `Filleuls parrainés — affiliations exercice ${resolvedExerciceLabel}`
+          : `Consultants réseau — parraineurs exercice ${resolvedExerciceLabel}`;
+      }
       if (dd.mode === "bridge") {
         return dd.kind === "bridge"
           ? "Filleuls directs — avec statut client"
           : "Filleuls directs — filleuls seuls";
+      }
+      if (dd.mode === "netGrowth") {
+        return dd.kind === "current"
+          ? `Consultants présents — exercice ${resolvedExerciceLabel}`
+          : `Consultants présents — exercice ${previousFiscalYearLabel(resolvedExerciceLabel) ?? "précédent"}`;
       }
       if (dd.mode === "attrition") {
         return dd.kind === "attrited"
@@ -1379,10 +1911,20 @@ export function ContactFilleulOrganisationPanel({
         ? parraineurExerciceStats.parraineurCount
         : parraineurExerciceStats.otherContactIds.length;
     }
+    if (drillDown.mode === "parrainagePerParraineur") {
+      return drillDown.kind === "parraines"
+        ? parrainagePerParraineurExerciceStats.totalParrainages
+        : parrainagePerParraineurExerciceStats.parraineurCount;
+    }
     if (drillDown.mode === "bridge") {
       return drillDown.kind === "bridge"
         ? bridgeStats.bridgeCount
         : bridgeStats.otherContactIds.length;
+    }
+    if (drillDown.mode === "netGrowth") {
+      return drillDown.kind === "current"
+        ? filleulNetGrowthExerciceStats.currentCount
+        : filleulNetGrowthExerciceStats.previousCount;
     }
     if (drillDown.mode === "attrition") {
       return drillDown.count;
@@ -1414,7 +1956,9 @@ export function ContactFilleulOrganisationPanel({
     drillDown,
     managerStats,
     parraineurExerciceStats,
+    parrainagePerParraineurExerciceStats,
     bridgeStats,
+    filleulNetGrowthExerciceStats,
     volumeStats,
     vaaDurationExerciceStats,
     habilitationDurationExerciceStats,
@@ -1428,10 +1972,26 @@ export function ContactFilleulOrganisationPanel({
       return `${sheetCount} filleul${sheetCount > 1 ? "s" : ""} · ${formatFilleulManagerPercent(managerStats.managerPercent)} Managers au total`;
     }
     if (drillDown.mode === "parraineur") {
-      return `${sheetCount} filleul${sheetCount > 1 ? "s" : ""} · ${formatFilleulManagerPercent(parraineurExerciceStats.parraineurPercent)} parraineurs exercice ${resolvedExerciceLabel} · cumul ${formatFilleulManagerPercent(parraineurCumulativeStats.parraineurPercent)}`;
+      return `${sheetCount} consultant${sheetCount > 1 ? "s" : ""} · ${formatFilleulManagerPercent(parraineurExerciceStats.parraineurPercent)} parraineurs exercice ${resolvedExerciceLabel} · cumul ${formatFilleulManagerPercent(parraineurCumulativeStats.parraineurPercent)}`;
+    }
+    if (drillDown.mode === "parrainagePerParraineur") {
+      const avg =
+        parrainagePerParraineurExerciceStats.averagePerParraineur != null
+          ? formatFilleulParrainagePerParraineur(
+              parrainagePerParraineurExerciceStats.averagePerParraineur
+            )
+          : "—";
+      return `${sheetCount} consultant${sheetCount > 1 ? "s" : ""} · moyenne ${avg} parraineur${parrainagePerParraineurExerciceStats.parraineurCount > 1 ? "s" : ""} exercice ${resolvedExerciceLabel} · cumul ${formatFilleulParrainagePerParraineurCumulativeIndex(parrainagePerParraineurCumulativeStats)}`;
     }
     if (drillDown.mode === "bridge") {
       return `${sheetCount} filleul${sheetCount > 1 ? "s" : ""} · ${formatFilleulManagerPercent(bridgeStats.bridgePercent)} double rôle au total`;
+    }
+    if (drillDown.mode === "netGrowth") {
+      const rate =
+        filleulNetGrowthExerciceStats.growthPercent != null
+          ? formatFilleulNetGrowthPercent(filleulNetGrowthExerciceStats.growthPercent)
+          : "—";
+      return `${sheetCount} consultant${sheetCount > 1 ? "s" : ""} · croissance ${rate} · ${formatFilleulNetGrowthExerciceSubtitle(filleulNetGrowthExerciceStats, resolvedExerciceLabel)}`;
     }
     if (drillDown.mode === "attrition") {
       return `${sheetCount} contact${sheetCount > 1 ? "s" : ""} — ${formatDashboardPercent(
@@ -1479,7 +2039,10 @@ export function ContactFilleulOrganisationPanel({
     managerStats.managerPercent,
     parraineurExerciceStats.parraineurPercent,
     parraineurCumulativeStats.parraineurPercent,
+    parrainagePerParraineurExerciceStats,
+    parrainagePerParraineurCumulativeStats,
     bridgeStats.bridgePercent,
+    filleulNetGrowthExerciceStats,
     filleulAttritionExerciceStats.totalCount,
     volumeStats.averageVolume,
     vaaDurationExerciceStats.averageMonths,
@@ -1491,14 +2054,13 @@ export function ContactFilleulOrganisationPanel({
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
-        <p className="text-sm text-muted-foreground">
-          Volumes et KPIs réseau pour l&apos;exercice sélectionné.
-        </p>
+      <div className="flex flex-wrap items-center justify-start gap-3 mb-1">
         <OrganisationExerciceSelector
           closedLabels={closedLabels}
           value={selectedExercice}
           onValueChange={setSelectedExercice}
+          displayTriggerLabel={`Exercice ${resolvedExerciceLabel}`}
+          className="w-auto min-w-[11rem] h-9 text-sm font-medium"
         />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
@@ -1517,6 +2079,13 @@ export function ContactFilleulOrganisationPanel({
           exerciceStats={parraineurExerciceStats}
           cumulativeStats={parraineurCumulativeStats}
           onOpenList={openParraineurList}
+        />
+        <ParrainagePerParraineurKpiPanel
+          loading={exerciceKpisLoading}
+          exerciceLabel={resolvedExerciceLabel}
+          exerciceStats={parrainagePerParraineurExerciceStats}
+          cumulativeStats={parrainagePerParraineurCumulativeStats}
+          onOpenList={openParrainagePerParraineurList}
         />
         <ParrainageDurationKpiPanel
           loading={exerciceKpisLoading}
@@ -1547,6 +2116,12 @@ export function ContactFilleulOrganisationPanel({
           onOpenList={openManagerDurationList}
         />
         <BridgeKpiPanel loading={loading} stats={bridgeStats} onOpenList={openBridgeList} />
+        <NetGrowthKpiPanel
+          loading={exerciceKpisLoading}
+          exerciceLabel={resolvedExerciceLabel}
+          stats={filleulNetGrowthExerciceStats}
+          onOpenList={openNetGrowthList}
+        />
         <div className="lg:col-span-2">
           <AttritionKpiPanel
             panelId="attrition_filleul"
@@ -1566,12 +2141,12 @@ export function ContactFilleulOrganisationPanel({
         </div>
       </div>
 
-      {contactsSheetOpen ? <DashboardDrillDownBackdrop /> : null}
+      {contactsSheetOpen || selectedDossierContactId != null ? <DashboardDrillDownBackdrop /> : null}
 
       <DashboardStatContactsSheet
         open={contactsSheetOpen}
         onOpenChange={(open) => {
-          if (!open && contactDetailOpen) return;
+          if (!open && (contactDetailOpen || selectedDossierContactId != null)) return;
           setContactsSheetOpen(open);
           if (!open) {
             setDrillDown(null);
@@ -1582,11 +2157,39 @@ export function ContactFilleulOrganisationPanel({
         description={sheetDescription}
         loadContacts={loadContactsSheet}
         refreshSignal={dataRefreshKey}
-        activeContactId={contactDetailOpen ? activeContactId : null}
-        stackedContactOpen={contactDetailOpen}
+        activeContactId={selectedDossierContactId ?? (contactDetailOpen ? activeContactId : null)}
+        stackedContactOpen={selectedDossierContactId != null || contactDetailOpen}
         onOpenContact={(contactId) => {
-          void openContactWithTab(contactId, undefined, { listBack: true });
+          setSelectedDossierContactId(contactId);
         }}
+      />
+
+      <OrganisationMemberDossierPanel
+        contactId={selectedDossierContactId}
+        roster={memberRoster}
+        contacts={contactsForStats}
+        cgp={cgp}
+        canEditVolumes={canEditOrganisationVolumes}
+        refreshKey={dataRefreshKey}
+        dossier={
+          selectedDossierContactId != null
+            ? mergeLegacyFilleulDossierView(
+                contactsForStats.find((c) => c.id === selectedDossierContactId) ?? {
+                  id: selectedDossierContactId,
+                },
+                dossiersByContactId.get(selectedDossierContactId)
+              )
+            : null
+        }
+        onDossierChange={handleDossierChange}
+        onNetworkDataChange={() => void refreshData({ silent: true })}
+        onClose={() => setSelectedDossierContactId(null)}
+        onSelectMember={setSelectedDossierContactId}
+        onOpenContactSheet={handleOpenContactSheetFromDossier}
+        onVolumeSave={canEditOrganisationVolumes ? handleVolumeSave : undefined}
+        onManagerVolumeSave={canEditOrganisationVolumes ? handleManagerVolumeSave : undefined}
+        onRankSave={handleRankSave}
+        stackedContactOpen={contactDetailOpen}
       />
 
       {contactDetailSheet}

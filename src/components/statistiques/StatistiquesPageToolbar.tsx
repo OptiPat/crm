@@ -14,6 +14,7 @@ import {
 import {
   STATISTIQUES_SECTIONS,
   statistiquesSectionAnchorId,
+  statistiquesSectionPanelCount,
 } from "@/lib/statistiques/statistiques-sections";
 import type { StatistiquesSectionId } from "@/lib/statistiques/statistiques-page-preferences";
 import { cn } from "@/lib/utils";
@@ -79,7 +80,9 @@ export function StatistiquesPageToolbar() {
               )}
             >
               <span className="text-foreground">{section.title}</span>
-              <span className="ml-1.5 text-muted-foreground tabular-nums">({section.panelCount})</span>
+              <span className="ml-1.5 text-muted-foreground tabular-nums">
+                ({statistiquesSectionPanelCount(section.id)})
+              </span>
             </button>
           ))}
         </nav>

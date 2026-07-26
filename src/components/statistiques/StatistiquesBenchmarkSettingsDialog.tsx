@@ -62,7 +62,10 @@ export function StatistiquesBenchmarkSettingsDialog({
   onOpenChange,
 }: StatistiquesBenchmarkSettingsDialogProps) {
   const [referenceEuros, setReferenceEuros] = useState("");
+  const [activeConsultantRatePercent, setActiveConsultantRatePercent] = useState("");
   const [sponsorRatePercent, setSponsorRatePercent] = useState("");
+  const [parrainagesPerParraineur, setParrainagesPerParraineur] = useState("");
+  const [netGrowthPercent, setNetGrowthPercent] = useState("");
   const [vaaDurationMonths, setVaaDurationMonths] = useState("");
   const [habilitationDurationMonths, setHabilitationDurationMonths] = useState("");
   const [nearPercent, setNearPercent] = useState("80");
@@ -72,7 +75,14 @@ export function StatistiquesBenchmarkSettingsDialog({
     if (!open) return;
     const settings = loadStatistiquesBenchmarkSettings();
     setReferenceEuros(formatFilleulVolumeField(settings.groupActiveConsultantVolumeEuros));
+    setActiveConsultantRatePercent(
+      String(settings.groupActiveConsultantRatePercent).replace(".", ",")
+    );
     setSponsorRatePercent(String(settings.groupSponsorRatePercent).replace(".", ","));
+    setParrainagesPerParraineur(
+      String(settings.groupParrainagesPerParraineur).replace(".", ",")
+    );
+    setNetGrowthPercent(String(settings.groupNetGrowthPercent).replace(".", ","));
     setVaaDurationMonths(String(settings.groupVaaDurationMonths).replace(".", ","));
     setHabilitationDurationMonths(
       String(settings.groupHabilitationDurationMonths).replace(".", ",")
@@ -84,7 +94,14 @@ export function StatistiquesBenchmarkSettingsDialog({
   const handleReset = () => {
     const defaults = defaultStatistiquesBenchmarkSettings();
     setReferenceEuros(formatFilleulVolumeField(defaults.groupActiveConsultantVolumeEuros));
+    setActiveConsultantRatePercent(
+      String(defaults.groupActiveConsultantRatePercent).replace(".", ",")
+    );
     setSponsorRatePercent(String(defaults.groupSponsorRatePercent).replace(".", ","));
+    setParrainagesPerParraineur(
+      String(defaults.groupParrainagesPerParraineur).replace(".", ",")
+    );
+    setNetGrowthPercent(String(defaults.groupNetGrowthPercent).replace(".", ","));
     setVaaDurationMonths(String(defaults.groupVaaDurationMonths).replace(".", ","));
     setHabilitationDurationMonths(
       String(defaults.groupHabilitationDurationMonths).replace(".", ",")
@@ -99,9 +116,34 @@ export function StatistiquesBenchmarkSettingsDialog({
       setError("Saisissez un montant de référence strictement positif.");
       return;
     }
+    const activeRateRaw = activeConsultantRatePercent.trim();
+    const parsedActiveConsultantRate =
+      activeRateRaw === ""
+        ? defaultStatistiquesBenchmarkSettings().groupActiveConsultantRatePercent
+        : Number.parseFloat(activeRateRaw.replace(",", "."));
+    if (
+      !Number.isFinite(parsedActiveConsultantRate) ||
+      parsedActiveConsultantRate <= 0 ||
+      parsedActiveConsultantRate > 100
+    ) {
+      setError("Le taux d'actifs de référence doit être entre 0 et 100 %.");
+      return;
+    }
     const parsedSponsorRate = Number.parseFloat(sponsorRatePercent.trim().replace(",", "."));
     if (!Number.isFinite(parsedSponsorRate) || parsedSponsorRate <= 0 || parsedSponsorRate > 100) {
-      setError("Le taux de parrainage de référence doit être entre 0 et 100 %.");
+      setError("Le taux de parraineurs de référence doit être entre 0 et 100 %.");
+      return;
+    }
+    const parsedParrainagesPerParraineur = Number.parseFloat(
+      parrainagesPerParraineur.trim().replace(",", ".")
+    );
+    if (!Number.isFinite(parsedParrainagesPerParraineur) || parsedParrainagesPerParraineur <= 0) {
+      setError("La référence parrainages / parraineur doit être strictement positive.");
+      return;
+    }
+    const parsedNetGrowthPercent = Number.parseFloat(netGrowthPercent.trim().replace(",", "."));
+    if (!Number.isFinite(parsedNetGrowthPercent) || parsedNetGrowthPercent <= 0) {
+      setError("La référence croissance nette doit être strictement positive (%).");
       return;
     }
     const parsedVaaDuration = Number.parseFloat(vaaDurationMonths.trim().replace(",", "."));
@@ -123,7 +165,10 @@ export function StatistiquesBenchmarkSettingsDialog({
     }
     saveStatistiquesBenchmarkSettings({
       groupActiveConsultantVolumeEuros: parsedReference,
+      groupActiveConsultantRatePercent: parsedActiveConsultantRate,
       groupSponsorRatePercent: parsedSponsorRate,
+      groupParrainagesPerParraineur: parsedParrainagesPerParraineur,
+      groupNetGrowthPercent: parsedNetGrowthPercent,
       groupVaaDurationMonths: parsedVaaDuration,
       groupHabilitationDurationMonths: parsedHabilitationDuration,
       nearGroupBenchmarkRatio: pct / 100,
@@ -132,7 +177,14 @@ export function StatistiquesBenchmarkSettingsDialog({
   };
 
   const previewReference = parseFilleulVolumeField(referenceEuros.replace(/\s/g, ""));
+  const previewActiveConsultantRate = Number.parseFloat(
+    activeConsultantRatePercent.trim().replace(",", ".")
+  );
   const previewSponsorRate = Number.parseFloat(sponsorRatePercent.trim().replace(",", "."));
+  const previewParrainagesPerParraineur = Number.parseFloat(
+    parrainagesPerParraineur.trim().replace(",", ".")
+  );
+  const previewNetGrowthPercent = Number.parseFloat(netGrowthPercent.trim().replace(",", "."));
   const previewVaaDuration = Number.parseFloat(vaaDurationMonths.trim().replace(",", "."));
   const previewHabilitationDuration = Number.parseFloat(
     habilitationDurationMonths.trim().replace(",", ".")
@@ -153,6 +205,30 @@ export function StatistiquesBenchmarkSettingsDialog({
     previewPct > 0 &&
     previewPct < 100
       ? previewSponsorRate * (previewPct / 100)
+      : null;
+  const previewActiveConsultantRateFloor =
+    Number.isFinite(previewActiveConsultantRate) &&
+    previewActiveConsultantRate > 0 &&
+    Number.isFinite(previewPct) &&
+    previewPct > 0 &&
+    previewPct < 100
+      ? previewActiveConsultantRate * (previewPct / 100)
+      : null;
+  const previewParrainagesPerParraineurFloor =
+    Number.isFinite(previewParrainagesPerParraineur) &&
+    previewParrainagesPerParraineur > 0 &&
+    Number.isFinite(previewPct) &&
+    previewPct > 0 &&
+    previewPct < 100
+      ? previewParrainagesPerParraineur * (previewPct / 100)
+      : null;
+  const previewNetGrowthFloor =
+    Number.isFinite(previewNetGrowthPercent) &&
+    previewNetGrowthPercent > 0 &&
+    Number.isFinite(previewPct) &&
+    previewPct > 0 &&
+    previewPct < 100
+      ? previewNetGrowthPercent * (previewPct / 100)
       : null;
   const previewVaaCeiling =
     Number.isFinite(previewVaaDuration) &&
@@ -186,7 +262,7 @@ export function StatistiquesBenchmarkSettingsDialog({
           <div className="space-y-5">
             <BenchmarkSection
               title="Organisation filleuls"
-              description="Panneaux volume, parrainage, délai VAA/VA et délai habilitation — comparaison à la moyenne groupe."
+              description="Panneaux volume, taux d'actifs, taux de parraineurs, parrainages / parraineur, croissance nette, délai VAA/VA et délai habilitation — comparaison à la moyenne groupe."
             >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2 sm:col-span-2">
@@ -211,8 +287,29 @@ export function StatistiquesBenchmarkSettingsDialog({
                 </div>
 
                 <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="stat-benchmark-active-rate">
+                    Taux d&apos;actifs — référence groupe (%)
+                  </Label>
+                  <Input
+                    id="stat-benchmark-active-rate"
+                    inputMode="decimal"
+                    placeholder="30"
+                    className="h-10"
+                    value={activeConsultantRatePercent}
+                    onChange={(event) => {
+                      setActiveConsultantRatePercent(event.target.value);
+                      setError(null);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Part des consultants présents sur l&apos;exercice avec au moins 1 € de volume
+                    propre (défaut 30 % — modifiable).
+                  </p>
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="stat-benchmark-sponsor-rate">
-                    Taux de parrainage — référence groupe (%)
+                    Taux de parraineurs — référence groupe (%)
                   </Label>
                   <Input
                     id="stat-benchmark-sponsor-rate"
@@ -228,6 +325,48 @@ export function StatistiquesBenchmarkSettingsDialog({
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     Moyenne nationale : part des consultants réseau (présents sur l&apos;exercice)
                     ayant parrainé au moins une personne affiliée durant la période.
+                  </p>
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="stat-benchmark-parrainages-per-parraineur">
+                    Parrainages / parraineur — référence groupe
+                  </Label>
+                  <Input
+                    id="stat-benchmark-parrainages-per-parraineur"
+                    inputMode="decimal"
+                    placeholder="1,9"
+                    className="h-10"
+                    value={parrainagesPerParraineur}
+                    onChange={(event) => {
+                      setParrainagesPerParraineur(event.target.value);
+                      setError(null);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Moyenne nationale : nombre de filleuls parrainés par consultant parraineur sur
+                    l&apos;exercice (affiliations durant la période).
+                  </p>
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="stat-benchmark-net-growth">
+                    Croissance nette — référence groupe (% vs exercice précédent)
+                  </Label>
+                  <Input
+                    id="stat-benchmark-net-growth"
+                    inputMode="decimal"
+                    placeholder="30"
+                    className="h-10"
+                    value={netGrowthPercent}
+                    onChange={(event) => {
+                      setNetGrowthPercent(event.target.value);
+                      setError(null);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Moyenne nationale : variation en % du nombre de consultants présents
+                    sur l&apos;exercice par rapport à l&apos;exercice précédent.
                   </p>
                 </div>
 
@@ -314,9 +453,29 @@ export function StatistiquesBenchmarkSettingsDialog({
                             </>
                           ) : null}
                         </p>
+                        {Number.isFinite(previewActiveConsultantRate) &&
+                        previewActiveConsultantRate > 0 ? (
+                          <p>
+                            Taux d&apos;actifs — réf. :{" "}
+                            <span className="font-medium text-foreground tabular-nums">
+                              {previewActiveConsultantRate.toString().replace(".", ",")} %
+                            </span>
+                            {previewActiveConsultantRateFloor != null ? (
+                              <>
+                                {" · "}
+                                zone orange{" "}
+                                <span className="font-medium text-foreground tabular-nums">
+                                  {previewActiveConsultantRateFloor.toFixed(1).replace(".", ",")} %
+                                </span>
+                                {" → "}
+                                {previewActiveConsultantRate.toString().replace(".", ",")} %
+                              </>
+                            ) : null}
+                          </p>
+                        ) : null}
                         {Number.isFinite(previewSponsorRate) && previewSponsorRate > 0 ? (
                           <p>
-                            Parrainage — réf. :{" "}
+                            Taux de parraineurs — réf. :{" "}
                             <span className="font-medium text-foreground tabular-nums">
                               {previewSponsorRate.toString().replace(".", ",")} %
                             </span>
@@ -329,6 +488,54 @@ export function StatistiquesBenchmarkSettingsDialog({
                                 </span>
                                 {" → "}
                                 {previewSponsorRate.toString().replace(".", ",")} %
+                              </>
+                            ) : null}
+                          </p>
+                        ) : null}
+                        {Number.isFinite(previewParrainagesPerParraineur) &&
+                        previewParrainagesPerParraineur > 0 ? (
+                          <p>
+                            Parrainages / parraineur — réf. :{" "}
+                            <span className="font-medium text-foreground tabular-nums">
+                              {previewParrainagesPerParraineur.toLocaleString("fr-FR", {
+                                minimumFractionDigits: 1,
+                                maximumFractionDigits: 1,
+                              })}
+                            </span>
+                            {previewParrainagesPerParraineurFloor != null ? (
+                              <>
+                                {" · "}
+                                zone orange{" "}
+                                <span className="font-medium text-foreground tabular-nums">
+                                  {previewParrainagesPerParraineurFloor.toLocaleString("fr-FR", {
+                                    minimumFractionDigits: 1,
+                                    maximumFractionDigits: 1,
+                                  })}
+                                </span>
+                                {" → "}
+                                {previewParrainagesPerParraineur.toLocaleString("fr-FR", {
+                                  minimumFractionDigits: 1,
+                                  maximumFractionDigits: 1,
+                                })}
+                              </>
+                            ) : null}
+                          </p>
+                        ) : null}
+                        {Number.isFinite(previewNetGrowthPercent) && previewNetGrowthPercent > 0 ? (
+                          <p>
+                            Croissance nette — réf. :{" "}
+                            <span className="font-medium text-foreground tabular-nums">
+                              +{previewNetGrowthPercent.toString().replace(".", ",")} %
+                            </span>
+                            {previewNetGrowthFloor != null ? (
+                              <>
+                                {" · "}
+                                zone orange{" "}
+                                <span className="font-medium text-foreground tabular-nums">
+                                  +{previewNetGrowthFloor.toFixed(1).replace(".", ",")} %
+                                </span>
+                                {" → "}
+                                +{previewNetGrowthPercent.toString().replace(".", ",")} %
                               </>
                             ) : null}
                           </p>

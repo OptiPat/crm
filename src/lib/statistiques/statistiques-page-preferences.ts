@@ -32,11 +32,13 @@ export type StatistiquesPanelId =
   | "filleul_org_manager"
   | "filleul_org_volume"
   | "filleul_org_parraineur"
+  | "filleul_org_parrainage_per_parraineur"
   | "filleul_org_parrainage_duration"
   | "filleul_org_vaa_duration"
   | "filleul_org_habilitation_duration"
   | "filleul_org_manager_duration"
-  | "filleul_org_bridge";
+  | "filleul_org_bridge"
+  | "filleul_org_net_growth";
 
 type StatistiquesCollapsibleId = StatistiquesSectionId | StatistiquesPanelId;
 
@@ -87,40 +89,62 @@ export function saveStatistiquesSectionOpen(
   writeState({ ...readState(), [sectionId]: open });
 }
 
-export const ALL_STATISTIQUES_PANEL_IDS: StatistiquesPanelId[] = [
-  "source_client",
-  "source_filleul",
-  "conversion_client",
-  "conversion_filleul",
-  "prescripteur_client",
-  "prescripteur_filleul",
-  "prescripteur_conversion_client",
-  "prescripteur_conversion_filleul",
-  "attrition_client",
-  "attrition_filleul",
-  "geography_client",
-  "geography_filleul",
-  "age_client",
-  "age_filleul",
-  "client_encours_placements",
-  "client_versements_programmes",
-  "client_panier_moyen",
-  "client_assurance_vie",
-  "client_scpi",
-  "client_per",
-  "client_immobilier",
-  "client_above_panier_moyen",
-  "client_scpi_reinvest",
-  "client_vp_coverage",
-  "filleul_org_manager",
-  "filleul_org_volume",
-  "filleul_org_parraineur",
-  "filleul_org_parrainage_duration",
-  "filleul_org_vaa_duration",
-  "filleul_org_habilitation_duration",
-  "filleul_org_manager_duration",
-  "filleul_org_bridge",
-];
+/** Panneaux KPI par section — source canonique pour les compteurs et « Tout ouvrir / replier ». */
+export const STATISTIQUES_PANELS_BY_SECTION: Record<
+  StatistiquesSectionId,
+  readonly StatistiquesPanelId[]
+> = {
+  contacts: [
+    "source_client",
+    "source_filleul",
+    "conversion_client",
+    "conversion_filleul",
+  ],
+  prescripteurs: [
+    "prescripteur_client",
+    "prescripteur_filleul",
+    "prescripteur_conversion_client",
+    "prescripteur_conversion_filleul",
+  ],
+  filleuls_organisation: [
+    "geography_filleul",
+    "age_filleul",
+    "filleul_org_manager",
+    "filleul_org_volume",
+    "filleul_org_parraineur",
+    "filleul_org_parrainage_per_parraineur",
+    "filleul_org_parrainage_duration",
+    "filleul_org_vaa_duration",
+    "filleul_org_habilitation_duration",
+    "filleul_org_manager_duration",
+    "filleul_org_bridge",
+    "filleul_org_net_growth",
+    "attrition_filleul",
+  ],
+  clients: [
+    "geography_client",
+    "age_client",
+    "client_encours_placements",
+    "client_versements_programmes",
+    "client_panier_moyen",
+    "client_assurance_vie",
+    "client_scpi",
+    "client_per",
+    "client_immobilier",
+    "client_above_panier_moyen",
+    "client_scpi_reinvest",
+    "client_vp_coverage",
+    "attrition_client",
+  ],
+};
+
+export const ALL_STATISTIQUES_PANEL_IDS: StatistiquesPanelId[] = Object.values(
+  STATISTIQUES_PANELS_BY_SECTION
+).flat();
+
+export function statistiquesPanelCountForSection(sectionId: StatistiquesSectionId): number {
+  return STATISTIQUES_PANELS_BY_SECTION[sectionId].length;
+}
 
 export function setAllStatistiquesPanelsOpen(open: boolean): void {
   const next = { ...readState() };

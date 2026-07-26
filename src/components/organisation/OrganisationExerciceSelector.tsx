@@ -16,6 +16,8 @@ type OrganisationExerciceSelectorProps = {
   value: OrganisationExerciceSelection;
   onValueChange: (value: OrganisationExerciceSelection) => void;
   className?: string;
+  /** Libellé du trigger (ex. « Exercice 2025-2026 ») — le menu garde les libellés d'options. */
+  displayTriggerLabel?: string;
 };
 
 export function OrganisationExerciceSelector({
@@ -23,6 +25,7 @@ export function OrganisationExerciceSelector({
   value,
   onValueChange,
   className,
+  displayTriggerLabel,
 }: OrganisationExerciceSelectorProps) {
   const options = buildOrganisationExerciceOptions(closedLabels);
 
@@ -32,7 +35,11 @@ export function OrganisationExerciceSelector({
       onValueChange={(next) => onValueChange(next as OrganisationExerciceSelection)}
     >
       <SelectTrigger className={className ?? "w-[220px] h-9 text-sm"}>
-        <SelectValue placeholder="Exercice" />
+        {displayTriggerLabel ? (
+          <span className="truncate">{displayTriggerLabel}</span>
+        ) : (
+          <SelectValue placeholder="Exercice" />
+        )}
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => (

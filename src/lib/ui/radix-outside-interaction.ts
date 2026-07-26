@@ -21,6 +21,16 @@ export function isRadixPortaledInteractionTarget(target: EventTarget | null): bo
   return el.closest(RADIX_PORTAL_INTERACTION_SELECTOR) != null;
 }
 
+/** Overlays maison portalés sur document.body (hors Dialog Radix), ex. RioIdentityMergeDialog. */
+const CUSTOM_OVERLAY_SELECTOR = ["[data-custom-modal-overlay]"].join(", ");
+
+/** Clic / focus « outside » qui cible en réalité un overlay maison portalé par-dessus le Dialog. */
+export function isCustomOverlayInteractionTarget(target: EventTarget | null): boolean {
+  const el = resolveInteractionElement(target);
+  if (!el) return false;
+  return el.closest(CUSTOM_OVERLAY_SELECTOR) != null;
+}
+
 type OutsideDismissEvent = {
   preventDefault: () => void;
   target: EventTarget | null;
@@ -28,9 +38,24 @@ type OutsideDismissEvent = {
 
 /**
  * Empêche la fermeture d'un sheet empilé au clic extérieur,
- * sauf si l'interaction vise un portail Radix (liste déroulante, popover…).
+ * sauf si l'interaction vise un portail Radix (liste déroulante, popover…)
+ * ou un overlay maison (ex. confirmation de fusion RIO) rendu par-dessus.
  */
 export function preventStackedSheetOutsideDismiss(event: OutsideDismissEvent): void {
-  if (isRadixPortaledInteractionTarget(event.target)) return;
+  if (isRadixPortaledInteractionTarget(event.target) || isCustomOverlayInteractionTarget(event.target)) {
+    return;
+  }
   event.preventDefault();
+}
+
+/**
+ * Empêche un Dialog Radix modal de traiter comme « outside » un clic qui cible
+ * en réalité un overlay maison portalé sur document.body (ex. RioIdentityMergeDialog) :
+ * sans ça, Radix peut fermer/désactiver le Dialog parent avant que le clic n'atteigne
+ * le bouton de l'overlay → boutons inertes, clavier bloqué (cf. RioIdentityMergeDialog).
+ */
+export function preventCustomOverlayOutsideDismiss(event: OutsideDismissEvent): void {
+  if (isCustomOverlayInteractionTarget(event.target)) {
+    event.preventDefault();
+  }
 }

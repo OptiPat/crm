@@ -123,6 +123,7 @@ describe("contact-filleul-organisation-stats", () => {
     const stats = computeFilleulAverageVolumeStats(volumeContacts);
     expect(stats.totalEligible).toBe(4);
     expect(stats.countedCount).toBe(2);
+    expect(stats.activePercent).toBe(50);
     expect(stats.averageVolume).toBeCloseTo(200_000, 5);
     expect(stats.missingVolumeCount).toBe(2);
     expect(
@@ -232,7 +233,7 @@ describe("contact-filleul-organisation-stats", () => {
     ).toEqual([10, 12]);
   });
 
-  it("calcule le taux de parrainage sur l'exercice (date d'inscription du filleul parrainé)", () => {
+  it("calcule le taux de parraineurs sur l'exercice (date d'inscription du filleul parrainé)", () => {
     const exercice = "2025-2026";
     const inExercice = (fiscalYearStartUnix(exercice) ?? 0) + 86_400;
     const beforeExercice = (fiscalYearStartUnix(exercice) ?? 0) - 86_400;

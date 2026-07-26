@@ -1,8 +1,17 @@
 /** Référence groupe par défaut — volume moyen / consultant actif (exercice). */
 export const DEFAULT_GROUP_ACTIVE_CONSULTANT_VOLUME_BENCHMARK_EUROS = 547_000;
 
-/** Référence groupe par défaut — taux de parrainage sur exercice (consultants réseau). */
+/** Référence groupe par défaut — taux d'actifs (consultants présents ≥ 1 €). */
+export const DEFAULT_GROUP_ACTIVE_CONSULTANT_RATE_BENCHMARK_PERCENT = 30;
+
+/** Référence groupe par défaut — taux de parraineurs sur exercice (consultants réseau). */
 export const DEFAULT_GROUP_SPONSOR_RATE_BENCHMARK_PERCENT = 26.5;
+
+/** Référence groupe par défaut — parrainages / parraineur sur exercice. */
+export const DEFAULT_GROUP_PARRAINAGES_PER_PARRAINEUR_BENCHMARK = 1.9;
+
+/** Référence groupe par défaut — croissance nette sur exercice (% vs exercice précédent). */
+export const DEFAULT_GROUP_NET_GROWTH_BENCHMARK_PERCENT = 30;
 
 /** Référence groupe par défaut — délai moyen avant 1er VAA ou VA (mois). */
 export const DEFAULT_GROUP_VAA_DURATION_BENCHMARK_MONTHS = 14.62;
@@ -18,8 +27,14 @@ export type FilleulVolumeBenchmarkStatus = "above_group" | "near_group" | "below
 export type StatistiquesBenchmarkSettings = {
   /** Volume moyen consultant actif — référence nationale / groupe (€). */
   groupActiveConsultantVolumeEuros: number;
-  /** Taux de parrainage — référence nationale / groupe (%). */
+  /** Taux d'actifs — référence groupe (% consultants présents ≥ 1 €). */
+  groupActiveConsultantRatePercent: number;
+  /** Taux de parraineurs — référence nationale / groupe (%). */
   groupSponsorRatePercent: number;
+  /** Parrainages / parraineur — référence nationale / groupe. */
+  groupParrainagesPerParraineur: number;
+  /** Croissance nette — référence nationale / groupe (% vs exercice précédent). */
+  groupNetGrowthPercent: number;
   /** Délai moyen avant 1er VAA ou VA — référence nationale / groupe (mois). */
   groupVaaDurationMonths: number;
   /** Délai moyen avant 1ère habilitation — référence nationale / groupe (mois). */
@@ -38,7 +53,10 @@ export const STATISTIQUES_BENCHMARK_SETTINGS_CHANGED = "statistiques-benchmark-s
 export function defaultStatistiquesBenchmarkSettings(): StatistiquesBenchmarkSettings {
   return {
     groupActiveConsultantVolumeEuros: DEFAULT_GROUP_ACTIVE_CONSULTANT_VOLUME_BENCHMARK_EUROS,
+    groupActiveConsultantRatePercent: DEFAULT_GROUP_ACTIVE_CONSULTANT_RATE_BENCHMARK_PERCENT,
     groupSponsorRatePercent: DEFAULT_GROUP_SPONSOR_RATE_BENCHMARK_PERCENT,
+    groupParrainagesPerParraineur: DEFAULT_GROUP_PARRAINAGES_PER_PARRAINEUR_BENCHMARK,
+    groupNetGrowthPercent: DEFAULT_GROUP_NET_GROWTH_BENCHMARK_PERCENT,
     groupVaaDurationMonths: DEFAULT_GROUP_VAA_DURATION_BENCHMARK_MONTHS,
     groupHabilitationDurationMonths: DEFAULT_GROUP_HABILITATION_DURATION_BENCHMARK_MONTHS,
     nearGroupBenchmarkRatio: DEFAULT_NEAR_GROUP_BENCHMARK_RATIO,
@@ -50,7 +68,10 @@ function normalizeBenchmarkSettings(
 ): StatistiquesBenchmarkSettings {
   const defaults = defaultStatistiquesBenchmarkSettings();
   const euros = raw?.groupActiveConsultantVolumeEuros;
+  const activeRate = raw?.groupActiveConsultantRatePercent;
   const sponsorRate = raw?.groupSponsorRatePercent;
+  const parrainagesPerParraineur = raw?.groupParrainagesPerParraineur;
+  const netGrowthPercent = raw?.groupNetGrowthPercent;
   const vaaDurationMonths = raw?.groupVaaDurationMonths;
   const habilitationDurationMonths = raw?.groupHabilitationDurationMonths;
   const ratio = raw?.nearGroupBenchmarkRatio;
@@ -58,10 +79,32 @@ function normalizeBenchmarkSettings(
   const groupActiveConsultantVolumeEuros =
     typeof euros === "number" && Number.isFinite(euros) && euros > 0 ? euros : defaults.groupActiveConsultantVolumeEuros;
 
+  const groupActiveConsultantRatePercent =
+    typeof activeRate === "number" &&
+    Number.isFinite(activeRate) &&
+    activeRate > 0 &&
+    activeRate <= 100
+      ? activeRate
+      : defaults.groupActiveConsultantRatePercent;
+
   const groupSponsorRatePercent =
     typeof sponsorRate === "number" && Number.isFinite(sponsorRate) && sponsorRate > 0 && sponsorRate <= 100
       ? sponsorRate
       : defaults.groupSponsorRatePercent;
+
+  const groupParrainagesPerParraineur =
+    typeof parrainagesPerParraineur === "number" &&
+    Number.isFinite(parrainagesPerParraineur) &&
+    parrainagesPerParraineur > 0
+      ? parrainagesPerParraineur
+      : defaults.groupParrainagesPerParraineur;
+
+  const groupNetGrowthPercent =
+    typeof netGrowthPercent === "number" &&
+    Number.isFinite(netGrowthPercent) &&
+    netGrowthPercent > 0
+      ? netGrowthPercent
+      : defaults.groupNetGrowthPercent;
 
   const groupVaaDurationMonths =
     typeof vaaDurationMonths === "number" &&
@@ -84,7 +127,10 @@ function normalizeBenchmarkSettings(
 
   return {
     groupActiveConsultantVolumeEuros,
+    groupActiveConsultantRatePercent,
     groupSponsorRatePercent,
+    groupParrainagesPerParraineur,
+    groupNetGrowthPercent,
     groupVaaDurationMonths,
     groupHabilitationDurationMonths,
     nearGroupBenchmarkRatio,
@@ -136,6 +182,17 @@ export function getFilleulVolumeBenchmarkStatus(
   );
 }
 
+export function getFilleulActiveConsultantRateBenchmarkStatus(
+  activeRatePercent: number,
+  settings: StatistiquesBenchmarkSettings
+): FilleulVolumeBenchmarkStatus {
+  return getGroupBenchmarkStatus(
+    activeRatePercent,
+    settings.groupActiveConsultantRatePercent,
+    settings.nearGroupBenchmarkRatio
+  );
+}
+
 export function getFilleulSponsorRateBenchmarkStatus(
   sponsorRatePercent: number,
   settings: StatistiquesBenchmarkSettings
@@ -143,6 +200,28 @@ export function getFilleulSponsorRateBenchmarkStatus(
   return getGroupBenchmarkStatus(
     sponsorRatePercent,
     settings.groupSponsorRatePercent,
+    settings.nearGroupBenchmarkRatio
+  );
+}
+
+export function getFilleulParrainagePerParraineurBenchmarkStatus(
+  averagePerParraineur: number,
+  settings: StatistiquesBenchmarkSettings
+): FilleulVolumeBenchmarkStatus {
+  return getGroupBenchmarkStatus(
+    averagePerParraineur,
+    settings.groupParrainagesPerParraineur,
+    settings.nearGroupBenchmarkRatio
+  );
+}
+
+export function getFilleulNetGrowthBenchmarkStatus(
+  netGrowthPercent: number,
+  settings: StatistiquesBenchmarkSettings
+): FilleulVolumeBenchmarkStatus {
+  return getGroupBenchmarkStatus(
+    netGrowthPercent,
+    settings.groupNetGrowthPercent,
     settings.nearGroupBenchmarkRatio
   );
 }
@@ -196,11 +275,38 @@ export function formatVolumeVsGroupBenchmarkPercent(
   return formatVsGroupBenchmarkPercent(averageVolume, settings.groupActiveConsultantVolumeEuros);
 }
 
+export function formatActiveConsultantRateVsGroupBenchmarkPercent(
+  activeRatePercent: number,
+  settings: StatistiquesBenchmarkSettings
+): string {
+  return formatVsGroupBenchmarkPercent(
+    activeRatePercent,
+    settings.groupActiveConsultantRatePercent
+  );
+}
+
 export function formatSponsorRateVsGroupBenchmarkPercent(
   sponsorRatePercent: number,
   settings: StatistiquesBenchmarkSettings
 ): string {
   return formatVsGroupBenchmarkPercent(sponsorRatePercent, settings.groupSponsorRatePercent);
+}
+
+export function formatParrainagePerParraineurVsGroupBenchmarkPercent(
+  averagePerParraineur: number,
+  settings: StatistiquesBenchmarkSettings
+): string {
+  return formatVsGroupBenchmarkPercent(
+    averagePerParraineur,
+    settings.groupParrainagesPerParraineur
+  );
+}
+
+export function formatNetGrowthVsGroupBenchmarkPercent(
+  netGrowthPercent: number,
+  settings: StatistiquesBenchmarkSettings
+): string {
+  return formatVsGroupBenchmarkPercent(netGrowthPercent, settings.groupNetGrowthPercent);
 }
 
 export function formatVaaDurationVsGroupBenchmarkPercent(

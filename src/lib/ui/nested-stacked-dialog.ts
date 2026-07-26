@@ -3,7 +3,10 @@ import {
   STACKED_DEEP_NESTED_SHEET_Z,
   STACKED_NESTED_SHEET_Z,
 } from "@/lib/ui/stacked-sheet-layers";
-import { preventStackedSheetOutsideDismiss } from "@/lib/ui/radix-outside-interaction";
+import {
+  preventCustomOverlayOutsideDismiss,
+  preventStackedSheetOutsideDismiss,
+} from "@/lib/ui/radix-outside-interaction";
 import type { PortalLayer } from "@/lib/ui/portal-layer-context";
 
 export type NestedStackDepth = "sheet" | "deep";
@@ -27,9 +30,12 @@ export function nestedStackedPortalLayer(
 }
 
 export function nestedStackedOutsideHandlers(nestedSheet: boolean) {
-  if (!nestedSheet) return {};
+  // Toujours actif (pas seulement en sheet empilé) : un overlay maison portalé
+  // (ex. confirmation de fusion RIO) doit rester interactif même par-dessus le
+  // Dialog par défaut, sinon Radix traite le clic comme « outside » et bloque tout.
+  const handler = nestedSheet ? preventStackedSheetOutsideDismiss : preventCustomOverlayOutsideDismiss;
   return {
-    onInteractOutside: preventStackedSheetOutsideDismiss,
-    onPointerDownOutside: preventStackedSheetOutsideDismiss,
+    onInteractOutside: handler,
+    onPointerDownOutside: handler,
   };
 }

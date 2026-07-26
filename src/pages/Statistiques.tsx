@@ -6,7 +6,7 @@ import { ContactSourceLeadPanel } from "@/components/statistiques/ContactSourceL
 import { StatistiquesPageToolbar } from "@/components/statistiques/StatistiquesPageToolbar";
 import { StatistiquesSection } from "@/components/statistiques/statistiques-ui";
 import { StatistiquesPageDataProvider } from "@/components/statistiques/statistiques-page-data-context";
-import { STATISTIQUES_SECTIONS } from "@/lib/statistiques/statistiques-sections";
+import { STATISTIQUES_SECTIONS, statistiquesSectionPanelCount } from "@/lib/statistiques/statistiques-sections";
 
 type StatistiquesProps = {
   onNavigate?: (page: string) => void;
@@ -29,10 +29,9 @@ function StatistiquesContent({ onNavigate }: StatistiquesProps) {
           key={section.id}
           sectionId={section.id}
           title={section.title}
-          subtitle={section.subtitle}
           intro={section.intro}
           icon={SECTION_ICONS[section.id]}
-          panelCount={section.panelCount}
+          panelCount={statistiquesSectionPanelCount(section.id)}
         >
           {section.id === "contacts" ? <ContactSourceLeadPanel onNavigate={onNavigate} /> : null}
           {section.id === "prescripteurs" ? (

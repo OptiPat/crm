@@ -1,0 +1,4 @@
+# public/pdfjs/pdf.worker.min.js est régénéré (LF pur) par scripts/copy-pdf-assets.cjs
+# à chaque `npm install`/`npm run build` (postinstall/prebuild). Sans ceci, core.autocrlf
+# sur Windows le re-marque "modifié" (fins de ligne seules) après chaque build.
+public/pdfjs/pdf.worker.min.js text eol=lf

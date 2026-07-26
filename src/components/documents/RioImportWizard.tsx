@@ -38,6 +38,7 @@ import { assessRioImport, type RioImportAssessment } from "@/lib/documents/rio-i
 import { RioWizardContextBar } from "./RioWizardContextBar";
 import { RioImportGuardBanner } from "./RioImportGuardBanner";
 import { RioIdentityMergeDialog } from "./RioIdentityMergeDialog";
+import { preventCustomOverlayOutsideDismiss } from "@/lib/ui/radix-outside-interaction";
 import { RioPdfPreviewPanel } from "./RioPdfPreviewPanel";
 import { ExtractedDataPreviewAdvanced } from "./ExtractedDataPreviewAdvanced";
 import { RioPatrimoineReviewStep } from "./RioPatrimoineReviewStep";
@@ -755,7 +756,11 @@ export function RioImportWizard({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{wizardBody}</div>
       ) : (
         <Dialog open={open} onOpenChange={handleWizardClose}>
-          <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-6xl flex-col overflow-hidden p-6">
+          <DialogContent
+            className="flex h-[90vh] max-h-[90vh] max-w-6xl flex-col overflow-hidden p-6"
+            onPointerDownOutside={preventCustomOverlayOutsideDismiss}
+            onInteractOutside={preventCustomOverlayOutsideDismiss}
+          >
             {wizardBody}
           </DialogContent>
         </Dialog>

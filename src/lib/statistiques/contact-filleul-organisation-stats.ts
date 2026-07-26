@@ -31,6 +31,8 @@ export type FilleulManagerStatResult = {
 
 export type FilleulAverageVolumeStatResult = {
   averageVolume: number | null;
+  /** Part des consultants présents avec volume propre ≥ 1 € (%). */
+  activePercent: number;
   countedCount: number;
   totalEligible: number;
   missingVolumeCount: number;
@@ -76,7 +78,7 @@ export function isContactEligibleForFilleulOrganisationStats(
   return contactEffectiveFilleulCategorie(contact) === "FILLEUL";
 }
 
-/** Base taux de parrainage : inscrits + désinscrits (tous parrains, suspects exclus). */
+/** Base taux de parraineurs : inscrits + désinscrits (tous parrains, suspects exclus). */
 export function isContactEligibleForFilleulParraineurStats(
   contact: Pick<Contact, "categorie" | "filleul_categorie">
 ): boolean {
@@ -158,6 +160,7 @@ function computeAverageVolumeFromEligibleContacts(
   if (totalEligible === 0) {
     return {
       averageVolume: null,
+      activePercent: 0,
       countedCount: 0,
       totalEligible: 0,
       missingVolumeCount: 0,
@@ -183,6 +186,7 @@ function computeAverageVolumeFromEligibleContacts(
 
   return {
     averageVolume: activeCount > 0 ? volumeSum / activeCount : null,
+    activePercent: (activeCount / totalEligible) * 100,
     countedCount: activeCount,
     totalEligible,
     missingVolumeCount,
@@ -400,7 +404,7 @@ export function computeFilleulParraineurStats(contacts: Contact[]): FilleulParra
 }
 
 /**
- * Taux de parrainage sur l'exercice : consultants présents sur l'exercice ayant parrainé
+ * Taux de parraineurs sur l'exercice : consultants présents sur l'exercice ayant parrainé
  * au moins une personne dont la date d'inscription (ou d'invitation prospect) tombe dans
  * l'exercice fiscal (filleuls parrainés désinscrits inclus).
  */
