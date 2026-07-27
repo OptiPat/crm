@@ -1,7 +1,7 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import { isDeFactoManagerFilleul } from "@/lib/contacts/contact-filleul-rank-match";
-import { isFilleulStatut, isPrescripteurCategorie } from "@/lib/contacts/contact-form-utils";
+import { isFilleulReseauSigne, isFilleulStatut, isPrescripteurCategorie } from "@/lib/contacts/contact-form-utils";
 import { contactOwnVolume } from "@/lib/organisation/organisation-branch-volumes";
 import {
   wasConsultantInNetworkDuringExercice,
@@ -75,6 +75,36 @@ function contactEffectiveFilleulCategorie(
   if (contact.filleul_categorie) return contact.filleul_categorie;
   if (isFilleulStatut(contact.categorie)) return contact.categorie;
   return null;
+}
+
+/** Aligné conversion filleul dashboard : prospects sans parrain ou parrain = moi ; filleuls parrainés par moi. */
+export function isContactEligibleForMyFilleulJdFunnel(
+  contact: Pick<Contact, "categorie" | "filleul_categorie" | "parrain_id">,
+  selfContactId: number | null | undefined
+): boolean {
+  if (selfContactId == null) return false;
+  const filleulCat = contactEffectiveFilleulCategorie(contact);
+  if (filleulCat === "SUSPECT_FILLEUL") return false;
+  if (filleulCat === "PROSPECT_FILLEUL") {
+    return contact.parrain_id == null || contact.parrain_id === selfContactId;
+  }
+  if (filleulCat === "FILLEUL" || filleulCat === "FILLEUL_DESINSCRIT") {
+    return resolveEffectiveDownlineParrainId(contact, selfContactId) === selfContactId;
+  }
+  return false;
+}
+
+/** Filleul inscrit (ou désinscrit ensuite) rattaché à moi. */
+export function isMyFilleulInscritFromJdFunnel(
+  contact: Pick<Contact, "categorie" | "filleul_categorie" | "parrain_id">,
+  selfContactId?: number | null
+): boolean {
+  if (selfContactId == null) return false;
+  const filleulCat = contactEffectiveFilleulCategorie(contact);
+  return (
+    isFilleulReseauSigne(filleulCat) &&
+    resolveEffectiveDownlineParrainId(contact, selfContactId) === selfContactId
+  );
 }
 
 /** Filleul inscrit (non désinscrit) — tous parrains, suspects exclus. */

@@ -12,8 +12,14 @@ import {
   isLiveFilleulExerciceVolumes,
   pickFilleulOrganisationExerciceLabelsForDisplay,
 } from "@/lib/statistiques/filleul-organisation-exercice-summary";
+import {
+  computeFilleulPersoJdExerciceSummary,
+  FILLEUL_PERSO_JD_EXERCICE_SUMMARY_METRICS,
+  type FilleulPersoJdExerciceSummaryMetricId,
+} from "@/lib/statistiques/filleul-perso-jd-exercice-stats";
 import { ChartLoading } from "@/components/dashboard/dashboard-ui";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatistiquesPanel } from "./statistiques-ui";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +34,11 @@ type ContactFilleulOrganisationExerciceSummaryPanelProps = {
   dataRefreshKey: string | number;
   onOpenConsultantsList?: (exerciceLabel: string, count: number) => void;
   onOpenParrainagesList?: (exerciceLabel: string, count: number) => void;
+  onOpenPersoJdList?: (
+    exerciceLabel: string,
+    kind: FilleulPersoJdExerciceSummaryMetricId,
+    count: number
+  ) => void;
 };
 
 export function ContactFilleulOrganisationExerciceSummaryPanel({
@@ -41,6 +52,7 @@ export function ContactFilleulOrganisationExerciceSummaryPanel({
   dataRefreshKey,
   onOpenConsultantsList,
   onOpenParrainagesList,
+  onOpenPersoJdList,
 }: ContactFilleulOrganisationExerciceSummaryPanelProps) {
   const [showAllExercices, setShowAllExercices] = useState(false);
   const [historyByLabel, setHistoryByLabel] = useState<Map<string, FilleulVolumeExercice[]>>(
@@ -99,6 +111,36 @@ export function ContactFilleulOrganisationExerciceSummaryPanel({
     [allExerciceLabels, showAllExercices]
   );
 
+  const persoSummaryRows = useMemo(() => {
+    if (dossiersLoading || historyLoading) return [];
+    return computeFilleulPersoJdExerciceSummary(displayedExerciceLabels, contacts, {
+      dossiersByContactId,
+      organisationSelfContactId,
+    });
+  }, [
+    displayedExerciceLabels,
+    contacts,
+    dossiersByContactId,
+    organisationSelfContactId,
+    dossiersLoading,
+    historyLoading,
+  ]);
+
+  const allPersoSummaryRows = useMemo(() => {
+    if (dossiersLoading || historyLoading) return [];
+    return computeFilleulPersoJdExerciceSummary(allExerciceLabels, contacts, {
+      dossiersByContactId,
+      organisationSelfContactId,
+    });
+  }, [
+    allExerciceLabels,
+    contacts,
+    dossiersByContactId,
+    organisationSelfContactId,
+    dossiersLoading,
+    historyLoading,
+  ]);
+
   const summaryRows = useMemo(() => {
     if (dossiersLoading || historyLoading) return [];
     return computeFilleulOrganisationExerciceSummary(displayedExerciceLabels, {
@@ -121,8 +163,143 @@ export function ContactFilleulOrganisationExerciceSummaryPanel({
     historyLoading,
   ]);
 
+  const allSummaryRows = useMemo(() => {
+    if (dossiersLoading || historyLoading) return [];
+    return computeFilleulOrganisationExerciceSummary(allExerciceLabels, {
+      contacts,
+      closedExerciceLabels,
+      organisationSelfContactId,
+      dossiersByContactId,
+      cgp: cgp ?? undefined,
+      historyRecordsByLabel: historyByLabel,
+    });
+  }, [
+    allExerciceLabels,
+    contacts,
+    closedExerciceLabels,
+    organisationSelfContactId,
+    dossiersByContactId,
+    cgp,
+    historyByLabel,
+    dossiersLoading,
+    historyLoading,
+  ]);
+
   const canExpand = allExerciceLabels.length > FILLEUL_ORGANISATION_EXERCICE_SUMMARY_DEFAULT_COUNT;
   const loading = dossiersLoading || historyLoading;
+
+  function renderSummaryTable<TRow extends { exerciceLabel: string }>(
+    metrics: Array<{
+      id: string;
+      label: string;
+      format: (row: TRow) => string;
+      formatTotal: (rows: TRow[]) => string;
+    }>,
+    rows: TRow[],
+    totalRows: TRow[],
+    getCount?: (metricId: string, row: TRow) => number | null
+  ) {
+    return (
+      <div className="overflow-x-auto rounded-lg border border-border/50">
+        <table className="w-full min-w-[32rem] text-sm">
+          <thead>
+            <tr className="border-b bg-muted/30 text-left">
+              <th
+                className="px-3 py-2 text-xs font-medium text-muted-foreground sticky left-0 bg-muted/30 z-10 min-w-[9rem]"
+              >
+                Indicateur
+              </th>
+              {rows.map((row) => (
+                <th
+                  key={row.exerciceLabel}
+                  className="px-3 py-2 text-xs font-medium text-muted-foreground text-right whitespace-nowrap"
+                >
+                  {row.exerciceLabel}
+                </th>
+              ))}
+              <th
+                className="px-3 py-2 text-xs font-medium text-foreground text-right whitespace-nowrap border-l border-border/50 bg-muted/40"
+              >
+                Total
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {metrics.map((metric) => (
+              <tr key={metric.id} className="border-b border-border/30 last:border-0">
+                <td
+                  className={cn(
+                    "px-3 py-2 text-xs text-muted-foreground sticky left-0 bg-card z-10",
+                    metric.id === "inscribedConsultantCount" && "font-medium text-foreground",
+                    metric.id === "organisationBranchVolume" && "font-medium text-foreground",
+                    metric.id === "jdInvitationCount" && "font-medium text-foreground",
+                    metric.id === "conversionRate" && "font-medium text-foreground"
+                  )}
+                >
+                  {metric.label}
+                </td>
+                {rows.map((row) => {
+                  const cellValue = metric.format(row);
+                  const count = getCount?.(metric.id, row);
+                  const clickable = count != null && count > 0;
+
+                  return (
+                    <td
+                      key={`${metric.id}-${row.exerciceLabel}`}
+                      className={cn(
+                        "px-3 py-2 text-right tabular-nums text-sm",
+                        metric.id === "inscribedConsultantCount" && "font-medium",
+                        metric.id === "organisationBranchVolume" && "font-medium",
+                        metric.id === "conversionRate" && "font-medium"
+                      )}
+                    >
+                      {clickable ? (
+                        <button
+                          type="button"
+                          className={cn(
+                            "rounded px-1 -mx-1 hover:bg-muted/60 hover:text-primary transition-colors underline-offset-2 hover:underline",
+                            metric.id === "inscribedConsultantCount" && "font-medium"
+                          )}
+                          onClick={() => {
+                            if (metric.id === "inscribedConsultantCount" && onOpenConsultantsList) {
+                              onOpenConsultantsList(row.exerciceLabel, count!);
+                            } else if (metric.id === "parrainageCount" && onOpenParrainagesList) {
+                              onOpenParrainagesList(row.exerciceLabel, count!);
+                            } else if (onOpenPersoJdList) {
+                              onOpenPersoJdList(
+                                row.exerciceLabel,
+                                metric.id as FilleulPersoJdExerciceSummaryMetricId,
+                                count!
+                              );
+                            }
+                          }}
+                        >
+                          {cellValue}
+                        </button>
+                      ) : (
+                        cellValue
+                      )}
+                    </td>
+                  );
+                })}
+                <td
+                  className={cn(
+                    "px-3 py-2 text-right tabular-nums text-sm border-l border-border/50 bg-muted/10",
+                    metric.id === "inscribedConsultantCount" && "font-medium",
+                    metric.id === "organisationBranchVolume" && "font-medium",
+                    metric.id === "conversionRate" && "font-medium",
+                    metric.id === "jdInvitationCount" && "font-medium"
+                  )}
+                >
+                  {metric.formatTotal(totalRows)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
   return (
     <StatistiquesPanel
@@ -139,92 +316,48 @@ export function ContactFilleulOrganisationExerciceSummaryPanel({
         </p>
       ) : (
         <div className="space-y-3">
-          <div className="overflow-x-auto rounded-lg border border-border/50">
-            <table className="w-full min-w-[32rem] text-sm">
-              <thead>
-                <tr className="border-b bg-muted/30 text-left">
-                  <th
-                    className="px-3 py-2 text-xs font-medium text-muted-foreground sticky left-0 bg-muted/30 z-10 min-w-[9rem]"
-                  >
-                    Indicateur
-                  </th>
-                  {summaryRows.map((row) => (
-                    <th
-                      key={row.exerciceLabel}
-                      className="px-3 py-2 text-xs font-medium text-muted-foreground text-right whitespace-nowrap"
-                    >
-                      {row.exerciceLabel}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {FILLEUL_ORGANISATION_EXERCICE_SUMMARY_METRICS.map((metric) => (
-                  <tr key={metric.id} className="border-b border-border/30 last:border-0">
-                    <td
-                      className={cn(
-                        "px-3 py-2 text-xs text-muted-foreground sticky left-0 bg-card z-10",
-                        metric.id === "inscribedConsultantCount" && "font-medium text-foreground",
-                        metric.id === "organisationBranchVolume" && "font-medium text-foreground"
-                      )}
-                    >
-                      {metric.label}
-                    </td>
-                    {summaryRows.map((row) => {
-                      const cellValue = metric.format(row);
-                      const consultantsClickable =
-                        metric.id === "inscribedConsultantCount" &&
-                        row.inscribedConsultantCount > 0 &&
-                        onOpenConsultantsList != null;
-                      const parrainagesClickable =
-                        metric.id === "parrainageCount" &&
-                        row.parrainageCount > 0 &&
-                        onOpenParrainagesList != null;
-                      const clickable = consultantsClickable || parrainagesClickable;
-
-                      return (
-                        <td
-                          key={`${metric.id}-${row.exerciceLabel}`}
-                          className={cn(
-                            "px-3 py-2 text-right tabular-nums text-sm",
-                            metric.id === "inscribedConsultantCount" && "font-medium",
-                            metric.id === "organisationBranchVolume" && "font-medium"
-                          )}
-                        >
-                          {clickable ? (
-                            <button
-                              type="button"
-                              className={cn(
-                                "rounded px-1 -mx-1 hover:bg-muted/60 hover:text-primary transition-colors underline-offset-2 hover:underline",
-                                metric.id === "inscribedConsultantCount" && "font-medium"
-                              )}
-                              onClick={() => {
-                                if (consultantsClickable) {
-                                  onOpenConsultantsList!(
-                                    row.exerciceLabel,
-                                    row.inscribedConsultantCount
-                                  );
-                                } else if (parrainagesClickable) {
-                                  onOpenParrainagesList!(
-                                    row.exerciceLabel,
-                                    row.parrainageCount
-                                  );
-                                }
-                              }}
-                            >
-                              {cellValue}
-                            </button>
-                          ) : (
-                            cellValue
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Tabs defaultValue="reseau">
+            <TabsList className="h-9">
+              <TabsTrigger value="reseau" className="text-xs px-3">
+                Réseau
+              </TabsTrigger>
+              <TabsTrigger value="perso" className="text-xs px-3">
+                Perso
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="reseau" className="mt-3">
+              {renderSummaryTable(
+                FILLEUL_ORGANISATION_EXERCICE_SUMMARY_METRICS,
+                summaryRows,
+                allSummaryRows,
+                (metricId, row) => {
+                  if (metricId === "inscribedConsultantCount") return row.inscribedConsultantCount;
+                  if (metricId === "parrainageCount") return row.parrainageCount;
+                  return null;
+                }
+              )}
+            </TabsContent>
+            <TabsContent value="perso" className="mt-3 space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Journée découverte (JD) · filleuls rattachés à vous — invitations et présences sur
+                la date d&apos;invitation de l&apos;exercice ; inscrits sur la date
+                d&apos;inscription de l&apos;exercice (filleuls désinscrits inclus ; repli
+                invitation si inscription absente). Total : cumul sur tous les exercices
+                disponibles, même repliés.
+              </p>
+              {renderSummaryTable(
+                FILLEUL_PERSO_JD_EXERCICE_SUMMARY_METRICS,
+                persoSummaryRows,
+                allPersoSummaryRows,
+                (metricId, row) => {
+                  if (metricId === "jdInvitationCount") return row.jdInvitationCount;
+                  if (metricId === "jdPresenceCount") return row.jdPresenceCount;
+                  if (metricId === "inscribedCount") return row.inscribedCount;
+                  return null;
+                }
+              )}
+            </TabsContent>
+          </Tabs>
 
           {canExpand ? (
             <div className="flex justify-end">

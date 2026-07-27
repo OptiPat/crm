@@ -323,7 +323,31 @@ export type FilleulOrganisationExerciceSummaryMetric = {
   id: FilleulOrganisationExerciceSummaryMetricId;
   label: string;
   format: (row: FilleulOrganisationExerciceSummaryRow) => string;
+  formatTotal: (rows: FilleulOrganisationExerciceSummaryRow[]) => string;
 };
+
+function sumOrganisationSummaryInt(
+  rows: FilleulOrganisationExerciceSummaryRow[],
+  key: "parrainageCount"
+): number {
+  return rows.reduce((acc, row) => acc + row[key], 0);
+}
+
+function averageOrganisationSummaryNullable(
+  rows: FilleulOrganisationExerciceSummaryRow[],
+  key:
+    | "averageVolume"
+    | "vaaDurationMonths"
+    | "habilitationDurationMonths"
+    | "managerDurationMonths"
+    | "parrainageDurationMonths"
+): number | null {
+  const values = rows
+    .map((row) => row[key])
+    .filter((value): value is number => value != null && Number.isFinite(value));
+  if (values.length === 0) return null;
+  return values.reduce((acc, value) => acc + value, 0) / values.length;
+}
 
 export const FILLEUL_ORGANISATION_EXERCICE_SUMMARY_METRICS: FilleulOrganisationExerciceSummaryMetric[] =
   [
@@ -331,11 +355,14 @@ export const FILLEUL_ORGANISATION_EXERCICE_SUMMARY_METRICS: FilleulOrganisationE
       id: "inscribedConsultantCount",
       label: "Nombre de consultant net",
       format: (row) => formatConsultantCount(row.inscribedConsultantCount),
+      formatTotal: () => "—",
     },
     {
       id: "parrainageCount",
       label: "Nombre de parrainages",
       format: (row) => formatConsultantCount(row.parrainageCount),
+      formatTotal: (rows) =>
+        formatConsultantCount(sumOrganisationSummaryInt(rows, "parrainageCount")),
     },
     {
       id: "organisationBranchVolume",
@@ -344,22 +371,29 @@ export const FILLEUL_ORGANISATION_EXERCICE_SUMMARY_METRICS: FilleulOrganisationE
         row.organisationBranchVolume != null
           ? formatFilleulVolumeDisplayWhole(row.organisationBranchVolume)
           : "—",
+      formatTotal: () => "—",
     },
     {
       id: "averageVolume",
       label: "Volume moyen (actifs)",
       format: (row) =>
         row.averageVolume != null ? formatFilleulVolumeDisplayWhole(row.averageVolume) : "—",
+      formatTotal: (rows) => {
+        const avg = averageOrganisationSummaryNullable(rows, "averageVolume");
+        return avg != null ? formatFilleulVolumeDisplayWhole(avg) : "—";
+      },
     },
     {
       id: "activePercent",
       label: "Taux d'actifs",
       format: (row) => formatFilleulManagerPercent(row.activePercent),
+      formatTotal: () => "—",
     },
     {
       id: "parraineurPercent",
       label: "Taux de parraineurs",
       format: (row) => formatFilleulManagerPercent(row.parraineurPercent),
+      formatTotal: () => "—",
     },
     {
       id: "parrainagesPerParraineur",
@@ -368,6 +402,7 @@ export const FILLEUL_ORGANISATION_EXERCICE_SUMMARY_METRICS: FilleulOrganisationE
         row.parrainagesPerParraineur != null
           ? formatFilleulParrainagePerParraineur(row.parrainagesPerParraineur)
           : "—",
+      formatTotal: () => "—",
     },
     {
       id: "netGrowthPercent",
@@ -376,11 +411,13 @@ export const FILLEUL_ORGANISATION_EXERCICE_SUMMARY_METRICS: FilleulOrganisationE
         row.netGrowthPercent != null
           ? formatSignedPercent(row.netGrowthPercent)
           : "—",
+      formatTotal: () => "—",
     },
     {
       id: "attritionPercent",
       label: "Attrition",
       format: (row) => formatFilleulManagerPercent(row.attritionPercent),
+      formatTotal: () => "—",
     },
     {
       id: "vaaDurationMonths",
@@ -389,6 +426,10 @@ export const FILLEUL_ORGANISATION_EXERCICE_SUMMARY_METRICS: FilleulOrganisationE
         row.vaaDurationMonths != null
           ? formatFilleulVaaDurationMonths(row.vaaDurationMonths)
           : "—",
+      formatTotal: (rows) => {
+        const avg = averageOrganisationSummaryNullable(rows, "vaaDurationMonths");
+        return avg != null ? formatFilleulVaaDurationMonths(avg) : "—";
+      },
     },
     {
       id: "habilitationDurationMonths",
@@ -397,6 +438,10 @@ export const FILLEUL_ORGANISATION_EXERCICE_SUMMARY_METRICS: FilleulOrganisationE
         row.habilitationDurationMonths != null
           ? formatFilleulHabilitationDurationMonths(row.habilitationDurationMonths)
           : "—",
+      formatTotal: (rows) => {
+        const avg = averageOrganisationSummaryNullable(rows, "habilitationDurationMonths");
+        return avg != null ? formatFilleulHabilitationDurationMonths(avg) : "—";
+      },
     },
     {
       id: "managerDurationMonths",
@@ -405,6 +450,10 @@ export const FILLEUL_ORGANISATION_EXERCICE_SUMMARY_METRICS: FilleulOrganisationE
         row.managerDurationMonths != null
           ? formatFilleulManagerDurationMonths(row.managerDurationMonths)
           : "—",
+      formatTotal: (rows) => {
+        const avg = averageOrganisationSummaryNullable(rows, "managerDurationMonths");
+        return avg != null ? formatFilleulManagerDurationMonths(avg) : "—";
+      },
     },
     {
       id: "parrainageDurationMonths",
@@ -413,6 +462,10 @@ export const FILLEUL_ORGANISATION_EXERCICE_SUMMARY_METRICS: FilleulOrganisationE
         row.parrainageDurationMonths != null
           ? formatFilleulParrainageDurationMonths(row.parrainageDurationMonths)
           : "—",
+      formatTotal: (rows) => {
+        const avg = averageOrganisationSummaryNullable(rows, "parrainageDurationMonths");
+        return avg != null ? formatFilleulParrainageDurationMonths(avg) : "—";
+      },
     },
   ];
 

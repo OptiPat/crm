@@ -161,6 +161,10 @@ import {
   type FilleulParrainagePerParraineurStatResult,
 } from "@/lib/statistiques/filleul-parrainage-per-parraineur-stats";
 import {
+  filterContactsForFilleulPersoJdExerciceList,
+  type FilleulPersoJdExerciceSummaryMetricId,
+} from "@/lib/statistiques/filleul-perso-jd-exercice-stats";
+import {
   computeFilleulNetGrowthExerciceStats,
   filterContactsForFilleulNetGrowthExerciceList,
   formatFilleulNetGrowthExerciceSubtitle,
@@ -236,6 +240,12 @@ type OrganisationDrillDown =
   | { mode: "parrainageDuration"; kind: FilleulParrainageDurationListKind }
   | { mode: "bridge"; kind: FilleulBridgeListKind }
   | { mode: "netGrowth"; kind: FilleulNetGrowthListKind; exerciceLabel?: string; count?: number }
+  | {
+      mode: "persoJd";
+      kind: FilleulPersoJdExerciceSummaryMetricId;
+      exerciceLabel: string;
+      count?: number;
+    }
   | { mode: "attrition"; kind: "active" | "attrited"; count: number };
 
 function ManagerKpiPanel({
@@ -1854,6 +1864,16 @@ export function ContactFilleulOrganisationPanel({
         )
       );
     }
+    if (drillDown.mode === "persoJd") {
+      return toDashboardStatContactList(
+        filterContactsForFilleulPersoJdExerciceList(
+          contactsForStats,
+          drillDown.exerciceLabel,
+          drillDown.kind,
+          parraineurStatsOptions
+        )
+      );
+    }
     return [];
   }, [contactsForStats, drillDown, statsOptions, parraineurStatsOptions, resolvedExerciceLabel]);
 
@@ -1930,6 +1950,19 @@ export function ContactFilleulOrganisationPanel({
     setContactsSheetOpen(true);
   }, []);
 
+  const openSummaryPersoJdList = useCallback(
+    (
+      exerciceLabel: string,
+      kind: FilleulPersoJdExerciceSummaryMetricId,
+      count: number
+    ) => {
+      if (count === 0) return;
+      setDrillDown({ mode: "persoJd", kind, exerciceLabel, count });
+      setContactsSheetOpen(true);
+    },
+    []
+  );
+
   const openFilleulAttritionList = useCallback(
     (kind: "active" | "attrited", stats: ContactAttritionStatResult) => {
       const count = kind === "active" ? stats.activeCount : stats.attritedCount;
@@ -1994,6 +2027,15 @@ export function ContactFilleulOrganisationPanel({
           ? `1ers parrainages exercice — avec délai inscription (${resolvedExerciceLabel})`
           : `1ers parrainages exercice — inscription manquante (${resolvedExerciceLabel})`;
       }
+      if (dd.mode === "persoJd") {
+        if (dd.kind === "jdInvitationCount") {
+          return `Invitations JD — exercice ${dd.exerciceLabel}`;
+        }
+        if (dd.kind === "jdPresenceCount") {
+          return `Présents JD — exercice ${dd.exerciceLabel}`;
+        }
+        return `Inscrits (filleul) — exercice ${dd.exerciceLabel}`;
+      }
       return dd.kind === "withVolume"
         ? `Consultants actifs (≥ 1 €) — exercice ${resolvedExerciceLabel}`
         : `Consultants inactifs — exercice ${resolvedExerciceLabel}`;
@@ -2052,6 +2094,9 @@ export function ContactFilleulOrganisationPanel({
       return drillDown.kind === "withDuration"
         ? parrainageDurationExerciceStats.countedCount
         : parrainageDurationExerciceStats.missingParrainageCount;
+    }
+    if (drillDown.mode === "persoJd") {
+      return drillDown.count ?? 0;
     }
     return drillDown.kind === "withVolume"
       ? volumeStats.countedCount
@@ -2139,6 +2184,9 @@ export function ContactFilleulOrganisationPanel({
           : "—";
       return `${sheetCount} inscription${sheetCount > 1 ? "s" : ""} exercice · délai moyen ${avg}`;
     }
+    if (drillDown.mode === "persoJd") {
+      return `${sheetCount} contact${sheetCount > 1 ? "s" : ""} · exercice ${drillDown.exerciceLabel}`;
+    }
     if (drillDown.kind === "withVolume" && volumeStats.averageVolume != null) {
       return `${sheetCount} filleul${sheetCount > 1 ? "s" : ""} · volume moyen ${formatFilleulVolumeDisplay(volumeStats.averageVolume)}`;
     }
@@ -2187,6 +2235,7 @@ export function ContactFilleulOrganisationPanel({
             dataRefreshKey={dataRefreshKey}
             onOpenConsultantsList={openSummaryConsultantsList}
             onOpenParrainagesList={openSummaryParrainagesList}
+            onOpenPersoJdList={openSummaryPersoJdList}
           />
         </div>
         <ContactGeographyPanel onNavigate={onNavigate} lens="filleul" />
