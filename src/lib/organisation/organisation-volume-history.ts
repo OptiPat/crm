@@ -2,6 +2,7 @@ import type { Contact } from "@/lib/api/tauri-contacts";
 import type { FilleulVolumeExercice } from "@/lib/api/tauri-filleul-volumes";
 import {
   currentFiscalYearLabel,
+  hasFiscalYearStarted,
   listSelectableFiscalYearLabels,
 } from "@/lib/pipe/remuneration-fiscal-year";
 import type { OrganisationTreeResult } from "@/lib/organisation/organisation-tree";
@@ -34,13 +35,58 @@ export function resolveOrganisationExerciceLabel(
   return selection;
 }
 
-/** Labels fermés + exercice courant si pas encore clôturé. */
+/** Volumes « live » sur fiche contact : exercice fiscal en cours et non clôturé. */
+export function isLiveFilleulExerciceVolumes(
+  exerciceLabel: string,
+  closedExerciceLabels: string[],
+  now = new Date()
+): boolean {
+  if (closedExerciceLabels.includes(exerciceLabel)) return false;
+  return exerciceLabel === currentFiscalYearLabel(now);
+}
+
+/** Historique importé / clôturé disponible pour cet exercice. */
+export function hasFilleulExerciceVolumeSnapshot(
+  exerciceLabel: string,
+  historyRecordsByLabel: Map<string, FilleulVolumeExercice[]>
+): boolean {
+  const records = historyRecordsByLabel.get(exerciceLabel);
+  return records != null && records.length > 0;
+}
+
+/** Mode historique : exercice non live avec snapshot en base. */
+export function shouldUseHistoricalFilleulExerciceVolumes(
+  exerciceLabel: string,
+  closedExerciceLabels: string[],
+  historyRecordsByLabel: Map<string, FilleulVolumeExercice[]>,
+  now = new Date()
+): boolean {
+  if (isLiveFilleulExerciceVolumes(exerciceLabel, closedExerciceLabels, now)) return false;
+  return hasFilleulExerciceVolumeSnapshot(exerciceLabel, historyRecordsByLabel);
+}
+
+/** Volumes affichables : exercice en cours ou snapshot importé / clôturé. */
+export function isFilleulExerciceVolumeResolvable(
+  exerciceLabel: string,
+  closedExerciceLabels: string[],
+  historyRecordsByLabel: Map<string, FilleulVolumeExercice[]>,
+  now = new Date()
+): boolean {
+  return (
+    isLiveFilleulExerciceVolumes(exerciceLabel, closedExerciceLabels, now) ||
+    hasFilleulExerciceVolumeSnapshot(exerciceLabel, historyRecordsByLabel)
+  );
+}
+
+/** Labels avec historique importé / clôturé (affichage sélecteur). */
 export function buildOrganisationExerciceOptions(
-  closedLabels: string[],
+  historyExerciceLabels: string[],
+  closedExerciceLabels: string[],
   now = new Date()
 ): { value: OrganisationExerciceSelection; label: string }[] {
   const current = currentFiscalYearLabel(now);
-  const closed = new Set(closedLabels);
+  const closed = new Set(closedExerciceLabels);
+  const historySet = new Set(historyExerciceLabels);
   const options: { value: OrganisationExerciceSelection; label: string }[] = [
     {
       value: ORGANISATION_CURRENT_EXERCICE,
@@ -48,9 +94,12 @@ export function buildOrganisationExerciceOptions(
     },
   ];
 
-  for (const label of closedLabels) {
+  for (const label of historyExerciceLabels) {
     if (label === current) continue;
-    options.push({ value: label, label });
+    options.push({
+      value: label,
+      label: closed.has(label) ? label : `${label} (non clôturé)`,
+    });
   }
 
   if (closed.has(current)) {
@@ -58,7 +107,14 @@ export function buildOrganisationExerciceOptions(
   }
 
   for (const label of listSelectableFiscalYearLabels(now)) {
-    if (label === current || closed.has(label)) continue;
+    if (
+      label === current ||
+      closed.has(label) ||
+      historySet.has(label) ||
+      !hasFiscalYearStarted(label, now)
+    ) {
+      continue;
+    }
     options.push({ value: label, label: `${label} (non clôturé)` });
   }
 
@@ -177,5 +233,17 @@ export function buildCloseFilleulExerciceSnapshots(
     volumePropre: row.ownVolume,
     volumeBranche: row.branchVolume,
     volumeManager: row.managerVolume,
+  }));
+}
+
+/** Clôture d'un exercice déjà importé : reprend les volumes stockés, pas le live. */
+export function buildCloseFilleulExerciceSnapshotsFromHistory(
+  records: FilleulVolumeExercice[]
+): CloseFilleulExerciceSnapshot[] {
+  return records.map((record) => ({
+    contactId: record.contactId,
+    volumePropre: record.volumePropre ?? 0,
+    volumeBranche: record.volumeBranche ?? 0,
+    volumeManager: record.volumeManager ?? 0,
   }));
 }

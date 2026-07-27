@@ -38,7 +38,8 @@ export type StatistiquesPanelId =
   | "filleul_org_habilitation_duration"
   | "filleul_org_manager_duration"
   | "filleul_org_bridge"
-  | "filleul_org_net_growth";
+  | "filleul_org_net_growth"
+  | "filleul_org_exercice_summary";
 
 type StatistiquesCollapsibleId = StatistiquesSectionId | StatistiquesPanelId;
 
@@ -109,6 +110,7 @@ export const STATISTIQUES_PANELS_BY_SECTION: Record<
   filleuls_organisation: [
     "geography_filleul",
     "age_filleul",
+    "filleul_org_exercice_summary",
     "filleul_org_manager",
     "filleul_org_volume",
     "filleul_org_parraineur",

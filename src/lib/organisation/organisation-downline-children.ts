@@ -23,7 +23,9 @@ export function buildVisibleDownlineByParrain(
   options?: OrganisationExerciceVisibilityOptions
 ): Map<number, Contact[]> {
   const byId = indexContactsById(contacts);
-  const byParrain = indexDownlineByParrain(contacts);
+  const byParrain = indexDownlineByParrain(contacts, {
+    attachOrphansToParrainId: selfContactId,
+  });
   const map = new Map<number, Contact[]>();
 
   for (const children of byParrain.values()) {

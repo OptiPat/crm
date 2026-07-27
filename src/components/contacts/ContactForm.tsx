@@ -52,7 +52,7 @@ import {
 } from "@/lib/foyers/foyer-fiscal-sync";
 import { ContactFoyerRelationsBlock, type ContactFoyerRelationsActions } from "@/components/contacts/ContactFoyerRelationsBlock";
 import { FoyerProspectionDatesApplyButton } from "@/components/contacts/FoyerProspectionDatesApplyButton";
-import { ContactFormParrainageSection } from "@/components/contacts/ContactFormParrainageSection";
+import { ContactFormParrainageSection, ContactFormParrainField } from "@/components/contacts/ContactFormParrainageSection";
 import { FilleulRankFormFields } from "@/components/organisation/FilleulRankFormFields";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
@@ -1489,6 +1489,8 @@ export function ContactForm({
               setFormData={setFormData}
               contact={contact}
               mesFilleulsCount={mesFilleulsCount}
+              allContacts={allContacts}
+              onOpenContact={onOpenContact}
             />
           </FormSection>
         </>
@@ -1509,9 +1511,18 @@ export function ContactForm({
               />
             )}
             {filleulActif && !filleulReseauInscrit && (
+              <ContactFormParrainField
+                formData={formData}
+                setFormData={setFormData}
+                contacts={allContacts}
+                excludeContactId={contact?.id}
+                onOpenContact={onOpenContact}
+              />
+            )}
+            {filleulActif && !filleulReseauInscrit && (
               <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2">
-                Lien parrain : module <span className="font-medium">Organisation</span> → dossier
-                consultant.
+                Dates invitation / inscription : module{" "}
+                <span className="font-medium">Organisation</span> → dossier consultant.
               </p>
             )}
             {filleulActif && !filleulReseauInscrit && (

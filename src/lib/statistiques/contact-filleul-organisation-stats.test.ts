@@ -273,6 +273,37 @@ describe("contact-filleul-organisation-stats", () => {
     ).toEqual([10]);
   });
 
+  it("compte le CGP comme parrain des filleuls orphelins (sans parrain_id)", () => {
+    const selfId = 10;
+    const exercice = "2025-2026";
+    const inExercice = (fiscalYearStartUnix(exercice) ?? 0) + 86_400;
+
+    const parrainContacts = [
+      contact({ id: selfId, filleul_categorie: "FILLEUL", nom: "CGP" }),
+      contact({ id: 12, filleul_categorie: "FILLEUL", nom: "NONPARRAIN" }),
+      contact({
+        id: 20,
+        filleul_categorie: "FILLEUL",
+        parrain_id: undefined,
+        date_inscription_filleul: inExercice,
+        nom: "ORPHELIN",
+      }),
+    ];
+
+    const options = { organisationSelfContactId: selfId };
+    const exerciceStats = computeFilleulParraineurExerciceStats(
+      parrainContacts,
+      exercice,
+      options
+    );
+    expect(exerciceStats.parraineurCount).toBe(1);
+    expect(exerciceStats.parraineurContactIds).toEqual([selfId]);
+
+    const cumulativeStats = computeFilleulParraineurStats(parrainContacts, options);
+    expect(cumulativeStats.parraineurCount).toBe(1);
+    expect(cumulativeStats.parraineurContactIds).toEqual([selfId]);
+  });
+
   it("exclut les consultants désinscrits avant l'exercice du dénominateur exercice", () => {
     const exercice = "2025-2026";
     const inExercice = (fiscalYearStartUnix(exercice) ?? 0) + 86_400;

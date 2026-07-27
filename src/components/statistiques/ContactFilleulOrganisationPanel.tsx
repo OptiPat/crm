@@ -14,6 +14,7 @@ import {
   computeFilleulManagerStats,
   computeFilleulParraineurStats,
   computeFilleulParraineurExerciceStats,
+  EMPTY_FILLEUL_AVERAGE_VOLUME_STATS,
   filterContactsForFilleulBridgeList,
   filterContactsForFilleulOrganisationList,
   filterContactsForFilleulParraineurExerciceList,
@@ -73,6 +74,7 @@ import { ChartEmpty, ChartLoading } from "@/components/dashboard/dashboard-ui";
 import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { cn } from "@/lib/utils";
 import { toDashboardStatContactList } from "./contact-stats-panels";
+import { ContactFilleulOrganisationExerciceSummaryPanel } from "./ContactFilleulOrganisationExerciceSummaryPanel";
 import { AttritionKpiPanel } from "./contact-attrition-kpi-panel";
 import { ContactAgePanel } from "./ContactAgePanel";
 import { ContactGeographyPanel } from "./ContactGeographyPanel";
@@ -85,8 +87,10 @@ import {
 import {
   applyExerciceVolumesToContacts,
   indexFilleulVolumeExercicesByContactId,
-  isCurrentOrganisationExercice,
+  isFilleulExerciceVolumeResolvable,
+  isLiveFilleulExerciceVolumes,
   resolveOrganisationExerciceLabel,
+  shouldUseHistoricalFilleulExerciceVolumes,
   type OrganisationExerciceSelection,
 } from "@/lib/organisation/organisation-volume-history";
 import { OrganisationMemberDossierPanel } from "@/components/organisation/OrganisationMemberDossierPanel";
@@ -102,6 +106,7 @@ import {
 import { getFilleulDossiersByContactIds, type FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import {
   getFilleulVolumeExercicesByLabel,
+  listClosedFilleulVolumeExerciceLabels,
   listFilleulVolumeExerciceLabels,
 } from "@/lib/api/tauri-filleul-volumes";
 import { currentFiscalYearLabel, previousFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
@@ -237,7 +242,7 @@ function ManagerKpiPanel({
   return (
     <StatistiquesPanel
       title="Managers"
-      description="Part des filleuls inscrits ayant un rang Manager dans l'organisation (titre Manager ou supérieur, ou qualification Planète et au-delà)."
+      description="Part des filleuls inscrits ayant un rang Manager dans l'organisation (titre Manager, Senior, Major ou Expert, ou qualification Manager, Planète et au-delà)."
       collapsible
       panelId="filleul_org_manager"
     >
@@ -284,11 +289,13 @@ function ManagerKpiPanel({
 
 function VolumeKpiPanel({
   loading,
+  unavailable,
   exerciceLabel,
   stats,
   onOpenList,
 }: {
   loading: boolean;
+  unavailable?: boolean;
   exerciceLabel: string;
   stats: FilleulAverageVolumeStatResult;
   onOpenList: (kind: FilleulVolumeListKind) => void;
@@ -306,12 +313,17 @@ function VolumeKpiPanel({
   return (
     <StatistiquesPanel
       title="Volume et taux d'actifs"
-      description={`Sur l'exercice ${exerciceLabel} : volume propre moyen des consultants actifs (≥ 1 €) et part des consultants présents sur la période ayant au moins 1 € de volume propre (inscrits ou désinscrits selon dates dossier).`}
+      description={`Sur l'exercice ${exerciceLabel} : volume propre moyen des consultants actifs (≥ 1 €) et part des consultants inscrits sur la période ayant au moins 1 € de volume propre (vous + filleuls selon dates dossier). Volume propre, pas le volume organisation.`}
       collapsible
       panelId="filleul_org_volume"
     >
       {loading ? (
         <ChartLoading />
+      ) : unavailable ? (
+        <ChartEmpty
+          title="Historique de volumes non disponible pour cet exercice."
+          height={180}
+        />
       ) : stats.totalEligible === 0 ? (
         <ChartEmpty title="Aucun consultant présent sur cet exercice." height={180} />
       ) : (
@@ -872,8 +884,8 @@ function ParraineurKpiPanel({
               {formatFilleulParraineurCumulativeIndex(cumulativeStats)}
             </p>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-              Filleuls inscrits ayant parrainé au moins une fois, toutes périodes — indépendant de
-              l&apos;exercice sélectionné.
+              Filleuls inscrits ou désinscrits ayant parrainé au moins une fois, toutes périodes —
+              indépendant de l&apos;exercice sélectionné.
             </p>
           </div>
 
@@ -1064,7 +1076,7 @@ function NetGrowthKpiPanel({
   return (
     <StatistiquesPanel
       title="Croissance nette"
-      description={`Variation en % du nombre de consultants présents sur l'exercice ${exerciceLabel} par rapport à l'exercice précédent (même règle de présence que le volume : inscrits ou désinscrits selon dates dossier).`}
+      description={`Variation en % du nombre net de consultants (inscrits et non désinscrits pendant l'exercice) entre l'exercice ${exerciceLabel} et l'exercice précédent.`}
       collapsible
       panelId="filleul_org_net_growth"
     >
@@ -1150,8 +1162,8 @@ function NetGrowthKpiPanel({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Consultants présents sur chaque exercice (inscription avant fin de période, pas encore
-            désinscrit au début). Référence groupe via « Références » en haut de page.
+            Consultants nets sur chaque exercice : inscrits pendant la période et non désinscrits
+            avant sa clôture. Référence groupe via « Références » en haut de page.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1349,12 +1361,14 @@ export function ContactFilleulOrganisationPanel({
   const [selectedDossierContactId, setSelectedDossierContactId] = useState<number | null>(null);
   const [cgp, setCgp] = useState<CgpConfig | null>(null);
   const [drillDown, setDrillDown] = useState<OrganisationDrillDown | null>(null);
-  const [closedLabels, setClosedLabels] = useState<string[]>([]);
+  const [historyExerciceLabels, setHistoryExerciceLabels] = useState<string[]>([]);
+  const [closedExerciceLabels, setClosedExerciceLabels] = useState<string[]>([]);
   const [selectedExercice, setSelectedExercice] =
     useState<OrganisationExerciceSelection>(ORGANISATION_CURRENT_EXERCICE);
   const [historyRecords, setHistoryRecords] = useState<
     Awaited<ReturnType<typeof getFilleulVolumeExercicesByLabel>>
   >([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [dossiersByContactId, setDossiersByContactId] = useState<Map<number, FilleulDossier>>(
     new Map()
   );
@@ -1362,7 +1376,15 @@ export function ContactFilleulOrganisationPanel({
   const [dossiersReadyKey, setDossiersReadyKey] = useState("");
 
   useEffect(() => {
-    void listFilleulVolumeExerciceLabels().then(setClosedLabels).catch(console.error);
+    void Promise.all([
+      listFilleulVolumeExerciceLabels(),
+      listClosedFilleulVolumeExerciceLabels(),
+    ])
+      .then(([history, closed]) => {
+        setHistoryExerciceLabels(history);
+        setClosedExerciceLabels(closed);
+      })
+      .catch(console.error);
   }, [dataRefreshKey]);
 
   useEffect(() => {
@@ -1374,32 +1396,72 @@ export function ContactFilleulOrganisationPanel({
     [selectedExercice]
   );
 
-  const viewingCurrentExercice = useMemo(
-    () =>
-      isCurrentOrganisationExercice(selectedExercice) ||
-      (selectedExercice === currentFiscalYearLabel() &&
-        !closedLabels.includes(selectedExercice)),
-    [selectedExercice, closedLabels]
+  const viewingLiveVolumes = useMemo(
+    () => isLiveFilleulExerciceVolumes(resolvedExerciceLabel, closedExerciceLabels),
+    [resolvedExerciceLabel, closedExerciceLabels]
   );
 
   useEffect(() => {
-    if (viewingCurrentExercice) {
+    if (viewingLiveVolumes) {
       setHistoryRecords([]);
+      setHistoryLoading(false);
       return;
     }
+    let cancelled = false;
+    setHistoryLoading(true);
     setHistoryRecords([]);
     void getFilleulVolumeExercicesByLabel(resolvedExerciceLabel)
-      .then(setHistoryRecords)
-      .catch(console.error);
-  }, [resolvedExerciceLabel, viewingCurrentExercice, dataRefreshKey]);
+      .then((records) => {
+        if (!cancelled) {
+          setHistoryRecords(records);
+          setHistoryLoading(false);
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedExerciceLabel, viewingLiveVolumes, dataRefreshKey]);
+
+  const historyRecordsByLabel = useMemo(
+    () => new Map([[resolvedExerciceLabel, historyRecords]]),
+    [resolvedExerciceLabel, historyRecords]
+  );
+
+  const useHistoricalVolumes = useMemo(
+    () =>
+      shouldUseHistoricalFilleulExerciceVolumes(
+        resolvedExerciceLabel,
+        closedExerciceLabels,
+        historyRecordsByLabel
+      ),
+    [resolvedExerciceLabel, closedExerciceLabels, historyRecordsByLabel]
+  );
+
+  const volumeDataResolvable = useMemo(
+    () =>
+      isFilleulExerciceVolumeResolvable(
+        resolvedExerciceLabel,
+        closedExerciceLabels,
+        historyRecordsByLabel
+      ),
+    [resolvedExerciceLabel, closedExerciceLabels, historyRecordsByLabel]
+  );
 
   const contactsForStats = useMemo(() => {
-    if (viewingCurrentExercice) return contacts;
-    return applyExerciceVolumesToContacts(
-      contacts,
-      indexFilleulVolumeExercicesByContactId(historyRecords)
-    );
-  }, [contacts, viewingCurrentExercice, historyRecords]);
+    if (viewingLiveVolumes) return contacts;
+    if (historyLoading) return contacts;
+    if (useHistoricalVolumes) {
+      return applyExerciceVolumesToContacts(
+        contacts,
+        indexFilleulVolumeExercicesByContactId(historyRecords)
+      );
+    }
+    return contacts;
+  }, [contacts, viewingLiveVolumes, historyLoading, useHistoricalVolumes, historyRecords]);
 
   const selfContact = useMemo(
     () => contactsForStats.find((contact) => contact.id === selfContactId) ?? null,
@@ -1421,7 +1483,7 @@ export function ContactFilleulOrganisationPanel({
     [organisationTree]
   );
 
-  const currentExerciceClosed = closedLabels.includes(currentFiscalYearLabel());
+  const currentExerciceClosed = closedExerciceLabels.includes(currentFiscalYearLabel());
   const canEditOrganisationVolumes = !currentExerciceClosed;
 
   const dossierContactIds = useMemo(() => {
@@ -1474,11 +1536,13 @@ export function ContactFilleulOrganisationPanel({
   }, [dossierContactIds, dossierContactIdsKey, dataRefreshKey]);
 
   const exerciceKpisLoading =
-    loading || (dossierContactIdsKey !== "" && (dossiersLoading || dossiersReadyKey !== dossierContactIdsKey));
+    loading ||
+    (dossierContactIdsKey !== "" && (dossiersLoading || dossiersReadyKey !== dossierContactIdsKey)) ||
+    (!viewingLiveVolumes && historyLoading);
 
   const parraineurStatsOptions = useMemo(
-    () => ({ dossiersByContactId }),
-    [dossiersByContactId]
+    () => ({ dossiersByContactId, organisationSelfContactId: selfContactId }),
+    [dossiersByContactId, selfContactId]
   );
 
   const {
@@ -1554,14 +1618,24 @@ export function ContactFilleulOrganisationPanel({
   const statsOptions = useMemo(() => ({ selfContactId }), [selfContactId]);
 
   const managerStats = useMemo(() => computeFilleulManagerStats(contactsForStats), [contactsForStats]);
+  const volumeStatsUnavailable =
+    !viewingLiveVolumes && !historyLoading && !volumeDataResolvable;
+
   const volumeStats = useMemo(
     () =>
-      computeFilleulAverageVolumeExerciceStats(
-        contactsForStats,
-        resolvedExerciceLabel,
-        parraineurStatsOptions
-      ),
-    [contactsForStats, resolvedExerciceLabel, parraineurStatsOptions]
+      volumeStatsUnavailable
+        ? EMPTY_FILLEUL_AVERAGE_VOLUME_STATS
+        : computeFilleulAverageVolumeExerciceStats(
+            contactsForStats,
+            resolvedExerciceLabel,
+            parraineurStatsOptions
+          ),
+    [
+      contactsForStats,
+      resolvedExerciceLabel,
+      parraineurStatsOptions,
+      volumeStatsUnavailable,
+    ]
   );
   const parraineurExerciceStats = useMemo(
     () =>
@@ -1573,8 +1647,8 @@ export function ContactFilleulOrganisationPanel({
     [contactsForStats, resolvedExerciceLabel, parraineurStatsOptions]
   );
   const parraineurCumulativeStats = useMemo(
-    () => computeFilleulParraineurStats(contactsForStats),
-    [contactsForStats]
+    () => computeFilleulParraineurStats(contactsForStats, parraineurStatsOptions),
+    [contactsForStats, parraineurStatsOptions]
   );
   const bridgeStats = useMemo(
     () => computeFilleulClientBridgeStats(contactsForStats, statsOptions),
@@ -2056,7 +2130,8 @@ export function ContactFilleulOrganisationPanel({
     <>
       <div className="flex flex-wrap items-center justify-start gap-3 mb-1">
         <OrganisationExerciceSelector
-          closedLabels={closedLabels}
+          historyExerciceLabels={historyExerciceLabels}
+          closedExerciceLabels={closedExerciceLabels}
           value={selectedExercice}
           onValueChange={setSelectedExercice}
           displayTriggerLabel={`Exercice ${resolvedExerciceLabel}`}
@@ -2064,11 +2139,24 @@ export function ContactFilleulOrganisationPanel({
         />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
+        <div className="lg:col-span-2">
+          <ContactFilleulOrganisationExerciceSummaryPanel
+            contacts={contacts}
+            historyExerciceLabels={historyExerciceLabels}
+            closedExerciceLabels={closedExerciceLabels}
+            organisationSelfContactId={selfContactId}
+            dossiersByContactId={dossiersByContactId}
+            cgp={cgp}
+            dossiersLoading={exerciceKpisLoading}
+            dataRefreshKey={dataRefreshKey}
+          />
+        </div>
         <ContactGeographyPanel onNavigate={onNavigate} lens="filleul" />
         <ContactAgePanel onNavigate={onNavigate} lens="filleul" />
         <ManagerKpiPanel loading={loading} stats={managerStats} onOpenList={openManagerList} />
         <VolumeKpiPanel
           loading={exerciceKpisLoading}
+          unavailable={volumeStatsUnavailable}
           exerciceLabel={resolvedExerciceLabel}
           stats={volumeStats}
           onOpenList={openVolumeList}

@@ -90,6 +90,17 @@ impl super::Database {
         rows.collect()
     }
 
+    pub fn list_closed_filleul_volume_exercice_labels(&self) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT exercice_label
+             FROM filleul_volume_exercices
+             WHERE closed_at IS NOT NULL
+             ORDER BY exercice_label DESC",
+        )?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        rows.collect()
+    }
+
     pub fn get_filleul_volume_exercices_by_contact(
         &self,
         contact_id: i64,

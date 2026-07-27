@@ -4008,6 +4008,17 @@ pub fn get_filleul_volume_exercices_by_contact(
 }
 
 #[tauri::command]
+pub fn list_closed_filleul_volume_exercice_labels(
+    db: State<'_, DbState>,
+) -> Result<Vec<String>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .list_closed_filleul_volume_exercice_labels()
+        .map_err(|e| format!("Failed to list closed filleul volume exercice labels: {}", e))
+}
+
+#[tauri::command]
 pub fn exercice_is_closed(db: State<'_, DbState>, exercice_label: String) -> Result<bool, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;

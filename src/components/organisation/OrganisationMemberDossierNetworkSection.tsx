@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,7 +11,12 @@ import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import {
   buildUpsertFilleulDossierInput,
   dossierDateToInput,
+  resolveFilleulCategorieAfterDesinscriptionDateChange,
 } from "@/lib/organisation/organisation-filleul-dossier";
+import {
+  describeOrganisationExerciceVisibilityHint,
+  validateFilleulDossierDatePatch,
+} from "@/lib/organisation/organisation-filleul-dossier-validation";
 import { FILLEUL_DOSSIER_DATE_LABELS } from "@/lib/organisation/organisation-filleul-dossier-labels";
 import { toast } from "sonner";
 
@@ -86,12 +91,40 @@ export function OrganisationMemberDossierNetworkSection({
     try {
       while (queueRef.current.length > 0) {
         const patch = queueRef.current.shift()!;
+        const dossierBeforePatch = dossierRef.current;
         const saved = await upsertFilleulDossier(
           buildUpsertFilleulDossierInput(dossierRef.current, patch),
           { notifyContactsChanged: true }
         );
         dossierRef.current = saved;
         onDossierChange(saved);
+
+        if (patch.dateDesinscription !== undefined && contact.id != null) {
+          const clearingDesinscription =
+            patch.dateDesinscription.trim() === "" &&
+            dossierBeforePatch.dateDesinscription != null;
+          let nextFilleulCategorie = resolveFilleulCategorieAfterDesinscriptionDateChange(
+            contact,
+            patch.dateDesinscription
+          );
+          if (nextFilleulCategorie === undefined && clearingDesinscription) {
+            nextFilleulCategorie = "FILLEUL";
+          }
+          if (nextFilleulCategorie !== undefined) {
+            await updateContact(
+              contact.id,
+              contactToUpdatePayload(contact, { filleul_categorie: nextFilleulCategorie })
+            );
+            onParrainChange?.();
+          }
+          const visibilityHint = describeOrganisationExerciceVisibilityHint(
+            contact,
+            dossierRef.current
+          );
+          if (visibilityHint) {
+            toast.info(visibilityHint, { duration: 8000 });
+          }
+        }
       }
     } catch (error) {
       console.error(error);
@@ -105,15 +138,42 @@ export function OrganisationMemberDossierNetworkSection({
         void processSaveQueue();
       }
     }
-  }, [onDossierChange]);
+  }, [contact, onDossierChange, onParrainChange]);
 
   const saveDossierPatch = useCallback(
     (patch: DossierPatch) => {
       if (!canEdit) return;
+
+      const datePatch = {
+        dateInvitation: patch.dateInvitation,
+        dateInscription: patch.dateInscription,
+        dateDesinscription: patch.dateDesinscription,
+      };
+      const hasDatePatch = Object.values(datePatch).some((v) => v !== undefined);
+      if (hasDatePatch) {
+        const validation = validateFilleulDossierDatePatch(
+          dossierRef.current,
+          contact,
+          datePatch
+        );
+        if (validation?.blocking) {
+          toast.error(validation.blocking);
+          return;
+        }
+        if (validation?.warning) {
+          toast.warning(validation.warning);
+        }
+      }
+
       queueRef.current.push(patch);
       void processSaveQueue();
     },
-    [canEdit, processSaveQueue]
+    [canEdit, contact, processSaveQueue]
+  );
+
+  const exerciceVisibilityHint = useMemo(
+    () => describeOrganisationExerciceVisibilityHint(contact, dossier),
+    [contact, dossier]
   );
 
   const handleParrainChange = useCallback(
@@ -242,7 +302,8 @@ export function OrganisationMemberDossierNetworkSection({
             Désinscription
           </p>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            Consultant retiré du réseau actif.
+            Consultant retiré du réseau actif. La date passe le statut réseau à « Filleul
+            désinscrit » ; l&apos;effacer repasse à « Filleul ».
           </p>
         </div>
         <DossierDateField
@@ -252,6 +313,11 @@ export function OrganisationMemberDossierNetworkSection({
           disabled={!canEdit || saving}
           onSave={(value) => saveDossierPatch({ dateDesinscription: value })}
         />
+        {exerciceVisibilityHint ? (
+          <p className="text-[11px] text-amber-800/90 bg-amber-50/80 border border-amber-200/60 rounded-md px-2.5 py-2">
+            {exerciceVisibilityHint}
+          </p>
+        ) : null}
       </div>
     </section>
   );

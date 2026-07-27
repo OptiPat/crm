@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import { fiscalYearStartUnix } from "@/lib/pipe/remuneration-fiscal-year";
-import { wasConsultantInNetworkDuringExercice } from "./organisation-exercice-membership";
+import { wasActifConsultantDuringExercice, wasConsultantInNetworkDuringExercice, wasInscribedConsultantDuringExercice } from "./organisation-exercice-membership";
 
 function contact(partial: Partial<Contact> & Pick<Contact, "id" | "nom" | "prenom">): Contact {
   return {
@@ -61,5 +61,59 @@ describe("wasConsultantInNetworkDuringExercice", () => {
     });
 
     expect(wasConsultantInNetworkDuringExercice(consultant, exercice)).toBe(true);
+  });
+
+  it("wasActifConsultantDuringExercice exclut un désinscrit pendant l'exercice", () => {
+    const start = fiscalYearStartUnix(exercice) ?? 0;
+    const duringExercice = start + 86_400 * 60;
+    const consultant = contact({
+      id: 12,
+      nom: "PARTI",
+      prenom: "Mi",
+      filleul_categorie: "FILLEUL_DESINSCRIT",
+      date_inscription_filleul: start - 86_400 * 30,
+    });
+    const dossiersByContactId = new Map<number, FilleulDossier>([
+      [
+        12,
+        {
+          contactId: 12,
+          dateInvitation: null,
+          dateInscription: start - 86_400 * 30,
+          dateDesinscription: duringExercice,
+          datePremiereSouscriptionImo: null,
+          datePremiereSouscriptionPlacement: null,
+          datePremiereSouscriptionScpi: null,
+          datePassageManager: null,
+          dateHabilitationCif: null,
+          datePremierVaaOuVa: null,
+          notes: null,
+          updatedAt: 1,
+        },
+      ],
+    ]);
+
+    expect(
+      wasConsultantInNetworkDuringExercice(consultant, exercice, dossiersByContactId)
+    ).toBe(true);
+    expect(
+      wasActifConsultantDuringExercice(consultant, exercice, { dossiersByContactId })
+    ).toBe(false);
+  });
+
+  it("wasInscribedConsultantDuringExercice inclut le contact Moi (CGP)", () => {
+    const cgp = contact({
+      id: 1,
+      nom: "Dupont",
+      prenom: "Jean",
+      categorie: "CGP",
+      filleul_categorie: null,
+    });
+    expect(
+      wasInscribedConsultantDuringExercice(cgp, exercice, {
+        organisationSelfContactId: 1,
+      })
+    ).toBe(true);
+    expect(wasConsultantInNetworkDuringExercice(cgp, exercice)).toBe(false);
   });
 });

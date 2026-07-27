@@ -3,7 +3,10 @@ import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import { isDeFactoManagerFilleul } from "@/lib/contacts/contact-filleul-rank-match";
 import { isFilleulStatut, isPrescripteurCategorie } from "@/lib/contacts/contact-form-utils";
 import { contactOwnVolume } from "@/lib/organisation/organisation-branch-volumes";
-import { wasConsultantInNetworkDuringExercice } from "@/lib/organisation/organisation-exercice-membership";
+import {
+  wasConsultantInNetworkDuringExercice,
+  wasInscribedConsultantDuringExercice,
+} from "@/lib/organisation/organisation-exercice-membership";
 import {
   resolveFilleulInscriptionTimestamp,
   resolveFilleulInvitationTimestamp,
@@ -50,9 +53,14 @@ export type FilleulParraineurStatResult = {
 export type FilleulParraineurStatsOptions = {
   /** Dossiers filleul pour dates d'inscription / invitation (downlines). */
   dossiersByContactId?: Map<number, FilleulDossier>;
+  /** Filleuls sans parrain_id rattachés à ce contact dans les stats parrainage. */
+  organisationSelfContactId?: number | null;
 };
 
-export type FilleulExerciceStatsOptions = FilleulParraineurStatsOptions;
+export type FilleulExerciceStatsOptions = FilleulParraineurStatsOptions & {
+  /** Contact « Moi » (CGP) — toujours compté comme consultant inscrit. */
+  organisationSelfContactId?: number | null;
+};
 
 export type FilleulBridgeStatResult = {
   totalCount: number;
@@ -211,10 +219,14 @@ export function computeFilleulAverageVolumeExerciceStats(
   options?: FilleulExerciceStatsOptions
 ): FilleulAverageVolumeStatResult {
   const dossiersByContactId = options?.dossiersByContactId;
+  const membershipOptions = {
+    dossiersByContactId,
+    organisationSelfContactId: options?.organisationSelfContactId,
+  };
   const eligible = contacts.filter(
     (contact) =>
       contact.id != null &&
-      wasConsultantInNetworkDuringExercice(contact, exerciceLabel, dossiersByContactId)
+      wasInscribedConsultantDuringExercice(contact, exerciceLabel, membershipOptions)
   ) as Contact[];
   return computeAverageVolumeFromEligibleContacts(eligible);
 }
@@ -236,10 +248,13 @@ export function filterContactsForFilleulVolumeExerciceList(
   exerciceLabel: string,
   options?: FilleulExerciceStatsOptions
 ): Contact[] {
-  const dossiersByContactId = options?.dossiersByContactId;
+  const membershipOptions = {
+    dossiersByContactId: options?.dossiersByContactId,
+    organisationSelfContactId: options?.organisationSelfContactId,
+  };
   return contacts.filter((contact) => {
     if (
-      !wasConsultantInNetworkDuringExercice(contact, exerciceLabel, dossiersByContactId)
+      !wasInscribedConsultantDuringExercice(contact, exerciceLabel, membershipOptions)
     ) {
       return false;
     }
@@ -282,11 +297,34 @@ export function isFilleulParrainableDownline(
   );
 }
 
-function buildParrainIdsWithFilleulDownline(contacts: Contact[]): Set<number> {
+export const EMPTY_FILLEUL_AVERAGE_VOLUME_STATS: FilleulAverageVolumeStatResult = {
+  averageVolume: null,
+  activePercent: 0,
+  countedCount: 0,
+  totalEligible: 0,
+  missingVolumeCount: 0,
+  contactIds: [],
+};
+
+export function resolveEffectiveDownlineParrainId(
+  contact: Pick<Contact, "parrain_id">,
+  organisationSelfContactId?: number | null
+): number | null {
+  if (contact.parrain_id != null) return contact.parrain_id;
+  if (organisationSelfContactId != null) return organisationSelfContactId;
+  return null;
+}
+
+function buildParrainIdsWithFilleulDownline(
+  contacts: Contact[],
+  organisationSelfContactId?: number | null
+): Set<number> {
   const parrainIds = new Set<number>();
   for (const contact of contacts) {
-    if (contact.parrain_id == null || !isFilleulParrainableDownline(contact)) continue;
-    parrainIds.add(contact.parrain_id);
+    if (!isFilleulParrainableDownline(contact)) continue;
+    const parrainId = resolveEffectiveDownlineParrainId(contact, organisationSelfContactId);
+    if (parrainId == null) continue;
+    parrainIds.add(parrainId);
   }
   return parrainIds;
 }
@@ -353,14 +391,17 @@ export function wasConsultantPresentAtExerciceStart(
 function buildParrainIdsWithExerciceDownline(
   contacts: Contact[],
   exerciceLabel: string,
-  dossiersByContactId?: Map<number, FilleulDossier>
+  dossiersByContactId?: Map<number, FilleulDossier>,
+  organisationSelfContactId?: number | null
 ): Set<number> {
   const parrainIds = new Set<number>();
   for (const contact of contacts) {
-    if (contact.parrain_id == null || !isFilleulParrainableDownline(contact)) continue;
+    if (!isFilleulParrainableDownline(contact)) continue;
     const affiliation = resolveDownlineAffiliationUnix(contact, dossiersByContactId);
     if (!isAffiliationInExercice(affiliation, exerciceLabel)) continue;
-    parrainIds.add(contact.parrain_id);
+    const parrainId = resolveEffectiveDownlineParrainId(contact, organisationSelfContactId);
+    if (parrainId == null) continue;
+    parrainIds.add(parrainId);
   }
   return parrainIds;
 }
@@ -395,10 +436,13 @@ function computeParraineurStatsFromParrainIds(
 }
 
 /** Taux cumulé (historique) = consultants réseau ayant parrainé au moins 1 filleul (toutes périodes). */
-export function computeFilleulParraineurStats(contacts: Contact[]): FilleulParraineurStatResult {
+export function computeFilleulParraineurStats(
+  contacts: Contact[],
+  options?: FilleulParraineurStatsOptions
+): FilleulParraineurStatResult {
   return computeParraineurStatsFromParrainIds(
     contacts,
-    buildParrainIdsWithFilleulDownline(contacts),
+    buildParrainIdsWithFilleulDownline(contacts, options?.organisationSelfContactId),
     isContactEligibleForFilleulParraineurStats
   );
 }
@@ -417,7 +461,8 @@ export function computeFilleulParraineurExerciceStats(
   const parrainIds = buildParrainIdsWithExerciceDownline(
     contacts,
     exerciceLabel,
-    dossiersByContactId
+    dossiersByContactId,
+    options?.organisationSelfContactId
   );
   const isEligible = (contact: Contact) =>
     wasConsultantInNetworkDuringExercice(contact, exerciceLabel, dossiersByContactId);
@@ -426,9 +471,13 @@ export function computeFilleulParraineurExerciceStats(
 
 export function filterContactsForFilleulParraineurList(
   contacts: Contact[],
-  kind: FilleulParraineurListKind
+  kind: FilleulParraineurListKind,
+  options?: FilleulParraineurStatsOptions
 ): Contact[] {
-  const parrainIdsWithDownline = buildParrainIdsWithFilleulDownline(contacts);
+  const parrainIdsWithDownline = buildParrainIdsWithFilleulDownline(
+    contacts,
+    options?.organisationSelfContactId
+  );
   return contacts.filter((contact) => {
     if (!isContactEligibleForFilleulParraineurStats(contact) || contact.id == null) return false;
     const isParraineur = parrainIdsWithDownline.has(contact.id);
@@ -446,7 +495,8 @@ export function filterContactsForFilleulParraineurExerciceList(
   const parrainIdsWithDownline = buildParrainIdsWithExerciceDownline(
     contacts,
     exerciceLabel,
-    dossiersByContactId
+    dossiersByContactId,
+    options?.organisationSelfContactId
   );
   return contacts.filter((contact) => {
     if (

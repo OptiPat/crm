@@ -73,6 +73,20 @@ describe("organisation-branch-volumes", () => {
     expect(melanie?.branchVolume).toBe(140);
   });
 
+  it("ordonne les lignes par branche (parrain suivi de ses filleuls) et non par génération à plat", () => {
+    // CGP -> Alexandre (gen1, sans descendance) et Bruno (gen1, avec Zoe en gen2).
+    // Un tri "génération puis alphabétique" séparerait Zoe (gen2) loin de Bruno.
+    const contacts = [
+      { ...c(2, { parrainId: 1, prenom: "Moi" }), nom: "CGP" },
+      c(3, { parrainId: 2, prenom: "Alexandre" }),
+      c(4, { parrainId: 2, prenom: "Bruno" }),
+      c(5, { parrainId: 4, prenom: "Zoe" }),
+    ];
+    const tree = buildOrganisationTree(contacts, { nom: "CGP", prenom: "Moi" });
+    const rows = buildOrganisationVolumeRows(tree, contacts);
+    expect(rows.map((r) => r.contactId)).toEqual([2, 3, 4, 5]);
+  });
+
   it("getVolumeBranchColorStatus — prime de dev sur badge ; filleul direct 500 k€ sur vol. branche", () => {
     const rows = buildOrganisationVolumeRows(
       buildOrganisationTree(

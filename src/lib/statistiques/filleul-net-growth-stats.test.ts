@@ -83,6 +83,39 @@ describe("filleul-net-growth-stats", () => {
     expect(formatFilleulNetGrowthPercent(stats.growthPercent!)).toBe("+50 %");
   });
 
+  it("exclut les consultants désinscrits pendant l'exercice du comptage actif", () => {
+    const start = fiscalYearStartUnix(exercice) ?? 0;
+    const duringExercice = start + 86_400 * 60;
+    const contacts = [
+      contact({
+        id: 10,
+        filleul_categorie: "FILLEUL",
+        date_inscription_filleul: start - 86_400 * 30,
+      }),
+      contact({
+        id: 11,
+        filleul_categorie: "FILLEUL_DESINSCRIT",
+        date_inscription_filleul: start - 86_400 * 30,
+      }),
+    ];
+    const dossiersByContactId = new Map([
+      [10, dossier(10, { dateInscription: start - 86_400 * 30 })],
+      [
+        11,
+        dossier(11, {
+          dateInscription: start - 86_400 * 30,
+          dateDesinscription: duringExercice,
+        }),
+      ],
+    ]);
+
+    const stats = computeFilleulNetGrowthExerciceStats(contacts, exercice, {
+      dossiersByContactId,
+    });
+    expect(stats.currentCount).toBe(1);
+    expect(stats.currentContactIds).toEqual([10]);
+  });
+
   it("retourne null si aucun consultant sur l'exercice précédent", () => {
     const contacts = [
       contact({

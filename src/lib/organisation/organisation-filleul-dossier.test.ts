@@ -8,6 +8,7 @@ import {
   mergeLegacyFilleulDossierView,
   resolveFilleulInscriptionTimestamp,
   resolveFilleulInvitationTimestamp,
+  resolveFilleulCategorieAfterDesinscriptionDateChange,
 } from "@/lib/organisation/organisation-filleul-dossier";
 
 describe("organisation-filleul-dossier", () => {
@@ -67,5 +68,26 @@ describe("organisation-filleul-dossier", () => {
     expect(merged.dateInvitation).toBe(100);
     expect(merged.dateInscription).toBe(200);
     expect(merged.updatedAt).toBe(0);
+  });
+
+  it("aligne le statut réseau après date de désinscription", () => {
+    expect(
+      resolveFilleulCategorieAfterDesinscriptionDateChange(
+        { filleul_categorie: "FILLEUL", categorie: "AUCUN" },
+        "2024-06-01"
+      )
+    ).toBe("FILLEUL_DESINSCRIT");
+    expect(
+      resolveFilleulCategorieAfterDesinscriptionDateChange(
+        { filleul_categorie: "FILLEUL_DESINSCRIT", categorie: "AUCUN" },
+        ""
+      )
+    ).toBe("FILLEUL");
+    expect(
+      resolveFilleulCategorieAfterDesinscriptionDateChange(
+        { filleul_categorie: "PROSPECT_FILLEUL", categorie: "AUCUN" },
+        "2024-06-01"
+      )
+    ).toBeUndefined();
   });
 });

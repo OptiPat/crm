@@ -1,26 +1,33 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { findContactByNameKeyWithSwap } from "@/lib/contacts/name-match";
+import { isFilleulStatut } from "@/lib/contacts/contact-form-utils";
 import { buildVisibleDownlineByParrain } from "@/lib/organisation/organisation-downline-children";
+import { isOrganisationNetworkConsultant } from "@/lib/organisation/organisation-exercice-membership";
 import {
   type OrganisationExerciceVisibilityOptions,
 } from "@/lib/organisation/organisation-exercice-visibility";
 export type OrganisationTreeOptions = OrganisationExerciceVisibilityOptions;
 
-/** Filleuls visibles dans l'arbre (pas les prospects / suspects). */
+function contactEffectiveFilleulCategorie(
+  contact: Pick<Contact, "filleul_categorie" | "categorie">
+): string | null | undefined {
+  if (contact.filleul_categorie) return contact.filleul_categorie;
+  if (isFilleulStatut(contact.categorie)) return contact.categorie;
+  return null;
+}
+
+/** Filleuls visibles dans l'arbre (inscrits / désinscrits, hors prospects / suspects). */
 export function isOrganisationDownlineMember(contact: Contact): boolean {
-  return (
-    contact.filleul_categorie === "FILLEUL" ||
-    contact.filleul_categorie === "FILLEUL_DESINSCRIT"
-  );
+  return isOrganisationNetworkConsultant(contact);
 }
 
 export function isOrganisationActifFilleul(contact: Contact): boolean {
-  return contact.filleul_categorie === "FILLEUL";
+  return contactEffectiveFilleulCategorie(contact) === "FILLEUL";
 }
 
 export function isOrganisationDesinscrit(contact: Contact): boolean {
-  return contact.filleul_categorie === "FILLEUL_DESINSCRIT";
+  return contactEffectiveFilleulCategorie(contact) === "FILLEUL_DESINSCRIT";
 }
 
 export type OrganisationDownlineNode = {
@@ -99,13 +106,45 @@ export function indexContactsById(contacts: Contact[]): Map<number, Contact> {
   return map;
 }
 
-export function indexDownlineByParrain(contacts: Contact[]): Map<number, Contact[]> {
+export type IndexDownlineByParrainOptions = {
+  /** Filleuls sans parrain_id rattachés à ce contact (généralement « Moi »). */
+  attachOrphansToParrainId?: number;
+};
+
+export function indexDownlineByParrain(
+  contacts: Contact[],
+  options?: IndexDownlineByParrainOptions
+): Map<number, Contact[]> {
+  const attachOrphansTo = options?.attachOrphansToParrainId;
+  const byId = indexContactsById(contacts);
+  const uplineIds = new Set<number>();
+  if (attachOrphansTo != null) {
+    let currentId = byId.get(attachOrphansTo)?.parrain_id ?? null;
+    const visited = new Set<number>();
+    while (currentId != null && !visited.has(currentId)) {
+      visited.add(currentId);
+      uplineIds.add(currentId);
+      currentId = byId.get(currentId)?.parrain_id ?? null;
+    }
+  }
+
   const map = new Map<number, Contact[]>();
   for (const c of contacts) {
-    if (!isOrganisationDownlineMember(c) || c.parrain_id == null) continue;
-    const list = map.get(c.parrain_id) ?? [];
+    if (!isOrganisationDownlineMember(c)) continue;
+    let parrainId: number | undefined = c.parrain_id ?? undefined;
+    if (parrainId == null) {
+      if (
+        attachOrphansTo == null ||
+        c.id === attachOrphansTo ||
+        uplineIds.has(c.id)
+      ) {
+        continue;
+      }
+      parrainId = attachOrphansTo;
+    }
+    const list = map.get(parrainId) ?? [];
     list.push(c);
-    map.set(c.parrain_id, list);
+    map.set(parrainId, list);
   }
   for (const list of map.values()) {
     list.sort(compareOrganisationContactsByPrenom);
@@ -371,7 +410,9 @@ export function buildOrganisationTree(
   const selfContact = resolveOrganisationSelfContact(contacts, cgp);
   const selfDisplayName = buildOrganisationSelfDisplayName(cgp, selfContact);
   const byId = indexContactsById(contacts);
-  const byParrain = indexDownlineByParrain(contacts);
+  const byParrain = indexDownlineByParrain(contacts, {
+    attachOrphansToParrainId: selfContact?.id,
+  });
 
   if (!selfContact) {
     return {
@@ -443,7 +484,9 @@ export function collectOrganisationDossierContactIds(
   if (!selfContact) return [];
 
   const byId = indexContactsById(contacts);
-  const byParrain = indexDownlineByParrain(contacts);
+  const byParrain = indexDownlineByParrain(contacts, {
+    attachOrphansToParrainId: selfContact.id,
+  });
   const ids = new Set<number>([selfContact.id]);
 
   let currentId = selfContact.parrain_id ?? null;

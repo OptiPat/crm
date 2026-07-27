@@ -15,6 +15,7 @@ export type FilleulParrainageDurationListKind = "withDuration" | "missingParrain
 
 export type FilleulParrainageDurationStatsOptions = {
   dossiersByContactId?: Map<number, FilleulDossier>;
+  organisationSelfContactId?: number | null;
 };
 
 export type FilleulParrainageDurationStatResult = {
@@ -123,7 +124,7 @@ export function computeFilleulParrainageDurationExerciceStats(
   const eligible = contacts.filter(
     (contact) =>
       contact.id != null &&
-      isFilleulInscribedDuringExercice(contact, exerciceLabel, dossiersByContactId)
+      isFilleulInscribedDuringExercice(contact, exerciceLabel, options)
   ) as Contact[];
   return computeParrainageDurationStatsFromEligible(contacts, eligible, dossiersByContactId);
 }
@@ -155,7 +156,7 @@ export function filterContactsForFilleulParrainageDurationExerciceList(
   const dossiersByContactId = options?.dossiersByContactId;
   return contacts.filter((contact) => {
     if (
-      !isFilleulInscribedDuringExercice(contact, exerciceLabel, dossiersByContactId) ||
+      !isFilleulInscribedDuringExercice(contact, exerciceLabel, options) ||
       contact.id == null
     ) {
       return false;

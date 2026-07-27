@@ -28,6 +28,11 @@ export async function listFilleulVolumeExerciceLabels(): Promise<string[]> {
   return invoke<string[]>("list_filleul_volume_exercice_labels");
 }
 
+/** Exercices clôturés (closed_at) — pas les imports historiques non clôturés. */
+export async function listClosedFilleulVolumeExerciceLabels(): Promise<string[]> {
+  return invoke<string[]>("list_closed_filleul_volume_exercice_labels");
+}
+
 export async function getFilleulVolumeExercicesByLabel(
   exerciceLabel: string
 ): Promise<FilleulVolumeExercice[]> {

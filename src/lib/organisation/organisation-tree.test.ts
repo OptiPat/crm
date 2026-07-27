@@ -324,4 +324,21 @@ describe("organisation-tree", () => {
     expect(groups[1]?.parrainLabel).toBe("Bruno MARTIN");
     expect(groups[1]?.parrainId).toBe(3);
   });
+
+  it("rattache les filleuls sans parrain au contact Moi dans l'arbre", () => {
+    const contacts = [
+      contact({ id: 1, nom: "CGP", prenom: "Moi", filleul_categorie: "FILLEUL" }),
+      contact({
+        id: 2,
+        nom: "ORPHELIN",
+        prenom: "Jean",
+        filleul_categorie: "FILLEUL",
+        parrain_id: undefined,
+      }),
+    ];
+    const tree = buildOrganisationTree(contacts, { nom: "CGP", prenom: "Moi" });
+    expect(tree.stats.actifs).toBe(1);
+    expect(tree.generations[0]?.map((n) => n.contact.id)).toEqual([2]);
+    expect(collectOrganisationDossierContactIds(contacts, tree.selfContact)).toContain(2);
+  });
 });

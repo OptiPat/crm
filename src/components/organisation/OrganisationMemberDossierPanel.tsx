@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/sheet";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import { getFilleulVolumeExercicesByContact } from "@/lib/api/tauri-filleul-volumes";
-import { isOrganisationActifFilleul } from "@/lib/organisation/organisation-tree";
+import { isOrganisationActifFilleul, isOrganisationDownlineMember } from "@/lib/organisation/organisation-tree";
 import { OrganisationMemberDossierNetworkSection } from "@/components/organisation/OrganisationMemberDossierNetworkSection";
 import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import { emptyFilleulDossier } from "@/lib/organisation/organisation-filleul-dossier";
@@ -110,6 +110,9 @@ export function OrganisationMemberDossierPanel({
     () => resolveOrganisationSelfContact(contacts, cgp ?? {}),
     [contacts, cgp]
   );
+
+  const canEditRanks =
+    contact != null && onRankSave != null && isOrganisationDownlineMember(contact);
 
   const editable =
     canEditVolumes &&
@@ -249,12 +252,17 @@ export function OrganisationMemberDossierPanel({
             </SheetHeader>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4">
-              {onRankSave && isOrganisationActifFilleul(contact) ? (
+              {canEditRanks ? (
                 <section className="space-y-2">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     Titre et qualification
                   </h4>
                   <FilleulRankEditor contact={contact} onSave={onRankSave} variant="panel" />
+                  {!contact.filleul_titre && !contact.filleul_qualification ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      Aucun titre ni qualification — utilisez le bouton ci-dessus pour les renseigner.
+                    </p>
+                  ) : null}
                 </section>
               ) : null}
 

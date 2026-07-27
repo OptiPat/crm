@@ -24,10 +24,15 @@ import { cn } from "@/lib/utils";
 type OrganisationBranchVolumesPanelProps = {
   rows: OrganisationVolumeRow[];
   contacts: Contact[];
+  /** Exercice clôturé : tout est figé, aucune saisie possible. */
   readOnly?: boolean;
+  /** Exercice en cours (vs exercice passé non clôturé) : seul le volume perso + Objectif Manager sont saisis en live ; le volume branche reste calculé. */
+  liveMode?: boolean;
   exerciceLabel?: string;
   onVolumeSave: (contact: Contact, volume: number | null) => void | Promise<void>;
   onManagerVolumeSave: (contact: Contact, volume: number | null) => void | Promise<void>;
+  /** Correction du volume organisation (branche) — exercice passé non clôturé uniquement. */
+  onBranchVolumeSave?: (contact: Contact, volume: number | null) => void | Promise<void>;
   onNodeClick?: (contact: Contact) => void;
   showTopBorder?: boolean;
 };
@@ -66,12 +71,15 @@ export function OrganisationBranchVolumesPanel({
   rows,
   contacts,
   readOnly = false,
+  liveMode = true,
   exerciceLabel,
   onVolumeSave,
   onManagerVolumeSave,
+  onBranchVolumeSave,
   onNodeClick,
   showTopBorder = true,
 }: OrganisationBranchVolumesPanelProps) {
+  const canEditBranchVolume = !readOnly && !liveMode && onBranchVolumeSave != null;
   const contactsById = useMemo(() => {
     const map = new Map<number, Contact>();
     for (const c of contacts) {
@@ -103,8 +111,13 @@ export function OrganisationBranchVolumesPanel({
           <p className="text-xs text-muted-foreground mt-1 max-w-3xl space-y-1">
             {readOnly ? (
               <span className="block">
-                Exercice {exerciceLabel ?? "sélectionné"} (lecture seule) — volume branche
-                calculé comme sur l&apos;exercice en cours.
+                Exercice {exerciceLabel ?? "sélectionné"} clôturé (lecture seule) — snapshot figé.
+              </span>
+            ) : !liveMode ? (
+              <span className="block">
+                Exercice {exerciceLabel ?? "sélectionné"} non clôturé — vous pouvez corriger les
+                volumes propre et organisation ci-dessous (ex. après un import Excel imprécis).
+                Clôturez l&apos;exercice une fois les chiffres validés pour les figer.
               </span>
             ) : (
               <>
@@ -213,7 +226,7 @@ export function OrganisationBranchVolumesPanel({
                   >
                     {row.generation === 0 || !row.managerObjectiveEligible ? (
                       <span className="block text-right text-muted-foreground text-xs">—</span>
-                    ) : readOnly ? (
+                    ) : readOnly || !liveMode ? (
                       <span
                         className="block text-right tabular-nums"
                         title={managerObjectiveCellTitle(row)}
@@ -244,7 +257,7 @@ export function OrganisationBranchVolumesPanel({
                       </span>
                     ) : (
                       <Input
-                        key={`vol-${row.contactId}-${contact.filleul_volume ?? "empty"}`}
+                        key={`vol-${row.contactId}-${liveMode ? contact.filleul_volume ?? "empty" : row.ownVolume}`}
                         className={cn("h-8 w-full max-w-[8rem] ml-auto text-right tabular-nums")}
                         inputMode="decimal"
                         placeholder="0"
@@ -253,7 +266,7 @@ export function OrganisationBranchVolumesPanel({
                           const parsed = parseFilleulVolumeField(e.target.value);
                           if (parsed == null) return;
                           if (parsed === row.ownVolume) return;
-                          void onVolumeSave(contact, parsed === 0 ? null : parsed);
+                          void onVolumeSave(contact, liveMode && parsed === 0 ? null : parsed);
                         }}
                       />
                     )}
@@ -266,7 +279,23 @@ export function OrganisationBranchVolumesPanel({
                     )}
                     title={exerciceBranchCellTitle(row)}
                   >
-                    {formatFilleulVolumeDisplay(exerciceDisplay)}
+                    {canEditBranchVolume ? (
+                      <Input
+                        key={`branch-${row.contactId}-${row.branchVolume}`}
+                        className="h-8 w-full max-w-[9rem] ml-auto text-right tabular-nums bg-background"
+                        inputMode="decimal"
+                        placeholder="0"
+                        defaultValue={formatFilleulVolumeField(exerciceDisplay)}
+                        onBlur={(e) => {
+                          const parsed = parseFilleulVolumeField(e.target.value);
+                          if (parsed == null) return;
+                          if (parsed === row.branchVolume) return;
+                          void onBranchVolumeSave?.(contact, parsed);
+                        }}
+                      />
+                    ) : (
+                      formatFilleulVolumeDisplay(exerciceDisplay)
+                    )}
                   </td>
                 </tr>
               );

@@ -1,5 +1,5 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
-import { wasConsultantInNetworkDuringExercice } from "@/lib/organisation/organisation-exercice-membership";
+import { wasActifConsultantDuringExercice } from "@/lib/organisation/organisation-exercice-membership";
 import {
   type FilleulAttritionExerciceStatsOptions,
 } from "@/lib/statistiques/contact-attrition-stats";
@@ -17,16 +17,24 @@ export type FilleulNetGrowthStatResult = {
   previousContactIds: number[];
 };
 
+export type FilleulNetGrowthExerciceStatsOptions = FilleulAttritionExerciceStatsOptions & {
+  organisationSelfContactId?: number | null;
+};
+
 /**
- * Croissance nette : variation en % du nombre de consultants présents sur l'exercice
- * (inscrits ou désinscrits selon dates dossier) par rapport à l'exercice précédent.
+ * Croissance nette : variation en % du nombre de consultants actifs sur l'exercice
+ * (présents et non désinscrits avant la fin — filleuls selon dates dossier + contact « Moi »)
+ * par rapport à l'exercice précédent.
  */
 export function computeFilleulNetGrowthExerciceStats(
   contacts: Contact[],
   exerciceLabel: string,
-  options?: FilleulAttritionExerciceStatsOptions
+  options?: FilleulNetGrowthExerciceStatsOptions
 ): FilleulNetGrowthStatResult {
-  const dossiersByContactId = options?.dossiersByContactId;
+  const membershipOptions = {
+    dossiersByContactId: options?.dossiersByContactId,
+    organisationSelfContactId: options?.organisationSelfContactId,
+  };
   const previousExerciceLabel = previousFiscalYearLabel(exerciceLabel);
 
   const currentContactIds: number[] = [];
@@ -34,12 +42,12 @@ export function computeFilleulNetGrowthExerciceStats(
 
   for (const contact of contacts) {
     if (contact.id == null) continue;
-    if (wasConsultantInNetworkDuringExercice(contact, exerciceLabel, dossiersByContactId)) {
+    if (wasActifConsultantDuringExercice(contact, exerciceLabel, membershipOptions)) {
       currentContactIds.push(contact.id);
     }
     if (
       previousExerciceLabel != null &&
-      wasConsultantInNetworkDuringExercice(contact, previousExerciceLabel, dossiersByContactId)
+      wasActifConsultantDuringExercice(contact, previousExerciceLabel, membershipOptions)
     ) {
       previousContactIds.push(contact.id);
     }
@@ -66,15 +74,18 @@ export function filterContactsForFilleulNetGrowthExerciceList(
   kind: FilleulNetGrowthListKind,
   exerciceLabel: string,
   previousExerciceLabel: string | null,
-  options?: FilleulAttritionExerciceStatsOptions
+  options?: FilleulNetGrowthExerciceStatsOptions
 ): Contact[] {
   const targetLabel = kind === "current" ? exerciceLabel : previousExerciceLabel;
   if (targetLabel == null) return [];
-  const dossiersByContactId = options?.dossiersByContactId;
+  const membershipOptions = {
+    dossiersByContactId: options?.dossiersByContactId,
+    organisationSelfContactId: options?.organisationSelfContactId,
+  };
   return contacts.filter(
     (contact) =>
       contact.id != null &&
-      wasConsultantInNetworkDuringExercice(contact, targetLabel, dossiersByContactId)
+      wasActifConsultantDuringExercice(contact, targetLabel, membershipOptions)
   );
 }
 

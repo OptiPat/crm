@@ -1,6 +1,10 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
+import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { textMatchesSearch } from "@/lib/search-utils";
-import type { OrganisationTreeResult } from "@/lib/organisation/organisation-tree";
+import {
+  buildOrganisationTree,
+  type OrganisationTreeResult,
+} from "@/lib/organisation/organisation-tree";
 
 export type OrganisationMemberStatus = "actif" | "desinscrit" | "self" | "upline";
 
@@ -75,6 +79,15 @@ export function collectOrganisationMemberRoster(
   }
 
   return entries.sort((a, b) => a.label.localeCompare(b.label, "fr"));
+}
+
+/** Recherche consultant : tout le réseau (hors filtre exercice affiché). */
+export function buildOrganisationSearchRoster(
+  contacts: Contact[],
+  cgp: Pick<CgpConfig, "nom" | "prenom">
+): OrganisationMemberRosterEntry[] {
+  const tree = buildOrganisationTree(contacts, cgp, { hideDesinscrits: false });
+  return collectOrganisationMemberRoster(tree);
 }
 
 export function findOrganisationMemberRosterEntry(

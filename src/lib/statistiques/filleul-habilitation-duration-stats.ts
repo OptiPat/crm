@@ -15,6 +15,7 @@ export type FilleulHabilitationDurationListKind = "withDuration" | "missingHabil
 
 export type FilleulHabilitationDurationStatsOptions = {
   dossiersByContactId?: Map<number, FilleulDossier>;
+  organisationSelfContactId?: number | null;
 };
 
 export type FilleulHabilitationDurationStatResult = {
@@ -95,7 +96,7 @@ export function computeFilleulHabilitationDurationExerciceStats(
   const eligible = contacts.filter(
     (contact) =>
       contact.id != null &&
-      isFilleulInscribedDuringExercice(contact, exerciceLabel, dossiersByContactId)
+      isFilleulInscribedDuringExercice(contact, exerciceLabel, options)
   ) as Contact[];
   return computeHabilitationDurationStatsFromEligible(eligible, dossiersByContactId);
 }
@@ -123,7 +124,7 @@ export function filterContactsForFilleulHabilitationDurationExerciceList(
   const dossiersByContactId = options?.dossiersByContactId;
   return contacts.filter((contact) => {
     if (
-      !isFilleulInscribedDuringExercice(contact, exerciceLabel, dossiersByContactId) ||
+      !isFilleulInscribedDuringExercice(contact, exerciceLabel, options) ||
       contact.id == null
     ) {
       return false;

@@ -1,6 +1,9 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
 import { formatEuroAmountCif, parseEuroInput } from "@/lib/souscription-cif/build-annexes-scpi-costs";
-import type { OrganisationTreeResult } from "@/lib/organisation/organisation-tree";
+import type {
+  OrganisationDownlineNode,
+  OrganisationTreeResult,
+} from "@/lib/organisation/organisation-tree";
 import {
   getManagerObjectiveStatus,
   isManagerObjectiveEligible,
@@ -123,6 +126,13 @@ export function parseFilleulVolumeField(raw: string): number | null {
 
 export function formatFilleulVolumeDisplay(euros: number): string {
   return formatEuroAmountCif(euros);
+}
+
+/** Montant entier (synthèse multi-exercices — pas de décimales). */
+export function formatFilleulVolumeDisplayWhole(euros: number): string {
+  return `${new Intl.NumberFormat("fr-FR", {
+    maximumFractionDigits: 0,
+  }).format(Math.round(euros))} €`;
 }
 
 function indexActiveFilleulsByParrain(contacts: Contact[]): Map<number, Contact[]> {
@@ -300,15 +310,30 @@ export function buildOrganisationVolumeRowsWithOwnVolumes(
     push(tree.selfContact, 0, `${tree.selfDisplayName} (vous)`);
   }
 
+  // Regroupe par parrain (déjà trié par parrain puis prénom dans tree.generations) pour
+  // parcourir la branche en profondeur : un filleul suit immédiatement son parrain, avant
+  // les autres branches — plutôt qu'un empilement de toute une génération à la fois.
+  const nodesByParrainId = new Map<number, OrganisationDownlineNode[]>();
   for (const layer of tree.generations) {
     for (const node of layer) {
-      push(node.contact, node.generation, `${node.contact.prenom} ${node.contact.nom}`.trim());
+      if (node.parrainId == null) continue;
+      const siblings = nodesByParrainId.get(node.parrainId) ?? [];
+      siblings.push(node);
+      nodesByParrainId.set(node.parrainId, siblings);
     }
   }
 
-  rows.sort(
-    (a, b) => a.generation - b.generation || a.label.localeCompare(b.label, "fr")
-  );
+  const pushBranch = (parrainId: number) => {
+    for (const node of nodesByParrainId.get(parrainId) ?? []) {
+      push(node.contact, node.generation, `${node.contact.prenom} ${node.contact.nom}`.trim());
+      if (node.contact.id != null) pushBranch(node.contact.id);
+    }
+  };
+
+  if (tree.selfContact?.id != null) {
+    pushBranch(tree.selfContact.id);
+  }
+
   return rows;
 }
 

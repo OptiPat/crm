@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Archive } from "lucide-react";
 import {
   AlertDialog,
@@ -13,34 +13,39 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import type { OrganisationTreeResult } from "@/lib/organisation/organisation-tree";
-import type { Contact } from "@/lib/api/tauri-contacts";
-import { buildCloseFilleulExerciceSnapshots } from "@/lib/organisation/organisation-volume-history";
+import {
+  type CloseFilleulExerciceSnapshot,
+} from "@/lib/organisation/organisation-volume-history";
 import { closeFilleulExercice } from "@/lib/api/tauri-filleul-volumes";
-import { currentFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
 import { toast } from "sonner";
 
 type OrganisationExerciceCloseDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  tree: OrganisationTreeResult;
-  contacts: Contact[];
+  exerciceLabel: string;
+  snapshots: CloseFilleulExerciceSnapshot[];
+  /** Exercice fiscal en cours : option de remise à zéro des volumes propres live. */
+  allowResetOwnVolumes?: boolean;
   onClosed: () => void;
 };
 
 export function OrganisationExerciceCloseDialog({
   open,
   onOpenChange,
-  tree,
-  contacts,
+  exerciceLabel,
+  snapshots,
+  allowResetOwnVolumes = false,
   onClosed,
 }: OrganisationExerciceCloseDialogProps) {
-  const exerciceLabel = currentFiscalYearLabel();
   const [resetOwnVolumes, setResetOwnVolumes] = useState(false);
   const [closing, setClosing] = useState(false);
-  const snapshots = buildCloseFilleulExerciceSnapshots(tree, contacts);
+
+  useEffect(() => {
+    if (open) setResetOwnVolumes(false);
+  }, [open, exerciceLabel]);
 
   const handleClose = async () => {
+    if (snapshots.length === 0) return;
     setClosing(true);
     try {
       await closeFilleulExercice({
@@ -51,7 +56,7 @@ export function OrganisationExerciceCloseDialog({
           volumeBranche: row.volumeBranche,
           volumeManager: row.volumeManager,
         })),
-        resetOwnVolumes,
+        resetOwnVolumes: allowResetOwnVolumes && resetOwnVolumes,
       });
       toast.success(`Exercice ${exerciceLabel} clôturé`);
       onOpenChange(false);
@@ -74,26 +79,33 @@ export function OrganisationExerciceCloseDialog({
           <AlertDialogDescription asChild>
             <div className="space-y-3 text-sm text-muted-foreground">
               <p>
-                {snapshots.length} contact{snapshots.length > 1 ? "s" : ""} seront archivés avec
-                leurs volumes propre, branche et objectif Manager (snapshot figé).
+                {allowResetOwnVolumes
+                  ? `${snapshots.length} contact${snapshots.length > 1 ? "s" : ""} seront archivés avec leurs volumes propre, branche et objectif Manager (snapshot figé).`
+                  : `${snapshots.length} contact${snapshots.length > 1 ? "s" : ""} : les volumes importés seront marqués comme clôturés (aucun recalcul depuis les volumes actuels).`}
               </p>
-              <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/20 p-3">
-                <Checkbox
-                  id="reset-own-volumes"
-                  checked={resetOwnVolumes}
-                  onCheckedChange={(checked) => setResetOwnVolumes(checked === true)}
-                />
-                <Label htmlFor="reset-own-volumes" className="text-sm leading-snug cursor-pointer">
-                  Remettre les volumes propres à zéro pour l&apos;exercice en cours
-                </Label>
-              </div>
+              {allowResetOwnVolumes ? (
+                <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/20 p-3">
+                  <Checkbox
+                    id="reset-own-volumes"
+                    checked={resetOwnVolumes}
+                    onCheckedChange={(checked) => setResetOwnVolumes(checked === true)}
+                  />
+                  <Label htmlFor="reset-own-volumes" className="text-sm leading-snug cursor-pointer">
+                    Remettre les volumes propres à zéro pour l&apos;exercice en cours
+                  </Label>
+                </div>
+              ) : null}
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={closing}>Annuler</AlertDialogCancel>
           <AlertDialogAction asChild>
-            <Button type="button" onClick={() => void handleClose()} disabled={closing}>
+            <Button
+              type="button"
+              onClick={() => void handleClose()}
+              disabled={closing || snapshots.length === 0}
+            >
               <Archive className="h-4 w-4 mr-1.5" aria-hidden />
               {closing ? "Clôture…" : "Clôturer"}
             </Button>

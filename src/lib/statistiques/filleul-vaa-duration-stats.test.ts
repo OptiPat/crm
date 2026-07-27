@@ -212,4 +212,43 @@ describe("filleul-vaa-duration-stats", () => {
     );
     expect(withDuration.map((row) => row.id)).toEqual([10]);
   });
+
+  it("inclut le contact Moi (CGP) si inscription sur l'exercice", () => {
+    const inscription = Math.floor(Date.parse("2024-09-01T00:00:00Z") / 1000);
+    const premierVaa = Math.floor(Date.parse("2024-11-15T00:00:00Z") / 1000);
+    const dossiersByContactId = new Map([
+      [
+        1,
+        {
+          contactId: 1,
+          dateInvitation: null,
+          dateInscription: inscription,
+          dateDesinscription: null,
+          datePremiereSouscriptionImo: null,
+          datePremiereSouscriptionPlacement: null,
+          datePremiereSouscriptionScpi: null,
+          datePassageManager: null,
+          dateHabilitationCif: null,
+          datePremierVaaOuVa: premierVaa,
+          notes: null,
+          updatedAt: 1,
+        },
+      ],
+    ]);
+    const contacts = [
+      contact({
+        id: 1,
+        categorie: "CGP",
+        filleul_categorie: null,
+        date_inscription_filleul: inscription,
+      }),
+    ];
+
+    const stats = computeFilleulVaaDurationExerciceStats(contacts, exercice, {
+      dossiersByContactId,
+      organisationSelfContactId: 1,
+    });
+    expect(stats.totalEligible).toBe(1);
+    expect(stats.averageMonths).toBe(2);
+  });
 });

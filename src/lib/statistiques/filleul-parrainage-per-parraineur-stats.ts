@@ -5,6 +5,7 @@ import {
   isFilleulParrainableDownline,
   isAffiliationInExercice,
   resolveDownlineAffiliationUnix,
+  resolveEffectiveDownlineParrainId,
   wasConsultantInNetworkDuringExercice,
   type FilleulParraineurStatsOptions,
 } from "@/lib/statistiques/contact-filleul-organisation-stats";
@@ -23,19 +24,21 @@ export type FilleulParrainagePerParraineurStatResult = {
 function countParrainagesByParrainId(
   contacts: Contact[],
   dossiersByContactId?: Map<number, FilleulDossier>,
-  exerciceLabel?: string
+  exerciceLabel?: string,
+  organisationSelfContactId?: number | null
 ): { totalParrainages: number; countsByParrainId: Map<number, number> } {
   const countsByParrainId = new Map<number, number>();
   let totalParrainages = 0;
 
   for (const contact of contacts) {
-    if (contact.parrain_id == null || !isFilleulParrainableDownline(contact)) continue;
+    if (!isFilleulParrainableDownline(contact)) continue;
     if (exerciceLabel != null) {
       const affiliation = resolveDownlineAffiliationUnix(contact, dossiersByContactId);
       if (!isAffiliationInExercice(affiliation, exerciceLabel)) continue;
     }
+    const parrainId = resolveEffectiveDownlineParrainId(contact, organisationSelfContactId);
+    if (parrainId == null) continue;
     totalParrainages += 1;
-    const parrainId = contact.parrain_id;
     countsByParrainId.set(parrainId, (countsByParrainId.get(parrainId) ?? 0) + 1);
   }
 
@@ -98,10 +101,12 @@ export function computeFilleulParrainagePerParraineurExerciceStats(
   options?: FilleulParraineurStatsOptions
 ): FilleulParrainagePerParraineurStatResult {
   const dossiersByContactId = options?.dossiersByContactId;
+  const organisationSelfContactId = options?.organisationSelfContactId;
   const { totalParrainages, countsByParrainId } = countParrainagesByParrainId(
     contacts,
     dossiersByContactId,
-    exerciceLabel
+    exerciceLabel,
+    organisationSelfContactId
   );
   return computeFromParrainageCounts(
     contacts,
@@ -111,7 +116,11 @@ export function computeFilleulParrainagePerParraineurExerciceStats(
   );
 }
 
-/** Filleuls parrainés dont l'affiliation tombe dans l'exercice (les parrainages comptés). */
+/**
+ * Filleuls parrainés dont l'affiliation tombe dans l'exercice (les parrainages comptés).
+ * Inclut les filleuls sans parrain_id renseigné, rattachés au CGP comme dans le total
+ * (cf. `resolveEffectiveDownlineParrainId`), pour que la liste corresponde au chiffre affiché.
+ */
 export function filterContactsForFilleulParrainagesExerciceList(
   contacts: Contact[],
   exerciceLabel: string,
@@ -119,7 +128,10 @@ export function filterContactsForFilleulParrainagesExerciceList(
 ): Contact[] {
   const dossiersByContactId = options?.dossiersByContactId;
   return contacts.filter((contact) => {
-    if (contact.parrain_id == null || !isFilleulParrainableDownline(contact)) return false;
+    if (!isFilleulParrainableDownline(contact)) return false;
+    if (resolveEffectiveDownlineParrainId(contact, options?.organisationSelfContactId) == null) {
+      return false;
+    }
     const affiliation = resolveDownlineAffiliationUnix(contact, dossiersByContactId);
     return isAffiliationInExercice(affiliation, exerciceLabel);
   });
@@ -135,10 +147,12 @@ export function filterContactsForFilleulParrainagePerParraineurExerciceList(
     return filterContactsForFilleulParrainagesExerciceList(contacts, exerciceLabel, options);
   }
   const dossiersByContactId = options?.dossiersByContactId;
+  const organisationSelfContactId = options?.organisationSelfContactId;
   const { countsByParrainId } = countParrainagesByParrainId(
     contacts,
     dossiersByContactId,
-    exerciceLabel
+    exerciceLabel,
+    organisationSelfContactId
   );
   return contacts.filter((contact) => {
     if (

@@ -15,12 +15,45 @@ import {
   defaultProchainSuiviSixMois,
   todayLocal,
 } from "@/lib/contacts/contact-form-utils";
+import { ContactPersonSearch } from "./ContactPersonSearch";
+
+type ContactFormParrainFieldProps = {
+  formData: NewContact;
+  setFormData: Dispatch<SetStateAction<NewContact>>;
+  contacts: Contact[];
+  excludeContactId?: number;
+  onOpenContact?: (contact: Contact) => void;
+};
+
+export function ContactFormParrainField({
+  formData,
+  setFormData,
+  contacts,
+  excludeContactId,
+  onOpenContact,
+}: ContactFormParrainFieldProps) {
+  return (
+    <ContactPersonSearch
+      label="Parrain"
+      hint="Consultant parrain dans votre réseau (souvent votre fiche « Moi »)"
+      placeholder="Rechercher un parrain…"
+      contacts={contacts}
+      excludeId={excludeContactId}
+      value={formData.parrain_id}
+      onChange={(id) => setFormData((prev) => ({ ...prev, parrain_id: id }))}
+      onOpenContact={onOpenContact}
+      badgeFn={(c) => c.filleul_categorie || c.categorie}
+    />
+  );
+}
 
 type ContactFormParrainageSectionProps = {
   formData: NewContact;
   setFormData: Dispatch<SetStateAction<NewContact>>;
   contact?: Contact | null;
   mesFilleulsCount: number;
+  allContacts: Contact[];
+  onOpenContact?: (contact: Contact) => void;
 };
 
 function DateFieldWithShortcuts({
@@ -71,11 +104,20 @@ export function ContactFormParrainageSection({
   setFormData,
   contact,
   mesFilleulsCount,
+  allContacts,
+  onOpenContact,
 }: ContactFormParrainageSectionProps) {
   return (
     <div className="space-y-4">
+      <ContactFormParrainField
+        formData={formData}
+        setFormData={setFormData}
+        contacts={allContacts}
+        excludeContactId={contact?.id}
+        onOpenContact={onOpenContact}
+      />
       <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2">
-        Parrain, dates réseau, titre, qualification et volumes : module{" "}
+        Dates réseau, titre, qualification et volumes : module{" "}
         <span className="font-medium">Organisation</span> → dossier consultant.
       </p>
 

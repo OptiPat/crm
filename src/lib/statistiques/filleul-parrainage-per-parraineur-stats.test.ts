@@ -114,6 +114,64 @@ describe("filleul-parrainage-per-parraineur-stats", () => {
     expect(stats.otherContactIds).toEqual([11, 20, 22]);
   });
 
+  it("attribue les parrainages orphelins au contact Moi sur l'exercice", () => {
+    const parrainage = Math.floor(Date.parse("2024-12-01T00:00:00Z") / 1000);
+    const selfId = 1;
+    const contacts = [
+      contact({
+        id: selfId,
+        categorie: "CGP",
+        filleul_categorie: null,
+        date_inscription_filleul: beforeExercice,
+      }),
+      contact({
+        id: 20,
+        filleul_categorie: "FILLEUL",
+        date_inscription_filleul: parrainage,
+      }),
+    ];
+    const dossiersByContactId = new Map([
+      [selfId, dossier(selfId, { dateInscription: beforeExercice })],
+      [20, dossier(20, { dateInscription: parrainage })],
+    ]);
+
+    const stats = computeFilleulParrainagePerParraineurExerciceStats(contacts, exercice, {
+      dossiersByContactId,
+      organisationSelfContactId: selfId,
+    });
+    expect(stats.totalParrainages).toBe(1);
+    expect(stats.parraineurCount).toBe(0);
+    expect(stats.averagePerParraineur).toBeNull();
+  });
+
+  it("liste aussi les parrainages orphelins rattachés au contact Moi (cohérence avec le total)", () => {
+    const parrainage = Math.floor(Date.parse("2024-12-01T00:00:00Z") / 1000);
+    const selfId = 1;
+    const contacts = [
+      contact({
+        id: selfId,
+        categorie: "CGP",
+        filleul_categorie: null,
+        date_inscription_filleul: beforeExercice,
+      }),
+      contact({
+        id: 20,
+        filleul_categorie: "FILLEUL",
+        date_inscription_filleul: parrainage,
+      }),
+    ];
+    const dossiersByContactId = new Map([
+      [selfId, dossier(selfId, { dateInscription: beforeExercice })],
+      [20, dossier(20, { dateInscription: parrainage })],
+    ]);
+
+    const parraines = filterContactsForFilleulParrainagesExerciceList(contacts, exercice, {
+      dossiersByContactId,
+      organisationSelfContactId: selfId,
+    });
+    expect(parraines.map((c) => c.id)).toEqual([20]);
+  });
+
   it("liste les filleuls parrainés sur l'exercice (affiliations)", () => {
     const inscription = Math.floor(Date.parse("2024-09-01T00:00:00Z") / 1000);
     const parrainage = Math.floor(Date.parse("2024-12-01T00:00:00Z") / 1000);

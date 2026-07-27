@@ -15,6 +15,7 @@ export type FilleulManagerDurationListKind = "withDuration" | "missingManager";
 
 export type FilleulManagerDurationStatsOptions = {
   dossiersByContactId?: Map<number, FilleulDossier>;
+  organisationSelfContactId?: number | null;
 };
 
 export type FilleulManagerDurationStatResult = {
@@ -92,7 +93,7 @@ export function computeFilleulManagerDurationExerciceStats(
   const eligible = contacts.filter(
     (contact) =>
       contact.id != null &&
-      isFilleulInscribedDuringExercice(contact, exerciceLabel, dossiersByContactId)
+      isFilleulInscribedDuringExercice(contact, exerciceLabel, options)
   ) as Contact[];
   return computeManagerDurationStatsFromEligible(eligible, dossiersByContactId);
 }
@@ -120,7 +121,7 @@ export function filterContactsForFilleulManagerDurationExerciceList(
   const dossiersByContactId = options?.dossiersByContactId;
   return contacts.filter((contact) => {
     if (
-      !isFilleulInscribedDuringExercice(contact, exerciceLabel, dossiersByContactId) ||
+      !isFilleulInscribedDuringExercice(contact, exerciceLabel, options) ||
       contact.id == null
     ) {
       return false;

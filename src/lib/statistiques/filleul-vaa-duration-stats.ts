@@ -13,6 +13,7 @@ export type FilleulVaaDurationListKind = "withDuration" | "missingVaa";
 
 export type FilleulVaaDurationStatsOptions = {
   dossiersByContactId?: Map<number, FilleulDossier>;
+  organisationSelfContactId?: number | null;
 };
 
 export type FilleulVaaDurationStatResult = {
@@ -66,12 +67,29 @@ export function resolveFilleulInscriptionToVaaDurationMonths(
 export function isFilleulInscribedDuringExercice(
   contact: Contact,
   exerciceLabel: string,
-  dossiersByContactId?: Map<number, FilleulDossier>
+  options?: {
+    dossiersByContactId?: Map<number, FilleulDossier>;
+    organisationSelfContactId?: number | null;
+  } | Map<number, FilleulDossier>
 ): boolean {
-  if (!isContactEligibleForFilleulParraineurStats(contact)) return false;
+  const normalized =
+    options instanceof Map
+      ? { dossiersByContactId: options }
+      : (options ?? {});
+  const { dossiersByContactId, organisationSelfContactId } = normalized;
   const dossier = contact.id != null ? dossiersByContactId?.get(contact.id) : undefined;
   const inscription = resolveFilleulInscriptionTimestamp(contact, dossier);
-  return isAffiliationInExercice(inscription, exerciceLabel);
+  const inscribedDuringExercice = isAffiliationInExercice(inscription, exerciceLabel);
+
+  if (
+    organisationSelfContactId != null &&
+    contact.id === organisationSelfContactId
+  ) {
+    return inscribedDuringExercice;
+  }
+
+  if (!isContactEligibleForFilleulParraineurStats(contact)) return false;
+  return inscribedDuringExercice;
 }
 
 function computeVaaDurationStatsFromEligible(
@@ -129,7 +147,8 @@ export function computeFilleulVaaDurationExerciceStats(
   const dossiersByContactId = options?.dossiersByContactId;
   const eligible = contacts.filter(
     (contact) =>
-      contact.id != null && isFilleulInscribedDuringExercice(contact, exerciceLabel, dossiersByContactId)
+      contact.id != null &&
+      isFilleulInscribedDuringExercice(contact, exerciceLabel, options)
   ) as Contact[];
   return computeVaaDurationStatsFromEligible(eligible, dossiersByContactId);
 }
@@ -157,7 +176,7 @@ export function filterContactsForFilleulVaaDurationExerciceList(
   const dossiersByContactId = options?.dossiersByContactId;
   return contacts.filter((contact) => {
     if (
-      !isFilleulInscribedDuringExercice(contact, exerciceLabel, dossiersByContactId) ||
+      !isFilleulInscribedDuringExercice(contact, exerciceLabel, options) ||
       contact.id == null
     ) {
       return false;

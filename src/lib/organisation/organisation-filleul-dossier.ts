@@ -1,6 +1,7 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { FilleulDossier, UpsertFilleulDossierInput } from "@/lib/api/tauri-filleul-dossier";
 import { upsertFilleulDossier } from "@/lib/api/tauri-filleul-dossier";
+import { isFilleulStatut } from "@/lib/contacts/contact-form-utils";
 import { dateFieldToIso, toDateInput } from "@/lib/contacts/contact-form-utils";
 
 export function emptyFilleulDossier(contactId: number): FilleulDossier {
@@ -159,6 +160,34 @@ export function resolveFilleulDesinscriptionTimestamp(
   dossier?: FilleulDossier | null
 ): number | null | undefined {
   return dossier?.dateDesinscription ?? null;
+}
+
+function contactEffectiveFilleulCategorieForSync(
+  contact: Pick<Contact, "filleul_categorie" | "categorie">
+): string | null {
+  if (contact.filleul_categorie) return contact.filleul_categorie;
+  if (isFilleulStatut(contact.categorie)) return contact.categorie;
+  return null;
+}
+
+/**
+ * Aligne le statut filleul (réseau) après saisie ou effacement de la date de désinscription dossier.
+ * Retourne `undefined` si aucun changement de statut nécessaire.
+ */
+export function resolveFilleulCategorieAfterDesinscriptionDateChange(
+  contact: Pick<Contact, "filleul_categorie" | "categorie">,
+  dateField: string
+): string | null | undefined {
+  const effective = contactEffectiveFilleulCategorieForSync(contact);
+  const hasDate = dateField.trim() !== "";
+
+  if (hasDate) {
+    if (effective === "FILLEUL") return "FILLEUL_DESINSCRIT";
+    return undefined;
+  }
+
+  if (effective === "FILLEUL_DESINSCRIT") return "FILLEUL";
+  return undefined;
 }
 
 /** Date 1er VAA ou VA : dossier uniquement. */

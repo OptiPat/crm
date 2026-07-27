@@ -514,6 +514,7 @@ fn main() {
             set_compta_month_closed,
             is_compta_month_closed,
             list_filleul_volume_exercice_labels,
+            list_closed_filleul_volume_exercice_labels,
             get_filleul_volume_exercices_by_label,
             get_filleul_volume_exercices_by_contact,
             exercice_is_closed,

@@ -23,8 +23,43 @@ function isEligibleForExerciceNetworkMembership(
   return filleulCat === "FILLEUL" || filleulCat === "FILLEUL_DESINSCRIT";
 }
 
+/** Filleul inscrit ou désinscrit du réseau (hors prospects / suspects). */
+export function isOrganisationNetworkConsultant(
+  contact: Pick<Contact, "categorie" | "filleul_categorie">
+): boolean {
+  return isEligibleForExerciceNetworkMembership(contact);
+}
+
 /**
- * Consultant présent sur l'exercice : inscription avant fin d'exercice,
+ * Consultant inscrit sur l'exercice : filleul présent (dates dossier) ou contact « Moi » (CGP).
+ */
+export function wasInscribedConsultantDuringExercice(
+  contact: Pick<
+    Contact,
+    "id" | "categorie" | "filleul_categorie" | "date_inscription_filleul"
+  >,
+  exerciceLabel: string,
+  options?: {
+    dossiersByContactId?: Map<number, FilleulDossier>;
+    organisationSelfContactId?: number | null;
+  }
+): boolean {
+  const organisationSelfContactId = options?.organisationSelfContactId;
+  if (
+    organisationSelfContactId != null &&
+    contact.id === organisationSelfContactId
+  ) {
+    return true;
+  }
+  return wasConsultantInNetworkDuringExercice(
+    contact,
+    exerciceLabel,
+    options?.dossiersByContactId
+  );
+}
+
+/**
+ * Filleul présent sur l'exercice : inscription avant fin d'exercice,
  * et (si désinscrit) sortie après le début d'exercice.
  */
 export function wasConsultantInNetworkDuringExercice(
@@ -47,6 +82,49 @@ export function wasConsultantInNetworkDuringExercice(
 
   const desinscription = resolveFilleulDesinscriptionTimestamp(dossier);
   if (desinscription != null && desinscription < start) return false;
+
+  return true;
+}
+
+/**
+ * Consultant actif sur l'exercice : présent sur la période et non sorti avant la fin
+ * (pas désinscrit pendant l'exercice — encore inscrit à la clôture).
+ */
+export function wasActifConsultantDuringExercice(
+  contact: Pick<
+    Contact,
+    "id" | "categorie" | "filleul_categorie" | "date_inscription_filleul"
+  >,
+  exerciceLabel: string,
+  options?: {
+    dossiersByContactId?: Map<number, FilleulDossier>;
+    organisationSelfContactId?: number | null;
+  }
+): boolean {
+  const organisationSelfContactId = options?.organisationSelfContactId;
+  if (
+    organisationSelfContactId != null &&
+    contact.id === organisationSelfContactId
+  ) {
+    return true;
+  }
+  if (
+    !wasConsultantInNetworkDuringExercice(
+      contact,
+      exerciceLabel,
+      options?.dossiersByContactId
+    )
+  ) {
+    return false;
+  }
+
+  const end = fiscalYearEndUnix(exerciceLabel);
+  if (end == null) return true;
+
+  const dossier =
+    contact.id != null ? options?.dossiersByContactId?.get(contact.id) : undefined;
+  const desinscription = resolveFilleulDesinscriptionTimestamp(dossier);
+  if (desinscription != null && desinscription <= end) return false;
 
   return true;
 }

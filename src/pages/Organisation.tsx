@@ -29,15 +29,20 @@ import {
 } from "@/components/organisation/OrganisationExerciceCloseDialog";
 import { buildOrganisationVolumeRows } from "@/lib/organisation/organisation-branch-volumes";
 import {
+  buildCloseFilleulExerciceSnapshots,
+  buildCloseFilleulExerciceSnapshotsFromHistory,
   buildOrganisationVolumeRowsForExercice,
   indexFilleulVolumeExercicesByContactId,
   isCurrentOrganisationExercice,
+  isLiveFilleulExerciceVolumes,
   resolveOrganisationExerciceLabel,
   type OrganisationExerciceSelection,
 } from "@/lib/organisation/organisation-volume-history";
 import {
   exerciceIsClosed,
   getFilleulVolumeExercicesByLabel,
+  importFilleulVolumeExercices,
+  listClosedFilleulVolumeExerciceLabels,
   listFilleulVolumeExerciceLabels,
 } from "@/lib/api/tauri-filleul-volumes";
 import { currentFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
@@ -45,7 +50,7 @@ import { OrganisationVolumesImportDialog } from "@/components/organisation/Organ
 import { OrganisationMemberSearch } from "@/components/organisation/OrganisationMemberSearch";
 import { OrganisationMemberDossierPanel } from "@/components/organisation/OrganisationMemberDossierPanel";
 import { OrganisationHierarchyList } from "@/components/organisation/OrganisationHierarchyList";
-import { collectOrganisationMemberRoster } from "@/lib/organisation/organisation-member-roster";
+import { buildOrganisationSearchRoster } from "@/lib/organisation/organisation-member-roster";
 import {
   indexFilleulDossiersByContactId,
   mergeLegacyFilleulDossierView,
@@ -61,7 +66,8 @@ export function Organisation({ onNavigate }: OrganisationProps) {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [cgp, setCgp] = useState<CgpConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  const [closedLabels, setClosedLabels] = useState<string[]>([]);
+  const [historyExerciceLabels, setHistoryExerciceLabels] = useState<string[]>([]);
+  const [closedExerciceLabels, setClosedExerciceLabels] = useState<string[]>([]);
   const [selectedExercice, setSelectedExercice] =
     useState<OrganisationExerciceSelection>(ORGANISATION_CURRENT_EXERCICE);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -82,14 +88,16 @@ export function Organisation({ onNavigate }: OrganisationProps) {
 
   const loadData = useCallback(async () => {
     try {
-      const [loadedContacts, loadedCgp, labels] = await Promise.all([
+      const [loadedContacts, loadedCgp, historyLabels, closedLabels] = await Promise.all([
         getAllContacts(),
         getCgpConfig(),
         listFilleulVolumeExerciceLabels(),
+        listClosedFilleulVolumeExerciceLabels(),
       ]);
       setContacts(loadedContacts);
       setCgp(loadedCgp);
-      setClosedLabels(labels);
+      setHistoryExerciceLabels(historyLabels);
+      setClosedExerciceLabels(closedLabels);
       const currentLabel = currentFiscalYearLabel();
       setCurrentExerciceClosed(await exerciceIsClosed(currentLabel));
       setDataRevision((revision) => revision + 1);
@@ -133,17 +141,48 @@ export function Organisation({ onNavigate }: OrganisationProps) {
     [contacts, cgp, treeVisibilityOptions]
   );
 
+  const viewingLiveVolumes = useMemo(
+    () => isLiveFilleulExerciceVolumes(resolvedExerciceLabel, closedExerciceLabels),
+    [resolvedExerciceLabel, closedExerciceLabels]
+  );
+
   const viewingCurrentExercice = useMemo(
     () =>
       isCurrentOrganisationExercice(selectedExercice) ||
-      (selectedExercice === currentFiscalYearLabel() && !closedLabels.includes(selectedExercice)),
-    [selectedExercice, closedLabels]
+      (selectedExercice === currentFiscalYearLabel() && !closedExerciceLabels.includes(selectedExercice)),
+    [selectedExercice, closedExerciceLabels]
   );
+
+  const selectedExerciceClosed = closedExerciceLabels.includes(resolvedExerciceLabel);
+
+  const closeSnapshots = useMemo(() => {
+    if (viewingLiveVolumes) {
+      return buildCloseFilleulExerciceSnapshots(tree, contacts);
+    }
+    return buildCloseFilleulExerciceSnapshotsFromHistory(historyRecords);
+  }, [viewingLiveVolumes, tree, contacts, historyRecords]);
+
+  const canCloseSelectedExercice = useMemo(() => {
+    if (selectedExerciceClosed) return false;
+    if (viewingLiveVolumes) {
+      return viewingCurrentExercice && tree.stats.total > 0;
+    }
+    return !historyLoading && historyRecords.length > 0;
+  }, [
+    selectedExerciceClosed,
+    tree.stats.total,
+    viewingLiveVolumes,
+    viewingCurrentExercice,
+    historyLoading,
+    historyRecords.length,
+  ]);
+
+  const closeDialogAllowResetOwnVolumes = viewingLiveVolumes && viewingCurrentExercice;
 
   useEffect(() => {
     let cancelled = false;
     const loadHistory = async () => {
-      if (viewingCurrentExercice) {
+      if (viewingLiveVolumes) {
         setHistoryRecords([]);
         return;
       }
@@ -163,24 +202,37 @@ export function Organisation({ onNavigate }: OrganisationProps) {
     return () => {
       cancelled = true;
     };
-  }, [resolvedExerciceLabel, viewingCurrentExercice]);
+  }, [resolvedExerciceLabel, viewingLiveVolumes]);
+
+  /** Recharge l'historique après une correction ponctuelle (exercice passé non clôturé). */
+  const refreshHistoryRecords = useCallback(async () => {
+    if (viewingLiveVolumes) return;
+    try {
+      const records = await getFilleulVolumeExercicesByLabel(resolvedExerciceLabel);
+      setHistoryRecords(records);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [resolvedExerciceLabel, viewingLiveVolumes]);
 
   const volumeRows = useMemo(() => {
-    if (viewingCurrentExercice) {
+    if (viewingLiveVolumes) {
       return buildOrganisationVolumeRows(tree, contacts);
     }
-    if (historyRecords.length === 0) return [];
+    // Exercice passé non clôturé sans historique : lignes à zéro, prêtes à être corrigées.
+    if (historyLoading) return [];
     return buildOrganisationVolumeRowsForExercice(tree, contacts, {
       mode: "history",
       recordsByContactId: indexFilleulVolumeExercicesByContactId(historyRecords),
     });
-  }, [viewingCurrentExercice, tree, contacts, historyRecords]);
+  }, [viewingLiveVolumes, tree, contacts, historyRecords, historyLoading]);
 
-  const showBranchVolumesPanel =
-    volumeRows.length > 0 &&
-    (viewingCurrentExercice || (!historyLoading && historyRecords.length > 0));
+  const showBranchVolumesPanel = volumeRows.length > 0;
 
-  const memberRoster = useMemo(() => collectOrganisationMemberRoster(tree), [tree]);
+  const searchRoster = useMemo(
+    () => buildOrganisationSearchRoster(contacts, cgp ?? {}),
+    [contacts, cgp]
+  );
 
   const dossierMemberIdsKey = useMemo(() => {
     const ids = collectOrganisationDossierContactIds(contacts, selfContact);
@@ -321,9 +373,59 @@ export function Organisation({ onNavigate }: OrganisationProps) {
     []
   );
 
+  /** Correction du volume propre sur un exercice passé non clôturé (pas l'exercice en cours). */
+  const handleHistoricalVolumeSave = useCallback(
+    async (contact: Contact, volume: number | null) => {
+      if (contact.id == null) return;
+      try {
+        await importFilleulVolumeExercices({
+          entries: [
+            {
+              contactId: contact.id,
+              exerciceLabel: resolvedExerciceLabel,
+              volumePropre: volume ?? 0,
+            },
+          ],
+          syncCurrentContactVolumes: false,
+        });
+        toast.success("Volume propre enregistré");
+        await refreshHistoryRecords();
+      } catch (error) {
+        console.error("Error saving historical filleul volume:", error);
+        toast.error("Impossible d'enregistrer le volume");
+        throw error;
+      }
+    },
+    [resolvedExerciceLabel, refreshHistoryRecords]
+  );
+
+  /** Correction du volume organisation (branche) sur un exercice passé non clôturé. */
+  const handleHistoricalBranchVolumeSave = useCallback(
+    async (contact: Contact, volume: number | null) => {
+      if (contact.id == null) return;
+      try {
+        await importFilleulVolumeExercices({
+          entries: [
+            {
+              contactId: contact.id,
+              exerciceLabel: resolvedExerciceLabel,
+              volumeBranche: volume ?? 0,
+            },
+          ],
+          syncCurrentContactVolumes: false,
+        });
+        toast.success("Volume organisation enregistré");
+        await refreshHistoryRecords();
+      } catch (error) {
+        console.error("Error saving historical branch volume:", error);
+        toast.error("Impossible d'enregistrer le volume organisation");
+        throw error;
+      }
+    },
+    [resolvedExerciceLabel, refreshHistoryRecords]
+  );
+
   const missingSelfContact = !loading && tree.selfContact == null;
-  const showHistoryEmpty =
-    !loading && !historyLoading && !viewingCurrentExercice && historyRecords.length === 0;
   const organisationDrillDownOpen =
     selectedDossierContactId != null || contactDetailOpen;
 
@@ -342,15 +444,16 @@ export function Organisation({ onNavigate }: OrganisationProps) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <OrganisationMemberSearch
-            roster={memberRoster}
+            roster={searchRoster}
             onSelect={handleMemberSelect}
           />
           <OrganisationExerciceSelector
-            closedLabels={closedLabels}
+            historyExerciceLabels={historyExerciceLabels}
+            closedExerciceLabels={closedExerciceLabels}
             value={selectedExercice}
             onValueChange={setSelectedExercice}
           />
-          {viewingCurrentExercice && !currentExerciceClosed && tree.stats.total > 0 ? (
+          {canCloseSelectedExercice ? (
             <OrganisationExerciceCloseButton onClick={() => setCloseDialogOpen(true)} />
           ) : null}
           <Button
@@ -404,15 +507,6 @@ export function Organisation({ onNavigate }: OrganisationProps) {
                 Ouvrir Paramètres
               </Button>
             )}
-          </CardContent>
-        </Card>
-      )}
-
-      {showHistoryEmpty && (
-        <Card className="border-dashed">
-          <CardContent className="py-6 text-sm text-muted-foreground text-center">
-            Aucun snapshot pour l&apos;exercice {resolvedExerciceLabel}. Clôturez l&apos;exercice
-            ou importez les volumes historiques pour le consulter ici.
           </CardContent>
         </Card>
       )}
@@ -512,11 +606,25 @@ export function Organisation({ onNavigate }: OrganisationProps) {
             <OrganisationBranchVolumesPanel
               rows={volumeRows}
               contacts={contacts}
-              readOnly={!viewingCurrentExercice}
+              readOnly={selectedExerciceClosed}
+              liveMode={viewingLiveVolumes}
               exerciceLabel={resolvedExerciceLabel}
-              onVolumeSave={viewingCurrentExercice ? handleVolumeSave : async () => {}}
+              onVolumeSave={
+                selectedExerciceClosed
+                  ? async () => {}
+                  : viewingLiveVolumes
+                    ? handleVolumeSave
+                    : handleHistoricalVolumeSave
+              }
               onManagerVolumeSave={
-                viewingCurrentExercice ? handleManagerVolumeSave : async () => {}
+                viewingLiveVolumes && !selectedExerciceClosed
+                  ? handleManagerVolumeSave
+                  : async () => {}
+              }
+              onBranchVolumeSave={
+                !viewingLiveVolumes && !selectedExerciceClosed
+                  ? handleHistoricalBranchVolumeSave
+                  : undefined
               }
               onNodeClick={handleNodeClick}
               showTopBorder={false}
@@ -527,7 +635,7 @@ export function Organisation({ onNavigate }: OrganisationProps) {
 
       <OrganisationMemberDossierPanel
         contactId={selectedDossierContactId}
-        roster={memberRoster}
+        roster={searchRoster}
         contacts={contacts}
         cgp={cgp}
         canEditVolumes={!currentExerciceClosed}
@@ -560,10 +668,13 @@ export function Organisation({ onNavigate }: OrganisationProps) {
       <OrganisationExerciceCloseDialog
         open={closeDialogOpen}
         onOpenChange={setCloseDialogOpen}
-        tree={tree}
-        contacts={contacts}
+        exerciceLabel={resolvedExerciceLabel}
+        snapshots={closeSnapshots}
+        allowResetOwnVolumes={closeDialogAllowResetOwnVolumes}
         onClosed={() => {
-          setSelectedExercice(ORGANISATION_CURRENT_EXERCICE);
+          if (viewingLiveVolumes) {
+            setSelectedExercice(ORGANISATION_CURRENT_EXERCICE);
+          }
           void loadData();
         }}
       />

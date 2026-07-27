@@ -12,7 +12,8 @@ import {
 } from "@/lib/organisation/organisation-volume-history";
 
 type OrganisationExerciceSelectorProps = {
-  closedLabels: string[];
+  historyExerciceLabels: string[];
+  closedExerciceLabels: string[];
   value: OrganisationExerciceSelection;
   onValueChange: (value: OrganisationExerciceSelection) => void;
   className?: string;
@@ -21,13 +22,17 @@ type OrganisationExerciceSelectorProps = {
 };
 
 export function OrganisationExerciceSelector({
-  closedLabels,
+  historyExerciceLabels,
+  closedExerciceLabels,
   value,
   onValueChange,
   className,
   displayTriggerLabel,
 }: OrganisationExerciceSelectorProps) {
-  const options = buildOrganisationExerciceOptions(closedLabels);
+  const options = buildOrganisationExerciceOptions(
+    historyExerciceLabels,
+    closedExerciceLabels
+  );
 
   return (
     <Select

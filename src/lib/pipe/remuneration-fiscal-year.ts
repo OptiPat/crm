@@ -31,6 +31,13 @@ export function currentFiscalYearLabel(now = new Date()): string {
   return fiscalYearLabelForDate(now);
 }
 
+/** Exercice commencé (01/08 ≤ date du jour). Les exercices futurs ne sont pas « en cours ». */
+export function hasFiscalYearStarted(label: string, now = new Date()): boolean {
+  const start = fiscalYearStartUnix(label);
+  if (start == null) return false;
+  return Math.floor(now.getTime() / 1000) >= start;
+}
+
 /** Exercice fiscal précédent (ex. « 2025-2026 » → « 2024-2025 »). */
 export function previousFiscalYearLabel(label: string): string | null {
   const match = /^(\d{4})-(\d{4})$/.exec(label.trim());
