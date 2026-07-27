@@ -26,6 +26,8 @@ type ContactFilleulOrganisationExerciceSummaryPanelProps = {
   cgp: CgpConfig | null;
   dossiersLoading: boolean;
   dataRefreshKey: string | number;
+  onOpenConsultantsList?: (exerciceLabel: string, count: number) => void;
+  onOpenParrainagesList?: (exerciceLabel: string, count: number) => void;
 };
 
 export function ContactFilleulOrganisationExerciceSummaryPanel({
@@ -37,6 +39,8 @@ export function ContactFilleulOrganisationExerciceSummaryPanel({
   cgp,
   dossiersLoading,
   dataRefreshKey,
+  onOpenConsultantsList,
+  onOpenParrainagesList,
 }: ContactFilleulOrganisationExerciceSummaryPanelProps) {
   const [showAllExercices, setShowAllExercices] = useState(false);
   const [historyByLabel, setHistoryByLabel] = useState<Map<string, FilleulVolumeExercice[]>>(
@@ -166,18 +170,56 @@ export function ContactFilleulOrganisationExerciceSummaryPanel({
                     >
                       {metric.label}
                     </td>
-                    {summaryRows.map((row) => (
-                      <td
-                        key={`${metric.id}-${row.exerciceLabel}`}
-                        className={cn(
-                          "px-3 py-2 text-right tabular-nums text-sm",
-                          metric.id === "inscribedConsultantCount" && "font-medium",
-                          metric.id === "organisationBranchVolume" && "font-medium"
-                        )}
-                      >
-                        {metric.format(row)}
-                      </td>
-                    ))}
+                    {summaryRows.map((row) => {
+                      const cellValue = metric.format(row);
+                      const consultantsClickable =
+                        metric.id === "inscribedConsultantCount" &&
+                        row.inscribedConsultantCount > 0 &&
+                        onOpenConsultantsList != null;
+                      const parrainagesClickable =
+                        metric.id === "parrainageCount" &&
+                        row.parrainageCount > 0 &&
+                        onOpenParrainagesList != null;
+                      const clickable = consultantsClickable || parrainagesClickable;
+
+                      return (
+                        <td
+                          key={`${metric.id}-${row.exerciceLabel}`}
+                          className={cn(
+                            "px-3 py-2 text-right tabular-nums text-sm",
+                            metric.id === "inscribedConsultantCount" && "font-medium",
+                            metric.id === "organisationBranchVolume" && "font-medium"
+                          )}
+                        >
+                          {clickable ? (
+                            <button
+                              type="button"
+                              className={cn(
+                                "rounded px-1 -mx-1 hover:bg-muted/60 hover:text-primary transition-colors underline-offset-2 hover:underline",
+                                metric.id === "inscribedConsultantCount" && "font-medium"
+                              )}
+                              onClick={() => {
+                                if (consultantsClickable) {
+                                  onOpenConsultantsList!(
+                                    row.exerciceLabel,
+                                    row.inscribedConsultantCount
+                                  );
+                                } else if (parrainagesClickable) {
+                                  onOpenParrainagesList!(
+                                    row.exerciceLabel,
+                                    row.parrainageCount
+                                  );
+                                }
+                              }}
+                            >
+                              {cellValue}
+                            </button>
+                          ) : (
+                            cellValue
+                          )}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>

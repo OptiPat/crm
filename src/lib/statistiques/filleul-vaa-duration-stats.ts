@@ -92,6 +92,28 @@ export function isFilleulInscribedDuringExercice(
   return inscribedDuringExercice;
 }
 
+/** Consultant avec 1er VAA/VA daté dans l'exercice (inscription peut être antérieure). */
+export function isFilleulPremierVaaDuringExercice(
+  contact: Contact,
+  exerciceLabel: string,
+  options?: FilleulVaaDurationStatsOptions
+): boolean {
+  const { dossiersByContactId, organisationSelfContactId } = options ?? {};
+  const dossier = contact.id != null ? dossiersByContactId?.get(contact.id) : undefined;
+  const premierVaa = resolveFilleulPremierVaaOuVaTimestamp(dossier);
+  const eventDuringExercice = isAffiliationInExercice(premierVaa, exerciceLabel);
+
+  if (
+    organisationSelfContactId != null &&
+    contact.id === organisationSelfContactId
+  ) {
+    return eventDuringExercice;
+  }
+
+  if (!isContactEligibleForFilleulParraineurStats(contact)) return false;
+  return eventDuringExercice;
+}
+
 function computeVaaDurationStatsFromEligible(
   eligible: Contact[],
   dossiersByContactId?: Map<number, FilleulDossier>
@@ -136,8 +158,8 @@ export function computeFilleulVaaDurationStats(
 }
 
 /**
- * Durée moyenne sur l'exercice : consultants inscrits durant l'exercice (désinscrits inclus),
- * hors ceux sans date 1er VAA/VA renseignée dans le dossier.
+ * Durée moyenne sur l'exercice : 1ers VAA/VA durant l'exercice (désinscrits inclus),
+ * délai inscription → 1er VAA/VA.
  */
 export function computeFilleulVaaDurationExerciceStats(
   contacts: Contact[],
@@ -148,7 +170,7 @@ export function computeFilleulVaaDurationExerciceStats(
   const eligible = contacts.filter(
     (contact) =>
       contact.id != null &&
-      isFilleulInscribedDuringExercice(contact, exerciceLabel, options)
+      isFilleulPremierVaaDuringExercice(contact, exerciceLabel, options)
   ) as Contact[];
   return computeVaaDurationStatsFromEligible(eligible, dossiersByContactId);
 }
@@ -176,7 +198,7 @@ export function filterContactsForFilleulVaaDurationExerciceList(
   const dossiersByContactId = options?.dossiersByContactId;
   return contacts.filter((contact) => {
     if (
-      !isFilleulInscribedDuringExercice(contact, exerciceLabel, options) ||
+      !isFilleulPremierVaaDuringExercice(contact, exerciceLabel, options) ||
       contact.id == null
     ) {
       return false;
@@ -211,9 +233,11 @@ export function formatFilleulVaaDurationExerciceSubtitle(
   stats: FilleulVaaDurationStatResult,
   exerciceLabel: string
 ): string {
-  if (stats.totalEligible === 0) return `Aucune inscription sur l'exercice ${exerciceLabel}`;
+  if (stats.totalEligible === 0) {
+    return `Aucun 1er VAA/VA sur l'exercice ${exerciceLabel}`;
+  }
   const base = formatFilleulVaaDurationSubtitle(stats);
-  return `${base} · inscriptions ${exerciceLabel}`;
+  return `${base} · 1ers VAA/VA ${exerciceLabel}`;
 }
 
 export function formatFilleulVaaDurationCumulativeIndex(stats: FilleulVaaDurationStatResult): string {

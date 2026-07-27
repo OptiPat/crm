@@ -33,6 +33,13 @@ pub struct CloseFilleulExerciceInput {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ReopenFilleulExerciceInput {
+    pub exercice_label: String,
+    pub restore_own_volumes: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FilleulVolumeExerciceImportEntry {
     pub contact_id: i64,
     pub exercice_label: String,
@@ -265,6 +272,55 @@ impl super::Database {
             }
         }
     }
+
+    pub fn reopen_filleul_exercice(&self, input: ReopenFilleulExerciceInput) -> Result<()> {
+        let label = input.exercice_label.trim();
+        if label.is_empty() {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "exercice_label vide".into(),
+            ));
+        }
+        if !self.exercice_is_closed(label)? {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "exercice non clôturé : {label}"
+            )));
+        }
+
+        self.begin_import_transaction()?;
+        let reopen_result = (|| -> Result<()> {
+            self.conn.execute(
+                "UPDATE filleul_volume_exercices
+                 SET closed_at = NULL
+                 WHERE exercice_label = ?1 AND closed_at IS NOT NULL",
+                params![label],
+            )?;
+
+            if input.restore_own_volumes {
+                let rows = self.get_filleul_volume_exercices_by_label(label)?;
+                for row in rows {
+                    if let Some(volume_propre) = row.volume_propre {
+                        self.conn.execute(
+                            "UPDATE contacts SET filleul_volume = ?1 WHERE id = ?2",
+                            params![volume_propre, row.contact_id],
+                        )?;
+                    }
+                }
+            }
+
+            Ok(())
+        })();
+
+        match reopen_result {
+            Ok(()) => {
+                self.commit_import_transaction()?;
+                Ok(())
+            }
+            Err(error) => {
+                let _ = self.rollback_import_transaction();
+                Err(error)
+            }
+        }
+    }
 }
 
 fn map_filleul_volume_exercice_row(row: &rusqlite::Row<'_>) -> Result<FilleulVolumeExercice> {
@@ -333,6 +389,47 @@ mod tests {
             })
             .unwrap_err();
         assert!(err.to_string().contains("déjà clôturé"));
+    }
+
+    #[test]
+    fn reopen_filleul_exercice_clears_closure_and_restores_own_volumes() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        let id = seed_contact(&db, "DUPONT", "Jean", 120_000.0);
+
+        db.close_filleul_exercice(CloseFilleulExerciceInput {
+            exercice_label: "2024-2025".to_string(),
+            entries: vec![FilleulVolumeExerciceEntry {
+                contact_id: id,
+                volume_propre: Some(120_000.0),
+                volume_branche: Some(450_000.0),
+                volume_manager: Some(800_000.0),
+            }],
+            reset_own_volumes: true,
+        })
+        .unwrap();
+        assert!(db.exercice_is_closed("2024-2025").unwrap());
+
+        db.reopen_filleul_exercice(ReopenFilleulExerciceInput {
+            exercice_label: "2024-2025".to_string(),
+            restore_own_volumes: true,
+        })
+        .unwrap();
+
+        assert!(!db.exercice_is_closed("2024-2025").unwrap());
+        let rows = db
+            .get_filleul_volume_exercices_by_label("2024-2025")
+            .unwrap();
+        assert!(rows[0].closed_at.is_none());
+        let reloaded = db.get_contact_by_id(id).unwrap();
+        assert_eq!(reloaded.filleul_volume, Some(120_000.0));
+
+        let err = db
+            .reopen_filleul_exercice(ReopenFilleulExerciceInput {
+                exercice_label: "2024-2025".to_string(),
+                restore_own_volumes: false,
+            })
+            .unwrap_err();
+        assert!(err.to_string().contains("non clôturé"));
     }
 
     #[test]

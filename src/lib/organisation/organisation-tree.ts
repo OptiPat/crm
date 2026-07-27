@@ -211,12 +211,8 @@ export function buildActifGenerationLayers(
         layer.push({
           contact: child,
           generation,
-          parrainId: child.parrain_id ?? null,
-          parrainLabel: resolveParrainLabel(
-            child.parrain_id ?? null,
-            selfContact.id,
-            byId
-          ),
+          parrainId,
+          parrainLabel: resolveParrainLabel(parrainId, selfContact.id, byId),
           isDesinscrit: false,
         });
         nextParrainIds.push(child.id);
@@ -326,8 +322,8 @@ export function collectOrganisationDesinscrits(
         entries.push({
           contact: child,
           generation,
-          parrainId: child.parrain_id ?? null,
-          parrainLabel: resolveParrainLabel(child.parrain_id ?? null, selfContact.id, byId),
+          parrainId,
+          parrainLabel: resolveParrainLabel(parrainId, selfContact.id, byId),
         });
       }
 

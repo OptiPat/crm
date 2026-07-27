@@ -3,9 +3,11 @@ import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import {
   calendarMonthsFromInscriptionToEvent,
   formatFilleulVaaDurationMonths,
-  isFilleulInscribedDuringExercice,
 } from "@/lib/statistiques/filleul-vaa-duration-stats";
-import { isContactEligibleForFilleulParraineurStats } from "@/lib/statistiques/contact-filleul-organisation-stats";
+import {
+  isAffiliationInExercice,
+  isContactEligibleForFilleulParraineurStats,
+} from "@/lib/statistiques/contact-filleul-organisation-stats";
 import {
   resolveFilleulInscriptionTimestamp,
   resolveFilleulPremiereHabilitationTimestamp,
@@ -35,6 +37,30 @@ export function resolveFilleulInscriptionToHabilitationDurationMonths(
   const inscription = resolveFilleulInscriptionTimestamp(contact, dossier);
   const premiereHabilitation = resolveFilleulPremiereHabilitationTimestamp(inscription, dossier);
   return calendarMonthsFromInscriptionToEvent(inscription, premiereHabilitation);
+}
+
+/** Première habilitation datée dans l'exercice (inscription peut être antérieure). */
+export function isFilleulPremiereHabilitationDuringExercice(
+  contact: Contact,
+  exerciceLabel: string,
+  options?: FilleulHabilitationDurationStatsOptions
+): boolean {
+  const { dossiersByContactId, organisationSelfContactId } = options ?? {};
+  const dossier =
+    contact.id != null ? dossiersByContactId?.get(contact.id) : undefined;
+  const inscription = resolveFilleulInscriptionTimestamp(contact, dossier);
+  const premiereHabilitation = resolveFilleulPremiereHabilitationTimestamp(inscription, dossier);
+  const eventDuringExercice = isAffiliationInExercice(premiereHabilitation, exerciceLabel);
+
+  if (
+    organisationSelfContactId != null &&
+    contact.id === organisationSelfContactId
+  ) {
+    return eventDuringExercice;
+  }
+
+  if (!isContactEligibleForFilleulParraineurStats(contact)) return false;
+  return eventDuringExercice;
 }
 
 function computeHabilitationDurationStatsFromEligible(
@@ -84,8 +110,8 @@ export function computeFilleulHabilitationDurationStats(
 }
 
 /**
- * Durée moyenne sur l'exercice : inscriptions durant l'exercice (désinscrits inclus),
- * hors consultants sans habilitation MIOBSP / MIA / Agent Lié renseignée.
+ * Durée moyenne sur l'exercice : premières habilitations durant l'exercice (désinscrits inclus),
+ * délai inscription → première habilitation.
  */
 export function computeFilleulHabilitationDurationExerciceStats(
   contacts: Contact[],
@@ -96,7 +122,7 @@ export function computeFilleulHabilitationDurationExerciceStats(
   const eligible = contacts.filter(
     (contact) =>
       contact.id != null &&
-      isFilleulInscribedDuringExercice(contact, exerciceLabel, options)
+      isFilleulPremiereHabilitationDuringExercice(contact, exerciceLabel, options)
   ) as Contact[];
   return computeHabilitationDurationStatsFromEligible(eligible, dossiersByContactId);
 }
@@ -124,7 +150,7 @@ export function filterContactsForFilleulHabilitationDurationExerciceList(
   const dossiersByContactId = options?.dossiersByContactId;
   return contacts.filter((contact) => {
     if (
-      !isFilleulInscribedDuringExercice(contact, exerciceLabel, options) ||
+      !isFilleulPremiereHabilitationDuringExercice(contact, exerciceLabel, options) ||
       contact.id == null
     ) {
       return false;
@@ -153,8 +179,10 @@ export function formatFilleulHabilitationDurationExerciceSubtitle(
   stats: FilleulHabilitationDurationStatResult,
   exerciceLabel: string
 ): string {
-  if (stats.totalEligible === 0) return `Aucune inscription sur l'exercice ${exerciceLabel}`;
-  return `${formatFilleulHabilitationDurationSubtitle(stats)} · inscriptions ${exerciceLabel}`;
+  if (stats.totalEligible === 0) {
+    return `Aucune habilitation sur l'exercice ${exerciceLabel}`;
+  }
+  return `${formatFilleulHabilitationDurationSubtitle(stats)} · habilitations ${exerciceLabel}`;
 }
 
 export function formatFilleulHabilitationDurationCumulativeIndex(

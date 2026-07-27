@@ -27,6 +27,10 @@ import {
   OrganisationExerciceCloseButton,
   OrganisationExerciceCloseDialog,
 } from "@/components/organisation/OrganisationExerciceCloseDialog";
+import {
+  OrganisationExerciceReopenButton,
+  OrganisationExerciceReopenDialog,
+} from "@/components/organisation/OrganisationExerciceReopenDialog";
 import { buildOrganisationVolumeRows } from "@/lib/organisation/organisation-branch-volumes";
 import {
   buildCloseFilleulExerciceSnapshots,
@@ -75,6 +79,7 @@ export function Organisation({ onNavigate }: OrganisationProps) {
     Awaited<ReturnType<typeof getFilleulVolumeExercicesByLabel>>
   >([]);
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [currentExerciceClosed, setCurrentExerciceClosed] = useState(false);
   const [selectedDossierContactId, setSelectedDossierContactId] = useState<number | null>(null);
@@ -178,6 +183,19 @@ export function Organisation({ onNavigate }: OrganisationProps) {
   ]);
 
   const closeDialogAllowResetOwnVolumes = viewingLiveVolumes && viewingCurrentExercice;
+
+  const canReopenSelectedExercice = useMemo(() => {
+    return selectedExerciceClosed && !historyLoading;
+  }, [selectedExerciceClosed, historyLoading]);
+
+  const reopenDialogAllowRestoreOwnVolumes =
+    resolvedExerciceLabel === currentFiscalYearLabel();
+
+  const reopenSnapshotCount = useMemo(() => {
+    if (!selectedExerciceClosed) return 0;
+    if (historyRecords.length > 0) return historyRecords.length;
+    return closeSnapshots.length;
+  }, [selectedExerciceClosed, historyRecords.length, closeSnapshots.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -456,6 +474,9 @@ export function Organisation({ onNavigate }: OrganisationProps) {
           {canCloseSelectedExercice ? (
             <OrganisationExerciceCloseButton onClick={() => setCloseDialogOpen(true)} />
           ) : null}
+          {canReopenSelectedExercice ? (
+            <OrganisationExerciceReopenButton onClick={() => setReopenDialogOpen(true)} />
+          ) : null}
           <Button
             type="button"
             variant="outline"
@@ -673,6 +694,20 @@ export function Organisation({ onNavigate }: OrganisationProps) {
         allowResetOwnVolumes={closeDialogAllowResetOwnVolumes}
         onClosed={() => {
           if (viewingLiveVolumes) {
+            setSelectedExercice(ORGANISATION_CURRENT_EXERCICE);
+          }
+          void loadData();
+        }}
+      />
+
+      <OrganisationExerciceReopenDialog
+        open={reopenDialogOpen}
+        onOpenChange={setReopenDialogOpen}
+        exerciceLabel={resolvedExerciceLabel}
+        snapshotCount={reopenSnapshotCount}
+        allowRestoreOwnVolumes={reopenDialogAllowRestoreOwnVolumes}
+        onReopened={() => {
+          if (reopenDialogAllowRestoreOwnVolumes) {
             setSelectedExercice(ORGANISATION_CURRENT_EXERCICE);
           }
           void loadData();

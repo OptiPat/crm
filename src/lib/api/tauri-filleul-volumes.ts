@@ -24,6 +24,11 @@ export interface CloseFilleulExerciceInput {
   resetOwnVolumes: boolean;
 }
 
+export interface ReopenFilleulExerciceInput {
+  exerciceLabel: string;
+  restoreOwnVolumes: boolean;
+}
+
 export async function listFilleulVolumeExerciceLabels(): Promise<string[]> {
   return invoke<string[]>("list_filleul_volume_exercice_labels");
 }
@@ -57,6 +62,13 @@ export async function closeFilleulExercice(
   input: CloseFilleulExerciceInput
 ): Promise<void> {
   await invoke<void>("close_filleul_exercice", { input });
+  notifyContactsChanged();
+}
+
+export async function reopenFilleulExercice(
+  input: ReopenFilleulExerciceInput
+): Promise<void> {
+  await invoke<void>("reopen_filleul_exercice", { input });
   notifyContactsChanged();
 }
 

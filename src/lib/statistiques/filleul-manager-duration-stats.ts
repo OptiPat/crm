@@ -3,9 +3,11 @@ import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import {
   calendarMonthsFromInscriptionToEvent,
   formatFilleulVaaDurationMonths,
-  isFilleulInscribedDuringExercice,
 } from "@/lib/statistiques/filleul-vaa-duration-stats";
-import { isContactEligibleForFilleulParraineurStats } from "@/lib/statistiques/contact-filleul-organisation-stats";
+import {
+  isAffiliationInExercice,
+  isContactEligibleForFilleulParraineurStats,
+} from "@/lib/statistiques/contact-filleul-organisation-stats";
 import {
   resolveFilleulInscriptionTimestamp,
   resolveFilleulPassageManagerTimestamp,
@@ -80,9 +82,22 @@ export function computeFilleulManagerDurationStats(
   return computeManagerDurationStatsFromEligible(eligible, options?.dossiersByContactId);
 }
 
+/** Qualification Manager datée dans l'exercice (inscription peut être antérieure). */
+export function isFilleulManagerQualificationDuringExercice(
+  contact: Contact,
+  exerciceLabel: string,
+  options?: FilleulManagerDurationStatsOptions
+): boolean {
+  if (!isContactEligibleForFilleulParraineurStats(contact)) return false;
+  const dossier =
+    contact.id != null ? options?.dossiersByContactId?.get(contact.id) : undefined;
+  const passageManager = resolveFilleulPassageManagerTimestamp(dossier);
+  return isAffiliationInExercice(passageManager, exerciceLabel);
+}
+
 /**
- * Durée moyenne sur l'exercice : inscriptions durant l'exercice (désinscrits inclus),
- * hors consultants sans date qualification Manager renseignée.
+ * Durée moyenne sur l'exercice : qualifications Manager durant l'exercice (désinscrits inclus),
+ * délai inscription → qualification Manager.
  */
 export function computeFilleulManagerDurationExerciceStats(
   contacts: Contact[],
@@ -93,7 +108,7 @@ export function computeFilleulManagerDurationExerciceStats(
   const eligible = contacts.filter(
     (contact) =>
       contact.id != null &&
-      isFilleulInscribedDuringExercice(contact, exerciceLabel, options)
+      isFilleulManagerQualificationDuringExercice(contact, exerciceLabel, options)
   ) as Contact[];
   return computeManagerDurationStatsFromEligible(eligible, dossiersByContactId);
 }
@@ -121,7 +136,7 @@ export function filterContactsForFilleulManagerDurationExerciceList(
   const dossiersByContactId = options?.dossiersByContactId;
   return contacts.filter((contact) => {
     if (
-      !isFilleulInscribedDuringExercice(contact, exerciceLabel, options) ||
+      !isFilleulManagerQualificationDuringExercice(contact, exerciceLabel, options) ||
       contact.id == null
     ) {
       return false;
@@ -150,8 +165,10 @@ export function formatFilleulManagerDurationExerciceSubtitle(
   stats: FilleulManagerDurationStatResult,
   exerciceLabel: string
 ): string {
-  if (stats.totalEligible === 0) return `Aucune inscription sur l'exercice ${exerciceLabel}`;
-  return `${formatFilleulManagerDurationSubtitle(stats)} · inscriptions ${exerciceLabel}`;
+  if (stats.totalEligible === 0) {
+    return `Aucune qualification Manager sur l'exercice ${exerciceLabel}`;
+  }
+  return `${formatFilleulManagerDurationSubtitle(stats)} · qualifications Manager ${exerciceLabel}`;
 }
 
 export function formatFilleulManagerDurationCumulativeIndex(

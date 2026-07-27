@@ -1,13 +1,13 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import {
+  isAffiliationInExercice,
   isContactEligibleForFilleulParraineurStats,
   isFilleulParrainableDownline,
 } from "@/lib/statistiques/contact-filleul-organisation-stats";
 import {
   calendarMonthsFromInscriptionToEvent,
   formatFilleulVaaDurationMonths,
-  isFilleulInscribedDuringExercice,
 } from "@/lib/statistiques/filleul-vaa-duration-stats";
 import { resolveFilleulInscriptionTimestamp } from "@/lib/organisation/organisation-filleul-dossier";
 
@@ -62,6 +62,33 @@ export function resolveFilleulInscriptionToParrainageDurationMonths(
   return calendarMonthsFromInscriptionToEvent(inscription, firstParrainage);
 }
 
+/** Consultant dont le 1er parrainage (inscription filleul) est daté dans l'exercice. */
+export function isFilleulFirstParrainageDuringExercice(
+  contact: Contact,
+  exerciceLabel: string,
+  contacts: Contact[],
+  options?: FilleulParrainageDurationStatsOptions
+): boolean {
+  if (contact.id == null) return false;
+  const { dossiersByContactId, organisationSelfContactId } = options ?? {};
+  const firstParrainage = resolveFirstParrainageInscriptionUnix(
+    contact.id,
+    contacts,
+    dossiersByContactId
+  );
+  const eventDuringExercice = isAffiliationInExercice(firstParrainage, exerciceLabel);
+
+  if (
+    organisationSelfContactId != null &&
+    contact.id === organisationSelfContactId
+  ) {
+    return eventDuringExercice;
+  }
+
+  if (!isContactEligibleForFilleulParraineurStats(contact)) return false;
+  return eventDuringExercice;
+}
+
 function computeParrainageDurationStatsFromEligible(
   contacts: Contact[],
   eligible: Contact[],
@@ -112,8 +139,8 @@ export function computeFilleulParrainageDurationStats(
 }
 
 /**
- * Durée moyenne sur l'exercice : inscriptions durant l'exercice (désinscrits inclus),
- * hors consultants sans parrainage enregistré.
+ * Durée moyenne sur l'exercice : 1ers parrainages durant l'exercice (désinscrits inclus),
+ * délai inscription → inscription du 1er filleul parrainé.
  */
 export function computeFilleulParrainageDurationExerciceStats(
   contacts: Contact[],
@@ -124,7 +151,7 @@ export function computeFilleulParrainageDurationExerciceStats(
   const eligible = contacts.filter(
     (contact) =>
       contact.id != null &&
-      isFilleulInscribedDuringExercice(contact, exerciceLabel, options)
+      isFilleulFirstParrainageDuringExercice(contact, exerciceLabel, contacts, options)
   ) as Contact[];
   return computeParrainageDurationStatsFromEligible(contacts, eligible, dossiersByContactId);
 }
@@ -156,7 +183,7 @@ export function filterContactsForFilleulParrainageDurationExerciceList(
   const dossiersByContactId = options?.dossiersByContactId;
   return contacts.filter((contact) => {
     if (
-      !isFilleulInscribedDuringExercice(contact, exerciceLabel, options) ||
+      !isFilleulFirstParrainageDuringExercice(contact, exerciceLabel, contacts, options) ||
       contact.id == null
     ) {
       return false;
@@ -189,8 +216,10 @@ export function formatFilleulParrainageDurationExerciceSubtitle(
   stats: FilleulParrainageDurationStatResult,
   exerciceLabel: string
 ): string {
-  if (stats.totalEligible === 0) return `Aucune inscription sur l'exercice ${exerciceLabel}`;
-  return `${formatFilleulParrainageDurationSubtitle(stats)} · inscriptions ${exerciceLabel}`;
+  if (stats.totalEligible === 0) {
+    return `Aucun 1er parrainage sur l'exercice ${exerciceLabel}`;
+  }
+  return `${formatFilleulParrainageDurationSubtitle(stats)} · 1ers parrainages ${exerciceLabel}`;
 }
 
 export function formatFilleulParrainageDurationCumulativeIndex(

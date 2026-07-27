@@ -170,7 +170,7 @@ import {
   type FilleulNetGrowthStatResult,
 } from "@/lib/statistiques/filleul-net-growth-stats";
 
-type OrganisationListCountUnit = "filleul" | "consultant" | "inscription";
+type OrganisationListCountUnit = "filleul" | "consultant" | "inscription" | "qualification";
 
 function formatOrganisationListCount(count: number, unit: OrganisationListCountUnit): string {
   if (unit === "consultant") {
@@ -178,6 +178,9 @@ function formatOrganisationListCount(count: number, unit: OrganisationListCountU
   }
   if (unit === "inscription") {
     return `${count} inscription${count > 1 ? "s" : ""}`;
+  }
+  if (unit === "qualification") {
+    return `${count} qualification${count > 1 ? "s" : ""}`;
   }
   return `${count} filleul${count > 1 ? "s" : ""}`;
 }
@@ -221,13 +224,18 @@ type OrganisationDrillDown =
   | { mode: "manager"; kind: FilleulOrganisationListKind }
   | { mode: "volume"; kind: FilleulVolumeListKind }
   | { mode: "parraineur"; kind: FilleulParraineurListKind }
-  | { mode: "parrainagePerParraineur"; kind: FilleulParrainagePerParraineurListKind }
+  | {
+      mode: "parrainagePerParraineur";
+      kind: FilleulParrainagePerParraineurListKind;
+      exerciceLabel?: string;
+      count?: number;
+    }
   | { mode: "vaaDuration"; kind: FilleulVaaDurationListKind }
   | { mode: "habilitationDuration"; kind: FilleulHabilitationDurationListKind }
   | { mode: "managerDuration"; kind: FilleulManagerDurationListKind }
   | { mode: "parrainageDuration"; kind: FilleulParrainageDurationListKind }
   | { mode: "bridge"; kind: FilleulBridgeListKind }
-  | { mode: "netGrowth"; kind: FilleulNetGrowthListKind }
+  | { mode: "netGrowth"; kind: FilleulNetGrowthListKind; exerciceLabel?: string; count?: number }
   | { mode: "attrition"; kind: "active" | "attrited"; count: number };
 
 function ManagerKpiPanel({
@@ -453,7 +461,7 @@ function VaaDurationKpiPanel({
   return (
     <StatistiquesPanel
       title="Délai avant 1er VAA ou VA"
-      description={`Sur l'exercice ${exerciceLabel}, durée moyenne en mois entre la date d'inscription et la date du premier VAA ou VA (dossier filleul), pour les consultants inscrits durant la période — désinscrits inclus.`}
+      description={`Sur l'exercice ${exerciceLabel}, durée moyenne en mois entre la date d'inscription et la date du premier VAA ou VA (dossier filleul), pour les consultants dont le 1er VAA/VA est daté durant la période — désinscrits inclus.`}
       collapsible
       panelId="filleul_org_vaa_duration"
     >
@@ -463,7 +471,7 @@ function VaaDurationKpiPanel({
         <div className="space-y-4">
           {exerciceStats.totalEligible === 0 ? (
             <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2.5">
-              Aucune inscription réseau sur l&apos;exercice {exerciceLabel}.
+              Aucun 1er VAA/VA sur l&apos;exercice {exerciceLabel}.
             </p>
           ) : exerciceStats.averageMonths == null ? (
             <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
@@ -476,7 +484,7 @@ function VaaDurationKpiPanel({
                 </p>
               </div>
               <p className="text-xs text-muted-foreground text-right max-w-xs">
-                Aucune date 1er VAA ou VA sur les inscriptions de l&apos;exercice.
+                Aucune inscription antérieure au 1er VAA/VA sur l&apos;exercice.
                 <br />
                 {formatFilleulVaaDurationExerciceSubtitle(exerciceStats, exerciceLabel)}
               </p>
@@ -589,7 +597,7 @@ function HabilitationDurationKpiPanel({
   return (
     <StatistiquesPanel
       title="Délai 1ère habilitation"
-      description={`Sur l'exercice ${exerciceLabel}, durée moyenne en mois entre l'inscription et la première habilitation (MIOBSP, MIA ou Agent Lié — la date renseignée la plus proche de l'inscription), pour les consultants inscrits durant la période — désinscrits inclus.`}
+      description={`Sur l'exercice ${exerciceLabel}, durée moyenne en mois entre l'inscription et la première habilitation (MIOBSP, MIA ou Agent Lié — la date renseignée la plus proche de l'inscription), pour les consultants habilités durant la période — désinscrits inclus.`}
       collapsible
       panelId="filleul_org_habilitation_duration"
     >
@@ -599,7 +607,7 @@ function HabilitationDurationKpiPanel({
         <div className="space-y-4">
           {exerciceStats.totalEligible === 0 ? (
             <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2.5">
-              Aucune inscription réseau sur l&apos;exercice {exerciceLabel}.
+              Aucune habilitation sur l&apos;exercice {exerciceLabel}.
             </p>
           ) : exerciceStats.averageMonths == null ? (
             <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
@@ -612,7 +620,7 @@ function HabilitationDurationKpiPanel({
                 </p>
               </div>
               <p className="text-xs text-muted-foreground text-right max-w-xs">
-                Aucune habilitation sur les inscriptions de l&apos;exercice.
+                Aucune inscription antérieure à l&apos;habilitation sur l&apos;exercice.
                 <br />
                 {formatFilleulHabilitationDurationExerciceSubtitle(exerciceStats, exerciceLabel)}
               </p>
@@ -722,7 +730,7 @@ function ManagerDurationKpiPanel({
   return (
     <StatistiquesPanel
       title="Délai passage Manager"
-      description={`Sur l'exercice ${exerciceLabel}, durée moyenne en mois entre l'inscription et la date de qualification Manager (dossier filleul), pour les consultants inscrits durant la période — désinscrits inclus.`}
+      description={`Sur l'exercice ${exerciceLabel}, durée moyenne en mois entre l'inscription et la date de qualification Manager (dossier filleul), pour les consultants qualifiés Manager durant la période — désinscrits inclus.`}
       collapsible
       panelId="filleul_org_manager_duration"
     >
@@ -732,7 +740,7 @@ function ManagerDurationKpiPanel({
         <div className="space-y-4">
           {exerciceStats.totalEligible === 0 ? (
             <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2.5">
-              Aucune inscription réseau sur l&apos;exercice {exerciceLabel}.
+              Aucune qualification Manager sur l&apos;exercice {exerciceLabel}.
             </p>
           ) : exerciceStats.averageMonths == null ? (
             <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
@@ -745,7 +753,7 @@ function ManagerDurationKpiPanel({
                 </p>
               </div>
               <p className="text-xs text-muted-foreground text-right max-w-xs">
-                Aucune date qualification Manager sur les inscriptions de l&apos;exercice.
+                Aucune inscription antérieure à la qualification Manager sur l&apos;exercice.
                 <br />
                 {formatFilleulManagerDurationExerciceSubtitle(exerciceStats, exerciceLabel)}
               </p>
@@ -789,13 +797,13 @@ function ManagerDurationKpiPanel({
               <OrganisationListButton
                 label="Avec qualification Manager"
                 count={exerciceStats.countedCount}
-                countUnit="inscription"
+                countUnit="qualification"
                 onClick={() => onOpenList("withDuration")}
               />
               <OrganisationListButton
                 label="Sans qualification Manager"
                 count={exerciceStats.missingManagerCount}
-                countUnit="inscription"
+                countUnit="qualification"
                 onClick={() => onOpenList("missingManager")}
               />
             </div>
@@ -890,9 +898,9 @@ function ParraineurKpiPanel({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Parrainages de l&apos;exercice : date d&apos;inscription du filleul parrainé (ou
-            d&apos;invitation si prospect) — désinscrits comptés si affiliation dans la période.
-            Référence groupe via « Références » en haut de page.
+            Parrainages de l&apos;exercice : date d&apos;inscription du filleul parrainé — prospects
+            exclus (le parrainage = passage filleul inscrit). Référence groupe via « Références » en
+            haut de page.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -940,7 +948,7 @@ function ParrainagePerParraineurKpiPanel({
   return (
     <StatistiquesPanel
       title="Parrainages / parraineur"
-      description={`Sur l'exercice ${exerciceLabel}, nombre moyen de filleuls parrainés par consultant parraineur — affiliations durant l'exercice (inscription du filleul, ou invitation si prospect), parmi les consultants présents sur la période.`}
+      description={`Sur l'exercice ${exerciceLabel}, nombre moyen de filleuls inscrits parrainés par consultant parraineur — inscriptions durant l'exercice, parmi les consultants présents sur la période (prospects exclus).`}
       collapsible
       panelId="filleul_org_parrainage_per_parraineur"
     >
@@ -1031,10 +1039,9 @@ function ParrainagePerParraineurKpiPanel({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Moyenne = parrainages de l&apos;exercice ÷ parraineurs de l&apos;exercice. Un
-            parrainage compte si la date d&apos;inscription du filleul parrainé (ou son invitation
-            prospect) tombe dans l&apos;exercice — aligné avec le taux de parraineurs. Référence
-            groupe via « Références » en haut de page.
+            Moyenne = parrainages de l&apos;exercice ÷ parraineurs de l&apos;exercice. Un parrainage
+            compte à la date d&apos;inscription du filleul (prospects exclus). Référence groupe via
+            « Références » en haut de page.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1204,7 +1211,7 @@ function ParrainageDurationKpiPanel({
   return (
     <StatistiquesPanel
       title="Délai avant 1er parrainage"
-      description={`Sur l'exercice ${exerciceLabel}, durée moyenne en mois entre l'inscription du consultant et la date d'inscription de son premier filleul parrainé, pour les consultants inscrits durant la période — désinscrits inclus.`}
+      description={`Sur l'exercice ${exerciceLabel}, durée moyenne en mois entre l'inscription du consultant et la date d'inscription de son premier filleul parrainé, pour les consultants dont le 1er parrainage est daté durant la période — désinscrits inclus.`}
       collapsible
       panelId="filleul_org_parrainage_duration"
     >
@@ -1214,7 +1221,7 @@ function ParrainageDurationKpiPanel({
         <div className="space-y-4">
           {exerciceStats.totalEligible === 0 ? (
             <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2.5">
-              Aucune inscription réseau sur l&apos;exercice {exerciceLabel}.
+              Aucun 1er parrainage sur l&apos;exercice {exerciceLabel}.
             </p>
           ) : exerciceStats.averageMonths == null ? (
             <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
@@ -1227,7 +1234,7 @@ function ParrainageDurationKpiPanel({
                 </p>
               </div>
               <p className="text-xs text-muted-foreground text-right max-w-xs">
-                Aucun parrainage enregistré sur les inscriptions de l&apos;exercice.
+                Aucune inscription antérieure au 1er parrainage sur l&apos;exercice.
                 <br />
                 {formatFilleulParrainageDurationExerciceSubtitle(exerciceStats, exerciceLabel)}
               </p>
@@ -1760,11 +1767,12 @@ export function ContactFilleulOrganisationPanel({
       );
     }
     if (drillDown.mode === "parrainagePerParraineur") {
+      const exerciceLabel = drillDown.exerciceLabel ?? resolvedExerciceLabel;
       return toDashboardStatContactList(
         filterContactsForFilleulParrainagePerParraineurExerciceList(
           contactsForStats,
           drillDown.kind,
-          resolvedExerciceLabel,
+          exerciceLabel,
           parraineurStatsOptions
         )
       );
@@ -1775,12 +1783,13 @@ export function ContactFilleulOrganisationPanel({
       );
     }
     if (drillDown.mode === "netGrowth") {
+      const exerciceLabel = drillDown.exerciceLabel ?? resolvedExerciceLabel;
       return toDashboardStatContactList(
         filterContactsForFilleulNetGrowthExerciceList(
           contactsForStats,
           drillDown.kind,
-          resolvedExerciceLabel,
-          previousFiscalYearLabel(resolvedExerciceLabel),
+          exerciceLabel,
+          previousFiscalYearLabel(exerciceLabel),
           parraineurStatsOptions
         )
       );
@@ -1904,6 +1913,23 @@ export function ContactFilleulOrganisationPanel({
     setContactsSheetOpen(true);
   }, []);
 
+  const openSummaryConsultantsList = useCallback((exerciceLabel: string, count: number) => {
+    if (count === 0) return;
+    setDrillDown({ mode: "netGrowth", kind: "current", exerciceLabel, count });
+    setContactsSheetOpen(true);
+  }, []);
+
+  const openSummaryParrainagesList = useCallback((exerciceLabel: string, count: number) => {
+    if (count === 0) return;
+    setDrillDown({
+      mode: "parrainagePerParraineur",
+      kind: "parraines",
+      exerciceLabel,
+      count,
+    });
+    setContactsSheetOpen(true);
+  }, []);
+
   const openFilleulAttritionList = useCallback(
     (kind: "active" | "attrited", stats: ContactAttritionStatResult) => {
       const count = kind === "active" ? stats.activeCount : stats.attritedCount;
@@ -1927,9 +1953,10 @@ export function ContactFilleulOrganisationPanel({
           : `Consultants réseau — sans parrainage exercice ${resolvedExerciceLabel}`;
       }
       if (dd.mode === "parrainagePerParraineur") {
+        const label = dd.exerciceLabel ?? resolvedExerciceLabel;
         return dd.kind === "parraines"
-          ? `Filleuls parrainés — affiliations exercice ${resolvedExerciceLabel}`
-          : `Consultants réseau — parraineurs exercice ${resolvedExerciceLabel}`;
+          ? `Filleuls parrainés — affiliations exercice ${label}`
+          : `Consultants réseau — parraineurs exercice ${label}`;
       }
       if (dd.mode === "bridge") {
         return dd.kind === "bridge"
@@ -1937,9 +1964,10 @@ export function ContactFilleulOrganisationPanel({
           : "Filleuls directs — filleuls seuls";
       }
       if (dd.mode === "netGrowth") {
+        const label = dd.exerciceLabel ?? resolvedExerciceLabel;
         return dd.kind === "current"
-          ? `Consultants présents — exercice ${resolvedExerciceLabel}`
-          : `Consultants présents — exercice ${previousFiscalYearLabel(resolvedExerciceLabel) ?? "précédent"}`;
+          ? `Consultants actifs (nets) — exercice ${label}`
+          : `Consultants actifs (nets) — exercice ${previousFiscalYearLabel(label) ?? "précédent"}`;
       }
       if (dd.mode === "attrition") {
         return dd.kind === "attrited"
@@ -1948,23 +1976,23 @@ export function ContactFilleulOrganisationPanel({
       }
       if (dd.mode === "vaaDuration") {
         return dd.kind === "withDuration"
-          ? `Inscriptions exercice — avec date 1er VAA/VA (${resolvedExerciceLabel})`
-          : `Inscriptions exercice — sans date 1er VAA/VA (${resolvedExerciceLabel})`;
+          ? `1ers VAA/VA exercice — avec délai inscription (${resolvedExerciceLabel})`
+          : `1ers VAA/VA exercice — inscription manquante (${resolvedExerciceLabel})`;
       }
       if (dd.mode === "habilitationDuration") {
         return dd.kind === "withDuration"
-          ? `Inscriptions exercice — avec habilitation (${resolvedExerciceLabel})`
-          : `Inscriptions exercice — sans habilitation (${resolvedExerciceLabel})`;
+          ? `Habilitations exercice — avec délai inscription (${resolvedExerciceLabel})`
+          : `Habilitations exercice — inscription manquante (${resolvedExerciceLabel})`;
       }
       if (dd.mode === "managerDuration") {
         return dd.kind === "withDuration"
-          ? `Inscriptions exercice — avec qualification Manager (${resolvedExerciceLabel})`
-          : `Inscriptions exercice — sans qualification Manager (${resolvedExerciceLabel})`;
+          ? `Qualifications Manager exercice — avec délai inscription (${resolvedExerciceLabel})`
+          : `Qualifications Manager exercice — inscription manquante (${resolvedExerciceLabel})`;
       }
       if (dd.mode === "parrainageDuration") {
         return dd.kind === "withDuration"
-          ? `Inscriptions exercice — avec parrainage (${resolvedExerciceLabel})`
-          : `Inscriptions exercice — sans parrainage (${resolvedExerciceLabel})`;
+          ? `1ers parrainages exercice — avec délai inscription (${resolvedExerciceLabel})`
+          : `1ers parrainages exercice — inscription manquante (${resolvedExerciceLabel})`;
       }
       return dd.kind === "withVolume"
         ? `Consultants actifs (≥ 1 €) — exercice ${resolvedExerciceLabel}`
@@ -1986,6 +2014,7 @@ export function ContactFilleulOrganisationPanel({
         : parraineurExerciceStats.otherContactIds.length;
     }
     if (drillDown.mode === "parrainagePerParraineur") {
+      if (drillDown.count != null) return drillDown.count;
       return drillDown.kind === "parraines"
         ? parrainagePerParraineurExerciceStats.totalParrainages
         : parrainagePerParraineurExerciceStats.parraineurCount;
@@ -1996,6 +2025,7 @@ export function ContactFilleulOrganisationPanel({
         : bridgeStats.otherContactIds.length;
     }
     if (drillDown.mode === "netGrowth") {
+      if (drillDown.count != null) return drillDown.count;
       return drillDown.kind === "current"
         ? filleulNetGrowthExerciceStats.currentCount
         : filleulNetGrowthExerciceStats.previousCount;
@@ -2049,6 +2079,9 @@ export function ContactFilleulOrganisationPanel({
       return `${sheetCount} consultant${sheetCount > 1 ? "s" : ""} · ${formatFilleulManagerPercent(parraineurExerciceStats.parraineurPercent)} parraineurs exercice ${resolvedExerciceLabel} · cumul ${formatFilleulManagerPercent(parraineurCumulativeStats.parraineurPercent)}`;
     }
     if (drillDown.mode === "parrainagePerParraineur") {
+      if (drillDown.exerciceLabel) {
+        return `${sheetCount} parrainage${sheetCount > 1 ? "s" : ""} · exercice ${drillDown.exerciceLabel}`;
+      }
       const avg =
         parrainagePerParraineurExerciceStats.averagePerParraineur != null
           ? formatFilleulParrainagePerParraineur(
@@ -2061,6 +2094,9 @@ export function ContactFilleulOrganisationPanel({
       return `${sheetCount} filleul${sheetCount > 1 ? "s" : ""} · ${formatFilleulManagerPercent(bridgeStats.bridgePercent)} double rôle au total`;
     }
     if (drillDown.mode === "netGrowth") {
+      if (drillDown.exerciceLabel) {
+        return `${sheetCount} consultant${sheetCount > 1 ? "s" : ""} actif${sheetCount > 1 ? "s" : ""} · exercice ${drillDown.exerciceLabel}`;
+      }
       const rate =
         filleulNetGrowthExerciceStats.growthPercent != null
           ? formatFilleulNetGrowthPercent(filleulNetGrowthExerciceStats.growthPercent)
@@ -2149,6 +2185,8 @@ export function ContactFilleulOrganisationPanel({
             cgp={cgp}
             dossiersLoading={exerciceKpisLoading}
             dataRefreshKey={dataRefreshKey}
+            onOpenConsultantsList={openSummaryConsultantsList}
+            onOpenParrainagesList={openSummaryParrainagesList}
           />
         </div>
         <ContactGeographyPanel onNavigate={onNavigate} lens="filleul" />

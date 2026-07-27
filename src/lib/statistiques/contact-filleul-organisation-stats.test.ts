@@ -229,6 +229,9 @@ describe("contact-filleul-organisation-stats", () => {
       true
     );
     expect(
+      isFilleulParrainableDownline({ categorie: "AUCUN", filleul_categorie: "PROSPECT_FILLEUL" })
+    ).toBe(false);
+    expect(
       filterContactsForFilleulParraineurList(parrainContacts, "parraineur").map((c) => c.id)
     ).toEqual([10, 12]);
   });
@@ -271,6 +274,43 @@ describe("contact-filleul-organisation-stats", () => {
         (c) => c.id
       )
     ).toEqual([10]);
+  });
+
+  it("ne compte pas un prospect comme parrainage pour le taux de parraineurs", () => {
+    const exercice = "2025-2026";
+    const inExercice = (fiscalYearStartUnix(exercice) ?? 0) + 86_400;
+    const contacts = [
+      contact({ id: 10, filleul_categorie: "FILLEUL", nom: "PARRAIN" }),
+      contact({
+        id: 20,
+        filleul_categorie: "PROSPECT_FILLEUL",
+        parrain_id: 10,
+        date_invitation_filleul: inExercice,
+        nom: "PROSPECT",
+      }),
+    ];
+    const dossiersByContactId = new Map([
+      [20, {
+        contactId: 20,
+        dateInvitation: inExercice,
+        dateInscription: null,
+        dateDesinscription: null,
+        datePremiereSouscriptionImo: null,
+        datePremiereSouscriptionPlacement: null,
+        datePremiereSouscriptionScpi: null,
+        datePassageManager: null,
+        dateHabilitationCif: null,
+        datePremierVaaOuVa: null,
+        notes: null,
+        updatedAt: 1,
+      }],
+    ]);
+
+    const stats = computeFilleulParraineurExerciceStats(contacts, exercice, {
+      dossiersByContactId,
+    });
+    expect(stats.parraineurCount).toBe(0);
+    expect(computeFilleulParraineurStats(contacts).parraineurCount).toBe(0);
   });
 
   it("compte le CGP comme parrain des filleuls orphelins (sans parrain_id)", () => {

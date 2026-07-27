@@ -4040,6 +4040,18 @@ pub fn close_filleul_exercice(
 }
 
 #[tauri::command]
+pub fn reopen_filleul_exercice(
+    db: State<'_, DbState>,
+    input: crate::database::filleul_volumes::ReopenFilleulExerciceInput,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .reopen_filleul_exercice(input)
+        .map_err(|e| format!("Failed to reopen filleul exercice: {}", e))
+}
+
+#[tauri::command]
 pub fn import_filleul_volume_exercices(
     db: State<'_, DbState>,
     input: crate::database::filleul_volumes::ImportFilleulVolumeExercicesInput,

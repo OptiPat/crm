@@ -90,7 +90,7 @@ describe("filleul-manager-duration-stats", () => {
     expect(stats.averageMonths).toBe(8);
   });
 
-  it("filtre par exercice sur la date d'inscription", () => {
+  it("filtre par exercice sur la date de qualification Manager", () => {
     const inscription = Math.floor(Date.parse("2024-09-01T00:00:00Z") / 1000);
     const manager = Math.floor(Date.parse("2025-03-01T00:00:00Z") / 1000);
     const dossiersByContactId = new Map([
@@ -99,7 +99,7 @@ describe("filleul-manager-duration-stats", () => {
         11,
         dossier(11, {
           dateInscription: beforeExercice,
-          datePassageManager: beforeExercice + 86_400 * 180,
+          datePassageManager: start - 86_400,
         }),
       ],
     ]);
@@ -121,5 +121,27 @@ describe("filleul-manager-duration-stats", () => {
     });
     expect(stats.totalEligible).toBe(1);
     expect(stats.averageMonths).toBe(6);
+  });
+
+  it("inclut une inscription antérieure si la qualification Manager est dans l'exercice", () => {
+    const inscription = Math.floor(Date.parse("2024-03-30T00:00:00Z") / 1000);
+    const manager = Math.floor(Date.parse("2025-03-25T00:00:00Z") / 1000);
+    const dossiersByContactId = new Map([
+      [20, dossier(20, { dateInscription: inscription, datePassageManager: manager })],
+    ]);
+    const contacts = [
+      contact({
+        id: 20,
+        filleul_categorie: "FILLEUL_DESINSCRIT",
+        date_inscription_filleul: inscription,
+      }),
+    ];
+
+    const stats = computeFilleulManagerDurationExerciceStats(contacts, exercice, {
+      dossiersByContactId,
+    });
+    expect(stats.totalEligible).toBe(1);
+    expect(stats.countedCount).toBe(1);
+    expect(stats.averageMonths).toBe(11);
   });
 });

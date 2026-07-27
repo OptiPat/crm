@@ -147,7 +147,7 @@ describe("filleul-vaa-duration-stats", () => {
     expect(stats.averageMonths).toBe(2);
   });
 
-  it("filtre par exercice sur la date d'inscription (désinscrit inclus)", () => {
+  it("filtre par exercice sur la date du 1er VAA/VA (désinscrit inclus)", () => {
     const inscription = Math.floor(Date.parse("2024-09-01T00:00:00Z") / 1000);
     const premierVaa = Math.floor(Date.parse("2024-12-01T00:00:00Z") / 1000);
     const dossiersByContactId = new Map([
@@ -180,7 +180,7 @@ describe("filleul-vaa-duration-stats", () => {
           datePremiereSouscriptionScpi: null,
           datePassageManager: null,
           dateHabilitationCif: null,
-          datePremierVaaOuVa: beforeExercice + 86_400 * 90,
+          datePremierVaaOuVa: start - 86_400,
           notes: null,
           updatedAt: 1,
         },
@@ -213,7 +213,7 @@ describe("filleul-vaa-duration-stats", () => {
     expect(withDuration.map((row) => row.id)).toEqual([10]);
   });
 
-  it("inclut le contact Moi (CGP) si inscription sur l'exercice", () => {
+  it("inclut le contact Moi (CGP) si 1er VAA/VA sur l'exercice", () => {
     const inscription = Math.floor(Date.parse("2024-09-01T00:00:00Z") / 1000);
     const premierVaa = Math.floor(Date.parse("2024-11-15T00:00:00Z") / 1000);
     const dossiersByContactId = new Map([
@@ -250,5 +250,43 @@ describe("filleul-vaa-duration-stats", () => {
     });
     expect(stats.totalEligible).toBe(1);
     expect(stats.averageMonths).toBe(2);
+  });
+
+  it("inclut une inscription antérieure si le 1er VAA/VA est dans l'exercice", () => {
+    const inscription = Math.floor(Date.parse("2018-07-09T00:00:00Z") / 1000);
+    const premierVaa = Math.floor(Date.parse("2019-01-24T00:00:00Z") / 1000);
+    const dossiersByContactId = new Map([
+      [
+        112,
+        {
+          contactId: 112,
+          dateInvitation: null,
+          dateInscription: inscription,
+          dateDesinscription: null,
+          datePremiereSouscriptionImo: null,
+          datePremiereSouscriptionPlacement: null,
+          datePremiereSouscriptionScpi: null,
+          datePassageManager: null,
+          dateHabilitationCif: null,
+          datePremierVaaOuVa: premierVaa,
+          notes: null,
+          updatedAt: 1,
+        },
+      ],
+    ]);
+    const contacts = [
+      contact({
+        id: 112,
+        filleul_categorie: "FILLEUL",
+        date_inscription_filleul: inscription,
+      }),
+    ];
+
+    const stats = computeFilleulVaaDurationExerciceStats(contacts, "2018-2019", {
+      dossiersByContactId,
+    });
+    expect(stats.totalEligible).toBe(1);
+    expect(stats.countedCount).toBe(1);
+    expect(stats.averageMonths).toBe(6);
   });
 });

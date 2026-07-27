@@ -102,7 +102,7 @@ describe("filleul-habilitation-duration-stats", () => {
     expect(stats.averageMonths).toBe(2);
   });
 
-  it("filtre par exercice sur la date d'inscription", () => {
+  it("filtre par exercice sur la date de première habilitation", () => {
     const inscription = Math.floor(Date.parse("2024-09-01T00:00:00Z") / 1000);
     const habilitation = Math.floor(Date.parse("2024-12-01T00:00:00Z") / 1000);
     const dossiersByContactId = new Map([
@@ -117,7 +117,7 @@ describe("filleul-habilitation-duration-stats", () => {
         11,
         dossier(11, {
           dateInscription: beforeExercice,
-          datePremiereSouscriptionScpi: beforeExercice + 86_400 * 90,
+          datePremiereSouscriptionScpi: start - 86_400,
         }),
       ],
     ]);

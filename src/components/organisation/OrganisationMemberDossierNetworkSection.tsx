@@ -92,44 +92,51 @@ export function OrganisationMemberDossierNetworkSection({
       while (queueRef.current.length > 0) {
         const patch = queueRef.current.shift()!;
         const dossierBeforePatch = dossierRef.current;
-        const saved = await upsertFilleulDossier(
-          buildUpsertFilleulDossierInput(dossierRef.current, patch),
-          { notifyContactsChanged: true }
-        );
-        dossierRef.current = saved;
-        onDossierChange(saved);
-
-        if (patch.dateDesinscription !== undefined && contact.id != null) {
-          const clearingDesinscription =
-            patch.dateDesinscription.trim() === "" &&
-            dossierBeforePatch.dateDesinscription != null;
-          let nextFilleulCategorie = resolveFilleulCategorieAfterDesinscriptionDateChange(
-            contact,
-            patch.dateDesinscription
-          );
-          if (nextFilleulCategorie === undefined && clearingDesinscription) {
-            nextFilleulCategorie = "FILLEUL";
-          }
-          if (nextFilleulCategorie !== undefined) {
-            await updateContact(
-              contact.id,
-              contactToUpdatePayload(contact, { filleul_categorie: nextFilleulCategorie })
+        try {
+          if (patch.dateDesinscription !== undefined && contact.id != null) {
+            const clearingDesinscription =
+              patch.dateDesinscription.trim() === "" &&
+              dossierBeforePatch.dateDesinscription != null;
+            let nextFilleulCategorie = resolveFilleulCategorieAfterDesinscriptionDateChange(
+              contact,
+              patch.dateDesinscription
             );
-            onParrainChange?.();
+            if (nextFilleulCategorie === undefined && clearingDesinscription) {
+              nextFilleulCategorie = "FILLEUL";
+            }
+            if (nextFilleulCategorie !== undefined) {
+              await updateContact(
+                contact.id,
+                contactToUpdatePayload(contact, { filleul_categorie: nextFilleulCategorie })
+              );
+              onParrainChange?.();
+            }
           }
-          const visibilityHint = describeOrganisationExerciceVisibilityHint(
-            contact,
-            dossierRef.current
+
+          const saved = await upsertFilleulDossier(
+            buildUpsertFilleulDossierInput(dossierRef.current, patch),
+            { notifyContactsChanged: true }
           );
-          if (visibilityHint) {
-            toast.info(visibilityHint, { duration: 8000 });
+          dossierRef.current = saved;
+          onDossierChange(saved);
+
+          if (patch.dateDesinscription !== undefined) {
+            const visibilityHint = describeOrganisationExerciceVisibilityHint(
+              contact,
+              dossierRef.current
+            );
+            if (visibilityHint) {
+              toast.info(visibilityHint, { duration: 8000 });
+            }
           }
+        } catch (patchError) {
+          queueRef.current.unshift(patch);
+          throw patchError;
         }
       }
     } catch (error) {
       console.error(error);
       toast.error("Impossible d'enregistrer le dossier réseau");
-      queueRef.current = [];
       throw error;
     } finally {
       processingRef.current = false;

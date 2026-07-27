@@ -117,7 +117,7 @@ export function computeFilleulParrainagePerParraineurExerciceStats(
 }
 
 /**
- * Filleuls parrainés dont l'affiliation tombe dans l'exercice (les parrainages comptés).
+ * Filleuls inscrits parrainés dont l'affiliation tombe dans l'exercice (prospects exclus).
  * Inclut les filleuls sans parrain_id renseigné, rattachés au CGP comme dans le total
  * (cf. `resolveEffectiveDownlineParrainId`), pour que la liste corresponde au chiffre affiché.
  */

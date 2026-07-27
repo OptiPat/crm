@@ -519,6 +519,7 @@ fn main() {
             get_filleul_volume_exercices_by_contact,
             exercice_is_closed,
             close_filleul_exercice,
+            reopen_filleul_exercice,
             import_filleul_volume_exercices,
             get_filleul_dossier,
             get_filleul_dossiers_by_contact_ids,

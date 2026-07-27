@@ -9,7 +9,6 @@ import {
 } from "@/lib/organisation/organisation-exercice-membership";
 import {
   resolveFilleulInscriptionTimestamp,
-  resolveFilleulInvitationTimestamp,
   resolveFilleulDesinscriptionTimestamp,
 } from "@/lib/organisation/organisation-filleul-dossier";
 import { fiscalYearEndUnix, fiscalYearStartUnix } from "@/lib/pipe/remuneration-fiscal-year";
@@ -284,17 +283,13 @@ export function formatFilleulAverageVolumeExerciceSubtitle(
   return `${base} · ${exerciceLabel}`;
 }
 
-/** Filleul parrainé compté pour le taux (inscrits, désinscrits, prospects — suspects exclus). */
+/** Filleul inscrit ou désinscrit parrainé (prospects et suspects exclus — le parrainage = inscription filleul). */
 export function isFilleulParrainableDownline(
   contact: Pick<Contact, "categorie" | "filleul_categorie">
 ): boolean {
   if (isPrescripteurCategorie(contact.categorie)) return false;
   const filleulCat = contactEffectiveFilleulCategorie(contact);
-  return (
-    filleulCat === "FILLEUL" ||
-    filleulCat === "FILLEUL_DESINSCRIT" ||
-    filleulCat === "PROSPECT_FILLEUL"
-  );
+  return filleulCat === "FILLEUL" || filleulCat === "FILLEUL_DESINSCRIT";
 }
 
 export const EMPTY_FILLEUL_AVERAGE_VOLUME_STATS: FilleulAverageVolumeStatResult = {
@@ -329,7 +324,7 @@ function buildParrainIdsWithFilleulDownline(
   return parrainIds;
 }
 
-/** Date d'affiliation réseau du filleul parrainé (inscription, ou invitation si prospect sans inscription). */
+/** Date d'inscription réseau du filleul parrainé (le parrainage = passage filleul inscrit). */
 export function resolveDownlineAffiliationUnix(
   contact: Pick<
     Contact,
@@ -339,13 +334,7 @@ export function resolveDownlineAffiliationUnix(
 ): number | null {
   const dossier = contact.id != null ? dossiersByContactId?.get(contact.id) : undefined;
   const inscription = resolveFilleulInscriptionTimestamp(contact, dossier);
-  if (inscription != null) return inscription;
-  const filleulCat = contactEffectiveFilleulCategorie(contact);
-  if (filleulCat === "PROSPECT_FILLEUL") {
-    const invitation = resolveFilleulInvitationTimestamp(contact, dossier);
-    return invitation ?? null;
-  }
-  return null;
+  return inscription ?? null;
 }
 
 export function isAffiliationInExercice(
@@ -449,8 +438,8 @@ export function computeFilleulParraineurStats(
 
 /**
  * Taux de parraineurs sur l'exercice : consultants présents sur l'exercice ayant parrainé
- * au moins une personne dont la date d'inscription (ou d'invitation prospect) tombe dans
- * l'exercice fiscal (filleuls parrainés désinscrits inclus).
+ * au moins un filleul inscrit dont la date d'inscription tombe dans l'exercice fiscal
+ * (filleuls parrainés désinscrits inclus ; prospects exclus).
  */
 export function computeFilleulParraineurExerciceStats(
   contacts: Contact[],

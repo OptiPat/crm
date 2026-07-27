@@ -130,12 +130,12 @@ describe("filleul-parrainage-duration-stats", () => {
 
     const stats = computeFilleulParrainageDurationStats(contacts, { dossiersByContactId });
     expect(stats.totalEligible).toBe(2);
-    expect(stats.countedCount).toBe(1);
-    expect(stats.missingParrainageCount).toBe(1);
-    expect(stats.averageMonths).toBe(8);
+    expect(stats.countedCount).toBe(0);
+    expect(stats.missingParrainageCount).toBe(2);
+    expect(stats.averageMonths).toBeNull();
   });
 
-  it("filtre par exercice sur la date d'inscription du consultant", () => {
+  it("filtre par exercice sur la date du 1er parrainage", () => {
     const inscription = Math.floor(Date.parse("2024-09-01T00:00:00Z") / 1000);
     const parrainage = Math.floor(Date.parse("2024-12-01T00:00:00Z") / 1000);
     const contacts = [
@@ -151,7 +151,7 @@ describe("filleul-parrainage-duration-stats", () => {
       }),
       contact({
         id: 20,
-        filleul_categorie: "PROSPECT_FILLEUL",
+        filleul_categorie: "FILLEUL",
         parrain_id: 10,
         date_inscription_filleul: parrainage,
       }),

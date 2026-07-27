@@ -107,9 +107,9 @@ describe("filleul-parrainage-per-parraineur-stats", () => {
     const stats = computeFilleulParrainagePerParraineurExerciceStats(contacts, exercice, {
       dossiersByContactId,
     });
-    expect(stats.totalParrainages).toBe(2);
+    expect(stats.totalParrainages).toBe(1);
     expect(stats.parraineurCount).toBe(1);
-    expect(stats.averagePerParraineur).toBe(2);
+    expect(stats.averagePerParraineur).toBe(1);
     expect(stats.totalEligible).toBe(4);
     expect(stats.otherContactIds).toEqual([11, 20, 22]);
   });
@@ -209,6 +209,6 @@ describe("filleul-parrainage-per-parraineur-stats", () => {
     const parraines = filterContactsForFilleulParrainagesExerciceList(contacts, exercice, {
       dossiersByContactId,
     });
-    expect(parraines.map((c) => c.id)).toEqual([20, 21]);
+    expect(parraines.map((c) => c.id)).toEqual([20]);
   });
 });
