@@ -49,9 +49,9 @@ describe("organisation-jd-funnel-tracker", () => {
     expect(loadJdFunnelCounts("2026-2027")).toEqual(EMPTY_JD_FUNNEL_COUNTS);
   });
 
-  it("calcule la progression plafonnée à 100 %", () => {
+  it("calcule la progression, sans la plafonner à 100 % (dépassement visible)", () => {
     expect(computeJdFunnelProgressPercent(32, 64)).toBe(50);
-    expect(computeJdFunnelProgressPercent(80, 64)).toBe(100);
+    expect(computeJdFunnelProgressPercent(80, 64)).toBe(125);
     expect(computeJdFunnelProgressPercent(0, 64)).toBe(0);
     expect(computeJdFunnelProgressPercent(10, null)).toBeNull();
     expect(computeJdFunnelProgressPercent(10, 0)).toBeNull();

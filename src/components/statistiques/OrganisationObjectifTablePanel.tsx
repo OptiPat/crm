@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useJdFunnelTracker } from "@/hooks/useJdFunnelTracker";
+import { currentFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
 import { computeGrowthObjective } from "@/lib/statistiques/organisation-growth-objective";
 import {
   loadOrganisationObjectifTablePrefs,
@@ -17,6 +18,7 @@ import {
   formatRatio,
   formatVolume,
   formatVolumeDelta,
+  VolumeProgressGauge,
 } from "./objectif-table-shared";
 import { StatistiquesPanel } from "./statistiques-ui";
 
@@ -185,6 +187,10 @@ export function OrganisationObjectifTablePanel({
   };
 
   const jdFunnelTracker = useJdFunnelTracker();
+  // Le volume « actuel » ne vaut comme progression que pour l'exercice en cours : un exercice futur
+  // suivi en amont (funnel JD) n'a par définition encore aucun volume réel — la jauge doit rester à 0,
+  // pas reprendre le volume de l'exercice en cours qui n'a rien à voir avec l'exercice suivi.
+  const isTrackingCurrentExercice = jdFunnelTracker.exerciceLabel === currentFiscalYearLabel();
 
   const canCompute = currentConsultantCount != null && defaultAttritionPercent != null;
   const result = canCompute
@@ -488,18 +494,34 @@ export function OrganisationObjectifTablePanel({
                       {formatVolume(result.targetOrgVolume)}
                       <DeltaBadge value={formatVolumeDelta(result.currentOrgVolume, result.targetOrgVolume)} />
                     </div>
+                    <VolumeProgressGauge
+                      current={isTrackingCurrentExercice ? result.currentOrgVolume : 0}
+                      target={result.targetOrgVolume}
+                    />
                     <div className="text-[11px] font-normal text-muted-foreground/70">
                       dont {formatVolume(targetPersonalVolume)} perso
                     </div>
+                    <VolumeProgressGauge
+                      current={isTrackingCurrentExercice ? currentPersonalVolume : 0}
+                      target={targetPersonalVolume}
+                    />
                   </td>
                   <td className="px-3 py-2 text-right align-top text-muted-foreground border-l border-border/50">
                     <div className="tabular-nums">
                       {formatVolume(groupResult.targetOrgVolume)}
                       <DeltaBadge value={formatVolumeDelta(result.currentOrgVolume, groupResult.targetOrgVolume)} />
                     </div>
+                    <VolumeProgressGauge
+                      current={isTrackingCurrentExercice ? result.currentOrgVolume : 0}
+                      target={groupResult.targetOrgVolume}
+                    />
                     <div className="text-[11px] text-muted-foreground/70">
                       dont {formatVolume(targetPersonalVolume)} perso
                     </div>
+                    <VolumeProgressGauge
+                      current={isTrackingCurrentExercice ? currentPersonalVolume : 0}
+                      target={targetPersonalVolume}
+                    />
                   </td>
                 </tr>
               </tbody>
@@ -516,6 +538,12 @@ export function OrganisationObjectifTablePanel({
               progression réelle pour l'exercice choisi ci-dessus — indépendant de l'exercice affiché dans le
               reste du tableau (le funnel se travaille en amont, souvent pour l'exercice suivant).
             </li>
+            {!isTrackingCurrentExercice && (
+              <li>
+                Les jauges de volume repartent de 0 : l'exercice {jdFunnelTracker.exerciceLabel} suivi
+                ci-dessus n'a pas encore démarré, il n'a donc pas encore de volume réel.
+              </li>
+            )}
           </ul>
         </div>
       )}

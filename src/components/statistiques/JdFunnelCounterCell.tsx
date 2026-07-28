@@ -1,16 +1,42 @@
 import { Minus, Plus } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { computeJdFunnelProgressPercent } from "@/lib/statistiques/organisation-jd-funnel-tracker";
 import { cn } from "@/lib/utils";
-import { formatCount } from "./objectif-table-shared";
+import { formatCount, progressColorClasses } from "./objectif-table-shared";
 
-/** Couleurs de progression : neutre → ambre → émeraude, pour un feedback visuel immédiat. */
-function progressColorClasses(percent: number | null): { bar: string; text: string } {
-  if (percent == null || percent <= 0) return { bar: "bg-muted-foreground/30", text: "text-muted-foreground/70" };
-  if (percent >= 100) return { bar: "bg-emerald-500", text: "text-emerald-600" };
-  if (percent >= 60) return { bar: "bg-emerald-400", text: "text-emerald-600" };
-  if (percent >= 30) return { bar: "bg-amber-400", text: "text-amber-600" };
-  return { bar: "bg-primary/70", text: "text-muted-foreground" };
+const HOLD_REPEAT_DELAY_MS = 400;
+const HOLD_REPEAT_INTERVAL_MS = 90;
+
+/** Incrémente/décrémente en continu tant que le bouton est maintenu appuyé (pas juste au clic). */
+function useHoldRepeat(onTick: () => void) {
+  const onTickRef = useRef(onTick);
+  onTickRef.current = onTick;
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clear = useCallback(() => {
+    if (timeoutRef.current != null) clearTimeout(timeoutRef.current);
+    if (intervalRef.current != null) clearInterval(intervalRef.current);
+    timeoutRef.current = null;
+    intervalRef.current = null;
+  }, []);
+
+  const start = useCallback(() => {
+    clear();
+    onTickRef.current();
+    timeoutRef.current = setTimeout(() => {
+      intervalRef.current = setInterval(() => onTickRef.current(), HOLD_REPEAT_INTERVAL_MS);
+    }, HOLD_REPEAT_DELAY_MS);
+  }, [clear]);
+
+  useEffect(() => clear, [clear]);
+
+  return {
+    onPointerDown: start,
+    onPointerUp: clear,
+    onPointerLeave: clear,
+    onPointerCancel: clear,
+  };
 }
 
 /**
@@ -30,6 +56,13 @@ export function JdFunnelCounterCell({
   const progressPercent = computeJdFunnelProgressPercent(current, target);
   const isComplete = progressPercent != null && progressPercent >= 100;
   const colors = progressColorClasses(progressPercent);
+
+  // Ref toujours à jour : l'appui maintenu déclenche des ticks en continu, chacun doit repartir de
+  // la dernière valeur connue (pas de la valeur capturée au moment du pointerDown).
+  const currentRef = useRef(current);
+  currentRef.current = current;
+  const decrementHold = useHoldRepeat(() => onChange(Math.max(0, currentRef.current - 1)));
+  const incrementHold = useHoldRepeat(() => onChange(currentRef.current + 1));
 
   // Petit rebond sur le libellé à chaque changement (feedback tactile même sans son/vibration).
   const [bump, setBump] = useState(false);
@@ -64,23 +97,23 @@ export function JdFunnelCounterCell({
       <div className="flex items-center gap-1.5 w-full max-w-[7.5rem]">
         <button
           type="button"
-          onClick={() => onChange(Math.max(0, current - 1))}
+          {...decrementHold}
           className="flex size-5 shrink-0 items-center justify-center rounded-md border border-border/70 text-muted-foreground transition-transform hover:text-foreground hover:bg-muted/50 hover:scale-110 active:scale-90"
-          aria-label="Retirer un"
+          aria-label="Retirer un (maintenir pour enchaîner)"
         >
           <Minus className="size-3" />
         </button>
         <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
           <div
             className={cn("h-full rounded-full transition-all duration-500 ease-out", colors.bar)}
-            style={{ width: `${progressPercent ?? 0}%` }}
+            style={{ width: `${Math.min(100, progressPercent ?? 0)}%` }}
           />
         </div>
         <button
           type="button"
-          onClick={() => onChange(current + 1)}
+          {...incrementHold}
           className="flex size-5 shrink-0 items-center justify-center rounded-md border border-border/70 text-muted-foreground transition-transform hover:text-foreground hover:bg-muted/50 hover:scale-110 active:scale-90"
-          aria-label="Ajouter un"
+          aria-label="Ajouter un (maintenir pour enchaîner)"
         >
           <Plus className="size-3" />
         </button>
@@ -92,7 +125,7 @@ export function JdFunnelCounterCell({
           bump && "scale-125"
         )}
       >
-        {isComplete ? "🎉 objectif atteint !" : `${formatCount(current)} obtenus${progressPercent != null ? ` · ${progressPercent}%` : ""}`}
+        {`${isComplete ? "🎉 " : ""}${formatCount(current)} obtenus${progressPercent != null ? ` · ${progressPercent}%` : ""}`}
       </div>
     </div>
   );

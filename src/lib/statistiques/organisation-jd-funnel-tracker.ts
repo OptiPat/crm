@@ -67,8 +67,11 @@ export function saveJdFunnelCounts(exerciceLabel: string, counts: JdFunnelCounts
   });
 }
 
-/** Progression (0-100, plafonnée) vers un objectif — null si l'objectif est inconnu ou nul. */
+/**
+ * Progression (%) vers un objectif — non plafonnée : dépasser l'objectif doit se voir (ex. 150 %),
+ * pas rester bloqué à 100 %. Null si l'objectif est inconnu ou nul.
+ */
 export function computeJdFunnelProgressPercent(current: number, target: number | null): number | null {
   if (target == null || target <= 0) return null;
-  return Math.min(100, Math.round((current / target) * 100));
+  return Math.round((current / target) * 100);
 }

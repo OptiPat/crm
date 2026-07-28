@@ -41,6 +41,35 @@ export function DeltaBadge({ value }: { value: string | null }) {
   );
 }
 
+/** Couleurs de progression partagées (compteurs JD + jauges de volume) : neutre → ambre → émeraude. */
+export function progressColorClasses(percent: number | null): { bar: string; text: string } {
+  if (percent == null || percent <= 0) return { bar: "bg-muted-foreground/30", text: "text-muted-foreground/70" };
+  if (percent >= 100) return { bar: "bg-emerald-500", text: "text-emerald-600" };
+  if (percent >= 60) return { bar: "bg-emerald-400", text: "text-emerald-600" };
+  if (percent >= 30) return { bar: "bg-amber-400", text: "text-amber-600" };
+  return { bar: "bg-primary/70", text: "text-muted-foreground" };
+}
+
+/** Jauge de progression en lecture seule (pas de +/- : la valeur « Actuel » vient déjà des vraies données). */
+export function VolumeProgressGauge({ current, target }: { current: number | null; target: number | null }) {
+  const percent = current != null && target != null && target > 0 ? (current / target) * 100 : null;
+  const isComplete = percent != null && percent >= 100;
+  const colors = progressColorClasses(percent);
+  return (
+    <div className="flex items-center gap-1.5 w-full max-w-[7.5rem] ml-auto">
+      <div className="h-1 flex-1 rounded-full bg-muted overflow-hidden">
+        <div
+          className={cn("h-full rounded-full transition-all duration-700 ease-out", colors.bar)}
+          style={{ width: `${Math.min(100, percent ?? 0)}%` }}
+        />
+      </div>
+      <span className={cn("text-[10px] font-medium tabular-nums shrink-0 w-7 text-right", colors.text)}>
+        {isComplete ? "🎉" : percent != null ? `${Math.round(percent)}%` : "—"}
+      </span>
+    </div>
+  );
+}
+
 /** Champ hypothèse éditable (%, ou €) avec bouton de réinitialisation vers la valeur observée. */
 export function AssumptionField({
   id,
