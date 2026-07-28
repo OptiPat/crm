@@ -367,7 +367,7 @@ export function OrganisationObjectifTablePanel({
                   </th>
                   <th
                     className={cn(
-                      "px-3 py-2 text-right text-xs font-medium whitespace-nowrap border-l border-border/50",
+                      "px-3 py-2 text-right text-xs font-medium whitespace-nowrap border-l-2 border-primary/40 bg-primary/5",
                       "text-primary"
                     )}
                   >
@@ -375,8 +375,8 @@ export function OrganisationObjectifTablePanel({
                   </th>
                   <th
                     className={cn(
-                      "px-3 py-2 text-right text-xs font-medium whitespace-nowrap border-l border-border/50",
-                      "text-muted-foreground"
+                      "px-3 py-2 text-right text-xs font-medium whitespace-nowrap border-l-2 border-amber-400/50 bg-amber-500/5",
+                      "text-amber-700 dark:text-amber-400"
                     )}
                     title="Votre attrition visée, votre volume perso visé et votre croissance visée sont conservés (pas de référence nationale pour ces 3-là) — seuls le taux d'actifs équipe, le taux de parraineurs et le volume moyen équipe basculent sur les références groupe."
                   >
@@ -390,11 +390,11 @@ export function OrganisationObjectifTablePanel({
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                     {formatCount(currentConsultantCount)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums font-medium border-l border-border/50">
+                  <td className="px-3 py-2 text-right tabular-nums font-medium text-primary border-l-2 border-primary/30 bg-primary/[0.03]">
                     {formatCount(result.targetHeadcount)}
                     <DeltaBadge value={formatCountDelta(currentConsultantCount, result.targetHeadcount)} />
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground border-l border-border/50">
+                  <td className="px-3 py-2 text-right tabular-nums text-amber-700 dark:text-amber-400 border-l-2 border-amber-400/30 bg-amber-500/[0.03]">
                     {formatCount(groupResult.targetHeadcount)}
                     <DeltaBadge value={formatCountDelta(currentConsultantCount, groupResult.targetHeadcount)} />
                   </td>
@@ -402,42 +402,42 @@ export function OrganisationObjectifTablePanel({
                 <tr className="border-b border-border/30">
                   <td className="px-3 py-2 text-muted-foreground align-top">Parrainages à réaliser (brut)</td>
                   <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground">—</td>
-                  <td className="px-3 py-2 text-right align-top border-l border-border/50">
+                  <td className="px-3 py-2 text-right align-top border-l-2 border-primary/30 bg-primary/[0.03]">
                     <JdFunnelCounterCell
                       target={result.recruitsForTarget}
                       current={jdFunnelTracker.counts.parrainages}
                       onChange={(value) => jdFunnelTracker.setStageCount("parrainages", value)}
                     />
                   </td>
-                  <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground border-l border-border/50">
+                  <td className="px-3 py-2 text-right align-top tabular-nums text-amber-700 dark:text-amber-400 border-l-2 border-amber-400/30 bg-amber-500/[0.03]">
                     {formatCount(groupResult.recruitsForTarget)}
                   </td>
                 </tr>
                 <tr className="border-b border-border/30 bg-muted/10">
                   <td className="px-3 py-2 text-muted-foreground align-top">Présents JD à obtenir</td>
                   <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground">—</td>
-                  <td className="px-3 py-2 text-right align-top border-l border-border/50">
+                  <td className="px-3 py-2 text-right align-top border-l-2 border-primary/30 bg-primary/[0.03]">
                     <JdFunnelCounterCell
                       target={result.jdPresencesForTarget}
                       current={jdFunnelTracker.counts.presences}
                       onChange={(value) => jdFunnelTracker.setStageCount("presences", value)}
                     />
                   </td>
-                  <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground border-l border-border/50">
+                  <td className="px-3 py-2 text-right align-top tabular-nums text-amber-700 dark:text-amber-400 border-l-2 border-amber-400/30 bg-amber-500/[0.03]">
                     {formatCount(groupResult.jdPresencesForTarget)}
                   </td>
                 </tr>
                 <tr className="border-b border-border/30">
                   <td className="px-3 py-2 text-muted-foreground align-top">« Oui, je viens » à obtenir</td>
                   <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground">—</td>
-                  <td className="px-3 py-2 text-right align-top border-l border-border/50">
+                  <td className="px-3 py-2 text-right align-top border-l-2 border-primary/30 bg-primary/[0.03]">
                     <JdFunnelCounterCell
                       target={result.jdConfirmationsForTarget}
                       current={jdFunnelTracker.counts.confirmations}
                       onChange={(value) => jdFunnelTracker.setStageCount("confirmations", value)}
                     />
                   </td>
-                  <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground border-l border-border/50">
+                  <td className="px-3 py-2 text-right align-top tabular-nums text-amber-700 dark:text-amber-400 border-l-2 border-amber-400/30 bg-amber-500/[0.03]">
                     {formatCount(groupResult.jdConfirmationsForTarget)}
                   </td>
                 </tr>
@@ -446,13 +446,13 @@ export function OrganisationObjectifTablePanel({
                   <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground">
                     {formatCount(currentSponsorsCount)}
                   </td>
-                  <td className="px-3 py-2 text-right align-top font-medium border-l border-border/50">
+                  <td className="px-3 py-2 text-right align-top font-medium text-primary border-l-2 border-primary/30 bg-primary/[0.03]">
                     <div className="tabular-nums">{formatCount(result.sponsorsForTarget)}</div>
                     <div className="text-[11px] font-normal text-muted-foreground/70">
                       → {formatRatio(result.impliedRatioForTarget)} parrainages/parraineur
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-right align-top text-muted-foreground border-l border-border/50">
+                  <td className="px-3 py-2 text-right align-top text-amber-700 dark:text-amber-400 border-l-2 border-amber-400/30 bg-amber-500/[0.03]">
                     <div className="tabular-nums">{formatCount(groupResult.sponsorsForTarget)}</div>
                     <div className="text-[11px] text-muted-foreground/70">
                       → {formatRatio(groupResult.impliedRatioForTarget)} parrainages/parraineur
@@ -464,7 +464,7 @@ export function OrganisationObjectifTablePanel({
                   <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground">
                     {formatCount(currentTeamActiveConsultantCount)}
                   </td>
-                  <td className="px-3 py-2 text-right align-top tabular-nums font-medium border-l border-border/50">
+                  <td className="px-3 py-2 text-right align-top tabular-nums font-medium text-primary border-l-2 border-primary/30 bg-primary/[0.03]">
                     <div>{formatRatio(result.targetTeamActiveCountRaw)}</div>
                     {result.targetTeamActiveCountRaw != null &&
                       result.targetTeamActiveCount != null &&
@@ -474,7 +474,7 @@ export function OrganisationObjectifTablePanel({
                         </div>
                       )}
                   </td>
-                  <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground border-l border-border/50">
+                  <td className="px-3 py-2 text-right align-top tabular-nums text-amber-700 dark:text-amber-400 border-l-2 border-amber-400/30 bg-amber-500/[0.03]">
                     <div>{formatRatio(groupResult.targetTeamActiveCountRaw)}</div>
                     {groupResult.targetTeamActiveCountRaw != null &&
                       groupResult.targetTeamActiveCount != null &&
@@ -493,8 +493,8 @@ export function OrganisationObjectifTablePanel({
                       dont {formatVolume(currentPersonalVolume)} perso
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-right align-top font-medium border-l border-border/50">
-                    <div className="tabular-nums">
+                  <td className="px-3 py-2 text-right align-top font-medium border-l-2 border-violet-400/30 bg-violet-500/[0.03]">
+                    <div className="tabular-nums text-violet-700 dark:text-violet-400">
                       {formatVolume(result.targetOrgVolume)}
                       <DeltaBadge value={formatVolumeDelta(result.currentOrgVolume, result.targetOrgVolume)} />
                     </div>
@@ -510,8 +510,8 @@ export function OrganisationObjectifTablePanel({
                       target={targetPersonalVolume}
                     />
                   </td>
-                  <td className="px-3 py-2 text-right align-top text-muted-foreground border-l border-border/50">
-                    <div className="tabular-nums">
+                  <td className="px-3 py-2 text-right align-top border-l-2 border-amber-400/30 bg-amber-500/[0.03]">
+                    <div className="tabular-nums text-amber-700 dark:text-amber-400">
                       {formatVolume(groupResult.targetOrgVolume)}
                       <DeltaBadge value={formatVolumeDelta(result.currentOrgVolume, groupResult.targetOrgVolume)} />
                     </div>
@@ -537,16 +537,16 @@ export function OrganisationObjectifTablePanel({
             <OrganisationGrowthProjectionPanel
               exerciceLabel={exerciceLabel}
               currentConsultantCount={currentConsultantCount ?? 0}
-              input={{
-                attritionPercent,
+              baseline={{
                 targetGrowthPercent,
+                attritionPercent,
                 targetSponsorsRatePercent,
+                targetTeamActiveRatePercent,
                 targetPersonalVolume,
                 targetTeamAverageVolume,
-                targetTeamActiveRatePercent,
-                jdPresenceToRecruitRatePercent,
-                jdConfirmationToPresenceRatePercent,
               }}
+              jdPresenceToRecruitRatePercent={jdPresenceToRecruitRatePercent}
+              jdConfirmationToPresenceRatePercent={jdConfirmationToPresenceRatePercent}
             />
           </div>
 
