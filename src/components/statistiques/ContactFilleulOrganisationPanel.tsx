@@ -2394,6 +2394,7 @@ export function ContactFilleulOrganisationPanel({
         <div className="lg:col-span-2">
           <OrganisationObjectifTablePanel
             loading={exerciceKpisLoading}
+            exerciceLabel={resolvedExerciceLabel}
             currentConsultantCount={filleulNetGrowthExerciceStats.currentCount}
             defaultAttritionPercent={
               filleulAttritionExerciceStats.totalCount > 0

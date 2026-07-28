@@ -10,6 +10,7 @@ import type { StatistiquesBenchmarkSettings } from "@/lib/statistiques/statistiq
 import { ChartLoading } from "@/components/dashboard/dashboard-ui";
 import { cn } from "@/lib/utils";
 import { JdFunnelCounterCell } from "./JdFunnelCounterCell";
+import { OrganisationGrowthProjectionPanel } from "./OrganisationGrowthProjectionPanel";
 import {
   AssumptionField,
   DeltaBadge,
@@ -26,6 +27,7 @@ const DEFAULT_JD_RATE_PERCENT = 50;
 
 export function OrganisationObjectifTablePanel({
   loading,
+  exerciceLabel,
   currentConsultantCount,
   defaultAttritionPercent,
   currentSponsorsCount,
@@ -38,6 +40,8 @@ export function OrganisationObjectifTablePanel({
   benchmarkSettings,
 }: {
   loading: boolean;
+  /** Exercice affiché par le sélecteur du panneau (« Objectif » porte sur la fin de cet exercice). */
+  exerciceLabel: string;
   currentConsultantCount: number | null;
   defaultAttritionPercent: number | null;
   currentSponsorsCount: number | null;
@@ -527,6 +531,25 @@ export function OrganisationObjectifTablePanel({
               </tbody>
             </table>
           </div>
+
+          <div className="space-y-2 pt-1 border-t border-border/50">
+            <p className="text-xs font-medium text-foreground">Projection sur 5 ans</p>
+            <OrganisationGrowthProjectionPanel
+              exerciceLabel={exerciceLabel}
+              currentConsultantCount={currentConsultantCount ?? 0}
+              input={{
+                attritionPercent,
+                targetGrowthPercent,
+                targetSponsorsRatePercent,
+                targetPersonalVolume,
+                targetTeamAverageVolume,
+                targetTeamActiveRatePercent,
+                jdPresenceToRecruitRatePercent,
+                jdConfirmationToPresenceRatePercent,
+              }}
+            />
+          </div>
+
           <ul className="space-y-1 text-[11px] text-muted-foreground list-disc pl-4 marker:text-muted-foreground/50">
             <li>La croissance ne s'applique qu'à l'effectif ; les autres lignes = effectif visé × taux de la ligne.</li>
             <li>Groupe = mêmes croissance/attrition/volume perso que Objectif ; seuls taux et volume équipe passent en référence nationale.</li>
