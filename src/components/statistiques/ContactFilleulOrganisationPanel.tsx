@@ -45,7 +45,7 @@ import {
   type ContactAttritionStatResult,
 } from "@/lib/statistiques/contact-attrition-stats";
 import { formatDashboardPercent } from "@/components/dashboard/dashboard-format";
-import { formatFilleulVolumeDisplay } from "@/lib/organisation/organisation-branch-volumes";
+import { contactOwnVolume, formatFilleulVolumeDisplay } from "@/lib/organisation/organisation-branch-volumes";
 import {
   filleulVolumeBenchmarkStatusBoxClasses,
   filleulVolumeBenchmarkStatusLabel,
@@ -68,6 +68,12 @@ import {
   filleulHabilitationDurationBenchmarkStatusLabel,
 } from "@/lib/statistiques/statistiques-benchmark-settings";
 import { useStatistiquesBenchmarkSettings } from "@/hooks/useStatistiquesBenchmarkSettings";
+import {
+  computeOrganisationDiagnostic,
+  sortOrganisationDiagnosticBySeverity,
+} from "@/lib/statistiques/organisation-diagnostic";
+import { OrganisationDiagnosticPanel } from "./OrganisationDiagnosticPanel";
+import { OrganisationObjectifTablePanel } from "./OrganisationObjectifTablePanel";
 import { DashboardDrillDownBackdrop } from "@/components/dashboard/DashboardDrillDownBackdrop";
 import { DashboardStatContactsSheet } from "@/components/dashboard/DashboardStatContactsSheet";
 import { ChartEmpty, ChartLoading } from "@/components/dashboard/dashboard-ui";
@@ -1562,6 +1568,26 @@ export function ContactFilleulOrganisationPanel({
     [dossiersByContactId, selfContactId]
   );
 
+  /** Mêmes options mais sans le contact « Moi » — pour isoler les stats de volume équipe. */
+  const teamOnlyStatsOptions = useMemo(
+    () => ({ dossiersByContactId, organisationSelfContactId: null }),
+    [dossiersByContactId]
+  );
+
+  /**
+   * Contacts hors « Moi » — filtrage explicite par id : le contact self a parfois
+   * `categorie`/`filleul_categorie` = FILLEUL (compte normal côté données), donc
+   * `organisationSelfContactId: null` seul ne suffit pas toujours à l'exclure de
+   * l'éligibilité réseau. On le retire ici pour isoler proprement le volume équipe.
+   */
+  const teamOnlyContactsForStats = useMemo(
+    () =>
+      selfContactId == null
+        ? contactsForStats
+        : contactsForStats.filter((contact) => contact.id !== selfContactId),
+    [contactsForStats, selfContactId]
+  );
+
   const {
     openContactWithTab,
     clearListBackMode,
@@ -1654,6 +1680,23 @@ export function ContactFilleulOrganisationPanel({
       volumeStatsUnavailable,
     ]
   );
+  /** Volume équipe hors « Moi » — sert à isoler le volume perso du volume équipe (tableau d'objectifs). */
+  const teamOnlyVolumeStats = useMemo(
+    () =>
+      volumeStatsUnavailable
+        ? EMPTY_FILLEUL_AVERAGE_VOLUME_STATS
+        : computeFilleulAverageVolumeExerciceStats(
+            teamOnlyContactsForStats,
+            resolvedExerciceLabel,
+            teamOnlyStatsOptions
+          ),
+    [teamOnlyContactsForStats, resolvedExerciceLabel, teamOnlyStatsOptions, volumeStatsUnavailable]
+  );
+  /** Volume personnel (contact « Moi ») sur l'exercice résolu — pour le tableau d'objectifs. */
+  const currentPersonalVolume = useMemo(
+    () => (volumeStatsUnavailable || !selfContact ? null : contactOwnVolume(selfContact)),
+    [volumeStatsUnavailable, selfContact]
+  );
   const parraineurExerciceStats = useMemo(
     () =>
       computeFilleulParraineurExerciceStats(
@@ -1692,6 +1735,45 @@ export function ContactFilleulOrganisationPanel({
         parraineurStatsOptions
       ),
     [contactsForStats, resolvedExerciceLabel, parraineurStatsOptions]
+  );
+  /**
+   * Contacts « survivants » — mêmes consultants que les « X actuels » (encore inscrits à la
+   * clôture, base `wasActifConsultantDuringExercice`), PAS la base plus large « présent à un
+   * moment de l'exercice, désinscrits compris » utilisée par les taux d'actifs/parraineurs
+   * affichés ailleurs. Sert uniquement à calculer des taux visés PAR DÉFAUT cohérents avec
+   * l'effectif « actuels » du tableau d'objectifs (sinon un taux calculé sur une population plus
+   * large que l'effectif qu'il multiplie donne des résultats qui ne se recoupent pas).
+   */
+  const survivorsContactsForStats = useMemo(() => {
+    const survivorsIds = new Set(filleulNetGrowthExerciceStats.currentContactIds);
+    return contactsForStats.filter((contact) => contact.id != null && survivorsIds.has(contact.id));
+  }, [contactsForStats, filleulNetGrowthExerciceStats.currentContactIds]);
+  const survivorsTeamOnlyContactsForStats = useMemo(
+    () =>
+      selfContactId == null
+        ? survivorsContactsForStats
+        : survivorsContactsForStats.filter((contact) => contact.id !== selfContactId),
+    [survivorsContactsForStats, selfContactId]
+  );
+  const survivorsTeamOnlyVolumeStats = useMemo(
+    () =>
+      volumeStatsUnavailable
+        ? EMPTY_FILLEUL_AVERAGE_VOLUME_STATS
+        : computeFilleulAverageVolumeExerciceStats(
+            survivorsTeamOnlyContactsForStats,
+            resolvedExerciceLabel,
+            teamOnlyStatsOptions
+          ),
+    [survivorsTeamOnlyContactsForStats, resolvedExerciceLabel, teamOnlyStatsOptions, volumeStatsUnavailable]
+  );
+  const survivorsParraineurExerciceStats = useMemo(
+    () =>
+      computeFilleulParraineurExerciceStats(
+        survivorsContactsForStats,
+        resolvedExerciceLabel,
+        parraineurStatsOptions
+      ),
+    [survivorsContactsForStats, resolvedExerciceLabel, parraineurStatsOptions]
   );
   const vaaDurationExerciceStats = useMemo(
     () =>
@@ -1757,6 +1839,77 @@ export function ContactFilleulOrganisationPanel({
   const parrainagePerParraineurCumulativeStats = useMemo(
     () => computeFilleulParrainagePerParraineurStats(contactsForStats),
     [contactsForStats]
+  );
+
+  const diagnosticBenchmarkSettings = useStatistiquesBenchmarkSettings();
+  const previousExerciceLabelForDiagnostic = previousFiscalYearLabel(resolvedExerciceLabel);
+  const previousNetGrowthStatsForDiagnostic = useMemo(
+    () =>
+      previousExerciceLabelForDiagnostic
+        ? computeFilleulNetGrowthExerciceStats(
+            contactsForStats,
+            previousExerciceLabelForDiagnostic,
+            parraineurStatsOptions
+          )
+        : null,
+    [contactsForStats, previousExerciceLabelForDiagnostic, parraineurStatsOptions]
+  );
+  const previousAttritionStatsForDiagnostic = useMemo(
+    () =>
+      previousExerciceLabelForDiagnostic
+        ? computeFilleulAttritionExerciceStats(
+            contactsForStats,
+            previousExerciceLabelForDiagnostic,
+            parraineurStatsOptions
+          )
+        : null,
+    [contactsForStats, previousExerciceLabelForDiagnostic, parraineurStatsOptions]
+  );
+  const diagnosticEntries = useMemo(
+    () =>
+      sortOrganisationDiagnosticBySeverity(
+        computeOrganisationDiagnostic({
+          benchmarkSettings: diagnosticBenchmarkSettings,
+          averageVolume: volumeStatsUnavailable ? null : volumeStats.averageVolume,
+          activeRatePercent:
+            !volumeStatsUnavailable && volumeStats.totalEligible > 0 ? volumeStats.activePercent : null,
+          sponsorRatePercent:
+            parraineurExerciceStats.totalCount > 0 ? parraineurExerciceStats.parraineurPercent : null,
+          parrainagesPerParraineur:
+            parrainagePerParraineurExerciceStats.parraineurCount > 0
+              ? parrainagePerParraineurExerciceStats.averagePerParraineur
+              : null,
+          netGrowthPercent: filleulNetGrowthExerciceStats.growthPercent,
+          previousNetGrowthPercent: previousNetGrowthStatsForDiagnostic?.growthPercent ?? null,
+          vaaDurationMonths: vaaDurationExerciceStats.averageMonths,
+          habilitationDurationMonths: habilitationDurationExerciceStats.averageMonths,
+          managerRatePercent: managerStats.totalCount > 0 ? managerStats.managerPercent : null,
+          attritionPercent:
+            filleulAttritionExerciceStats.totalCount > 0
+              ? filleulAttritionExerciceStats.attritionPercent
+              : null,
+          previousAttritionPercent:
+            previousAttritionStatsForDiagnostic && previousAttritionStatsForDiagnostic.totalCount > 0
+              ? previousAttritionStatsForDiagnostic.attritionPercent
+              : null,
+          parrainageDurationMonths: parrainageDurationExerciceStats.averageMonths,
+        })
+      ),
+    [
+      diagnosticBenchmarkSettings,
+      volumeStatsUnavailable,
+      volumeStats,
+      parraineurExerciceStats,
+      parrainagePerParraineurExerciceStats,
+      filleulNetGrowthExerciceStats,
+      previousNetGrowthStatsForDiagnostic,
+      vaaDurationExerciceStats,
+      habilitationDurationExerciceStats,
+      managerStats,
+      filleulAttritionExerciceStats,
+      previousAttritionStatsForDiagnostic,
+      parrainageDurationExerciceStats,
+    ]
   );
 
   const loadContactsSheet = useCallback(async () => {
@@ -2237,6 +2390,38 @@ export function ContactFilleulOrganisationPanel({
             onOpenParrainagesList={openSummaryParrainagesList}
             onOpenPersoJdList={openSummaryPersoJdList}
           />
+        </div>
+        <div className="lg:col-span-2">
+          <OrganisationObjectifTablePanel
+            loading={exerciceKpisLoading}
+            currentConsultantCount={filleulNetGrowthExerciceStats.currentCount}
+            defaultAttritionPercent={
+              filleulAttritionExerciceStats.totalCount > 0
+                ? filleulAttritionExerciceStats.attritionPercent
+                : null
+            }
+            currentSponsorsCount={
+              parraineurExerciceStats.totalCount > 0 ? parraineurExerciceStats.parraineurCount : null
+            }
+            currentSponsorsRatePercent={
+              survivorsParraineurExerciceStats.totalCount > 0
+                ? survivorsParraineurExerciceStats.parraineurPercent
+                : null
+            }
+            currentPersonalVolume={currentPersonalVolume}
+            currentTeamAverageVolume={volumeStatsUnavailable ? null : teamOnlyVolumeStats.averageVolume}
+            currentTeamActiveConsultantCount={volumeStatsUnavailable ? null : teamOnlyVolumeStats.countedCount}
+            currentTeamActiveRatePercent={
+              volumeStatsUnavailable || survivorsTeamOnlyVolumeStats.totalEligible === 0
+                ? null
+                : survivorsTeamOnlyVolumeStats.activePercent
+            }
+            defaultTargetGrowthPercent={diagnosticBenchmarkSettings.groupNetGrowthPercent}
+            benchmarkSettings={diagnosticBenchmarkSettings}
+          />
+        </div>
+        <div className="lg:col-span-2">
+          <OrganisationDiagnosticPanel loading={exerciceKpisLoading} entries={diagnosticEntries} />
         </div>
         <ContactGeographyPanel onNavigate={onNavigate} lens="filleul" />
         <ContactAgePanel onNavigate={onNavigate} lens="filleul" />

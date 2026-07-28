@@ -34,6 +34,8 @@ dist-ssr
 /target-*-result.txt
 
 # --- Données sensibles (ne jamais committer) ---
+# Notes stratégiques personnelles (réseau/organisation) — jamais publiques
+docs/DIAGNOSTIC_ORGANISATION.md
 _fixtures/identity/*
 !_fixtures/identity/.gitkeep
 # RIO clients déposés localement pour diagnostic (jamais committer)
