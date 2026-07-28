@@ -3,6 +3,8 @@ import {
   currentFiscalYearLabel,
   fiscalYearLabelForDate,
   fiscalYearLabelForUnix,
+  nextFiscalYearLabel,
+  previousFiscalYearLabel,
 } from "@/lib/pipe/remuneration-fiscal-year";
 
 describe("remuneration-fiscal-year", () => {
@@ -19,5 +21,11 @@ describe("remuneration-fiscal-year", () => {
 
   it("année courante cohérente", () => {
     expect(currentFiscalYearLabel(new Date(2026, 5, 1))).toBe("2025-2026");
+  });
+
+  it("calcule l'exercice précédent et suivant", () => {
+    expect(previousFiscalYearLabel("2025-2026")).toBe("2024-2025");
+    expect(nextFiscalYearLabel("2025-2026")).toBe("2026-2027");
+    expect(nextFiscalYearLabel("invalide")).toBeNull();
   });
 });

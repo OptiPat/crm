@@ -1,6 +1,5 @@
-import { RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { formatFilleulVolumeDisplayWhole } from "@/lib/organisation/organisation-branch-volumes";
+import { useJdFunnelTracker } from "@/hooks/useJdFunnelTracker";
 import { computeGrowthObjective } from "@/lib/statistiques/organisation-growth-objective";
 import {
   loadOrganisationObjectifTablePrefs,
@@ -9,134 +8,19 @@ import {
 import type { StatistiquesBenchmarkSettings } from "@/lib/statistiques/statistiques-benchmark-settings";
 import { ChartLoading } from "@/components/dashboard/dashboard-ui";
 import { cn } from "@/lib/utils";
+import { JdFunnelCounterCell } from "./JdFunnelCounterCell";
+import {
+  AssumptionField,
+  DeltaBadge,
+  formatCount,
+  formatCountDelta,
+  formatRatio,
+  formatVolume,
+  formatVolumeDelta,
+} from "./objectif-table-shared";
 import { StatistiquesPanel } from "./statistiques-ui";
 
-function formatCount(value: number | null): string {
-  return value != null ? value.toLocaleString("fr-FR") : "—";
-}
-
-function formatVolume(value: number | null): string {
-  return value != null ? formatFilleulVolumeDisplayWhole(value) : "—";
-}
-
-function formatRatio(value: number | null): string {
-  return value != null ? value.toLocaleString("fr-FR", { maximumFractionDigits: 1 }) : "—";
-}
-
-function formatCountDelta(current: number | null, target: number | null): string | null {
-  if (current == null || target == null) return null;
-  const delta = target - current;
-  if (delta === 0) return null;
-  return `${delta > 0 ? "+" : "−"}${Math.abs(delta).toLocaleString("fr-FR")}`;
-}
-
-function formatVolumeDelta(current: number | null, target: number | null): string | null {
-  if (current == null || target == null) return null;
-  const delta = target - current;
-  if (Math.abs(delta) < 1) return null;
-  return `${delta > 0 ? "+" : "−"}${formatVolume(Math.abs(delta))}`;
-}
-
-/** Petit badge d'écart vs la colonne « Actuel » (vert si progression, rouge si recul). */
-function DeltaBadge({ value }: { value: string | null }) {
-  if (value == null) return null;
-  const isNegative = value.startsWith("−");
-  return (
-    <span className={cn("ml-1.5 text-[11px] font-normal", isNegative ? "text-red-500" : "text-emerald-600")}>
-      {value}
-    </span>
-  );
-}
-
-/** Champ hypothèse éditable (%, ou €) avec bouton de réinitialisation vers la valeur observée. */
-function AssumptionField({
-  id,
-  label,
-  suffix,
-  value,
-  defaultValue,
-  step,
-  width,
-  onChange,
-  groupValue,
-  groupLabel,
-  mode = "number",
-}: {
-  id: string;
-  label: string;
-  suffix: string;
-  value: number;
-  defaultValue: number;
-  step?: number;
-  width: string;
-  onChange: (value: number) => void;
-  /** Référence groupe (nationale) affichée en tooltip au survol — null si non disponible pour cet indicateur. */
-  groupValue?: number | null;
-  /** Libellé utilisé dans le tooltip, ex. « Réf. groupe ». */
-  groupLabel?: string;
-  /** "money" affiche un champ texte avec séparateurs de milliers, sans flèches numériques, plus lisible pour des € (ex. 164 024 plutôt que 164024). */
-  mode?: "number" | "money";
-}) {
-  const groupTitle =
-    groupValue != null
-      ? `${groupLabel ?? "Réf. groupe"} : ${groupValue.toLocaleString("fr-FR")} ${suffix}`
-      : undefined;
-  const isModified = value !== defaultValue;
-  return (
-    <div
-      className="flex flex-col gap-1 rounded-lg border border-border/50 bg-muted/20 px-2.5 py-2"
-      title={groupTitle}
-    >
-      <label htmlFor={id} className="text-[11px] font-medium text-muted-foreground leading-tight">
-        {label}
-      </label>
-      <div className="flex items-center gap-1">
-        {mode === "money" ? (
-          <input
-            id={id}
-            type="text"
-            inputMode="numeric"
-            value={value.toLocaleString("fr-FR")}
-            onChange={(e) => {
-              const digits = e.target.value.replace(/[^\d-]/g, "");
-              onChange(digits === "" || digits === "-" ? 0 : Number(digits));
-            }}
-            className={cn(
-              "rounded-md border border-border/70 bg-background px-2 py-1 text-right text-sm tabular-nums",
-              width
-            )}
-          />
-        ) : (
-          <input
-            id={id}
-            type="number"
-            step={step}
-            value={value}
-            onChange={(e) => onChange(Number(e.target.value))}
-            className={cn(
-              "rounded-md border border-border/70 bg-background px-2 py-1 text-right text-sm tabular-nums",
-              width
-            )}
-          />
-        )}
-        <span className="text-muted-foreground text-xs">{suffix}</span>
-        {isModified && (
-          <button
-            type="button"
-            onClick={() => onChange(defaultValue)}
-            title={`Réinitialiser à la valeur observée (${defaultValue.toLocaleString("fr-FR")} ${suffix})`}
-            className="ml-auto text-muted-foreground hover:text-foreground shrink-0"
-          >
-            <RotateCcw className="size-3.5" />
-          </button>
-        )}
-      </div>
-      <div className="h-3.5 text-[10px] text-muted-foreground/70 leading-tight">
-        {isModified ? `obs. ${defaultValue.toLocaleString("fr-FR")} ${suffix}` : "\u00A0"}
-      </div>
-    </div>
-  );
-}
+const DEFAULT_JD_RATE_PERCENT = 50;
 
 export function OrganisationObjectifTablePanel({
   loading,
@@ -202,6 +86,12 @@ export function OrganisationObjectifTablePanel({
   );
   const [targetSponsorsRatePercent, setTargetSponsorsRatePercentState] = useState(
     persistedPrefs.targetSponsorsRatePercent ?? defaultSponsorsRatePercent
+  );
+  const [jdPresenceToRecruitRatePercent, setJdPresenceToRecruitRatePercentState] = useState(
+    persistedPrefs.jdPresenceToRecruitRatePercent ?? DEFAULT_JD_RATE_PERCENT
+  );
+  const [jdConfirmationToPresenceRatePercent, setJdConfirmationToPresenceRatePercentState] = useState(
+    persistedPrefs.jdConfirmationToPresenceRatePercent ?? DEFAULT_JD_RATE_PERCENT
   );
 
   // Ne resynchronise sur la valeur observée que si l'utilisateur n'a pas de préférence enregistrée
@@ -281,6 +171,20 @@ export function OrganisationObjectifTablePanel({
       targetSponsorsRatePercent: value === defaultSponsorsRatePercent ? undefined : value,
     });
   };
+  const setJdPresenceToRecruitRatePercent = (value: number) => {
+    setJdPresenceToRecruitRatePercentState(value);
+    saveOrganisationObjectifTablePrefs({
+      jdPresenceToRecruitRatePercent: value === DEFAULT_JD_RATE_PERCENT ? undefined : value,
+    });
+  };
+  const setJdConfirmationToPresenceRatePercent = (value: number) => {
+    setJdConfirmationToPresenceRatePercentState(value);
+    saveOrganisationObjectifTablePrefs({
+      jdConfirmationToPresenceRatePercent: value === DEFAULT_JD_RATE_PERCENT ? undefined : value,
+    });
+  };
+
+  const jdFunnelTracker = useJdFunnelTracker();
 
   const canCompute = currentConsultantCount != null && defaultAttritionPercent != null;
   const result = canCompute
@@ -295,12 +199,15 @@ export function OrganisationObjectifTablePanel({
         targetTeamAverageVolume,
         currentTeamActiveConsultantCount,
         targetTeamActiveRatePercent,
+        jdPresenceToRecruitRatePercent,
+        jdConfirmationToPresenceRatePercent,
       })
     : null;
 
   // Même effectif/attrition/croissance que la colonne « Objectif » (partagés, pas de référence
   // groupe pour l'attrition) — seuls les taux et volumes visés basculent sur les références groupe,
-  // pour comparer « à ma croissance visée, si je performais comme la moyenne du groupe ».
+  // pour comparer « à ma croissance visée, si je performais comme la moyenne du groupe ». Pas de
+  // référence nationale pour le funnel JD non plus : mêmes taux JD que la colonne Objectif.
   const groupResult = canCompute
     ? computeGrowthObjective({
         currentConsultantCount,
@@ -313,6 +220,8 @@ export function OrganisationObjectifTablePanel({
         targetTeamAverageVolume: benchmarkSettings.groupActiveConsultantVolumeEuros,
         currentTeamActiveConsultantCount,
         targetTeamActiveRatePercent: benchmarkSettings.groupActiveConsultantRatePercent,
+        jdPresenceToRecruitRatePercent,
+        jdConfirmationToPresenceRatePercent,
       })
     : null;
 
@@ -331,9 +240,25 @@ export function OrganisationObjectifTablePanel({
         </p>
       ) : (
         <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            {formatCount(currentConsultantCount)} consultants actuels — ajustez les hypothèses ci-dessous.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              {formatCount(currentConsultantCount)} consultants actuels — ajustez les hypothèses ci-dessous.
+            </p>
+            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              Progression suivie pour l'exercice
+              <select
+                value={jdFunnelTracker.exerciceLabel}
+                onChange={(e) => jdFunnelTracker.setExerciceLabel(e.target.value)}
+                className="rounded-md border border-border/70 bg-background px-1.5 py-0.5 text-xs"
+              >
+                {jdFunnelTracker.exerciceOptions.map((label) => (
+                  <option key={label} value={label}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
             <AssumptionField
               id="objectif-croissance-input"
@@ -400,6 +325,26 @@ export function OrganisationObjectifTablePanel({
               groupValue={benchmarkSettings.groupActiveConsultantVolumeEuros}
               mode="money"
             />
+            <AssumptionField
+              id="objectif-taux-presence-jd-input"
+              label="Taux présent JD → parrainage"
+              suffix="%"
+              value={jdPresenceToRecruitRatePercent}
+              defaultValue={DEFAULT_JD_RATE_PERCENT}
+              step={1}
+              width="w-16"
+              onChange={setJdPresenceToRecruitRatePercent}
+            />
+            <AssumptionField
+              id="objectif-taux-confirmation-jd-input"
+              label='Taux "oui, je viens" → présent JD'
+              suffix="%"
+              value={jdConfirmationToPresenceRatePercent}
+              defaultValue={DEFAULT_JD_RATE_PERCENT}
+              step={1}
+              width="w-16"
+              onChange={setJdConfirmationToPresenceRatePercent}
+            />
           </div>
 
           <div className="overflow-x-auto rounded-lg border border-border/50">
@@ -445,13 +390,45 @@ export function OrganisationObjectifTablePanel({
                   </td>
                 </tr>
                 <tr className="border-b border-border/30">
-                  <td className="px-3 py-2 text-muted-foreground">Parrainages à réaliser (brut)</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">—</td>
-                  <td className="px-3 py-2 text-right tabular-nums font-medium border-l border-border/50">
-                    {formatCount(result.recruitsForTarget)}
+                  <td className="px-3 py-2 text-muted-foreground align-top">Parrainages à réaliser (brut)</td>
+                  <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground">—</td>
+                  <td className="px-3 py-2 text-right align-top border-l border-border/50">
+                    <JdFunnelCounterCell
+                      target={result.recruitsForTarget}
+                      current={jdFunnelTracker.counts.parrainages}
+                      onChange={(value) => jdFunnelTracker.setStageCount("parrainages", value)}
+                    />
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground border-l border-border/50">
+                  <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground border-l border-border/50">
                     {formatCount(groupResult.recruitsForTarget)}
+                  </td>
+                </tr>
+                <tr className="border-b border-border/30 bg-muted/10">
+                  <td className="px-3 py-2 text-muted-foreground align-top">Présents JD à obtenir</td>
+                  <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground">—</td>
+                  <td className="px-3 py-2 text-right align-top border-l border-border/50">
+                    <JdFunnelCounterCell
+                      target={result.jdPresencesForTarget}
+                      current={jdFunnelTracker.counts.presences}
+                      onChange={(value) => jdFunnelTracker.setStageCount("presences", value)}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground border-l border-border/50">
+                    {formatCount(groupResult.jdPresencesForTarget)}
+                  </td>
+                </tr>
+                <tr className="border-b border-border/30">
+                  <td className="px-3 py-2 text-muted-foreground align-top">« Oui, je viens » à obtenir</td>
+                  <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground">—</td>
+                  <td className="px-3 py-2 text-right align-top border-l border-border/50">
+                    <JdFunnelCounterCell
+                      target={result.jdConfirmationsForTarget}
+                      current={jdFunnelTracker.counts.confirmations}
+                      onChange={(value) => jdFunnelTracker.setStageCount("confirmations", value)}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground border-l border-border/50">
+                    {formatCount(groupResult.jdConfirmationsForTarget)}
                   </td>
                 </tr>
                 <tr className="border-b border-border/30 bg-muted/10">
@@ -533,6 +510,12 @@ export function OrganisationObjectifTablePanel({
             <li>Groupe = mêmes croissance/attrition/volume perso que Objectif ; seuls taux et volume équipe passent en référence nationale.</li>
             <li>« Actifs organisation » affiche le chiffre décimal exact (arrondi indiqué en dessous) pour que le volume se vérifie à la main.</li>
             <li>L'attrition visée porte sur le parrainage brut (existants + recrues), pas sur l'effectif/volume final.</li>
+            <li>Funnel JD : pas de référence nationale, taux de transformation à ajuster à votre expérience terrain.</li>
+            <li>
+              Les compteurs (+/−) sous « Parrainages », « Présents JD » et « Oui, je viens » suivent votre
+              progression réelle pour l'exercice choisi ci-dessus — indépendant de l'exercice affiché dans le
+              reste du tableau (le funnel se travaille en amont, souvent pour l'exercice suivant).
+            </li>
           </ul>
         </div>
       )}

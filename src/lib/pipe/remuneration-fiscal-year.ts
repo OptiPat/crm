@@ -47,6 +47,15 @@ export function previousFiscalYearLabel(label: string): string | null {
   return `${startYear - 1}-${startYear}`;
 }
 
+/** Exercice fiscal suivant (ex. « 2025-2026 » → « 2026-2027 »). */
+export function nextFiscalYearLabel(label: string): string | null {
+  const match = /^(\d{4})-(\d{4})$/.exec(label.trim());
+  if (!match) return null;
+  const startYear = Number(match[1]);
+  if (!Number.isFinite(startYear)) return null;
+  return `${startYear + 1}-${startYear + 2}`;
+}
+
 /** Liste des années fiscales affichables (courante ± 2). */
 export function listSelectableFiscalYearLabels(now = new Date()): string[] {
   const current = fiscalYearLabelForDate(now);

@@ -15,6 +15,8 @@ export type OrganisationObjectifTablePrefs = {
   targetTeamAverageVolume?: number;
   targetTeamActiveRatePercent?: number;
   targetSponsorsRatePercent?: number;
+  jdPresenceToRecruitRatePercent?: number;
+  jdConfirmationToPresenceRatePercent?: number;
 };
 
 const STORAGE_KEY = "crm_organisation_objectif_table_v1";

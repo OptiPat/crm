@@ -149,4 +149,27 @@ describe("computeGrowthObjective", () => {
     expect(Number.isFinite(result.recruitsForTarget)).toBe(true);
     expect(result.recruitsForTarget).toBeGreaterThan(0);
   });
+
+  it("calcule le funnel JD en cascade (présents JD puis « oui je viens »)", () => {
+    const result = computeGrowthObjective({
+      currentConsultantCount: 10,
+      attritionPercent: 50,
+      targetGrowthPercent: 30, // recruitsForTarget = 16
+      jdPresenceToRecruitRatePercent: 50,
+      jdConfirmationToPresenceRatePercent: 50,
+    });
+    // 16 parrainages ÷ 50 % = 32 présents JD ; 32 ÷ 50 % = 64 « oui je viens »
+    expect(result.jdPresencesForTarget).toBe(32);
+    expect(result.jdConfirmationsForTarget).toBe(64);
+  });
+
+  it("laisse le funnel JD à null si les taux de transformation sont inconnus", () => {
+    const result = computeGrowthObjective({
+      currentConsultantCount: 10,
+      attritionPercent: 50,
+      targetGrowthPercent: 30,
+    });
+    expect(result.jdPresencesForTarget).toBeNull();
+    expect(result.jdConfirmationsForTarget).toBeNull();
+  });
 });

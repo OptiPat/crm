@@ -50,6 +50,12 @@
  * Le tableau interactif n'a qu'une colonne visée (« Objectif »/« Groupe ») — il n'y a plus de
  * scénario « Stable (0 %) » séparé (colonne retirée) ; seuls les résultats correspondant à
  * `targetGrowthPercent` sont exposés.
+ *
+ * Funnel Journée Découverte (JD) — en amont du parrainage : deux taux de transformation libres,
+ * sans référence nationale (pas de benchmark JD disponible), calculés en cascade à partir de
+ * `recruitsForTarget` :
+ *   présents JD nécessaires = parrainages bruts ÷ taux de transformation « présent JD → parrainage »
+ *   « oui je viens » nécessaires = présents JD nécessaires ÷ taux de transformation « oui-je-viens → présent JD »
  */
 export type GrowthObjectiveInput = {
   /** Base actuelle de consultants, soi compris (effectif réseau, pas seulement les actifs). */
@@ -73,6 +79,11 @@ export type GrowthObjectiveInput = {
   currentTeamActiveConsultantCount?: number | null;
   /** Taux d'actifs équipe visé (%) — paramètre libre, appliqué à l'effectif équipe (hors soi). */
   targetTeamActiveRatePercent?: number | null;
+
+  /** Taux de transformation « présent JD → parrainage » (%) — paramètre libre, pas de référence nationale. */
+  jdPresenceToRecruitRatePercent?: number | null;
+  /** Taux de transformation « oui-je-viens → présent JD » (%) — paramètre libre, pas de référence nationale. */
+  jdConfirmationToPresenceRatePercent?: number | null;
 };
 
 export type GrowthObjectiveResult = {
@@ -102,6 +113,11 @@ export type GrowthObjectiveResult = {
   currentOrgVolume: number | null;
   /** Volume total visé (perso visé + équipe visée × volume équipe visé). */
   targetOrgVolume: number | null;
+
+  /** Présents JD nécessaires pour obtenir `recruitsForTarget` parrainages — null si taux inconnu. */
+  jdPresencesForTarget: number | null;
+  /** « Oui je viens » nécessaires pour obtenir `jdPresencesForTarget` présents — null si taux inconnu. */
+  jdConfirmationsForTarget: number | null;
 };
 
 export function computeGrowthObjective(input: GrowthObjectiveInput): GrowthObjectiveResult {
@@ -155,6 +171,23 @@ export function computeGrowthObjective(input: GrowthObjectiveInput): GrowthObjec
       ? input.targetPersonalVolume + targetTeamActiveCountRaw * input.targetTeamAverageVolume
       : null;
 
+  // Funnel JD : cascade parrainages → présents JD → « oui je viens » — chaque étage divise par le
+  // taux de transformation visé (null si le taux n'est pas renseigné, pas de valeur par défaut ici).
+  const jdPresenceRate =
+    input.jdPresenceToRecruitRatePercent != null && input.jdPresenceToRecruitRatePercent > 0
+      ? input.jdPresenceToRecruitRatePercent / 100
+      : null;
+  const jdPresencesForTarget = jdPresenceRate != null ? Math.ceil(recruitsForTarget / jdPresenceRate) : null;
+
+  const jdConfirmationRate =
+    input.jdConfirmationToPresenceRatePercent != null && input.jdConfirmationToPresenceRatePercent > 0
+      ? input.jdConfirmationToPresenceRatePercent / 100
+      : null;
+  const jdConfirmationsForTarget =
+    jdConfirmationRate != null && jdPresencesForTarget != null
+      ? Math.ceil(jdPresencesForTarget / jdConfirmationRate)
+      : null;
+
   return {
     targetHeadcount,
     recruitsForTarget,
@@ -164,5 +197,7 @@ export function computeGrowthObjective(input: GrowthObjectiveInput): GrowthObjec
     targetTeamActiveCountRaw,
     currentOrgVolume,
     targetOrgVolume,
+    jdPresencesForTarget,
+    jdConfirmationsForTarget,
   };
 }
