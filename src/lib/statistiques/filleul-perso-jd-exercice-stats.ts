@@ -43,7 +43,7 @@ export type FilleulPersoJdExerciceSummaryMetric = {
   id: FilleulPersoJdExerciceSummaryMetricId;
   label: string;
   format: (row: FilleulPersoJdExerciceSummaryRow) => string;
-  formatTotal: (rows: FilleulPersoJdExerciceSummaryRow[]) => string;
+  formatTotal?: (rows: FilleulPersoJdExerciceSummaryRow[]) => string;
 };
 
 function sumPersoJdRowCounts(

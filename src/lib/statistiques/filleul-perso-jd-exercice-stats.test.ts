@@ -265,8 +265,8 @@ describe("filleul-perso-jd-exercice-stats", () => {
       (m) => m.id === "conversionRate"
     )!;
 
-    expect(invitationsMetric.formatTotal(summary)).toBe("2");
-    expect(conversionMetric.formatTotal(summary)).toBe("50 %");
+    expect(invitationsMetric.formatTotal!(summary)).toBe("2");
+    expect(conversionMetric.formatTotal!(summary)).toBe("50 %");
   });
 
   it("ignore une invitation hors exercice", () => {
