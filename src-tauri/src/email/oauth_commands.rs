@@ -5,6 +5,7 @@ use super::oauth_send::{
     fetch_gmail_signature, send_test_to_self, send_with_resolved_identity,
     ImportedGmailSignature, OAuthSendResult,
 };
+use super::signature_import::{import_signature_from_file, outlook_signatures_directory};
 use super::oauth_store::EmailOAuthStore;
 use crate::database::workspace::WorkspaceConfig;
 use crate::workspace::collaboration::team_append_audit;
@@ -191,6 +192,24 @@ pub fn fetch_gmail_signature_for_cgp(
 ) -> Result<ImportedGmailSignature, String> {
     require_ui_session(&session)?;
     fetch_gmail_signature(&app_handle)
+}
+
+#[tauri::command]
+pub fn import_email_signature_from_file_cmd(
+    app_handle: AppHandle,
+    session: State<'_, UiSessionState>,
+    file_path: String,
+) -> Result<ImportedGmailSignature, String> {
+    require_ui_session(&session)?;
+    import_signature_from_file(&app_handle, &file_path)
+}
+
+#[tauri::command]
+pub fn get_outlook_signatures_directory_cmd(
+    session: State<'_, UiSessionState>,
+) -> Result<Option<String>, String> {
+    require_ui_session(&session)?;
+    Ok(outlook_signatures_directory())
 }
 
 #[tauri::command]

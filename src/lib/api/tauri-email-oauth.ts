@@ -79,3 +79,16 @@ export interface ImportedGmailSignature {
 export async function fetchGmailSignatureForCgp(): Promise<ImportedGmailSignature> {
   return invoke<ImportedGmailSignature>("fetch_gmail_signature_for_cgp");
 }
+
+/** Image ou fichier Outlook `.htm` — sans compte Gmail. */
+export async function importEmailSignatureFromFile(
+  filePath: string
+): Promise<ImportedGmailSignature> {
+  return invoke<ImportedGmailSignature>("import_email_signature_from_file_cmd", {
+    filePath,
+  });
+}
+
+export async function getOutlookSignaturesDirectory(): Promise<string | null> {
+  return invoke<string | null>("get_outlook_signatures_directory_cmd");
+}

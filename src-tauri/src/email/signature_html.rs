@@ -1,4 +1,6 @@
-//! Signature Gmail : entités HTML et conversion texte.
+//! Signature email : entités HTML, conversion texte, images locales / distantes.
+
+use std::path::{Path, PathBuf};
 
 /// Décode `&#39;`, `&#x27;`, `&nbsp;`, etc.
 pub fn decode_html_entities(s: &str) -> String {
@@ -180,6 +182,24 @@ pub fn normalize_signature_html(html: &str) -> String {
 const MAX_INLINE_SIGNATURE_IMAGE_BYTES: usize = 512_000;
 
 /// Télécharge les images http(s) de la signature et les intègre en data URL (aperçu CRM + envoi fiable).
+/// Extrait le fragment utile d'un fichier Outlook `.htm` (corps HTML).
+pub fn extract_signature_html_fragment(raw: &str) -> String {
+    let decoded = decode_html_entities(raw.trim());
+    let lower = decoded.to_lowercase();
+    let body_start = lower.find("<body");
+    let fragment = if let Some(start) = body_start {
+        let after_tag = lower[start..].find('>').map(|i| start + i + 1).unwrap_or(start);
+        let end = lower[after_tag..]
+            .find("</body>")
+            .map(|i| after_tag + i)
+            .unwrap_or(decoded.len());
+        decoded[after_tag..end].trim()
+    } else {
+        decoded.as_str()
+    };
+    fragment.trim().to_string()
+}
+
 pub fn inline_remote_images_in_html(html: &str) -> String {
     if !html.contains("<img") && !html.contains("<IMG") {
         return html.to_string();
@@ -254,6 +274,99 @@ fn fetch_image_as_data_url(client: &reqwest::blocking::Client, url: &str) -> Opt
     use base64::Engine;
     let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
     Some(format!("data:{mime};base64,{b64}"))
+}
+
+pub(crate) fn image_path_to_data_url(path: &Path) -> Option<String> {
+    read_local_image_as_data_url(path)
+}
+
+fn read_local_image_as_data_url(path: &Path) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+    if bytes.is_empty() || bytes.len() > MAX_INLINE_SIGNATURE_IMAGE_BYTES {
+        return None;
+    }
+    let mime = if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        "image/png"
+    } else if bytes.starts_with(b"\xff\xd8\xff") {
+        "image/jpeg"
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        "image/gif"
+    } else if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        "image/webp"
+    } else {
+        return None;
+    };
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Some(format!("data:{mime};base64,{b64}"))
+}
+
+fn resolve_local_image_path(base_dir: &Path, src: &str) -> Option<PathBuf> {
+    let trimmed = src.trim();
+    if trimmed.is_empty() || trimmed.starts_with("data:") || trimmed.starts_with("cid:") {
+        return None;
+    }
+    if trimmed.starts_with("file://") {
+        let path_part = trimmed.trim_start_matches("file://");
+        let path = PathBuf::from(path_part.replace('/', "\\"));
+        return path.is_file().then_some(path);
+    }
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return None;
+    }
+    let relative = trimmed
+        .trim_start_matches("./")
+        .trim_start_matches(".\\");
+    let candidate = base_dir.join(relative);
+    if candidate.is_file() {
+        return Some(candidate);
+    }
+    let slash = relative.replace('\\', "/");
+    let candidate = base_dir.join(slash);
+    candidate.is_file().then_some(candidate)
+}
+
+/// Intègre les images locales référencées dans un fichier Outlook `.htm` (+ dossier `_files`).
+pub fn inline_local_file_images_in_html(html: &str, base_dir: &Path) -> String {
+    if !html.contains("<img") && !html.contains("<IMG") {
+        return html.to_string();
+    }
+    let mut out = html.to_string();
+    let mut offset = 0usize;
+    loop {
+        let lower = out.to_lowercase();
+        let Some(rel) = lower[offset..].find("<img") else {
+            break;
+        };
+        let tag_start = offset + rel;
+        let Some(tag_end_rel) = lower[tag_start..].find('>') else {
+            break;
+        };
+        let tag_end = tag_start + tag_end_rel + 1;
+        let tag = &out[tag_start..tag_end];
+        if let Some((rel_start, rel_end)) = find_img_src_range(tag) {
+            let url_start = tag_start + rel_start;
+            let url_end = tag_start + rel_end;
+            let url = &out[url_start..url_end];
+            if let Some(path) = resolve_local_image_path(base_dir, url) {
+                if let Some(data_url) = read_local_image_as_data_url(&path) {
+                    out.replace_range(url_start..url_end, &data_url);
+                    offset = url_start + data_url.len();
+                    continue;
+                }
+            }
+        }
+        offset = tag_end;
+    }
+    out
+}
+
+pub fn finalize_signature_html(html: &str, local_base: Option<&Path>) -> String {
+    let with_remote = inline_remote_images_in_html(html);
+    match local_base {
+        Some(base) => inline_local_file_images_in_html(&with_remote, base),
+        None => with_remote,
+    }
 }
 
 fn guess_image_mime(url: &str) -> String {
@@ -332,6 +445,33 @@ mod tests {
     fn decode_entities() {
         assert_eq!(decode_html_entities("l&#39;Orias"), "l'Orias");
         assert_eq!(decode_html_entities("a &amp; b"), "a & b");
+    }
+
+    #[test]
+    fn inline_local_file_images_embeds_relative_outlook_assets() {
+        let dir = std::env::temp_dir().join(format!(
+            "crm_sig_test_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let files_dir = dir.join("sig_files");
+        std::fs::create_dir_all(&files_dir).expect("sig_files dir");
+        let png = files_dir.join("logo.png");
+        std::fs::write(&png, b"\x89PNG\r\n\x1a\nfake").expect("png");
+        let html = r#"<p><img src="sig_files/logo.png" alt="Logo"></p>"#;
+        let out = inline_local_file_images_in_html(html, &dir);
+        assert!(out.contains("data:image/png;base64,"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn extract_signature_html_fragment_reads_body_only() {
+        let raw = "<html><head><style>p{}</style></head><body><p>Sig</p></body></html>";
+        assert_eq!(extract_signature_html_fragment(raw), "<p>Sig</p>");
     }
 
     #[test]

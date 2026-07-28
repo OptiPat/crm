@@ -903,7 +903,8 @@ fn known_stellium_message_ids(state: &StelliumExceltisState) -> HashSet<String> 
 }
 
 fn graph_stellium_search() -> String {
-    format!("from:{GMAIL_FROM} subject:Remboursement")
+    // KQL Graph : AND obligatoire entre critères ; adresse SMTP en guillemets (le @ casse la syntaxe).
+    format!("from:\"{GMAIL_FROM}\" AND subject:Remboursement")
 }
 
 fn stellium_recency_cutoff_unix() -> i64 {
@@ -1683,6 +1684,13 @@ mod tests {
         let json = serde_json::to_string(&state).unwrap();
         let parsed: StelliumExceltisState = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.fetch_retry_message_ids, vec!["msg-network"]);
+    }
+
+    #[test]
+    fn graph_stellium_search_uses_graph_kql_syntax() {
+        let q = graph_stellium_search();
+        assert!(q.contains("from:\"marketplacement@stellium.fr\""));
+        assert!(q.contains("AND subject:Remboursement"));
     }
 
     #[test]

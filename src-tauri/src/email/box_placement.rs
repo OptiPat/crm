@@ -341,7 +341,7 @@ fn box_placement_recency_cutoff_unix() -> i64 {
 }
 
 fn graph_box_placement_search() -> String {
-    format!("from:{GMAIL_FROM} \"Box placement\"")
+    format!("from:\"{GMAIL_FROM}\" AND subject:\"Box placement\"")
 }
 
 #[derive(Debug, Deserialize)]

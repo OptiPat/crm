@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod signature_html;
+pub mod signature_import;
 pub mod legacy_cleanup;
 pub mod oauth_client;
 pub mod oauth_commands;

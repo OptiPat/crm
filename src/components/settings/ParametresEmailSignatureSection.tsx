@@ -3,8 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
-import { FileSignature, Loader2, Sparkles } from "lucide-react";
+import { FileImage, FileSignature, Loader2, Sparkles } from "lucide-react";
 import { fetchGmailSignatureForCgp, getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
+import {
+  pickAndImportOutlookSignatureFile,
+  pickAndImportSignatureImage,
+} from "@/lib/emails/email-signature-import";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { PARAMETRES_PATH } from "@/lib/settings/parametres-labels";
 import { toast } from "sonner";
@@ -19,7 +23,14 @@ export function ParametresEmailSignatureSection({
   onConfigChange,
 }: ParametresEmailSignatureSectionProps) {
   const [importingSignature, setImportingSignature] = useState(false);
-  const hasHtmlPreview = Boolean(cgpConfig.email_signature_html?.trim());
+
+  const applyImportedSignature = (sig: { plain: string; html: string }) => {
+    onConfigChange({
+      email_signature: sig.plain,
+      email_signature_html: sig.html,
+    });
+    toast.success("Signature importée — enregistrez vos modifications.");
+  };
 
   const handleImportGmailSignature = async () => {
     setImportingSignature(true);
@@ -30,11 +41,7 @@ export function ParametresEmailSignatureSection({
         return;
       }
       const sig = await fetchGmailSignatureForCgp();
-      onConfigChange({
-        email_signature: sig.plain,
-        email_signature_html: sig.html,
-      });
-      toast.success("Signature Gmail importée — enregistrez vos modifications.");
+      applyImportedSignature(sig);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Import signature impossible");
     } finally {
@@ -42,27 +49,89 @@ export function ParametresEmailSignatureSection({
     }
   };
 
+  const handleImportSignatureImage = async () => {
+    setImportingSignature(true);
+    try {
+      const sig = await pickAndImportSignatureImage();
+      if (!sig) return;
+      applyImportedSignature(sig);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Import image impossible");
+    } finally {
+      setImportingSignature(false);
+    }
+  };
+
+  const handleImportOutlookFile = async () => {
+    setImportingSignature(true);
+    try {
+      const sig = await pickAndImportOutlookSignatureFile();
+      if (!sig) return;
+      applyImportedSignature(sig);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Import Outlook impossible");
+    } finally {
+      setImportingSignature(false);
+    }
+  };
+
+  const hasHtmlPreview = Boolean(cgpConfig.email_signature_html?.trim());
+
   return (
     <SettingsPanel
       title="Signature des emails"
-      description="Ajoutée en fin de chaque envoi depuis Suivi. Importez depuis Gmail pour conserver le logo."
+      description="Ajoutée en fin de chaque envoi depuis Suivi. Outlook : importez l'image ou le fichier .htm."
       action={
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={importingSignature}
-          onClick={() => void handleImportGmailSignature()}
-        >
-          {importingSignature ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <>
-              <Sparkles className="h-4 w-4 mr-1.5" />
-              Importer Gmail
-            </>
-          )}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={importingSignature}
+            onClick={() => void handleImportSignatureImage()}
+          >
+            {importingSignature ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <FileImage className="h-4 w-4 mr-1.5" />
+                Importer image
+              </>
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={importingSignature}
+            onClick={() => void handleImportOutlookFile()}
+          >
+            {importingSignature ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <FileSignature className="h-4 w-4 mr-1.5" />
+                Fichier Outlook
+              </>
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={importingSignature}
+            onClick={() => void handleImportGmailSignature()}
+          >
+            {importingSignature ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4 mr-1.5" />
+                Importer Gmail
+              </>
+            )}
+          </Button>
+        </div>
       }
     >
       <div className={hasHtmlPreview ? "grid gap-6 lg:grid-cols-2" : "space-y-4"}>
@@ -84,7 +153,8 @@ export function ParametresEmailSignatureSection({
             }
           />
           <p className="text-xs text-muted-foreground">
-            Modifier le texte après un import Gmail efface le logo — réimportez si besoin.
+            Signature image : « Importer image » (enregistrez l&apos;image depuis Outlook) ou « Fichier
+            Outlook » (.htm). Modifier le texte après import efface le logo — réimportez si besoin.
           </p>
         </div>
 

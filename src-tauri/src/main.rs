@@ -432,6 +432,8 @@ fn main() {
             disconnect_google_calendar_oauth_cmd,
             test_email_connection,
             fetch_gmail_signature_for_cgp,
+            import_email_signature_from_file_cmd,
+            get_outlook_signatures_directory_cmd,
             get_app_info,
             list_db_backups,
             create_manual_db_backup,
