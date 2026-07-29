@@ -22,6 +22,7 @@ const VALID_STAGES: &[&str] = &[
 const TIMELINE_CREATION: &str = "CREATION";
 const TIMELINE_AVANCEMENT: &str = "AVANCEMENT";
 const TIMELINE_NOTE: &str = "NOTE";
+const TIMELINE_SMS_ENVOYE: &str = "SMS_ENVOYE";
 
 fn now_unix() -> i64 {
     Utc::now().timestamp()
@@ -351,6 +352,32 @@ impl super::Database {
             .ok_or(rusqlite::Error::QueryReturnedNoRows)
     }
 
+    pub fn create_parrainage_pipe_sms_sent_note(
+        &self,
+        parrainage_pipe_id: i64,
+        contenu: &str,
+    ) -> Result<super::models::ParrainagePipeTimelineEntry> {
+        let trimmed = contenu.trim();
+        if trimmed.is_empty() {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "note vide".into(),
+            ));
+        }
+        let now = now_unix();
+        self.insert_parrainage_timeline_entry(
+            parrainage_pipe_id,
+            TIMELINE_SMS_ENVOYE,
+            Some("SMS envoyé"),
+            Some(trimmed),
+            now,
+        )?;
+        let entries = self.list_parrainage_pipe_timeline_entries(parrainage_pipe_id)?;
+        entries
+            .into_iter()
+            .next()
+            .ok_or(rusqlite::Error::QueryReturnedNoRows)
+    }
+
     pub fn get_parrainage_funnel_counts(
         &self,
         exercice_label: &str,
@@ -382,7 +409,18 @@ impl super::Database {
                 _ => {}
             }
         }
+        // COUNT(DISTINCT ...) : un même pipe compte pour 1 même s'il a plusieurs entrées SMS_ENVOYE
+        // (retour manuel à « À contacter » puis renvoi), pour rester cohérent avec les autres
+        // compteurs du funnel qui comptent des pipes distincts, pas des événements.
+        let sms_envoyes: i64 = self.conn.query_row(
+            "SELECT COUNT(DISTINCT te.parrainage_pipe_id) FROM parrainage_pipe_timeline_entries te
+             JOIN parrainage_pipes pp ON pp.id = te.parrainage_pipe_id
+             WHERE te.entry_type = ?1 AND pp.exercice_label = ?2 AND pp.archived_at IS NULL",
+            params![TIMELINE_SMS_ENVOYE, exercice_label],
+            |row| row.get(0),
+        )?;
         Ok(super::models::ParrainageFunnelCounts {
+            sms_envoyes,
             confirmations,
             presences,
             parrainages,

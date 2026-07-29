@@ -1668,6 +1668,7 @@ pub struct ParrainagePipeTimelineEntry {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ParrainageFunnelCounts {
+    pub sms_envoyes: i64,
     pub confirmations: i64,
     pub presences: i64,
     pub parrainages: i64,

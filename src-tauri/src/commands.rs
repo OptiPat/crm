@@ -755,6 +755,20 @@ pub fn create_parrainage_pipe_timeline_note(
 }
 
 #[tauri::command]
+pub fn create_parrainage_pipe_sms_sent_note(
+    db: State<'_, DbState>,
+    parrainage_pipe_id: i64,
+    contenu: String,
+) -> Result<ParrainagePipeTimelineEntry, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .create_parrainage_pipe_sms_sent_note(parrainage_pipe_id, &contenu)
+        .map_err(|e| format!("Failed to create parrainage pipe sms note: {}", e))
+}
+
+#[tauri::command]
 pub fn get_parrainage_funnel_counts(
     db: State<'_, DbState>,
     exercice_label: String,

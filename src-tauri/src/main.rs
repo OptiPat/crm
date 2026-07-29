@@ -21,7 +21,6 @@ mod licensing;
 mod navigation_guard;
 mod newsletter;
 mod notes;
-mod parrainage_coach;
 mod scpi_bulletin;
 mod secure_files;
 mod system_commands;
@@ -74,9 +73,6 @@ use licensing::{
     start_license_trial_cmd,
 };
 use newsletter::*;
-use parrainage_coach::{
-    generate_parrainage_script, refine_parrainage_script,
-};
 use notes::{
     add_shared_note_contribution_cmd, create_personal_note_cmd, create_shared_note_cmd,
     delete_personal_note_cmd, delete_shared_note_cmd, get_all_personal_notes_cmd,
@@ -202,6 +198,7 @@ fn main() {
             delete_parrainage_pipe,
             list_parrainage_pipe_timeline_entries,
             create_parrainage_pipe_timeline_note,
+            create_parrainage_pipe_sms_sent_note,
             get_parrainage_funnel_counts,
             set_pipe_stage,
             list_pipe_timeline_entries,
@@ -486,8 +483,6 @@ fn main() {
             save_newsletter_settings,
             generate_newsletter_content,
             refine_newsletter_content,
-            generate_parrainage_script,
-            refine_parrainage_script,
             ensure_newsletter_etiquette,
             activate_newsletter_campaign,
             get_newsletter_audience_members,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  createParrainagePipeTimelineNote,
   deleteParrainagePipe,
   listParrainagePipeTimelineEntries,
   setParrainagePipeStage,
@@ -48,13 +47,17 @@ export function ParrainagePipeDetailPanel({
   const [notes, setNotes] = useState(pipe.notes ?? "");
   const [invitationType, setInvitationType] = useState(pipe.invitation_type ?? "");
   const [timeline, setTimeline] = useState<ParrainagePipeTimelineEntry[]>([]);
-  const [noteDraft, setNoteDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  const savedMetaRef = useRef({ notes: pipe.notes ?? "", invitationType: pipe.invitation_type ?? "" });
 
+  // Resynchro uniquement au changement de fiche : ne pas écraser une saisie en cours
+  // avec l'écho serveur d'une sauvegarde (autosave notes, changement d'étape, etc.).
   useEffect(() => {
     setNotes(pipe.notes ?? "");
     setInvitationType(pipe.invitation_type ?? "");
-  }, [pipe.id, pipe.notes, pipe.invitation_type]);
+    savedMetaRef.current = { notes: pipe.notes ?? "", invitationType: pipe.invitation_type ?? "" };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pipe.id]);
 
   useEffect(() => {
     void listParrainagePipeTimelineEntries(pipe.id)
@@ -62,49 +65,45 @@ export function ParrainagePipeDetailPanel({
       .catch(() => setTimeline([]));
   }, [pipe.id, pipe.updated_at]);
 
-  const saveMeta = async () => {
-    setSaving(true);
-    try {
-      const updated = await updateParrainagePipe(pipe.id, {
-        notes: notes.trim() || null,
-        invitation_type: invitationType || null,
-      });
-      onUpdated(updated);
-      toast.success("Fiche mise à jour");
-    } catch (error) {
-      toast.error(String(error));
-    } finally {
-      setSaving(false);
+  useEffect(() => {
+    if (notes === savedMetaRef.current.notes && invitationType === savedMetaRef.current.invitationType) {
+      return;
     }
-  };
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const updated = await updateParrainagePipe(pipe.id, {
+            notes: notes.trim() || null,
+            invitation_type: invitationType || null,
+          });
+          savedMetaRef.current = { notes, invitationType };
+          onUpdated(updated);
+        } catch (error) {
+          toast.error(String(error));
+        }
+      })();
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [notes, invitationType, pipe.id, onUpdated]);
 
-  const changeStage = async (stage: ParrainagePipeStage) => {
+  /** Retourne `true` si l'étape a bien été changée (l'erreur est déjà affichée via toast sinon). */
+  const changeStage = async (
+    stage: ParrainagePipeStage,
+    options?: { silent?: boolean }
+  ): Promise<boolean> => {
     setSaving(true);
     try {
       const updated = await setParrainagePipeStage(pipe.id, stage, {
         invitationType: (invitationType as ParrainageInvitationType) || null,
       });
       onUpdated(updated);
-      toast.success(`Étape : ${PARRAINAGE_PIPE_STAGE_LABELS[stage]}`);
+      if (!options?.silent) {
+        toast.success(`Étape : ${PARRAINAGE_PIPE_STAGE_LABELS[stage]}`);
+      }
+      return true;
     } catch (error) {
       toast.error(String(error));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const addNote = async () => {
-    const trimmed = noteDraft.trim();
-    if (!trimmed) return;
-    setSaving(true);
-    try {
-      await createParrainagePipeTimelineNote(pipe.id, trimmed);
-      setNoteDraft("");
-      const entries = await listParrainagePipeTimelineEntries(pipe.id);
-      setTimeline(entries);
-      toast.success("Note ajoutée");
-    } catch (error) {
-      toast.error(String(error));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -184,17 +183,6 @@ export function ParrainagePipeDetailPanel({
             <div className="space-y-2">
               <Label>Notes</Label>
               <DictationTextarea value={notes} onChange={setNotes} rows={4} disabled={saving} />
-              <Button size="sm" onClick={() => void saveMeta()} disabled={saving}>
-                Enregistrer
-              </Button>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Ajouter une note</Label>
-              <DictationTextarea value={noteDraft} onChange={setNoteDraft} rows={3} disabled={saving} />
-              <Button size="sm" variant="secondary" onClick={() => void addNote()} disabled={saving || !noteDraft.trim()}>
-                Ajouter au fil
-              </Button>
             </div>
 
             {timeline.length > 0 && (
@@ -223,6 +211,7 @@ export function ParrainagePipeDetailPanel({
                   .then(setTimeline)
                   .catch(() => setTimeline([]));
               }}
+              onAdvanceStage={() => changeStage("PRISE_DE_CONTACT", { silent: true })}
             />
           </div>
         </div>

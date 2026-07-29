@@ -6,8 +6,13 @@ import {
 import { subscribeParrainagePipeChanged } from "@/lib/parrainage-pipe/parrainage-pipe-events";
 import { EMPTY_JD_FUNNEL_COUNTS } from "@/lib/statistiques/organisation-jd-funnel-tracker";
 
+const EMPTY_PARRAINAGE_FUNNEL_COUNTS: ParrainageFunnelCounts = {
+  sms_envoyes: 0,
+  ...EMPTY_JD_FUNNEL_COUNTS,
+};
+
 export function useParrainageFunnelCounts(exerciceLabel: string) {
-  const [counts, setCounts] = useState<ParrainageFunnelCounts>(EMPTY_JD_FUNNEL_COUNTS);
+  const [counts, setCounts] = useState<ParrainageFunnelCounts>(EMPTY_PARRAINAGE_FUNNEL_COUNTS);
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
@@ -16,7 +21,7 @@ export function useParrainageFunnelCounts(exerciceLabel: string) {
       const next = await getParrainageFunnelCounts(exerciceLabel);
       setCounts(next);
     } catch {
-      setCounts(EMPTY_JD_FUNNEL_COUNTS);
+      setCounts(EMPTY_PARRAINAGE_FUNNEL_COUNTS);
     } finally {
       setLoading(false);
     }

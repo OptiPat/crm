@@ -28,6 +28,7 @@ export interface ParrainagePipeTimelineEntry {
 }
 
 export interface ParrainageFunnelCounts {
+  sms_envoyes: number;
   confirmations: number;
   presences: number;
   parrainages: number;
@@ -115,6 +116,18 @@ export async function createParrainagePipeTimelineNote(
   contenu: string
 ): Promise<ParrainagePipeTimelineEntry> {
   const entry = await invoke<ParrainagePipeTimelineEntry>("create_parrainage_pipe_timeline_note", {
+    parrainagePipeId,
+    contenu,
+  });
+  notifyParrainagePipeChanged();
+  return entry;
+}
+
+export async function createParrainagePipeSmsSentNote(
+  parrainagePipeId: number,
+  contenu: string
+): Promise<ParrainagePipeTimelineEntry> {
+  const entry = await invoke<ParrainagePipeTimelineEntry>("create_parrainage_pipe_sms_sent_note", {
     parrainagePipeId,
     contenu,
   });

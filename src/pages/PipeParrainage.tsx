@@ -40,7 +40,7 @@ export function PipeParrainage() {
 
   const [exerciceLabel, setExerciceLabel] = useState(defaultExercice);
   const [pipes, setPipes] = useState<ParrainagePipeRecord[]>([]);
-  const [counts, setCounts] = useState({ confirmations: 0, presences: 0, parrainages: 0 });
+  const [counts, setCounts] = useState({ sms_envoyes: 0, confirmations: 0, presences: 0, parrainages: 0 });
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<ParrainagePipeRecord | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -101,6 +101,7 @@ export function PipeParrainage() {
   };
 
   const funnelCards = [
+    { label: "SMS envoyés", current: counts.sms_envoyes },
     { label: "« Oui, je viens »", current: counts.confirmations },
     { label: "Présents JD/PO", current: counts.presences },
     { label: "Inscrits", current: counts.parrainages },
