@@ -27,7 +27,6 @@ import {
   type ParrainagePipeStage,
 } from "@/lib/parrainage-pipe/parrainage-pipe-types";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 
 export function PipeParrainage() {
   const exerciceOptions = useMemo(() => {
@@ -144,24 +143,11 @@ export function PipeParrainage() {
         </Button>
       </div>
 
-      <div className={cn("flex min-h-0 flex-1", selected ? "grid grid-cols-1 lg:grid-cols-[1fr_22rem]" : "")}>
-        <div className="min-h-0 flex flex-col">
-          {loading ? (
-            <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-              Chargement…
-            </div>
-          ) : (
-            <ParrainagePipeBoard
-              pipes={pipes}
-              selectedId={selected?.id ?? null}
-              onSelect={setSelected}
-              onRequestStageChange={(pipe, stage) => void handleStageChange(pipe, stage)}
-            />
-          )}
-        </div>
-        {selected && (
+      <div className="flex min-h-0 flex-1">
+        {selected ? (
           <ParrainagePipeDetailPanel
             pipe={selected}
+            onBack={() => setSelected(null)}
             onUpdated={(pipe) => {
               setSelected(pipe);
               void loadData();
@@ -170,6 +156,17 @@ export function PipeParrainage() {
               setSelected(null);
               void loadData();
             }}
+          />
+        ) : loading ? (
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            Chargement…
+          </div>
+        ) : (
+          <ParrainagePipeBoard
+            pipes={pipes}
+            selectedId={null}
+            onSelect={setSelected}
+            onRequestStageChange={(pipe, stage) => void handleStageChange(pipe, stage)}
           />
         )}
       </div>
