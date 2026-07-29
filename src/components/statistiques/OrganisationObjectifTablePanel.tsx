@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useJdFunnelTracker } from "@/hooks/useJdFunnelTracker";
+import { useParrainageFunnelCounts } from "@/hooks/useParrainageFunnelCounts";
 import { currentFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
 import { computeGrowthObjective } from "@/lib/statistiques/organisation-growth-objective";
 import {
@@ -9,7 +10,7 @@ import {
 import type { StatistiquesBenchmarkSettings } from "@/lib/statistiques/statistiques-benchmark-settings";
 import { ChartLoading } from "@/components/dashboard/dashboard-ui";
 import { cn } from "@/lib/utils";
-import { JdFunnelCounterCell } from "./JdFunnelCounterCell";
+import { ParrainageFunnelProgressCell } from "./ParrainageFunnelProgressCell";
 import { OrganisationGrowthProjectionPanel } from "./OrganisationGrowthProjectionPanel";
 import {
   AssumptionField,
@@ -191,6 +192,7 @@ export function OrganisationObjectifTablePanel({
   };
 
   const jdFunnelTracker = useJdFunnelTracker();
+  const parrainageFunnel = useParrainageFunnelCounts(jdFunnelTracker.exerciceLabel);
   // Le volume « actuel » ne vaut comme progression que pour l'exercice en cours : un exercice futur
   // suivi en amont (funnel JD) n'a par définition encore aucun volume réel — la jauge doit rester à 0,
   // pas reprendre le volume de l'exercice en cours qui n'a rien à voir avec l'exercice suivi.
@@ -403,10 +405,9 @@ export function OrganisationObjectifTablePanel({
                   <td className="px-3 py-2 text-muted-foreground align-top">Parrainages à réaliser (brut)</td>
                   <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground">—</td>
                   <td className="px-3 py-2 text-right align-top border-l-2 border-primary/30 bg-primary/[0.03]">
-                    <JdFunnelCounterCell
+                    <ParrainageFunnelProgressCell
                       target={result.recruitsForTarget}
-                      current={jdFunnelTracker.counts.parrainages}
-                      onChange={(value) => jdFunnelTracker.setStageCount("parrainages", value)}
+                      current={parrainageFunnel.counts.parrainages}
                     />
                   </td>
                   <td className="px-3 py-2 text-right align-top tabular-nums text-amber-700 dark:text-amber-400 border-l-2 border-amber-400/30 bg-amber-500/[0.03]">
@@ -417,10 +418,9 @@ export function OrganisationObjectifTablePanel({
                   <td className="px-3 py-2 text-muted-foreground align-top">Présents JD à obtenir</td>
                   <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground">—</td>
                   <td className="px-3 py-2 text-right align-top border-l-2 border-primary/30 bg-primary/[0.03]">
-                    <JdFunnelCounterCell
+                    <ParrainageFunnelProgressCell
                       target={result.jdPresencesForTarget}
-                      current={jdFunnelTracker.counts.presences}
-                      onChange={(value) => jdFunnelTracker.setStageCount("presences", value)}
+                      current={parrainageFunnel.counts.presences}
                     />
                   </td>
                   <td className="px-3 py-2 text-right align-top tabular-nums text-amber-700 dark:text-amber-400 border-l-2 border-amber-400/30 bg-amber-500/[0.03]">
@@ -431,10 +431,9 @@ export function OrganisationObjectifTablePanel({
                   <td className="px-3 py-2 text-muted-foreground align-top">« Oui, je viens » à obtenir</td>
                   <td className="px-3 py-2 text-right align-top tabular-nums text-muted-foreground">—</td>
                   <td className="px-3 py-2 text-right align-top border-l-2 border-primary/30 bg-primary/[0.03]">
-                    <JdFunnelCounterCell
+                    <ParrainageFunnelProgressCell
                       target={result.jdConfirmationsForTarget}
-                      current={jdFunnelTracker.counts.confirmations}
-                      onChange={(value) => jdFunnelTracker.setStageCount("confirmations", value)}
+                      current={parrainageFunnel.counts.confirmations}
                     />
                   </td>
                   <td className="px-3 py-2 text-right align-top tabular-nums text-amber-700 dark:text-amber-400 border-l-2 border-amber-400/30 bg-amber-500/[0.03]">

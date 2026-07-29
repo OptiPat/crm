@@ -27,6 +27,7 @@ import { TemplatesEmail } from "@/pages/TemplatesEmail";
 import { Suivi } from "@/pages/Suivi";
 import { Etiquettes } from "@/pages/Etiquettes";
 import { Pipe } from "@/pages/Pipe";
+import { PipeParrainage } from "@/pages/PipeParrainage";
 import { Agenda } from "@/pages/Agenda";
 import { Newsletter } from "@/pages/Newsletter";
 import { AppBrandingProvider } from "@/components/app-branding/AppBrandingProvider";
@@ -247,6 +248,12 @@ function AppInner() {
         return (
           <ErrorBoundary>
             <Pipe />
+          </ErrorBoundary>
+        );
+      case "pipe-parrainage":
+        return (
+          <ErrorBoundary>
+            <PipeParrainage />
           </ErrorBoundary>
         );
       case "contacts":

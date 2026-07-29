@@ -20,16 +20,16 @@ import {
 import { createContact, type Contact } from "@/lib/api/tauri-contacts";
 import { ContactRegistreToggle } from "@/components/contacts/ContactRegistreSwitch";
 import { toast } from "sonner";
-const PIPE_CONTACT_CATEGORIES = [
-  { value: "SUSPECT_CLIENT", label: "Suspect client" },
-  { value: "PROSPECT_CLIENT", label: "Prospect client" },
-  { value: "CLIENT", label: "Client" },
+
+const PARRAINAGE_CONTACT_CATEGORIES = [
+  { value: "SUSPECT_FILLEUL", label: "Suspect filleul" },
+  { value: "PROSPECT_FILLEUL", label: "Prospect filleul" },
+  { value: "FILLEUL", label: "Filleul" },
 ] as const;
 
-interface PipeQuickContactDialogProps {
+interface ParrainageQuickContactDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Pré-remplissage depuis la recherche contact (nom saisi). */
   initialSearch?: string;
   onCreated: (contact: Contact) => void;
 }
@@ -44,16 +44,16 @@ function splitSearchHint(search: string): { prenom: string; nom: string } {
   };
 }
 
-export function PipeQuickContactDialog({
+export function ParrainageQuickContactDialog({
   open,
   onOpenChange,
   initialSearch = "",
   onCreated,
-}: PipeQuickContactDialogProps) {
+}: ParrainageQuickContactDialogProps) {
   const hint = splitSearchHint(initialSearch);
   const [nom, setNom] = useState(hint.nom);
   const [prenom, setPrenom] = useState(hint.prenom);
-  const [categorie, setCategorie] = useState<string>("PROSPECT_CLIENT");
+  const [filleulCategorie, setFilleulCategorie] = useState<string>("SUSPECT_FILLEUL");
   const [registre, setRegistre] = useState<"TU" | "VOUS">("VOUS");
   const [email, setEmail] = useState("");
   const [telephone, setTelephone] = useState("");
@@ -63,7 +63,7 @@ export function PipeQuickContactDialog({
     const next = splitSearchHint(search);
     setNom(next.nom);
     setPrenom(next.prenom);
-    setCategorie("PROSPECT_CLIENT");
+    setFilleulCategorie("SUSPECT_FILLEUL");
     setRegistre("VOUS");
     setEmail("");
     setTelephone("");
@@ -90,7 +90,8 @@ export function PipeQuickContactDialog({
       const created = await createContact({
         nom: nom.trim().toUpperCase(),
         prenom: prenom.trim(),
-        categorie,
+        categorie: "AUCUN",
+        filleul_categorie: filleulCategorie,
         registre,
         email: email.trim() || undefined,
         telephone: telephone.trim() || undefined,
@@ -100,6 +101,7 @@ export function PipeQuickContactDialog({
         ...created,
         prenom: prenom.trim(),
         nom: nom.trim().toUpperCase(),
+        filleul_categorie: filleulCategorie,
       };
       toast.success("Contact créé");
       onCreated(contact);
@@ -118,7 +120,7 @@ export function PipeQuickContactDialog({
         <DialogHeader>
           <DialogTitle>Nouveau contact</DialogTitle>
           <DialogDescription>
-            Création rapide depuis le pipe client — vous pourrez compléter la fiche plus tard.
+            Création rapide depuis le pipe parrainage — vous pourrez compléter la fiche plus tard.
           </DialogDescription>
         </DialogHeader>
 
@@ -126,30 +128,23 @@ export function PipeQuickContactDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Prénom *</Label>
-              <Input
-                value={prenom}
-                onChange={(e) => setPrenom(e.target.value)}
-                autoFocus
-              />
+              <Input value={prenom} onChange={(e) => setPrenom(e.target.value)} autoFocus />
             </div>
             <div className="space-y-2">
               <Label>Nom *</Label>
-              <Input
-                value={nom}
-                onChange={(e) => setNom(e.target.value.toUpperCase())}
-              />
+              <Input value={nom} onChange={(e) => setNom(e.target.value.toUpperCase())} />
             </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-2 min-w-[10rem] flex-1">
-              <Label>Catégorie</Label>
-              <Select value={categorie} onValueChange={setCategorie}>
+              <Label>Catégorie filleul</Label>
+              <Select value={filleulCategorie} onValueChange={setFilleulCategorie}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {PIPE_CONTACT_CATEGORIES.map((c) => (
+                  {PARRAINAGE_CONTACT_CATEGORIES.map((c) => (
                     <SelectItem key={c.value} value={c.value}>
                       {c.label}
                     </SelectItem>
@@ -160,15 +155,12 @@ export function PipeQuickContactDialog({
 
             <div className="space-y-2">
               <Label>Registre</Label>
-              <ContactRegistreToggle
-                value={registre}
-                onChange={setRegistre}
-                disabled={loading}
-              />
+              <ContactRegistreToggle value={registre} onChange={setRegistre} disabled={loading} />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">            <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
               <Label>Email</Label>
               <Input
                 type="email"

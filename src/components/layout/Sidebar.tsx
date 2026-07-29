@@ -109,7 +109,12 @@ const statistiquesNavItem: NavItem = {
   icon: BarChart3,
 };
 
-const pipeNavItem: NavItem = { id: "pipe", label: "Pipe", icon: Briefcase };
+const pipeNavItem: NavItem = { id: "pipe", label: "Pipe client", icon: Briefcase };
+const pipeParrainageNavItem: NavItem = {
+  id: "pipe-parrainage",
+  label: "Pipe parrainage",
+  icon: UserPlus,
+};
 
 const standaloneItems: NavItem[] = [
   { id: "dashboard", label: "Tableau de bord", icon: Home },
@@ -349,6 +354,7 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
         {renderNavItem(dashboard)}
         {renderNavItem(statistiquesNavItem)}
         {renderNavItem(pipeNavItem)}
+        {renderNavItem(pipeParrainageNavItem)}
 
         {collapsed
           ? navGroups.map(renderCollapsedGroup)

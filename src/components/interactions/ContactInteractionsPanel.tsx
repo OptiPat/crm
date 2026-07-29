@@ -85,7 +85,7 @@ const FILTER_LABELS: { id: RelationTimelineFilter; label: string }[] = [
   { id: "all", label: "Tout" },
   { id: "crm", label: "CRM" },
   { id: "mailbox", label: "Boîte mail" },
-  { id: "pipe", label: "Pipe" },
+  { id: "pipe", label: "Pipe client" },
 ];
 
 function formatTs(ts: number | null | undefined): string | null {

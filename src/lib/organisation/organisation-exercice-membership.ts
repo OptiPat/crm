@@ -1,6 +1,6 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
-import { isFilleulStatut, isPrescripteurCategorie } from "@/lib/contacts/contact-form-utils";
+import { isFilleulStatut } from "@/lib/contacts/contact-form-utils";
 import {
   resolveFilleulDesinscriptionTimestamp,
   resolveFilleulInscriptionTimestamp,
@@ -15,10 +15,12 @@ function contactEffectiveFilleulCategorie(
   return null;
 }
 
+// Le statut filleul (`filleul_categorie`) est indépendant du statut client (`categorie`) : un
+// contact peut être à la fois Prescripteur et Filleul, le double rôle est légitime — on ne
+// regarde donc que `filleul_categorie` (ou son repli), jamais `categorie`.
 function isEligibleForExerciceNetworkMembership(
   contact: Pick<Contact, "categorie" | "filleul_categorie">
 ): boolean {
-  if (isPrescripteurCategorie(contact.categorie)) return false;
   const filleulCat = contactEffectiveFilleulCategorie(contact);
   return filleulCat === "FILLEUL" || filleulCat === "FILLEUL_DESINSCRIT";
 }

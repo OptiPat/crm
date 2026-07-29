@@ -1632,6 +1632,62 @@ pub struct UpdatePipe {
     pub notes: Option<String>,
 }
 
+/// Prospect filleul dans le pipe parrainage (funnel recrutement).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ParrainagePipe {
+    pub id: i64,
+    pub contact_id: i64,
+    pub stage: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invitation_type: Option<String>,
+    pub exercice_label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archived_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contact_nom: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contact_prenom: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ParrainagePipeTimelineEntry {
+    pub id: i64,
+    pub parrainage_pipe_id: i64,
+    pub entry_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub titre: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contenu: Option<String>,
+    pub occurred_at: i64,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ParrainageFunnelCounts {
+    pub confirmations: i64,
+    pub presences: i64,
+    pub parrainages: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NewParrainagePipe {
+    pub contact_id: i64,
+    pub exercice_label: String,
+    pub stage: Option<String>,
+    pub invitation_type: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateParrainagePipe {
+    pub invitation_type: Option<String>,
+    pub notes: Option<String>,
+}
+
 /// Opération partenaire Stellium Box Placement (suivi mail entrant).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PlacementOperation {

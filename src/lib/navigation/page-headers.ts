@@ -13,8 +13,12 @@ const PAGE_HEADERS: Record<string, PageHeaderMeta> = {
     subtitle: "Analyses et indicateurs avancés",
   },
   pipe: {
-    title: "Pipe",
+    title: "Pipe client",
     subtitle: "Affaires commerciales en cours",
+  },
+  "pipe-parrainage": {
+    title: "Pipe parrainage",
+    subtitle: "Suivi terrain du recrutement filleul",
   },
   contacts: {
     title: "Contacts",

@@ -85,7 +85,6 @@ export function isContactEligibleForFilleulSourceLeadStats(
   contact: Contact,
   options?: ContactSourceLeadStatsOptions
 ): boolean {
-  if (isPrescripteurCategorie(contact.categorie)) return false;
   const filleulCat = contactEffectiveFilleulCategorie(contact);
   if (filleulCat === "SUSPECT_FILLEUL") return false;
   const selfContactId = options?.selfContactId;

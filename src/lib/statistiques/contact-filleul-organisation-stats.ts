@@ -107,11 +107,14 @@ export function isMyFilleulInscritFromJdFunnel(
   );
 }
 
-/** Filleul inscrit (non désinscrit) — tous parrains, suspects exclus. */
+/**
+ * Filleul inscrit (non désinscrit) — tous parrains, suspects exclus.
+ * Le statut filleul (`filleul_categorie`) est indépendant du statut client (`categorie`) : un
+ * contact peut être à la fois Prescripteur et Filleul, le double rôle est légitime.
+ */
 export function isContactEligibleForFilleulOrganisationStats(
   contact: Pick<Contact, "categorie" | "filleul_categorie">
 ): boolean {
-  if (isPrescripteurCategorie(contact.categorie)) return false;
   return contactEffectiveFilleulCategorie(contact) === "FILLEUL";
 }
 
@@ -119,7 +122,6 @@ export function isContactEligibleForFilleulOrganisationStats(
 export function isContactEligibleForFilleulParraineurStats(
   contact: Pick<Contact, "categorie" | "filleul_categorie">
 ): boolean {
-  if (isPrescripteurCategorie(contact.categorie)) return false;
   const filleulCat = contactEffectiveFilleulCategorie(contact);
   return filleulCat === "FILLEUL" || filleulCat === "FILLEUL_DESINSCRIT";
 }
@@ -317,7 +319,6 @@ export function formatFilleulAverageVolumeExerciceSubtitle(
 export function isFilleulParrainableDownline(
   contact: Pick<Contact, "categorie" | "filleul_categorie">
 ): boolean {
-  if (isPrescripteurCategorie(contact.categorie)) return false;
   const filleulCat = contactEffectiveFilleulCategorie(contact);
   return filleulCat === "FILLEUL" || filleulCat === "FILLEUL_DESINSCRIT";
 }
@@ -549,7 +550,6 @@ export function isContactEligibleForFilleulBridgeBaseStats(
   contact: Pick<Contact, "categorie" | "filleul_categorie" | "parrain_id">,
   selfContactId?: number | null
 ): boolean {
-  if (isPrescripteurCategorie(contact.categorie)) return false;
   const filleulCat = contactEffectiveFilleulCategorie(contact);
   if (filleulCat !== "FILLEUL" && filleulCat !== "FILLEUL_DESINSCRIT") return false;
   if (selfContactId == null) return false;

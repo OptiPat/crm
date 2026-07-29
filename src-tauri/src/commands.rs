@@ -16,12 +16,13 @@ use crate::database::{
         InvestissementVersement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
         NewCustomFieldDef, NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInteraction,
         NewInvestissement, NewInvestissementValorisation, NewInvestissementVersement,
-        NewPartenaire, NewPipe, NewPipeTimelineEntry, NewSegment, NewTache, NewTemplateEmail,
-        NomProduitSuggestion, Partenaire, Pipe, PipeContactTimelineEntry, PipeR1DocumentChecklist,
+        NewPartenaire, NewPipe, NewPipeTimelineEntry, NewParrainagePipe, NewSegment, NewTache, NewTemplateEmail,
+        NomProduitSuggestion, ParrainageFunnelCounts, ParrainagePipe, ParrainagePipeTimelineEntry,
+        Partenaire, Pipe, PipeContactTimelineEntry, PipeR1DocumentChecklist,
         PipeR1MissingDocsSummary, PipeR3DocumentChecklist, PipeR3ImmoDocumentChecklist,
         PipeR3MissingDocsSummary, PipeTimelineEntry, PipelineStats, ProductStats, Segment,
         SegmentWithCount, SetTacheStatutResult, Setting, Tache, TemplateEmail, TemplateEmailAction,
-        UpdateCustomFieldDef, UpdatePipe, UpdatePipeR1DocumentChecklistInput,
+        UpdateCustomFieldDef, UpdatePipe, UpdateParrainagePipe, UpdatePipeR1DocumentChecklistInput,
         UpdatePipeR3DocumentChecklistInput, UpdatePipeR3ImmoDocumentChecklistInput,
         UpdatePipeTimelineEntry, YearlyActivityStats,
     },
@@ -647,6 +648,123 @@ pub fn delete_pipe(db: State<'_, DbState>, id: i64) -> Result<(), String> {
     database
         .delete_pipe(id)
         .map_err(|e| format!("Failed to delete pipe: {}", e))
+}
+
+#[tauri::command]
+pub fn list_parrainage_pipes(
+    db: State<'_, DbState>,
+    exercice_label: String,
+    include_archived: Option<bool>,
+) -> Result<Vec<ParrainagePipe>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .list_parrainage_pipes(&exercice_label, include_archived.unwrap_or(false))
+        .map_err(|e| format!("Failed to list parrainage pipes: {}", e))
+}
+
+#[tauri::command]
+pub fn get_parrainage_pipe_by_id(db: State<'_, DbState>, id: i64) -> Result<ParrainagePipe, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_parrainage_pipe_by_id(id)
+        .map_err(|e| format!("Failed to get parrainage pipe: {}", e))
+}
+
+#[tauri::command]
+pub fn create_parrainage_pipe(
+    db: State<'_, DbState>,
+    input: NewParrainagePipe,
+) -> Result<ParrainagePipe, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .create_parrainage_pipe(input)
+        .map_err(|e| format!("Failed to create parrainage pipe: {}", e))
+}
+
+#[tauri::command]
+pub fn update_parrainage_pipe(
+    db: State<'_, DbState>,
+    id: i64,
+    update: UpdateParrainagePipe,
+) -> Result<ParrainagePipe, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .update_parrainage_pipe(id, update)
+        .map_err(|e| format!("Failed to update parrainage pipe: {}", e))
+}
+
+#[tauri::command]
+pub fn set_parrainage_pipe_stage(
+    db: State<'_, DbState>,
+    id: i64,
+    stage: String,
+    invitation_type: Option<String>,
+    notes: Option<String>,
+) -> Result<ParrainagePipe, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .set_parrainage_pipe_stage(id, &stage, invitation_type.as_deref(), notes.as_deref())
+        .map_err(|e| format!("Failed to set parrainage pipe stage: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_parrainage_pipe(db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .delete_parrainage_pipe(id)
+        .map_err(|e| format!("Failed to delete parrainage pipe: {}", e))
+}
+
+#[tauri::command]
+pub fn list_parrainage_pipe_timeline_entries(
+    db: State<'_, DbState>,
+    parrainage_pipe_id: i64,
+) -> Result<Vec<ParrainagePipeTimelineEntry>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .list_parrainage_pipe_timeline_entries(parrainage_pipe_id)
+        .map_err(|e| format!("Failed to list parrainage pipe timeline: {}", e))
+}
+
+#[tauri::command]
+pub fn create_parrainage_pipe_timeline_note(
+    db: State<'_, DbState>,
+    parrainage_pipe_id: i64,
+    contenu: String,
+) -> Result<ParrainagePipeTimelineEntry, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .create_parrainage_pipe_timeline_note(parrainage_pipe_id, &contenu)
+        .map_err(|e| format!("Failed to create parrainage pipe note: {}", e))
+}
+
+#[tauri::command]
+pub fn get_parrainage_funnel_counts(
+    db: State<'_, DbState>,
+    exercice_label: String,
+) -> Result<ParrainageFunnelCounts, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_parrainage_funnel_counts(&exercice_label)
+        .map_err(|e| format!("Failed to get parrainage funnel counts: {}", e))
 }
 
 #[tauri::command]

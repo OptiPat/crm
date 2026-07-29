@@ -23,7 +23,6 @@ export function isContactEligibleForClientStatsLens(
 export function isContactEligibleForFilleulStatsLens(
   contact: Pick<Contact, "categorie" | "filleul_categorie">
 ): boolean {
-  if (isPrescripteurCategorie(contact.categorie)) return false;
   const filleulCat = contactEffectiveFilleulCategorie(contact);
   return (
     filleulCat === "FILLEUL" ||

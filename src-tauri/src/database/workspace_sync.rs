@@ -80,6 +80,8 @@ const TABLE_POLICIES: &[(&str, WorkspaceTablePolicy)] = &[
     ("pipe_r3_document_checklists", WorkspaceTablePolicy::Shared),
     ("pipe_r1_document_checklists", WorkspaceTablePolicy::Shared),
     ("pipes", WorkspaceTablePolicy::Shared),
+    ("parrainage_pipes", WorkspaceTablePolicy::Shared),
+    ("parrainage_pipe_timeline_entries", WorkspaceTablePolicy::Shared),
     ("personal_notes", WorkspaceTablePolicy::LocalOnly),
     ("shared_notes_cache", WorkspaceTablePolicy::Derived),
     (

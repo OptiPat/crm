@@ -101,6 +101,19 @@ describe("wasConsultantInNetworkDuringExercice", () => {
     ).toBe(false);
   });
 
+  it("inclut un FILLEUL même si son statut client est Prescripteur (double rôle légitime)", () => {
+    const consultant = contact({
+      id: 13,
+      nom: "DOUBLE",
+      prenom: "Role",
+      categorie: "PRESCRIPTEUR",
+      filleul_categorie: "FILLEUL",
+      date_inscription_filleul: beforeStart,
+    });
+
+    expect(wasConsultantInNetworkDuringExercice(consultant, exercice)).toBe(true);
+  });
+
   it("wasInscribedConsultantDuringExercice inclut le contact Moi (CGP)", () => {
     const cgp = contact({
       id: 1,

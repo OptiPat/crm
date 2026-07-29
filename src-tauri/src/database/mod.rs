@@ -38,6 +38,7 @@ pub mod notes;
 pub mod notifications_summary;
 pub mod operations;
 pub mod partenaires;
+pub mod parrainage_pipe;
 pub mod pipe;
 pub mod pipe_contact_sync;
 pub mod pipe_contact_timeline;
@@ -657,6 +658,7 @@ impl Database {
         self.migrate_compta_sync_columns()?;
         self.migrate_notes_tables()?;
         self.migrate_pipes_table()?;
+        self.migrate_parrainage_pipes_table()?;
         self.migrate_pipe_timeline_table()?;
         self.migrate_pipe_r1_document_checklists_table()?;
         self.migrate_pipe_r3_document_checklists_table()?;

@@ -99,6 +99,15 @@ describe("contact-filleul-organisation-stats", () => {
     expect(isFilleulManagerInOrganisation({ filleul_titre: "SENIOR" })).toBe(true);
   });
 
+  it("inclut un FILLEUL même si son statut client est Prescripteur (double rôle légitime)", () => {
+    expect(
+      isContactEligibleForFilleulOrganisationStats({
+        categorie: "PRESCRIPTEUR",
+        filleul_categorie: "FILLEUL",
+      })
+    ).toBe(true);
+  });
+
   it("filtre les listes drill-down Manager / autres", () => {
     expect(
       filterContactsForFilleulOrganisationList(contacts, "manager").map((c) => c.id)
