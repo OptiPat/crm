@@ -84,6 +84,8 @@ import { ContactFilleulOrganisationExerciceSummaryPanel } from "./ContactFilleul
 import { AttritionKpiPanel } from "./contact-attrition-kpi-panel";
 import { ContactAgePanel } from "./ContactAgePanel";
 import { ContactGeographyPanel } from "./ContactGeographyPanel";
+import { ContactPrescripteurPanel } from "./ContactPrescripteurPanel";
+import { ContactSourceLeadPanel } from "./ContactSourceLeadPanel";
 import { StatistiquesPanel } from "./statistiques-ui";
 import { useStatistiquesPageData } from "./statistiques-page-data-context";
 import {
@@ -2426,6 +2428,10 @@ export function ContactFilleulOrganisationPanel({
         </div>
         <ContactGeographyPanel onNavigate={onNavigate} lens="filleul" />
         <ContactAgePanel onNavigate={onNavigate} lens="filleul" />
+        <div className="lg:col-span-2 space-y-5">
+          <ContactSourceLeadPanel onNavigate={onNavigate} lens="filleul" />
+          <ContactPrescripteurPanel onNavigate={onNavigate} lens="filleul" />
+        </div>
         <ManagerKpiPanel loading={loading} stats={managerStats} onOpenList={openManagerList} />
         <VolumeKpiPanel
           loading={exerciceKpisLoading}

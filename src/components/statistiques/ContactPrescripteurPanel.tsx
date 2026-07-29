@@ -27,9 +27,10 @@ import { useStatistiquesPageData } from "./statistiques-page-data-context";
 
 type ContactPrescripteurPanelProps = {
   onNavigate?: (page: string) => void;
+  lens: SourceLeadStatsLens;
 };
 
-export function ContactPrescripteurPanel({ onNavigate }: ContactPrescripteurPanelProps) {
+export function ContactPrescripteurPanel({ onNavigate, lens }: ContactPrescripteurPanelProps) {
   const {
     contacts,
     investissementsWithDetails: investissements,
@@ -162,54 +163,45 @@ export function ContactPrescripteurPanel({ onNavigate }: ContactPrescripteurPane
     <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
         <AttributionDistributionPanel
-          panelId="prescripteur_client"
-          title="Prescripteur — Clients"
-          description="Clients regroupés par prescripteur renseigné sur la fiche."
-          loading={loading}
-          total={clientContactStats.total}
-          totalLabel="Clients"
-          totalHint="Mêmes règles que Source / lead."
-          rows={clientContactStats.rows}
-          onOpenRow={(row) => openContactDistributionRow(row, "client")}
-        />
+        panelId={lens === "client" ? "prescripteur_client" : "prescripteur_filleul"}
+        title="Prescripteur"
+        description={
+          lens === "client"
+            ? "Clients regroupés par prescripteur renseigné sur la fiche."
+            : "Filleuls du réseau direct regroupés par prescripteur."
+        }
+        loading={loading}
+        total={lens === "client" ? clientContactStats.total : filleulContactStats.total}
+        totalLabel={lens === "client" ? "Clients" : "Filleuls"}
+        totalHint={lens === "client" ? "Mêmes règles que Source / lead." : "Mêmes règles que Source / lead."}
+        rows={lens === "client" ? clientContactStats.rows : filleulContactStats.rows}
+        onOpenRow={(row) => openContactDistributionRow(row, lens)}
+      />
 
-        <AttributionDistributionPanel
-          panelId="prescripteur_filleul"
-          title="Prescripteur — Filleuls"
-          description="Filleuls du réseau direct regroupés par prescripteur."
-          loading={loading}
-          total={filleulContactStats.total}
-          totalLabel="Filleuls"
-          totalHint="Mêmes règles que Source / lead."
-          rows={filleulContactStats.rows}
-          onOpenRow={(row) => openContactDistributionRow(row, "filleul")}
-        />
-
-        <AttributionConversionPanel
-          panelId="prescripteur_conversion_client"
-          title="Conversion et volume — Clients"
-          description="Par prescripteur : taux de conversion et montants signés « avec moi »."
-          loading={loading}
-          rows={clientConversionStats.rows}
-          variant="client"
-          summaryLabel="Supports"
-          summaryValue={clientConversionStats.total}
-          summaryHint={`${formatDashboardCurrency(clientConversionStats.totalMontantCentimes / 100)} souscrits`}
-          onOpenRow={(row) => openConversionRow(row, "client")}
-        />
-
-        <AttributionConversionPanel
-          panelId="prescripteur_conversion_filleul"
-          title="Conversion — Filleuls"
-          description="Par prescripteur : taux de conversion filleul (inscrit ou désinscrit)."
-          loading={loading}
-          rows={filleulConversionStats.rows}
-          variant="filleul"
-          summaryLabel="Filleuls"
-          summaryValue={filleulContactStats.total}
-          summaryHint={filleulConversionSummary.hint}
-          onOpenRow={(row) => openConversionRow(row, "filleul")}
-        />
+      <AttributionConversionPanel
+        panelId={
+          lens === "client" ? "prescripteur_conversion_client" : "prescripteur_conversion_filleul"
+        }
+        title={lens === "client" ? "Conversion et volume par prescripteur" : "Conversion"}
+        description={
+          lens === "client"
+            ? "Par prescripteur : taux de conversion et montants signés « avec moi »."
+            : "Par prescripteur : taux de conversion filleul (inscrit ou désinscrit)."
+        }
+        loading={loading}
+        rows={lens === "client" ? clientConversionStats.rows : filleulConversionStats.rows}
+        variant={lens}
+        summaryLabel={lens === "client" ? "Supports" : "Filleuls"}
+        summaryValue={
+          lens === "client" ? clientConversionStats.total : filleulContactStats.total
+        }
+        summaryHint={
+          lens === "client"
+            ? `${formatDashboardCurrency(clientConversionStats.totalMontantCentimes / 100)} souscrits`
+            : filleulConversionSummary.hint
+        }
+        onOpenRow={(row) => openConversionRow(row, lens)}
+      />
       </div>
 
       {drillDownOpen ? <DashboardDrillDownBackdrop /> : null}

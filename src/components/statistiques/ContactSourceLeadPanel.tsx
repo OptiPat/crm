@@ -27,9 +27,10 @@ import { useStatistiquesPageData } from "./statistiques-page-data-context";
 
 type ContactSourceLeadPanelProps = {
   onNavigate?: (page: string) => void;
+  lens: SourceLeadStatsLens;
 };
 
-export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelProps) {
+export function ContactSourceLeadPanel({ onNavigate, lens }: ContactSourceLeadPanelProps) {
   const {
     contacts,
     investissementsWithDetails: investissements,
@@ -162,54 +163,47 @@ export function ContactSourceLeadPanel({ onNavigate }: ContactSourceLeadPanelPro
     <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
         <AttributionDistributionPanel
-          panelId="source_client"
-          title="Source contact — Clients"
-          description="Prospects et clients actifs avec le champ Source / lead renseigné sur la fiche."
-          loading={loading}
-          total={clientContactStats.total}
-          totalLabel="Clients"
-          totalHint="Exclus : suspects clients, prescripteurs, filleuls seuls."
-          rows={clientContactStats.rows}
-          onOpenRow={(row) => openContactDistributionRow(row, "client")}
-        />
+        panelId={lens === "client" ? "source_client" : "source_filleul"}
+        title="Source / lead"
+        description={
+          lens === "client"
+            ? "Prospects et clients actifs avec le champ Source / lead renseigné sur la fiche."
+            : "Filleuls de votre réseau direct avec Source / lead — vous devez être leur parrain sur la fiche."
+        }
+        loading={loading}
+        total={lens === "client" ? clientContactStats.total : filleulContactStats.total}
+        totalLabel={lens === "client" ? "Clients" : "Filleuls"}
+        totalHint={
+          lens === "client"
+            ? "Exclus : suspects clients, prescripteurs, filleuls seuls."
+            : "Prospects, inscrits et désinscrits."
+        }
+        rows={lens === "client" ? clientContactStats.rows : filleulContactStats.rows}
+        onOpenRow={(row) => openContactDistributionRow(row, lens)}
+      />
 
-        <AttributionDistributionPanel
-          panelId="source_filleul"
-          title="Source contact — Filleuls"
-          description="Filleuls de votre réseau direct avec Source / lead — vous devez être leur parrain sur la fiche."
-          loading={loading}
-          total={filleulContactStats.total}
-          totalLabel="Filleuls"
-          totalHint="Prospects, inscrits et désinscrits."
-          rows={filleulContactStats.rows}
-          onOpenRow={(row) => openContactDistributionRow(row, "filleul")}
-        />
-
-        <AttributionConversionPanel
-          panelId="conversion_client"
-          title="Conversion et volume — Clients"
-          description="Par source : combien ont signé un investissement « avec moi », et combien d'euros au total."
-          loading={loading}
-          rows={clientConversionStats.rows}
-          variant="client"
-          summaryLabel="Supports"
-          summaryValue={clientConversionStats.total}
-          summaryHint={`${formatDashboardCurrency(clientConversionStats.totalMontantCentimes / 100)} souscrits`}
-          onOpenRow={(row) => openConversionRow(row, "client")}
-        />
-
-        <AttributionConversionPanel
-          panelId="conversion_filleul"
-          title="Conversion — Filleuls"
-          description="Par source : combien de prospects filleuls sont devenus inscrits (ou désinscrits) dans votre réseau."
-          loading={loading}
-          rows={filleulConversionStats.rows}
-          variant="filleul"
-          summaryLabel="Filleuls"
-          summaryValue={filleulContactStats.total}
-          summaryHint={filleulConversionSummary.hint}
-          onOpenRow={(row) => openConversionRow(row, "filleul")}
-        />
+      <AttributionConversionPanel
+        panelId={lens === "client" ? "conversion_client" : "conversion_filleul"}
+        title={lens === "client" ? "Conversion et volume par source" : "Conversion"}
+        description={
+          lens === "client"
+            ? "Par source : combien ont signé un investissement « avec moi », et combien d'euros au total."
+            : "Par source : combien de prospects filleuls sont devenus inscrits (ou désinscrits) dans votre réseau."
+        }
+        loading={loading}
+        rows={lens === "client" ? clientConversionStats.rows : filleulConversionStats.rows}
+        variant={lens}
+        summaryLabel={lens === "client" ? "Supports" : "Filleuls"}
+        summaryValue={
+          lens === "client" ? clientConversionStats.total : filleulContactStats.total
+        }
+        summaryHint={
+          lens === "client"
+            ? `${formatDashboardCurrency(clientConversionStats.totalMontantCentimes / 100)} souscrits`
+            : filleulConversionSummary.hint
+        }
+        onOpenRow={(row) => openConversionRow(row, lens)}
+      />
       </div>
 
       {drillDownOpen ? <DashboardDrillDownBackdrop /> : null}

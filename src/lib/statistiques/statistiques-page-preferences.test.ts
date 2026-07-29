@@ -35,8 +35,17 @@ describe("statistiques-page-preferences", () => {
     saveStatistiquesSectionOpen("conversion_filleul", false);
     expect(loadStatistiquesSectionOpen("conversion_filleul", true)).toBe(false);
 
-    saveStatistiquesSectionOpen("contacts", true);
-    expect(loadStatistiquesSectionOpen("contacts", false)).toBe(true);
+    saveStatistiquesSectionOpen("clients", true);
+    expect(loadStatistiquesSectionOpen("clients", false)).toBe(true);
+  });
+
+  it("migre les anciennes sections source et prescripteurs", () => {
+    storage.set(
+      "crm_statistiques_sections_v1",
+      JSON.stringify({ contacts: false, prescripteurs: true })
+    );
+    expect(loadStatistiquesSectionOpen("clients", true)).toBe(false);
+    expect(loadStatistiquesSectionOpen("filleuls_organisation", false)).toBe(true);
   });
 
   it("migre l'ancienne section attrition vers clients", () => {

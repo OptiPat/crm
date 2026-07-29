@@ -1,8 +1,4 @@
-export type StatistiquesSectionId =
-  | "contacts"
-  | "prescripteurs"
-  | "clients"
-  | "filleuls_organisation";
+export type StatistiquesSectionId = "clients" | "filleuls_organisation";
 
 export type StatistiquesPanelId =
   | "source_client"
@@ -50,12 +46,24 @@ const STORAGE_KEY = "crm_statistiques_sections_v1";
 type StatistiquesSectionsState = Partial<Record<StatistiquesCollapsibleId, boolean>>;
 
 function migrateSectionsState(state: StatistiquesSectionsState): StatistiquesSectionsState {
-  const raw = state as StatistiquesSectionsState & { attrition?: boolean };
+  const raw = state as StatistiquesSectionsState & {
+    attrition?: boolean;
+    contacts?: boolean;
+    prescripteurs?: boolean;
+  };
   const migrated: StatistiquesSectionsState = { ...raw };
   if (raw.attrition !== undefined && migrated.clients === undefined) {
     migrated.clients = raw.attrition;
   }
+  if (raw.contacts !== undefined && migrated.clients === undefined) {
+    migrated.clients = raw.contacts;
+  }
+  if (raw.prescripteurs !== undefined && migrated.filleuls_organisation === undefined) {
+    migrated.filleuls_organisation = raw.prescripteurs;
+  }
   delete (migrated as { attrition?: boolean }).attrition;
+  delete (migrated as { contacts?: boolean }).contacts;
+  delete (migrated as { prescripteurs?: boolean }).prescripteurs;
   return migrated;
 }
 
@@ -97,21 +105,13 @@ export const STATISTIQUES_PANELS_BY_SECTION: Record<
   StatistiquesSectionId,
   readonly StatistiquesPanelId[]
 > = {
-  contacts: [
-    "source_client",
-    "source_filleul",
-    "conversion_client",
-    "conversion_filleul",
-  ],
-  prescripteurs: [
-    "prescripteur_client",
-    "prescripteur_filleul",
-    "prescripteur_conversion_client",
-    "prescripteur_conversion_filleul",
-  ],
   filleuls_organisation: [
     "geography_filleul",
     "age_filleul",
+    "source_filleul",
+    "conversion_filleul",
+    "prescripteur_filleul",
+    "prescripteur_conversion_filleul",
     "filleul_org_exercice_summary",
     "filleul_org_diagnostic",
     "filleul_org_objectif_table",
@@ -130,6 +130,10 @@ export const STATISTIQUES_PANELS_BY_SECTION: Record<
   clients: [
     "geography_client",
     "age_client",
+    "source_client",
+    "conversion_client",
+    "prescripteur_client",
+    "prescripteur_conversion_client",
     "client_encours_placements",
     "client_versements_programmes",
     "client_panier_moyen",

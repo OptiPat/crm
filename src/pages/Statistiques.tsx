@@ -1,8 +1,6 @@
-import { CircleUser, Network, Share2, Users } from "lucide-react";
+import { CircleUser, Network } from "lucide-react";
 import { ContactClientStatsPanel } from "@/components/statistiques/ContactClientStatsPanel";
 import { ContactFilleulOrganisationPanel } from "@/components/statistiques/ContactFilleulOrganisationPanel";
-import { ContactPrescripteurPanel } from "@/components/statistiques/ContactPrescripteurPanel";
-import { ContactSourceLeadPanel } from "@/components/statistiques/ContactSourceLeadPanel";
 import { StatistiquesPageToolbar } from "@/components/statistiques/StatistiquesPageToolbar";
 import { StatistiquesSection } from "@/components/statistiques/statistiques-ui";
 import { StatistiquesPageDataProvider } from "@/components/statistiques/statistiques-page-data-context";
@@ -13,8 +11,6 @@ type StatistiquesProps = {
 };
 
 const SECTION_ICONS = {
-  contacts: Users,
-  prescripteurs: Share2,
   filleuls_organisation: Network,
   clients: CircleUser,
 } as const;
@@ -33,10 +29,6 @@ function StatistiquesContent({ onNavigate }: StatistiquesProps) {
           icon={SECTION_ICONS[section.id]}
           panelCount={statistiquesSectionPanelCount(section.id)}
         >
-          {section.id === "contacts" ? <ContactSourceLeadPanel onNavigate={onNavigate} /> : null}
-          {section.id === "prescripteurs" ? (
-            <ContactPrescripteurPanel onNavigate={onNavigate} />
-          ) : null}
           {section.id === "filleuls_organisation" ? (
             <ContactFilleulOrganisationPanel onNavigate={onNavigate} />
           ) : null}
