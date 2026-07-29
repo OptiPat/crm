@@ -1,23 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
+import { FilleulDossierDateField } from "@/components/organisation/FilleulDossierDateField";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { FilleulDossier } from "@/lib/api/tauri-filleul-dossier";
-import { upsertFilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import { updateContact } from "@/lib/api/tauri-contacts";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
-import {
-  buildUpsertFilleulDossierInput,
-  dossierDateToInput,
-  resolveFilleulCategorieAfterDesinscriptionDateChange,
-} from "@/lib/organisation/organisation-filleul-dossier";
-import {
-  describeOrganisationExerciceVisibilityHint,
-  validateFilleulDossierDatePatch,
-} from "@/lib/organisation/organisation-filleul-dossier-validation";
+import { dossierDateToInput } from "@/lib/organisation/organisation-filleul-dossier";
+import { describeOrganisationExerciceVisibilityHint } from "@/lib/organisation/organisation-filleul-dossier-validation";
 import { FILLEUL_DOSSIER_DATE_LABELS } from "@/lib/organisation/organisation-filleul-dossier-labels";
+import { useFilleulDossierPatchQueue } from "@/hooks/useFilleulDossierPatchQueue";
 import { toast } from "sonner";
 
 type OrganisationMemberDossierNetworkSectionProps = {
@@ -30,42 +23,6 @@ type OrganisationMemberDossierNetworkSectionProps = {
   onSelectMember?: (contactId: number) => void;
 };
 
-type DossierPatch = Parameters<typeof buildUpsertFilleulDossierInput>[1];
-
-function DossierDateField({
-  id,
-  label,
-  value,
-  disabled,
-  onSave,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  disabled?: boolean;
-  onSave: (value: string) => void | Promise<void>;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id} className="text-xs text-muted-foreground">
-        {label}
-      </Label>
-      <Input
-        id={id}
-        type="date"
-        className="h-9"
-        defaultValue={value}
-        disabled={disabled}
-        key={`${id}-${value}`}
-        onBlur={(event) => {
-          if (event.target.value === value) return;
-          void onSave(event.target.value);
-        }}
-      />
-    </div>
-  );
-}
-
 export function OrganisationMemberDossierNetworkSection({
   contact,
   contacts,
@@ -75,132 +32,34 @@ export function OrganisationMemberDossierNetworkSection({
   onParrainChange,
   onSelectMember,
 }: OrganisationMemberDossierNetworkSectionProps) {
-  const [saving, setSaving] = useState(false);
-  const dossierRef = useRef(dossier);
-  const queueRef = useRef<DossierPatch[]>([]);
-  const processingRef = useRef(false);
-
-  useEffect(() => {
-    dossierRef.current = dossier;
-  }, [dossier]);
-
-  const processSaveQueue = useCallback(async () => {
-    if (processingRef.current) return;
-    processingRef.current = true;
-    setSaving(true);
-    try {
-      while (queueRef.current.length > 0) {
-        const patch = queueRef.current.shift()!;
-        const dossierBeforePatch = dossierRef.current;
-        try {
-          if (patch.dateDesinscription !== undefined && contact.id != null) {
-            const clearingDesinscription =
-              patch.dateDesinscription.trim() === "" &&
-              dossierBeforePatch.dateDesinscription != null;
-            let nextFilleulCategorie = resolveFilleulCategorieAfterDesinscriptionDateChange(
-              contact,
-              patch.dateDesinscription
-            );
-            if (nextFilleulCategorie === undefined && clearingDesinscription) {
-              nextFilleulCategorie = "FILLEUL";
-            }
-            if (nextFilleulCategorie !== undefined) {
-              await updateContact(
-                contact.id,
-                contactToUpdatePayload(contact, { filleul_categorie: nextFilleulCategorie })
-              );
-              onParrainChange?.();
-            }
-          }
-
-          const saved = await upsertFilleulDossier(
-            buildUpsertFilleulDossierInput(dossierRef.current, patch),
-            { notifyContactsChanged: true }
-          );
-          dossierRef.current = saved;
-          onDossierChange(saved);
-
-          if (patch.dateDesinscription !== undefined) {
-            const visibilityHint = describeOrganisationExerciceVisibilityHint(
-              contact,
-              dossierRef.current
-            );
-            if (visibilityHint) {
-              toast.info(visibilityHint, { duration: 8000 });
-            }
-          }
-        } catch (patchError) {
-          queueRef.current.unshift(patch);
-          throw patchError;
-        }
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error("Impossible d'enregistrer le dossier réseau");
-      throw error;
-    } finally {
-      processingRef.current = false;
-      setSaving(false);
-      if (queueRef.current.length > 0) {
-        void processSaveQueue();
-      }
-    }
-  }, [contact, onDossierChange, onParrainChange]);
-
-  const saveDossierPatch = useCallback(
-    (patch: DossierPatch) => {
-      if (!canEdit) return;
-
-      const datePatch = {
-        dateInvitation: patch.dateInvitation,
-        dateInscription: patch.dateInscription,
-        dateDesinscription: patch.dateDesinscription,
-      };
-      const hasDatePatch = Object.values(datePatch).some((v) => v !== undefined);
-      if (hasDatePatch) {
-        const validation = validateFilleulDossierDatePatch(
-          dossierRef.current,
-          contact,
-          datePatch
-        );
-        if (validation?.blocking) {
-          toast.error(validation.blocking);
-          return;
-        }
-        if (validation?.warning) {
-          toast.warning(validation.warning);
-        }
-      }
-
-      queueRef.current.push(patch);
-      void processSaveQueue();
-    },
-    [canEdit, contact, processSaveQueue]
-  );
+  const { saving, saveDossierPatch } = useFilleulDossierPatchQueue({
+    contact,
+    dossier,
+    canEdit,
+    onDossierChange,
+    onCategorieChange: onParrainChange,
+  });
 
   const exerciceVisibilityHint = useMemo(
     () => describeOrganisationExerciceVisibilityHint(contact, dossier),
     [contact, dossier]
   );
 
-  const handleParrainChange = useCallback(
-    async (parrainId: number | undefined) => {
-      if (!canEdit || contact.id == null) return;
-      if (parrainId === contact.parrain_id) return;
-      try {
-        await updateContact(contact.id, {
-          ...contactToUpdatePayload(contact),
-          parrain_id: parrainId,
-        });
-        toast.success("Parrain enregistré");
-        onParrainChange?.();
-      } catch (error) {
-        console.error(error);
-        toast.error("Impossible d'enregistrer le parrain");
-      }
-    },
-    [canEdit, contact, onParrainChange]
-  );
+  async function handleParrainChange(parrainId: number | undefined) {
+    if (!canEdit || contact.id == null) return;
+    if (parrainId === contact.parrain_id) return;
+    try {
+      await updateContact(contact.id, {
+        ...contactToUpdatePayload(contact),
+        parrain_id: parrainId,
+      });
+      toast.success("Parrain enregistré");
+      onParrainChange?.();
+    } catch (error) {
+      console.error(error);
+      toast.error("Impossible d'enregistrer le parrain");
+    }
+  }
 
   return (
     <section className="space-y-3">
@@ -225,56 +84,56 @@ export function OrganisationMemberDossierNetworkSection({
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <DossierDateField
+        <FilleulDossierDateField
           id="dossier-date-invitation"
           label={FILLEUL_DOSSIER_DATE_LABELS.dateInvitation}
           value={dossierDateToInput(dossier.dateInvitation)}
           disabled={!canEdit || saving}
           onSave={(value) => saveDossierPatch({ dateInvitation: value })}
         />
-        <DossierDateField
+        <FilleulDossierDateField
           id="dossier-date-inscription"
           label={FILLEUL_DOSSIER_DATE_LABELS.dateInscription}
           value={dossierDateToInput(dossier.dateInscription)}
           disabled={!canEdit || saving}
           onSave={(value) => saveDossierPatch({ dateInscription: value })}
         />
-        <DossierDateField
+        <FilleulDossierDateField
           id="dossier-date-imo"
           label={FILLEUL_DOSSIER_DATE_LABELS.datePremiereSouscriptionImo}
           value={dossierDateToInput(dossier.datePremiereSouscriptionImo)}
           disabled={!canEdit || saving}
           onSave={(value) => saveDossierPatch({ datePremiereSouscriptionImo: value })}
         />
-        <DossierDateField
+        <FilleulDossierDateField
           id="dossier-date-placement"
           label={FILLEUL_DOSSIER_DATE_LABELS.datePremiereSouscriptionPlacement}
           value={dossierDateToInput(dossier.datePremiereSouscriptionPlacement)}
           disabled={!canEdit || saving}
           onSave={(value) => saveDossierPatch({ datePremiereSouscriptionPlacement: value })}
         />
-        <DossierDateField
+        <FilleulDossierDateField
           id="dossier-date-scpi"
           label={FILLEUL_DOSSIER_DATE_LABELS.datePremiereSouscriptionScpi}
           value={dossierDateToInput(dossier.datePremiereSouscriptionScpi)}
           disabled={!canEdit || saving}
           onSave={(value) => saveDossierPatch({ datePremiereSouscriptionScpi: value })}
         />
-        <DossierDateField
+        <FilleulDossierDateField
           id="dossier-date-cif"
           label={FILLEUL_DOSSIER_DATE_LABELS.dateHabilitationCif}
           value={dossierDateToInput(dossier.dateHabilitationCif)}
           disabled={!canEdit || saving}
           onSave={(value) => saveDossierPatch({ dateHabilitationCif: value })}
         />
-        <DossierDateField
+        <FilleulDossierDateField
           id="dossier-date-vaa"
           label={FILLEUL_DOSSIER_DATE_LABELS.datePremierVaaOuVa}
           value={dossierDateToInput(dossier.datePremierVaaOuVa)}
           disabled={!canEdit || saving}
           onSave={(value) => saveDossierPatch({ datePremierVaaOuVa: value })}
         />
-        <DossierDateField
+        <FilleulDossierDateField
           id="dossier-date-manager"
           label={FILLEUL_DOSSIER_DATE_LABELS.datePassageManager}
           value={dossierDateToInput(dossier.datePassageManager)}
@@ -313,7 +172,7 @@ export function OrganisationMemberDossierNetworkSection({
             désinscrit » ; l&apos;effacer repasse à « Filleul ».
           </p>
         </div>
-        <DossierDateField
+        <FilleulDossierDateField
           id="dossier-date-desinscription"
           label={FILLEUL_DOSSIER_DATE_LABELS.dateDesinscription}
           value={dossierDateToInput(dossier.dateDesinscription)}

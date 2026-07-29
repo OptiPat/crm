@@ -11,12 +11,16 @@ export function fiscalYearLabelForDate(date: Date): string {
   return `${year - 1}-${year}`;
 }
 
+// Bornes en jour calendaire UTC (minuit), pas en heure locale : les dates stockées
+// (dossier filleul, RDV, souscriptions...) sont elles-mêmes des jours calendaires UTC
+// (cf. lib/dates/calendar-date.ts). Comparer une borne locale à une date UTC décalait
+// de 1 à 2h les exclusions pile aux frontières 31/07 ↔ 01/08.
 export function fiscalYearStartUnix(label: string): number | null {
   const match = /^(\d{4})-(\d{4})$/.exec(label.trim());
   if (!match) return null;
   const startYear = Number(match[1]);
   if (!Number.isFinite(startYear)) return null;
-  return Math.floor(new Date(startYear, 7, 1, 0, 0, 0, 0).getTime() / 1000);
+  return Math.floor(Date.UTC(startYear, 7, 1, 0, 0, 0, 0) / 1000);
 }
 
 export function fiscalYearEndUnix(label: string): number | null {
@@ -24,7 +28,7 @@ export function fiscalYearEndUnix(label: string): number | null {
   if (!match) return null;
   const endYear = Number(match[2]);
   if (!Number.isFinite(endYear)) return null;
-  return Math.floor(new Date(endYear, 6, 31, 23, 59, 59, 999).getTime() / 1000);
+  return Math.floor(Date.UTC(endYear, 6, 31, 23, 59, 59, 999) / 1000);
 }
 
 export function currentFiscalYearLabel(now = new Date()): string {

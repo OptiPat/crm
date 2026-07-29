@@ -234,6 +234,10 @@ export function ContactDetailSyntheseTab({
   const clientLabel = getClientLabel(contact.categorie || "AUCUN");
   const filleulLabel = getFilleulLabel(contact.filleul_categorie);
   const filleulReseauInscrit = isFilleulReseauInscrit(contact.filleul_categorie);
+  // Carte « Parrainage » (type/présence invitation + dates réseau éditables) : tous les statuts
+  // filleul, y compris prospect/suspect — on doit pouvoir noter une invitation JD/PO et sa date
+  // avant même que la personne soit officiellement inscrite au réseau (FILLEUL).
+  const filleulReseauSigne = isFilleulStatut(contact.filleul_categorie);
   const notesDisplay = stripDateInscriptionFromNotes(contact.notes);
   const showRolesCard =
     clientLabel ||
@@ -242,8 +246,8 @@ export function ContactDetailSyntheseTab({
     contact.date_r1 ||
     contact.date_dernier_contact ||
     contact.date_prochain_suivi ||
-    (!filleulReseauInscrit && contact.date_dernier_contact_filleul) ||
-    (!filleulReseauInscrit && contact.date_prochain_suivi_filleul);
+    (!filleulReseauSigne && contact.date_dernier_contact_filleul) ||
+    (!filleulReseauSigne && contact.date_prochain_suivi_filleul);
 
   const handleSyncGoogle = async () => {
     if (contact.id == null) return;
@@ -549,10 +553,11 @@ export function ContactDetailSyntheseTab({
         </Card>
       )}
 
-      {filleulReseauInscrit && (
+      {filleulReseauSigne && (
         <ContactDetailSyntheseParrainageCard
           contact={contact}
           mesFilleulsCount={mesFilleulsCount}
+          onContactUpdated={onContactUpdated}
           header={
             <SyntheseCardHeader
               sectionKey="parrainage"
@@ -637,7 +642,7 @@ export function ContactDetailSyntheseTab({
                 </div>
               </div>
             )}
-            {contact.date_dernier_contact_filleul && !filleulReseauInscrit && (
+            {contact.date_dernier_contact_filleul && !filleulReseauSigne && (
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <div>
@@ -648,7 +653,7 @@ export function ContactDetailSyntheseTab({
                 </div>
               </div>
             )}
-            {contact.date_prochain_suivi_filleul && !filleulReseauInscrit && (
+            {contact.date_prochain_suivi_filleul && !filleulReseauSigne && (
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <div>

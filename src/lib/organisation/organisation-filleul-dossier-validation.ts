@@ -6,7 +6,10 @@ import {
   resolveFilleulInscriptionTimestamp,
   resolveFilleulInvitationTimestamp,
 } from "@/lib/organisation/organisation-filleul-dossier";
-import { wasConsultantInNetworkDuringExercice } from "@/lib/organisation/organisation-exercice-membership";
+import {
+  isOrganisationNetworkConsultant,
+  wasConsultantInNetworkDuringExercice,
+} from "@/lib/organisation/organisation-exercice-membership";
 import {
   currentFiscalYearLabel,
   fiscalYearEndUnix,
@@ -105,6 +108,10 @@ export function describeOrganisationExerciceVisibilityHint(
   dossier: FilleulDossier | null | undefined,
   exerciceLabel = currentFiscalYearLabel()
 ): string | null {
+  // Un prospect/suspect filleul n'est jamais attendu dans l'arbre par exercice (réservé aux
+  // consultants FILLEUL / FILLEUL_DESINSCRIT) : pas de faux « absent de l'arbre » pour eux.
+  if (!isOrganisationNetworkConsultant(contact)) return null;
+
   const dossiersByContactId = new Map<number, FilleulDossier>();
   if (contact.id != null && dossier) {
     dossiersByContactId.set(contact.id, dossier);

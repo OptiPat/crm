@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   buildUpsertFilleulDossierInput,
   dossierDateInputToTimestamp,
@@ -11,7 +11,16 @@ import {
   resolveFilleulCategorieAfterDesinscriptionDateChange,
 } from "@/lib/organisation/organisation-filleul-dossier";
 
+const invoke = vi.fn();
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (...args: unknown[]) => invoke(...args),
+}));
+
 describe("organisation-filleul-dossier", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
   it("indexe les dossiers par contact", () => {
     const map = indexFilleulDossiersByContactId([
       { ...emptyFilleulDossier(1), dateInvitation: 100 },
@@ -68,6 +77,52 @@ describe("organisation-filleul-dossier", () => {
     expect(merged.dateInvitation).toBe(100);
     expect(merged.dateInscription).toBe(200);
     expect(merged.updatedAt).toBe(0);
+  });
+
+  it("repli legacy même si le dossier est un shell vide non-null (get_filleul_dossier sans ligne)", () => {
+    const merged = mergeLegacyFilleulDossierView(
+      { id: 8, date_invitation_filleul: 100, date_inscription_filleul: 200 },
+      emptyFilleulDossier(8)
+    );
+    expect(merged.dateInvitation).toBe(100);
+    expect(merged.dateInscription).toBe(200);
+  });
+
+  it("ne repli pas la legacy quand une vraie ligne dossier existe (updatedAt > 0)", () => {
+    const dossier = { ...emptyFilleulDossier(9), dateInvitation: null, updatedAt: 1 };
+    const merged = mergeLegacyFilleulDossierView(
+      { id: 9, date_invitation_filleul: 100, date_inscription_filleul: 200 },
+      dossier
+    );
+    expect(merged.dateInvitation).toBeNull();
+  });
+
+  it("upsertFilleulDossierDatesFromImport repart du dossier existant (pas d'un shell vide)", async () => {
+    const { upsertFilleulDossierDatesFromImport } = await import(
+      "@/lib/organisation/organisation-filleul-dossier"
+    );
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "get_filleul_dossier") {
+        return Promise.resolve({
+          ...emptyFilleulDossier(42),
+          dateDesinscription: 999,
+          datePassageManager: 555,
+          updatedAt: 1,
+        });
+      }
+      if (cmd === "upsert_filleul_dossier") {
+        return Promise.resolve(emptyFilleulDossier(42));
+      }
+      throw new Error(`commande inattendue : ${cmd}`);
+    });
+
+    await upsertFilleulDossierDatesFromImport(42, { dateInscription: "2024-03-15" });
+
+    expect(invoke).toHaveBeenCalledWith("get_filleul_dossier", { contactId: 42 });
+    const upsertCall = invoke.mock.calls.find(([cmd]) => cmd === "upsert_filleul_dossier");
+    expect(upsertCall?.[1].input.dateDesinscription).toBe(999);
+    expect(upsertCall?.[1].input.datePassageManager).toBe(555);
+    expect(upsertCall?.[1].input.dateInscription).not.toBeNull();
   });
 
   it("aligne le statut réseau après date de désinscription", () => {

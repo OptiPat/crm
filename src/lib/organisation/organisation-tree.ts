@@ -505,5 +505,17 @@ export function collectOrganisationDossierContactIds(
     }
   }
 
+  // Prospects/suspects filleul rattachés à moi (relation plate, pas dans le downline
+  // FILLEUL/FILLEUL_DESINSCRIT ci-dessus) : ils peuvent avoir une date d'invitation JD/PO
+  // dans leur dossier (funnel avant inscription réseau), utile aux stats de parrainage perso.
+  for (const contact of contacts) {
+    if (contact.id == null || ids.has(contact.id)) continue;
+    const cat = contactEffectiveFilleulCategorie(contact);
+    if (cat !== "PROSPECT_FILLEUL" && cat !== "SUSPECT_FILLEUL") continue;
+    if (contact.parrain_id == null || contact.parrain_id === selfContact.id) {
+      ids.add(contact.id);
+    }
+  }
+
   return [...ids];
 }

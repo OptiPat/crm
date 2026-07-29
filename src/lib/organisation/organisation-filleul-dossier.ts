@@ -1,6 +1,6 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { FilleulDossier, UpsertFilleulDossierInput } from "@/lib/api/tauri-filleul-dossier";
-import { upsertFilleulDossier } from "@/lib/api/tauri-filleul-dossier";
+import { getFilleulDossier, upsertFilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import { isFilleulStatut } from "@/lib/contacts/contact-form-utils";
 import { dateFieldToIso, toDateInput } from "@/lib/contacts/contact-form-utils";
 
@@ -104,13 +104,20 @@ export function hasFilleulDossierRecord(dossier: FilleulDossier): boolean {
   return dossier.updatedAt > 0;
 }
 
-/** Vue dossier pour l'UI : ligne DB ou repli dates legacy contacts. */
+/**
+ * Vue dossier pour l'UI : ligne DB (si elle existe réellement) ou repli dates legacy contacts.
+ * Important : `dossier` peut être un shell vide non-null renvoyé par `get_filleul_dossier`
+ * quand aucune ligne n'existe encore (contactId + tout à null, `updatedAt: 0`) — on teste donc
+ * `hasFilleulDossierRecord`, pas juste la présence de l'objet, sinon ce repli ne se déclenche
+ * jamais côté fiche contact (qui utilise le fetch unitaire) et une première sauvegarde partielle
+ * écraserait à `null` les dates legacy jamais reportées dans le dossier.
+ */
 export function mergeLegacyFilleulDossierView(
   contact: Pick<Contact, "id" | "date_invitation_filleul" | "date_inscription_filleul">,
   dossier?: FilleulDossier | null
 ): FilleulDossier {
-  if (dossier) return dossier;
-  const contactId = contact.id;
+  if (dossier && hasFilleulDossierRecord(dossier)) return dossier;
+  const contactId = contact.id ?? dossier?.contactId;
   if (contactId == null) {
     return emptyFilleulDossier(0);
   }
@@ -246,7 +253,8 @@ export async function upsertFilleulDossierDatesFromImport(
   if (dates.dateInvitation) patch.dateInvitation = dates.dateInvitation;
   if (dates.dateInscription) patch.dateInscription = dates.dateInscription;
   if (Object.keys(patch).length === 0) return null;
-  return upsertFilleulDossier(
-    buildUpsertFilleulDossierInput(emptyFilleulDossier(contactId), patch)
-  );
+  // Repart du dossier existant (pas d'un shell vide) : un ré-import qui ne fournit que
+  // l'inscription ne doit pas écraser à null une désinscription/date manager déjà saisie.
+  const current = await getFilleulDossier(contactId);
+  return upsertFilleulDossier(buildUpsertFilleulDossierInput(current, patch));
 }

@@ -291,6 +291,45 @@ describe("organisation-tree", () => {
     expect(collectOrganisationDossierContactIds(contacts, self)).toEqual([2, 5]);
   });
 
+  it("collectOrganisationDossierContactIds inclut les prospects/suspects rattachés à moi", () => {
+    const contacts = [
+      contact({ id: 2, nom: "CGP", prenom: "Moi", filleul_categorie: "FILLEUL" }),
+      contact({
+        id: 6,
+        nom: "VERGNES",
+        prenom: "Fabien",
+        filleul_categorie: "PROSPECT_FILLEUL",
+      }),
+      contact({
+        id: 7,
+        nom: "AUTRE",
+        prenom: "Prospect",
+        filleul_categorie: "PROSPECT_FILLEUL",
+        parrain_id: 2,
+      }),
+      contact({
+        id: 9,
+        nom: "PASMOI",
+        prenom: "Prospect",
+        filleul_categorie: "PROSPECT_FILLEUL",
+        parrain_id: 999,
+      }),
+      contact({
+        id: 10,
+        nom: "SUSPECT",
+        prenom: "Test",
+        filleul_categorie: "SUSPECT_FILLEUL",
+        parrain_id: 2,
+      }),
+    ];
+    const self = resolveOrganisationSelfContact(contacts, { nom: "CGP", prenom: "Moi" });
+    const ids = collectOrganisationDossierContactIds(contacts, self);
+    expect(ids).toContain(6);
+    expect(ids).toContain(7);
+    expect(ids).toContain(10);
+    expect(ids).not.toContain(9);
+  });
+
   it("groupDesinscritsByParrain distingue Moi et filleuls actifs parrain", () => {
     const contacts = [
       contact({ id: 2, nom: "CGP", prenom: "Moi", filleul_categorie: "FILLEUL" }),

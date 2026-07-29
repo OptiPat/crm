@@ -37,4 +37,11 @@ describe("organisation-filleul-dossier-validation", () => {
     expect(hint).toContain("2025-2026");
     expect(hint).toContain("recherche");
   });
+
+  it("pas de hint « absent de l'arbre » pour un prospect/suspect filleul (pas encore réseau)", () => {
+    const prospect = { ...contact, filleul_categorie: "PROSPECT_FILLEUL" };
+    const dossier = emptyFilleulDossier(1);
+    const hint = describeOrganisationExerciceVisibilityHint(prospect, dossier, "2025-2026");
+    expect(hint).toBeNull();
+  });
 });
