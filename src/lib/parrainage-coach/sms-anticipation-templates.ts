@@ -136,7 +136,7 @@ export const SMS_ANTICIPATION_PROFILE_DEFS: Record<SmsAnticipationProfile, SmsAn
     },
   },
   SENIOR_EXPERT: {
-    label: "🏆 Senior / Expert / Manager",
+    label: "🏆 Cadre confirmé / Manager",
     pourQui:
       "Quelqu'un qui a déjà une bonne situation, une carrière établie, du leadership ou une grosse expérience pro. On ne lui parle pas de « galères », mais de plafonnement ou de reconversion.",
     variants: {
