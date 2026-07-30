@@ -190,7 +190,7 @@ export function availableSmsAnticipationVariants(
 }
 
 /** Normalise la casse d'un prénom (« test »/« TEST » → « Test »), aligné sur le backend Rust. */
-function formatDisplayName(raw: string): string {
+export function formatDisplayName(raw: string): string {
   const trimmed = raw.trim();
   let result = "";
   let capitalizeNext = true;

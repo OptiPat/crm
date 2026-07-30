@@ -211,7 +211,15 @@ export function ParrainagePipeDetailPanel({
                   .then(setTimeline)
                   .catch(() => setTimeline([]));
               }}
-              onAdvanceStage={() => changeStage("PRISE_DE_CONTACT", { silent: true })}
+              onAdvanceStage={() => {
+                const nextStage =
+                  pipe.stage === "A_CONTACTER"
+                    ? "PRISE_DE_CONTACT"
+                    : pipe.stage === "PRISE_DE_CONTACT"
+                      ? "CONFIRME"
+                      : null;
+                return nextStage ? changeStage(nextStage, { silent: true }) : true;
+              }}
             />
           </div>
         </div>

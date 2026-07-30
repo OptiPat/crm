@@ -12,7 +12,16 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ParrainagePipeRecord } from "@/lib/api/tauri-parrainage-pipe";
-import { createParrainagePipeSmsSentNote } from "@/lib/api/tauri-parrainage-pipe";
+import {
+  createParrainagePipeSmsSentNote,
+  createParrainagePipeTimelineNote,
+} from "@/lib/api/tauri-parrainage-pipe";
+import {
+  APPEL_PRISE_CONTACT_OBJECTIONS,
+  APPEL_PRISE_CONTACT_STEPS,
+  renderAppelPriseContactStep,
+  type AppelPriseContactStepDef,
+} from "@/lib/parrainage-coach/appel-prise-contact-script";
 import {
   availableSmsAnticipationVariants,
   renderSmsAnticipationTemplate,
@@ -318,6 +327,158 @@ function SmsAnticipationSection({
   );
 }
 
+function AppelPriseContactSection({
+  pipe,
+  onNoteSaved,
+  onAdvanceStage,
+}: {
+  pipe: ParrainagePipeRecord;
+  onNoteSaved?: () => void;
+  onAdvanceStage?: () => Promise<boolean> | boolean;
+}) {
+  const allAppelSteps = [...APPEL_PRISE_CONTACT_STEPS, ...APPEL_PRISE_CONTACT_OBJECTIONS];
+
+  const [texts, setTexts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      allAppelSteps.map((step) => [
+        step.id,
+        renderAppelPriseContactStep(step.template, pipe.contact_prenom ?? ""),
+      ])
+    )
+  );
+  const [variantByStep, setVariantByStep] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      allAppelSteps.filter((step) => step.variants).map((step) => [step.id, step.variants![0].id])
+    )
+  );
+  const [advancing, setAdvancing] = useState(false);
+
+  const applyVariant = (step: AppelPriseContactStepDef, variantId: string) => {
+    const variant = step.variants?.find((v) => v.id === variantId);
+    if (!variant) return;
+    setVariantByStep((prev) => ({ ...prev, [step.id]: variantId }));
+    setTexts((prev) => ({
+      ...prev,
+      [step.id]: renderAppelPriseContactStep(variant.template, pipe.contact_prenom ?? ""),
+    }));
+  };
+
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copié");
+    } catch {
+      toast.error("Copie impossible");
+    }
+  };
+
+  const markDone = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setAdvancing(true);
+    try {
+      const advanced = await onAdvanceStage?.();
+      if (advanced === false) {
+        return;
+      }
+      const combinedSteps = APPEL_PRISE_CONTACT_STEPS.map(
+        (step) => `${step.title} :\n${texts[step.id]}`
+      ).join("\n\n");
+      const combinedObjections = APPEL_PRISE_CONTACT_OBJECTIONS.map(
+        (step) => `${step.title} :\n${texts[step.id]}`
+      ).join("\n\n");
+      await createParrainagePipeTimelineNote(
+        pipe.id,
+        `Script d'appel :\n\n${combinedSteps}\n\nObjections possibles :\n\n${combinedObjections}`
+      );
+      onNoteSaved?.();
+      fireConfettiBurst({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+      toast.success("Appel effectué — étape suivante");
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setAdvancing(false);
+    }
+  };
+
+  const autoResize = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
+  const renderStepCard = (step: AppelPriseContactStepDef) => (
+    <div key={step.id} className="space-y-1 rounded-md border border-border/60 p-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-[11px] font-medium leading-tight">
+          {step.title}
+          {step.note && <span className="ml-1 italic text-muted-foreground">— {step.note}</span>}
+        </Label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-6 px-1.5 shrink-0"
+          onClick={() => void copy(texts[step.id])}
+        >
+          <Copy className="size-3.5" />
+        </Button>
+      </div>
+      {step.variants && (
+        <div className="flex flex-wrap gap-1.5">
+          {step.variants.map((v) => (
+            <Button
+              key={v.id}
+              type="button"
+              size="sm"
+              variant={variantByStep[step.id] === v.id ? "default" : "outline"}
+              className="h-6 text-[11px] px-2"
+              onClick={() => applyVariant(step, v.id)}
+            >
+              {v.label}
+            </Button>
+          ))}
+        </div>
+      )}
+      <Textarea
+        ref={autoResize}
+        value={texts[step.id]}
+        onChange={(e) => {
+          setTexts((prev) => ({ ...prev, [step.id]: e.target.value }));
+          autoResize(e.target);
+        }}
+        rows={2}
+        className="text-sm resize-none overflow-hidden"
+      />
+      {step.expectedReply && (
+        <p className="text-[11px] italic text-muted-foreground">
+          (Réponse attendue : {step.expectedReply})
+        </p>
+      )}
+      {step.headsUp && <p className="text-[11px] italic text-muted-foreground">{step.headsUp}</p>}
+      {texts[step.id].includes("[") && (
+        <p className="text-[11px] text-amber-600">
+          Pensez à compléter le champ entre crochets avant l&apos;appel.
+        </p>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-2">
+      {APPEL_PRISE_CONTACT_STEPS.map(renderStepCard)}
+
+      <div className="space-y-2 rounded-md border border-dashed border-border/60 p-2">
+        <div className="text-[11px] font-medium text-muted-foreground">Objections possibles</div>
+        {APPEL_PRISE_CONTACT_OBJECTIONS.map(renderStepCard)}
+      </div>
+
+      <Button type="button" size="sm" onClick={(e) => void markDone(e)} disabled={advancing}>
+        Appel effectué → étape suivante
+      </Button>
+    </div>
+  );
+}
+
 interface ParrainageScriptPanelProps {
   pipe: ParrainagePipeRecord;
   onNoteSaved?: () => void;
@@ -328,6 +489,7 @@ export function ParrainageScriptPanel({ pipe, onNoteSaved, onAdvanceStage }: Par
   const stage = pipe.stage as ParrainagePipeStage;
   const isInscrit = stage === "INSCRIT";
   const isAContacter = stage === "A_CONTACTER";
+  const isPriseDeContact = stage === "PRISE_DE_CONTACT";
 
   return (
     <Card className="border-border/60 shadow-none">
@@ -339,7 +501,9 @@ export function ParrainageScriptPanel({ pipe, onNoteSaved, onAdvanceStage }: Par
         <CardDescription className="text-xs">
           {isAContacter
             ? "SMS d'anticipation — textes prêts à l'emploi selon le profil relationnel du contact."
-            : `Étape « ${PARRAINAGE_PIPE_STAGE_LABELS[stage]} ».`}
+            : isPriseDeContact
+              ? "Script d'appel — prospect au téléphone."
+              : `Étape « ${PARRAINAGE_PIPE_STAGE_LABELS[stage]} ».`}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -349,6 +513,8 @@ export function ParrainageScriptPanel({ pipe, onNoteSaved, onAdvanceStage }: Par
           </p>
         ) : isAContacter ? (
           <SmsAnticipationSection pipe={pipe} onNoteSaved={onNoteSaved} onAdvanceStage={onAdvanceStage} />
+        ) : isPriseDeContact ? (
+          <AppelPriseContactSection pipe={pipe} onNoteSaved={onNoteSaved} onAdvanceStage={onAdvanceStage} />
         ) : (
           <p className="text-sm text-muted-foreground">
             Pas encore de script pour cette étape.
