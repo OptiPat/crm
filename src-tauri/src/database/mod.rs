@@ -637,6 +637,7 @@ impl Database {
         self.migrate_etiquette_pipeline()?;
         self.migrate_etiquette_rendement_cible()?;
         self.migrate_calendar_events()?;
+        self.migrate_pipe_rdv_contact_date_snapshot()?;
         self.migrate_contacts_google_sync()?;
         self.migrate_google_contact_name_proposal_dismissals()?;
         self.migrate_add_lieu_naissance()?;
@@ -1273,6 +1274,22 @@ impl Database {
                 [],
             )?;
         }
+        Ok(())
+    }
+
+    fn migrate_pipe_rdv_contact_date_snapshot(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS pipe_rdv_contact_date_snapshot (
+                pipe_timeline_entry_id INTEGER NOT NULL,
+                contact_id INTEGER NOT NULL,
+                date_dernier_contact_before INTEGER,
+                date_r1_before INTEGER,
+                restore_date_r1 INTEGER NOT NULL DEFAULT 0,
+                categorie_before TEXT,
+                PRIMARY KEY (pipe_timeline_entry_id, contact_id)
+            )",
+            [],
+        )?;
         Ok(())
     }
 

@@ -1,4 +1,5 @@
 import type { PlacementOperation } from "@/lib/api/tauri-box-placement";
+import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import { PIPE_STAGE_FIELD_LABEL } from "@/lib/pipe/pipe-types";
 import { formatStelliumProductForDisplay } from "@/lib/placement/stellium-box-placement-products";
 import { placementOperationIsClosed, placementOperationIsUndeclared } from "@/lib/placement/placement-operation-tracking";
@@ -32,12 +33,19 @@ function ts(value: number | null | undefined): boolean {
 }
 
 function declareLabels(
-  operation: Pick<PlacementOperation, "stellium_label" | "product_label">
+  operation: Pick<PlacementOperation, "stellium_label" | "product_label" | "montant_centimes">
 ): { label: string; sublabel?: string } {
   const acte = operation.stellium_label?.trim() ?? "";
   const produit = formatStelliumProductForDisplay(operation.product_label?.trim() ?? "");
-  if (acte && produit) return { label: acte, sublabel: produit };
-  return { label: acte || produit || "Opération" };
+  const montant =
+    operation.montant_centimes != null && operation.montant_centimes > 0
+      ? formatEuroCentimes(operation.montant_centimes)
+      : "";
+  const detail = [produit, montant].filter(Boolean).join(" · ");
+  if (acte && detail) return { label: acte, sublabel: detail };
+  if (acte) return { label: acte };
+  if (detail) return { label: detail };
+  return { label: "Opération" };
 }
 
 /** 6 étapes fixes, toujours affichées (comme Prospection → R1 → … → Gagnée). */
@@ -47,6 +55,7 @@ export function getPlacementOperationStepperSteps(
     | "status"
     | "stellium_label"
     | "product_label"
+    | "montant_centimes"
     | "non_conforme_at"
     | "partner_resent_at"
     | "client_notified_at"

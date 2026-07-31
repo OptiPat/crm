@@ -169,6 +169,37 @@ describe("filleul-parrainage-duration-stats", () => {
     expect(stats.averageMonths).toBe(3);
   });
 
+  it("signale une chronologie incohérente sans calculer un délai", () => {
+    const parrainInscription = Math.floor(Date.parse("2025-09-19T00:00:00Z") / 1000);
+    const filleulInscription = Math.floor(Date.parse("2025-09-16T00:00:00Z") / 1000);
+    const contacts = [
+      contact({
+        id: 179,
+        filleul_categorie: "FILLEUL",
+        date_inscription_filleul: parrainInscription,
+      }),
+      contact({
+        id: 162,
+        filleul_categorie: "FILLEUL",
+        parrain_id: 179,
+        date_inscription_filleul: filleulInscription,
+      }),
+    ];
+    const dossiersByContactId = new Map([
+      [179, dossier(179, { dateInscription: parrainInscription, updatedAt: 1 })],
+      [162, dossier(162, { dateInscription: filleulInscription, updatedAt: 1 })],
+    ]);
+
+    const stats = computeFilleulParrainageDurationExerciceStats(contacts, "2025-2026", {
+      dossiersByContactId,
+    });
+    expect(stats.totalEligible).toBe(1);
+    expect(stats.countedCount).toBe(0);
+    expect(stats.incoherentTimelineCount).toBe(1);
+    expect(stats.missingParrainageCount).toBe(0);
+    expect(stats.averageMonths).toBeNull();
+  });
+
   it("ignore un prospect parrainé sans date d'inscription", () => {
     const jan1 = Math.floor(Date.parse("2024-01-01T00:00:00Z") / 1000);
     const invitation = Math.floor(Date.parse("2024-06-01T00:00:00Z") / 1000);

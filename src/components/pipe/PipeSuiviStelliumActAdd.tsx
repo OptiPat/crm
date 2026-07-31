@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import {
   parseMontantEurosToCentimes,
   placementOperationRequiresMontant,
+  formatMontantCentimesInput,
 } from "@/lib/pipe/placement-montant";
 import { inferTypeProduitFromStelliumProductLabel } from "@/lib/pipe/remuneration-type-produit";
 
@@ -78,11 +79,16 @@ const VARIANT_COPY: Record<
 function formatDraftLabel(operation: PlacementOperation): string {
   const acte = operation.stellium_label?.trim();
   const produit = formatStelliumProductForDisplay(operation.product_label?.trim() ?? "");
+  const montant =
+    operation.montant_centimes != null && operation.montant_centimes > 0
+      ? formatMontantCentimesInput(operation.montant_centimes)
+      : "";
+  const detail = [produit, montant ? `${montant} €` : ""].filter(Boolean).join(" · ");
   if (acte && isVersementComplementaireActLabel(acte)) {
-    return produit ? `${acte} · ${produit}` : acte;
+    return detail ? `${acte} · ${detail}` : acte;
   }
-  if (acte && produit) return `${acte} · ${produit}`;
-  return acte || produit || "Acte Stellium";
+  if (acte && detail) return `${acte} · ${detail}`;
+  return acte || detail || "Acte Stellium";
 }
 
 export function PipeSuiviStelliumActAdd({

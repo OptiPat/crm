@@ -1252,7 +1252,9 @@ function ParrainageDurationKpiPanel({
                 </p>
               </div>
               <p className="text-xs text-muted-foreground text-right max-w-xs">
-                Aucune inscription antérieure au 1er parrainage sur l&apos;exercice.
+                {exerciceStats.incoherentTimelineCount > 0
+                  ? "Le 1er parrainage est daté avant l'inscription réseau du consultant — vérifiez les dates du dossier filleul."
+                  : "Aucune inscription antérieure au 1er parrainage sur l'exercice."}
                 <br />
                 {formatFilleulParrainageDurationExerciceSubtitle(exerciceStats, exerciceLabel)}
               </p>
@@ -1306,6 +1308,14 @@ function ParrainageDurationKpiPanel({
                 countUnit="consultant"
                 onClick={() => onOpenList("missingParrainage")}
               />
+              {exerciceStats.incoherentTimelineCount > 0 ? (
+                <OrganisationListButton
+                  label="Dates incohérentes"
+                  count={exerciceStats.incoherentTimelineCount}
+                  countUnit="consultant"
+                  onClick={() => onOpenList("incoherentTimeline")}
+                />
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -2178,9 +2188,13 @@ export function ContactFilleulOrganisationPanel({
           : `Qualifications Manager exercice — inscription manquante (${resolvedExerciceLabel})`;
       }
       if (dd.mode === "parrainageDuration") {
-        return dd.kind === "withDuration"
-          ? `1ers parrainages exercice — avec délai inscription (${resolvedExerciceLabel})`
-          : `1ers parrainages exercice — inscription manquante (${resolvedExerciceLabel})`;
+        if (dd.kind === "withDuration") {
+          return `1ers parrainages exercice — avec délai inscription (${resolvedExerciceLabel})`;
+        }
+        if (dd.kind === "incoherentTimeline") {
+          return `1ers parrainages exercice — dates incohérentes (${resolvedExerciceLabel})`;
+        }
+        return `1ers parrainages exercice — sans parrainage inscrit (${resolvedExerciceLabel})`;
       }
       if (dd.mode === "persoJd") {
         if (dd.kind === "jdInvitationCount") {
@@ -2246,9 +2260,11 @@ export function ContactFilleulOrganisationPanel({
         : managerDurationExerciceStats.missingManagerCount;
     }
     if (drillDown.mode === "parrainageDuration") {
-      return drillDown.kind === "withDuration"
-        ? parrainageDurationExerciceStats.countedCount
-        : parrainageDurationExerciceStats.missingParrainageCount;
+      if (drillDown.kind === "withDuration") return parrainageDurationExerciceStats.countedCount;
+      if (drillDown.kind === "incoherentTimeline") {
+        return parrainageDurationExerciceStats.incoherentTimelineCount;
+      }
+      return parrainageDurationExerciceStats.missingParrainageCount;
     }
     if (drillDown.mode === "persoJd") {
       return drillDown.count ?? 0;

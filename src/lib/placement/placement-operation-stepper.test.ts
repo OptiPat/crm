@@ -35,6 +35,18 @@ describe("placement-operation-stepper", () => {
     expect(stepState(steps, "waiting")).toBe("pending");
   });
 
+  it("étape déclaration : sous-libellé produit et montant souscrit", () => {
+    const steps = getPlacementOperationStepperSteps({
+      ...base,
+      stellium_label: "Souscription",
+      product_label: "Comète",
+      montant_centimes: 50_000_00,
+      status: "PENDING",
+    });
+    expect(steps[0].label).toBe("Souscription");
+    expect(steps[0].sublabel).toBe("Comète · 50\u202f000\u00a0€");
+  });
+
   it("toujours 6 étapes dont En attente partenaire", () => {
     const steps = getPlacementOperationStepperSteps({ ...base, status: "PENDING" });
     expect(steps).toHaveLength(6);

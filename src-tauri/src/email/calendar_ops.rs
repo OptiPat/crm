@@ -503,10 +503,6 @@ fn sync_pipe_rdv_from_google_week(
         }
     }
 
-    for contact_id in contact_ids_to_sync {
-        let _ = db.sync_contact_dates_for_contact_from_affaire(contact_id);
-    }
-
     Ok(AgendaGooglePipeSyncResult {
         rescheduled,
         cancelled,
@@ -597,10 +593,6 @@ pub fn sync_all_pipe_linked_google_rdvs(
             }
             Err(_) => {}
         }
-    }
-
-    for contact_id in contact_ids_to_sync {
-        let _ = db.sync_contact_dates_for_contact_from_affaire(contact_id);
     }
 
     Ok(AgendaGooglePipeSyncResult {
@@ -796,6 +788,7 @@ pub fn create_google_calendar_rdv(
 
     if let Some(entry_id) = pipe_timeline_entry_id {
         let _ = db.set_pipe_timeline_google_event_id(entry_id, Some(&created.id));
+        let _ = db.apply_pipe_agenda_rdv_to_contacts(entry_id, start_at);
     }
 
     db.get_calendar_event_by_id(row_id).map_err(|e| e.to_string())
@@ -948,6 +941,12 @@ pub fn update_google_calendar_rdv(
         true,
     )
     .map_err(|e| e.to_string())?;
+
+    if let Some(ref ce) = calendar_event {
+        if let Some(timeline_id) = ce.pipe_timeline_entry_id {
+            let _ = db.apply_pipe_agenda_rdv_to_contacts(timeline_id, start_at);
+        }
+    }
 
     Ok(crate::database::models::CalendarRdvSyncDetails {
         visio_link,

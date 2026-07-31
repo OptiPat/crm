@@ -11,7 +11,10 @@ import {
 } from "@/lib/statistiques/filleul-vaa-duration-stats";
 import { resolveFilleulInscriptionTimestamp } from "@/lib/organisation/organisation-filleul-dossier";
 
-export type FilleulParrainageDurationListKind = "withDuration" | "missingParrainage";
+export type FilleulParrainageDurationListKind =
+  | "withDuration"
+  | "missingParrainage"
+  | "incoherentTimeline";
 
 export type FilleulParrainageDurationStatsOptions = {
   dossiersByContactId?: Map<number, FilleulDossier>;
@@ -23,8 +26,10 @@ export type FilleulParrainageDurationStatResult = {
   countedCount: number;
   totalEligible: number;
   missingParrainageCount: number;
+  incoherentTimelineCount: number;
   contactIdsWithDuration: number[];
   contactIdsMissingParrainage: number[];
+  contactIdsIncoherentTimeline: number[];
 };
 
 /** Date d'inscription du premier filleul parrainé (hors invitation prospect seule). */
@@ -44,6 +49,29 @@ export function resolveFirstParrainageInscriptionUnix(
   }
 
   return earliest;
+}
+
+export type FilleulParrainageDurationContactKind =
+  | "withDuration"
+  | "missingParrainage"
+  | "incoherentTimeline";
+
+export function classifyFilleulParrainageDurationContact(
+  contact: Pick<Contact, "id" | "date_inscription_filleul">,
+  contacts: Contact[],
+  dossiersByContactId?: Map<number, FilleulDossier>
+): FilleulParrainageDurationContactKind {
+  if (contact.id == null) return "missingParrainage";
+  const dossier = dossiersByContactId?.get(contact.id);
+  const inscription = resolveFilleulInscriptionTimestamp(contact, dossier);
+  const firstParrainage = resolveFirstParrainageInscriptionUnix(
+    contact.id,
+    contacts,
+    dossiersByContactId
+  );
+  if (firstParrainage == null || inscription == null) return "missingParrainage";
+  if (firstParrainage < inscription) return "incoherentTimeline";
+  return "withDuration";
 }
 
 export function resolveFilleulInscriptionToParrainageDurationMonths(
@@ -96,10 +124,20 @@ function computeParrainageDurationStatsFromEligible(
 ): FilleulParrainageDurationStatResult {
   const contactIdsWithDuration: number[] = [];
   const contactIdsMissingParrainage: number[] = [];
+  const contactIdsIncoherentTimeline: number[] = [];
   let monthsSum = 0;
 
   for (const contact of eligible) {
     if (contact.id == null) continue;
+    const kind = classifyFilleulParrainageDurationContact(contact, contacts, dossiersByContactId);
+    if (kind === "incoherentTimeline") {
+      contactIdsIncoherentTimeline.push(contact.id);
+      continue;
+    }
+    if (kind === "missingParrainage") {
+      contactIdsMissingParrainage.push(contact.id);
+      continue;
+    }
     const months = resolveFilleulInscriptionToParrainageDurationMonths(
       contact,
       contacts,
@@ -121,8 +159,10 @@ function computeParrainageDurationStatsFromEligible(
     countedCount,
     totalEligible,
     missingParrainageCount: contactIdsMissingParrainage.length,
+    incoherentTimelineCount: contactIdsIncoherentTimeline.length,
     contactIdsWithDuration,
     contactIdsMissingParrainage,
+    contactIdsIncoherentTimeline,
   };
 }
 
@@ -156,6 +196,13 @@ export function computeFilleulParrainageDurationExerciceStats(
   return computeParrainageDurationStatsFromEligible(contacts, eligible, dossiersByContactId);
 }
 
+function matchesParrainageDurationListKind(
+  kind: FilleulParrainageDurationListKind,
+  contactKind: FilleulParrainageDurationContactKind
+): boolean {
+  return kind === contactKind;
+}
+
 export function filterContactsForFilleulParrainageDurationList(
   contacts: Contact[],
   kind: FilleulParrainageDurationListKind,
@@ -164,13 +211,12 @@ export function filterContactsForFilleulParrainageDurationList(
   const dossiersByContactId = options?.dossiersByContactId;
   return contacts.filter((contact) => {
     if (!isContactEligibleForFilleulParraineurStats(contact) || contact.id == null) return false;
-    const hasDuration =
-      resolveFilleulInscriptionToParrainageDurationMonths(
-        contact,
-        contacts,
-        dossiersByContactId
-      ) != null;
-    return kind === "withDuration" ? hasDuration : !hasDuration;
+    const contactKind = classifyFilleulParrainageDurationContact(
+      contact,
+      contacts,
+      dossiersByContactId
+    );
+    return matchesParrainageDurationListKind(kind, contactKind);
   });
 }
 
@@ -188,13 +234,12 @@ export function filterContactsForFilleulParrainageDurationExerciceList(
     ) {
       return false;
     }
-    const hasDuration =
-      resolveFilleulInscriptionToParrainageDurationMonths(
-        contact,
-        contacts,
-        dossiersByContactId
-      ) != null;
-    return kind === "withDuration" ? hasDuration : !hasDuration;
+    const contactKind = classifyFilleulParrainageDurationContact(
+      contact,
+      contacts,
+      dossiersByContactId
+    );
+    return matchesParrainageDurationListKind(kind, contactKind);
   });
 }
 
@@ -203,13 +248,31 @@ export function formatFilleulParrainageDurationSubtitle(
 ): string {
   if (stats.totalEligible === 0) return "Aucun consultant éligible";
   if (stats.countedCount === 0) {
-    return `Aucun parrainage sur ${stats.totalEligible} consultant${stats.totalEligible > 1 ? "s" : ""}`;
+    const parts: string[] = [];
+    if (stats.incoherentTimelineCount > 0) {
+      parts.push(
+        `${stats.incoherentTimelineCount} date${stats.incoherentTimelineCount > 1 ? "s" : ""} incohérente${stats.incoherentTimelineCount > 1 ? "s" : ""}`
+      );
+    }
+    if (stats.missingParrainageCount > 0) {
+      parts.push(
+        `${stats.missingParrainageCount} sans parrainage inscrit`
+      );
+    }
+    if (parts.length === 0) {
+      return `Aucun parrainage sur ${stats.totalEligible} consultant${stats.totalEligible > 1 ? "s" : ""}`;
+    }
+    return `${parts.join(" · ")} sur ${stats.totalEligible} consultant${stats.totalEligible > 1 ? "s" : ""}`;
   }
-  const missing =
-    stats.missingParrainageCount > 0
-      ? ` · ${stats.missingParrainageCount} sans parrainage`
-      : "";
-  return `${stats.countedCount} consultant${stats.countedCount > 1 ? "s" : ""} sur ${stats.totalEligible}${missing}`;
+  const extras: string[] = [];
+  if (stats.missingParrainageCount > 0) {
+    extras.push(`${stats.missingParrainageCount} sans parrainage`);
+  }
+  if (stats.incoherentTimelineCount > 0) {
+    extras.push(`${stats.incoherentTimelineCount} incohérent${stats.incoherentTimelineCount > 1 ? "s" : ""}`);
+  }
+  const extra = extras.length > 0 ? ` · ${extras.join(" · ")}` : "";
+  return `${stats.countedCount} consultant${stats.countedCount > 1 ? "s" : ""} sur ${stats.totalEligible}${extra}`;
 }
 
 export function formatFilleulParrainageDurationExerciceSubtitle(

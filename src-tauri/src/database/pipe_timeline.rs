@@ -284,6 +284,7 @@ impl super::Database {
         }
         if entry_type == TIMELINE_RDV {
             let _ = self.cancel_pipe_rdv_reminder_schedules(id, None);
+            let _ = self.restore_contact_dates_after_pipe_rdv_cancelled(id);
         }
         let deleted = self
             .conn

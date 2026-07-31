@@ -1,4 +1,5 @@
 import type { PlacementOperation, PlacementOperationWithContact } from "@/lib/api/tauri-box-placement";
+import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import {
   getPlacementBoardActiveStepId,
   type PlacementStepperStepId,
@@ -294,12 +295,22 @@ function pickPlacementBoardCardTimestamp(
 }
 
 export function formatPlacementBoardActeLabel(
-  operation: Pick<PlacementOperation, "stellium_label" | "product_label" | "operation_type">
+  operation: Pick<
+    PlacementOperation,
+    "stellium_label" | "product_label" | "operation_type" | "montant_centimes"
+  >
 ): string {
   const acte = operation.stellium_label?.trim();
   const produit = formatStelliumProductForDisplay(operation.product_label?.trim() ?? "");
-  if (acte && produit) return `${acte} · ${produit}`;
-  return acte || produit || operation.operation_type;
+  const montant =
+    operation.montant_centimes != null && operation.montant_centimes > 0
+      ? formatEuroCentimes(operation.montant_centimes)
+      : "";
+  const detail = [produit, montant].filter(Boolean).join(" · ");
+  if (acte && detail) return `${acte} · ${detail}`;
+  if (acte) return acte;
+  if (detail) return detail;
+  return operation.operation_type;
 }
 
 export function placementBoardRowShowsUndeclaredBadge(

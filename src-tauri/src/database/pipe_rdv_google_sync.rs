@@ -205,6 +205,7 @@ impl super::Database {
             event_location,
             true,
         )?;
+        let _ = self.apply_pipe_agenda_rdv_to_contacts(timeline_entry_id, new_start_at);
         Ok(true)
     }
 
@@ -270,6 +271,7 @@ impl super::Database {
             return Ok(false);
         }
         self.update_pipe_timeline_occurred_at(timeline_entry_id, start_at)?;
+        let _ = self.apply_pipe_agenda_rdv_to_contacts(timeline_entry_id, start_at);
         Ok(true)
     }
 
