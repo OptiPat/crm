@@ -72,6 +72,7 @@ const TABLE_POLICIES: &[(&str, WorkspaceTablePolicy)] = &[
     ("template_email_actions", WorkspaceTablePolicy::Shared),
     ("placement_operations", WorkspaceTablePolicy::Shared),
     ("pipe_timeline_entries", WorkspaceTablePolicy::Shared),
+    ("pipe_rdv_contact_date_snapshot", WorkspaceTablePolicy::Shared),
     ("pipe_rdv_scheduled_emails", WorkspaceTablePolicy::Shared),
     (
         "pipe_r3_immo_document_checklists",
