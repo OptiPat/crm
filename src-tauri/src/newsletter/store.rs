@@ -46,12 +46,14 @@ INTERDITS :
 - Signature (ajoutée automatiquement)"#;
 
 pub const DEFAULT_MISTRAL_MODEL: &str = "mistral-small-latest";
+pub const DEFAULT_LLM_PROVIDER: &str = "mistral";
 static NEWSLETTER_STORE_IO_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NewsletterSettingsPublic {
     pub api_key_configured: bool,
+    pub llm_provider: String,
     pub style_prompt: String,
     pub model: String,
     pub etiquette_nom: String,
@@ -75,6 +77,10 @@ pub struct NewsletterSettingsPublic {
     #[serde(default)]
     pub agenda_link_id: Option<String>,
     pub default_audience_filters: NewsletterAudienceFilters,
+    pub brevo_api_key_configured: bool,
+    pub brevo_sender_name: Option<String>,
+    pub brevo_sender_email: Option<String>,
+    pub default_brevo_template_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -82,6 +88,7 @@ pub struct NewsletterSettingsPublic {
 pub struct NewsletterSettingsInput {
     #[serde(default)]
     pub api_key: Option<String>,
+    pub llm_provider: Option<String>,
     pub style_prompt: Option<String>,
     pub model: Option<String>,
     pub etiquette_nom: Option<String>,
@@ -96,6 +103,11 @@ pub struct NewsletterSettingsInput {
     pub section_spacing: Option<String>,
     pub default_audience_filters: Option<NewsletterAudienceFilters>,
     pub agenda_link_id: Option<String>,
+    #[serde(default)]
+    pub brevo_api_key: Option<String>,
+    pub brevo_sender_name: Option<String>,
+    pub brevo_sender_email: Option<String>,
+    pub default_brevo_template_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -104,6 +116,8 @@ struct PersistedNewsletterStore {
     version: u32,
     #[serde(default)]
     api_key_enc: Option<String>,
+    #[serde(default)]
+    llm_provider: Option<String>,
     #[serde(default)]
     style_prompt: Option<String>,
     #[serde(default)]
@@ -132,6 +146,14 @@ struct PersistedNewsletterStore {
     agenda_link_id: Option<String>,
     #[serde(default)]
     default_audience_filters: Option<NewsletterAudienceFilters>,
+    #[serde(default)]
+    brevo_api_key_enc: Option<String>,
+    #[serde(default)]
+    brevo_sender_name: Option<String>,
+    #[serde(default)]
+    brevo_sender_email: Option<String>,
+    #[serde(default)]
+    default_brevo_template_id: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -139,6 +161,9 @@ pub struct NewsletterStore {
     pub api_key: Option<String>,
     /// Clé chiffrée présente sur disque (même si déchiffrement indisponible).
     pub encrypted_api_key_present: bool,
+    pub brevo_api_key: Option<String>,
+    pub encrypted_brevo_api_key_present: bool,
+    pub llm_provider: String,
     pub style_prompt: String,
     pub model: String,
     pub etiquette_nom: String,
@@ -153,6 +178,9 @@ pub struct NewsletterStore {
     pub section_spacing: Option<String>,
     pub agenda_link_id: Option<String>,
     pub default_audience_filters: NewsletterAudienceFilters,
+    pub brevo_sender_name: Option<String>,
+    pub brevo_sender_email: Option<String>,
+    pub default_brevo_template_id: Option<i64>,
 }
 
 impl NewsletterStore {
@@ -210,9 +238,14 @@ impl NewsletterStore {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let storage_key = load_storage_key(app)?;
-        let existing_enc = Self::read_persisted(app)?
-            .and_then(|p| p.api_key_enc);
-        let persisted = self.to_persisted(storage_key.as_ref(), existing_enc)?;
+        let existing = Self::read_persisted(app)?;
+        let existing_mistral_enc = existing.as_ref().and_then(|p| p.api_key_enc.clone());
+        let existing_brevo_enc = existing.as_ref().and_then(|p| p.brevo_api_key_enc.clone());
+        let persisted = self.to_persisted(
+            storage_key.as_ref(),
+            existing_mistral_enc,
+            existing_brevo_enc,
+        )?;
         let json = serde_json::to_string_pretty(&persisted).map_err(|e| e.to_string())?;
         crate::atomic_file::write(&path, json).map_err(|e| e.to_string())
     }
@@ -225,6 +258,7 @@ impl NewsletterStore {
                     .as_ref()
                     .map(|k| !k.trim().is_empty())
                     .unwrap_or(false),
+            llm_provider: self.llm_provider.clone(),
             style_prompt: self.style_prompt.clone(),
             model: self.model.clone(),
             etiquette_nom: self.etiquette_nom.clone(),
@@ -239,6 +273,15 @@ impl NewsletterStore {
             section_spacing: self.section_spacing.clone(),
             agenda_link_id: self.agenda_link_id.clone(),
             default_audience_filters: self.default_audience_filters.clone(),
+            brevo_api_key_configured: self.encrypted_brevo_api_key_present
+                || self
+                    .brevo_api_key
+                    .as_ref()
+                    .map(|k| !k.trim().is_empty())
+                    .unwrap_or(false),
+            brevo_sender_name: self.brevo_sender_name.clone(),
+            brevo_sender_email: self.brevo_sender_email.clone(),
+            default_brevo_template_id: self.default_brevo_template_id,
         }
     }
 
@@ -264,9 +307,25 @@ impl NewsletterStore {
             (Some(_), None) => None,
             (None, _) => None,
         };
+        let encrypted_brevo_api_key_present = persisted
+            .brevo_api_key_enc
+            .as_ref()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+        let brevo_api_key = match (&persisted.brevo_api_key_enc, storage_key) {
+            (Some(enc), Some(key)) => Some(decrypt_secret(enc, key)?),
+            (Some(_), None) => None,
+            (None, _) => None,
+        };
         Ok(Self {
             api_key,
             encrypted_api_key_present,
+            brevo_api_key,
+            encrypted_brevo_api_key_present,
+            llm_provider: persisted
+                .llm_provider
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| DEFAULT_LLM_PROVIDER.to_string()),
             style_prompt: persisted
                 .style_prompt
                 .filter(|s| !s.trim().is_empty())
@@ -319,28 +378,51 @@ impl NewsletterStore {
             default_audience_filters: persisted
                 .default_audience_filters
                 .unwrap_or_default(),
+            brevo_sender_name: persisted
+                .brevo_sender_name
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            brevo_sender_email: persisted
+                .brevo_sender_email
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            default_brevo_template_id: persisted.default_brevo_template_id,
         })
     }
 
     fn to_persisted(
         &self,
         storage_key: Option<&[u8; 32]>,
-        existing_enc: Option<String>,
+        existing_mistral_enc: Option<String>,
+        existing_brevo_enc: Option<String>,
     ) -> Result<PersistedNewsletterStore, String> {
         let api_key_enc = match (&self.api_key, storage_key) {
             (Some(key), Some(storage)) if !key.trim().is_empty() => {
                 Some(encrypt_secret(key.trim(), storage)?)
             }
             (Some(_), None) => {
-                return Err("Clé API Mistral : clé de stockage indisponible.".into());
+                return Err("Clé API IA : clé de stockage indisponible.".into());
             }
             (Some(_), Some(_)) | (None, _) => {
-                existing_enc.filter(|s| !s.trim().is_empty())
+                existing_mistral_enc.filter(|s| !s.trim().is_empty())
+            }
+        };
+        let brevo_api_key_enc = match (&self.brevo_api_key, storage_key) {
+            (Some(key), Some(storage)) if !key.trim().is_empty() => {
+                Some(encrypt_secret(key.trim(), storage)?)
+            }
+            (Some(_), None) => {
+                return Err("Clé API Brevo : clé de stockage indisponible.".into());
+            }
+            (Some(_), Some(_)) | (None, _) => {
+                existing_brevo_enc.filter(|s| !s.trim().is_empty())
             }
         };
         Ok(PersistedNewsletterStore {
             version: 2,
             api_key_enc,
+            llm_provider: Some(self.llm_provider.clone()),
+            brevo_api_key_enc,
             style_prompt: Some(self.style_prompt.clone()),
             model: Some(self.model.clone()),
             etiquette_nom: Some(self.etiquette_nom.clone()),
@@ -355,6 +437,9 @@ impl NewsletterStore {
             section_spacing: self.section_spacing.clone(),
             agenda_link_id: self.agenda_link_id.clone(),
             default_audience_filters: Some(self.default_audience_filters.clone()),
+            brevo_sender_name: self.brevo_sender_name.clone(),
+            brevo_sender_email: self.brevo_sender_email.clone(),
+            default_brevo_template_id: self.default_brevo_template_id,
         })
     }
 }
@@ -364,6 +449,9 @@ impl Default for NewsletterStore {
         Self {
             api_key: None,
             encrypted_api_key_present: false,
+            brevo_api_key: None,
+            encrypted_brevo_api_key_present: false,
+            llm_provider: DEFAULT_LLM_PROVIDER.to_string(),
             style_prompt: DEFAULT_NEWSLETTER_STYLE_PROMPT.to_string(),
             model: DEFAULT_MISTRAL_MODEL.to_string(),
             etiquette_nom: "Newsletter".to_string(),
@@ -378,6 +466,9 @@ impl Default for NewsletterStore {
             section_spacing: None,
             agenda_link_id: None,
             default_audience_filters: NewsletterAudienceFilters::default(),
+            brevo_sender_name: None,
+            brevo_sender_email: None,
+            default_brevo_template_id: None,
         }
     }
 }
@@ -414,7 +505,7 @@ mod tests {
         let runtime = NewsletterStore::from_persisted(persisted, Some(&key)).unwrap();
         assert_eq!(runtime.api_key.as_deref(), Some("secret-test"));
 
-        let migrated = runtime.to_persisted(Some(&key), None).unwrap();
+        let migrated = runtime.to_persisted(Some(&key), None, None).unwrap();
         assert_eq!(migrated.version, 2);
         assert!(migrated.api_key_enc.unwrap().starts_with("v2:"));
     }

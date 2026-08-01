@@ -498,6 +498,9 @@ fn main() {
             start_newsletter_edition_send,
             record_newsletter_edition_send,
             finish_newsletter_edition_send,
+            list_brevo_email_templates,
+            test_brevo_connection,
+            push_newsletter_edition_to_brevo,
             // Champs personnalisés
             get_custom_field_defs,
             create_custom_field_def,

@@ -27,6 +27,8 @@ export interface NewsletterComposerDraft {
   audienceFilters: NewsletterAudienceFilters;
   activeEditionId: number | null;
   preparedQueueCount: number | null;
+  /** Édition dont le compositeur affiche le contenu (évite d'écraser une autre édition préparée). */
+  composerEditionId: number | null;
   savedAt: number;
 }
 
@@ -71,6 +73,8 @@ export function loadNewsletterComposerDraft(): NewsletterComposerDraft | null {
         typeof parsed.activeEditionId === "number" ? parsed.activeEditionId : null,
       preparedQueueCount:
         typeof parsed.preparedQueueCount === "number" ? parsed.preparedQueueCount : null,
+      composerEditionId:
+        typeof parsed.composerEditionId === "number" ? parsed.composerEditionId : null,
       savedAt: parsed.savedAt,
     };
   } catch {

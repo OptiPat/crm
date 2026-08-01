@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { NewsletterAudienceMember } from "@/lib/api/tauri-newsletter";
 import {
   computeNewsletterAudiencePreview,
+  hasNewsletterAudienceDrift,
   isNewsletterMemberEditionSelectable,
   isNewsletterMemberSelected,
   mergeExcludeContactIds,
@@ -91,5 +92,24 @@ describe("newsletter audience utils", () => {
     });
     expect(preview.eligible).toBe(1);
     expect(preview.excludedByFilters).toBe(2);
+  });
+
+  it("detects drift between live preview and prepared recipient ids", () => {
+    const preview = computeNewsletterAudiencePreview(
+      [member({ contactId: 1 }), member({ contactId: 2, nom: "Martin" })],
+      emptyFilters
+    );
+    expect(hasNewsletterAudienceDrift(preview, [1, 2])).toBe(false);
+    expect(hasNewsletterAudienceDrift(preview, [1])).toBe(true);
+    expect(hasNewsletterAudienceDrift(preview, [1, 3])).toBe(true);
+    expect(hasNewsletterAudienceDrift(preview, null)).toBe(false);
+  });
+
+  it("detects drift when counts match but recipients differ", () => {
+    const preview = computeNewsletterAudiencePreview(
+      [member({ contactId: 1 }), member({ contactId: 2, nom: "Martin" })],
+      emptyFilters
+    );
+    expect(hasNewsletterAudienceDrift(preview, [1, 3])).toBe(true);
   });
 });

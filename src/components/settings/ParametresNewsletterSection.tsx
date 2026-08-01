@@ -9,7 +9,10 @@ import {
   DEFAULT_NEWSLETTER_AUDIENCE_FILTERS,
   ensureNewsletterEtiquette,
   getNewsletterSettings,
+  listBrevoEmailTemplates,
   saveNewsletterSettings,
+  testBrevoConnection,
+  type BrevoTemplateSummary,
   type NewsletterAudienceFilters,
   type NewsletterSettings,
 } from "@/lib/api/tauri-newsletter";
@@ -18,10 +21,14 @@ import { normalizeAgendaLinks } from "@/lib/emails/agenda-links";
 import { NewsletterAudiencePanel } from "@/components/newsletter/NewsletterAudiencePanel";
 import { openExternalUrl } from "@/lib/api/tauri-system";
 import {
-  DEFAULT_MISTRAL_MODEL,
   DEFAULT_NEWSLETTER_STYLE_PROMPT,
   NEWSLETTER_STYLE_PRESETS,
 } from "@/lib/newsletter/default-style-prompt";
+import {
+  NEWSLETTER_LLM_PROVIDERS,
+  newsletterLlmProviderOption,
+  type NewsletterLlmProvider,
+} from "@/lib/newsletter/llm-providers";
 import {
   DEFAULT_NEWSLETTER_SECONDARY,
   NEWSLETTER_LAYOUT_OPTIONS,
@@ -50,7 +57,7 @@ export function ParametresNewsletterSection({
 }: {
   /** Met à jour l'état parent (ex. liste d'exclusions côté composer) sans navigation. */
   onSettingsSync?: (settings: NewsletterSettings) => void;
-  /** Uniquement après « Enregistrer » Mistral / campagne (pas les exclusions). */
+  /** Uniquement après « Enregistrer » fournisseur IA / campagne (pas les exclusions). */
   switchToComposerAfterSave?: boolean;
   onSwitchToComposer?: () => void;
 }) {
@@ -58,8 +65,18 @@ export function ParametresNewsletterSection({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [llmProvider, setLlmProvider] = useState<NewsletterLlmProvider>("mistral");
+  const llmProviderMeta = newsletterLlmProviderOption(llmProvider);
+  const [brevoApiKeyInput, setBrevoApiKeyInput] = useState("");
+  const [brevoSenderName, setBrevoSenderName] = useState("");
+  const [brevoSenderEmail, setBrevoSenderEmail] = useState("");
+  const [defaultBrevoTemplateId, setDefaultBrevoTemplateId] = useState("");
+  const [brevoTemplates, setBrevoTemplates] = useState<BrevoTemplateSummary[]>([]);
+  const [loadingBrevoTemplates, setLoadingBrevoTemplates] = useState(false);
+  const [testingBrevo, setTestingBrevo] = useState(false);
+  const [brevoTemplatesError, setBrevoTemplatesError] = useState<string | null>(null);
   const [stylePrompt, setStylePrompt] = useState(DEFAULT_NEWSLETTER_STYLE_PROMPT);
-  const [model, setModel] = useState(DEFAULT_MISTRAL_MODEL);
+  const [model, setModel] = useState(llmProviderMeta.defaultModel);
   const [etiquetteNom, setEtiquetteNom] = useState("Newsletter");
   const [sendDelayMs, setSendDelayMs] = useState(3000);
   const [accentColor, setAccentColor] = useState("#0f2744");
@@ -80,6 +97,27 @@ export function ParametresNewsletterSection({
 
   const agendaLinks = normalizeAgendaLinks(cgp);
 
+  const loadBrevoTemplates = useCallback(async () => {
+    setLoadingBrevoTemplates(true);
+    setBrevoTemplatesError(null);
+    try {
+      const templates = await listBrevoEmailTemplates();
+      setBrevoTemplates(templates);
+      if (templates.length === 0) {
+        setBrevoTemplatesError(
+          "Aucun template transactionnel trouvé. Créez-le dans Brevo : Transactionnel → Templates, ou saisissez l'ID manuellement ci-dessous."
+        );
+      }
+    } catch (e) {
+      setBrevoTemplates([]);
+      const message = e instanceof Error ? e.message : String(e);
+      setBrevoTemplatesError(message);
+      toast.error(message);
+    } finally {
+      setLoadingBrevoTemplates(false);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -90,6 +128,9 @@ export function ParametresNewsletterSection({
       setCgp(cgpConfig);
       setSettings(s);
       const links = normalizeAgendaLinks(cgpConfig);
+      setLlmProvider(
+        (newsletterLlmProviderOption(s.llmProvider).id as NewsletterLlmProvider) ?? "mistral"
+      );
       setStylePrompt(s.stylePrompt);
       setModel(s.model);
       setEtiquetteNom(s.etiquetteNom);
@@ -104,6 +145,16 @@ export function ParametresNewsletterSection({
       setSectionSpacing(s.sectionSpacing ?? "normal");
       setAudienceFilters(s.defaultAudienceFilters ?? DEFAULT_NEWSLETTER_AUDIENCE_FILTERS);
       setAgendaLinkId(s.agendaLinkId?.trim() || links[0]?.id || "");
+      setBrevoSenderName(s.brevoSenderName?.trim() || cgpConfig?.nom?.trim() || "");
+      setBrevoSenderEmail(s.brevoSenderEmail?.trim() || cgpConfig?.email?.trim() || "");
+      setDefaultBrevoTemplateId(
+        s.defaultBrevoTemplateId != null ? String(s.defaultBrevoTemplateId) : ""
+      );
+      if (s.brevoApiKeyConfigured) {
+        void loadBrevoTemplates();
+      } else {
+        setBrevoTemplates([]);
+      }
       const etiq = await ensureNewsletterEtiquette(s.etiquetteNom);
       setSubscriberCount(etiq.contactCount);
     } catch (e) {
@@ -112,7 +163,7 @@ export function ParametresNewsletterSection({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadBrevoTemplates]);
 
   useEffect(() => {
     void load();
@@ -120,12 +171,13 @@ export function ParametresNewsletterSection({
 
   const handleSave = async () => {
     if (!settings?.apiKeyConfigured && !apiKeyInput.trim()) {
-      toast.error("Saisissez votre clé API Mistral avant d'enregistrer");
+      toast.error(`Saisissez votre clé API ${llmProviderMeta.label} avant d'enregistrer`);
       return;
     }
     setSaving(true);
     try {
       const payload: Parameters<typeof saveNewsletterSettings>[0] = {
+        llmProvider,
         stylePrompt,
         model,
         etiquetteNom,
@@ -154,12 +206,58 @@ export function ParametresNewsletterSection({
         onSwitchToComposer?.();
       }
       if (payload.apiKey) {
-        toast.success("Clé Mistral enregistrée (masquée pour sécurité)");
+        toast.success(`Clé ${llmProviderMeta.label} enregistrée (masquée pour sécurité)`);
       } else {
         toast.success("Paramètres newsletter enregistrés");
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erreur enregistrement");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTestBrevo = async () => {
+    setTestingBrevo(true);
+    try {
+      const message = await testBrevoConnection();
+      toast.success(message);
+      await loadBrevoTemplates();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Connexion Brevo impossible");
+    } finally {
+      setTestingBrevo(false);
+    }
+  };
+
+  const handleSaveBrevo = async () => {
+    if (!settings?.brevoApiKeyConfigured && !brevoApiKeyInput.trim()) {
+      toast.error("Saisissez votre clé API Brevo avant d'enregistrer");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload: Parameters<typeof saveNewsletterSettings>[0] = {
+        brevoSenderName: brevoSenderName.trim() || null,
+        brevoSenderEmail: brevoSenderEmail.trim() || null,
+        defaultBrevoTemplateId:
+          defaultBrevoTemplateId.trim() ? Number(defaultBrevoTemplateId) : null,
+      };
+      if (brevoApiKeyInput.trim()) {
+        payload.brevoApiKey = brevoApiKeyInput.trim();
+      }
+      const saved = await saveNewsletterSettings(payload);
+      setSettings(saved);
+      setBrevoApiKeyInput("");
+      onSettingsSync?.(saved);
+      if (payload.brevoApiKey) {
+        toast.success("Clé Brevo enregistrée (masquée pour sécurité)");
+      } else {
+        toast.success("Paramètres Brevo enregistrés");
+      }
+      void loadBrevoTemplates();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur enregistrement Brevo");
     } finally {
       setSaving(false);
     }
@@ -191,47 +289,78 @@ export function ParametresNewsletterSection({
   return (
     <div className="space-y-6">
       <SettingsPanel
-        title="Clé API Mistral"
-        description="Newsletters et bulletins SCPI (OCR + résumés Mistral). Clé stockée localement et chiffrée — console.mistral.ai"
+        id="newsletter-llm"
+        title="Fournisseur IA (newsletter)"
+        description="Un seul fournisseur actif à la fois. Clé chiffrée localement. Les bulletins SCPI restent sur Mistral (OCR)."
       >
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="param-mistral-key">
+            <Label htmlFor="param-llm-provider">Fournisseur</Label>
+            <select
+              id="param-llm-provider"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={llmProvider}
+              onChange={(e) => {
+                const next = e.target.value as NewsletterLlmProvider;
+                setLlmProvider(next);
+                const meta = newsletterLlmProviderOption(next);
+                if (
+                  model.trim() === "" ||
+                  NEWSLETTER_LLM_PROVIDERS.some((item) => item.defaultModel === model.trim())
+                ) {
+                  setModel(meta.defaultModel);
+                }
+              }}
+            >
+              {NEWSLETTER_LLM_PROVIDERS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="param-llm-key">
               {settings?.apiKeyConfigured ?
-                "Nouvelle clé (laisser vide pour conserver)"
-              : "Clé API"}
+                `Nouvelle clé ${llmProviderMeta.label} (laisser vide pour conserver)`
+              : `Clé API ${llmProviderMeta.label}`}
             </Label>
             <Input
-              id="param-mistral-key"
+              id="param-llm-key"
               type="password"
               autoComplete="off"
-              placeholder={settings?.apiKeyConfigured ? "••••••••" : "sk-…"}
+              placeholder={
+                settings?.apiKeyConfigured ? "••••••••" : llmProviderMeta.keyPlaceholder
+              }
               value={apiKeyInput}
               onChange={(e) => setApiKeyInput(e.target.value)}
             />
             {settings?.apiKeyConfigured ?
               <p className="text-xs text-green-700 dark:text-green-400">
-                Clé Mistral enregistrée — le champ reste vide volontairement (comme un mot de
-                passe).
+                Clé {newsletterLlmProviderOption(settings.llmProvider).label} enregistrée — le
+                champ reste vide volontairement (comme un mot de passe).
               </p>
             : null}
             <Button
               type="button"
               variant="link"
               className="h-auto p-0 text-xs"
-              onClick={() => void openExternalUrl("https://console.mistral.ai/")}
+              onClick={() => void openExternalUrl(llmProviderMeta.keyUrl)}
             >
-              Obtenir une clé sur console.mistral.ai
+              Obtenir une clé {llmProviderMeta.label}
             </Button>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="param-mistral-model">Modèle</Label>
+            <Label htmlFor="param-llm-model">Modèle</Label>
             <Input
-              id="param-mistral-model"
+              id="param-llm-model"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder={DEFAULT_MISTRAL_MODEL}
+              placeholder={llmProviderMeta.defaultModel}
             />
+            <p className="text-xs text-muted-foreground">
+              Suggestion : <code className="text-[11px]">{llmProviderMeta.defaultModel}</code>
+            </p>
           </div>
           <Button type="button" disabled={saving} onClick={() => void handleSave()}>
             {saving ?
@@ -239,14 +368,149 @@ export function ParametresNewsletterSection({
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Enregistrement…
               </>
-            : "Enregistrer la clé Mistral"}
+            : "Enregistrer le fournisseur IA"}
           </Button>
         </div>
       </SettingsPanel>
 
       <SettingsPanel
-        title="Style par défaut"
-        description="Équivalent de votre GEM Gemini — modifiable à chaque génération via « Instructions édition »"
+        id="newsletter-brevo"
+        title="Brevo (envoi professionnel)"
+        description="Clé API, expéditeur et template par défaut. Le premier push amorce un brouillon Brevo avec le texte du CRM — personnalisez ensuite librement dans Brevo."
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="param-brevo-key">
+              {settings?.brevoApiKeyConfigured ?
+                "Nouvelle clé API (laisser vide pour conserver)"
+              : "Clé API Brevo"}
+            </Label>
+            <Input
+              id="param-brevo-key"
+              type="password"
+              autoComplete="off"
+              placeholder={settings?.brevoApiKeyConfigured ? "••••••••" : "xkeysib-…"}
+              value={brevoApiKeyInput}
+              onChange={(e) => setBrevoApiKeyInput(e.target.value)}
+            />
+            <Button
+              type="button"
+              variant="link"
+              className="h-auto p-0 text-xs"
+              onClick={() => void openExternalUrl("https://app.brevo.com/settings/keys/api")}
+            >
+              Gérer les clés sur app.brevo.com
+            </Button>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="param-brevo-sender-name">Nom expéditeur</Label>
+              <Input
+                id="param-brevo-sender-name"
+                value={brevoSenderName}
+                onChange={(e) => setBrevoSenderName(e.target.value)}
+                placeholder="Votre cabinet"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="param-brevo-sender-email">Email expéditeur</Label>
+              <Input
+                id="param-brevo-sender-email"
+                type="email"
+                value={brevoSenderEmail}
+                onChange={(e) => setBrevoSenderEmail(e.target.value)}
+                placeholder="newsletter@example.com"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <Label htmlFor="param-brevo-template">Template par défaut</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!settings?.brevoApiKeyConfigured || loadingBrevoTemplates}
+                onClick={() => void loadBrevoTemplates()}
+              >
+                {loadingBrevoTemplates ?
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : "Actualiser"}
+              </Button>
+            </div>
+            <select
+              id="param-brevo-template"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={defaultBrevoTemplateId}
+              onChange={(e) => setDefaultBrevoTemplateId(e.target.value)}
+              disabled={!settings?.brevoApiKeyConfigured || brevoTemplates.length === 0}
+            >
+              <option value="">— Choisir un template —</option>
+              {brevoTemplates.map((template) => (
+                <option key={template.id} value={String(template.id)}>
+                  {template.name}
+                  {template.subject ? ` — ${template.subject}` : ""}
+                  {!template.isActive ? " (inactif)" : ""}
+                </option>
+              ))}
+            </select>
+            <div className="space-y-2">
+              <Label htmlFor="param-brevo-template-id">Ou ID template (nombre)</Label>
+              <Input
+                id="param-brevo-template-id"
+                type="number"
+                min={1}
+                placeholder="Ex. 42 — visible dans l'URL Brevo lors de l'édition"
+                value={defaultBrevoTemplateId}
+                onChange={(e) => setDefaultBrevoTemplateId(e.target.value)}
+              />
+            </div>
+            {brevoTemplatesError ?
+              <p className="text-xs text-amber-700 dark:text-amber-400">{brevoTemplatesError}</p>
+            : null}
+            <p className="text-xs text-muted-foreground">
+              Template <strong>Transactionnel → Templates</strong> (actif), choisi une fois comme
+              modèle de mise en page (ex. <code className="text-[11px]">{"{{ contact.FIRSTNAME }}"}</code>
+              ). Le texte de chaque newsletter se colle dans le <strong>brouillon campagne</strong>{" "}
+              (Modifier le design), pas ici.
+            </p>
+          </div>
+          <div className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground space-y-2">
+            <p className="font-medium text-foreground">Exemple de structure template (une fois)</p>
+            <pre className="text-[11px] whitespace-pre-wrap bg-muted/30 rounded p-2">{`<p>Bonjour {{ contact.FIRSTNAME }},</p>
+<p>… zone de corps éditable dans le brouillon …</p>`}</pre>
+            <p>
+              Après chaque push CRM : Marketing → Campagnes → Brouillons → « CRM — … » →{" "}
+              <strong>Modifier le design</strong> → coller le texte du compositeur → envoyer.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!settings?.brevoApiKeyConfigured || testingBrevo}
+              onClick={() => void handleTestBrevo()}
+            >
+              {testingBrevo ?
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              : null}
+              Tester la connexion
+            </Button>
+            <Button type="button" disabled={saving} onClick={() => void handleSaveBrevo()}>
+              {saving ?
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Enregistrement…
+                </>
+              : "Enregistrer Brevo"}
+            </Button>
+          </div>
+        </div>
+      </SettingsPanel>
+
+      <SettingsPanel
+        title="Style de rédaction"
+        description="Prompt système envoyé au fournisseur IA choisi (Mistral, GPT, Claude ou Gemini)."
       >
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
@@ -498,8 +762,9 @@ export function ParametresNewsletterSection({
         <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-5">
           <li>Destinataires = contacts avec email (sauf désinscrits et exclusions permanentes)</li>
           <li>Un seul lien principal (bouton agenda)</li>
-          <li>Envoi via Gmail connecté (Paramètres → Emails & envois)</li>
-          <li>Testez avec « M'envoyer un test » avant la campagne</li>
+          <li>Envoi Gmail : connectez Gmail (Paramètres → Emails & envois)</li>
+          <li>Envoi Brevo : préparez la campagne puis « Pousser vers Brevo »</li>
+          <li>Testez avec « M'envoyer un test » avant la campagne Gmail</li>
         </ul>
       </SettingsPanel>
     </div>

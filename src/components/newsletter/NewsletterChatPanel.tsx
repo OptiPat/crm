@@ -82,7 +82,7 @@ export function NewsletterChatPanel({
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
           <MessageSquare className="h-4 w-4" />
-          Discuter avec Mistral
+          Discuter avec l&apos;IA
         </CardTitle>
         <CardDescription>
           Reformulez un point, ajustez le ton ou raccourcissez — la newsletter et l&apos;aperçu se
@@ -131,7 +131,7 @@ export function NewsletterChatPanel({
           {refining && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" />
-              Mistral réfléchit…
+              L&apos;IA réfléchit…
             </div>
           )}
         </div>
@@ -157,7 +157,7 @@ export function NewsletterChatPanel({
             className="shrink-0 self-end"
             disabled={disabled || refining || !message.trim()}
             onClick={() => void sendMessage(message)}
-            aria-label="Envoyer à Mistral"
+            aria-label="Envoyer à l'IA"
           >
             {refining ?
               <Loader2 className="h-4 w-4 animate-spin" />

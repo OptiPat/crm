@@ -421,7 +421,8 @@ impl Database {
     pub fn list_newsletter_editions(&self, limit: u32) -> Result<Vec<NewsletterEditionSummary>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, edition_label, subject, prepared_at, send_completed_at,
-                    queued_count, sent_count, error_count, status
+                    queued_count, sent_count, error_count, status,
+                    brevo_campaign_id, brevo_pushed_at
              FROM newsletter_editions
              ORDER BY prepared_at DESC
              LIMIT ?1",
@@ -437,6 +438,8 @@ impl Database {
                 sent_count: row.get::<_, i64>(6)? as u32,
                 error_count: row.get::<_, i64>(7)? as u32,
                 status: row.get(8)?,
+                brevo_campaign_id: row.get(9)?,
+                brevo_pushed_at: row.get(10)?,
             })
         })?;
         rows.collect()
@@ -446,7 +449,8 @@ impl Database {
         let mut detail = self.conn.query_row(
             "SELECT id, edition_label, subject, plain_body, theme, edition_instructions,
                     prepared_at, send_started_at, send_completed_at,
-                    queued_count, sent_count, error_count, status
+                    queued_count, sent_count, error_count, status, content_json,
+                    brevo_campaign_id, brevo_list_id, brevo_template_id, brevo_pushed_at
              FROM newsletter_editions WHERE id = ?1",
             params![edition_id],
             |row| {
@@ -465,6 +469,11 @@ impl Database {
                     error_count: row.get::<_, i64>(11)? as u32,
                     status: row.get(12)?,
                     recipients: Vec::new(),
+                    content_json: row.get(13)?,
+                    brevo_campaign_id: row.get(14)?,
+                    brevo_list_id: row.get(15)?,
+                    brevo_template_id: row.get(16)?,
+                    brevo_pushed_at: row.get(17)?,
                 })
             },
         )?;
@@ -619,7 +628,8 @@ impl Database {
 
         self.conn.query_row(
             "SELECT id, edition_label, subject, prepared_at, send_completed_at,
-                    queued_count, sent_count, error_count, status
+                    queued_count, sent_count, error_count, status,
+                    brevo_campaign_id, brevo_pushed_at
              FROM newsletter_editions WHERE id = ?1",
             params![edition_id],
             |row| {
@@ -633,9 +643,50 @@ impl Database {
                     sent_count: row.get::<_, i64>(6)? as u32,
                     error_count: row.get::<_, i64>(7)? as u32,
                     status: row.get(8)?,
+                    brevo_campaign_id: row.get(9)?,
+                    brevo_pushed_at: row.get(10)?,
                 })
             },
         )
+    }
+
+    pub fn update_newsletter_edition_content(
+        &self,
+        edition_id: i64,
+        subject: &str,
+        plain_body: &str,
+        content_json: &str,
+    ) -> Result<()> {
+        let updated = self.conn.execute(
+            "UPDATE newsletter_editions
+             SET subject = ?1, plain_body = ?2, content_json = ?3
+             WHERE id = ?4 AND status IN ('prepared', 'sending', 'partial')",
+            params![subject, plain_body, content_json, edition_id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        Ok(())
+    }
+
+    pub fn record_newsletter_brevo_push(
+        &self,
+        edition_id: i64,
+        campaign_id: i64,
+        list_id: i64,
+        template_id: i64,
+        pushed_at: i64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE newsletter_editions
+             SET brevo_campaign_id = ?1,
+                 brevo_list_id = ?2,
+                 brevo_template_id = ?3,
+                 brevo_pushed_at = ?4
+             WHERE id = ?5",
+            params![campaign_id, list_id, template_id, pushed_at, edition_id],
+        )?;
+        Ok(())
     }
 
     fn resolve_active_newsletter_edition_id(

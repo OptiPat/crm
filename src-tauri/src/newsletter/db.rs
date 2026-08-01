@@ -112,6 +112,10 @@ pub struct NewsletterEditionSummary {
     pub sent_count: u32,
     pub error_count: u32,
     pub status: String,
+    #[serde(default)]
+    pub brevo_campaign_id: Option<i64>,
+    #[serde(default)]
+    pub brevo_pushed_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,6 +147,16 @@ pub struct NewsletterEditionDetail {
     pub error_count: u32,
     pub status: String,
     pub recipients: Vec<NewsletterEditionRecipient>,
+    #[serde(default)]
+    pub brevo_campaign_id: Option<i64>,
+    #[serde(default)]
+    pub brevo_list_id: Option<i64>,
+    #[serde(default)]
+    pub brevo_template_id: Option<i64>,
+    #[serde(default)]
+    pub brevo_pushed_at: Option<i64>,
+    #[serde(default)]
+    pub content_json: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

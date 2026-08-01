@@ -1,8 +1,13 @@
+use super::brevo::{
+    list_brevo_templates, push_newsletter_campaign, test_brevo_api_key, BrevoRecipient,
+    BrevoTemplateSummary, PushBrevoCampaignInput, PushBrevoCampaignResult,
+};
 use super::db::{
     CancelNewsletterPreparationResult, LastNewsletterEditionDuplicate, NewsletterAudienceFilters,
     NewsletterAudienceMember, NewsletterAudiencePreview, NewsletterEditionDetail,
     NewsletterEditionSummary, NewsletterUnsubscribedContact, PrepareNewsletterEditionResult,
 };
+use super::llm::LlmProvider;
 use super::mistral::{generate_newsletter_json, refine_newsletter_json};
 use super::store::{NewsletterSettingsInput, NewsletterSettingsPublic, NewsletterStore};
 use crate::auth::session::{require_ui_session, UiSessionState};
@@ -91,6 +96,12 @@ pub fn save_newsletter_settings(
             store.api_key = None;
         } else {
             store.api_key = Some(trimmed.to_string());
+        }
+    }
+    if let Some(provider) = input.llm_provider {
+        let trimmed = provider.trim();
+        if !trimmed.is_empty() {
+            store.llm_provider = LlmProvider::parse(trimmed).as_id().to_string();
         }
     }
     if let Some(style) = input.style_prompt {
@@ -189,6 +200,37 @@ pub fn save_newsletter_settings(
             Some(trimmed.to_string())
         };
     }
+    if let Some(key) = input.brevo_api_key {
+        let trimmed = key.trim();
+        if trimmed.is_empty() {
+            store.brevo_api_key = None;
+        } else {
+            store.brevo_api_key = Some(trimmed.to_string());
+        }
+    }
+    if let Some(name) = input.brevo_sender_name {
+        let trimmed = name.trim();
+        store.brevo_sender_name = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(email) = input.brevo_sender_email {
+        let trimmed = email.trim();
+        store.brevo_sender_email = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(template_id) = input.default_brevo_template_id {
+        store.default_brevo_template_id = if template_id > 0 {
+            Some(template_id)
+        } else {
+            None
+        };
+    }
     store.save(&app)?;
     NewsletterStore::load(&app).map(|s| s.to_public())
 }
@@ -201,21 +243,12 @@ pub fn generate_newsletter_content(
 ) -> Result<GeneratedNewsletterContent, String> {
     require_ui_session(&session)?;
     let store = NewsletterStore::load(&app)?;
-    let api_key = store
-        .api_key
-        .as_ref()
-        .filter(|k| !k.trim().is_empty())
-        .ok_or_else(|| {
-            if store.encrypted_api_key_present {
-                "Clé API illisible — fermez et rouvrez le CRM avec votre mot de passe maître."
-                    .to_string()
-            } else {
-                "Configurez votre clé API Mistral dans Newsletter → Paramètres.".to_string()
-            }
-        })?;
+    let api_key = newsletter_api_key(&store)?;
+    let provider = LlmProvider::parse(&store.llm_provider);
 
     let raw = generate_newsletter_json(
-        api_key,
+        provider,
+        &api_key,
         &store.model,
         &store.style_prompt,
         &input.theme,
@@ -249,18 +282,8 @@ pub fn refine_newsletter_content(
 ) -> Result<GeneratedNewsletterContent, String> {
     require_ui_session(&session)?;
     let store = NewsletterStore::load(&app)?;
-    let api_key = store
-        .api_key
-        .as_ref()
-        .filter(|k| !k.trim().is_empty())
-        .ok_or_else(|| {
-            if store.encrypted_api_key_present {
-                "Clé API illisible — fermez et rouvrez le CRM avec votre mot de passe maître."
-                    .to_string()
-            } else {
-                "Configurez votre clé API Mistral dans Newsletter → Paramètres.".to_string()
-            }
-        })?;
+    let api_key = newsletter_api_key(&store)?;
+    let provider = LlmProvider::parse(&store.llm_provider);
 
     let message = input.message.trim();
     if message.is_empty() {
@@ -277,7 +300,8 @@ pub fn refine_newsletter_content(
         .collect();
 
     let raw = refine_newsletter_json(
-        api_key,
+        provider,
+        &api_key,
         &store.model,
         &store.style_prompt,
         &current_json,
@@ -671,6 +695,240 @@ pub fn finish_newsletter_edition_send(
         .map_err(|e| format!("Clôture envoi: {}", e))
 }
 
+#[tauri::command]
+pub fn list_brevo_email_templates(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<Vec<BrevoTemplateSummary>, String> {
+    require_ui_session(&session)?;
+    let store = NewsletterStore::load(&app)?;
+    let api_key = brevo_api_key(&store)?;
+    list_brevo_templates(&api_key)
+}
+
+#[tauri::command]
+pub fn test_brevo_connection(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<String, String> {
+    require_ui_session(&session)?;
+    let store = NewsletterStore::load(&app)?;
+    let api_key = brevo_api_key(&store)?;
+    test_brevo_api_key(&api_key)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PushNewsletterEditionToBrevoInput {
+    pub edition_id: i64,
+    pub template_id: Option<i64>,
+    /// Contenu affiché dans le compositeur au moment du push (prioritaire sur l'édition en base).
+    pub subject: Option<String>,
+    pub plain_body: Option<String>,
+    pub content_json: Option<String>,
+}
+
+#[tauri::command]
+pub fn push_newsletter_edition_to_brevo(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+    db: State<'_, DbState>,
+    input: PushNewsletterEditionToBrevoInput,
+) -> Result<PushBrevoCampaignResult, String> {
+    require_ui_session(&session)?;
+    let store = NewsletterStore::load(&app)?;
+    let api_key = brevo_api_key(&store)?;
+
+    let template_id = input
+        .template_id
+        .or(store.default_brevo_template_id)
+        .ok_or_else(|| "Sélectionnez un template Brevo.".to_string())?;
+
+    let sender_name = store
+        .brevo_sender_name
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| "Renseignez le nom expéditeur Brevo (Newsletter → Paramètres).".to_string())?
+        .to_string();
+    let sender_email = store
+        .brevo_sender_email
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| {
+            "Renseignez l'email expéditeur Brevo (Newsletter → Paramètres).".to_string()
+        })?
+        .to_string();
+    validate_brevo_sender_email(&sender_email)?;
+
+    let (push_input, prepared_recipient_count) = {
+        let db_guard = db.lock().map_err(|e| format!("Erreur accès base: {}", e))?;
+        let database = db_guard.as_ref().ok_or("Base de données non initialisée")?;
+        let detail = database
+            .get_newsletter_edition_detail(input.edition_id)
+            .map_err(|e| format!("Édition newsletter: {}", e))?;
+
+        if !edition_allows_brevo_push(&detail.status) {
+            return Err(format!(
+                "Cette édition n'est plus poussable vers Brevo (statut « {} »). Préparez une nouvelle campagne.",
+                detail.status
+            ));
+        }
+
+        let content_json = input
+            .content_json
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.to_string())
+            .or_else(|| {
+                detail
+                    .content_json
+                    .as_deref()
+                    .filter(|s| !s.trim().is_empty())
+                    .map(|s| s.to_string())
+            })
+            .ok_or_else(|| {
+                "Contenu de l'édition introuvable — préparez à nouveau la campagne.".to_string()
+            })?;
+
+        let subject = input
+            .subject
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or(detail.subject.as_str())
+            .trim()
+            .to_string();
+
+        if input.content_json.is_some() || input.subject.is_some() || input.plain_body.is_some() {
+            let plain_body = input
+                .plain_body
+                .as_deref()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or(detail.plain_body.as_str())
+                .trim()
+                .to_string();
+            database
+                .update_newsletter_edition_content(
+                    input.edition_id,
+                    &subject,
+                    &plain_body,
+                    &content_json,
+                )
+                .map_err(|_| {
+                    "Impossible de mettre à jour le contenu — l'édition n'est plus au statut « préparée »."
+                        .to_string()
+                })?;
+        }
+
+        let preheader = serde_json::from_str::<serde_json::Value>(&content_json)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("preheader")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+            });
+
+        let prepared_recipient_count = detail.queued_count;
+
+        let recipients: Vec<BrevoRecipient> = detail
+            .recipients
+            .into_iter()
+            .filter(|r| !r.email.trim().is_empty())
+            .map(|r| BrevoRecipient {
+                email: r.email.trim().to_string(),
+                prenom: r.prenom,
+                nom: r.nom,
+            })
+            .collect();
+
+        (PushBrevoCampaignInput {
+            edition_label: detail.edition_label,
+            subject,
+            preheader,
+            template_id,
+            sender_name,
+            sender_email,
+            recipients,
+        }, prepared_recipient_count)
+    };
+
+    let mut result = push_newsletter_campaign(&api_key, push_input)?;
+    result.prepared_recipient_count = prepared_recipient_count;
+
+    let record_warning = {
+        let db_guard = db.lock().map_err(|e| format!("Erreur accès base: {}", e))?;
+        let database = db_guard.as_ref().ok_or("Base de données non initialisée")?;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_secs() as i64;
+        match database.record_newsletter_brevo_push(
+            input.edition_id,
+            result.campaign_id,
+            result.list_id,
+            template_id,
+            now,
+        ) {
+            Ok(()) => None,
+            Err(e) => Some(format!(
+                "Brouillon Brevo créé (#{}) mais non enregistré dans le CRM : {}",
+                result.campaign_id, e
+            )),
+        }
+    };
+
+    result.record_warning = record_warning;
+    Ok(result)
+}
+
+fn validate_brevo_sender_email(email: &str) -> Result<(), String> {
+    if email.contains('@') && email.len() >= 5 && !email.chars().any(char::is_whitespace) {
+        return Ok(());
+    }
+    Err("Email expéditeur Brevo invalide (Newsletter → Paramètres).".into())
+}
+
+fn edition_allows_brevo_push(status: &str) -> bool {
+    matches!(status, "prepared" | "sending" | "partial")
+}
+
+fn brevo_api_key(store: &NewsletterStore) -> Result<String, String> {
+    store
+        .brevo_api_key
+        .as_ref()
+        .filter(|k| !k.trim().is_empty())
+        .cloned()
+        .ok_or_else(|| {
+            if store.encrypted_brevo_api_key_present {
+                "Clé API Brevo illisible — fermez et rouvrez le CRM avec votre mot de passe maître."
+                    .to_string()
+            } else {
+                "Clé API Brevo non configurée (Newsletter → Paramètres).".to_string()
+            }
+        })
+}
+
+fn newsletter_api_key(store: &NewsletterStore) -> Result<String, String> {
+    let provider = LlmProvider::parse(&store.llm_provider);
+    store
+        .api_key
+        .as_ref()
+        .filter(|k| !k.trim().is_empty())
+        .cloned()
+        .ok_or_else(|| {
+            if store.encrypted_api_key_present {
+                "Clé API illisible — fermez et rouvrez le CRM avec votre mot de passe maître."
+                    .to_string()
+            } else {
+                format!(
+                    "Configurez votre clé API {} dans Newsletter → Paramètres.",
+                    provider.label()
+                )
+            }
+        })
+}
+
 fn parse_generated_newsletter(raw: &str) -> Result<GeneratedNewsletterContent, String> {
     let trimmed = raw.trim();
     let json_str = if trimmed.starts_with("```") {
@@ -684,7 +942,7 @@ fn parse_generated_newsletter(raw: &str) -> Result<GeneratedNewsletterContent, S
     };
 
     let value: serde_json::Value = serde_json::from_str(json_str)
-        .map_err(|e| format!("JSON Mistral invalide: {} — {}", e, truncate(raw, 120)))?;
+        .map_err(|e| format!("JSON IA invalide: {} — {}", e, truncate(raw, 120)))?;
 
     let subject = value
         .get("subject")
@@ -694,7 +952,7 @@ fn parse_generated_newsletter(raw: &str) -> Result<GeneratedNewsletterContent, S
         .trim()
         .to_string();
     if subject.is_empty() {
-        return Err("Mistral n'a pas fourni de sujet (subject).".into());
+        return Err("L'IA n'a pas fourni de sujet (subject).".into());
     }
 
     let preheader = value

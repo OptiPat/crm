@@ -56,6 +56,7 @@ describe("newsletter-composer-draft", () => {
       },
       activeEditionId: 7,
       preparedQueueCount: 12,
+      composerEditionId: 7,
     });
     const loaded = loadNewsletterComposerDraft();
     expect(loaded?.theme).toBe("Assurance emprunteur");
@@ -83,6 +84,7 @@ describe("newsletter-composer-draft", () => {
       audienceFilters: DEFAULT_NEWSLETTER_AUDIENCE_FILTERS,
       activeEditionId: null,
       preparedQueueCount: null,
+      composerEditionId: null,
     });
     expect(loadNewsletterComposerDraft()?.theme).toBe("x");
     saveNewsletterComposerDraft({
@@ -100,6 +102,7 @@ describe("newsletter-composer-draft", () => {
       audienceFilters: DEFAULT_NEWSLETTER_AUDIENCE_FILTERS,
       activeEditionId: null,
       preparedQueueCount: null,
+      composerEditionId: null,
     });
     expect(loadNewsletterComposerDraft()).toBeNull();
     clearNewsletterComposerDraft();

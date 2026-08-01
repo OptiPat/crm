@@ -74,6 +74,8 @@ export interface NewsletterEditionSummary {
   sentCount: number;
   errorCount: number;
   status: string;
+  brevoCampaignId?: number | null;
+  brevoPushedAt?: number | null;
 }
 
 export interface NewsletterEditionRecipient {
@@ -101,6 +103,11 @@ export interface NewsletterEditionDetail {
   errorCount: number;
   status: string;
   recipients: NewsletterEditionRecipient[];
+  brevoCampaignId?: number | null;
+  brevoListId?: number | null;
+  brevoTemplateId?: number | null;
+  brevoPushedAt?: number | null;
+  contentJson?: string | null;
 }
 
 export interface LastNewsletterEditionDuplicate {
@@ -165,6 +172,7 @@ export type NewsletterSectionSpacing = "compact" | "normal" | "airy";
 
 export interface NewsletterSettings {
   apiKeyConfigured: boolean;
+  llmProvider: string;
   stylePrompt: string;
   model: string;
   etiquetteNom: string;
@@ -180,10 +188,15 @@ export interface NewsletterSettings {
   /** Identifiant du lien agenda (Paramètres → Agenda & RDV) pour le bouton RDV newsletter. */
   agendaLinkId?: string | null;
   defaultAudienceFilters: NewsletterAudienceFilters;
+  brevoApiKeyConfigured: boolean;
+  brevoSenderName?: string | null;
+  brevoSenderEmail?: string | null;
+  defaultBrevoTemplateId?: number | null;
 }
 
 export interface NewsletterSettingsInput {
   apiKey?: string | null;
+  llmProvider?: string | null;
   stylePrompt?: string | null;
   model?: string | null;
   etiquetteNom?: string | null;
@@ -198,6 +211,31 @@ export interface NewsletterSettingsInput {
   sectionSpacing?: NewsletterSectionSpacing | null;
   agendaLinkId?: string | null;
   defaultAudienceFilters?: NewsletterAudienceFilters | null;
+  brevoApiKey?: string | null;
+  brevoSenderName?: string | null;
+  brevoSenderEmail?: string | null;
+  defaultBrevoTemplateId?: number | null;
+}
+
+export interface BrevoTemplateSummary {
+  id: number;
+  name: string;
+  subject: string;
+  isActive: boolean;
+}
+
+export interface PushNewsletterEditionToBrevoResult {
+  campaignId: number;
+  listId: number;
+  recipientCount: number;
+  preparedRecipientCount: number;
+  campaignUrl: string;
+  campaignListUrl: string;
+  templateEditUrl: string;
+  campaignName: string;
+  sampleRecipientEmail: string;
+  sampleRecipientFirstname: string;
+  recordWarning?: string | null;
 }
 
 export interface GeneratedNewsletterSection {
@@ -387,6 +425,33 @@ export async function finishNewsletterEditionSend(input: {
   return invoke<NewsletterEditionSummary>("finish_newsletter_edition_send", {
     editionId: input.editionId,
     cancelled: input.cancelled,
+  });
+}
+
+export async function listBrevoEmailTemplates(): Promise<BrevoTemplateSummary[]> {
+  return invoke<BrevoTemplateSummary[]>("list_brevo_email_templates");
+}
+
+export async function testBrevoConnection(): Promise<string> {
+  return invoke<string>("test_brevo_connection");
+}
+
+export async function pushNewsletterEditionToBrevo(input: {
+  editionId: number;
+  templateId?: number | null;
+  /** Contenu actuel du compositeur — prioritaire sur l'édition en base. */
+  subject?: string;
+  plainBody?: string;
+  contentJson?: string;
+}): Promise<PushNewsletterEditionToBrevoResult> {
+  return invoke<PushNewsletterEditionToBrevoResult>("push_newsletter_edition_to_brevo", {
+    input: {
+      editionId: input.editionId,
+      templateId: input.templateId ?? null,
+      subject: input.subject ?? null,
+      plainBody: input.plainBody ?? null,
+      contentJson: input.contentJson ?? null,
+    },
   });
 }
 

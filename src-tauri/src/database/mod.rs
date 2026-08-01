@@ -611,6 +611,7 @@ impl Database {
         self.migrate_add_email_envoi_jours_semaine()?;
         self.migrate_add_newsletter_desinscrit()?;
         self.migrate_newsletter_editions()?;
+        self.migrate_newsletter_brevo_fields()?;
         self.migrate_protect_newsletter_etiquette()?;
         self.migrate_contact_etiquettes_contact_index()?;
         self.migrate_contact_etiquettes_tache_id()?;
@@ -1849,6 +1850,38 @@ impl Database {
              ON newsletter_edition_recipients(edition_id)",
             [],
         )?;
+        Ok(())
+    }
+
+    fn migrate_newsletter_brevo_fields(&self) -> Result<()> {
+        if !self.table_has_column("newsletter_editions", "brevo_campaign_id")? {
+            self.conn.execute(
+                "ALTER TABLE newsletter_editions ADD COLUMN brevo_campaign_id INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: colonne brevo_campaign_id sur newsletter_editions");
+        }
+        if !self.table_has_column("newsletter_editions", "brevo_list_id")? {
+            self.conn.execute(
+                "ALTER TABLE newsletter_editions ADD COLUMN brevo_list_id INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: colonne brevo_list_id sur newsletter_editions");
+        }
+        if !self.table_has_column("newsletter_editions", "brevo_template_id")? {
+            self.conn.execute(
+                "ALTER TABLE newsletter_editions ADD COLUMN brevo_template_id INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: colonne brevo_template_id sur newsletter_editions");
+        }
+        if !self.table_has_column("newsletter_editions", "brevo_pushed_at")? {
+            self.conn.execute(
+                "ALTER TABLE newsletter_editions ADD COLUMN brevo_pushed_at INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: colonne brevo_pushed_at sur newsletter_editions");
+        }
         Ok(())
     }
 

@@ -412,11 +412,14 @@ export function NewsletterAudiencePanel({
 export function newsletterChecklistOk(input: {
   preview: NewsletterAudiencePreview | null;
   emailConnected: boolean;
+  brevoConfigured?: boolean;
   hasContent: boolean;
 }): { ok: boolean; messages: string[] } {
   const messages: string[] = [];
   if (!input.hasContent) messages.push("Générez ou saisissez le contenu");
-  if (!input.emailConnected) messages.push("Connectez Gmail (Paramètres → Emails & envois → Connexion)");
+  if (!input.emailConnected && !input.brevoConfigured) {
+    messages.push("Connectez Gmail ou configurez Brevo (Paramètres → Newsletter)");
+  }
   if (!input.preview || input.preview.eligible === 0) {
     messages.push("Aucun destinataire sélectionné");
   }

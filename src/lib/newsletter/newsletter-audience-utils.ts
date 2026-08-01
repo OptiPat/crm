@@ -130,6 +130,31 @@ export function setNewsletterMembersSelection(
   return [...ids];
 }
 
+function sortedContactIds(ids: number[]): number[] {
+  return [...ids].sort((a, b) => a - b);
+}
+
+function contactIdSetsMatch(left: number[], right: number[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  const sortedLeft = sortedContactIds(left);
+  const sortedRight = sortedContactIds(right);
+  return sortedLeft.every((id, index) => id === sortedRight[index]);
+}
+
+/** Audience affichée ≠ destinataires figés à la préparation (IDs, pas la file Gmail restante). */
+export function hasNewsletterAudienceDrift(
+  preview: NewsletterAudiencePreview | null | undefined,
+  preparedRecipientContactIds: number[] | null | undefined
+): boolean {
+  if (!preview || !preparedRecipientContactIds || preparedRecipientContactIds.length === 0) {
+    return false;
+  }
+  const liveIds = preview.recipients.map((recipient) => recipient.contactId);
+  return !contactIdSetsMatch(liveIds, preparedRecipientContactIds);
+}
+
 export function computeNewsletterAudiencePreview(
   members: NewsletterAudienceMember[],
   editionFilters: NewsletterAudienceFilters,

@@ -79,7 +79,7 @@ describe("parametres-search", () => {
   });
 
   it("redirige newsletter et compta hors Paramètres", () => {
-    const mistral = filterParametresSearch("mistral").find((h) => h.id === "newsletter-mistral");
+    const mistral = filterParametresSearch("mistral").find((h) => h.id === "newsletter-llm");
     const compta = filterParametresSearch("drive").find((h) => h.id === "compta-config");
     expect(mistral?.externalPage).toBe("newsletter");
     expect(compta?.externalPage).toBe("comptabilite");
