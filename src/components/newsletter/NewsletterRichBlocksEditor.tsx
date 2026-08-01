@@ -22,11 +22,13 @@ import { NewsletterRichTextField } from "@/components/newsletter/NewsletterRichT
 type NewsletterRichBlocksEditorProps = {
   draft: GeneratedNewsletterContent;
   onChange: (next: GeneratedNewsletterContent) => void;
+  embedded?: boolean;
 };
 
 export function NewsletterRichBlocksEditor({
   draft,
   onChange,
+  embedded = false,
 }: NewsletterRichBlocksEditorProps) {
   const blocks = draft.blocks ?? [];
   const sectionCount = draft.sections.length;
@@ -46,12 +48,14 @@ export function NewsletterRichBlocksEditor({
   };
 
   return (
-    <div className="space-y-3 rounded-lg border p-3 bg-muted/10">
+    <div className={embedded ? "space-y-3" : "space-y-3 rounded-lg border p-3 bg-muted/10"}>
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <Label className="text-sm flex items-center gap-1">
-          <Layers className="h-4 w-4" />
-          Blocs enrichis
-        </Label>
+        {embedded ? null : (
+          <Label className="text-sm flex items-center gap-1">
+            <Layers className="h-4 w-4" />
+            Blocs enrichis
+          </Label>
+        )}
         <div className="flex flex-wrap gap-1">
           {RICH_BLOCK_OPTIONS.map((opt) => (
             <Button
@@ -68,10 +72,12 @@ export function NewsletterRichBlocksEditor({
           ))}
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Citation, chiffre clé, encart ou séparateur — placez chaque bloc où vous voulez dans le
-        mail.
-      </p>
+      {!embedded ?
+        <p className="text-xs text-muted-foreground">
+          Citation, chiffre clé, encart ou séparateur — placez chaque bloc où vous voulez dans le
+          mail.
+        </p>
+      : null}
       {blocks.length === 0 ?
         <p className="text-xs text-muted-foreground italic">Aucun bloc enrichi.</p>
       : <ul className="space-y-3">

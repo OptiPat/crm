@@ -16,11 +16,13 @@ import { toast } from "sonner";
 type NewsletterPlacedImagesEditorProps = {
   draft: GeneratedNewsletterContent;
   onChange: (next: GeneratedNewsletterContent) => void;
+  embedded?: boolean;
 };
 
 export function NewsletterPlacedImagesEditor({
   draft,
   onChange,
+  embedded = false,
 }: NewsletterPlacedImagesEditorProps) {
   const [importing, setImporting] = useState(false);
   const images = draft.images ?? [];
@@ -57,14 +59,15 @@ export function NewsletterPlacedImagesEditor({
   };
 
   return (
-    <div className="space-y-3 rounded-lg border p-3 bg-muted/10">
+    <div className={embedded ? "space-y-3" : "space-y-3 rounded-lg border p-3 bg-muted/10"}>
       <div className="flex items-center justify-between gap-2">
-        <Label className="text-sm">Images</Label>
+        {embedded ? null : <Label className="text-sm">Images</Label>}
         <Button
           type="button"
           variant="outline"
           size="sm"
           disabled={importing}
+          className={embedded ? "ml-auto" : undefined}
           onClick={() => void handleImport()}
         >
           {importing ?
@@ -73,9 +76,11 @@ export function NewsletterPlacedImagesEditor({
           Importer
         </Button>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Importez depuis votre PC, puis placez chaque image où vous voulez dans le mail.
-      </p>
+      {!embedded ?
+        <p className="text-xs text-muted-foreground">
+          Importez depuis votre PC, puis placez chaque image où vous voulez dans le mail.
+        </p>
+      : null}
       {images.length === 0 ?
         <p className="text-xs text-muted-foreground italic">Aucune image.</p>
       : <ul className="space-y-3">

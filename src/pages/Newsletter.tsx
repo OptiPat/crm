@@ -23,8 +23,6 @@ import {
   Save,
   Mail,
   Copy,
-  Undo2,
-  ExternalLink,
 } from "lucide-react";
 import {
   DEFAULT_NEWSLETTER_AUDIENCE_FILTERS,
@@ -103,7 +101,11 @@ import {
 import { newsletterLlmProviderOption } from "@/lib/newsletter/llm-providers";
 import { buildComposerRestoreFromEdition } from "@/lib/newsletter/newsletter-composer-restore";
 import { isResumableNewsletterEdition } from "@/lib/newsletter/newsletter-edition-resume";
+import { NewsletterCampaignReadyCard } from "@/components/newsletter/NewsletterCampaignReadyCard";
+import { NewsletterComposerStepper } from "@/components/newsletter/NewsletterComposerStepper";
+import { NewsletterStickyStatusBar } from "@/components/newsletter/NewsletterStickyStatusBar";
 import { hasNewsletterAudienceDrift } from "@/lib/newsletter/newsletter-audience-utils";
+import { computeNewsletterComposerSteps } from "@/lib/newsletter/newsletter-composer-steps";
 import { beginBackgroundActivity } from "@/lib/background-activity";
 import { toast } from "sonner";
 import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
@@ -263,6 +265,83 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
 
   const hasActivePreparedCampaign =
     activeEditionId != null && (preparedEditionQueuedCount ?? 0) > 0;
+
+  const hasContent = Boolean(subject.trim() && plainBody.trim());
+  const hasRecipients =
+    hasActivePreparedCampaign || (audiencePreview?.eligible ?? 0) > 0;
+  const hasSendProgress =
+    activeEditionBrevoCampaignId != null ||
+    batchSending ||
+    (preparedQueueCount != null &&
+      preparedEditionQueuedCount != null &&
+      preparedQueueCount < preparedEditionQueuedCount);
+
+  const composerSteps = useMemo(
+    () =>
+      computeNewsletterComposerSteps({
+        hasRecipients,
+        hasContent,
+        hasPreparedCampaign: hasActivePreparedCampaign,
+        hasSendProgress,
+      }),
+    [hasRecipients, hasContent, hasActivePreparedCampaign, hasSendProgress]
+  );
+
+  const activeComposerStep = useMemo(
+    () => composerSteps.find((step) => step.active) ?? null,
+    [composerSteps]
+  );
+
+  const checklistState = useMemo(
+    () =>
+      newsletterChecklistOk({
+        preview: audiencePreview,
+        emailConnected,
+        brevoConfigured: settings?.brevoApiKeyConfigured,
+        hasContent,
+        preparedEditionQueuedCount,
+      }),
+    [
+      audiencePreview,
+      emailConnected,
+      settings?.brevoApiKeyConfigured,
+      hasContent,
+      preparedEditionQueuedCount,
+    ]
+  );
+
+  const recipientStatusLabel = useMemo(() => {
+    if (hasActivePreparedCampaign) {
+      const live =
+        audiencePreview?.eligible != null ?
+          ` · ${audiencePreview.eligible} affiché${audiencePreview.eligible !== 1 ? "s" : ""}`
+        : "";
+      return `${preparedEditionQueuedCount} préparé${(preparedEditionQueuedCount ?? 0) !== 1 ? "s" : ""}${live}`;
+    }
+    const count = audiencePreview?.eligible ?? 0;
+    return `${count} sélectionné${count !== 1 ? "s" : ""}`;
+  }, [audiencePreview?.eligible, hasActivePreparedCampaign, preparedEditionQueuedCount]);
+
+  const scrollToAudience = useCallback(() => {
+    document.getElementById("newsletter-audience-panel")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, []);
+
+  const handleCopyBrevoText = useCallback(async () => {
+    const text = plainBody.trim();
+    if (!text) {
+      toast.error("Aucun texte à copier");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Texte copié — collez-le dans Brevo (Modifier le design)");
+    } catch {
+      toast.error("Copie impossible depuis le navigateur");
+    }
+  }, [plainBody]);
 
   const applyPreparedEditionSnapshot = useCallback((detail: NewsletterEditionDetail) => {
     setPreparedEditionQueuedCount(detail.queuedCount);
@@ -971,6 +1050,16 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         </TabsList>
 
         <TabsContent value="composer" className="mt-4 space-y-4">
+          <NewsletterComposerStepper steps={composerSteps} className="py-1" />
+
+          <NewsletterStickyStatusBar
+            activeStep={activeComposerStep}
+            recipientLabel={recipientStatusLabel}
+            checklistIncomplete={!checklistState.ok}
+            audienceDrift={audienceDrift}
+            onScrollToAudience={scrollToAudience}
+          />
+
           <NewsletterAudiencePanel
             filters={audienceFilters}
             settingsAudienceFilters={
@@ -984,153 +1073,36 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
             onOpenContact={(id, ids) => void openContactSheet(id, ids ?? audienceContactIds)}
           />
 
-          {hasActivePreparedCampaign ?
-            <Card className="border-primary/30 bg-primary/5">
-              <CardContent className="py-4 flex flex-col gap-4">
-                <div className="min-w-0 text-sm">
-                  <p className="font-medium">
-                    Campagne prête — {preparedEditionQueuedCount} destinataire
-                    {(preparedEditionQueuedCount ?? 0) !== 1 ? "s" : ""} figé
-                    {(preparedEditionQueuedCount ?? 0) !== 1 ? "s" : ""} pour l&apos;envoi
-                  </p>
-                  {preparedQueueCount != null && preparedQueueCount > 0 ?
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {preparedQueueCount} email{preparedQueueCount !== 1 ? "s" : ""} encore en file
-                      Gmail
-                    </p>
-                  : null}
-                  {audienceDrift ?
-                    <p className="text-amber-700 dark:text-amber-400 mt-1 text-xs">
-                      L&apos;audience affichée ({audiencePreview?.eligible ?? 0} sélectionné
-                      {(audiencePreview?.eligible ?? 0) !== 1 ? "s" : ""}) ne correspond plus à la
-                      campagne préparée — recliquez sur « Préparer la campagne » avant le push Brevo.
-                    </p>
-                  : null}
-                  {batchProgress ?
-                    <p className="text-muted-foreground mt-1 flex items-center gap-2">
-                      {batchSending ?
-                        <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                      : null}
-                      Envoi en cours… {batchProgress.sent}/{batchProgress.total}
-                    </p>
-                  : <p className="text-muted-foreground mt-1">
-                      Délai {Math.round(sendDelayMs / 1000)} s entre chaque envoi (Gmail)
-                    </p>
-                  }
-                  {settings?.brevoApiKeyConfigured ?
-                    <div className="mt-3 space-y-2 rounded-md border bg-background/80 p-3">
-                      <p className="text-xs font-medium">Envoi via Brevo</p>
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <select
-                          className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
-                          value={selectedBrevoTemplateId}
-                          onChange={(e) => setSelectedBrevoTemplateId(e.target.value)}
-                          disabled={loadingBrevoTemplates || brevoTemplates.length === 0}
-                        >
-                          <option value="">Template Brevo…</option>
-                          {brevoTemplates.map((template) => (
-                            <option key={template.id} value={String(template.id)}>
-                              {template.name}
-                            </option>
-                          ))}
-                        </select>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          disabled={brevoPushing || loadingBrevoTemplates || audienceDrift}
-                          onClick={handlePushToBrevo}
-                          title={
-                            audienceDrift ?
-                              "L'audience a changé depuis la préparation — préparez à nouveau la campagne"
-                            : undefined
-                          }
-                        >
-                          {brevoPushing ?
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          : <ExternalLink className="h-4 w-4 mr-2" />}
-                          Pousser les contacts vers Brevo
-                        </Button>
-                      </div>
-                      {brevoCampaignListUrl ?
-                        <div className="space-y-1">
-                          <Button
-                            type="button"
-                            variant="link"
-                            className="h-auto p-0 text-xs"
-                            onClick={() => void openExternalUrl(brevoCampaignListUrl)}
-                          >
-                            Ouvrir les brouillons Brevo
-                          </Button>
-                          {brevoCampaignName ?
-                            <p className="text-xs text-muted-foreground">
-                              Filtre <strong>Brouillons</strong> → « <strong>{brevoCampaignName}</strong> »
-                              {activeEditionBrevoCampaignId != null ?
-                                ` (#${activeEditionBrevoCampaignId})`
-                              : ""}
-                              . Puis <strong>Modifier le design</strong> : collez le texte du compositeur,
-                              mettez en forme, <strong>Aperçu et test</strong>, envoyez.
-                            </p>
-                          : null}
-                          <p className="text-xs text-muted-foreground">
-                            Le template choisi ci-dessus sert de mise en page de base (configuré une
-                            fois dans Brevo). Le texte de chaque édition se colle dans le brouillon,
-                            pas dans le template transactionnel.
-                          </p>
-                        </div>
-                      : <p className="text-xs text-muted-foreground">
-                          Synchronise les destinataires et crée un brouillon campagne dans Brevo
-                          (template + objet). Ensuite : brouillon → Modifier le design → coller le
-                          texte → envoyer.
-                        </p>
-                      }
-                    </div>
-                  : null}
-                </div>
-                <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full min-w-0">
-                  {batchSending ?
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      className="w-full sm:w-auto"
-                      onClick={handleCancelBatchSend}
-                    >
-                      Annuler l&apos;envoi
-                    </Button>
-                  : <>
-                      {activeEditionId != null && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full sm:w-auto"
-                          onClick={() => void openPreparedReview(activeEditionId)}
-                        >
-                          <Eye className="h-4 w-4 mr-2 shrink-0" />
-                          Revoir le contenu
-                        </Button>
-                      )}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full sm:w-auto"
-                        onClick={() => setCancelPrepareConfirmOpen(true)}
-                      >
-                        <Undo2 className="h-4 w-4 mr-2 shrink-0" />
-                        Annuler la préparation
-                      </Button>
-                      <Button
-                        type="button"
-                        className="w-full sm:w-auto"
-                        disabled={!emailConnected || preparedQueueCount == null || preparedQueueCount <= 0}
-                        onClick={() => setSendConfirmOpen(true)}
-                      >
-                        <Send className="h-4 w-4 mr-2 shrink-0" />
-                        Envoyer (Gmail)
-                      </Button>
-                    </>
-                  }
-                </div>
-              </CardContent>
-            </Card>
+          {hasActivePreparedCampaign && activeEditionId != null ?
+            <NewsletterCampaignReadyCard
+              preparedEditionQueuedCount={preparedEditionQueuedCount ?? 0}
+              preparedQueueCount={preparedQueueCount}
+              audienceDrift={audienceDrift}
+              audienceEligible={audiencePreview?.eligible ?? 0}
+              sendDelayMs={sendDelayMs}
+              brevoConfigured={Boolean(settings?.brevoApiKeyConfigured)}
+              brevoTemplates={brevoTemplates}
+              selectedBrevoTemplateId={selectedBrevoTemplateId}
+              onSelectedBrevoTemplateIdChange={setSelectedBrevoTemplateId}
+              loadingBrevoTemplates={loadingBrevoTemplates}
+              brevoPushing={brevoPushing}
+              brevoCampaignListUrl={brevoCampaignListUrl}
+              brevoCampaignName={brevoCampaignName}
+              activeEditionBrevoCampaignId={activeEditionBrevoCampaignId}
+              batchSending={batchSending}
+              batchProgress={batchProgress}
+              emailConnected={emailConnected}
+              hasPlainBody={Boolean(plainBody.trim())}
+              onCopyBrevoText={() => void handleCopyBrevoText()}
+              onPushToBrevo={handlePushToBrevo}
+              onOpenBrevoList={() => {
+                if (brevoCampaignListUrl) void openExternalUrl(brevoCampaignListUrl);
+              }}
+              onReviewPrepared={() => void openPreparedReview(activeEditionId)}
+              onCancelPreparation={() => setCancelPrepareConfirmOpen(true)}
+              onSendGmail={() => setSendConfirmOpen(true)}
+              onCancelBatchSend={handleCancelBatchSend}
+            />
           : null}
 
           <Card>
@@ -1279,6 +1251,16 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                       : <Mail className="h-4 w-4 mr-2" />}
                       M&apos;envoyer un test
                     </Button>
+                    {settings?.brevoApiKeyConfigured && plainBody.trim() ?
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void handleCopyBrevoText()}
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copier pour Brevo
+                      </Button>
+                    : null}
                     <Button
                       type="button"
                       disabled={preparing}
@@ -1290,19 +1272,9 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                       Préparer la campagne
                     </Button>
                   </div>
-                  {!newsletterChecklistOk({
-                    preview: audiencePreview,
-                    emailConnected,
-                    brevoConfigured: settings?.brevoApiKeyConfigured,
-                    hasContent: Boolean(subject.trim() && plainBody.trim()),
-                  }).ok && (
+                  {!checklistState.ok && (
                     <p className="text-xs text-amber-700 dark:text-amber-400">
-                      {newsletterChecklistOk({
-                        preview: audiencePreview,
-                        emailConnected,
-                        brevoConfigured: settings?.brevoApiKeyConfigured,
-                        hasContent: Boolean(subject.trim() && plainBody.trim()),
-                      }).messages.join(" · ")}
+                      {checklistState.messages.join(" · ")}
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">

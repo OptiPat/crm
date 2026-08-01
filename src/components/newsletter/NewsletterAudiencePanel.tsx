@@ -173,7 +173,7 @@ export function NewsletterAudiencePanel({
   };
 
   return (
-    <Card>
+    <Card id="newsletter-audience-panel">
       <CardHeader className="pb-3">
         <CardTitle className="text-lg">
           {isSettingsMode ? "Exclusions permanentes" : "Destinataires"}
@@ -414,13 +414,15 @@ export function newsletterChecklistOk(input: {
   emailConnected: boolean;
   brevoConfigured?: boolean;
   hasContent: boolean;
+  preparedEditionQueuedCount?: number | null;
 }): { ok: boolean; messages: string[] } {
   const messages: string[] = [];
   if (!input.hasContent) messages.push("Générez ou saisissez le contenu");
   if (!input.emailConnected && !input.brevoConfigured) {
     messages.push("Connectez Gmail ou configurez Brevo (Paramètres → Newsletter)");
   }
-  if (!input.preview || input.preview.eligible === 0) {
+  const hasPreparedAudience = (input.preparedEditionQueuedCount ?? 0) > 0;
+  if (!hasPreparedAudience && (!input.preview || input.preview.eligible === 0)) {
     messages.push("Aucun destinataire sélectionné");
   }
   return { ok: messages.length === 0, messages };

@@ -7,6 +7,8 @@ import { NEWSLETTER_LAYOUT_OPTIONS } from "@/lib/newsletter/newsletter-branding"
 import { Plus, Trash2 } from "lucide-react";
 import { NEWSLETTER_VARIABLE_HINTS } from "@/lib/newsletter/newsletter-template-variables";
 import { footerProfileHasOptions } from "@/lib/newsletter/newsletter-footer-options";
+import { NewsletterCollapsibleSection } from "@/components/newsletter/NewsletterCollapsibleSection";
+import { useState } from "react";
 import { NewsletterPlacedImagesEditor } from "@/components/newsletter/NewsletterPlacedImagesEditor";
 import { NewsletterRichBlocksEditor } from "@/components/newsletter/NewsletterRichBlocksEditor";
 import { NewsletterRichTextField } from "@/components/newsletter/NewsletterRichTextField";
@@ -46,59 +48,99 @@ export function NewsletterSectionEditor({
   const includeConseiller = draft.includeConseiller !== false;
   const conseillerName = draft.conseillerName ?? conseillerDefaults?.name ?? "";
   const conseillerPhone = draft.conseillerPhone ?? conseillerDefaults?.phone ?? "";
+  const [editorMode, setEditorMode] = useState<"simple" | "advanced">("simple");
+  const hasImages = (draft.images?.length ?? 0) > 0;
+  const hasBlocks = (draft.blocks?.length ?? 0) > 0;
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2 bg-muted/20">
-        <strong>Branding de ce numéro</strong> — mise en page, images, blocs enrichis et CTA
-        optionnel. Barre de mise en forme (gras, italique, souligné…) sur chaque zone de texte,
-        comme dans Templates email. Couleurs et typographie globales : Newsletter → Paramètres.
-        Variables :{" "}
-        {NEWSLETTER_VARIABLE_HINTS.join(", ")}
-      </p>
-
-      <div className="space-y-2">
-        <Label htmlFor="nl-layout">Mise en page de ce numéro</Label>
-        <select
-          id="nl-layout"
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-          value={draft.layout ?? "magazine"}
-          onChange={(e) => update({ layout: e.target.value as NewsletterLayout })}
-        >
-          {NEWSLETTER_LAYOUT_OPTIONS.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          {NEWSLETTER_LAYOUT_OPTIONS.find((o) => o.id === (draft.layout ?? "magazine"))?.hint}
+          Variables : {NEWSLETTER_VARIABLE_HINTS.join(", ")} — couleurs et typo : Paramètres.
         </p>
+        <div className="flex rounded-md border p-0.5 text-xs">
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded ${editorMode === "simple" ? "bg-primary text-primary-foreground" : ""}`}
+            onClick={() => setEditorMode("simple")}
+          >
+            Simple
+          </button>
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded ${editorMode === "advanced" ? "bg-primary text-primary-foreground" : ""}`}
+            onClick={() => setEditorMode("advanced")}
+          >
+            Avancé
+          </button>
+        </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="nl-preheader">Preheader (aperçu inbox)</Label>
-        <Input
-          id="nl-preheader"
-          value={draft.preheader ?? ""}
-          onChange={(e) => update({ preheader: e.target.value })}
-          placeholder="Phrase sous l'objet dans la boîte mail"
-        />
-      </div>
+      {editorMode === "advanced" ?
+        <NewsletterCollapsibleSection
+          title="Mise en page et titre éditorial"
+          description="Layout, preheader, titre du numéro"
+          defaultOpen
+        >
+          <div className="space-y-2">
+            <Label htmlFor="nl-layout">Mise en page de ce numéro</Label>
+            <select
+              id="nl-layout"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={draft.layout ?? "magazine"}
+              onChange={(e) => update({ layout: e.target.value as NewsletterLayout })}
+            >
+              {NEWSLETTER_LAYOUT_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              {NEWSLETTER_LAYOUT_OPTIONS.find((o) => o.id === (draft.layout ?? "magazine"))?.hint}
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="nl-preheader">Preheader (aperçu inbox)</Label>
+            <Input
+              id="nl-preheader"
+              value={draft.preheader ?? ""}
+              onChange={(e) => update({ preheader: e.target.value })}
+              placeholder="Phrase sous l'objet dans la boîte mail"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="nl-edition-title">Titre éditorial du numéro</Label>
+            <Input
+              id="nl-edition-title"
+              value={draft.editionTitle ?? ""}
+              onChange={(e) => update({ editionTitle: e.target.value })}
+              placeholder="Ex. Les SCPI en 2025 : le palmarès"
+            />
+          </div>
+        </NewsletterCollapsibleSection>
+      : null}
 
-      <div className="space-y-2">
-        <Label htmlFor="nl-edition-title">Titre éditorial du numéro</Label>
-        <Input
-          id="nl-edition-title"
-          value={draft.editionTitle ?? ""}
-          onChange={(e) => update({ editionTitle: e.target.value })}
-          placeholder="Ex. Les SCPI en 2025 : le palmarès"
-        />
-      </div>
-
-      <NewsletterPlacedImagesEditor draft={draft} onChange={onChange} />
-
-      <NewsletterRichBlocksEditor draft={draft} onChange={onChange} />
+      {editorMode === "advanced" ?
+        <>
+          <NewsletterCollapsibleSection
+            title="Images"
+            description="Importez puis placez chaque image dans le mail"
+            defaultOpen={hasImages}
+            badge={hasImages ? `${draft.images?.length ?? 0}` : undefined}
+          >
+            <NewsletterPlacedImagesEditor draft={draft} onChange={onChange} embedded />
+          </NewsletterCollapsibleSection>
+          <NewsletterCollapsibleSection
+            title="Blocs enrichis"
+            description="Citation, chiffre clé, encart ou séparateur"
+            defaultOpen={hasBlocks}
+            badge={hasBlocks ? `${draft.blocks?.length ?? 0}` : undefined}
+          >
+            <NewsletterRichBlocksEditor draft={draft} onChange={onChange} embedded />
+          </NewsletterCollapsibleSection>
+        </>
+      : null}
 
       <NewsletterRichTextField
         id="nl-intro"
@@ -223,11 +265,11 @@ export function NewsletterSectionEditor({
       </div>
 
       {footerProfile && footerProfileHasOptions(footerProfile) && (
-        <div className="space-y-2 rounded-lg border p-3">
-          <p className="text-sm font-medium">Pied de page — cette édition</p>
-          <p className="text-xs text-muted-foreground">
-            Données du profil CGP. Cochez uniquement ce que vous voulez afficher dans ce numéro.
-          </p>
+        <NewsletterCollapsibleSection
+          title="Pied de page — cette édition"
+          description="Téléphone, site, adresse (profil CGP)"
+          defaultOpen={false}
+        >
           {footerProfile.phone && (
             <div className="flex items-center gap-2">
               <Checkbox
@@ -264,22 +306,15 @@ export function NewsletterSectionEditor({
               </Label>
             </div>
           )}
-        </div>
+        </NewsletterCollapsibleSection>
       )}
 
-      <div className="space-y-2 rounded-lg border p-3">
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="nl-include-conseiller"
-            checked={includeConseiller}
-            onCheckedChange={(v) => update({ includeConseiller: v === true })}
-          />
-          <Label htmlFor="nl-include-conseiller" className="text-sm font-normal">
-            Inclure le bloc « Votre conseiller »
-          </Label>
-        </div>
+      <NewsletterCollapsibleSection
+        title="Bloc « Votre conseiller »"
+        defaultOpen={includeConseiller && editorMode === "advanced"}
+      >
         {includeConseiller && (
-          <div className="space-y-2 pl-1">
+          <div className="space-y-2">
             <div className="space-y-1">
               <Label htmlFor="nl-conseiller-name" className="text-xs text-muted-foreground">
                 Nom affiché
@@ -307,7 +342,17 @@ export function NewsletterSectionEditor({
             </p>
           </div>
         )}
-      </div>
+        <div className="flex items-center gap-2 pt-1">
+          <Checkbox
+            id="nl-include-conseiller"
+            checked={includeConseiller}
+            onCheckedChange={(v) => update({ includeConseiller: v === true })}
+          />
+          <Label htmlFor="nl-include-conseiller" className="text-sm font-normal">
+            Inclure le bloc « Votre conseiller »
+          </Label>
+        </div>
+      </NewsletterCollapsibleSection>
     </div>
   );
 }
