@@ -229,6 +229,7 @@ fn main() {
             create_template_email,
             get_template_email_by_id,
             update_template_email,
+            backfill_template_souscription_envois,
             get_template_email_action,
             set_template_email_action,
             set_template_etiquette_links,

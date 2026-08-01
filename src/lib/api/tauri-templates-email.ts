@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { normalizeBrokenAgendaTokens } from "@/lib/emails/agenda-links";
 import { notifyTemplatesEmailChanged } from "@/lib/emails/template-events";
 
 export interface TemplateEmail {
@@ -92,7 +93,23 @@ export async function seedDefaultEmailTemplates(options?: {
   });
 }
 
-import { normalizeBrokenAgendaTokens } from "@/lib/emails/agenda-links";
+export interface TemplateSouscriptionBackfillResult {
+  scanned: number;
+  scheduled: number;
+  updated: number;
+  skipped_past: number;
+  skipped_ineligible: number;
+}
+
+/** Rattrapage des souscriptions déjà enregistrées (date d'envoi encore future). */
+export async function backfillTemplateSouscriptionEnvois(
+  templateId: number
+): Promise<TemplateSouscriptionBackfillResult> {
+  return invoke<TemplateSouscriptionBackfillResult>(
+    "backfill_template_souscription_envois",
+    { templateId }
+  );
+}
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

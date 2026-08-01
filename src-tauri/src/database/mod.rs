@@ -51,6 +51,8 @@ pub mod pipe_remuneration;
 pub mod pipe_timeline;
 pub mod placement_operations;
 pub mod scpi_campaigns;
+pub mod souscription_event_condition;
+pub mod souscription_event_recipients;
 pub mod segments;
 pub mod settings;
 pub mod stellium_perf_campaigns;

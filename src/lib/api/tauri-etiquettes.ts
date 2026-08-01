@@ -218,6 +218,8 @@ export interface ConditionEvenementSouscription {
   types?: string[];
   /** Si false : une seule fois par contact (première souscription). */
   a_chaque_souscription?: boolean;
+  /** Filtre sur l'investissement déclencheur (SCPI, etc.). */
+  reinvestissement_dividendes?: "any" | "inactive" | "active";
 }
 
 export interface ConditionDateApprocheInvestissement {

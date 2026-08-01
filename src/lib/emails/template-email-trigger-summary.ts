@@ -103,6 +103,7 @@ function buildTriggerSummaryInput(
     base.eventTypesProduitCount = config?.types?.length ?? 0;
     base.aChaqueSouscription =
       config?.a_chaque_souscription ?? trigger.a_chaque_souscription;
+    base.reinvestissementDividendes = config?.reinvestissement_dividendes ?? "any";
   } else if (type === "TMI") {
     const config = parseConditionTmiConfig(trigger.condition_config);
     base.tmiTranches = config?.tranches ?? [];

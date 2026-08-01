@@ -3,6 +3,9 @@
 use super::{
     email_schedule::resolve_email_date_prevue_for_contact,
     models::{Contact, Etiquette},
+    souscription_event_condition::{
+        investissement_matches_souscription_event_condition, parse_souscription_event_condition_str,
+    },
     Database,
 };
 use rusqlite::{params, Result};
@@ -822,12 +825,28 @@ impl Database {
         if inv.origine != "MON_CONSEIL" {
             return Ok(false);
         }
-        Ok(inv.contact_id.is_some())
+        Ok(inv.contact_id.is_some() || inv.foyer_id.is_some())
     }
 
     /// Après création/mise à jour d'un investissement (contact + membres du foyer).
     /// Pose les étiquettes « événement : nouvelle souscription » et calcule la date d'envoi.
-    pub fn apply_souscription_event_etiquettes(
+    pub fn apply_souscription_event_etiquettes_for_investissement(
+        &self,
+        investissement_id: i64,
+    ) -> Result<usize> {
+        if !self.investissement_eligible_souscription_event(investissement_id)? {
+            return Ok(0);
+        }
+        let inv = self.get_investissement_by_id(investissement_id)?;
+        let recipients = self.souscription_event_recipient_contact_ids(&inv)?;
+        let mut total = 0usize;
+        for contact_id in recipients {
+            total += self.apply_souscription_event_etiquettes_for_contact(contact_id, investissement_id)?;
+        }
+        Ok(total)
+    }
+
+    fn apply_souscription_event_etiquettes_for_contact(
         &self,
         contact_id: i64,
         investissement_id: i64,
@@ -836,12 +855,6 @@ impl Database {
             return Ok(0);
         }
         let inv = self.get_investissement_by_id(investissement_id)?;
-        let Some(inv_contact_id) = inv.contact_id else {
-            return Ok(0);
-        };
-        if inv_contact_id != contact_id {
-            return Ok(0);
-        }
         let contact = self.get_contact_by_id(contact_id)?;
 
         let now = std::time::SystemTime::now()
@@ -867,27 +880,10 @@ impl Database {
                 continue;
             }
 
-            let (types_filter, a_chaque): (Vec<String>, bool) =
-                if let Some(ref cfg) = etiqu.auto_condition_config {
-                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(cfg) {
-                        let types: Vec<String> = parsed["types"]
-                            .as_array()
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v.as_str().map(String::from))
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-                        let a_chaque = parsed["a_chaque_souscription"].as_bool().unwrap_or(true);
-                        (types, a_chaque)
-                    } else {
-                        (vec![], true)
-                    }
-                } else {
-                    (vec![], true)
-                };
+            let cfg = parse_souscription_event_condition_str(etiqu.auto_condition_config.as_deref());
+            let a_chaque = cfg.a_chaque_souscription;
 
-            if !types_filter.is_empty() && !types_filter.iter().any(|t| t == &inv.type_produit) {
+            if !investissement_matches_souscription_event_condition(&inv, &cfg) {
                 continue;
             }
 
@@ -926,17 +922,8 @@ impl Database {
         let mut total = 0;
         if let Some(iid) = trigger_investissement_id {
             if self.investissement_eligible_souscription_event(iid)? {
-                if let Ok(inv) = self.get_investissement_by_id(iid) {
-                    if let Some(cid) = inv.contact_id {
-                        total += self.apply_souscription_event_etiquettes(cid, iid)?;
-                        total += self.schedule_template_souscription_events(
-                            cid,
-                            iid,
-                            &inv.type_produit,
-                            inv.date_souscription,
-                        )?;
-                    }
-                }
+                total += self.apply_souscription_event_etiquettes_for_investissement(iid)?;
+                total += self.schedule_template_souscription_events_for_investissement(iid)?;
             }
         }
         let mut seen = Vec::new();

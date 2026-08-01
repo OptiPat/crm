@@ -128,6 +128,7 @@ export function AutoRuleConditionFields({
       parseConditionConfig<ConditionEvenementSouscription>(conditionConfig) ?? {
         types: [],
         a_chaque_souscription: true,
+        reinvestissement_dividendes: "any",
       },
     [conditionConfig]
   );
@@ -163,7 +164,11 @@ export function AutoRuleConditionFields({
             if (type === "DELAI_SANS_CONTACT") {
               config = stringifyConditionConfig({ jours: 365, inclure_sans_date: true });
             } else             if (type === "EVENEMENT_SOUSCRIPTION") {
-              config = stringifyConditionConfig({ types: [], a_chaque_souscription: true });
+              config = stringifyConditionConfig({
+                types: [],
+                a_chaque_souscription: true,
+                reinvestissement_dividendes: "any",
+              });
             } else if (type === "TMI") {
               config = stringifyConditionConfig({ tranches: [30] });
             } else if (type === "IR_NET") {
@@ -218,6 +223,36 @@ export function AutoRuleConditionFields({
                 </div>
               ))}
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Réinvestissement des dividendes</Label>
+            <Select
+              value={evtSouscription.reinvestissement_dividendes ?? "any"}
+              onValueChange={(v) =>
+                emit(
+                  conditionType,
+                  stringifyConditionConfig({
+                    ...evtSouscription,
+                    reinvestissement_dividendes:
+                      v === "inactive" || v === "active" ? v : "any",
+                  }),
+                  categories
+                )
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Sans filtre</SelectItem>
+                <SelectItem value="inactive">Sans réinvestissement uniquement</SelectItem>
+                <SelectItem value="active">Avec réinvestissement uniquement</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Filtre sur l&apos;investissement qui déclenche l&apos;événement (ex. SCPI perçue en
+              revenus).
+            </p>
           </div>
           {onRepeatEachSouscriptionChange && (
             <SouscriptionRepeatModeRadios

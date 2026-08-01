@@ -22,6 +22,7 @@ use crate::database::{
         PipeR1MissingDocsSummary, PipeR3DocumentChecklist, PipeR3ImmoDocumentChecklist,
         PipeR3MissingDocsSummary, PipeTimelineEntry, PipelineStats, ProductStats, Segment,
         SegmentWithCount, SetTacheStatutResult, Setting, Tache, TemplateEmail, TemplateEmailAction,
+        TemplateSouscriptionBackfillResult,
         UpdateCustomFieldDef, UpdatePipe, UpdateParrainagePipe, UpdatePipeR1DocumentChecklistInput,
         UpdatePipeR3DocumentChecklistInput, UpdatePipeR3ImmoDocumentChecklistInput,
         UpdatePipeTimelineEntry, YearlyActivityStats,
@@ -1254,6 +1255,19 @@ pub fn update_template_email(
     database
         .update_template_email(id, &template)
         .map_err(|e| format!("Failed to update template: {}", e))
+}
+
+#[tauri::command]
+pub fn backfill_template_souscription_envois(
+    db: State<'_, DbState>,
+    template_id: i64,
+) -> Result<TemplateSouscriptionBackfillResult, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .backfill_template_souscription_envois(template_id)
+        .map_err(|e| format!("Failed to backfill template souscription envois: {}", e))
 }
 
 #[tauri::command]

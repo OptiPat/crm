@@ -1,6 +1,10 @@
 ﻿//! DÃ©clencheur email stockÃ© dans `templates_email.variables` (clÃ© `email_trigger`).
 
-use super::models::Etiquette;
+use super::models::{Etiquette, Investissement};
+use super::souscription_event_condition::{
+    investissement_matches_souscription_event_condition,
+    parse_souscription_event_condition_str, SouscriptionEventConditionParsed,
+};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -68,32 +72,22 @@ impl TemplateEmailTriggerConfig {
             && self.resolved_condition_type().as_deref() == Some("EVENEMENT_SOUSCRIPTION")
     }
 
-    pub fn souscription_types_filter(&self) -> Vec<String> {
-        let Some(cfg) = self.resolved_condition_config() else {
-            return vec![];
-        };
-        let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&cfg) else {
-            return vec![];
-        };
-        parsed["types"]
-            .as_array()
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default()
+    pub fn souscription_condition_parsed(&self) -> SouscriptionEventConditionParsed {
+        parse_souscription_event_condition_str(self.resolved_condition_config().as_deref())
     }
 
     pub fn a_chaque_souscription_resolved(&self) -> bool {
-        if let Some(cfg) = self.resolved_condition_config() {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&cfg) {
-                if let Some(v) = parsed["a_chaque_souscription"].as_bool() {
-                    return v;
-                }
-            }
+        self.souscription_condition_parsed().a_chaque_souscription
+    }
+
+    pub fn investissement_matches_souscription_trigger(&self, inv: &Investissement) -> bool {
+        if !self.is_event_souscription() {
+            return false;
         }
-        self.a_chaque_souscription
+        investissement_matches_souscription_event_condition(
+            inv,
+            &self.souscription_condition_parsed(),
+        )
     }
 
     pub fn is_contact_excluded(&self, contact_id: i64) -> bool {

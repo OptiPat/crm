@@ -2395,6 +2395,7 @@ export function TemplateEmailForm({
                     <TemplateEmailTriggerPanel
                       trigger={emailTrigger}
                       onChange={setEmailTrigger}
+                      templateId={effectiveTemplateId}
                     />
                   </TabsContent>
 

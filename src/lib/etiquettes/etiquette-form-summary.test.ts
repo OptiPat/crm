@@ -75,4 +75,13 @@ describe("formatEtiquetteRuleSummary", () => {
     });
     expect(once).toContain("une seule fois");
   });
+
+  it("souscription affiche le filtre réinvestissement", () => {
+    const sans = formatEtiquetteRuleSummary({
+      ...base,
+      conditionType: "EVENEMENT_SOUSCRIPTION",
+      reinvestissementDividendes: "inactive",
+    });
+    expect(sans).toContain("sans réinvestissement des dividendes");
+  });
 });

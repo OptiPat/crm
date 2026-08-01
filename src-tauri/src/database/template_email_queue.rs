@@ -1,7 +1,7 @@
 //! File d'envoi pilotée par le modèle email (sans étiquette obligatoire).
 
 use super::email_schedule::resolve_email_date_prevue_for_contact;
-use super::models::{Contact, EtiquetteEmailQueueItem};
+use super::models::{Contact, EtiquetteEmailQueueItem, Investissement, TemplateSouscriptionBackfillResult};
 use super::template_email_trigger::{
     etiquette_schedule_from_trigger, parse_template_email_trigger,
     template_trigger_resets_outside_period, TemplateEmailTriggerConfig,
@@ -104,7 +104,7 @@ impl Database {
         &self,
         contact: &Contact,
         trigger: &TemplateEmailTriggerConfig,
-        type_produit: &str,
+        inv: &Investissement,
         organisation_self_id: Option<i64>,
     ) -> bool {
         if !trigger.is_event_souscription() {
@@ -117,11 +117,7 @@ impl Database {
         ) {
             return false;
         }
-        let types = trigger.souscription_types_filter();
-        if !types.is_empty() && !types.iter().any(|t| t == type_produit) {
-            return false;
-        }
-        true
+        trigger.investissement_matches_souscription_trigger(inv)
     }
 
     fn upsert_contact_template_envoi(
@@ -373,24 +369,40 @@ impl Database {
         Ok(scheduled)
     }
 
-    /// Planifie les modèles « événement souscription » actifs pour ce contact.
-    pub fn schedule_template_souscription_events(
+    /// Planifie les modèles « événement souscription » pour tous les destinataires de l'investissement.
+    pub fn schedule_template_souscription_events_for_investissement(
         &self,
-        contact_id: i64,
         investissement_id: i64,
-        type_produit: &str,
-        date_souscription: Option<i64>,
     ) -> Result<usize> {
         if !self.investissement_eligible_souscription_event(investissement_id)? {
             return Ok(0);
         }
+        let inv = self.get_investissement_by_id(investissement_id)?;
+        let recipients = self.souscription_event_recipient_contact_ids(&inv)?;
+        let mut total = 0usize;
+        for contact_id in recipients {
+            total += self.schedule_template_souscription_events_for_contact(
+                contact_id,
+                investissement_id,
+                &inv,
+            )?;
+        }
+        Ok(total)
+    }
+
+    fn schedule_template_souscription_events_for_contact(
+        &self,
+        contact_id: i64,
+        investissement_id: i64,
+        inv: &Investissement,
+    ) -> Result<usize> {
         let contact = self.get_contact_by_id(contact_id)?;
         let org_self_id = self.resolve_organisation_self_contact_id()?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
-        let eligible_at = date_souscription.unwrap_or(now);
+        let eligible_at = inv.date_souscription.unwrap_or(now);
 
         let mut stmt = self.conn.prepare(
             "SELECT id, variables FROM templates_email ORDER BY nom",
@@ -405,7 +417,7 @@ impl Database {
             if !self.template_trigger_matches_souscription(
                 &contact,
                 &trigger,
-                type_produit,
+                &inv,
                 org_self_id,
             ) {
                 continue;
@@ -446,6 +458,124 @@ impl Database {
             }
         }
         Ok(scheduled)
+    }
+
+    /// Rattrapage : planifie les envois pour les souscriptions déjà enregistrées dont la date
+    /// d'envoi calculée est encore dans le futur (hors délai dépassé).
+    pub fn backfill_template_souscription_envois(
+        &self,
+        template_id: i64,
+    ) -> Result<TemplateSouscriptionBackfillResult> {
+        let tpl = self.get_template_email_by_id(template_id)?;
+        let trigger = parse_template_email_trigger(tpl.variables.as_deref());
+        if !trigger.is_event_souscription() {
+            return Ok(TemplateSouscriptionBackfillResult::default());
+        }
+
+        let sched = etiquette_schedule_from_trigger(&trigger);
+        let a_chaque = trigger.a_chaque_souscription_resolved();
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT id FROM investissements
+             WHERE origine = 'MON_CONSEIL'
+               AND date_souscription IS NOT NULL
+               AND (contact_id IS NOT NULL OR foyer_id IS NOT NULL)
+             ORDER BY date_souscription ASC, id ASC",
+        )?;
+        let investissement_ids: Vec<i64> = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let mut result = TemplateSouscriptionBackfillResult {
+            scanned: investissement_ids.len(),
+            ..Default::default()
+        };
+
+        for investissement_id in investissement_ids {
+            let inv = match self.get_investissement_by_id(investissement_id) {
+                Ok(v) => v,
+                Err(_) => {
+                    result.skipped_ineligible += 1;
+                    continue;
+                }
+            };
+            let recipients = match self.souscription_event_recipient_contact_ids(&inv) {
+                Ok(ids) if !ids.is_empty() => ids,
+                _ => {
+                    result.skipped_ineligible += 1;
+                    continue;
+                }
+            };
+
+            let eligible_at = inv.date_souscription.unwrap_or(now);
+            let email_date_prevue =
+                resolve_email_date_prevue_for_contact(&sched, eligible_at).unwrap_or(eligible_at);
+            if email_date_prevue <= now {
+                result.skipped_past += 1;
+                continue;
+            }
+
+            for contact_id in recipients {
+                let contact = match self.get_contact_by_id(contact_id) {
+                    Ok(c) => c,
+                    Err(_) => {
+                        result.skipped_ineligible += 1;
+                        continue;
+                    }
+                };
+                if !self.template_trigger_matches_souscription(
+                    &contact,
+                    &trigger,
+                    &inv,
+                    org_self_id,
+                ) {
+                    result.skipped_ineligible += 1;
+                    continue;
+                }
+                if trigger.is_contact_excluded(contact_id) {
+                    result.skipped_ineligible += 1;
+                    continue;
+                }
+
+                if !a_chaque {
+                    let exists: i64 = self.conn.query_row(
+                        "SELECT COUNT(*) FROM contact_template_envois
+                         WHERE contact_id = ?1 AND template_id = ?2 AND investissement_id IS NULL",
+                        params![contact_id, template_id],
+                        |row| row.get(0),
+                    )?;
+                    if exists > 0 {
+                        result.skipped_ineligible += 1;
+                        continue;
+                    }
+                }
+
+                let inv_key = if a_chaque {
+                    Some(investissement_id)
+                } else {
+                    None
+                };
+                if self.upsert_contact_template_envoi(
+                    contact_id,
+                    template_id,
+                    inv_key,
+                    eligible_at,
+                    Some(email_date_prevue),
+                    a_chaque,
+                )? {
+                    result.scheduled += 1;
+                } else {
+                    result.updated += 1;
+                }
+            }
+        }
+
+        Ok(result)
     }
 
     /// Recalcule `email_date_prevue` des envois non envoyés après modification du déclencheur modèle.

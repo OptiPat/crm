@@ -23,8 +23,11 @@ import {
   triggerRuleTreeToConfig,
 } from "@/lib/emails/template-email-trigger-rule-tree";
 import type { RuleLeaf, RuleOp } from "@/lib/etiquettes/rule-ast";
-import { Zap } from "lucide-react";
-import { useMemo, useRef } from "react";
+import { backfillTemplateSouscriptionEnvois } from "@/lib/api/tauri-templates-email";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { History, Loader2, Zap } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 
 type SimpleTriggerSnapshot = Pick<
   TemplateEmailTriggerConfig,
@@ -34,9 +37,11 @@ type SimpleTriggerSnapshot = Pick<
 type Props = {
   trigger: TemplateEmailTriggerConfig;
   onChange: (next: TemplateEmailTriggerConfig) => void;
+  templateId?: number | null;
 };
 
-export function TemplateEmailTriggerPanel({ trigger, onChange }: Props) {
+export function TemplateEmailTriggerPanel({ trigger, onChange, templateId }: Props) {
+  const [backfillLoading, setBackfillLoading] = useState(false);
   const patch = (partial: Partial<TemplateEmailTriggerConfig>) =>
     onChange({ ...trigger, ...partial });
 
@@ -61,6 +66,37 @@ export function TemplateEmailTriggerPanel({ trigger, onChange }: Props) {
   );
 
   const conditionType = trigger.condition_type ?? "EVENEMENT_SOUSCRIPTION";
+  const isSouscriptionTrigger =
+    trigger.enabled && conditionType === "EVENEMENT_SOUSCRIPTION";
+
+  const handleBackfill = async () => {
+    if (templateId == null) return;
+    setBackfillLoading(true);
+    try {
+      const result = await backfillTemplateSouscriptionEnvois(templateId);
+      const parts: string[] = [];
+      if (result.scheduled > 0) {
+        parts.push(
+          `${result.scheduled} planifié${result.scheduled > 1 ? "s" : ""}`
+        );
+      }
+      if (result.updated > 0) {
+        parts.push(`${result.updated} mis à jour`);
+      }
+      if (result.skipped_past > 0) {
+        parts.push(`${result.skipped_past} hors délai (ignoré${result.skipped_past > 1 ? "s" : ""})`);
+      }
+      toast.success(
+        parts.length > 0
+          ? `Rattrapage : ${parts.join(", ")}.`
+          : "Aucune souscription éligible à rattraper."
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Échec du rattrapage");
+    } finally {
+      setBackfillLoading(false);
+    }
+  };
 
   const setRepeatEach = (each: boolean) => {
     patch({ a_chaque_souscription: each });
@@ -290,6 +326,36 @@ export function TemplateEmailTriggerPanel({ trigger, onChange }: Props) {
               jours après la souscription, puis le prochain mercredi à 19 h (Suivi → Envois).
             </p>
           </div>
+
+          {isSouscriptionTrigger && (
+            <div className="space-y-2 border-t pt-4">
+              <Label className="text-sm font-medium">Portefeuille déjà en place</Label>
+              <p className="text-xs text-muted-foreground">
+                Planifie automatiquement les emails pour les souscriptions déjà enregistrées dont la
+                date d&apos;envoi est encore dans le futur. Les dossiers au-delà du délai sont
+                ignorés.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={templateId == null || backfillLoading}
+                onClick={() => void handleBackfill()}
+              >
+                {backfillLoading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <History className="h-4 w-4 mr-2" />
+                )}
+                Rattraper les souscriptions en cours
+              </Button>
+              {templateId == null && (
+                <p className="text-xs text-muted-foreground">
+                  Enregistrez le modèle une première fois pour activer le rattrapage.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

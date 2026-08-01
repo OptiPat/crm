@@ -34,6 +34,8 @@ export interface EtiquetteRuleSummaryInput {
   eventTypesProduitCount?: number;
   /** Pose de l'étiquette à chaque investissement (événement souscription). */
   aChaqueSouscription?: boolean;
+  /** Filtre réinvestissement dividendes (événement souscription). */
+  reinvestissementDividendes?: "any" | "inactive" | "active";
   /** Libellé répétition souscription : étiquette (défaut) ou envoi (déclencheur modèle). */
   repeatEntity?: "etiquette" | "envoi";
   invChampDate: string;
@@ -86,6 +88,12 @@ export function formatEtiquetteRuleSummary(input: EtiquetteRuleSummaryInput): st
         count > 0
           ? ` (${count} type${count > 1 ? "s" : ""} de produit)`
           : " (tous produits)";
+      const reinvest =
+        input.reinvestissementDividendes === "inactive"
+          ? " — sans réinvestissement des dividendes"
+          : input.reinvestissementDividendes === "active"
+            ? " — avec réinvestissement des dividendes"
+            : "";
       const entity = input.repeatEntity ?? "etiquette";
       const repeat =
         input.aChaqueSouscription === false
@@ -95,7 +103,7 @@ export function formatEtiquetteRuleSummary(input: EtiquetteRuleSummaryInput): st
           : entity === "envoi"
             ? " — un envoi à chaque investissement"
             : " — étiquette à chaque investissement";
-      detail = `souscription enregistrée sur la fiche${types}${repeat}`;
+      detail = `souscription enregistrée sur la fiche${types}${reinvest}${repeat}`;
       break;
     }
     case "DELAI_SANS_CONTACT":

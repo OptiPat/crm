@@ -1089,6 +1089,15 @@ pub struct SetTacheStatutResult {
     pub spawned_next: Option<Tache>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TemplateSouscriptionBackfillResult {
+    pub scanned: usize,
+    pub scheduled: usize,
+    pub updated: usize,
+    pub skipped_past: usize,
+    pub skipped_ineligible: usize,
+}
+
 // ==================== CHAMPS PERSONNALISÉS ====================
 
 /// Définition d'un champ personnalisé (créé par l'utilisateur).

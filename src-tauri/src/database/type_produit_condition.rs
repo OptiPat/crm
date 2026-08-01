@@ -12,6 +12,12 @@ pub enum TriStateFilter {
     Active,
 }
 
+impl Default for TriStateFilter {
+    fn default() -> Self {
+        TriStateFilter::Any
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TypeProduitConditionParsed {
     pub types: Vec<String>,

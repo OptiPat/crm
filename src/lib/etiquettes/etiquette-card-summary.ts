@@ -132,6 +132,7 @@ function storedToSummaryInput(
     );
     base.eventTypesProduitCount = config?.types?.length ?? 0;
     base.aChaqueSouscription = config?.a_chaque_souscription ?? true;
+    base.reinvestissementDividendes = config?.reinvestissement_dividendes ?? "any";
   } else if (type === "TMI") {
     const config = parseConditionTmiConfig(etiquette.auto_condition_config);
     base.tmiTranches = config?.tranches ?? [];
