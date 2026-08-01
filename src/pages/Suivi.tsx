@@ -6,6 +6,7 @@ import { Check, Tag, Users } from "lucide-react";
 import {
   genererAlertesAutomatiques,
   checkAndCreateDemembrementAlerts,
+  checkAndCreateArbitrageAlerts,
   countAlertesTraiteesDepuis,
 } from "@/lib/api/tauri-alertes";
 import { getAlertesWithContacts, type AlerteWithContact } from "@/lib/api/tauri-dashboard";
@@ -40,6 +41,7 @@ import { buildEtiquetteAttributionMap } from "@/lib/etiquettes/etiquette-attribu
 import { useSuiviAutoRefresh } from "@/hooks/useSuiviAutoRefresh";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { notifyAlertesChanged } from "@/lib/alertes/alert-events";
 import {
   consumeSuiviNavigationIntent,
   loadPersistedSuiviActiveTab,
@@ -90,6 +92,7 @@ export function Suivi({ currentPage, onNavigate }: SuiviProps) {
   const alertesTabLoadedRef = useRef(false);
   const etiquettesTabLoadedRef = useRef(false);
   const alertesRefreshGenRef = useRef(0);
+  const alertesHeavyRefreshRef = useRef(0);
 
   const handleTabChange = useCallback((tab: SuiviMainTab) => {
     setActiveTab(tab);
@@ -177,14 +180,19 @@ export function Suivi({ currentPage, onNavigate }: SuiviProps) {
       console.error("Error loading alertes:", error);
       if (showLoading) toast.error("Erreur lors du chargement des alertes");
     } finally {
-      if (!isRefreshGenerationCurrent(alertesRefreshGenRef, token)) return;
-      if (showLoading) setLoading(false);
+      if (
+        isRefreshGenerationCurrent(alertesRefreshGenRef, token) &&
+        alertesHeavyRefreshRef.current === 0
+      ) {
+        setLoading(false);
+      }
     }
   }, []);
 
   const regenerateAndLoadAlertes = useCallback(async (options?: { silent?: boolean }) => {
     const showLoading = !options?.silent;
     const token = beginRefreshGeneration(alertesRefreshGenRef);
+    alertesHeavyRefreshRef.current += 1;
     try {
       if (showLoading) setLoading(true);
 
@@ -192,6 +200,12 @@ export function Suivi({ currentPage, onNavigate }: SuiviProps) {
         await checkAndCreateDemembrementAlerts();
       } catch (error) {
         console.error("Error demembrement alerts:", error);
+      }
+
+      try {
+        await checkAndCreateArbitrageAlerts();
+      } catch (error) {
+        console.error("Error arbitrage alerts:", error);
       }
 
       try {
@@ -209,8 +223,13 @@ export function Suivi({ currentPage, onNavigate }: SuiviProps) {
       console.error("Error loading alertes:", error);
       if (showLoading) toast.error("Erreur lors du chargement des alertes");
     } finally {
-      if (!isRefreshGenerationCurrent(alertesRefreshGenRef, token)) return;
-      if (showLoading) setLoading(false);
+      alertesHeavyRefreshRef.current = Math.max(0, alertesHeavyRefreshRef.current - 1);
+      if (
+        isRefreshGenerationCurrent(alertesRefreshGenRef, token) &&
+        alertesHeavyRefreshRef.current === 0
+      ) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -367,6 +386,9 @@ export function Suivi({ currentPage, onNavigate }: SuiviProps) {
       await handleSelectEtiquette(selectedEtiquette);
       await loadEtiquettes();
       notifyEtiquettesChanged();
+      if (excludeFromAuto) {
+        notifyAlertesChanged();
+      }
     } catch (error) {
       console.error("Error removing etiquette:", error);
       toast.error("Erreur lors du retrait de l'étiquette");

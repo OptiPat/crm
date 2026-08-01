@@ -12,6 +12,7 @@ export type AppNotificationKind =
   | "emails_incomplete"
   | "emails_sent"
   | "alertes_suivi"
+  | "alertes_arbitrage"
   | "taches_urgent"
   | "placement_non_conforme"
   | "exceltis_stellium"
@@ -49,6 +50,7 @@ export type AppNotificationsSummaryDto = {
   incomplete: NotificationQueueBucketDto;
   sent: NotificationQueueBucketDto;
   alertes: NotificationQueueBucketDto;
+  alertes_arbitrage: NotificationQueueBucketDto;
   taches_urgent: NotificationQueueBucketDto;
   placement_non_conforme: NotificationQueueBucketDto;
   stellium_signals: StelliumExceltisSignal[];
@@ -85,6 +87,25 @@ export function buildAppNotificationsSummary(
   pushQueue("emails_followup", "Relance sans réponse", "warning", "followup", dto.followup);
   pushQueue("emails_incomplete", "Envoi à compléter", "warning", "incomplete", dto.incomplete);
   pushQueue("emails_sent", "En attente de réponse client", "info", "sent", dto.sent);
+
+  if (dto.alertes_arbitrage.count > 0) {
+    items.push({
+      id: "alertes_arbitrage",
+      label:
+        dto.alertes_arbitrage.count === 1
+          ? "Arbitrage à traiter"
+          : "Arbitrages à traiter",
+      count: dto.alertes_arbitrage.count,
+      severity: "urgent",
+      targetPage: "taches",
+      tachesEcheanceFilter: "urgent",
+      focusContactId:
+        dto.alertes_arbitrage.count === 1 &&
+        dto.alertes_arbitrage.focus_contact_id != null
+          ? dto.alertes_arbitrage.focus_contact_id
+          : undefined,
+    });
+  }
 
   if (dto.alertes.count > 0) {
     items.push({

@@ -3,6 +3,7 @@ import {
   currentFiscalYearLabel,
   fiscalYearLabelForDate,
   fiscalYearLabelForUnix,
+  hasFiscalYearStarted,
   nextFiscalYearLabel,
   previousFiscalYearLabel,
 } from "@/lib/pipe/remuneration-fiscal-year";
@@ -27,5 +28,13 @@ describe("remuneration-fiscal-year", () => {
     expect(previousFiscalYearLabel("2025-2026")).toBe("2024-2025");
     expect(nextFiscalYearLabel("2025-2026")).toBe("2026-2027");
     expect(nextFiscalYearLabel("invalide")).toBeNull();
+  });
+
+  it("hasFiscalYearStarted suit le calendrier local (01/08)", () => {
+    const jul31 = new Date(2026, 6, 31, 12, 0, 0);
+    const aug1Morning = new Date(2026, 7, 1, 0, 30, 0);
+    expect(hasFiscalYearStarted("2025-2026", jul31)).toBe(true);
+    expect(hasFiscalYearStarted("2026-2027", jul31)).toBe(false);
+    expect(hasFiscalYearStarted("2026-2027", aug1Morning)).toBe(true);
   });
 });

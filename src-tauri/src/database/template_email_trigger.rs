@@ -1,4 +1,4 @@
-﻿//! DÃ©clencheur email stockÃ© dans `templates_email.variables` (clÃ© `email_trigger`).
+//! Declencheur email stocke dans `templates_email.variables` (cle `email_trigger`).
 
 use super::models::{Etiquette, Investissement};
 use super::souscription_event_condition::{
@@ -20,7 +20,7 @@ pub struct TemplateEmailTriggerConfig {
     #[serde(default)]
     pub envoi_jours_semaine: Option<String>,
     pub a_chaque_souscription: bool,
-    /// Contacts décochés dans l'aperçu (exclus de la file déclencheur).
+    /// Contacts decoches dans l'apercu (exclus de la file declencheur).
     #[serde(default)]
     pub excluded_contact_ids: Vec<i64>,
     /// Ancien format
@@ -95,7 +95,7 @@ impl TemplateEmailTriggerConfig {
     }
 }
 
-/// Déclencheurs périodiques : hors période, la file modèle est effacée (comme une étiquette auto).
+/// Declencheurs periodiques : hors periode, la file modele est effacee (comme une etiquette auto).
 pub fn template_trigger_resets_outside_period(condition_type: &str) -> bool {
     condition_type == "PERIODE_ANNEE"
 }
@@ -113,7 +113,7 @@ pub fn parse_template_email_trigger(variables: Option<&str>) -> TemplateEmailTri
     serde_json::from_value(trigger_val.clone()).unwrap_or_default()
 }
 
-/// ParamÃ¨tres de planification rÃ©utilisant `resolve_email_date_prevue_for_contact`.
+/// Parametres de planification reutilisant `resolve_email_date_prevue_for_contact`.
 pub fn etiquette_schedule_from_trigger(trigger: &TemplateEmailTriggerConfig) -> Etiquette {
     Etiquette {
         id: 0,

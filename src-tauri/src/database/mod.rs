@@ -2,6 +2,7 @@ use rusqlite::{params, Connection, Result};
 use tauri::{AppHandle, Manager};
 
 pub mod alertes;
+pub mod arbitrage_alerts;
 pub mod birthdays;
 pub mod calendar_events;
 pub mod client_onedrive;
@@ -601,6 +602,8 @@ impl Database {
         self.migrate_add_investissement_numero_contrat()?;
         self.migrate_add_investissement_statut()?;
         self.migrate_add_investissement_prevoyance_fields()?;
+        self.migrate_add_investissement_arbitrage_dates()?;
+        self.migrate_add_alerte_investissement_id()?;
         self.migrate_investissement_valorisations()?;
         self.migrate_stellium_fields_on_valorisations()?;
 
@@ -2147,6 +2150,33 @@ impl Database {
                    AND montant_versement_programme IS NOT NULL",
                 [],
             )?;
+        }
+        Ok(())
+    }
+
+    /// Migration : dates arbitrage semestriel AV/PER (opt-in par contrat).
+    fn migrate_add_investissement_arbitrage_dates(&self) -> Result<()> {
+        for column in ["date_dernier_arbitrage", "date_prochain_arbitrage"] {
+            if !self.table_has_column("investissements", column)? {
+                self.conn.execute(
+                    &format!("ALTER TABLE investissements ADD COLUMN {column} INTEGER"),
+                    [],
+                )?;
+                println!("✅ Migration appliquée : colonne {column} sur investissements");
+            }
+        }
+        Ok(())
+    }
+
+    /// Migration : lien alerte arbitrage → contrat (dédup + traitement).
+    fn migrate_add_alerte_investissement_id(&self) -> Result<()> {
+        if !self.table_has_column("alertes", "investissement_id")? {
+            self.conn.execute(
+                "ALTER TABLE alertes ADD COLUMN investissement_id INTEGER
+                 REFERENCES investissements(id) ON DELETE SET NULL",
+                [],
+            )?;
+            println!("✅ Migration appliquée : colonne investissement_id sur alertes");
         }
         Ok(())
     }

@@ -179,6 +179,8 @@ impl super::Database {
             date_souscription: Some(unix_to_rfc3339_local(closing_ts)),
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,

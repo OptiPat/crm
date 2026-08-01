@@ -75,6 +75,7 @@ import {
   type Etiquette,
 } from "@/lib/api/tauri-etiquettes";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { notifyAlertesChanged } from "@/lib/alertes/alert-events";
 import { ContactAutoEtiquetteLog } from "@/components/contacts/ContactAutoEtiquetteLog";
 import { ContactDetailFoyerTab } from "@/components/contacts/ContactDetailFoyerTab";
 import { type ContactFoyerRelationsActions } from "@/components/contacts/ContactFoyerRelationsBlock";
@@ -405,6 +406,9 @@ export function ContactDetail({
       await retirerEtiquette(contact.id, etiquetteId, excludeFromAuto);
       await loadEtiquettes();
       notifyEtiquettesChanged();
+      if (excludeFromAuto) {
+        notifyAlertesChanged();
+      }
       toast.success(
         excludeFromAuto
           ? "Étiquette retirée — ne sera plus appliquée automatiquement"

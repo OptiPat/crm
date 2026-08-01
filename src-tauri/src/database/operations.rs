@@ -290,6 +290,8 @@ mod database_integration_tests {
             date_souscription: Some(iso),
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -327,6 +329,8 @@ mod database_integration_tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -381,6 +385,8 @@ mod database_integration_tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -439,6 +445,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -465,6 +473,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -503,6 +513,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -529,6 +541,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -555,6 +569,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -581,6 +597,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -619,6 +637,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -645,6 +665,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -684,6 +706,8 @@ mod database_integration_tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -731,6 +755,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -758,6 +784,8 @@ mod database_integration_tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -802,6 +830,8 @@ mod database_integration_tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -868,6 +898,8 @@ mod database_integration_tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -912,6 +944,8 @@ mod database_integration_tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -974,6 +1008,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -1012,6 +1048,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -1050,6 +1088,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -1087,6 +1127,8 @@ mod database_integration_tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -1118,6 +1160,8 @@ mod database_integration_tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -1150,6 +1194,8 @@ mod database_integration_tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -1196,6 +1242,8 @@ mod database_integration_tests {
             date_souscription: Some(iso),
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -1682,6 +1730,8 @@ mod database_integration_tests {
             date_souscription: Some(souscription_iso),
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -1721,6 +1771,8 @@ mod database_integration_tests {
             date_souscription: Some(older_iso),
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -1752,6 +1804,8 @@ mod database_integration_tests {
             date_souscription: Some(newer_iso),
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -1793,6 +1847,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -1821,6 +1877,8 @@ mod database_integration_tests {
             date_souscription: Some(souscription_iso),
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -1861,6 +1919,8 @@ mod database_integration_tests {
             date_souscription: Some(older_iso),
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -1896,6 +1956,8 @@ mod database_integration_tests {
             date_souscription: Some(newer_iso),
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -2081,6 +2143,217 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn auto_etiquette_exclusion_suppresses_lead_6mois_without_segment_link() {
+        let db = test_db();
+        db.ensure_default_segments_and_alerte_links().unwrap();
+        db.ensure_default_etiquettes().unwrap();
+
+        let old_ts = chrono::Utc::now().timestamp() - 200 * 24 * 3600;
+        let old_iso = chrono::DateTime::from_timestamp(old_ts, 0).unwrap().to_rfc3339();
+        let contact = db
+            .create_contact(NewContact {
+                categorie: "PROSPECT_CLIENT".into(),
+                date_dernier_contact: Some(old_iso),
+                ..sample_contact("Durand", "Paul")
+            })
+            .unwrap();
+        let contact_id = contact.id.unwrap();
+
+        let etiquette_id: i64 = db
+            .get_connection()
+            .query_row(
+                "SELECT id FROM etiquettes WHERE LOWER(TRIM(nom)) = LOWER(TRIM('Suivi > 6 mois'))",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        // Simule une base ancienne : étiquette sans segment_id lié
+        db.get_connection()
+            .execute(
+                "UPDATE etiquettes SET segment_id = NULL WHERE id = ?1",
+                rusqlite::params![etiquette_id],
+            )
+            .unwrap();
+
+        db.generer_alertes_automatiques().unwrap();
+        let before = db
+            .get_alertes_with_contacts(None)
+            .unwrap()
+            .into_iter()
+            .filter(|a| a.contact_id == contact_id && a.type_alerte == "LEAD_SUIVI_6MOIS")
+            .count();
+        assert_eq!(before, 1, "alerte lead 6 mois attendue avant exclusion");
+
+        db.exclude_contact_from_auto_etiquette(contact_id, etiquette_id)
+            .unwrap();
+
+        let visible = db
+            .get_alertes_with_contacts(None)
+            .unwrap()
+            .into_iter()
+            .any(|a| a.contact_id == contact_id && a.type_alerte == "LEAD_SUIVI_6MOIS");
+        assert!(
+            !visible,
+            "alerte masquée après exclusion Suivi > 6 mois même sans segment_id"
+        );
+    }
+
+    #[test]
+    fn suivi_6mois_exclusion_does_not_suppress_lead_jamais_contacte() {
+        let db = test_db();
+        db.ensure_default_segments_and_alerte_links().unwrap();
+        db.ensure_default_etiquettes().unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                categorie: "SUSPECT_CLIENT".into(),
+                date_dernier_contact: None,
+                ..sample_contact("Cruz", "Marion")
+            })
+            .unwrap();
+        let contact_id = contact.id.unwrap();
+
+        db.generer_alertes_automatiques().unwrap();
+
+        let etiquette_id: i64 = db
+            .get_connection()
+            .query_row(
+                "SELECT id FROM etiquettes WHERE LOWER(TRIM(nom)) = LOWER(TRIM('Suivi > 6 mois'))",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        db.exclude_contact_from_auto_etiquette(contact_id, etiquette_id)
+            .unwrap();
+
+        let visible = db
+            .get_alertes_with_contacts(None)
+            .unwrap()
+            .into_iter()
+            .any(|a| a.contact_id == contact_id && a.type_alerte == "LEAD_JAMAIS_CONTACTE");
+        assert!(
+            visible,
+            "exclure Suivi > 6 mois ne doit pas masquer Prospect jamais contacté"
+        );
+    }
+
+    #[test]
+    fn filleul_6mois_exclusion_suppresses_matching_alerte() {
+        let db = test_db();
+        db.ensure_default_segments_and_alerte_links().unwrap();
+        db.ensure_default_etiquettes().unwrap();
+
+        let old_ts = chrono::Utc::now().timestamp() - 200 * 24 * 3600;
+        let old_iso = chrono::DateTime::from_timestamp(old_ts, 0).unwrap().to_rfc3339();
+        let contact = db
+            .create_contact(NewContact {
+                categorie: "CLIENT".into(),
+                filleul_categorie: Some("PROSPECT_FILLEUL".into()),
+                date_dernier_contact_filleul: Some(old_iso),
+                ..sample_contact("Leconte", "Julien")
+            })
+            .unwrap();
+        let contact_id = contact.id.unwrap();
+
+        db.generer_alertes_automatiques().unwrap();
+        assert!(
+            db.get_alertes_with_contacts(None)
+                .unwrap()
+                .iter()
+                .any(|a| a.contact_id == contact_id && a.type_alerte == "FILLEUL_SUIVI_6MOIS"),
+            "alerte filleul 6 mois attendue"
+        );
+
+        let etiquette_id: i64 = db
+            .get_connection()
+            .query_row(
+                "SELECT id FROM etiquettes WHERE LOWER(TRIM(nom)) = LOWER(TRIM('Filleul suivi > 6 mois'))",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        db.exclude_contact_from_auto_etiquette(contact_id, etiquette_id)
+            .unwrap();
+
+        let visible = db
+            .get_alertes_with_contacts(None)
+            .unwrap()
+            .into_iter()
+            .any(|a| a.contact_id == contact_id && a.type_alerte == "FILLEUL_SUIVI_6MOIS");
+        assert!(
+            !visible,
+            "exclure Filleul suivi > 6 mois masque l'alerte filleul"
+        );
+    }
+
+    #[test]
+    fn generer_alertes_closes_stale_filleul_6mois_without_suivi_date() {
+        let db = test_db();
+        db.ensure_default_segments_and_alerte_links().unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                categorie: "CLIENT".into(),
+                filleul_categorie: Some("PROSPECT_FILLEUL".into()),
+                date_dernier_contact: None,
+                date_dernier_contact_filleul: None,
+                ..sample_contact("Leconte", "Julien")
+            })
+            .unwrap();
+        let contact_id = contact.id.unwrap();
+
+        db.get_connection()
+            .execute(
+                "INSERT INTO alertes (contact_id, type_alerte, message, date_alerte, lue, traitee)
+                 VALUES (?1, 'FILLEUL_SUIVI_6MOIS', 'Stale', unixepoch(), 0, 0)",
+                rusqlite::params![contact_id],
+            )
+            .unwrap();
+
+        db.generer_alertes_automatiques().unwrap();
+
+        let open = db
+            .get_alertes_with_contacts(None)
+            .unwrap()
+            .into_iter()
+            .any(|a| a.contact_id == contact_id && a.type_alerte == "FILLEUL_SUIVI_6MOIS");
+        assert!(
+            !open,
+            "alerte filleul 6 mois obsolète doit être fermée sans date de suivi filleul"
+        );
+    }
+
+    #[test]
+    fn generer_alertes_keeps_lead_jamais_contacte_for_suspect_without_date() {
+        let db = test_db();
+        db.ensure_default_segments_and_alerte_links().unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                categorie: "SUSPECT_CLIENT".into(),
+                date_dernier_contact: None,
+                ..sample_contact("Cruz", "Marion")
+            })
+            .unwrap();
+        let contact_id = contact.id.unwrap();
+
+        db.generer_alertes_automatiques().unwrap();
+
+        let open = db
+            .get_alertes_with_contacts(None)
+            .unwrap()
+            .into_iter()
+            .any(|a| a.contact_id == contact_id && a.type_alerte == "LEAD_JAMAIS_CONTACTE");
+        assert!(
+            open,
+            "suspect sans date doit garder l'alerte prospect jamais contacté"
+        );
+    }
+
+    #[test]
     fn generer_alertes_closes_orphan_suivi_alerts_for_paused_contacts() {
         let db = test_db();
         let contact = db
@@ -2160,6 +2433,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: Some(iso),
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -2296,6 +2571,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -2322,6 +2599,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -2531,6 +2810,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -2665,6 +2946,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -5327,6 +5610,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -5404,6 +5689,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -5480,6 +5767,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -5506,6 +5795,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -5583,6 +5874,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,
@@ -5609,6 +5902,8 @@ mod database_integration_tests {
             date_souscription: None,
             date_fin_demembrement: None,
             date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
             mensualite_credit: None,
             credit_crd: None,
             loyer_mensuel: None,

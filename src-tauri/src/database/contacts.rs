@@ -41,7 +41,7 @@ fn merge_optional_f64(
     }
 }
 
-fn parse_optional_date_iso(date_str: &str) -> Option<i64> {
+pub(crate) fn parse_optional_date_iso(date_str: &str) -> Option<i64> {
     use chrono::{DateTime, NaiveDate, TimeZone, Utc};
     if let Ok(dt) = DateTime::parse_from_rfc3339(date_str) {
         return Some(dt.timestamp());
@@ -52,7 +52,7 @@ fn parse_optional_date_iso(date_str: &str) -> Option<i64> {
         .map(|ndt| Utc.from_utc_datetime(&ndt).timestamp())
 }
 
-fn parse_optional_date_field(date_str: &Option<String>) -> Option<i64> {
+pub(crate) fn parse_optional_date_field(date_str: &Option<String>) -> Option<i64> {
     date_str
         .as_ref()
         .filter(|s| !s.trim().is_empty())

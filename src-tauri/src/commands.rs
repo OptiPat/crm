@@ -1504,6 +1504,8 @@ pub fn get_app_notifications_summary(
         crate::email::stellium_exceltis::get_stellium_exceltis_signals(&db).unwrap_or_default();
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let _ = database.check_and_create_demembrement_alerts();
+    let _ = database.check_and_create_arbitrage_alerts();
     database
         .get_app_notifications_summary(stellium)
         .map_err(|e| format!("Failed to get notifications summary: {}", e))
@@ -2111,6 +2113,40 @@ pub fn check_and_create_demembrement_alerts(db: State<'_, DbState>) -> Result<Ve
     database
         .check_and_create_demembrement_alerts()
         .map_err(|e| format!("Failed to check demembrement alerts: {}", e))
+}
+
+#[tauri::command]
+pub fn check_and_create_arbitrage_alerts(db: State<'_, DbState>) -> Result<Vec<Alerte>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .check_and_create_arbitrage_alerts()
+        .map_err(|e| format!("Failed to check arbitrage alerts: {}", e))
+}
+
+#[tauri::command]
+pub fn traiter_alerte_arbitrage(db: State<'_, DbState>, alerte_id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .traiter_alerte_arbitrage(alerte_id)
+        .map_err(|e| format!("Failed to treat arbitrage alert: {}", e))
+}
+
+#[tauri::command]
+pub fn reporter_alerte_arbitrage(
+    db: State<'_, DbState>,
+    alerte_id: i64,
+    mois: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .reporter_alerte_arbitrage(alerte_id, mois)
+        .map_err(|e| format!("Failed to postpone arbitrage alert: {}", e))
 }
 
 // ========== PDF ==========

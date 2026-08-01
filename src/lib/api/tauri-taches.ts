@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifyAlertesChanged } from "@/lib/alertes/alert-events";
 import { notifyTachesChanged } from "@/lib/taches/tache-events";
+import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import type { TacheRecurrence } from "@/lib/taches/tache-recurrence";
 
 export type TacheStatut = "A_FAIRE" | "FAIT";
@@ -78,10 +80,16 @@ export async function setTacheStatut(
 ): Promise<SetTacheStatutResult> {
   const result = await invoke<SetTacheStatutResult>("set_tache_statut", { id, statut });
   notifyTachesChanged();
+  if (statut === "FAIT") {
+    notifyAlertesChanged();
+    notifyInvestissementsChanged();
+  }
   return result;
 }
 
 export async function deleteTache(id: number): Promise<void> {
   await invoke<void>("delete_tache", { id });
   notifyTachesChanged();
+  notifyAlertesChanged();
+  notifyInvestissementsChanged();
 }

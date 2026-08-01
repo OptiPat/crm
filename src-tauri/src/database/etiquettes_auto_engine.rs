@@ -178,6 +178,44 @@ impl Database {
         })
     }
 
+    fn contact_matches_filleul_category_in_rule(
+        contact: &Contact,
+        categories: &[String],
+    ) -> bool {
+        let Some(fc) = contact.filleul_categorie.as_deref() else {
+            return false;
+        };
+        categories.iter().any(|c| match c.as_str() {
+            "FILLEUL" => fc == "FILLEUL",
+            cat if cat.contains("FILLEUL") => cat == fc,
+            _ => false,
+        })
+    }
+
+    fn contact_matches_client_category_in_rule(contact: &Contact, categories: &[String]) -> bool {
+        categories
+            .iter()
+            .any(|c| !c.contains("FILLEUL") && c == contact.categorie.as_str())
+    }
+
+    /// Date de référence suivi selon la catégorie du contact (client vs filleul).
+    pub(crate) fn resolve_suivi_contact_timestamp(
+        contact: &Contact,
+        categories: &[String],
+    ) -> Option<i64> {
+        let filleul = Self::contact_matches_filleul_category_in_rule(contact, categories);
+        let client = Self::contact_matches_client_category_in_rule(contact, categories);
+        if filleul && !client {
+            contact.date_dernier_contact_filleul
+        } else if client && !filleul {
+            contact.date_dernier_contact
+        } else if filleul {
+            contact.date_dernier_contact_filleul
+        } else {
+            contact.date_dernier_contact
+        }
+    }
+
     fn load_auto_assignment_map(&self) -> Result<HashMap<AssignmentKey, AssignmentInfo>> {
         let mut map = HashMap::new();
         let mut stmt = self.conn.prepare(
@@ -259,15 +297,8 @@ impl Database {
                     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
                         let jours = parsed["jours"].as_i64().unwrap_or(365);
                         let inclure_sans_date = parsed["inclure_sans_date"].as_bool().unwrap_or(true);
-                        let filleul_only = categories.iter().any(|c| c.contains("FILLEUL"))
-                            && !categories.iter().any(|c| {
-                                c == "CLIENT" || c == "PROSPECT_CLIENT" || c == "SUSPECT_CLIENT"
-                            });
-                        let last_contact = if filleul_only {
-                            contact.date_dernier_contact_filleul
-                        } else {
-                            contact.date_dernier_contact
-                        };
+                        let last_contact =
+                            Self::resolve_suivi_contact_timestamp(contact, categories);
                         if let Some(last_contact) = last_contact {
                             let diff_days = (now - last_contact) / (24 * 60 * 60);
                             diff_days >= jours
@@ -374,16 +405,7 @@ impl Database {
                 }
             }
             "JAMAIS_CONTACT" => {
-                let filleul_only = categories.iter().any(|c| c.contains("FILLEUL"))
-                    && !categories.iter().any(|c| {
-                        c == "CLIENT" || c == "PROSPECT_CLIENT" || c == "SUSPECT_CLIENT"
-                    });
-                let last = if filleul_only {
-                    contact.date_dernier_contact_filleul
-                } else {
-                    contact.date_dernier_contact
-                };
-                last.is_none()
+                Self::resolve_suivi_contact_timestamp(contact, categories).is_none()
             }
             "A_ETIQUETTE" => {
                 if let Some(config_str) = config {
@@ -607,6 +629,14 @@ impl Database {
             self.is_auto_etiquette_excluded(contact_id, etiquette.id)?
         };
         if excluded {
+            if opts.log_eval {
+                let _ = self.log_auto_etiquette_event(
+                    contact_id,
+                    etiquette.id,
+                    false,
+                    "excluded",
+                );
+            }
             return Ok(0);
         }
         if contact.statut_suivi == "EN_PAUSE" || contact.statut_suivi == "ARCHIVE" {

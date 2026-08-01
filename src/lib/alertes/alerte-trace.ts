@@ -105,6 +105,15 @@ export function getAlerteTraceInfo(alerte: AlerteWithContact): AlerteTraceInfo {
           "Vérifiez les investissements SCPI à démembrement du contact ou de son foyer.",
         daysOpen,
       };
+    case "ARBITRAGE_AV_PER":
+      return {
+        source,
+        rule: "Patrimoine — arbitrage AV/PER « avec moi » à échéance",
+        detail:
+          alerte.message.trim() ||
+          "Date prochain arbitrage atteinte sur un contrat suivi.",
+        daysOpen,
+      };
     case "ANNIVERSAIRE":
       return {
         source,

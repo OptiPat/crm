@@ -5,10 +5,11 @@
 //! inchangé. Les méthodes appelées sur d'autres domaines (`get_contact_by_id`,
 //! `get_all_contacts`, segments) restent accessibles via `self`.
 
-use rusqlite::{params, Result};
+use rusqlite::{params, OptionalExtension, Result};
+use std::collections::HashMap;
 
 /// Alertes patrimoine : conservées même si le suivi relationnel est en pause.
-const PATRIMOINE_ALERTE_TYPES: &[&str] = &["FIN_DEMEMBREMENT", "ANNIVERSAIRE"];
+const PATRIMOINE_ALERTE_TYPES: &[&str] = &["FIN_DEMEMBREMENT", "ANNIVERSAIRE", "ARBITRAGE_AV_PER"];
 
 fn patrimoine_alerte_types_sql() -> String {
     PATRIMOINE_ALERTE_TYPES
@@ -34,8 +35,44 @@ fn mark_alertes_traitees_set_sql() -> &'static str {
     "traitee = 1, lue = 1, traitee_at = unixepoch()"
 }
 
+/// Repli si `etiquettes.segment_id` est NULL (bases anciennes) : même table que le frontend.
+fn sql_excluded_etiquette_covers_alerte_type(e_nom_expr: &str, type_alerte_expr: &str) -> String {
+    format!(
+        "(
+          (LOWER(TRIM({e_nom_expr})) = LOWER(TRIM('Suivi > 1 an'))
+           AND {type_alerte_expr} IN ('SUIVI_CLIENT_1AN', 'SUIVI_CLIENT_ANNUEL'))
+          OR (LOWER(TRIM({e_nom_expr})) = LOWER(TRIM('Jamais suivi'))
+              AND {type_alerte_expr} = 'CLIENT_JAMAIS_SUIVI')
+          OR (LOWER(TRIM({e_nom_expr})) = LOWER(TRIM('Suivi > 6 mois'))
+              AND {type_alerte_expr} = 'LEAD_SUIVI_6MOIS')
+          OR (LOWER(TRIM({e_nom_expr})) = LOWER(TRIM('Prospect jamais contacté'))
+              AND {type_alerte_expr} = 'LEAD_JAMAIS_CONTACTE')
+          OR (LOWER(TRIM({e_nom_expr})) = LOWER(TRIM('Filleul jamais contacté'))
+              AND {type_alerte_expr} = 'FILLEUL_JAMAIS_CONTACTE')
+          OR (LOWER(TRIM({e_nom_expr})) = LOWER(TRIM('Filleul suivi > 6 mois'))
+              AND {type_alerte_expr} = 'FILLEUL_SUIVI_6MOIS')
+          OR (LOWER(TRIM({e_nom_expr})) = LOWER(TRIM('Filleul suivi > 1 an'))
+              AND {type_alerte_expr} = 'SUIVI_FILLEUL_1AN')
+        )"
+    )
+}
+
+fn fallback_alerte_types_for_etiquette_nom(nom: &str) -> Vec<&'static str> {
+    match nom.trim().to_lowercase().as_str() {
+        "suivi > 1 an" => vec!["SUIVI_CLIENT_1AN"],
+        "jamais suivi" => vec!["CLIENT_JAMAIS_SUIVI"],
+        "suivi > 6 mois" => vec!["LEAD_SUIVI_6MOIS"],
+        "prospect jamais contacté" => vec!["LEAD_JAMAIS_CONTACTE"],
+        "filleul jamais contacté" => vec!["FILLEUL_JAMAIS_CONTACTE"],
+        "filleul suivi > 6 mois" => vec!["FILLEUL_SUIVI_6MOIS"],
+        "filleul suivi > 1 an" => vec!["SUIVI_FILLEUL_1AN"],
+        _ => vec![],
+    }
+}
+
 /// Segment inactif ou contact exclu du calcul auto de l'étiquette liée.
 fn alerte_segment_eligible_sql(a_alias: &str) -> String {
+    let nom_fallback = sql_excluded_etiquette_covers_alerte_type("e.nom", &format!("{a_alias}.type_alerte"));
     format!(
         "NOT EXISTS (
             SELECT 1 FROM alerte_segment_links asl
@@ -48,6 +85,12 @@ fn alerte_segment_eligible_sql(a_alias: &str) -> String {
             INNER JOIN contact_etiquette_auto_exclusions ex
               ON ex.contact_id = {a_alias}.contact_id AND ex.etiquette_id = e.id
             WHERE asl.type_alerte = {a_alias}.type_alerte
+         )
+         AND NOT EXISTS (
+            SELECT 1 FROM contact_etiquette_auto_exclusions ex
+            INNER JOIN etiquettes e ON e.id = ex.etiquette_id
+            WHERE ex.contact_id = {a_alias}.contact_id
+              AND ({nom_fallback})
          )"
     )
 }
@@ -202,6 +245,21 @@ impl super::Database {
     }
 
     pub fn marquer_alerte_traitee(&self, id: i64) -> Result<()> {
+        let type_alerte: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT type_alerte FROM alertes WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if type_alerte.as_deref() == Some(super::arbitrage_alerts::TYPE_ALERTE_ARBITRAGE) {
+            return self.traiter_alerte_arbitrage(id);
+        }
+        self.set_alerte_traitee_flag(id)
+    }
+
+    pub(crate) fn set_alerte_traitee_flag(&self, id: i64) -> Result<()> {
         let now = chrono::Utc::now().timestamp();
         self.conn.execute(
             "UPDATE alertes SET traitee = 1, lue = 1, traitee_at = ?2 WHERE id = ?1",
@@ -212,6 +270,15 @@ impl super::Database {
 
     /// Repousse l'alerte sans toucher aux dates contact (snooze).
     pub fn snooze_alerte(&self, id: i64, days: i64) -> Result<()> {
+        let type_alerte: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT type_alerte FROM alertes WHERE id = ?1 AND traitee = 0",
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()?;
+
         let now = chrono::Utc::now().timestamp();
         let new_date = now + days * 86_400;
         let updated = self.conn.execute(
@@ -220,6 +287,10 @@ impl super::Database {
         )?;
         if updated == 0 {
             return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+
+        if type_alerte.as_deref() == Some(super::arbitrage_alerts::TYPE_ALERTE_ARBITRAGE) {
+            self.after_snooze_arbitrage_alerte(id, new_date)?;
         }
         Ok(())
     }
@@ -245,6 +316,7 @@ impl super::Database {
     }
 
     pub fn delete_alerte(&self, id: i64) -> Result<()> {
+        let _ = self.before_delete_arbitrage_alerte(id);
         self.conn
             .execute("DELETE FROM alertes WHERE id = ?1", params![id])?;
         Ok(())
@@ -297,18 +369,31 @@ impl super::Database {
         contact_id: i64,
         type_alerte: &str,
     ) -> Result<bool> {
-        if !self.segments_table_exists() {
-            return Ok(false);
-        }
-        let n: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM alerte_segment_links asl
-             INNER JOIN etiquettes e ON e.segment_id = asl.segment_id
-             INNER JOIN contact_etiquette_auto_exclusions ex
-               ON ex.contact_id = ?1 AND ex.etiquette_id = e.id
-             WHERE asl.type_alerte = ?2",
-            params![contact_id, type_alerte],
-            |row| row.get(0),
-        )?;
+        let nom_match = sql_excluded_etiquette_covers_alerte_type("e.nom", "?2");
+        let sql = if self.segments_table_exists() {
+            format!(
+                "SELECT COUNT(*) FROM (
+                   SELECT 1 FROM alerte_segment_links asl
+                   INNER JOIN etiquettes e ON e.segment_id = asl.segment_id
+                   INNER JOIN contact_etiquette_auto_exclusions ex
+                     ON ex.contact_id = ?1 AND ex.etiquette_id = e.id
+                   WHERE asl.type_alerte = ?2
+                   UNION
+                   SELECT 1 FROM contact_etiquette_auto_exclusions ex
+                   INNER JOIN etiquettes e ON e.id = ex.etiquette_id
+                   WHERE ex.contact_id = ?1 AND ({nom_match})
+                 )"
+            )
+        } else {
+            format!(
+                "SELECT COUNT(*) FROM contact_etiquette_auto_exclusions ex
+                 INNER JOIN etiquettes e ON e.id = ex.etiquette_id
+                 WHERE ex.contact_id = ?1 AND ({nom_match})"
+            )
+        };
+        let n: i64 = self.conn.query_row(&sql, params![contact_id, type_alerte], |row| {
+            row.get(0)
+        })?;
         Ok(n > 0)
     }
 
@@ -318,17 +403,26 @@ impl super::Database {
         contact_id: i64,
         etiquette_id: i64,
     ) -> Result<usize> {
-        if !self.segments_table_exists() {
-            return Ok(0);
+        let mut types: Vec<String> = Vec::new();
+        if self.segments_table_exists() {
+            let mut stmt = self.conn.prepare(
+                "SELECT DISTINCT asl.type_alerte FROM alerte_segment_links asl
+                 INNER JOIN etiquettes e ON e.segment_id = asl.segment_id
+                 WHERE e.id = ?1",
+            )?;
+            types = stmt
+                .query_map(params![etiquette_id], |row| row.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
         }
-        let mut stmt = self.conn.prepare(
-            "SELECT asl.type_alerte FROM alerte_segment_links asl
-             INNER JOIN etiquettes e ON e.segment_id = asl.segment_id
-             WHERE e.id = ?1",
-        )?;
-        let types = stmt
-            .query_map(params![etiquette_id], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
+        if types.is_empty() {
+            if let Ok(etiquette) = self.get_etiquette_by_id(etiquette_id) {
+                types.extend(
+                    fallback_alerte_types_for_etiquette_nom(&etiquette.nom)
+                        .into_iter()
+                        .map(str::to_string),
+                );
+            }
+        }
         let mut closed = 0usize;
         for type_alerte in types {
             if self.close_open_suivi_alerte(contact_id, &type_alerte)? {
@@ -369,7 +463,7 @@ impl super::Database {
                 &format!(
                     "UPDATE alertes SET {set}
                  WHERE contact_id = ?1 AND traitee = 0
-                   AND type_alerte NOT IN ('FIN_DEMEMBREMENT')"
+                   AND type_alerte NOT IN ('FIN_DEMEMBREMENT', 'ANNIVERSAIRE', 'ARBITRAGE_AV_PER')"
                 ),
                 params![contact_id],
             )?;
@@ -503,16 +597,26 @@ impl super::Database {
             ),
             [],
         )?;
+        let nom_fallback =
+            sql_excluded_etiquette_covers_alerte_type("e.nom", "alertes.type_alerte");
         let n_exclusions = self.conn.execute(
             &format!(
                 "UPDATE alertes SET {set}
              WHERE traitee = 0
-               AND EXISTS (
-                 SELECT 1 FROM alerte_segment_links asl
-                 INNER JOIN etiquettes e ON e.segment_id = asl.segment_id
-                 INNER JOIN contact_etiquette_auto_exclusions ex
-                   ON ex.contact_id = alertes.contact_id AND ex.etiquette_id = e.id
-                 WHERE asl.type_alerte = alertes.type_alerte
+               AND (
+                 EXISTS (
+                   SELECT 1 FROM alerte_segment_links asl
+                   INNER JOIN etiquettes e ON e.segment_id = asl.segment_id
+                   INNER JOIN contact_etiquette_auto_exclusions ex
+                     ON ex.contact_id = alertes.contact_id AND ex.etiquette_id = e.id
+                   WHERE asl.type_alerte = alertes.type_alerte
+                 )
+                 OR EXISTS (
+                   SELECT 1 FROM contact_etiquette_auto_exclusions ex
+                   INNER JOIN etiquettes e ON e.id = ex.etiquette_id
+                   WHERE ex.contact_id = alertes.contact_id
+                     AND ({nom_fallback})
+                 )
                )"
             ),
             [],
@@ -546,6 +650,14 @@ impl super::Database {
             return Ok(0);
         }
 
+        let mut segments_by_type: HashMap<String, Vec<i64>> = HashMap::new();
+        for (type_alerte, segment_id) in links {
+            segments_by_type
+                .entry(type_alerte)
+                .or_default()
+                .push(segment_id);
+        }
+
         let contacts = self.get_all_contacts()?;
         let org_self_id = self.resolve_organisation_self_contact_id()?;
         let mut count = 0;
@@ -566,14 +678,24 @@ impl super::Database {
 
             let label = format!("{} {}", contact.prenom, contact.nom);
 
-            for (type_alerte, segment_id) in &links {
+            for (type_alerte, segment_ids) in &segments_by_type {
                 if self.contact_excluded_from_alerte_type(contact_id, type_alerte)? {
+                    let _ = self.close_open_suivi_alerte(contact_id, type_alerte)?;
                     continue;
                 }
-                if self.contact_matches_segment(&contact, *segment_id, Some(&org_self_id))? {
+                let mut matches = false;
+                for &segment_id in segment_ids {
+                    if self.contact_matches_segment(&contact, segment_id, Some(&org_self_id))? {
+                        matches = true;
+                        break;
+                    }
+                }
+                if matches {
                     if self.try_create_alerte_suivi(contact_id, type_alerte, label.clone(), now)? {
                         count += 1;
                     }
+                } else {
+                    let _ = self.close_open_suivi_alerte(contact_id, type_alerte)?;
                 }
             }
         }

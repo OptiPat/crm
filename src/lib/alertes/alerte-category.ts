@@ -33,7 +33,11 @@ const FILLEUL_TYPES = new Set([
   "FILLEUL_JAMAIS_CONTACTE",
 ]);
 
-const PATRIMOINE_TYPES = new Set(["FIN_DEMEMBREMENT", "ANNIVERSAIRE"]);
+const PATRIMOINE_TYPES = new Set([
+  "FIN_DEMEMBREMENT",
+  "ANNIVERSAIRE",
+  "ARBITRAGE_AV_PER",
+]);
 
 export function getAlerteCategory(typeAlerte: string): AlerteCategory | null {
   if (CLIENT_TYPES.has(typeAlerte)) return "client";

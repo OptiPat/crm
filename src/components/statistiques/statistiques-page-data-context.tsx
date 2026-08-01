@@ -48,31 +48,61 @@ export function StatistiquesPageDataProvider({ children }: { children: ReactNode
     const silent = options?.silent ?? false;
     const seq = ++loadSeqRef.current;
     if (!silent) setLoading(true);
-    try {
-      const [contactRows, invRows, dashboardStats, cgp] = await Promise.all([
-        getAllContacts(),
-        getInvestissementsWithDetails(),
-        getDashboardStats(),
-        getCgpConfig(),
-      ]);
-      if (loadSeqRef.current !== seq) return;
+
+    const [contactsResult, invResult, dashboardResult, cgpResult] = await Promise.allSettled([
+      getAllContacts(),
+      getInvestissementsWithDetails(),
+      getDashboardStats(),
+      getCgpConfig(),
+    ]);
+
+    if (loadSeqRef.current !== seq) return;
+
+    let refreshed = false;
+
+    if (contactsResult.status === "fulfilled") {
+      const contactRows = contactsResult.value;
       setContacts(contactRows);
-      setInvestissementsWithDetails(invRows);
-      setDashboard(dashboardStats);
-      setSelfContactId(resolveOrganisationSelfContact(contactRows, cgp)?.id ?? null);
+      refreshed = true;
+      if (cgpResult.status === "fulfilled") {
+        setSelfContactId(resolveOrganisationSelfContact(contactRows, cgpResult.value)?.id ?? null);
+      }
+    } else {
+      console.error("Erreur chargement contacts statistiques:", contactsResult.reason);
+      if (!silent) {
+        setContacts([]);
+        setSelfContactId(null);
+      }
+    }
+
+    if (invResult.status === "fulfilled") {
+      setInvestissementsWithDetails(invResult.value);
+      refreshed = true;
+    } else {
+      console.error("Erreur chargement investissements statistiques:", invResult.reason);
+      if (!silent) setInvestissementsWithDetails([]);
+    }
+
+    if (dashboardResult.status === "fulfilled") {
+      setDashboard(dashboardResult.value);
+      refreshed = true;
+    } else {
+      console.error("Erreur chargement dashboard statistiques:", dashboardResult.reason);
+      if (!silent) setDashboard(null);
+    }
+
+    if (cgpResult.status !== "fulfilled") {
+      console.error("Erreur chargement config CGP statistiques:", cgpResult.reason);
+    }
+
+    if (refreshed) {
       setLastUpdatedAt(new Date());
       setDataRefreshKey((key) => key + 1);
-    } catch (error) {
-      if (loadSeqRef.current !== seq) return;
-      console.error("Erreur chargement données statistiques:", error);
-      setContacts([]);
-      setInvestissementsWithDetails([]);
-      setDashboard(null);
-      setSelfContactId(null);
+    } else if (!silent) {
       setLastUpdatedAt(null);
-    } finally {
-      if (loadSeqRef.current === seq && !silent) setLoading(false);
     }
+
+    if (loadSeqRef.current === seq && !silent) setLoading(false);
   }, []);
 
   useEffect(() => {

@@ -16,6 +16,7 @@ pub struct AppNotificationsSummaryDto {
     pub incomplete: NotificationQueueBucket,
     pub sent: NotificationQueueBucket,
     pub alertes: NotificationQueueBucket,
+    pub alertes_arbitrage: NotificationQueueBucket,
     pub taches_urgent: NotificationQueueBucket,
     pub placement_non_conforme: NotificationQueueBucket,
     pub stellium_signals: Vec<crate::email::stellium_exceltis::StelliumExceltisSignal>,
@@ -59,10 +60,21 @@ impl super::Database {
         &self,
         stellium_signals: Vec<crate::email::stellium_exceltis::StelliumExceltisSignal>,
     ) -> Result<AppNotificationsSummaryDto> {
-        let alertes = self.get_alertes_non_traitees()?;
-        let alertes_count = alertes.len() as u32;
+        let alertes_all = self.get_alertes_non_traitees()?;
+        let (arbitrage_alertes, suivi_alertes): (Vec<_>, Vec<_>) = alertes_all
+            .into_iter()
+            .partition(|a| a.type_alerte == super::arbitrage_alerts::TYPE_ALERTE_ARBITRAGE);
+
+        let alertes_count = suivi_alertes.len() as u32;
         let alertes_focus = if alertes_count == 1 {
-            Some(alertes[0].contact_id)
+            Some(suivi_alertes[0].contact_id)
+        } else {
+            None
+        };
+
+        let alertes_arbitrage_count = arbitrage_alertes.len() as u32;
+        let alertes_arbitrage_focus = if alertes_arbitrage_count == 1 {
+            Some(arbitrage_alertes[0].contact_id)
         } else {
             None
         };
@@ -79,6 +91,10 @@ impl super::Database {
             alertes: NotificationQueueBucket {
                 count: alertes_count,
                 focus_contact_id: alertes_focus,
+            },
+            alertes_arbitrage: NotificationQueueBucket {
+                count: alertes_arbitrage_count,
+                focus_contact_id: alertes_arbitrage_focus,
             },
             taches_urgent: NotificationQueueBucket {
                 count: taches_urgent_count,

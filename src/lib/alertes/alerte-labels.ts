@@ -20,6 +20,8 @@ export function getTypeAlerteLabel(type: string): string {
       return "Filleul jamais contacté";
     case "FIN_DEMEMBREMENT":
       return "Fin démembrement";
+    case "ARBITRAGE_AV_PER":
+      return "Arbitrage AV/PER";
     case "ANNIVERSAIRE":
       return "Anniversaire";
     default:
@@ -41,6 +43,8 @@ export function getTypeAlerteBadgeClass(type: string): string {
       return "bg-orange-100 text-orange-800 border-orange-200";
     case "FIN_DEMEMBREMENT":
       return "bg-blue-100 text-blue-800 border-blue-200";
+    case "ARBITRAGE_AV_PER":
+      return "bg-teal-100 text-teal-800 border-teal-200";
     case "ANNIVERSAIRE":
       return "bg-purple-100 text-purple-800 border-purple-200";
     default:

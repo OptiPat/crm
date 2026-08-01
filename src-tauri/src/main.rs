@@ -289,6 +289,9 @@ fn main() {
             create_investissement_versement,
             delete_investissement_versement,
             check_and_create_demembrement_alerts,
+            check_and_create_arbitrage_alerts,
+            traiter_alerte_arbitrage,
+            reporter_alerte_arbitrage,
             read_pdf_file,
             // Etiquettes
             get_all_etiquettes,

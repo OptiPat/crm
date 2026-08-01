@@ -14,10 +14,10 @@ export function DashboardTodayGrid({
   currentPage?: string;
 }) {
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch min-h-[280px]">
+    <div className="space-y-5 min-w-0">
+      <TachesPreview onNavigate={onNavigate} onOpenContact={onOpenContact} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch min-h-[280px]">
         <CalendarTodayPreview onOpenContact={onOpenContact} onNavigate={onNavigate} />
-        <TachesPreview onNavigate={onNavigate} onOpenContact={onOpenContact} />
         <BirthdaysTodayPreview onOpenContact={onOpenContact} />
       </div>
       <ScpiCampaignPreview onNavigate={onNavigate} currentPage={currentPage} />

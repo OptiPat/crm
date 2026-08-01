@@ -7,11 +7,9 @@ import { ConversionFunnelPanel } from "@/components/dashboard/ConversionFunnelPa
 import { DashboardPeriodFilterBar } from "@/components/dashboard/DashboardPeriodFilter";
 import { AlertsPreview } from "@/components/dashboard/AlertsPreview";
 import { DashboardTodayGrid } from "@/components/dashboard/DashboardTodayGrid";
-import { QuickActions } from "@/components/dashboard/QuickActions";
 import {
   DashboardPageHeader,
   DashboardSectionTitle,
-  DashboardKpiHelp,
   DashboardCollapsibleSection,
   DashboardCockpitSection,
   StatCardSkeleton,
@@ -27,7 +25,7 @@ import {
 } from "lucide-react";
 import { getDashboardStats, type DashboardStats } from "@/lib/api/tauri-dashboard";
 import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
-import { genererAlertesAutomatiques } from "@/lib/api/tauri-alertes";
+import { genererAlertesAutomatiques, checkAndCreateArbitrageAlerts, checkAndCreateDemembrementAlerts } from "@/lib/api/tauri-alertes";
 import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
@@ -104,6 +102,12 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
         } catch {
           /* déjà initialisé */
         }
+        void checkAndCreateDemembrementAlerts().catch((error) => {
+          console.error("Erreur alertes démembrement:", error);
+        });
+        void checkAndCreateArbitrageAlerts().catch((error) => {
+          console.error("Erreur alertes arbitrage:", error);
+        });
         void genererAlertesAutomatiques().catch((error) => {
           console.error("Erreur génération alertes:", error);
         });
@@ -179,7 +183,6 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
           <DashboardSectionTitle subtitle="Chiffres consolidés du portefeuille">
             Vue d&apos;ensemble
           </DashboardSectionTitle>
-          <DashboardKpiHelp />
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
           {loading ? (
             Array.from({ length: 6 }).map((_, i) => <StatCardSkeleton key={i} />)
@@ -267,13 +270,6 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
           </div>
         </section>
       </div>
-
-      <section className="space-y-3">
-        <DashboardSectionTitle subtitle="Accès rapide aux pages principales">
-          Raccourcis
-        </DashboardSectionTitle>
-        <QuickActions onNavigate={onNavigate} />
-      </section>
 
       <DashboardCockpitSection>
         <DashboardTodayGrid

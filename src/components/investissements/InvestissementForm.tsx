@@ -97,6 +97,7 @@ import {
   type NomProduitSuggestion,
   type OrigineInvestissement,
 } from "@/lib/api/tauri-investissements";
+import { checkAndCreateArbitrageAlerts } from "@/lib/api/tauri-alertes";
 import { InvestissementEncoursPanel } from "@/components/investissements/InvestissementEncoursPanel";
 import { InvestissementVersementsPanel } from "@/components/investissements/InvestissementVersementsPanel";
 import { InvestissementCloturePanel } from "@/components/investissements/InvestissementCloturePanel";
@@ -128,7 +129,15 @@ import {
   type ContactEtiquetteDetails,
 } from "@/lib/api/tauri-etiquettes";
 import { dateFieldToIso } from "@/lib/contacts/contact-form-utils";
+import { isArbitrageSuiviEligible } from "@/lib/alertes/arbitrage-alerte";
 import { unixToDateInput } from "@/lib/dates/calendar-date";
+
+/** En édition, `""` efface la date côté Rust (sinon `undefined` = conserver l'existant). */
+function optionalDateFieldForSave(field: string, isEdit: boolean): string | undefined {
+  const trimmed = field.trim();
+  if (!trimmed) return isEdit ? "" : undefined;
+  return dateFieldToIso(trimmed);
+}
 import {
   addYearsToDateInput,
   detectDemembrementKind,
@@ -276,6 +285,8 @@ export function InvestissementForm({
     null
   );
   const [dateFinPret, setDateFinPret] = useState("");
+  const [dateDernierArbitrage, setDateDernierArbitrage] = useState("");
+  const [dateProchainArbitrage, setDateProchainArbitrage] = useState("");
   const [mensualiteCredit, setMensualiteCredit] = useState("");
   const [creditCrd, setCreditCrd] = useState("");
   const [loyerMensuel, setLoyerMensuel] = useState("");
@@ -354,6 +365,9 @@ export function InvestissementForm({
   // SCPI accepte le réinvestissement des dividendes
   const accepteReinvestissement = ["SCPI", "SCPI_FISCALE"].includes(typeProduit);
   const isPrevoyance = typeProduit === "PREVOYANCE";
+  const showArbitrageFields =
+    isArbitrageSuiviEligible(typeProduit, origine, editingInvestissement?.statut) &&
+    isActifEncours;
   const immoFinancing = isImmobilierFinancingType(typeProduit);
   const scpiFinancing = isScpiFinancingType(typeProduit);
 
@@ -527,6 +541,16 @@ export function InvestissementForm({
         setDateFinPret(
           investissement.date_fin_pret ? unixToDateInput(investissement.date_fin_pret) : ""
         );
+        setDateDernierArbitrage(
+          investissement.date_dernier_arbitrage
+            ? unixToDateInput(investissement.date_dernier_arbitrage)
+            : ""
+        );
+        setDateProchainArbitrage(
+          investissement.date_prochain_arbitrage
+            ? unixToDateInput(investissement.date_prochain_arbitrage)
+            : ""
+        );
         setMensualiteCredit(financingCentimesToEuro(investissement.mensualite_credit));
         setCreditCrd(financingCentimesToEuro(investissement.credit_crd));
         setLoyerMensuel(financingCentimesToEuro(investissement.loyer_mensuel));
@@ -601,6 +625,8 @@ export function InvestissementForm({
     setDureeDemembrementAns("");
     setDetentionMode(null);
     setDateFinPret("");
+    setDateDernierArbitrage("");
+    setDateProchainArbitrage("");
     setMensualiteCredit("");
     setCreditCrd("");
     setLoyerMensuel("");
@@ -704,6 +730,12 @@ export function InvestissementForm({
         date_souscription: dateFieldToIso(dateSouscription),
         date_fin_demembrement: dateFinDemembrementIso,
         date_fin_pret: acceptsFinancingFields ? dateFieldToIso(dateFinPret) : undefined,
+        date_dernier_arbitrage: showArbitrageFields
+          ? optionalDateFieldForSave(dateDernierArbitrage, !!investissement)
+          : undefined,
+        date_prochain_arbitrage: showArbitrageFields
+          ? optionalDateFieldForSave(dateProchainArbitrage, !!investissement)
+          : undefined,
         mensualite_credit: acceptsFinancingFields
           ? euroToFinancingCentimes(mensualiteCredit)
           : undefined,
@@ -760,6 +792,14 @@ export function InvestissementForm({
           }
         } else {
           toast.success("Investissement créé");
+        }
+      }
+
+      if (showArbitrageFields) {
+        try {
+          await checkAndCreateArbitrageAlerts();
+        } catch (error) {
+          console.error("Error arbitrage alerts:", error);
         }
       }
 
@@ -1160,6 +1200,36 @@ export function InvestissementForm({
               onChange={(e) => setDateSouscription(e.target.value)}
             />
           </div>
+
+          {showArbitrageFields && (
+            <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
+              <p className="text-sm font-medium">Suivi arbitrage</p>
+              <p className="text-xs text-muted-foreground">
+                Renseignez la date du prochain arbitrage pour activer le rappel (contrat « avec
+                moi » uniquement). Sans date, aucune alerte.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="date-dernier-arbitrage">Date dernier arbitrage</Label>
+                  <Input
+                    id="date-dernier-arbitrage"
+                    type="date"
+                    value={dateDernierArbitrage}
+                    onChange={(e) => setDateDernierArbitrage(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="date-prochain-arbitrage">Date prochain arbitrage</Label>
+                  <Input
+                    id="date-prochain-arbitrage"
+                    type="date"
+                    value={dateProchainArbitrage}
+                    onChange={(e) => setDateProchainArbitrage(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {isPrevoyance && (
             <div className="space-y-4 rounded-lg border bg-muted/20 p-4">

@@ -306,6 +306,8 @@ export const investissements = sqliteTable("investissements", {
     enum: ["ACTIF", "CLOTURE"],
   }).default("ACTIF").notNull(),
   dateCloture: integer("date_cloture", { mode: "timestamp" }),
+  dateDernierArbitrage: integer("date_dernier_arbitrage", { mode: "timestamp" }),
+  dateProchainArbitrage: integer("date_prochain_arbitrage", { mode: "timestamp" }),
   
   // Timestamps
   createdAt: integer("created_at", { mode: "timestamp" })
@@ -524,6 +526,7 @@ export const alertes = sqliteTable("alertes", {
       "SUIVI_CLIENT_ANNUEL",
       "SUIVI_PROSPECT_6MOIS",
       "FIN_DEMEMBREMENT",
+      "ARBITRAGE_AV_PER",
       "ANNIVERSAIRE",
       "WORKFLOW",
     ],

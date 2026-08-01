@@ -18,6 +18,8 @@ export interface Investissement {
   date_souscription?: number;
   date_fin_demembrement?: number;
   date_fin_pret?: number;
+  date_dernier_arbitrage?: number;
+  date_prochain_arbitrage?: number;
   mensualite_credit?: number;
   credit_crd?: number;
   loyer_mensuel?: number;
@@ -57,6 +59,8 @@ export interface NewInvestissement {
   date_souscription?: string; // ISO string ou timestamp
   date_fin_demembrement?: string; // ISO string ou timestamp
   date_fin_pret?: string; // ISO string ou timestamp
+  date_dernier_arbitrage?: string;
+  date_prochain_arbitrage?: string;
   mensualite_credit?: number;
   credit_crd?: number;
   loyer_mensuel?: number;

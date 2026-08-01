@@ -34,7 +34,7 @@ import { subscribeTachesChanged } from "@/lib/taches/tache-events";
 import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
 import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
-import { consumeTachesNavigationIntent } from "@/lib/navigation/taches-navigation";
+import { consumeTachesNavigationIntent, TACHES_NAVIGATION_EVENT } from "@/lib/navigation/taches-navigation";
 import {
   buildTachesActiveFilterChips,
   type TachesActiveFilterId,
@@ -77,17 +77,24 @@ export function Taches({ onNavigate }: TachesProps) {
   const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
-    const navFilter = consumeTachesNavigationIntent();
-    if (navFilter !== "urgent") return;
-    setPrefs((prev) => {
-      const next = {
-        ...prev,
-        statutFilter: "ACTIVES" as const,
-        echeanceFilter: "urgent" as const,
-      };
-      saveTachesPagePreferences(next);
-      return next;
-    });
+    const applyNavigationIntent = () => {
+      const nav = consumeTachesNavigationIntent();
+      if (nav.echeanceFilter !== "urgent" && nav.focusContactId == null) return;
+      setPrefs((prev) => {
+        const next = {
+          ...prev,
+          statutFilter: "ACTIVES" as const,
+          echeanceFilter:
+            nav.echeanceFilter === "urgent" ? ("urgent" as const) : prev.echeanceFilter,
+          contactIdFilter: nav.focusContactId ?? prev.contactIdFilter,
+        };
+        saveTachesPagePreferences(next);
+        return next;
+      });
+    };
+    applyNavigationIntent();
+    window.addEventListener(TACHES_NAVIGATION_EVENT, applyNavigationIntent);
+    return () => window.removeEventListener(TACHES_NAVIGATION_EVENT, applyNavigationIntent);
   }, []);
 
   const updatePrefs = useCallback((patch: Partial<TachesPagePreferences>) => {

@@ -167,7 +167,19 @@ impl super::Database {
         )?;
 
         let tache = self.get_tache_by_id(id)?;
+        let contact_ids: Vec<i64> = tache.contacts.iter().map(|c| c.contact_id).collect();
         let spawned_next = if existing.statut != "FAIT" && tache.statut == "FAIT" {
+            if let Err(e) = self.try_traiter_arbitrage_alerte_from_tache(
+                &tache.titre,
+                tache.description.as_deref(),
+                &contact_ids,
+            ) {
+                self.conn.execute(
+                    "UPDATE taches SET statut = ?1, completed_at = ?2, updated_at = unixepoch() WHERE id = ?3",
+                    params![existing.statut, existing.completed_at, id],
+                )?;
+                return Err(e);
+            }
             self.maybe_spawn_recurrence(&tache)?
         } else {
             None
@@ -283,24 +295,32 @@ impl super::Database {
     /// Tâches actives dont l'échéance est aujourd'hui ou en retard (exclut sans date et à venir).
     pub fn count_taches_urgent_echeance(&self) -> Result<(u32, Option<i64>)> {
         let tomorrow = start_of_today_unix() + 86400;
+        let exclude_arbitrage =
+            super::arbitrage_alerts::arbitrage_auto_task_title_sql_exclude("t");
         let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM taches
-             WHERE statut != 'FAIT'
-               AND date_echeance IS NOT NULL
-               AND date_echeance < ?1",
+            &format!(
+                "SELECT COUNT(*) FROM taches t
+                 WHERE t.statut != 'FAIT'
+                   AND t.date_echeance IS NOT NULL
+                   AND t.date_echeance < ?1
+                   AND {exclude_arbitrage}"
+            ),
             params![tomorrow],
             |row| row.get(0),
         )?;
         let focus_contact_id = if count == 1 {
             self.conn
                 .query_row(
-                    "SELECT tc.contact_id FROM taches t
-                     LEFT JOIN tache_contacts tc ON tc.tache_id = t.id
-                     WHERE t.statut != 'FAIT'
-                       AND t.date_echeance IS NOT NULL
-                       AND t.date_echeance < ?1
-                     ORDER BY t.date_echeance ASC, t.id ASC
-                     LIMIT 1",
+                    &format!(
+                        "SELECT tc.contact_id FROM taches t
+                         LEFT JOIN tache_contacts tc ON tc.tache_id = t.id
+                         WHERE t.statut != 'FAIT'
+                           AND t.date_echeance IS NOT NULL
+                           AND t.date_echeance < ?1
+                           AND {exclude_arbitrage}
+                         ORDER BY t.date_echeance ASC, t.id ASC
+                         LIMIT 1"
+                    ),
                     params![tomorrow],
                     |row| row.get::<_, Option<i64>>(0),
                 )

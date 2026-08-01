@@ -4,7 +4,13 @@ import {
   getContactAutoEtiquetteLog,
   type AutoEtiquetteLogEntry,
 } from "@/lib/api/tauri-segments";
+import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { cn } from "@/lib/utils";
+
+function formatEvalStatus(entry: AutoEtiquetteLogEntry): string {
+  if (entry.reason === "excluded") return "exclue du calcul auto";
+  return entry.matched ? "appliquée" : "non applicable";
+}
 
 function groupByEvaluatedAt(entries: AutoEtiquetteLogEntry[]) {
   const groups = new Map<number, AutoEtiquetteLogEntry[]>();
@@ -31,9 +37,13 @@ export function ContactAutoEtiquetteLog({ contactId }: { contactId: number }) {
   const [entries, setEntries] = useState<AutoEtiquetteLogEntry[]>([]);
 
   useEffect(() => {
-    getContactAutoEtiquetteLog(contactId, 15)
-      .then(setEntries)
-      .catch(() => setEntries([]));
+    const load = () => {
+      getContactAutoEtiquetteLog(contactId, 15)
+        .then(setEntries)
+        .catch(() => setEntries([]));
+    };
+    load();
+    return subscribeEtiquettesChanged(load);
   }, [contactId]);
 
   const groups = useMemo(() => groupByEvaluatedAt(entries), [entries]);
@@ -42,7 +52,9 @@ export function ContactAutoEtiquetteLog({ contactId }: { contactId: number }) {
   if (entries.length === 0) return null;
 
   const appliedLabels =
-    latest?.items.filter((e) => e.matched).map((e) => e.etiquetteNom) ?? [];
+    latest?.items
+      .filter((e) => e.matched && e.reason !== "excluded")
+      .map((e) => e.etiquetteNom) ?? [];
 
   return (
     <details className="group w-full mt-2 rounded-lg border bg-muted/20 text-xs">
@@ -82,10 +94,14 @@ export function ContactAutoEtiquetteLog({ contactId }: { contactId: number }) {
                   <span className="font-medium">{e.etiquetteNom}</span>
                   <span
                     className={cn(
-                      e.matched ? "text-green-700" : "text-muted-foreground"
+                      e.reason === "excluded"
+                        ? "text-amber-700"
+                        : e.matched
+                          ? "text-green-700"
+                          : "text-muted-foreground"
                     )}
                   >
-                    {e.matched ? "appliquée" : "non applicable"}
+                    {formatEvalStatus(e)}
                   </span>
                 </li>
               ))}

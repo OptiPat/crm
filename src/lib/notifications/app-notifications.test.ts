@@ -18,6 +18,7 @@ const emptyDto = {
   incomplete: { count: 0 },
   sent: { count: 0 },
   alertes: { count: 0 },
+  alertes_arbitrage: { count: 0 },
   taches_urgent: { count: 0 },
   placement_non_conforme: { count: 0 },
   stellium_signals: [] as [],
@@ -36,13 +37,21 @@ describe("buildAppNotificationsSummary", () => {
       incomplete: { count: 0 },
       sent: { count: 0 },
       alertes: { count: 1, focus_contact_id: 9 },
+      alertes_arbitrage: { count: 2, focus_contact_id: 42 },
       taches_urgent: { count: 3 },
       placement_non_conforme: { count: 2, focus_contact_id: null },
       stellium_signals: [],
     });
 
-    expect(summary.items).toHaveLength(5);
-    expect(summary.totalCount).toBe(9);
+    expect(summary.items).toHaveLength(6);
+    expect(summary.totalCount).toBe(11);
+    expect(summary.items.find((i) => i.id === "alertes_arbitrage")).toMatchObject({
+      label: "Arbitrages à traiter",
+      count: 2,
+      targetPage: "taches",
+      tachesEcheanceFilter: "urgent",
+      severity: "urgent",
+    });
     expect(summary.items.find((i) => i.id === "placement_non_conforme")).toMatchObject({
       label: "Opérations partenaire non conformes",
       count: 2,
@@ -67,6 +76,7 @@ describe("buildAppNotificationsSummary", () => {
       incomplete: { count: 0 },
       sent: { count: 0 },
       alertes: { count: 0 },
+      alertes_arbitrage: { count: 0 },
       taches_urgent: { count: 0 },
       placement_non_conforme: { count: 0 },
       stellium_signals: [],

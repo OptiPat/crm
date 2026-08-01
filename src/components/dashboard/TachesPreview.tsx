@@ -79,7 +79,6 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
     <DashboardPanel
       title="Tâches à faire"
       description={description}
-      className="h-full"
       action={
         onNavigate ? (
           <Button

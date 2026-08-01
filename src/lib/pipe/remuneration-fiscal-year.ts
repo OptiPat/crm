@@ -35,11 +35,19 @@ export function currentFiscalYearLabel(now = new Date()): string {
   return fiscalYearLabelForDate(now);
 }
 
-/** Exercice commencé (01/08 ≤ date du jour). Les exercices futurs ne sont pas « en cours ». */
+/**
+ * Exercice commencé (01/08 ≤ date du jour, calendrier local).
+ * Aligné avec `currentFiscalYearLabel` / `fiscalYearLabelForDate` — pas la borne UTC seule,
+ * sinon le 01/08 matin (Europe) l'exercice courant peut être absent des listes.
+ */
 export function hasFiscalYearStarted(label: string, now = new Date()): boolean {
-  const start = fiscalYearStartUnix(label);
-  if (start == null) return false;
-  return Math.floor(now.getTime() / 1000) >= start;
+  const match = /^(\d{4})-(\d{4})$/.exec(label.trim());
+  if (!match) return false;
+  const labelStartYear = Number(match[1]);
+  if (!Number.isFinite(labelStartYear)) return false;
+  const currentStartYear = Number(currentFiscalYearLabel(now).split("-")[0]);
+  if (!Number.isFinite(currentStartYear)) return false;
+  return labelStartYear <= currentStartYear;
 }
 
 /** Exercice fiscal précédent (ex. « 2025-2026 » → « 2024-2025 »). */

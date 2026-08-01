@@ -9,7 +9,8 @@ const INVESTISSEMENT_SELECT_COLS: &str = "id, contact_id, foyer_id, type_produit
     mensualite_credit, credit_crd, loyer_mensuel,
     prevoyance_perso, prevoyance_pro, prevoyance_versement_mensuel,
     versement_programme, montant_versement_programme, frequence_versement,
-    reinvestissement_dividendes, notes, origine, statut, date_cloture, created_at, updated_at";
+    reinvestissement_dividendes, notes, origine, statut, date_cloture,
+    date_dernier_arbitrage, date_prochain_arbitrage, created_at, updated_at";
 
 fn normalize_numero_contrat(value: Option<String>) -> Option<String> {
     value.and_then(|s| {
@@ -54,13 +55,15 @@ impl super::Database {
                 .get::<_, String>(23)
                 .unwrap_or_else(|_| "ACTIF".to_string()),
             date_cloture: row.get(24)?,
-            created_at: row.get(25)?,
-            updated_at: row.get(26)?,
-            encours_actuel: row.get(27)?,
-            encours_date: row.get(28)?,
-            montant_investi_total: row.get(29)?,
-            stellium_versements_nets_centimes: row.get(30)?,
-            stellium_perf_euro_centimes: row.get(31)?,
+            date_dernier_arbitrage: row.get(25)?,
+            date_prochain_arbitrage: row.get(26)?,
+            created_at: row.get(27)?,
+            updated_at: row.get(28)?,
+            encours_actuel: row.get(29)?,
+            encours_date: row.get(30)?,
+            montant_investi_total: row.get(31)?,
+            stellium_versements_nets_centimes: row.get(32)?,
+            stellium_perf_euro_centimes: row.get(33)?,
         })
     }
 
@@ -148,6 +151,67 @@ impl super::Database {
         Ok(result)
     }
 
+    fn map_investissement_with_details_row(
+        row: &rusqlite::Row<'_>,
+    ) -> rusqlite::Result<super::models::InvestissementWithDetails> {
+        let contact_nom: String = row.get(2)?;
+        let contact_prenom: String = row.get(3)?;
+        let foyer_nom: Option<String> = row.get(5)?;
+        let display_nom = if contact_nom.trim().is_empty() && foyer_nom.is_some() {
+            foyer_nom.clone().unwrap_or_default()
+        } else {
+            contact_nom
+        };
+        let display_prenom = if contact_prenom.trim().is_empty() && foyer_nom.is_some() {
+            "Foyer".to_string()
+        } else {
+            contact_prenom
+        };
+        Ok(super::models::InvestissementWithDetails {
+            id: row.get(0)?,
+            contact_id: row.get(1)?,
+            contact_nom: display_nom,
+            contact_prenom: display_prenom,
+            foyer_id: row.get(4)?,
+            foyer_nom: row.get(5)?,
+            type_produit: row.get(6)?,
+            partenaire_id: row.get(7)?,
+            partenaire_nom: row.get(8)?,
+            nom_produit: row.get(9)?,
+            numero_contrat: row.get(10)?,
+            montant_initial: row.get(11)?,
+            date_souscription: row.get(12)?,
+            date_fin_demembrement: row.get(13)?,
+            date_fin_pret: row.get(14)?,
+            mensualite_credit: row.get(15)?,
+            credit_crd: row.get(16)?,
+            loyer_mensuel: row.get(17)?,
+            prevoyance_perso: row.get::<_, i64>(18)? != 0,
+            prevoyance_pro: row.get::<_, i64>(19)? != 0,
+            prevoyance_versement_mensuel: row.get(20)?,
+            versement_programme: row.get::<_, i64>(21)? != 0,
+            montant_versement_programme: row.get(22)?,
+            frequence_versement: row.get(23)?,
+            reinvestissement_dividendes: row.get::<_, i64>(24)? != 0,
+            notes: row.get(25)?,
+            origine: row
+                .get::<_, String>(26)
+                .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+            statut: row
+                .get::<_, String>(27)
+                .unwrap_or_else(|_| "ACTIF".to_string()),
+            date_cloture: row.get(28)?,
+            // Colonnes 29–30 : dates arbitrage (non exposées dans InvestissementWithDetails).
+            created_at: row.get(31)?,
+            updated_at: row.get(32)?,
+            encours_actuel: row.get(33)?,
+            encours_date: row.get(34)?,
+            montant_investi_total: row.get(35)?,
+            stellium_versements_nets_centimes: row.get(36)?,
+            stellium_perf_euro_centimes: row.get(37)?,
+        })
+    }
+
     pub fn get_investissements_with_details(
         &self,
     ) -> Result<Vec<super::models::InvestissementWithDetails>> {
@@ -162,7 +226,8 @@ impl super::Database {
                     i.mensualite_credit, i.credit_crd, i.loyer_mensuel,
                     i.prevoyance_perso, i.prevoyance_pro, i.prevoyance_versement_mensuel,
                     i.versement_programme, i.montant_versement_programme, i.frequence_versement,
-                    i.reinvestissement_dividendes, i.notes, i.origine, i.statut, i.date_cloture, i.created_at, i.updated_at,
+                    i.reinvestissement_dividendes, i.notes, i.origine, i.statut, i.date_cloture,
+                    i.date_dernier_arbitrage, i.date_prochain_arbitrage, i.created_at, i.updated_at,
                     {}
              FROM investissements i
              LEFT JOIN contacts c ON i.contact_id = c.id
@@ -174,63 +239,8 @@ impl super::Database {
             ),
         )?;
 
-        let investissements = stmt.query_map([], |row| {
-            let contact_nom: String = row.get(2)?;
-            let contact_prenom: String = row.get(3)?;
-            let foyer_nom: Option<String> = row.get(5)?;
-            let display_nom = if contact_nom.trim().is_empty() && foyer_nom.is_some() {
-                foyer_nom.clone().unwrap_or_default()
-            } else {
-                contact_nom
-            };
-            let display_prenom = if contact_prenom.trim().is_empty() && foyer_nom.is_some() {
-                "Foyer".to_string()
-            } else {
-                contact_prenom
-            };
-            Ok(super::models::InvestissementWithDetails {
-                id: row.get(0)?,
-                contact_id: row.get(1)?,
-                contact_nom: display_nom,
-                contact_prenom: display_prenom,
-                foyer_id: row.get(4)?,
-                foyer_nom: row.get(5)?,
-                type_produit: row.get(6)?,
-                partenaire_id: row.get(7)?,
-                partenaire_nom: row.get(8)?,
-                nom_produit: row.get(9)?,
-                numero_contrat: row.get(10)?,
-                montant_initial: row.get(11)?,
-                date_souscription: row.get(12)?,
-                date_fin_demembrement: row.get(13)?,
-                date_fin_pret: row.get(14)?,
-                mensualite_credit: row.get(15)?,
-                credit_crd: row.get(16)?,
-                loyer_mensuel: row.get(17)?,
-                prevoyance_perso: row.get::<_, i64>(18)? != 0,
-                prevoyance_pro: row.get::<_, i64>(19)? != 0,
-                prevoyance_versement_mensuel: row.get(20)?,
-                versement_programme: row.get::<_, i64>(21)? != 0,
-                montant_versement_programme: row.get(22)?,
-                frequence_versement: row.get(23)?,
-                reinvestissement_dividendes: row.get::<_, i64>(24)? != 0,
-                notes: row.get(25)?,
-                origine: row
-                    .get::<_, String>(26)
-                    .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-                statut: row
-                    .get::<_, String>(27)
-                    .unwrap_or_else(|_| "ACTIF".to_string()),
-                date_cloture: row.get(28)?,
-                created_at: row.get(29)?,
-                updated_at: row.get(30)?,
-                encours_actuel: row.get(31)?,
-                encours_date: row.get(32)?,
-                montant_investi_total: row.get(33)?,
-                stellium_versements_nets_centimes: row.get(34)?,
-                stellium_perf_euro_centimes: row.get(35)?,
-            })
-        })?;
+        let investissements =
+            stmt.query_map([], Self::map_investissement_with_details_row)?;
 
         let mut result = Vec::new();
         for investissement in investissements {
@@ -342,6 +352,12 @@ impl super::Database {
                 .map(|dt| dt.timestamp())
         });
 
+        let date_dernier_arbitrage_timestamp =
+            super::contacts::parse_optional_date_field(&investissement.date_dernier_arbitrage);
+
+        let date_prochain_arbitrage_timestamp =
+            super::contacts::parse_optional_date_field(&investissement.date_prochain_arbitrage);
+
         // Origine par défaut : MON_CONSEIL
         let origine = investissement
             .origine
@@ -363,11 +379,12 @@ impl super::Database {
             "INSERT INTO investissements (contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
                                          numero_contrat,
                                          montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
+                                         date_dernier_arbitrage, date_prochain_arbitrage,
                                          mensualite_credit, credit_crd, loyer_mensuel,
                                          prevoyance_perso, prevoyance_pro, prevoyance_versement_mensuel,
                                          versement_programme, montant_versement_programme, frequence_versement,
                                          reinvestissement_dividendes, notes, origine) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)",
             params![
                 &investissement.contact_id,
                 &investissement.foyer_id,
@@ -379,6 +396,8 @@ impl super::Database {
                 date_souscription_timestamp,
                 date_fin_demembrement_timestamp,
                 date_fin_pret_timestamp,
+                date_dernier_arbitrage_timestamp,
+                date_prochain_arbitrage_timestamp,
                 &investissement.mensualite_credit,
                 &investissement.credit_crd,
                 &investissement.loyer_mensuel,
@@ -403,6 +422,7 @@ impl super::Database {
         }
 
         let id = self.conn.last_insert_rowid();
+        let _ = self.sync_arbitrage_alerts_after_investissement_save(id);
         let inv = self.get_investissement_by_id(id)?;
         self.sync_contacts_statut_suivi_after_investissement_change(inv.contact_id, inv.foyer_id)?;
         Ok(inv)
@@ -471,6 +491,25 @@ impl super::Database {
                 .map(|dt| dt.timestamp())
         });
 
+        let date_dernier_arbitrage_timestamp = match investissement.date_dernier_arbitrage.as_ref() {
+            None => self
+                .get_investissement_by_id(id)
+                .ok()
+                .and_then(|i| i.date_dernier_arbitrage),
+            Some(date_str) if date_str.trim().is_empty() => None,
+            Some(date_str) => super::contacts::parse_optional_date_iso(date_str),
+        };
+
+        let date_prochain_arbitrage_timestamp = match investissement.date_prochain_arbitrage.as_ref()
+        {
+            None => self
+                .get_investissement_by_id(id)
+                .ok()
+                .and_then(|i| i.date_prochain_arbitrage),
+            Some(date_str) if date_str.trim().is_empty() => None,
+            Some(date_str) => super::contacts::parse_optional_date_iso(date_str),
+        };
+
         let origine = investissement
             .origine
             .clone()
@@ -516,20 +555,22 @@ impl super::Database {
                 date_souscription = ?8,
                 date_fin_demembrement = ?9,
                 date_fin_pret = ?10,
-                mensualite_credit = ?11,
-                credit_crd = ?12,
-                loyer_mensuel = ?13,
-                prevoyance_perso = ?14,
-                prevoyance_pro = ?15,
-                prevoyance_versement_mensuel = ?16,
-                versement_programme = ?17,
-                montant_versement_programme = ?18,
-                frequence_versement = ?19,
-                reinvestissement_dividendes = ?20,
-                notes = ?21,
-                origine = ?22,
+                date_dernier_arbitrage = ?11,
+                date_prochain_arbitrage = ?12,
+                mensualite_credit = ?13,
+                credit_crd = ?14,
+                loyer_mensuel = ?15,
+                prevoyance_perso = ?16,
+                prevoyance_pro = ?17,
+                prevoyance_versement_mensuel = ?18,
+                versement_programme = ?19,
+                montant_versement_programme = ?20,
+                frequence_versement = ?21,
+                reinvestissement_dividendes = ?22,
+                notes = ?23,
+                origine = ?24,
                 updated_at = unixepoch()
-            WHERE id = ?23",
+            WHERE id = ?25",
             params![
                 &investissement.contact_id,
                 &investissement.foyer_id,
@@ -541,6 +582,8 @@ impl super::Database {
                 date_souscription_timestamp,
                 date_fin_demembrement_timestamp,
                 date_fin_pret_timestamp,
+                date_dernier_arbitrage_timestamp,
+                date_prochain_arbitrage_timestamp,
                 &investissement.mensualite_credit,
                 &investissement.credit_crd,
                 &investissement.loyer_mensuel,
@@ -556,6 +599,8 @@ impl super::Database {
                 id
             ],
         )?;
+
+        let _ = self.sync_arbitrage_alerts_after_investissement_save(id);
 
         if let Some(contact_id) = investissement.contact_id {
             self.sync_dernier_contact_from_investissements(contact_id)?;
@@ -674,6 +719,7 @@ impl super::Database {
         )?;
         let inv = self.get_investissement_by_id(id)?;
         self.sync_contacts_statut_suivi_after_investissement_change(inv.contact_id, inv.foyer_id)?;
+        let _ = self.sync_arbitrage_alerts_after_investissement_save(id);
         Ok(inv)
     }
 
@@ -688,6 +734,7 @@ impl super::Database {
         )?;
         let inv = self.get_investissement_by_id(id)?;
         self.sync_contacts_statut_suivi_after_investissement_change(inv.contact_id, inv.foyer_id)?;
+        let _ = self.sync_arbitrage_alerts_after_investissement_save(id);
         Ok(inv)
     }
 
@@ -1150,6 +1197,8 @@ mod tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -1179,6 +1228,8 @@ mod tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -1197,6 +1248,138 @@ mod tests {
 
         let updated = db.get_investissement_by_id(id).unwrap();
         assert_eq!(updated.numero_contrat.as_deref(), Some("AV-12345"));
+    }
+
+    #[test]
+    fn get_investissements_with_details_maps_arbitrage_date_columns() {
+        use super::super::models::NewInvestissement;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.get_connection()
+            .execute(
+                "INSERT INTO contacts (categorie, nom, prenom, created_at, updated_at)
+                 VALUES ('CLIENT', 'DUPONT', 'Jean', 1, 1)",
+                [],
+            )
+            .unwrap();
+
+        let created = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(1),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "Contrat".into(),
+                numero_contrat: None,
+                montant_initial: Some(50_000_00),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+
+        let rows = db.get_investissements_with_details().unwrap();
+        assert_eq!(rows.len(), 1);
+        let row = &rows[0];
+        assert_eq!(row.id, created.id);
+        assert_eq!(row.type_produit, "ASSURANCE_VIE");
+        assert_eq!(row.origine, "MON_CONSEIL");
+        assert_eq!(row.created_at, created.created_at);
+        assert_eq!(row.updated_at, created.updated_at);
+    }
+
+    #[test]
+    fn update_investissement_clears_arbitrage_dates_with_empty_string() {
+        use super::super::models::NewInvestissement;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.get_connection()
+            .execute(
+                "INSERT INTO contacts (categorie, nom, prenom, created_at, updated_at)
+                 VALUES ('CLIENT', 'DUPONT', 'Jean', 1, 1)",
+                [],
+            )
+            .unwrap();
+
+        let iso = "2026-03-01T00:00:00.000Z".to_string();
+        let created = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(1),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "Contrat".into(),
+                numero_contrat: None,
+                montant_initial: None,
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                date_dernier_arbitrage: Some(iso.clone()),
+                date_prochain_arbitrage: Some(iso),
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+        assert!(created.date_prochain_arbitrage.is_some());
+
+        db.update_investissement(
+            created.id,
+            &NewInvestissement {
+                contact_id: Some(1),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "Contrat".into(),
+                numero_contrat: None,
+                montant_initial: None,
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                date_dernier_arbitrage: Some("".into()),
+                date_prochain_arbitrage: Some("".into()),
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            },
+        )
+        .unwrap();
+
+        let updated = db.get_investissement_by_id(created.id).unwrap();
+        assert_eq!(updated.date_dernier_arbitrage, None);
+        assert_eq!(updated.date_prochain_arbitrage, None);
     }
 
     #[test]
@@ -1223,6 +1406,8 @@ mod tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -1284,6 +1469,8 @@ mod tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -1352,6 +1539,8 @@ mod tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -1417,6 +1606,8 @@ mod tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -1445,6 +1636,8 @@ mod tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -1489,6 +1682,8 @@ mod tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -1517,6 +1712,8 @@ mod tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,

@@ -2402,7 +2402,10 @@ export function ContactFilleulOrganisationPanel({
             organisationSelfContactId={selfContactId}
             dossiersByContactId={dossiersByContactId}
             cgp={cgp}
-            dossiersLoading={exerciceKpisLoading}
+            dossiersLoading={
+              dossierContactIdsKey !== "" &&
+              (dossiersLoading || dossiersReadyKey !== dossierContactIdsKey)
+            }
             dataRefreshKey={dataRefreshKey}
             onOpenConsultantsList={openSummaryConsultantsList}
             onOpenParrainagesList={openSummaryParrainagesList}

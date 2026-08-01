@@ -508,6 +508,10 @@ pub struct Investissement {
     /// ACTIF = dans l'encours ; CLOTURE = sorti de l'encours, conservé en stats.
     pub statut: String,
     pub date_cloture: Option<i64>,
+    /// Dernier arbitrage enregistré (AV/PER « avec moi », opt-in).
+    pub date_dernier_arbitrage: Option<i64>,
+    /// Prochain arbitrage prévu — alerte si renseignée et échéance atteinte.
+    pub date_prochain_arbitrage: Option<i64>,
     /// Dernière valorisation saisie (centimes), si renseignée.
     pub encours_actuel: Option<i64>,
     /// Date de la dernière valorisation (timestamp Unix).
@@ -541,6 +545,8 @@ pub struct NewInvestissement {
     pub date_souscription: Option<String>,     // ISO string
     pub date_fin_demembrement: Option<String>, // ISO string
     pub date_fin_pret: Option<String>,         // ISO string
+    pub date_dernier_arbitrage: Option<String>, // ISO string
+    pub date_prochain_arbitrage: Option<String>, // ISO string
     pub mensualite_credit: Option<i64>,
     pub credit_crd: Option<i64>,
     pub loyer_mensuel: Option<i64>,

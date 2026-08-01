@@ -226,7 +226,8 @@ export function AppNotificationsBar({
                   navigateToTaches(
                     onPageChange,
                     item.tachesEcheanceFilter ?? "urgent",
-                    currentPage
+                    currentPage,
+                    item.focusContactId
                   );
                   return;
                 }

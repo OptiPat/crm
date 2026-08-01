@@ -481,7 +481,7 @@ impl Database {
         self.conn.execute(
             "UPDATE alertes SET traitee = 1, lue = 1, traitee_at = unixepoch()
              WHERE contact_id = ?1 AND traitee = 0
-               AND type_alerte NOT IN ('FIN_DEMEMBREMENT')",
+               AND type_alerte NOT IN ('FIN_DEMEMBREMENT', 'ANNIVERSAIRE', 'ARBITRAGE_AV_PER')",
             params![contact_id],
         )?;
         Ok(())

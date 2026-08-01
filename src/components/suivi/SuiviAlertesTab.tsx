@@ -40,9 +40,12 @@ import {
   deleteAlerte,
   snoozeAlerte,
   formatAlerteContactLabel,
+  traiterAlerteArbitrage,
+  reporterAlerteArbitrage,
 } from "@/lib/api/tauri-alertes";
 import type { AlerteWithContact } from "@/lib/api/tauri-dashboard";
 import { getTypeAlerteLabel } from "@/lib/alertes/alerte-labels";
+import { isAlerteArbitrageAvPer } from "@/lib/alertes/arbitrage-alerte";
 import { countAlertesByCategory, type AlerteCategoryFilter } from "@/lib/alertes/alerte-category";
 import {
   buildContactIdsWithActiveTaches,
@@ -85,7 +88,8 @@ import { buildTacheDraftFromAlerte } from "@/lib/taches/tache-from-alerte";
 import type { EtiquetteEmailQueueItem, EtiquetteWithCount } from "@/lib/api/tauri-etiquettes";
 import { isEtiquetteQueueItemBatchLocked } from "@/lib/etiquettes/etiquette-email-send-runner";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
-import { subscribeTachesChanged } from "@/lib/taches/tache-events";
+import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
+import { subscribeTachesChanged, notifyTachesChanged } from "@/lib/taches/tache-events";
 import { toast } from "sonner";
 
 export type SuiviAlertesTabProps = {
@@ -241,23 +245,35 @@ export function SuiviAlertesTab({
     if (!alerteATraiter) return;
     setSubmittingTraiter(true);
     try {
-      const contact = await getContactById(alerteATraiter.contact_id);
-      await updateContact(
-        alerteATraiter.contact_id,
-        contactToUpdatePayload(
-          contact,
-          suiviDatesOverrides(alerteATraiter.type_alerte, {
-            dernierContact: dateDernierSuivi,
-          })
-        )
-      );
-      await marquerAlerteTraitee(alerteATraiter.alerte_id);
+      if (isAlerteArbitrageAvPer(alerteATraiter.type_alerte)) {
+        await traiterAlerteArbitrage(alerteATraiter.alerte_id);
+      } else {
+        const contact = await getContactById(alerteATraiter.contact_id);
+        await updateContact(
+          alerteATraiter.contact_id,
+          contactToUpdatePayload(
+            contact,
+            suiviDatesOverrides(alerteATraiter.type_alerte, {
+              dernierContact: dateDernierSuivi,
+            })
+          )
+        );
+        await marquerAlerteTraitee(alerteATraiter.alerte_id);
+      }
       const treatedId = alerteATraiter.alerte_id;
       const next = andNext ? findNextAlerteInList(alertesFiltered, treatedId) : null;
       onAlertesChange((prev) => prev.filter((a) => a.alerte_id !== treatedId));
       setAlerteATraiter(null);
-      toast.success("Suivi enregistré sur le contact");
+      toast.success(
+        isAlerteArbitrageAvPer(alerteATraiter.type_alerte)
+          ? "Arbitrage enregistré — prochaine échéance recalculée"
+          : "Suivi enregistré sur le contact"
+      );
       notifyRelationChanged(alerteATraiter.contact_id);
+      notifyTachesChanged();
+      if (isAlerteArbitrageAvPer(alerteATraiter.type_alerte)) {
+        notifyInvestissementsChanged();
+      }
       if (next) {
         openTraiterDialog(next);
       }
@@ -271,21 +287,33 @@ export function SuiviAlertesTab({
 
   const handleReporterSuivi = async (alerte: AlerteWithContact, mois: number) => {
     try {
-      const contact = await getContactById(alerte.contact_id);
-      await updateContact(
-        alerte.contact_id,
-        contactToUpdatePayload(
-          contact,
-          suiviDatesOverrides(alerte.type_alerte, {
-            dernierContact: todayLocal(),
-            prochainSuivi: addMonthsLocal(mois),
-          })
-        )
-      );
-      await marquerAlerteTraitee(alerte.alerte_id);
+      if (isAlerteArbitrageAvPer(alerte.type_alerte)) {
+        await reporterAlerteArbitrage(alerte.alerte_id, mois);
+      } else {
+        const contact = await getContactById(alerte.contact_id);
+        await updateContact(
+          alerte.contact_id,
+          contactToUpdatePayload(
+            contact,
+            suiviDatesOverrides(alerte.type_alerte, {
+              dernierContact: todayLocal(),
+              prochainSuivi: addMonthsLocal(mois),
+            })
+          )
+        );
+        await marquerAlerteTraitee(alerte.alerte_id);
+      }
       onAlertesChange((prev) => prev.filter((a) => a.alerte_id !== alerte.alerte_id));
-      toast.success(`Suivi reporté de ${mois} mois`);
+      toast.success(
+        isAlerteArbitrageAvPer(alerte.type_alerte)
+          ? `Arbitrage reporté de ${mois} mois`
+          : `Suivi reporté de ${mois} mois`
+      );
       notifyRelationChanged(alerte.contact_id);
+      notifyTachesChanged();
+      if (isAlerteArbitrageAvPer(alerte.type_alerte)) {
+        notifyInvestissementsChanged();
+      }
     } catch (error) {
       console.error("Error reporting suivi:", error);
       toast.error("Erreur lors du report du suivi");
@@ -552,7 +580,11 @@ export function SuiviAlertesTab({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Marquer le suivi comme effectué</DialogTitle>
+            <DialogTitle>
+              {alerteATraiter && isAlerteArbitrageAvPer(alerteATraiter.type_alerte)
+                ? "Marquer l'arbitrage comme effectué"
+                : "Marquer le suivi comme effectué"}
+            </DialogTitle>
             <DialogDescription>
               {alerteATraiter && (
                 <>
@@ -564,26 +596,30 @@ export function SuiviAlertesTab({
                   </span>
                   {" · "}
                   {getTypeAlerteLabel(alerteATraiter.type_alerte)}
-                  {isAlerteSuiviFilleul(alerteATraiter.type_alerte)
-                    ? " — date dernier contact filleul."
-                    : " — date dernier contact."}
+                  {isAlerteArbitrageAvPer(alerteATraiter.type_alerte)
+                    ? " — la date dernier arbitrage sera aujourd'hui et la prochaine échéance sera avancée (ajustable sur le contrat)."
+                    : isAlerteSuiviFilleul(alerteATraiter.type_alerte)
+                      ? " — date dernier contact filleul."
+                      : " — date dernier contact."}
                 </>
               )}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Label htmlFor="date-dernier-suivi">Date du dernier suivi</Label>
-            <SuiviAlertesTraiterDateShortcuts
-              value={dateDernierSuivi}
-              onChange={setDateDernierSuivi}
-            />
-            <Input
-              id="date-dernier-suivi"
-              type="date"
-              value={dateDernierSuivi}
-              onChange={(e) => setDateDernierSuivi(e.target.value)}
-            />
-          </div>
+          {alerteATraiter && !isAlerteArbitrageAvPer(alerteATraiter.type_alerte) && (
+            <div className="space-y-3 py-2">
+              <Label htmlFor="date-dernier-suivi">Date du dernier suivi</Label>
+              <SuiviAlertesTraiterDateShortcuts
+                value={dateDernierSuivi}
+                onChange={setDateDernierSuivi}
+              />
+              <Input
+                id="date-dernier-suivi"
+                type="date"
+                value={dateDernierSuivi}
+                onChange={(e) => setDateDernierSuivi(e.target.value)}
+              />
+            </div>
+          )}
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button
               type="button"
@@ -597,14 +633,24 @@ export function SuiviAlertesTab({
               type="button"
               variant="secondary"
               onClick={() => void confirmTraiter(true)}
-              disabled={submittingTraiter || !dateDernierSuivi}
+              disabled={
+                submittingTraiter ||
+                (!!alerteATraiter &&
+                  !isAlerteArbitrageAvPer(alerteATraiter.type_alerte) &&
+                  !dateDernierSuivi)
+              }
             >
               Traiter et suivant
             </Button>
             <Button
               type="button"
               onClick={() => void confirmTraiter(false)}
-              disabled={submittingTraiter || !dateDernierSuivi}
+              disabled={
+                submittingTraiter ||
+                (!!alerteATraiter &&
+                  !isAlerteArbitrageAvPer(alerteATraiter.type_alerte) &&
+                  !dateDernierSuivi)
+              }
             >
               {submittingTraiter ? "Enregistrement…" : "Confirmer"}
             </Button>
