@@ -90,6 +90,24 @@ pub fn save_newsletter_settings(
 ) -> Result<NewsletterSettingsPublic, String> {
     require_ui_session(&session)?;
     let mut store = NewsletterStore::load(&app)?;
+    if let Some(provider) = input.llm_provider.as_deref() {
+        let trimmed = provider.trim();
+        if !trimmed.is_empty() {
+            let new_id = LlmProvider::parse(trimmed).as_id().to_string();
+            if new_id != store.llm_provider {
+                let has_new_key = input
+                    .api_key
+                    .as_ref()
+                    .is_some_and(|k| !k.trim().is_empty());
+                if !has_new_key {
+                    return Err(format!(
+                        "Changez de fournisseur IA : saisissez la clé API {}.",
+                        LlmProvider::parse(&new_id).label()
+                    ));
+                }
+            }
+        }
+    }
     if let Some(key) = input.api_key {
         let trimmed = key.trim();
         if trimmed.is_empty() {
@@ -139,6 +157,54 @@ pub fn save_newsletter_settings(
     if let Some(secondary) = input.secondary_color {
         let trimmed = secondary.trim();
         store.secondary_color = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(header) = input.header_color {
+        let trimmed = header.trim();
+        store.header_color = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(header_text) = input.header_text_color {
+        let trimmed = header_text.trim();
+        store.header_text_color = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(title) = input.title_color {
+        let trimmed = title.trim();
+        store.title_color = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(separator) = input.separator_color {
+        let trimmed = separator.trim();
+        store.separator_color = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(text) = input.text_color {
+        let trimmed = text.trim();
+        store.text_color = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(button) = input.button_color {
+        let trimmed = button.trim();
+        store.button_color = if trimmed.is_empty() {
             None
         } else {
             Some(trimmed.to_string())
@@ -843,6 +909,7 @@ pub fn push_newsletter_edition_to_brevo(
             .collect();
 
         (PushBrevoCampaignInput {
+            edition_id: input.edition_id,
             edition_label: detail.edition_label,
             subject,
             preheader,

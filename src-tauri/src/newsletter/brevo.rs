@@ -27,6 +27,7 @@ pub struct BrevoRecipient {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PushBrevoCampaignInput {
+    pub edition_id: i64,
     pub edition_label: String,
     pub subject: String,
     pub preheader: Option<String>,
@@ -212,13 +213,14 @@ pub fn push_newsletter_campaign(
     let client = BrevoClient::new(api_key)?;
     let contact_fields = resolve_contact_field_keys(&client)?;
     let folder_id = ensure_crm_folder(&client)?;
-    let list_name = format!("CRM — {}", sanitize_list_name(&input.edition_label));
+    let label = sanitize_list_name(&input.edition_label);
+    let list_name = format!("CRM — {label} (#{})", input.edition_id);
     let list_id = create_contact_list(&client, &list_name, folder_id)?;
     upsert_contacts_on_list(&client, list_id, &input.recipients, &contact_fields)?;
 
     let template_html = fetch_smtp_template_html(&client, input.template_id)?;
 
-    let campaign_name = format!("CRM — {}", sanitize_list_name(&input.edition_label));
+    let campaign_name = format!("CRM — {label} (#{})", input.edition_id);
     let campaign_id = create_campaign_draft(
         &client,
         &campaign_name,
@@ -559,11 +561,15 @@ fn brevo_template_edit_url(template_id: i64, html: &str) -> String {
     format!("https://app.brevo.com/editor/classic/html/{template_id}")
 }
 
-fn truncate(value: &str, max: usize) -> String {
-    if value.len() <= max {
+fn truncate(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
         return value.to_string();
     }
-    format!("{}…", &value[..max])
+    let mut end = max_bytes;
+    while end > 0 && !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &value[..end])
 }
 
 #[cfg(test)]
@@ -633,5 +639,14 @@ mod tests {
             brevo_template_edit_url(42, "<p>Bonjour</p>"),
             "https://app.brevo.com/editor/classic/html/42"
         );
+    }
+
+    #[test]
+    fn truncate_respects_utf8_char_boundaries() {
+        let accented = "échec de connexion à l'API Brevo";
+        let truncated = truncate(accented, 10);
+        assert!(truncated.ends_with('…'));
+        assert!(std::str::from_utf8(truncated.as_bytes()).is_ok());
+        assert!(truncated.len() <= 14);
     }
 }

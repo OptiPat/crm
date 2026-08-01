@@ -218,6 +218,49 @@ export function applyRichEditorFontSize(
   return true;
 }
 
+function unwrapRichEditorElement(el: HTMLElement): void {
+  const parent = el.parentNode;
+  if (!parent) return;
+  while (el.firstChild) {
+    parent.insertBefore(el.firstChild, el);
+  }
+  parent.removeChild(el);
+}
+
+/** Retire la taille inline (px) sur la sélection — retour à la taille du corps newsletter. */
+export function clearRichEditorFontSize(
+  editorEl: HTMLDivElement | null,
+  savedRange?: Range | null
+): boolean {
+  if (!editorEl) return false;
+  editorEl.focus();
+  restoreRichEditorSelection(editorEl, savedRange ?? saveRichEditorSelection(editorEl));
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+  const range = sel.getRangeAt(0);
+  if (!editorEl.contains(range.commonAncestorContainer)) return false;
+
+  const walker = document.createTreeWalker(editorEl, NodeFilter.SHOW_ELEMENT);
+  const targets: HTMLElement[] = [];
+  let node = walker.nextNode();
+  while (node) {
+    if (node instanceof HTMLElement && range.intersectsNode(node) && node.style.fontSize) {
+      targets.push(node);
+    }
+    node = walker.nextNode();
+  }
+  if (targets.length === 0) return false;
+
+  for (const el of targets.reverse()) {
+    if (el.style.length === 1) {
+      unwrapRichEditorElement(el);
+    } else {
+      el.style.removeProperty("font-size");
+    }
+  }
+  return true;
+}
+
 /** execCommand avec sélection restaurée (barre d'outils sans perdre la sélection). */
 export function execRichEditorCommand(
   editorEl: HTMLDivElement | null,

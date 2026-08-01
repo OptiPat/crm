@@ -3,6 +3,7 @@ import {
   buildNewsletterHtml,
   buildNewsletterHtmlOptions,
   buildNewsletterPlainBody,
+  buildNewsletterPlainBodyForExport,
   formatNewsletterEditionLabel,
   mergeNewsletterDraftFromPlain,
   parseNewsletterTemplateMeta,
@@ -54,9 +55,7 @@ describe("newsletter-html", () => {
     const html = buildNewsletterHtml(
       {
         ...sampleContent,
-        includeFooterPhone: true,
-        includeFooterSite: true,
-        includeFooterAddress: true,
+        includeConseiller: false,
       },
       {
       cabinetName: "Cabinet Test",
@@ -78,10 +77,10 @@ describe("newsletter-html", () => {
     expect(html).toContain("Prendre rendez-vous");
     expect(html).not.toContain("Prenez rendez-vous.");
     expect(html).not.toContain("Me répondre par email");
-    expect(html).toContain("Votre conseiller");
+    expect(html).not.toContain("Votre conseiller");
     expect(html).toContain("Jean Dupont");
     expect(html).toContain("01 23 45 67 89");
-    expect(html).toContain("Site web");
+    expect(html).toContain("cabinet.fr");
     expect(html).toContain("12 rue Test, 75002 Paris");
   });
 
@@ -94,6 +93,17 @@ describe("newsletter-html", () => {
     expect(btn).toContain("border-radius:4px");
     expect(btn).not.toContain("text-transform:uppercase");
     expect(html).toContain("Prendre rendez-vous");
+  });
+
+  it("embeds cabinet logo in header and hides cabinet name text", () => {
+    const html = buildNewsletterHtml(sampleContent, {
+      cabinetName: "PLAZAVENIR",
+      logoDataUrl: "data:image/png;base64,AAA",
+    });
+    expect(html).toContain("nl-logo-img");
+    expect(html).toContain('src="data:image/png;base64,AAA"');
+    expect(html).not.toContain(">PLAZAVENIR<");
+    expect(html).toContain("Lettre patrimoniale");
   });
 
   it("uses title font in header meta labels", () => {
@@ -169,9 +179,16 @@ describe("newsletter-html", () => {
     expect(draft.sections.some((s) => s.body.includes("juin"))).toBe(true);
   });
 
-  it("omits footer contact lines unless explicitly included", () => {
+  it("omits footer contact lines when opted out", () => {
     const html = buildNewsletterHtml(
-      { ...sampleContent, includeConseiller: false },
+      {
+        ...sampleContent,
+        includeConseiller: false,
+        includeFooterPhone: false,
+        includeFooterSite: false,
+        includeFooterAddress: false,
+        includeFooterConseiller: false,
+      },
       {
         cabinetName: "Cabinet Test",
         cgpPhone: "01 23 45 67 89",
@@ -179,9 +196,83 @@ describe("newsletter-html", () => {
         postalAddress: "12 rue Test, 75002 Paris",
       }
     );
-    expect(html).not.toContain("Site web");
+    expect(html).not.toContain("cabinet.fr");
     expect(html).not.toContain("01 23 45 67 89");
     expect(html).not.toContain("12 rue Test");
+  });
+
+  it("renders structured footer contact lines by default", () => {
+    const html = buildNewsletterHtml(
+      {
+        ...sampleContent,
+        includeConseiller: false,
+        conseillerName: "Jean DUPONT",
+      },
+      {
+        cabinetName: "Cabinet Test",
+        cgpPhone: "01 23 45 67 89",
+        siteWeb: "https://www.cabinet.fr",
+        postalAddress: "12 rue Test, 75002 Paris",
+      }
+    );
+    expect(html).toContain("Jean DUPONT</p>");
+    expect(html).toContain("01 23 45 67 89</a> · ");
+    expect(html).toContain("cabinet.fr</a>");
+    expect(html).toContain("12 rue Test, 75002 Paris</p>");
+    expect(html).not.toMatch(/Jean DUPONT · /);
+    expect(html.match(/12 rue Test, 75002 Paris/g)?.length).toBe(1);
+  });
+
+  it("renders optional legal mentions block below CTA", () => {
+    const html = buildNewsletterHtml({
+      ...sampleContent,
+      includeLegalMentions: true,
+      legalMentions: "Les performances passées ne préjugent pas des performances futures.",
+    });
+    expect(html).toContain("nl-legal-text");
+    expect(html).toContain("performances passées");
+    const ctaIdx = html.indexOf("nl-cta-pad");
+    const legalIdx = html.indexOf("nl-legal-pad");
+    expect(ctaIdx).toBeGreaterThan(-1);
+    expect(legalIdx).toBeGreaterThan(ctaIdx);
+  });
+
+  it("renders legal mentions below agenda button when present", () => {
+    const html = buildNewsletterHtml(
+      {
+        ...sampleContent,
+        cta: "N'attendez pas le 31 décembre pour y penser.",
+        includeLegalMentions: true,
+        legalMentions: "Les performances passées ne préjugent pas des performances futures.",
+      },
+      { agendaUrl: "https://calendly.com/test" }
+    );
+    const agendaIdx = html.indexOf("Prendre rendez-vous");
+    const legalIdx = html.indexOf('class="nl-legal-pad"');
+    expect(agendaIdx).toBeGreaterThan(-1);
+    expect(legalIdx).toBeGreaterThan(agendaIdx);
+  });
+
+  it("omits legal mentions unless explicitly included", () => {
+    const html = buildNewsletterHtml({
+      ...sampleContent,
+      legalMentions: "Mention légale cachée.",
+    });
+    expect(html).not.toMatch(/class="nl-legal-pad"/);
+    expect(html).not.toContain("Mention légale cachée");
+  });
+
+  it("buildNewsletterPlainBodyForExport appends legal mentions", () => {
+    const plain = buildNewsletterPlainBodyForExport({
+      subject: "Objet",
+      intro: "Intro",
+      sections: [],
+      cta: "RDV",
+      includeLegalMentions: true,
+      legalMentions: "Mention légale.",
+    });
+    expect(plain).toContain("RDV");
+    expect(plain).toContain("Mention légale.");
   });
 
   it("omits conseiller block when includeConseiller is false", () => {
@@ -200,13 +291,14 @@ describe("newsletter-html", () => {
       }
     );
     expect(html).not.toContain("Votre conseiller");
-    expect(html).not.toContain("Jean DUPONT");
+    expect(html).toContain("Jean DUPONT");
   });
 
-  it("uses edited conseiller name in HTML", () => {
+  it("uses edited conseiller name in HTML when block enabled", () => {
     const html = buildNewsletterHtml(
       {
         ...sampleContent,
+        includeConseiller: true,
         conseillerName: "Jean DUPONT",
         conseillerPhone: "0102030405",
       },
@@ -225,10 +317,37 @@ describe("newsletter-html", () => {
     expect(html).not.toContain("Me répondre par email");
   });
 
+  it("uses header text color for bandeau labels", () => {
+    const html = buildNewsletterHtml(sampleContent, {
+      headerColor: "#0f2744",
+      headerTextColor: "#b8956a",
+      editionLabel: "août 2026",
+    });
+    expect(html).toContain("Lettre patrimoniale");
+    expect(html).toContain("color:#b8956a");
+    expect(html).toContain("août 2026");
+  });
+
+  it("uses granular colors independently", () => {
+    const html = buildNewsletterHtml(sampleContent, {
+      headerColor: "#111111",
+      titleColor: "#222222",
+      separatorColor: "#333333",
+      textColor: "#444444",
+      buttonColor: "#555555",
+      agendaUrl: "https://calendly.com/test",
+    });
+    expect(html).toContain("background:#111111");
+    expect(html).toContain("background:#333333");
+    expect(html).toContain("color:#222222");
+    expect(html).toContain("color:#444444");
+    expect(html).toContain("background:#555555");
+  });
+
   it("uses secondary color in header stripe and section numbers", () => {
     const html = buildNewsletterHtml(sampleContent, {
       cabinetName: "Cabinet Test",
-      secondaryColor: "#ff5500",
+      separatorColor: "#ff5500",
     });
     expect(html).toContain("#ff5500");
     expect(html).toContain(">01<");

@@ -12,11 +12,13 @@ import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
 import { blocksHtmlAt, normalizeNewsletterBlocks } from "@/lib/newsletter/newsletter-blocks";
 import {
   formatCgpPostalAddress,
+  formatFooterSiteLabel,
   shouldShowFooterAddress,
+  shouldShowFooterConseiller,
   shouldShowFooterPhone,
   shouldShowFooterSite,
 } from "@/lib/newsletter/newsletter-footer-options";
-import { resolveNewsletterBranding } from "@/lib/newsletter/newsletter-branding";
+import { resolveNewsletterBranding, resolveNewsletterColors, type NewsletterPalette } from "@/lib/newsletter/newsletter-branding";
 import { normalizeNewsletterImages, imagesMatching } from "@/lib/newsletter/newsletter-images";
 import {
   resolveNewsletterCta,
@@ -59,6 +61,18 @@ export interface NewsletterHtmlOptions {
   accentColor?: string;
 
   secondaryColor?: string;
+
+  headerColor?: string;
+
+  headerTextColor?: string;
+
+  titleColor?: string;
+
+  separatorColor?: string;
+
+  textColor?: string;
+
+  buttonColor?: string;
 
   layout?: NewsletterLayout;
 
@@ -107,8 +121,6 @@ export interface NewsletterHtmlOptions {
 
 
 
-const BODY_COLOR = "#2d3748";
-
 const MUTED_COLOR = "#8a8a8a";
 
 const HIGHLIGHT_BG = "#faf6f0";
@@ -116,14 +128,18 @@ const HIGHLIGHT_BG = "#faf6f0";
 function buildCtaButtonAnchor(
   label: string,
   href: string,
-  accent: string,
+  buttonColor: string,
   typo: ResolvedNewsletterTypography
 ): string {
-  return `<a class="nl-cta-btn" href="${escapeHtml(href)}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:4px;font-family:${typo.bodyFontFamily};font-size:15px;font-weight:600;letter-spacing:0.01em;box-shadow:0 2px 12px rgba(15,39,68,0.18);">${escapeHtml(label)}</a>`;
+  return `<a class="nl-cta-btn" href="${escapeHtml(href)}" style="display:inline-block;background:${buttonColor};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:4px;font-family:${typo.bodyFontFamily};font-size:15px;font-weight:600;letter-spacing:0.01em;box-shadow:0 2px 12px rgba(15,39,68,0.18);">${escapeHtml(label)}</a>`;
 }
 
 function shouldShowCta(content: GeneratedNewsletterContent): boolean {
   return content.includeCta !== false && Boolean(content.cta?.trim());
+}
+
+function shouldShowLegalMentions(content: GeneratedNewsletterContent): boolean {
+  return content.includeLegalMentions === true && Boolean(content.legalMentions?.trim());
 }
 
 function resolveConseillerFields(
@@ -141,7 +157,7 @@ function shouldShowConseiller(
   content: GeneratedNewsletterContent,
   options: NewsletterHtmlOptions
 ): boolean {
-  if (content.includeConseiller === false) return false;
+  if (content.includeConseiller !== true) return false;
   const { name, phone } = resolveConseillerFields(content, options);
   return Boolean(name || phone);
 }
@@ -156,7 +172,7 @@ export function defaultConseillerFields(cgp: CgpConfig | null): {
   return {
     conseillerName,
     conseillerPhone,
-    includeConseiller: Boolean(conseillerName || conseillerPhone),
+    includeConseiller: false,
   };
 }
 
@@ -164,6 +180,14 @@ function buildMobileStyleBlock(typo: ResolvedNewsletterTypography): string {
   return `<style type="text/css">
 ${NEWSLETTER_RICH_TEXT_CSS}
 body { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+.nl-footer-contact,
+.nl-footer-contact p,
+.nl-footer-contact a { font-size: 11px; line-height: 1.45; color: ${MUTED_COLOR}; font-family: Arial, Helvetica, sans-serif; }
+.nl-footer-contact a { text-decoration: underline; }
+.nl-footer-contact a.nl-footer-tel { text-decoration: none; }
+.nl-footer-legal,
+.nl-footer-legal p,
+.nl-footer-legal a { font-size: 11px; line-height: 1.45; color: ${MUTED_COLOR}; font-family: Arial, Helvetica, sans-serif; text-align: center; }
 @media only screen and (max-width: 520px) {
   .nl-outer-pad { padding: 8px 4px !important; }
   .nl-container { width: 100% !important; max-width: 100% !important; }
@@ -179,10 +203,21 @@ body { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
   .nl-rich-pad { padding: 0 16px 14px 16px !important; }
   .nl-rich-inner { padding: 16px 14px !important; }
   .nl-cta-pad { padding: 4px 16px 16px 16px !important; }
+  .nl-legal-pad { padding: 0 16px 20px 16px !important; }
   .nl-cta-inner { padding: 18px 14px !important; font-size: ${typo.mobileBodyFontSize} !important; }
   .nl-agenda-pad { padding: 4px 16px 20px 16px !important; }
   .nl-conseiller-pad { padding: 0 16px 20px 16px !important; }
-  .nl-footer-pad { padding: 18px 16px 20px 16px !important; font-size: 12px !important; }
+  .nl-footer-pad { padding: 18px 16px 20px 16px !important; font-size: 11px !important; }
+  .nl-footer-contact,
+  .nl-footer-contact p,
+  .nl-footer-contact a { font-size: 11px !important; line-height: 1.45 !important; color: ${MUTED_COLOR} !important; padding: 0 !important; }
+  .nl-footer-contact p { display: block !important; margin: 0 0 4px 0 !important; }
+  .nl-footer-contact p:last-child { margin-bottom: 0 !important; }
+  .nl-footer-contact a { display: inline !important; }
+  .nl-footer-legal,
+  .nl-footer-legal p,
+  .nl-footer-legal a { font-size: 11px !important; line-height: 1.45 !important; color: ${MUTED_COLOR} !important; text-align: center !important; }
+  .nl-footer-legal a { display: inline !important; padding: 0 !important; }
   .nl-section-num { display: none !important; width: 0 !important; padding: 0 !important; }
   .nl-edition-title { font-size: 17px !important; line-height: 1.35 !important; }
   .nl-cta-btn { display: block !important; width: 100% !important; max-width: none !important; margin: 0 auto !important; padding: 18px 16px !important; font-size: 14px !important; line-height: 1.3 !important; box-sizing: border-box !important; min-height: 48px !important; }
@@ -246,27 +281,48 @@ function normalizeExternalUrl(url: string): string {
   return `https://${trimmed}`;
 }
 
-function buildFooterContactLine(
+const FOOTER_TEXT_STYLE = `margin:0;font-size:11px;line-height:1.45;color:${MUTED_COLOR};font-family:Arial,Helvetica,sans-serif;`;
+const FOOTER_LINK_STYLE = `font-size:11px;line-height:1.45;color:${MUTED_COLOR};font-family:Arial,Helvetica,sans-serif;`;
+
+function buildFooterContactBlock(
   options: NewsletterHtmlOptions,
   content: GeneratedNewsletterContent
 ): string {
-  const parts: string[] = [];
+  const lines: string[] = [];
+  const { name } = resolveConseillerFields(content, options);
+  if (shouldShowFooterConseiller(content, name)) {
+    lines.push(`<p style="${FOOTER_TEXT_STYLE}margin-bottom:4px;">${escapeHtml(name)}</p>`);
+  }
+
+  const contactParts: string[] = [];
   const phone = options.cgpPhone?.trim();
   if (shouldShowFooterPhone(content, phone)) {
     const telHref = phone!.replace(/\s/g, "");
-    parts.push(
-      `<a class="nl-mailto-link" href="tel:${escapeHtml(telHref)}" style="color:${MUTED_COLOR};text-decoration:none;">${escapeHtml(phone!)}</a>`
+    contactParts.push(
+      `<a class="nl-footer-tel" href="tel:${escapeHtml(telHref)}" style="${FOOTER_LINK_STYLE}text-decoration:none;">${escapeHtml(phone!)}</a>`
     );
   }
   const site = options.siteWeb?.trim();
   if (shouldShowFooterSite(content, site)) {
     const href = normalizeExternalUrl(site!);
-    parts.push(
-      `<a class="nl-mailto-link" href="${escapeHtml(href)}" style="color:${MUTED_COLOR};text-decoration:underline;">Site web</a>`
+    const label = formatFooterSiteLabel(site!);
+    contactParts.push(
+      `<a class="nl-footer-web" href="${escapeHtml(href)}" style="${FOOTER_LINK_STYLE}text-decoration:underline;">${escapeHtml(label)}</a>`
     );
   }
-  if (parts.length === 0) return "";
-  return `<p style="margin:0 0 10px 0;">${parts.join(" · ")}</p>`;
+  if (contactParts.length > 0) {
+    lines.push(
+      `<p style="${FOOTER_TEXT_STYLE}margin-bottom:4px;">${contactParts.join(" · ")}</p>`
+    );
+  }
+
+  const postal = options.postalAddress?.trim();
+  if (shouldShowFooterAddress(content, postal) && postal) {
+    lines.push(`<p style="${FOOTER_TEXT_STYLE}">${escapeHtml(postal)}</p>`);
+  }
+
+  if (lines.length === 0) return "";
+  return `<div class="nl-footer-contact" style="margin:0 0 10px 0;text-align:center;">${lines.join("")}</div>`;
 }
 
 function buildNewsletterFooterHtml(
@@ -279,19 +335,18 @@ function buildNewsletterFooterHtml(
       ? `Vous recevez cette newsletter en tant que contact de ${cabinet}.`
       : "Vous recevez cette newsletter en tant que contact.";
 
-  const contactLine = buildFooterContactLine(options, content);
-  const postal = options.postalAddress?.trim();
-  const postalLine =
-    shouldShowFooterAddress(content, postal) && postal
-      ? `<p style="margin:0 0 10px 0;">${escapeHtml(postal)}</p>`
-      : "";
+  const contactBlock = buildFooterContactBlock(options, content);
 
   const email = options.unsubscribeEmail?.trim();
   const unsubscribeLine = email
-    ? `<p style="margin:0;"><a class="nl-mailto-link" href="${escapeHtml(buildUnsubscribeMailto(email))}" style="color:${MUTED_COLOR};text-decoration:underline;">Se désinscrire</a></p>`
+    ? `<p style="${FOOTER_TEXT_STYLE}margin:0;"><a class="nl-footer-unsub" href="${escapeHtml(buildUnsubscribeMailto(email))}" style="${FOOTER_LINK_STYLE}text-decoration:underline;">Se désinscrire</a></p>`
     : "";
 
-  return `${contactLine}${postalLine}<p style="margin:0 0 10px 0;">${clientLine}</p>${unsubscribeLine}`;
+  const legalBlock = `<div class="nl-footer-legal" style="text-align:center;">
+<p style="${FOOTER_TEXT_STYLE}margin:0 0 4px 0;">${clientLine}</p>${unsubscribeLine}
+</div>`;
+
+  return `${contactBlock}${legalBlock}`;
 }
 
 
@@ -338,8 +393,7 @@ function buildPreheaderBlock(preheader: string): string {
 
 function buildHeaderBlock(
   options: NewsletterHtmlOptions,
-  accent: string,
-  secondary: string,
+  palette: NewsletterPalette,
   cabinet: string,
   editionTitle: string | null | undefined,
   layout: NewsletterLayout,
@@ -349,8 +403,9 @@ function buildHeaderBlock(
     options.editionLabel?.trim() || formatNewsletterEditionLabel()
   );
   const titleSize = layout === "single" ? "18px" : "20px";
+  const headerText = palette.headerTextColor;
   const titleLine = editionTitle?.trim()
-    ? `<p class="nl-edition-title" style="margin:8px 0 0 0;font-family:${typo.titleFontFamily};font-size:${titleSize};line-height:1.35;color:#ffffff;font-weight:400;">${escapeHtml(editionTitle.trim())}</p>`
+    ? `<p class="nl-edition-title" style="margin:8px 0 0 0;font-family:${typo.titleFontFamily};font-size:${titleSize};line-height:1.35;color:${headerText};font-weight:400;">${escapeHtml(editionTitle.trim())}</p>`
     : "";
   const logo = options.logoDataUrl?.trim();
   const logoSize = 120;
@@ -362,24 +417,25 @@ function buildHeaderBlock(
       </td>`
     : "";
 
+  const headerMetaSize = typo.bodyFontSize;
   const headerMetaFont = typo.titleFontFamily;
   const cabinetLine =
     logo ? "" : (
-      `<p style="margin:0;font-family:${headerMetaFont};font-size:11px;color:rgba(255,255,255,0.82);text-transform:uppercase;letter-spacing:0.14em;font-weight:600;">${cabinet}</p>`
+      `<p style="margin:0;font-family:${headerMetaFont};font-size:11px;color:${headerText};text-transform:uppercase;letter-spacing:0.14em;font-weight:600;">${cabinet}</p>`
     );
 
-  return `<tr><td style="background:${accent};padding:0;">
+  return `<tr><td style="background:${palette.headerColor};padding:0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr><td style="height:3px;background:${secondary};font-size:0;line-height:0;">&nbsp;</td></tr>
+<tr><td style="height:3px;background:${palette.separatorColor};font-size:0;line-height:0;">&nbsp;</td></tr>
 <tr><td class="nl-header-pad" style="padding:28px 40px 26px 40px;">
 <table role="presentation" cellpadding="0" cellspacing="0" class="nl-header-stack">
 <tr>
 ${logoCell}
 <td class="nl-header-text-cell" style="vertical-align:middle;">
 ${cabinetLine}
-<p style="margin:${logo ? "0" : "8px 0 0 0"};font-family:${headerMetaFont};font-size:10px;color:rgba(255,255,255,0.72);text-transform:uppercase;letter-spacing:0.18em;font-weight:600;">Lettre patrimoniale</p>
+<p class="nl-header-kicker" style="margin:${logo ? "0" : "8px 0 0 0"};font-family:${headerMetaFont};font-size:${headerMetaSize};color:${headerText};text-transform:uppercase;letter-spacing:0.18em;font-weight:600;">Lettre patrimoniale</p>
 ${titleLine}
-<p style="margin:6px 0 0 0;font-family:${headerMetaFont};font-size:11px;color:rgba(255,255,255,0.88);letter-spacing:0.04em;font-weight:400;text-transform:capitalize;">${editionLabel}</p>
+<p class="nl-header-date" style="margin:6px 0 0 0;font-family:${headerMetaFont};font-size:${headerMetaSize};color:${headerText};letter-spacing:0.04em;font-weight:400;text-transform:capitalize;">${editionLabel}</p>
 </td>
 </tr>
 </table>
@@ -391,8 +447,7 @@ ${titleLine}
 function buildSectionRow(
   section: { title: string; body: string; highlight?: boolean; imageUrl?: string },
   index: number,
-  accent: string,
-  secondary: string,
+  palette: NewsletterPalette,
   layout: NewsletterLayout,
   typo: ResolvedNewsletterTypography
 ): string {
@@ -406,7 +461,7 @@ function buildSectionRow(
   const minimalLayout = layout === "minimal" || layout === "single";
   const innerPadding = highlight || alertLayout ? "24px 28px" : "0";
   const innerBg = highlight || alertLayout ? HIGHLIGHT_BG : "transparent";
-  const borderColor = alertLayout && highlight ? accent : secondary;
+  const borderColor = alertLayout && highlight ? palette.titleColor : palette.separatorColor;
   const innerBorder =
     highlight || alertLayout
       ? `border:1px solid ${borderColor};border-left:4px solid ${borderColor};`
@@ -414,13 +469,13 @@ function buildSectionRow(
 
   const titleBlock = title
     ? minimalLayout
-      ? `<div class="nl-section-title nl-rich-text" style="margin:0 0 10px 0;font-family:${typo.titleFontFamily};font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:${accent};">${title}</div>`
-      : `<div class="nl-section-title nl-rich-text" style="margin:0 0 10px 0;font-family:${typo.titleFontFamily};font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:${accent};">${title}</div>
-        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 14px 0;"><tr><td style="width:48px;height:2px;background:${secondary};font-size:0;line-height:0;">&nbsp;</td></tr></table>`
+      ? `<div class="nl-section-title nl-rich-text" style="margin:0 0 10px 0;font-family:${typo.titleFontFamily};font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:${palette.titleColor};">${title}</div>`
+      : `<div class="nl-section-title nl-rich-text" style="margin:0 0 10px 0;font-family:${typo.titleFontFamily};font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:${palette.titleColor};">${title}</div>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 14px 0;"><tr><td style="width:48px;height:2px;background:${palette.separatorColor};font-size:0;line-height:0;">&nbsp;</td></tr></table>`
     : "";
 
   const bodyBlock = body
-    ? `<div class="nl-rich-text nl-section-body-text" style="${newsletterBodyTextStyle(typo)}">${body}</div>`
+    ? `<div class="nl-rich-text nl-section-body-text" style="${newsletterBodyTextStyle(typo, palette.textColor)}">${body}</div>`
     : "";
   const imageBlock = section.imageUrl?.trim()
     ? `<p style="margin:0 0 14px 0;"><img class="nl-mobile-img" src="${escapeHtml(section.imageUrl.trim())}" alt="" width="520" style="display:block;width:100%;max-width:520px;height:auto;border-radius:2px;border:0;" /></p>`
@@ -428,7 +483,7 @@ function buildSectionRow(
 
   const numCell = minimalLayout
     ? ""
-    : `<td class="nl-section-num" style="vertical-align:top;padding-right:18px;width:36px;font-family:Arial,Helvetica,sans-serif;font-size:26px;font-weight:300;line-height:1;color:${secondary};">${num}</td>`;
+    : `<td class="nl-section-num" style="vertical-align:top;padding-right:18px;width:36px;font-family:Arial,Helvetica,sans-serif;font-size:26px;font-weight:300;line-height:1;color:${palette.separatorColor};">${num}</td>`;
 
   const sectionPad =
     layout === "single"
@@ -441,7 +496,7 @@ function buildSectionRow(
 <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
 <tr>
 ${numCell}
-<td class="nl-section-body" style="vertical-align:top;font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};color:${BODY_COLOR};">
+<td class="nl-section-body" style="vertical-align:top;font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};color:${palette.textColor};">
 ${imageBlock}${titleBlock}${bodyBlock}
 </td>
 </tr>
@@ -454,22 +509,21 @@ ${imageBlock}${titleBlock}${bodyBlock}
 function buildCtaButtonBlock(
   label: string,
   href: string,
-  accent: string,
+  palette: NewsletterPalette,
   typo: ResolvedNewsletterTypography,
   introAboveButton?: string
 ): string {
   const intro = introAboveButton?.trim()
-    ? `<div class="nl-rich-text" style="margin:0 0 16px 0;${newsletterBodyTextStyle(typo)}">${formatNewsletterBodyHtml(introAboveButton)}</div>`
+    ? `<div class="nl-rich-text" style="margin:0 0 16px 0;${newsletterBodyTextStyle(typo, palette.textColor)}">${formatNewsletterBodyHtml(introAboveButton)}</div>`
     : "";
   return `<tr><td class="nl-cta-pad" style="padding:8px 40px 28px 40px;text-align:center;">
-${intro}${buildCtaButtonAnchor(label, href, accent, typo)}
+${intro}${buildCtaButtonAnchor(label, href, palette.buttonColor, typo)}
 </td></tr>`;
 }
 
 function buildCtaBlock(
   cta: string,
-  accent: string,
-  secondary: string,
+  palette: NewsletterPalette,
   layout: NewsletterLayout,
   typo: ResolvedNewsletterTypography
 ): string {
@@ -478,7 +532,7 @@ function buildCtaBlock(
 
   if (layout === "alert") {
     return `<tr><td class="nl-cta-pad" style="padding:12px 40px 32px 40px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${accent};border-radius:2px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${palette.buttonColor};border-radius:2px;">
 <tr><td class="nl-cta-inner" style="padding:24px 28px;font-family:${typo.bodyFontFamily};font-size:18px;line-height:${typo.lineHeight};color:#ffffff;text-align:center;">
 <div class="nl-rich-text" style="margin:0;color:#ffffff;">${text}</div>
 </td></tr>
@@ -486,11 +540,28 @@ function buildCtaBlock(
 </td></tr>`;
   }
 
-  const border = layout === "minimal" ? accent : secondary;
+  const border = layout === "minimal" ? palette.titleColor : palette.separatorColor;
   return `<tr><td class="nl-cta-pad" style="padding:8px 40px 28px 40px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf9f7;border-left:3px solid ${border};">
-<tr><td class="nl-cta-inner" style="padding:22px 24px;font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};color:${BODY_COLOR};">
-<div class="nl-rich-text" style="margin:0;${newsletterBodyTextStyle(typo)}">${text}</div>
+<tr><td class="nl-cta-inner" style="padding:22px 24px;font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};color:${palette.textColor};">
+<div class="nl-rich-text" style="margin:0;${newsletterBodyTextStyle(typo, palette.textColor)}">${text}</div>
+</td></tr>
+</table>
+</td></tr>`;
+}
+
+
+
+function buildLegalMentionsBlock(
+  content: GeneratedNewsletterContent,
+  typo: ResolvedNewsletterTypography
+): string {
+  if (!shouldShowLegalMentions(content)) return "";
+  const text = formatNewsletterBodyHtml(content.legalMentions!);
+  return `<tr><td class="nl-legal-pad" style="padding:0 40px 28px 40px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #ebe8e3;">
+<tr><td style="padding:20px 0 0 0;">
+<div class="nl-rich-text nl-legal-text" style="margin:0;font-family:${typo.bodyFontFamily};font-size:11px;line-height:1.5;color:${MUTED_COLOR};">${text}</div>
 </td></tr>
 </table>
 </td></tr>`;
@@ -501,7 +572,7 @@ function buildCtaBlock(
 function buildConseillerBlock(
   content: GeneratedNewsletterContent,
   options: NewsletterHtmlOptions,
-  accent: string,
+  palette: NewsletterPalette,
   typo: ResolvedNewsletterTypography
 ): string {
   if (!shouldShowConseiller(content, options)) return "";
@@ -514,7 +585,7 @@ function buildConseillerBlock(
 
     phone ?
 
-      `<p style="margin:6px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;"><a class="nl-mailto-link" href="tel:${escapeHtml(phone.replace(/\s/g, ""))}" style="color:${accent};text-decoration:none;">${escapeHtml(phone)}</a></p>`
+      `<p style="margin:6px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;"><a class="nl-mailto-link" href="tel:${escapeHtml(phone.replace(/\s/g, ""))}" style="color:${palette.titleColor};text-decoration:none;">${escapeHtml(phone)}</a></p>`
 
     : "";
 
@@ -528,7 +599,7 @@ function buildConseillerBlock(
 
 <p style="margin:0 0 6px 0;font-family:${typo.titleFontFamily};font-size:10px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${MUTED_COLOR};">Votre conseiller</p>
 
-${name ? `<p style="margin:0;font-family:${typo.bodyFontFamily};font-size:18px;line-height:1.4;color:${BODY_COLOR};">${escapeHtml(name)}</p>` : ""}
+${name ? `<p style="margin:0;font-family:${typo.bodyFontFamily};font-size:18px;line-height:1.4;color:${palette.textColor};">${escapeHtml(name)}</p>` : ""}
 
 ${phoneLine}
 
@@ -544,13 +615,13 @@ ${phoneLine}
 
 function buildAgendaBlock(
   options: NewsletterHtmlOptions,
-  accent: string,
+  palette: NewsletterPalette,
   typo: ResolvedNewsletterTypography
 ): string {
   const agendaUrl = options.agendaUrl?.trim();
   if (!agendaUrl) return "";
 
-  const agendaBtn = buildCtaButtonAnchor("Prendre rendez-vous", agendaUrl, accent, typo);
+  const agendaBtn = buildCtaButtonAnchor("Prendre rendez-vous", agendaUrl, palette.buttonColor, typo);
 
   return `<tr><td class="nl-agenda-pad" style="padding:8px 40px 36px 40px;text-align:center;">
 ${agendaBtn}
@@ -637,6 +708,15 @@ export function buildNewsletterPlainBody(content: GeneratedNewsletterContent): s
   }
 
   return lines.join("\n").trim();
+}
+
+/** Texte brut export (envoi / copie) — inclut les mentions légales si activées. */
+export function buildNewsletterPlainBodyForExport(content: GeneratedNewsletterContent): string {
+  const lines = buildNewsletterPlainBody(content);
+  if (shouldShowLegalMentions(content)) {
+    return `${lines}\n\n${newsletterFieldToPlain(content.legalMentions!)}`.trim();
+  }
+  return lines;
 
 }
 
@@ -652,12 +732,12 @@ export function buildNewsletterHtml(
 
 ): string {
 
-  const branding = resolveNewsletterBranding({
+  const { layout } = resolveNewsletterBranding({
     accentColor: options.accentColor,
     secondaryColor: options.secondaryColor,
     layout: content.layout ?? options.layout,
   });
-  const { accentColor: accent, secondaryColor: secondary, layout } = branding;
+  const palette = resolveNewsletterColors(options);
   const typo = resolveNewsletterTypography({
     bodyFont: options.bodyFont,
     titleFont: options.titleFont,
@@ -676,24 +756,23 @@ export function buildNewsletterHtml(
 
   let sectionsHtml = "";
   for (let i = 0; i < content.sections.length; i++) {
-    sectionsHtml += blocksHtmlAt(blocks, { type: "before_section", index: i }, accent, secondary, typo);
+    sectionsHtml += blocksHtmlAt(blocks, { type: "before_section", index: i }, palette, typo);
     sectionsHtml += imagesHtmlAt(images, { type: "before_section", index: i });
     sectionsHtml += buildSectionRow(
       content.sections[i]!,
       i,
-      accent,
-      secondary,
+      palette,
       layout,
       typo
     );
     sectionsHtml += imagesHtmlAt(images, { type: "after_section", index: i });
-    sectionsHtml += blocksHtmlAt(blocks, { type: "after_section", index: i }, accent, secondary, typo);
+    sectionsHtml += blocksHtmlAt(blocks, { type: "after_section", index: i }, palette, typo);
   }
 
   const resolvedCta = resolveNewsletterCta(content, { agendaUrl: options.agendaUrl });
   let ctaHtml = "";
   if (resolvedCta.mode === "text" && resolvedCta.text) {
-    ctaHtml = buildCtaBlock(resolvedCta.text, accent, secondary, layout, typo);
+    ctaHtml = buildCtaBlock(resolvedCta.text, palette, layout, typo);
   } else if (
     resolvedCta.mode === "button" &&
     resolvedCta.buttonHref &&
@@ -702,7 +781,7 @@ export function buildNewsletterHtml(
     ctaHtml = buildCtaButtonBlock(
       resolvedCta.buttonLabel,
       resolvedCta.buttonHref,
-      accent,
+      palette,
       typo,
       resolvedCta.introAboveButton
     );
@@ -734,34 +813,36 @@ ${preheaderBlock}
 
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" class="nl-container" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #e5e2dd;border-radius:2px;overflow:hidden;box-shadow:0 4px 24px rgba(15,39,68,0.08);">
 
-${buildHeaderBlock(options, accent, secondary, cabinet, content.editionTitle, layout, typo)}
+${buildHeaderBlock(options, palette, cabinet, content.editionTitle, layout, typo)}
 
 ${imagesHtmlAt(images, { type: "header" }, true)}
-${blocksHtmlAt(blocks, { type: "header" }, accent, secondary, typo)}
+${blocksHtmlAt(blocks, { type: "header" }, palette, typo)}
 
-<tr><td class="nl-body-pad" style="padding:${introPad};font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};color:${BODY_COLOR};">
+<tr><td class="nl-body-pad" style="padding:${introPad};font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};color:${palette.textColor};">
 
-<div class="nl-rich-text" style="${newsletterBodyTextStyle(typo)}">${intro}</div>
+<div class="nl-rich-text" style="${newsletterBodyTextStyle(typo, palette.textColor)}">${intro}</div>
 
 </td></tr>
 
 ${imagesHtmlAt(images, { type: "after_intro" })}
-${blocksHtmlAt(blocks, { type: "after_intro" }, accent, secondary, typo)}
+${blocksHtmlAt(blocks, { type: "after_intro" }, palette, typo)}
 
 ${sectionsHtml}
 
 ${imagesHtmlAt(images, { type: "before_cta" })}
-${blocksHtmlAt(blocks, { type: "before_cta" }, accent, secondary, typo)}
+${blocksHtmlAt(blocks, { type: "before_cta" }, palette, typo)}
 
 ${ctaHtml}
 
-${showAgendaBlock ? buildAgendaBlock(options, accent, typo) : ""}
+${showAgendaBlock ? buildAgendaBlock(options, palette, typo) : ""}
 
-${buildConseillerBlock(content, options, accent, typo)}
+${buildLegalMentionsBlock(content, typo)}
+
+${buildConseillerBlock(content, options, palette, typo)}
 
 ${NEWSLETTER_SIGNATURE_MARKER}
 
-<tr><td class="nl-footer-pad" style="padding:24px 40px 28px 40px;font-size:11px;color:${MUTED_COLOR};font-family:Arial,Helvetica,sans-serif;line-height:1.6;background:#fafafa;border-top:1px solid #ebe8e3;">
+<tr><td class="nl-footer-pad" style="padding:14px 40px 16px 40px;font-size:11px;color:${MUTED_COLOR};font-family:Arial,Helvetica,sans-serif;line-height:1.35;background:#fafafa;border-top:1px solid #ebe8e3;">
 
 ${buildNewsletterFooterHtml(options, cabinet, content)}
 
@@ -848,6 +929,12 @@ export function buildNewsletterHtmlOptions(
   branding?: {
     accentColor?: string | null;
     secondaryColor?: string | null;
+    headerColor?: string | null;
+    headerTextColor?: string | null;
+    titleColor?: string | null;
+    separatorColor?: string | null;
+    textColor?: string | null;
+    buttonColor?: string | null;
     layout?: NewsletterLayout | null;
     typography?: NewsletterTypographySettings | null;
     agendaLinkId?: string | null;
@@ -860,10 +947,17 @@ export function buildNewsletterHtmlOptions(
     secondaryColor: branding?.secondaryColor,
     layout: branding?.layout,
   });
+  const colors = resolveNewsletterColors(branding);
   return {
     cabinetName: cgp?.cabinet?.trim() || undefined,
     accentColor: resolved.accentColor,
     secondaryColor: resolved.secondaryColor,
+    headerColor: colors.headerColor,
+    headerTextColor: colors.headerTextColor,
+    titleColor: colors.titleColor,
+    separatorColor: colors.separatorColor,
+    textColor: colors.textColor,
+    buttonColor: colors.buttonColor,
     layout: resolved.layout,
     bodyFont: branding?.typography?.bodyFont ?? undefined,
     titleFont: branding?.typography?.titleFont ?? undefined,
@@ -977,9 +1071,12 @@ export function mergeNewsletterDraftFromPlain(
     ...(previous?.conseillerPhone != null ? { conseillerPhone: previous.conseillerPhone } : {}),
     ...(previous?.ctaLabel?.trim() ? { ctaLabel: previous.ctaLabel.trim() } : {}),
     ...(previous?.ctaUrl?.trim() ? { ctaUrl: previous.ctaUrl.trim() } : {}),
-    ...(previous?.includeFooterPhone === true ? { includeFooterPhone: true } : {}),
-    ...(previous?.includeFooterSite === true ? { includeFooterSite: true } : {}),
-    ...(previous?.includeFooterAddress === true ? { includeFooterAddress: true } : {}),
+    ...(previous?.includeFooterPhone === false ? { includeFooterPhone: false } : {}),
+    ...(previous?.includeFooterSite === false ? { includeFooterSite: false } : {}),
+    ...(previous?.includeFooterAddress === false ? { includeFooterAddress: false } : {}),
+    ...(previous?.includeFooterConseiller === false ? { includeFooterConseiller: false } : {}),
+    ...(previous?.legalMentions != null ? { legalMentions: previous.legalMentions } : {}),
+    ...(previous?.includeLegalMentions === true ? { includeLegalMentions: true } : {}),
   };
 }
 

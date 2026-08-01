@@ -660,7 +660,7 @@ impl Database {
         let updated = self.conn.execute(
             "UPDATE newsletter_editions
              SET subject = ?1, plain_body = ?2, content_json = ?3
-             WHERE id = ?4 AND status IN ('prepared', 'sending', 'partial')",
+             WHERE id = ?4 AND status IN ('prepared', 'partial', 'sending')",
             params![subject, plain_body, content_json, edition_id],
         )?;
         if updated == 0 {
@@ -677,7 +677,7 @@ impl Database {
         template_id: i64,
         pushed_at: i64,
     ) -> Result<()> {
-        self.conn.execute(
+        let updated = self.conn.execute(
             "UPDATE newsletter_editions
              SET brevo_campaign_id = ?1,
                  brevo_list_id = ?2,
@@ -686,6 +686,9 @@ impl Database {
              WHERE id = ?5",
             params![campaign_id, list_id, template_id, pushed_at, edition_id],
         )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
         Ok(())
     }
 

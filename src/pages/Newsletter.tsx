@@ -66,7 +66,7 @@ import {
   buildNewsletterHtml,
   buildNewsletterHtmlOptions,
   buildNewsletterPlainBody,
-  defaultConseillerFields,
+  buildNewsletterPlainBodyForExport,
   draftFromStructuredContent,
   mergeNewsletterDraftFromPlain,
   formatNewsletterEditionLabel,
@@ -121,6 +121,12 @@ function buildHtmlOptions(
     ...buildNewsletterHtmlOptions(cgp, {
       accentColor: settings?.accentColor,
       secondaryColor: settings?.secondaryColor,
+      headerColor: settings?.headerColor,
+      headerTextColor: settings?.headerTextColor,
+      titleColor: settings?.titleColor,
+      separatorColor: settings?.separatorColor,
+      textColor: settings?.textColor,
+      buttonColor: settings?.buttonColor,
       layout: content?.layout ?? settings?.defaultLayout ?? undefined,
       agendaLinkId: settings?.agendaLinkId,
       typography: {
@@ -520,11 +526,6 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     [cgp]
   );
 
-  const conseillerDefaults = useMemo(() => {
-    const fields = defaultConseillerFields(cgp);
-    return { name: fields.conseillerName, phone: fields.conseillerPhone };
-  }, [cgp]);
-
   const footerProfile = useMemo(() => footerProfileFromCgp(cgp), [cgp]);
 
   const htmlOptions = useMemo(
@@ -577,9 +578,12 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
   ]);
 
   useEffect(() => {
-    if (!plainBody.trim()) return;
+    const hasPreviewContent =
+      Boolean(subject.trim()) &&
+      (Boolean(plainBody.trim()) || (editMode === "sections" && content != null));
+    if (!hasPreviewContent) return;
     setPreviewHtml(buildNewsletterHtml(currentDraft, htmlOptions));
-  }, [currentDraft, htmlOptions, plainBody]);
+  }, [currentDraft, htmlOptions, plainBody, subject, editMode, content]);
 
   const applyDraft = useCallback(
     (c: GeneratedNewsletterContent) => {
@@ -619,14 +623,11 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         theme: theme.trim(),
         editionInstructions: mergedInstructions || null,
       });
-      const conseiller = defaultConseillerFields(cgp);
       const withDefaults = {
         ...generated,
         includeCta: generated.includeCta ?? Boolean(generated.cta?.trim()),
         layout: generated.layout ?? settings?.defaultLayout ?? "magazine",
-        includeConseiller: generated.includeConseiller ?? conseiller.includeConseiller,
-        conseillerName: generated.conseillerName ?? conseiller.conseillerName,
-        conseillerPhone: generated.conseillerPhone ?? conseiller.conseillerPhone,
+        includeConseiller: false,
       };
       setContent(withDefaults);
       setSubject(withDefaults.subject);
@@ -698,7 +699,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       });
       const subj = replaceTemplateVariables(subject.trim(), vars);
       const bodyPlain = appendEmailSignature(
-        replaceTemplateVariables(plainBody.trim(), vars),
+        replaceTemplateVariables(buildNewsletterPlainBodyForExport(currentDraft).trim(), vars),
         cgp?.email_signature
       );
       const htmlBuilt = buildNewsletterHtml(currentDraft, htmlOptions);
@@ -1234,7 +1235,6 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                       <NewsletterSectionEditor
                         draft={currentDraft}
                         onChange={handleSectionDraftChange}
-                        conseillerDefaults={conseillerDefaults}
                         footerProfile={footerProfile}
                       />
                     </TabsContent>

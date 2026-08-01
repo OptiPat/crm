@@ -10,8 +10,6 @@ if ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
     $enc = [System.Text.Encoding]::Unicode
 } elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFE -and $bytes[1] -eq 0xFF) {
     $enc = [System.Text.Encoding]::BigEndianUnicode
-} elseif ($bytes.Length -ge 2 -and $bytes[1] -eq 0x00) {
-    $enc = [System.Text.Encoding]::Unicode
 } else {
     $enc = [System.Text.Encoding]::UTF8
 }

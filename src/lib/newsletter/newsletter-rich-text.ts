@@ -125,8 +125,11 @@ export function formatNewsletterSectionTitleHtml(raw: string): string {
   return escapeHtml(trimmed);
 }
 
-export function newsletterBodyTextStyle(typo: ResolvedNewsletterTypography): string {
-  return `margin:0;font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};color:${BODY_COLOR};`;
+export function newsletterBodyTextStyle(
+  typo: ResolvedNewsletterTypography,
+  textColor: string = BODY_COLOR
+): string {
+  return `margin:0;font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};color:${textColor};`;
 }
 
 export const NEWSLETTER_RICH_TEXT_CSS = `

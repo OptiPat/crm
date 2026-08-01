@@ -18,7 +18,7 @@ describe("newsletter-typography", () => {
     });
     expect(typo.bodyFontFamily).toContain("Arial");
     expect(typo.bodyFontSize).toBe("15px");
-    expect(typo.mobileBodyFontSize).toBe("16px");
+    expect(typo.mobileBodyFontSize).toBe("15px");
     expect(typo.lineHeight).toBe("1.6");
     expect(typo.sectionPad).toContain("16px");
   });

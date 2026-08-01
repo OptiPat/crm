@@ -12,13 +12,16 @@ export function formatCgpPostalAddress(cgp: CgpConfig | null | undefined): strin
 }
 
 export interface NewsletterFooterProfile {
+  conseillerName?: string;
   phone?: string;
   siteWeb?: string;
   postalAddress?: string;
 }
 
 export function footerProfileFromCgp(cgp: CgpConfig | null | undefined): NewsletterFooterProfile {
+  const conseillerName = [cgp?.prenom?.trim(), cgp?.nom?.trim()].filter(Boolean).join(" ");
   return {
+    conseillerName: conseillerName || undefined,
     phone: cgp?.telephone?.trim() || undefined,
     siteWeb: cgp?.site_web?.trim() || undefined,
     postalAddress: formatCgpPostalAddress(cgp),
@@ -26,26 +29,49 @@ export function footerProfileFromCgp(cgp: CgpConfig | null | undefined): Newslet
 }
 
 export function footerProfileHasOptions(profile: NewsletterFooterProfile): boolean {
-  return Boolean(profile.phone || profile.siteWeb || profile.postalAddress);
+  return Boolean(
+    profile.conseillerName || profile.phone || profile.siteWeb || profile.postalAddress
+  );
+}
+
+/** Libellé court du site pour le pied de page (domaine sans www). */
+export function formatFooterSiteLabel(siteWeb: string): string {
+  const trimmed = siteWeb.trim();
+  try {
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    return new URL(withProto).hostname.replace(/^www\./i, "");
+  } catch {
+    return trimmed
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .replace(/\/.*$/, "");
+  }
+}
+
+export function shouldShowFooterConseiller(
+  content: GeneratedNewsletterContent,
+  conseillerName?: string | null
+): boolean {
+  return content.includeFooterConseiller !== false && Boolean(conseillerName?.trim());
 }
 
 export function shouldShowFooterPhone(
   content: GeneratedNewsletterContent,
   phone?: string | null
 ): boolean {
-  return content.includeFooterPhone === true && Boolean(phone?.trim());
+  return content.includeFooterPhone !== false && Boolean(phone?.trim());
 }
 
 export function shouldShowFooterSite(
   content: GeneratedNewsletterContent,
   siteWeb?: string | null
 ): boolean {
-  return content.includeFooterSite === true && Boolean(siteWeb?.trim());
+  return content.includeFooterSite !== false && Boolean(siteWeb?.trim());
 }
 
 export function shouldShowFooterAddress(
   content: GeneratedNewsletterContent,
   postalAddress?: string | null
 ): boolean {
-  return content.includeFooterAddress === true && Boolean(postalAddress?.trim());
+  return content.includeFooterAddress !== false && Boolean(postalAddress?.trim());
 }

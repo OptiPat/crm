@@ -30,8 +30,11 @@ import {
   type NewsletterLlmProvider,
 } from "@/lib/newsletter/llm-providers";
 import {
+  DEFAULT_NEWSLETTER_HEADER_TEXT,
   DEFAULT_NEWSLETTER_SECONDARY,
+  DEFAULT_NEWSLETTER_TEXT,
   NEWSLETTER_LAYOUT_OPTIONS,
+  resolveNewsletterColors,
 } from "@/lib/newsletter/newsletter-branding";
 import type {
   NewsletterBodyFont,
@@ -49,6 +52,44 @@ import {
   NEWSLETTER_TITLE_FONT_OPTIONS,
 } from "@/lib/newsletter/newsletter-typography";
 import { toast } from "sonner";
+
+function NewsletterColorField({
+  id,
+  label,
+  hint,
+  value,
+  onChange,
+  placeholder,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      <div className="flex gap-2 items-center">
+        <Input
+          id={id}
+          type="color"
+          className="w-14 h-10 p-1 cursor-pointer"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="font-mono text-sm max-w-[8rem]"
+        />
+      </div>
+    </div>
+  );
+}
 
 export function ParametresNewsletterSection({
   onSettingsSync,
@@ -79,8 +120,12 @@ export function ParametresNewsletterSection({
   const [model, setModel] = useState(llmProviderMeta.defaultModel);
   const [etiquetteNom, setEtiquetteNom] = useState("Newsletter");
   const [sendDelayMs, setSendDelayMs] = useState(3000);
-  const [accentColor, setAccentColor] = useState("#0f2744");
-  const [secondaryColor, setSecondaryColor] = useState(DEFAULT_NEWSLETTER_SECONDARY);
+  const [headerColor, setHeaderColor] = useState("#0f2744");
+  const [headerTextColor, setHeaderTextColor] = useState(DEFAULT_NEWSLETTER_HEADER_TEXT);
+  const [titleColor, setTitleColor] = useState("#0f2744");
+  const [separatorColor, setSeparatorColor] = useState(DEFAULT_NEWSLETTER_SECONDARY);
+  const [textColor, setTextColor] = useState(DEFAULT_NEWSLETTER_TEXT);
+  const [buttonColor, setButtonColor] = useState("#0f2744");
   const [defaultLayout, setDefaultLayout] = useState<NewsletterLayout>("magazine");
   const [bodyFont, setBodyFont] = useState<NewsletterBodyFont>("classic");
   const [titleFont, setTitleFont] = useState<NewsletterTitleFont>("classic");
@@ -135,8 +180,22 @@ export function ParametresNewsletterSection({
       setModel(s.model);
       setEtiquetteNom(s.etiquetteNom);
       setSendDelayMs(s.sendDelayMs);
-      setAccentColor(s.accentColor?.trim() || "#0f2744");
-      setSecondaryColor(s.secondaryColor?.trim() || DEFAULT_NEWSLETTER_SECONDARY);
+      const colors = resolveNewsletterColors({
+        accentColor: s.accentColor,
+        secondaryColor: s.secondaryColor,
+        headerColor: s.headerColor,
+        headerTextColor: s.headerTextColor,
+        titleColor: s.titleColor,
+        separatorColor: s.separatorColor,
+        textColor: s.textColor,
+        buttonColor: s.buttonColor,
+      });
+      setHeaderColor(colors.headerColor);
+      setHeaderTextColor(colors.headerTextColor);
+      setTitleColor(colors.titleColor);
+      setSeparatorColor(colors.separatorColor);
+      setTextColor(colors.textColor);
+      setButtonColor(colors.buttonColor);
       setDefaultLayout(s.defaultLayout ?? "magazine");
       setBodyFont(s.bodyFont ?? "classic");
       setTitleFont(s.titleFont ?? "classic");
@@ -169,9 +228,21 @@ export function ParametresNewsletterSection({
     void load();
   }, [load]);
 
-  const handleSave = async () => {
-    if (!settings?.apiKeyConfigured && !apiKeyInput.trim()) {
+  const handleSave = async (options?: { requireLlmApiKey?: boolean }) => {
+    const requireLlmApiKey = options?.requireLlmApiKey ?? false;
+    const savedLlmProvider = settings
+      ? (newsletterLlmProviderOption(settings.llmProvider).id as NewsletterLlmProvider)
+      : null;
+    const providerChanged =
+      savedLlmProvider != null && llmProvider !== savedLlmProvider;
+    if (requireLlmApiKey && !settings?.apiKeyConfigured && !apiKeyInput.trim()) {
       toast.error(`Saisissez votre clé API ${llmProviderMeta.label} avant d'enregistrer`);
+      return;
+    }
+    if (providerChanged && !apiKeyInput.trim()) {
+      toast.error(
+        `Vous avez sélectionné ${llmProviderMeta.label} : saisissez la clé API correspondante avant d'enregistrer.`
+      );
       return;
     }
     setSaving(true);
@@ -182,8 +253,14 @@ export function ParametresNewsletterSection({
         model,
         etiquetteNom,
         sendDelayMs,
-        accentColor,
-        secondaryColor,
+        accentColor: buttonColor,
+        secondaryColor: separatorColor,
+        headerColor,
+        headerTextColor,
+        titleColor,
+        separatorColor,
+        textColor,
+        buttonColor,
         defaultLayout,
         bodyFont,
         titleFont,
@@ -362,7 +439,7 @@ export function ParametresNewsletterSection({
               Suggestion : <code className="text-[11px]">{llmProviderMeta.defaultModel}</code>
             </p>
           </div>
-          <Button type="button" disabled={saving} onClick={() => void handleSave()}>
+          <Button type="button" disabled={saving} onClick={() => void handleSave({ requireLlmApiKey: true })}>
             {saving ?
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -604,41 +681,55 @@ export function ParametresNewsletterSection({
             normale ou grande, un interlignage aéré, et vérifiez l'aperçu mobile dans le
             composer.
           </p>
-          <div className="space-y-2">
-            <Label htmlFor="param-nl-accent">Couleur d'accent (en-tête, titres)</Label>
-            <div className="flex gap-2 items-center">
-              <Input
-                id="param-nl-accent"
-                type="color"
-                className="w-14 h-10 p-1 cursor-pointer"
-                value={accentColor}
-                onChange={(e) => setAccentColor(e.target.value)}
-              />
-              <Input
-                value={accentColor}
-                onChange={(e) => setAccentColor(e.target.value)}
-                placeholder="#0f2744"
-                className="font-mono text-sm max-w-[8rem]"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="param-nl-secondary">Couleur secondaire (traits, numéros, CTA)</Label>
-            <div className="flex gap-2 items-center">
-              <Input
-                id="param-nl-secondary"
-                type="color"
-                className="w-14 h-10 p-1 cursor-pointer"
-                value={secondaryColor}
-                onChange={(e) => setSecondaryColor(e.target.value)}
-              />
-              <Input
-                value={secondaryColor}
-                onChange={(e) => setSecondaryColor(e.target.value)}
-                placeholder={DEFAULT_NEWSLETTER_SECONDARY}
-                className="font-mono text-sm max-w-[8rem]"
-              />
-            </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <NewsletterColorField
+              id="param-nl-header-color"
+              label="Couleur en-tête"
+              hint="Fond du bandeau (logo et textes d'en-tête)."
+              value={headerColor}
+              onChange={setHeaderColor}
+              placeholder="#0f2744"
+            />
+            <NewsletterColorField
+              id="param-nl-header-text-color"
+              label="Couleur texte en-tête"
+              hint="« Lettre patrimoniale », mois (ex. août 2026), nom du cabinet."
+              value={headerTextColor}
+              onChange={setHeaderTextColor}
+              placeholder={DEFAULT_NEWSLETTER_HEADER_TEXT}
+            />
+            <NewsletterColorField
+              id="param-nl-title-color"
+              label="Couleur titres"
+              hint="Titres de section et libellés mis en avant."
+              value={titleColor}
+              onChange={setTitleColor}
+              placeholder="#0f2744"
+            />
+            <NewsletterColorField
+              id="param-nl-separator-color"
+              label="Couleur séparateur"
+              hint="Trait sous l'en-tête, numéros de section, filets."
+              value={separatorColor}
+              onChange={setSeparatorColor}
+              placeholder={DEFAULT_NEWSLETTER_SECONDARY}
+            />
+            <NewsletterColorField
+              id="param-nl-text-color"
+              label="Couleur du texte"
+              hint="Intro, corps des sections et encarts."
+              value={textColor}
+              onChange={setTextColor}
+              placeholder={DEFAULT_NEWSLETTER_TEXT}
+            />
+            <NewsletterColorField
+              id="param-nl-button-color"
+              label="Couleur bouton"
+              hint="Boutons d'action (RDV, CTA cliquable)."
+              value={buttonColor}
+              onChange={setButtonColor}
+              placeholder="#0f2744"
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="param-nl-default-layout">Mise en page par défaut</Label>
@@ -735,7 +826,7 @@ export function ParametresNewsletterSection({
               </select>
             </div>
           </div>
-          <Button type="button" disabled={saving} onClick={() => void handleSave()}>
+          <Button type="button" disabled={saving} onClick={() => void handleSave({ requireLlmApiKey: false })}>
             {saving ?
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

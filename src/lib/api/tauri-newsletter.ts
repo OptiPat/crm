@@ -179,6 +179,12 @@ export interface NewsletterSettings {
   sendDelayMs: number;
   accentColor?: string | null;
   secondaryColor?: string | null;
+  headerColor?: string | null;
+  headerTextColor?: string | null;
+  titleColor?: string | null;
+  separatorColor?: string | null;
+  textColor?: string | null;
+  buttonColor?: string | null;
   defaultLayout?: NewsletterLayout | null;
   bodyFont?: NewsletterBodyFont | null;
   titleFont?: NewsletterTitleFont | null;
@@ -203,6 +209,12 @@ export interface NewsletterSettingsInput {
   sendDelayMs?: number | null;
   accentColor?: string | null;
   secondaryColor?: string | null;
+  headerColor?: string | null;
+  headerTextColor?: string | null;
+  titleColor?: string | null;
+  separatorColor?: string | null;
+  textColor?: string | null;
+  buttonColor?: string | null;
   defaultLayout?: NewsletterLayout | null;
   bodyFont?: NewsletterBodyFont | null;
   titleFont?: NewsletterTitleFont | null;
@@ -263,6 +275,10 @@ export interface GeneratedNewsletterContent {
   ctaUrl?: string;
   /** false = pas de bloc CTA dans le mail */
   includeCta?: boolean;
+  /** Texte des mentions légales (risques, réglementation, etc.) */
+  legalMentions?: string;
+  /** true = afficher le bloc mentions légales sous le CTA */
+  includeLegalMentions?: boolean;
   /** false = pas de bloc « Votre conseiller » */
   includeConseiller?: boolean;
   /** true = téléphone profil CGP dans le pied de page */
@@ -271,6 +287,8 @@ export interface GeneratedNewsletterContent {
   includeFooterSite?: boolean;
   /** true = adresse postale profil CGP dans le pied de page */
   includeFooterAddress?: boolean;
+  /** true = nom du conseiller dans le pied de page */
+  includeFooterConseiller?: boolean;
   conseillerName?: string;
   conseillerPhone?: string;
 }

@@ -35,9 +35,9 @@ const TITLE_FONTS: Record<NewsletterTitleFont, string> = {
 };
 
 const FONT_SIZES: Record<NewsletterBodyFontSize, { body: string; mobile: string }> = {
-  sm: { body: "15px", mobile: "16px" },
-  md: { body: "17px", mobile: "16px" },
-  lg: { body: "19px", mobile: "18px" },
+  sm: { body: "15px", mobile: "15px" },
+  md: { body: "17px", mobile: "17px" },
+  lg: { body: "19px", mobile: "19px" },
 };
 
 const LINE_HEIGHTS: Record<NewsletterLineHeight, string> = {
@@ -119,6 +119,6 @@ export function resolveNewsletterTypography(
     mobileBodyFontSize: sizes.mobile,
     lineHeight: LINE_HEIGHTS[lineHeight],
     sectionPad: SECTION_PAD[sectionSpacing],
-    introPad: sectionSpacing === "compact" ? "28px 40px 8px 40px" : "36px 40px 12px 40px",
+    introPad: sectionSpacing === "compact" ? "28px 40px 20px 40px" : "36px 40px 28px 40px",
   };
 }

@@ -16,10 +16,13 @@ import { NewsletterRichTextField } from "@/components/newsletter/NewsletterRichT
 type NewsletterSectionEditorProps = {
   draft: GeneratedNewsletterContent;
   onChange: (next: GeneratedNewsletterContent) => void;
-  /** Valeurs profil CGP si le brouillon n'a pas encore de surcharge */
-  conseillerDefaults?: { name: string; phone: string };
   /** Coordonnées profil disponibles pour le pied de page */
-  footerProfile?: { phone?: string; siteWeb?: string; postalAddress?: string };
+  footerProfile?: {
+    conseillerName?: string;
+    phone?: string;
+    siteWeb?: string;
+    postalAddress?: string;
+  };
 };
 
 function emptySection(index: number) {
@@ -29,7 +32,6 @@ function emptySection(index: number) {
 export function NewsletterSectionEditor({
   draft,
   onChange,
-  conseillerDefaults,
   footerProfile,
 }: NewsletterSectionEditorProps) {
   const update = (patch: Partial<GeneratedNewsletterContent>) => {
@@ -45,9 +47,7 @@ export function NewsletterSectionEditor({
   };
 
   const includeCta = draft.includeCta !== false;
-  const includeConseiller = draft.includeConseiller !== false;
-  const conseillerName = draft.conseillerName ?? conseillerDefaults?.name ?? "";
-  const conseillerPhone = draft.conseillerPhone ?? conseillerDefaults?.phone ?? "";
+  const includeLegalMentions = draft.includeLegalMentions === true;
   const [editorMode, setEditorMode] = useState<"simple" | "advanced">("simple");
   const hasImages = (draft.images?.length ?? 0) > 0;
   const hasBlocks = (draft.blocks?.length ?? 0) > 0;
@@ -262,19 +262,56 @@ export function NewsletterSectionEditor({
             </p>
           </>
         )}
+        <div className="flex items-center gap-2 border-t pt-3">
+          <Checkbox
+            id="nl-include-legal"
+            checked={includeLegalMentions}
+            onCheckedChange={(v) =>
+              update({
+                includeLegalMentions: v === true,
+                legalMentions: draft.legalMentions ?? "",
+              })
+            }
+          />
+          <Label htmlFor="nl-include-legal" className="text-sm font-normal">
+            Inclure des mentions légales
+          </Label>
+        </div>
+        {includeLegalMentions && (
+          <NewsletterRichTextField
+            id="nl-legal-mentions"
+            label="Mentions légales"
+            value={draft.legalMentions ?? ""}
+            onChange={(legalMentions) => update({ legalMentions, includeLegalMentions: true })}
+            minHeight="100px"
+            placeholder="Ex. Les performances passées ne préjugent pas des performances futures…"
+          />
+        )}
       </div>
 
       {footerProfile && footerProfileHasOptions(footerProfile) && (
         <NewsletterCollapsibleSection
           title="Pied de page — cette édition"
-          description="Téléphone, site, adresse (profil CGP)"
+          description="Identité conseiller, téléphone, site, adresse (profil CGP)"
           defaultOpen={false}
         >
+          {footerProfile.conseillerName && (
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="nl-footer-conseiller"
+                checked={draft.includeFooterConseiller !== false}
+                onCheckedChange={(v) => update({ includeFooterConseiller: v === true })}
+              />
+              <Label htmlFor="nl-footer-conseiller" className="text-sm font-normal">
+                Identité conseiller ({footerProfile.conseillerName})
+              </Label>
+            </div>
+          )}
           {footerProfile.phone && (
             <div className="flex items-center gap-2">
               <Checkbox
                 id="nl-footer-phone"
-                checked={draft.includeFooterPhone === true}
+                checked={draft.includeFooterPhone !== false}
                 onCheckedChange={(v) => update({ includeFooterPhone: v === true })}
               />
               <Label htmlFor="nl-footer-phone" className="text-sm font-normal">
@@ -286,7 +323,7 @@ export function NewsletterSectionEditor({
             <div className="flex items-center gap-2">
               <Checkbox
                 id="nl-footer-site"
-                checked={draft.includeFooterSite === true}
+                checked={draft.includeFooterSite !== false}
                 onCheckedChange={(v) => update({ includeFooterSite: v === true })}
               />
               <Label htmlFor="nl-footer-site" className="text-sm font-normal">
@@ -298,7 +335,7 @@ export function NewsletterSectionEditor({
             <div className="flex items-center gap-2">
               <Checkbox
                 id="nl-footer-address"
-                checked={draft.includeFooterAddress === true}
+                checked={draft.includeFooterAddress !== false}
                 onCheckedChange={(v) => update({ includeFooterAddress: v === true })}
               />
               <Label htmlFor="nl-footer-address" className="text-sm font-normal">
@@ -308,51 +345,6 @@ export function NewsletterSectionEditor({
           )}
         </NewsletterCollapsibleSection>
       )}
-
-      <NewsletterCollapsibleSection
-        title="Bloc « Votre conseiller »"
-        defaultOpen={includeConseiller && editorMode === "advanced"}
-      >
-        {includeConseiller && (
-          <div className="space-y-2">
-            <div className="space-y-1">
-              <Label htmlFor="nl-conseiller-name" className="text-xs text-muted-foreground">
-                Nom affiché
-              </Label>
-              <Input
-                id="nl-conseiller-name"
-                value={conseillerName}
-                onChange={(e) => update({ conseillerName: e.target.value })}
-                placeholder="Ex. Jean DUPONT"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="nl-conseiller-phone" className="text-xs text-muted-foreground">
-                Téléphone (optionnel)
-              </Label>
-              <Input
-                id="nl-conseiller-phone"
-                value={conseillerPhone}
-                onChange={(e) => update({ conseillerPhone: e.target.value })}
-                placeholder="Ex. 06 12 34 56 78"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Par défaut : profil CGP (Paramètres → Profil). Décochez pour masquer ce bloc.
-            </p>
-          </div>
-        )}
-        <div className="flex items-center gap-2 pt-1">
-          <Checkbox
-            id="nl-include-conseiller"
-            checked={includeConseiller}
-            onCheckedChange={(v) => update({ includeConseiller: v === true })}
-          />
-          <Label htmlFor="nl-include-conseiller" className="text-sm font-normal">
-            Inclure le bloc « Votre conseiller »
-          </Label>
-        </div>
-      </NewsletterCollapsibleSection>
     </div>
   );
 }

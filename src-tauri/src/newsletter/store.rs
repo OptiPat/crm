@@ -63,6 +63,18 @@ pub struct NewsletterSettingsPublic {
     #[serde(default)]
     pub secondary_color: Option<String>,
     #[serde(default)]
+    pub header_color: Option<String>,
+    #[serde(default)]
+    pub header_text_color: Option<String>,
+    #[serde(default)]
+    pub title_color: Option<String>,
+    #[serde(default)]
+    pub separator_color: Option<String>,
+    #[serde(default)]
+    pub text_color: Option<String>,
+    #[serde(default)]
+    pub button_color: Option<String>,
+    #[serde(default)]
     pub default_layout: Option<String>,
     #[serde(default)]
     pub body_font: Option<String>,
@@ -95,6 +107,12 @@ pub struct NewsletterSettingsInput {
     pub send_delay_ms: Option<u64>,
     pub accent_color: Option<String>,
     pub secondary_color: Option<String>,
+    pub header_color: Option<String>,
+    pub header_text_color: Option<String>,
+    pub title_color: Option<String>,
+    pub separator_color: Option<String>,
+    pub text_color: Option<String>,
+    pub button_color: Option<String>,
     pub default_layout: Option<String>,
     pub body_font: Option<String>,
     pub title_font: Option<String>,
@@ -130,6 +148,18 @@ struct PersistedNewsletterStore {
     accent_color: Option<String>,
     #[serde(default)]
     secondary_color: Option<String>,
+    #[serde(default)]
+    header_color: Option<String>,
+    #[serde(default)]
+    header_text_color: Option<String>,
+    #[serde(default)]
+    title_color: Option<String>,
+    #[serde(default)]
+    separator_color: Option<String>,
+    #[serde(default)]
+    text_color: Option<String>,
+    #[serde(default)]
+    button_color: Option<String>,
     #[serde(default)]
     default_layout: Option<String>,
     #[serde(default)]
@@ -170,6 +200,12 @@ pub struct NewsletterStore {
     pub send_delay_ms: u64,
     pub accent_color: Option<String>,
     pub secondary_color: Option<String>,
+    pub header_color: Option<String>,
+    pub header_text_color: Option<String>,
+    pub title_color: Option<String>,
+    pub separator_color: Option<String>,
+    pub text_color: Option<String>,
+    pub button_color: Option<String>,
     pub default_layout: Option<String>,
     pub body_font: Option<String>,
     pub title_font: Option<String>,
@@ -265,6 +301,12 @@ impl NewsletterStore {
             send_delay_ms: self.send_delay_ms,
             accent_color: self.accent_color.clone(),
             secondary_color: self.secondary_color.clone(),
+            header_color: self.header_color.clone(),
+            header_text_color: self.header_text_color.clone(),
+            title_color: self.title_color.clone(),
+            separator_color: self.separator_color.clone(),
+            text_color: self.text_color.clone(),
+            button_color: self.button_color.clone(),
             default_layout: self.default_layout.clone(),
             body_font: self.body_font.clone(),
             title_font: self.title_font.clone(),
@@ -345,6 +387,30 @@ impl NewsletterStore {
                 .map(|s| s.trim().to_string()),
             secondary_color: persisted
                 .secondary_color
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            header_color: persisted
+                .header_color
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            header_text_color: persisted
+                .header_text_color
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            title_color: persisted
+                .title_color
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            separator_color: persisted
+                .separator_color
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            text_color: persisted
+                .text_color
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            button_color: persisted
+                .button_color
                 .filter(|s| !s.trim().is_empty())
                 .map(|s| s.trim().to_string()),
             default_layout: persisted
@@ -429,6 +495,12 @@ impl NewsletterStore {
             send_delay_ms: Some(self.send_delay_ms),
             accent_color: self.accent_color.clone(),
             secondary_color: self.secondary_color.clone(),
+            header_color: self.header_color.clone(),
+            header_text_color: self.header_text_color.clone(),
+            title_color: self.title_color.clone(),
+            separator_color: self.separator_color.clone(),
+            text_color: self.text_color.clone(),
+            button_color: self.button_color.clone(),
             default_layout: self.default_layout.clone(),
             body_font: self.body_font.clone(),
             title_font: self.title_font.clone(),
@@ -458,6 +530,12 @@ impl Default for NewsletterStore {
             send_delay_ms: 3000,
             accent_color: None,
             secondary_color: None,
+            header_color: None,
+            header_text_color: None,
+            title_color: None,
+            separator_color: None,
+            text_color: None,
+            button_color: None,
             default_layout: None,
             body_font: None,
             title_font: None,

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import {
   applyRichEditorFontSize,
+  clearRichEditorFontSize,
   execRichEditorCommand,
   exitRichEditorList,
   finalizeEditorHtmlForStorage,
@@ -36,10 +37,12 @@ import {
 import { toast } from "sonner";
 
 const FONT_SIZE_OPTIONS = [
-  { value: 18, label: "18" },
-  { value: 22, label: "22" },
-  { value: 26, label: "26" },
-  { value: 32, label: "32" },
+  { value: 13, label: "13" },
+  { value: 15, label: "15" },
+  { value: 17, label: "17" },
+  { value: 20, label: "20" },
+  { value: 24, label: "24" },
+  { value: 28, label: "28" },
 ] as const;
 
 export type RichTextEmailEditorVariant = "default" | "sectionTitle" | "note";
@@ -212,6 +215,20 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
     });
   };
 
+  const resetFontSize = () => {
+    const el = editorRef.current;
+    if (!el) return;
+    runWithSavedSelection(() => {
+      const applied = clearRichEditorFontSize(el, savedSelectionRef.current);
+      if (applied) {
+        captureSelection();
+        emitChange(false, true);
+      } else {
+        window.alert("Sélectionnez du texte avec une taille personnalisée.");
+      }
+    });
+  };
+
   const applyColor = (command: "foreColor" | "hiliteColor", color: string) => {
     if (!color) return;
     exec(command, color);
@@ -291,6 +308,16 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
             {opt.label}
           </Button>
         ))}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 px-2 text-xs font-normal"
+          title="Réinitialiser la taille (taille du corps)"
+          onClick={resetFontSize}
+        >
+          Auto
+        </Button>
         <Button
           type="button"
           variant="ghost"

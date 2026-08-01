@@ -389,17 +389,29 @@ fn http_client() -> Result<Client, String> {
         .map_err(|e| format!("Client HTTP : {e}"))
 }
 
-fn truncate_for_user(text: &str, max: usize) -> String {
+fn truncate_for_user(text: &str, max_bytes: usize) -> String {
     let t = text.trim();
-    if t.len() <= max {
+    if t.len() <= max_bytes {
         return t.to_string();
     }
-    format!("{}…", &t[..max])
+    let mut end = max_bytes;
+    while end > 0 && !t.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &t[..end])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn truncate_for_user_respects_utf8_char_boundaries() {
+        let s = "é".repeat(120);
+        let out = truncate_for_user(&s, 100);
+        assert!(out.ends_with('…'));
+        assert!(std::str::from_utf8(out.as_bytes()).is_ok());
+    }
 
     #[test]
     fn parse_provider_aliases() {
