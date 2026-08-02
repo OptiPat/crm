@@ -1,5 +1,7 @@
 /** Valeurs de la liste déroulante `choixcontrat` du modèle PDF arbitrage AV. */
 
+import { resolveStelliumAvProductLabelFromCrm } from "@/lib/pdf/arbitrage-fiche-conseil/av-stellium-product-map";
+
 export const ARBITRAGE_AV_CHOIX_CONTRAT_OPTIONS = [
   "Cristalliance Avenir",
   "Cristalliance Evoluvie",
@@ -19,20 +21,18 @@ export const ARBITRAGE_AV_CHOIX_CONTRAT_OPTIONS = [
 
 export type ArbitrageAvChoixContrat = (typeof ARBITRAGE_AV_CHOIX_CONTRAT_OPTIONS)[number];
 
-function normalizeHaystack(...parts: Array<string | null | undefined>): string {
-  return parts
-    .filter(Boolean)
-    .join(" ")
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9+]+/g, " ")
-    .trim();
-}
-
-function includesToken(haystack: string, token: string): boolean {
-  return haystack.includes(token);
-}
+const STELLIUM_AV_TO_PDF_CHOIX: Partial<
+  Record<
+    ReturnType<typeof resolveStelliumAvProductLabelFromCrm> & string,
+    ArbitrageAvChoixContrat
+  >
+> = {
+  "Cristalliance Avenir": "Cristalliance Avenir",
+  "Cristalliance Evoluvie": "Cristalliance Evoluvie",
+  "Cristalliance Opportunites": "Cristalliance Opportunités",
+  "Cristalliance Vie First": "Cristalliance Vie First",
+  "Fipavie Ingénierie": "Fipavie Ingenierie",
+};
 
 /** Résout le contrat PDF à partir du produit / partenaire CRM. */
 export function resolveArbitrageAvChoixContrat(input: {
@@ -40,36 +40,14 @@ export function resolveArbitrageAvChoixContrat(input: {
   partenaireNom?: string | null;
   numeroContrat?: string | null;
 }): { value: ArbitrageAvChoixContrat | null; candidates: ArbitrageAvChoixContrat[] } {
-  const haystack = normalizeHaystack(
-    input.nomProduit,
-    input.partenaireNom,
-    input.numeroContrat
-  );
-  const matches = new Set<ArbitrageAvChoixContrat>();
-
-  if (
-    includesToken(haystack, "vie first") ||
-    (includesToken(haystack, "apicil") && includesToken(haystack, "vie first"))
-  ) {
-    matches.add("Cristalliance Vie First");
+  void input.numeroContrat;
+  const stellium = resolveStelliumAvProductLabelFromCrm(input);
+  if (!stellium) {
+    return { value: null, candidates: [] };
   }
-  if (
-    includesToken(haystack, "cristalliance evoluvie") ||
-    (includesToken(haystack, "apicil") && !includesToken(haystack, "vie first"))
-  ) {
-    matches.add("Cristalliance Evoluvie");
+  const pdfValue = STELLIUM_AV_TO_PDF_CHOIX[stellium] ?? null;
+  if (!pdfValue) {
+    return { value: null, candidates: [] };
   }
-  if (
-    includesToken(haystack, "vie plus") ||
-    includesToken(haystack, "suravenir") ||
-    includesToken(haystack, "cristalliance avenir")
-  ) {
-    matches.add("Cristalliance Avenir");
-  }
-
-  const candidates = ARBITRAGE_AV_CHOIX_CONTRAT_OPTIONS.filter((opt) => matches.has(opt));
-  if (candidates.length === 1) {
-    return { value: candidates[0], candidates };
-  }
-  return { value: null, candidates };
+  return { value: pdfValue, candidates: [pdfValue] };
 }

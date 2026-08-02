@@ -169,13 +169,62 @@ export function formatPlacementBoardContactLabel(
   return parts.length > 0 ? parts.join(" ") : "Contact";
 }
 
-/** Une ligne contact + suivi sans répéter le nom (pipe_titre prioritaire). */
+/** NOM Prénom — repère visuel rapide sur le board Stellium. */
+export function formatPlacementBoardContactNomPrenom(
+  row: Pick<PlacementOperationWithContact, "contact_prenom" | "contact_nom">
+): string {
+  const nom = row.contact_nom?.trim();
+  const prenom = row.contact_prenom?.trim();
+  if (nom && prenom) return `${nom} ${prenom}`;
+  return nom ?? prenom ?? "Contact";
+}
+
+function contactLabelVariants(
+  row: Pick<PlacementOperationWithContact, "contact_prenom" | "contact_nom">
+): string[] {
+  const nom = row.contact_nom?.trim();
+  const prenom = row.contact_prenom?.trim();
+  const variants = new Set<string>();
+  if (nom && prenom) {
+    variants.add(`${nom} ${prenom}`);
+    variants.add(`${prenom} ${nom}`);
+  } else if (nom) {
+    variants.add(nom);
+  } else if (prenom) {
+    variants.add(prenom);
+  }
+  return [...variants];
+}
+
+function stripContactFromPipeTitre(pipeTitre: string, contactVariants: string[]): string {
+  let rest = pipeTitre.trim();
+  for (const label of contactVariants) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    rest = rest
+      .replace(new RegExp(`\\s*[—–-]\\s*${escaped}\\s*`, "gi"), " — ")
+      .replace(new RegExp(`^${escaped}\\s*[—–-]?\\s*`, "i"), "")
+      .replace(new RegExp(`\\s*[—–-]?\\s*${escaped}$`, "i"), "");
+  }
+  return rest
+    .replace(/\s*[—–-]\s*[—–-]+\s*/g, " — ")
+    .replace(/^\s*[—–-]\s*|\s*[—–-]\s*$/g, "")
+    .trim();
+}
+
+/** Sous-titre carte : contact en premier, puis contexte pipe (tâche, n° contrat…). */
 export function formatPlacementBoardCardSubtitle(
   row: Pick<PlacementOperationWithContact, "contact_prenom" | "contact_nom" | "pipe_titre">
 ): string {
+  const contact = formatPlacementBoardContactNomPrenom(row);
   const pipeTitre = row.pipe_titre?.trim();
-  if (pipeTitre) return pipeTitre;
-  return formatPlacementBoardContactLabel(row);
+  if (!pipeTitre) return contact;
+
+  const variants = contactLabelVariants(row);
+  const rest = stripContactFromPipeTitre(pipeTitre, variants);
+  if (!rest || rest.localeCompare(pipeTitre, "fr", { sensitivity: "accent" }) === 0) {
+    return contact;
+  }
+  return `${contact} — ${rest}`;
 }
 
 export type PlacementBoardRowBadge = "awaiting_send" | "scan_orphan";

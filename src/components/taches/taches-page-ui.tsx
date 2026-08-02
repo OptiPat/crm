@@ -355,6 +355,8 @@ export function TachesGroupedList({
   onAttachContact,
   onFicheConseil,
   ficheConseilDisabled,
+  onSendToPipe,
+  sendToPipeBusyId,
 }: {
   sections: TacheSection[];
   showContact?: boolean;
@@ -370,6 +372,8 @@ export function TachesGroupedList({
   onAttachContact?: (tache: TacheWithContact) => void;
   onFicheConseil?: (tache: TacheWithContact) => void;
   ficheConseilDisabled?: boolean;
+  onSendToPipe?: (tache: TacheWithContact) => void;
+  sendToPipeBusyId?: number | null;
 }) {
   return (
     <div className="space-y-5">
@@ -420,6 +424,10 @@ export function TachesGroupedList({
                   onFicheConseil ? (x) => onFicheConseil(x as TacheWithContact) : undefined
                 }
                 ficheConseilDisabled={ficheConseilDisabled}
+                onSendToPipe={
+                  onSendToPipe ? (x) => onSendToPipe(x as TacheWithContact) : undefined
+                }
+                sendToPipeBusy={sendToPipeBusyId === t.id}
               />
             ))}
           </div>

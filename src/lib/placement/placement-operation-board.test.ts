@@ -229,14 +229,21 @@ describe("placement-operation-board", () => {
     expect(filtered).toHaveLength(0);
   });
 
-  it("sous-titre carte sans répéter le contact", () => {
+  it("sous-titre carte : contact en premier", () => {
+    expect(
+      formatPlacementBoardCardSubtitle({
+        contact_prenom: "Nicolas",
+        contact_nom: "PLAZA",
+        pipe_titre: "Arbitrage assurance vie — PLAZA Nicolas — 9E 267574012",
+      })
+    ).toBe("PLAZA Nicolas — Arbitrage assurance vie — 9E 267574012");
     expect(
       formatPlacementBoardCardSubtitle({
         contact_prenom: "Luc",
         contact_nom: "ALAMEDA",
         pipe_titre: "Luc ALAMEDA — suivi juillet 2026",
       })
-    ).toBe("Luc ALAMEDA — suivi juillet 2026");
+    ).toBe("ALAMEDA Luc — suivi juillet 2026");
   });
 
   it("dates carte : création en colonne acte, dates métier ailleurs", () => {

@@ -406,6 +406,17 @@ impl super::Database {
                 "operation_type invalide".into(),
             ));
         }
+        if let Some(inv_id) = input.investissement_id.filter(|id| *id > 0) {
+            let inv = self.get_investissement_by_id(inv_id)?;
+            match inv.contact_id {
+                Some(cid) if cid == input.contact_id => {}
+                _ => {
+                    return Err(rusqlite::Error::InvalidParameterName(
+                        "investissement_id ne correspond pas au contact".into(),
+                    ));
+                }
+            }
+        }
 
         let mut pipe_type: Option<String> = None;
         let mut existing_pending: Option<super::models::PlacementOperation> = None;
@@ -493,8 +504,8 @@ impl super::Database {
             "INSERT INTO placement_operations (
                 contact_id, pipe_id, pipe_timeline_entry_id, operation_type,
                 product_label, stellium_label, status, created_at, updated_at,
-                montant_centimes, type_produit
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                montant_centimes, type_produit, investissement_id
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 input.contact_id,
                 input.pipe_id,
@@ -507,6 +518,7 @@ impl super::Database {
                 now,
                 input.montant_centimes,
                 input.type_produit,
+                input.investissement_id,
             ],
         )?;
         let id = self.conn.last_insert_rowid();
@@ -1758,6 +1770,7 @@ mod tests {
                 stellium_label: Some("Souscription".into()),
                 montant_centimes: Some(5_000_000),
                 type_produit: Some("SCPI".into()),
+                ..Default::default()
             })
             .unwrap();
 
@@ -2687,10 +2700,65 @@ mod tests {
                 stellium_label: Some("Souscription".into()),
                 montant_centimes: None,
                 type_produit: None,
+                ..Default::default()
             })
             .unwrap_err()
             .to_string();
 
         assert!(err.contains("montant souscrit requis"));
+    }
+
+    #[test]
+    fn create_placement_rejects_investissement_id_for_other_contact() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        let contact_a = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        let contact_b = db.create_contact(sample_contact("Martin", "Paul")).unwrap();
+        let contact_a_id = contact_a.id.unwrap();
+        let contact_b_id = contact_b.id.unwrap();
+        let inv = db
+            .create_investissement(super::super::models::NewInvestissement {
+                contact_id: Some(contact_a_id),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "Vie Plus".into(),
+                numero_contrat: Some("AV-1".into()),
+                montant_initial: None,
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+
+        let err = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id: contact_b_id,
+                pipe_id: None,
+                pipe_timeline_entry_id: None,
+                operation_type: OP_ARBITRAGE.into(),
+                product_label: Some("Cristalliance Avenir".into()),
+                stellium_label: Some("Arbitrage libre".into()),
+                investissement_id: Some(inv.id),
+                ..Default::default()
+            })
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("investissement_id ne correspond pas au contact"));
     }
 }

@@ -1786,6 +1786,8 @@ pub struct NewPlacementOperation {
     pub montant_centimes: Option<i64>,
     #[serde(default)]
     pub type_produit: Option<String>,
+    #[serde(default)]
+    pub investissement_id: Option<i64>,
 }
 
 impl Default for NewPlacementOperation {
@@ -1799,6 +1801,7 @@ impl Default for NewPlacementOperation {
             stellium_label: None,
             montant_centimes: None,
             type_produit: None,
+            investissement_id: None,
         }
     }
 }

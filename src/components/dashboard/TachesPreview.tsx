@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowRight, Clock, FileText } from "lucide-react";
+import { ArrowRight, Clock } from "lucide-react";
 import { getAllTaches, updateTache, type Tache } from "@/lib/api/tauri-taches";
 import { subscribeTachesChanged } from "@/lib/taches/tache-events";
 import {
@@ -16,12 +16,14 @@ import {
   echeanceState,
 } from "@/lib/taches/tache-display";
 import { TacheForm } from "@/components/taches/TacheForm";
-import { ArbitrageFicheContratPickDialog } from "@/components/taches/ArbitrageFicheContratPickDialog";
-import { ArbitrageFicheTemplatePickDialog } from "@/components/taches/ArbitrageFicheTemplatePickDialog";
+import { ArbitrageFicheConseilDialogs } from "@/components/fiche-conseil/ArbitrageFicheConseilDialogs";
+import { ArbitrageFicheConseilButton } from "@/components/fiche-conseil/ArbitrageFicheConseilButton";
+import { SendToPipeButton } from "@/components/fiche-conseil/SendToPipeButton";
 import { cn } from "@/lib/utils";
 import { filterAndSortTachesDashboardCockpit } from "@/lib/taches/tache-filters";
 import { useArbitrageTacheDone } from "@/hooks/useArbitrageTacheDone";
-import { useArbitrageFicheConseil } from "@/hooks/useArbitrageFicheConseil";
+import { useArbitrageFicheConseil, isFicheConseilActionsBusy } from "@/hooks/useArbitrageFicheConseil";
+import { useSendFicheConseilTaskToPipe } from "@/hooks/useSendFicheConseilTaskToPipe";
 import { isFicheConseilTask } from "@/lib/alertes/arbitrage-alerte";
 import {
   buildPostponedTachePayload,
@@ -54,16 +56,10 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
   }, []);
 
   const { tryComplete, dialog: arbitrageDialog } = useArbitrageTacheDone(() => void load());
-  const {
-    startFicheConseil,
-    pendingContratPick,
-    setPendingContratPick,
-    confirmContratPick,
-    pendingPick,
-    setPendingPick,
-    confirmTemplatePick,
-    busy: ficheBusy,
-  } = useArbitrageFicheConseil();
+  const ficheConseil = useArbitrageFicheConseil();
+  const { startFicheConseilForTask } = ficheConseil;
+  const { sendToPipe, sendToPipeBusyId } = useSendFicheConseilTaskToPipe(onNavigate);
+  const ficheActionsDisabled = isFicheConseilActionsBusy(ficheConseil, sendToPipeBusyId);
 
   useEffect(() => {
     void load();
@@ -141,6 +137,8 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
             const state = echeanceState(tache.date_echeance, tache.statut);
             const firstContact = tache.contacts?.[0] ?? null;
             const extraCount = (tache.contacts?.length ?? 0) - 1;
+            const contacts = tache.contacts ?? [];
+            const hasContact = contacts.length > 0;
             return (
               <li
                 key={tache.id}
@@ -197,22 +195,22 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
                   </div>
                 </div>
                 <div className="shrink-0 ml-auto flex items-center gap-1.5">
-                  {isFicheConseilTask(tache) ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 px-2.5 text-xs shrink-0 gap-1"
-                      title="Générer la fiche conseil arbitrage"
-                      disabled={ficheBusy || pendingPick != null || pendingContratPick != null}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void startFicheConseil(tache);
-                      }}
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      Fiche Conseil
-                    </Button>
+                  {isFicheConseilTask(tache) && hasContact ? (
+                    <>
+                      {onNavigate ? (
+                        <SendToPipeButton
+                          compact
+                          disabled={ficheActionsDisabled}
+                          stopPropagation
+                          onClick={() => void sendToPipe(tache)}
+                        />
+                      ) : null}
+                      <ArbitrageFicheConseilButton
+                        disabled={ficheActionsDisabled}
+                        stopPropagation
+                        onClick={() => startFicheConseilForTask(tache)}
+                      />
+                    </>
                   ) : null}
                   <Select
                     onValueChange={(v) => {
@@ -242,23 +240,7 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
         </ul>
       )}
       {arbitrageDialog}
-      <ArbitrageFicheContratPickDialog
-        open={pendingContratPick !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingContratPick(null);
-        }}
-        contrats={pendingContratPick?.contrats ?? []}
-        suggestedInvestissementId={pendingContratPick?.suggestedInvestissementId}
-        onConfirm={confirmContratPick}
-      />
-      <ArbitrageFicheTemplatePickDialog
-        open={pendingPick !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingPick(null);
-        }}
-        templates={pendingPick?.templates ?? []}
-        onConfirm={confirmTemplatePick}
-      />
+      <ArbitrageFicheConseilDialogs hook={ficheConseil} />
       <TacheForm
         open={formOpen}
         onOpenChange={setFormOpen}

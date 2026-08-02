@@ -3,9 +3,11 @@ import { toast } from "sonner";
 import type { Tache } from "@/lib/api/tauri-taches";
 import type { ArbitrageFicheTemplate } from "@/lib/api/tauri-arbitrage-fiche";
 import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
+import { buildPartenaireNomMap } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-partenaires";
 import {
   isFicheConseilTask,
   parseArbitrageInvestissementId,
+  resolveArbitrageFicheProductKind,
   type ArbitrageFicheProductKind,
 } from "@/lib/alertes/arbitrage-alerte";
 import { generateArbitrageFicheConseil } from "@/lib/pdf/arbitrage-fiche-conseil/generate-arbitrage-fiche";
@@ -15,20 +17,48 @@ import {
 } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-fiche-template";
 import {
   filterFicheConseilEligibleInvestissements,
+  filterFicheConseilContratPickItemsByProductKind,
+  filterFicheConseilContratPickItemsByStelliumProduct,
   resolveFicheConseilProductKind,
   toFicheConseilContratPickItems,
   type FicheConseilContratPickItem,
+  type FicheConseilContext,
 } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-resolve";
+import {
+  isStelliumActEligibleForFicheConseil,
+  stelliumProductLabelToFicheProductKind,
+} from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
+
+export type FicheConseilHook = ReturnType<typeof useArbitrageFicheConseil>;
+
+export function isFicheConseilActionsBusy(
+  hook: Pick<FicheConseilHook, "busy" | "pendingPick" | "pendingContratPick">,
+  sendToPipeBusyId?: number | null
+): boolean {
+  return (
+    hook.busy ||
+    hook.pendingPick != null ||
+    hook.pendingContratPick != null ||
+    sendToPipeBusyId != null
+  );
+}
+
+export type FicheConseilStartOptions = {
+  suggestedInvestissementId?: number;
+  filterProductKind?: ArbitrageFicheProductKind;
+  /** Libellé catalogue Stellium (depuis acte pipe) — affine au-delà du type AV/PER. */
+  stelliumProductLabel?: string;
+};
 
 export type ArbitrageFicheTemplatePickPending = {
-  tache: Tache;
+  context: FicheConseilContext;
   productKind: ArbitrageFicheProductKind;
   investissementId: number;
   templates: ArbitrageFicheTemplate[];
 };
 
 export type ArbitrageFicheContratPickPending = {
-  tache: Tache;
+  context: FicheConseilContext;
   contrats: FicheConseilContratPickItem[];
   suggestedInvestissementId?: number;
 };
@@ -41,7 +71,7 @@ export function useArbitrageFicheConseil() {
 
   const runGeneration = useCallback(
     async (
-      tache: Tache,
+      contactId: number,
       templateId: string,
       productKind: ArbitrageFicheProductKind,
       investissementId: number
@@ -49,7 +79,7 @@ export function useArbitrageFicheConseil() {
       setBusy(true);
       try {
         const { opened } = await generateArbitrageFicheConseil(
-          tache,
+          contactId,
           templateId,
           productKind,
           investissementId
@@ -70,10 +100,10 @@ export function useArbitrageFicheConseil() {
   );
 
   const continueWithInvestissement = useCallback(
-    async (tache: Tache, investissementId: number) => {
-      const contactId = tache.contacts[0]?.contact_id;
+    async (context: FicheConseilContext, investissementId: number) => {
+      const contactId = context.contactId;
       if (!contactId) {
-        toast.error("Aucun contact lié à cette tâche.");
+        toast.error("Aucun contact lié.");
         return;
       }
 
@@ -84,7 +114,10 @@ export function useArbitrageFicheConseil() {
         toast.error("Contrat non éligible ou introuvable pour ce client.");
         return;
       }
-      const productKind = resolveFicheConseilProductKind(tache, investissement);
+      const productKind = resolveFicheConseilProductKind(
+        { titre: context.titreHint ?? "" },
+        investissement
+      );
       if (!productKind) {
         toast.error("Type de contrat non pris en charge pour la fiche conseil.");
         return;
@@ -93,44 +126,66 @@ export function useArbitrageFicheConseil() {
       const templates = await requireArbitrageFicheTemplates(productKind);
       const resolved = resolveArbitrageFicheTemplateForGeneration(templates);
       if (resolved) {
-        await runGeneration(tache, resolved.id, productKind, investissementId);
+        await runGeneration(contactId, resolved.id, productKind, investissementId);
         return;
       }
-      setPendingPick({ tache, productKind, investissementId, templates });
+      setPendingPick({ context, productKind, investissementId, templates });
     },
     [runGeneration]
   );
 
   const startFicheConseil = useCallback(
-    async (tache: Tache) => {
-      if (busy || pendingPick || pendingContratPick) return;
-      if (!isFicheConseilTask(tache)) return;
-
-      const contactId = tache.contacts[0]?.contact_id;
-      if (!contactId) {
-        toast.error("Aucun contact lié à cette tâche.");
+    async (context: FicheConseilContext, options?: FicheConseilStartOptions) => {
+      if (busy || pendingPick || pendingContratPick) {
+        toast.info("Génération fiche conseil en cours…");
+        return;
+      }
+      if (!context.contactId) {
+        toast.error("Aucun contact lié.");
         return;
       }
 
       setBusy(true);
       try {
-        const contrats = toFicheConseilContratPickItems(
-          await getInvestissementsByContact(contactId)
-        );
+        const investissements = await getInvestissementsByContact(context.contactId);
+        let contrats = toFicheConseilContratPickItems(investissements);
+        if (options?.filterProductKind) {
+          contrats = filterFicheConseilContratPickItemsByProductKind(
+            contrats,
+            options.filterProductKind
+          );
+        }
+        if (options?.stelliumProductLabel) {
+          const partenaireNoms = await buildPartenaireNomMap(investissements);
+          contrats = filterFicheConseilContratPickItemsByStelliumProduct(
+            contrats,
+            investissements,
+            partenaireNoms,
+            options.stelliumProductLabel
+          );
+        }
         if (contrats.length === 0) {
           toast.error("Aucun contrat AV/PER éligible pour ce client.");
           return;
         }
-        if (contrats.length === 1) {
-          await continueWithInvestissement(tache, contrats[0].investissementId);
+
+        const embeddedId =
+          options?.suggestedInvestissementId ??
+          parseArbitrageInvestissementId(context.descriptionHint);
+        if (embeddedId && contrats.some((c) => c.investissementId === embeddedId)) {
+          await continueWithInvestissement(context, embeddedId);
           return;
         }
 
-        const embeddedId = parseArbitrageInvestissementId(tache.description);
+        if (contrats.length === 1) {
+          await continueWithInvestissement(context, contrats[0].investissementId);
+          return;
+        }
+
         const suggestedInvestissementId = contrats.some((c) => c.investissementId === embeddedId)
           ? embeddedId ?? undefined
           : undefined;
-        setPendingContratPick({ tache, contrats, suggestedInvestissementId });
+        setPendingContratPick({ context, contrats, suggestedInvestissementId });
       } catch (error) {
         console.error(error);
         toast.error(`Erreur : ${String(error)}`);
@@ -141,6 +196,52 @@ export function useArbitrageFicheConseil() {
     [busy, pendingPick, pendingContratPick, continueWithInvestissement]
   );
 
+  const startFicheConseilForTask = useCallback(
+    (tache: Tache) => {
+      if (!isFicheConseilTask(tache)) return;
+      const contactId = tache.contacts[0]?.contact_id;
+      if (!contactId) {
+        toast.error("Aucun contact lié à cette tâche.");
+        return;
+      }
+      const embeddedId = parseArbitrageInvestissementId(tache.description);
+      const kindFromTitle: ArbitrageFicheProductKind | null = resolveArbitrageFicheProductKind(tache);
+      void startFicheConseil(
+        {
+          contactId,
+          titreHint: tache.titre,
+          descriptionHint: tache.description,
+        },
+        {
+          suggestedInvestissementId: embeddedId ?? undefined,
+          filterProductKind: kindFromTitle ?? undefined,
+        }
+      );
+    },
+    [startFicheConseil]
+  );
+
+  const startFicheConseilForStelliumAct = useCallback(
+    (
+      contactId: number,
+      stelliumLabel: string,
+      productLabel: string,
+      options?: { suggestedInvestissementId?: number }
+    ) => {
+      if (!isStelliumActEligibleForFicheConseil(stelliumLabel, productLabel)) return;
+      const filterProductKind = stelliumProductLabelToFicheProductKind(productLabel);
+      void startFicheConseil(
+        { contactId },
+        {
+          filterProductKind: filterProductKind ?? undefined,
+          stelliumProductLabel: productLabel.trim() || undefined,
+          suggestedInvestissementId: options?.suggestedInvestissementId,
+        }
+      );
+    },
+    [startFicheConseil]
+  );
+
   const confirmContratPick = useCallback(
     (investissementId: number) => {
       const pending = pendingContratPick;
@@ -149,7 +250,7 @@ export function useArbitrageFicheConseil() {
       setBusy(true);
       void (async () => {
         try {
-          await continueWithInvestissement(pending.tache, investissementId);
+          await continueWithInvestissement(pending.context, investissementId);
         } catch (error) {
           console.error(error);
           toast.error(`Erreur : ${String(error)}`);
@@ -167,7 +268,7 @@ export function useArbitrageFicheConseil() {
       setPendingPick(null);
       if (pending) {
         void runGeneration(
-          pending.tache,
+          pending.context.contactId,
           templateId,
           pending.productKind,
           pending.investissementId
@@ -179,6 +280,8 @@ export function useArbitrageFicheConseil() {
 
   return {
     startFicheConseil,
+    startFicheConseilForTask,
+    startFicheConseilForStelliumAct,
     pendingContratPick,
     setPendingContratPick,
     confirmContratPick,

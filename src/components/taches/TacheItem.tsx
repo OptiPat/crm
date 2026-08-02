@@ -1,5 +1,7 @@
-import { Calendar, Clock, FileText, Pencil, Trash2, User, UserPlus } from "lucide-react";
+import { Calendar, Clock, Pencil, Trash2, User, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ArbitrageFicheConseilButton } from "@/components/fiche-conseil/ArbitrageFicheConseilButton";
+import { SendToPipeButton } from "@/components/fiche-conseil/SendToPipeButton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,7 +22,7 @@ import {
 } from "@/lib/taches/tache-display";
 import { TACHE_POSTPONE_OPTIONS } from "@/lib/taches/postpone-tache";
 import { formatRecurrenceLabel, isActiveRecurrence } from "@/lib/taches/tache-recurrence";
-import { isFicheConseilTask } from "@/lib/alertes/arbitrage-alerte";
+import { displayTacheDescription, isFicheConseilTask } from "@/lib/alertes/arbitrage-alerte";
 
 interface TacheItemProps {
   tache: Tache | TacheWithContact;
@@ -40,6 +42,8 @@ interface TacheItemProps {
   onAttachContact?: (tache: Tache | TacheWithContact) => void;
   onFicheConseil?: (tache: Tache | TacheWithContact) => void;
   ficheConseilDisabled?: boolean;
+  onSendToPipe?: (tache: Tache | TacheWithContact) => void;
+  sendToPipeBusy?: boolean;
 }
 
 export function TacheItem({
@@ -58,6 +62,8 @@ export function TacheItem({
   onAttachContact,
   onFicheConseil,
   ficheConseilDisabled = false,
+  onSendToPipe,
+  sendToPipeBusy = false,
 }: TacheItemProps) {
   const done = tache.statut === "FAIT";
   const state = echeanceState(tache.date_echeance, tache.statut);
@@ -141,26 +147,28 @@ export function TacheItem({
           )}
         </div>
 
-        {tache.description && (
-          <p className="truncate text-xs text-muted-foreground">{tache.description}</p>
-        )}
+        {(() => {
+          const description = displayTacheDescription(tache.description);
+          return description ? (
+            <p className="truncate text-xs text-muted-foreground">{description}</p>
+          ) : null;
+        })()}
       </div>
 
       {showActions && (
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-          {!done && onFicheConseil && isFicheConseilTask(tache) ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 px-2.5 text-xs shrink-0 gap-1"
-              title="Générer la fiche conseil arbitrage"
+          {!done && onSendToPipe && isFicheConseilTask(tache) && contacts.length > 0 ? (
+            <SendToPipeButton
+              disabled={sendToPipeBusy || ficheConseilDisabled}
+              onClick={() => onSendToPipe(tache)}
+            />
+          ) : null}
+
+          {!done && onFicheConseil && isFicheConseilTask(tache) && contacts.length > 0 ? (
+            <ArbitrageFicheConseilButton
               disabled={ficheConseilDisabled}
               onClick={() => onFicheConseil(tache)}
-            >
-              <FileText className="h-3.5 w-3.5" />
-              Fiche Conseil
-            </Button>
+            />
           ) : null}
 
           {!done && onPostpone && (

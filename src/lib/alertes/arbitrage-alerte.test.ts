@@ -10,6 +10,9 @@ import {
   resolveArbitrageFicheProductKind,
   parseArbitrageInvestissementId,
   isArbitrageSuiviEligible,
+  stripTacheDescriptionMetadata,
+  mergeTacheDescriptionWithMetadata,
+  displayTacheDescription,
 } from "@/lib/alertes/arbitrage-alerte";
 
 const NOW = Date.parse("2026-02-01T10:00:00Z");
@@ -50,6 +53,18 @@ describe("arbitrage-alerte", () => {
       parseArbitrageInvestissementId("crm:fiche_conseil_exceltis\ncrm:investissement_id:7")
     ).toBe(7);
     expect(parseArbitrageInvestissementId("autre")).toBeNull();
+  });
+
+  it("masque les métadonnées CRM à l'affichage et les préserve à l'enregistrement", () => {
+    const raw = "crm:fiche_conseil_exceltis\ncrm:investissement_id:7\nRappeler le client";
+    expect(displayTacheDescription(raw)).toBe("Rappeler le client");
+    expect(stripTacheDescriptionMetadata("crm:investissement_id:42")).toBe("");
+    expect(mergeTacheDescriptionWithMetadata("Note modifiée", raw)).toBe(
+      "crm:fiche_conseil_exceltis\ncrm:investissement_id:7\nNote modifiée"
+    );
+    expect(mergeTacheDescriptionWithMetadata("", raw)).toBe(
+      "crm:fiche_conseil_exceltis\ncrm:investissement_id:7"
+    );
   });
 
   it("calcule la prochaine échéance par défaut à +6 mois UTC", () => {

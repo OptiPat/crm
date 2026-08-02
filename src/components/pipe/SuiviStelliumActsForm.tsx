@@ -2,6 +2,8 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StelliumPlacementActFields } from "@/components/pipe/StelliumPlacementActFields";
 import { PlacementMontantField } from "@/components/pipe/PlacementMontantField";
+import { ArbitrageFicheConseilButton } from "@/components/fiche-conseil/ArbitrageFicheConseilButton";
+import { isStelliumActEligibleForFicheConseil } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
 import { isVersementComplementaireActLabel } from "@/lib/pipe/pipe-suivi";
 
 export interface SuiviStelliumActRow {
@@ -28,9 +30,19 @@ interface SuiviStelliumActsFormProps {
   acts: SuiviStelliumActRow[];
   onChange: (acts: SuiviStelliumActRow[]) => void;
   disabled?: boolean;
+  contactId?: number;
+  onFicheConseil?: (actLabel: string, productLabel: string) => void;
+  ficheConseilDisabled?: boolean;
 }
 
-export function SuiviStelliumActsForm({ acts, onChange, disabled = false }: SuiviStelliumActsFormProps) {
+export function SuiviStelliumActsForm({
+  acts,
+  onChange,
+  disabled = false,
+  contactId,
+  onFicheConseil,
+  ficheConseilDisabled = false,
+}: SuiviStelliumActsFormProps) {
   const updateAct = (key: string, patch: Partial<Pick<SuiviStelliumActRow, "productLabel" | "actLabel" | "montantEuros">>) => {
     onChange(
       acts.map((row) => (row.key === key ? { ...row, ...patch } : row))
@@ -83,6 +95,16 @@ export function SuiviStelliumActsForm({ acts, onChange, disabled = false }: Suiv
               onChange={(montantEuros) => updateAct(row.key, { montantEuros })}
               disabled={disabled}
             />
+          ) : null}
+          {contactId &&
+          onFicheConseil &&
+          isStelliumActEligibleForFicheConseil(row.actLabel, row.productLabel) ? (
+            <div className="flex justify-end">
+              <ArbitrageFicheConseilButton
+                disabled={disabled || ficheConseilDisabled}
+                onClick={() => onFicheConseil(row.actLabel, row.productLabel)}
+              />
+            </div>
           ) : null}
         </div>
       ))}

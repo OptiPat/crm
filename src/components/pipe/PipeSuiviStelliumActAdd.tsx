@@ -36,6 +36,22 @@ import {
   formatMontantCentimesInput,
 } from "@/lib/pipe/placement-montant";
 import { inferTypeProduitFromStelliumProductLabel } from "@/lib/pipe/remuneration-type-produit";
+import { useArbitrageFicheConseil, isFicheConseilActionsBusy } from "@/hooks/useArbitrageFicheConseil";
+import { ArbitrageFicheConseilDialogs } from "@/components/fiche-conseil/ArbitrageFicheConseilDialogs";
+import { ArbitrageFicheConseilButton } from "@/components/fiche-conseil/ArbitrageFicheConseilButton";
+import { isStelliumActEligibleForFicheConseil } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
+import { resolveInvestissementIdForStelliumAct } from "@/lib/placement/resolve-investissement-for-stellium-act";
+
+async function resolveDraftInvestissementId(
+  contactId: number,
+  stelliumLabel: string,
+  productLabel: string,
+  existingId?: number | null
+): Promise<number | null> {
+  if (existingId != null && existingId > 0) return existingId;
+  if (!isStelliumActEligibleForFicheConseil(stelliumLabel, productLabel)) return null;
+  return resolveInvestissementIdForStelliumAct(contactId, productLabel);
+}
 
 type PipeStelliumActAddVariant = "suivi" | "affaire";
 
@@ -99,6 +115,9 @@ export function PipeSuiviStelliumActAdd({
 }: PipeSuiviStelliumActAddProps) {
   const copy = VARIANT_COPY[variant];
   const isVersementChild = variant === "affaire" && isVersementComplementaireAffaire(pipe);
+  const ficheConseil = useArbitrageFicheConseil();
+  const { startFicheConseilForStelliumAct } = ficheConseil;
+  const ficheDisabled = isFicheConseilActionsBusy(ficheConseil);
   const [drafts, setDrafts] = useState<PlacementOperation[]>([]);
   const [loadingDrafts, setLoadingDrafts] = useState(true);
   const [openNew, setOpenNew] = useState(false);
@@ -234,6 +253,12 @@ export function PipeSuiviStelliumActAdd({
           contenu: options?.contenu?.trim() || null,
           occurred_at: occurredAtUnix,
         });
+        const investissementId = await resolveDraftInvestissementId(
+          pipe.contact_id,
+          label,
+          product,
+          operation.investissement_id
+        );
         await createPlacementOperation({
           contact_id: pipe.contact_id,
           pipe_id: pipe.id,
@@ -241,6 +266,7 @@ export function PipeSuiviStelliumActAdd({
           operation_type: placementOperationTypeFromStelliumLabel(label),
           stellium_label: label,
           product_label: product || null,
+          investissement_id: investissementId,
         });
         notifyPlacementOperationsChanged();
         toast.success(
@@ -298,6 +324,11 @@ export function PipeSuiviStelliumActAdd({
     setSavingId("new");
     try {
       const remuneration = buildRemunerationPayload(product, montantEuros);
+      const investissementId = await resolveDraftInvestissementId(
+        pipe.contact_id,
+        label,
+        product
+      );
       await createPlacementOperation({
         contact_id: pipe.contact_id,
         pipe_id: pipe.id,
@@ -306,6 +337,7 @@ export function PipeSuiviStelliumActAdd({
         product_label: product,
         montant_centimes: remuneration.montant_centimes,
         type_produit: remuneration.type_produit,
+        investissement_id: investissementId,
       });
       notifyPlacementOperationsChanged();
       toast.success(copy.createSuccess);
@@ -321,6 +353,10 @@ export function PipeSuiviStelliumActAdd({
       setSavingId(null);
     }
   };
+
+  const newActFicheEligible =
+    variant === "suivi" &&
+    isStelliumActEligibleForFicheConseil(stelliumLabel, productLabel);
 
   return (
     <div className="space-y-3 rounded-lg border bg-muted/15 p-4">
@@ -373,25 +409,47 @@ export function PipeSuiviStelliumActAdd({
                 rows={2}
                 placeholder="Montant, contexte…"
               />
-              <Button
-                type="button"
-                size="sm"
-                className="gap-1.5"
-                disabled={savingId === draft.id}
-                onClick={() =>
-                  void confirmStelliumSend(draft, {
-                    occurredAt: draftOccurredAt[draft.id],
-                    contenu: draftContenu[draft.id],
-                  })
-                }
-              >
-                <Send className="h-3.5 w-3.5" />
-                {savingId === draft.id
-                  ? "Enregistrement…"
-                  : versementDraft
-                    ? "Créer l'affaire versement"
-                    : "Confirmer l'envoi Stellium"}
-              </Button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {variant === "suivi" &&
+                isStelliumActEligibleForFicheConseil(
+                  draft.stellium_label ?? "",
+                  draft.product_label ?? ""
+                ) ? (
+                  <ArbitrageFicheConseilButton
+                    disabled={ficheDisabled || savingId === draft.id}
+                    onClick={() =>
+                      startFicheConseilForStelliumAct(
+                        pipe.contact_id,
+                        draft.stellium_label ?? "",
+                        draft.product_label ?? "",
+                        {
+                          suggestedInvestissementId:
+                            draft.investissement_id ?? undefined,
+                        }
+                      )
+                    }
+                  />
+                ) : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={savingId === draft.id}
+                  onClick={() =>
+                    void confirmStelliumSend(draft, {
+                      occurredAt: draftOccurredAt[draft.id],
+                      contenu: draftContenu[draft.id],
+                    })
+                  }
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {savingId === draft.id
+                    ? "Enregistrement…"
+                    : versementDraft
+                      ? "Créer l'affaire versement"
+                      : "Confirmer l'envoi Stellium"}
+                </Button>
+              </div>
             </div>
             );
           })}
@@ -426,7 +484,28 @@ export function PipeSuiviStelliumActAdd({
               {newActNeedsMontant || showVersementInit ? (
                 <PlacementMontantField value={montantEuros} onChange={setMontantEuros} />
               ) : null}
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
+                {newActFicheEligible ? (
+                  <ArbitrageFicheConseilButton
+                    disabled={ficheDisabled || savingId === "new"}
+                    onClick={() => {
+                      void (async () => {
+                        const suggestedId = await resolveInvestissementIdForStelliumAct(
+                          pipe.contact_id,
+                          productLabel
+                        );
+                        startFicheConseilForStelliumAct(
+                          pipe.contact_id,
+                          stelliumLabel,
+                          productLabel,
+                          {
+                            suggestedInvestissementId: suggestedId ?? undefined,
+                          }
+                        );
+                      })();
+                    }}
+                  />
+                ) : null}
                 <Button
                   type="button"
                   variant="outline"
@@ -460,6 +539,7 @@ export function PipeSuiviStelliumActAdd({
           ) : null}
         </div>
       )}
+      <ArbitrageFicheConseilDialogs hook={ficheConseil} />
     </div>
   );
 }

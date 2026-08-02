@@ -60,6 +60,8 @@ import { parseMontantEurosToCentimes } from "@/lib/pipe/placement-montant";
 import { toast } from "sonner";
 import { TeamLockBanner } from "@/components/team/TeamLockBanner";
 import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
+import { useArbitrageFicheConseil, isFicheConseilActionsBusy } from "@/hooks/useArbitrageFicheConseil";
+import { ArbitrageFicheConseilDialogs } from "@/components/fiche-conseil/ArbitrageFicheConseilDialogs";
 
 const TYPE_ICONS = {
   AFFAIRE: Briefcase,
@@ -178,6 +180,9 @@ export function PipeFormPanel({
     entityType: "pipe",
     entityId: pipe?.id,
   });
+  const ficheConseil = useArbitrageFicheConseil();
+  const { startFicheConseilForStelliumAct } = ficheConseil;
+  const ficheDisabled = isFicheConseilActionsBusy(ficheConseil);
 
   const initialFormRef = useRef<PipeFormSnapshot>(
     buildFormState(pipe, initialType, defaultContactId, buildOptions)
@@ -336,6 +341,9 @@ export function PipeFormPanel({
       contacts.find((c) => c.id === contactId) ??
       (contactHintRef.current?.id === contactId ? contactHintRef.current : undefined);
     if (contact) contactHintRef.current = contact;
+    if (!pipe && form.pipeType === "ACTE_GESTION") {
+      setSuiviStelliumActs(createInitialSuiviStelliumActs());
+    }
     setForm((prev) => {
       const secondaryContactId =
         prev.secondaryContactId === contactId ? 0 : prev.secondaryContactId;
@@ -645,7 +653,16 @@ export function PipeFormPanel({
                 rattachée. Confirmez l&apos;envoi Stellium depuis la fiche une fois le dossier prêt.
               </p>
             </div>
-            <SuiviStelliumActsForm acts={suiviStelliumActs} onChange={setSuiviStelliumActs} />
+            <SuiviStelliumActsForm
+              acts={suiviStelliumActs}
+              onChange={setSuiviStelliumActs}
+              disabled={loading}
+              contactId={form.contactId > 0 ? form.contactId : undefined}
+              onFicheConseil={(actLabel, productLabel) =>
+                startFicheConseilForStelliumAct(form.contactId, actLabel, productLabel)
+              }
+              ficheConseilDisabled={ficheDisabled}
+            />
           </div>
         )}
 
@@ -731,6 +748,7 @@ export function PipeFormPanel({
           {loading ? "Enregistrement…" : pipe ? "Enregistrer" : "Créer le pipe"}
         </Button>
       </div>
+      <ArbitrageFicheConseilDialogs hook={ficheConseil} />
     </form>
   );
 }

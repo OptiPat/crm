@@ -29,6 +29,10 @@ import {
   type Tache,
   type TachePriorite,
 } from "@/lib/api/tauri-taches";
+import {
+  mergeTacheDescriptionWithMetadata,
+  stripTacheDescriptionMetadata,
+} from "@/lib/alertes/arbitrage-alerte";
 import { dateInputToUnix, unixToDateInput } from "@/lib/dates/calendar-date";
 import {
   TACHE_DATE_SHORTCUTS_EXTENDED,
@@ -104,7 +108,7 @@ function buildState(
   }
   return {
     titre: tache?.titre ?? defaultTitle ?? "",
-    description: tache?.description ?? "",
+    description: stripTacheDescriptionMetadata(tache?.description),
     dateEcheance: tache?.date_echeance
       ? unixToDateInput(tache.date_echeance)
       : defaultCreateDateEcheance(defaultDateEcheance),
@@ -262,7 +266,9 @@ export function TacheForm({
       const payload: NewTache = {
         contact_ids: form.contactIds,
         titre,
-        description: form.description.trim() || null,
+        description: tache
+          ? mergeTacheDescriptionWithMetadata(form.description, tache.description)
+          : form.description.trim() || null,
         date_echeance: dateInputToUnix(form.dateEcheance),
         priorite: form.priorite,
         statut: tache?.statut ?? "A_FAIRE",

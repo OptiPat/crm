@@ -7,6 +7,7 @@ import {
 } from "@/lib/alertes/arbitrage-alerte";
 import {
   filterFicheConseilEligibleInvestissements,
+  filterFicheConseilContratPickItemsByStelliumProduct,
   investissementToFicheProductKind,
   resolveFicheConseilProductKind,
   toFicheConseilContratPickItems,
@@ -66,6 +67,26 @@ describe("fiche-conseil-resolve", () => {
     expect(investissementToFicheProductKind("ASSURANCE_VIE")).toBe("AV");
     expect(investissementToFicheProductKind("PER")).toBe("PER");
     expect(investissementToFicheProductKind("SCPI")).toBeNull();
+  });
+
+  it("filtre par libellé produit Stellium (pas seulement AV/PER)", () => {
+    const investissements = [
+      inv({ id: 1, nom_produit: "Vie Plus", partenaire_id: 100 }),
+      inv({ id: 2, nom_produit: "Cristalliance Evoluvie", partenaire_id: 200 }),
+    ];
+    const items = toFicheConseilContratPickItems(investissements);
+    const partenaireNoms = new Map<number, string>([
+      [100, "Suravenir"],
+      [200, "Apicil"],
+    ]);
+    const filtered = filterFicheConseilContratPickItemsByStelliumProduct(
+      items,
+      investissements,
+      partenaireNoms,
+      "Cristalliance Avenir"
+    );
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].investissementId).toBe(1);
   });
 });
 

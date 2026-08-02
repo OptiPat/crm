@@ -75,6 +75,7 @@ export interface NewPlacementOperationInput {
   stellium_label?: string | null;
   montant_centimes?: number | null;
   type_produit?: string | null;
+  investissement_id?: number | null;
 }
 
 export const PLACEMENT_OPERATIONS_CHANGED_EVENT = "placement-operations-changed";

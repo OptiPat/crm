@@ -75,6 +75,45 @@ export function isFicheConseilTask(tache: {
   return isArbitrageAutoTask(tache) || isExceltisFicheConseilTask(tache);
 }
 
+const TACHE_METADATA_LINE =
+  /^(crm:fiche_conseil_exceltis|crm:investissement_id:\d+)$/;
+
+/** Partie lisible de la description (sans métadonnées CRM internes). */
+export function stripTacheDescriptionMetadata(description?: string | null): string {
+  if (!description?.trim()) return "";
+  return description
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !TACHE_METADATA_LINE.test(line))
+    .join("\n")
+    .trim();
+}
+
+function extractTacheDescriptionMetadataLines(description?: string | null): string[] {
+  if (!description?.trim()) return [];
+  return description
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => TACHE_METADATA_LINE.test(line));
+}
+
+/** Réinjecte les métadonnées CRM après édition utilisateur de la description. */
+export function mergeTacheDescriptionWithMetadata(
+  userDescription: string,
+  existingDescription?: string | null
+): string | null {
+  const metadataLines = extractTacheDescriptionMetadataLines(existingDescription);
+  const user = userDescription.trim();
+  const parts = [...metadataLines];
+  if (user) parts.push(user);
+  return parts.length > 0 ? parts.join("\n") : null;
+}
+
+/** Description affichée dans l'UI (notes utilisateur uniquement). */
+export function displayTacheDescription(description?: string | null): string {
+  return stripTacheDescriptionMetadata(description);
+}
+
 /** Ajoute des mois calendaires UTC à une date input (ou à aujourd'hui si vide). */
 export function dateInputAddMonthsUtc(
   fromInput: string | null | undefined,

@@ -9,22 +9,19 @@ import {
 import { openDocumentFile } from "@/lib/api/tauri-system";
 import { fillArbitrageFicheConseilPdf } from "@/lib/pdf/arbitrage-fiche-conseil/fill-fiche";
 import { buildArbitrageFicheOutputFileName } from "@/lib/pdf/arbitrage-fiche-conseil/build-output-filename";
-import type { Tache } from "@/lib/api/tauri-taches";
-
 export type GenerateArbitrageFicheConseilResult = {
   savedPath: string;
   opened: boolean;
 };
 
 export async function generateArbitrageFicheConseil(
-  tache: Tache,
+  contactId: number,
   templateId: string,
   productKind: ArbitrageFicheProductKind,
   investissementId: number
 ): Promise<GenerateArbitrageFicheConseilResult> {
-  const contactId = tache.contacts[0]?.contact_id;
   if (!contactId) {
-    throw new Error("Aucun contact lié à cette tâche.");
+    throw new Error("Aucun contact lié.");
   }
 
   const templatePath = await getArbitrageFicheTemplatePath(templateId, productKind);
@@ -33,6 +30,10 @@ export async function generateArbitrageFicheConseil(
     getInvestissementById(investissementId),
     readPdfFile(templatePath),
   ]);
+
+  if (investissement.contact_id != null && investissement.contact_id !== contactId) {
+    throw new Error("Le contrat ne correspond pas au contact sélectionné.");
+  }
 
   const filled = await fillArbitrageFicheConseilPdf(templateBytes, productKind, {
     nomClient: contact.nom,
@@ -58,7 +59,7 @@ export async function generateArbitrageFicheConseil(
 
 /** @deprecated */
 export const generateArbitrageAvFicheConseil = (
-  tache: Tache,
+  contactId: number,
   templateId: string,
   investissementId: number
-) => generateArbitrageFicheConseil(tache, templateId, "AV", investissementId);
+) => generateArbitrageFicheConseil(contactId, templateId, "AV", investissementId);

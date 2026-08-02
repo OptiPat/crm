@@ -18,6 +18,7 @@ export interface SuiviStelliumActInput {
   productLabel: string;
   actLabel: string;
   montantCentimes?: number | null;
+  investissementId?: number | null;
 }
 
 export function validateSuiviStelliumActInput(
@@ -100,6 +101,7 @@ export async function applySuiviStelliumActsAfterPipeCreate(
       operation_type: placementOperationTypeFromStelliumLabel(actLabel),
       stellium_label: actLabel,
       product_label: product,
+      investissement_id: act.investissementId ?? null,
     });
   }
   notifyPlacementOperationsChanged();

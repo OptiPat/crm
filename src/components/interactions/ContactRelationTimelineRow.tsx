@@ -17,6 +17,7 @@ import {
   Trash2,
   Wallet,
 } from "lucide-react";
+import { displayTacheDescription } from "@/lib/alertes/arbitrage-alerte";
 import { echeanceLabel } from "@/lib/taches/tache-display";
 import type { Interaction } from "@/lib/api/tauri-interactions";
 import {
@@ -560,11 +561,14 @@ export function ContactRelationTimelineRow({
           <p className={`font-medium leading-snug ${done ? "line-through text-muted-foreground" : ""}`}>
             {tache.titre}
           </p>
-          {tache.description && (
-            <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">
-              {tache.description}
-            </p>
-          )}
+          {(() => {
+            const description = displayTacheDescription(tache.description);
+            return description ? (
+              <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">
+                {description}
+              </p>
+            ) : null;
+          })()}
         </div>
       </li>
     );

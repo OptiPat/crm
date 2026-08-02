@@ -331,6 +331,7 @@ mod tests {
             stellium_label: Some("Souscription".into()),
             montant_centimes: Some(5_000_000),
             type_produit: Some("SCPI".into()),
+            investissement_id: None,
         })
         .unwrap();
         db.set_pipe_stage(affaire.id, PIPE_STAGE_GAGNEE, None, None)
@@ -371,6 +372,7 @@ mod tests {
             stellium_label: Some("Versement complémentaire".into()),
             montant_centimes: Some(1_000_000),
             type_produit: Some("SCPI".into()),
+            investissement_id: None,
         })
         .unwrap();
         db.create_placement_operation(NewPlacementOperation {
@@ -382,6 +384,7 @@ mod tests {
             stellium_label: Some("Souscription".into()),
             montant_centimes: Some(5_000_000),
             type_produit: Some("SCPI".into()),
+            investissement_id: None,
         })
         .unwrap();
 
@@ -415,6 +418,7 @@ mod tests {
             stellium_label: Some("Souscription".into()),
             montant_centimes: Some(3_000_000),
             type_produit: Some("SCPI".into()),
+            investissement_id: None,
         })
         .unwrap();
         let op = db
