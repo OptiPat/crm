@@ -39,7 +39,7 @@ import { inferTypeProduitFromStelliumProductLabel } from "@/lib/pipe/remuneratio
 import { useArbitrageFicheConseil, isFicheConseilActionsBusy } from "@/hooks/useArbitrageFicheConseil";
 import { ArbitrageFicheConseilDialogs } from "@/components/fiche-conseil/ArbitrageFicheConseilDialogs";
 import { ArbitrageFicheConseilButton } from "@/components/fiche-conseil/ArbitrageFicheConseilButton";
-import { isStelliumActEligibleForFicheConseil, isVpModificationStelliumAct } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
+import { isStelliumActEligibleForFicheConseil, isVpModificationStelliumAct, isVpMiseEnPlaceStelliumAct } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
 import {
   EMPTY_VP_MODIFICATION_ACT_VALUE,
   toVpModificationPdfFillInput,
@@ -47,7 +47,14 @@ import {
   type VpModificationActValue,
 } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
 import { VpModificationActFields } from "@/components/pipe/VpModificationActFields";
+import { VpMiseEnPlaceActFields } from "@/components/pipe/VpMiseEnPlaceActFields";
 import { loadVpModificationMontantEurosPrefill } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-prefill";
+import {
+  EMPTY_VP_MISE_EN_PLACE_ACT_VALUE,
+  toVpMiseEnPlacePdfFillInput,
+  vpMiseEnPlaceMontantCentimesFromAct,
+  type VpMiseEnPlaceActValue,
+} from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-types";
 import { resolveInvestissementIdForStelliumAct } from "@/lib/placement/resolve-investissement-for-stellium-act";
 
 async function resolveDraftInvestissementId(
@@ -135,10 +142,16 @@ export function PipeSuiviStelliumActAdd({
   const [newActVpModification, setNewActVpModification] = useState<VpModificationActValue>({
     ...EMPTY_VP_MODIFICATION_ACT_VALUE,
   });
+  const [newActVpMiseEnPlace, setNewActVpMiseEnPlace] = useState<VpMiseEnPlaceActValue>({
+    ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE,
+  });
   const [draftOccurredAt, setDraftOccurredAt] = useState<Record<number, string>>({});
   const [draftContenu, setDraftContenu] = useState<Record<number, string>>({});
   const [draftVpModification, setDraftVpModification] = useState<
     Record<number, VpModificationActValue>
+  >({});
+  const [draftVpMiseEnPlace, setDraftVpMiseEnPlace] = useState<
+    Record<number, VpMiseEnPlaceActValue>
   >({});
   const [savingId, setSavingId] = useState<number | "new" | null>(null);
   const draftsLoadedRef = useRef(false);
@@ -149,6 +162,7 @@ export function PipeSuiviStelliumActAdd({
     pipeType: pipe.pipe_type,
   });
   const newActIsVpModification = isVpModificationStelliumAct(stelliumLabel);
+  const newActIsVpMiseEnPlace = isVpMiseEnPlaceStelliumAct(stelliumLabel);
 
   const buildRemunerationPayload = (product: string, montantRaw: string) => {
     const montant_centimes = parseMontantEurosToCentimes(montantRaw);
@@ -190,6 +204,26 @@ export function PipeSuiviStelliumActAdd({
           next[draft.id] = {
             ...existing,
             kinds: [...existing.kinds, "montant"],
+            montantEuros: formatMontantCentimesInput(draft.montant_centimes),
+          };
+        } else {
+          next[draft.id] = existing;
+        }
+      }
+      return next;
+    });
+    setDraftVpMiseEnPlace((prev) => {
+      const next: Record<number, VpMiseEnPlaceActValue> = {};
+      for (const draft of nextDrafts) {
+        const existing = prev[draft.id] ?? { ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE };
+        if (
+          isVpMiseEnPlaceStelliumAct(draft.stellium_label ?? "") &&
+          draft.montant_centimes != null &&
+          draft.montant_centimes > 0 &&
+          !existing.montantEuros.trim()
+        ) {
+          next[draft.id] = {
+            ...existing,
             montantEuros: formatMontantCentimesInput(draft.montant_centimes),
           };
         } else {
@@ -296,7 +330,9 @@ export function PipeSuiviStelliumActAdd({
         );
         const vpMontantCentimes = isVpModificationStelliumAct(label)
           ? vpModificationMontantCentimesFromAct(draftVpModification[operation.id])
-          : null;
+          : isVpMiseEnPlaceStelliumAct(label)
+            ? vpMiseEnPlaceMontantCentimesFromAct(draftVpMiseEnPlace[operation.id])
+            : null;
         await createPlacementOperation({
           contact_id: pipe.contact_id,
           pipe_id: pipe.id,
@@ -362,7 +398,11 @@ export function PipeSuiviStelliumActAdd({
     }
     setSavingId("new");
     try {
-      const vpMontantCentimes = vpModificationMontantCentimesFromAct(newActVpModification);
+      const vpMontantCentimes = newActIsVpModification
+        ? vpModificationMontantCentimesFromAct(newActVpModification)
+        : newActIsVpMiseEnPlace
+          ? vpMiseEnPlaceMontantCentimesFromAct(newActVpMiseEnPlace)
+          : null;
       const remuneration = buildRemunerationPayload(product, montantEuros);
       const investissementId = await resolveDraftInvestissementId(
         pipe.contact_id,
@@ -387,6 +427,7 @@ export function PipeSuiviStelliumActAdd({
       setProductLabel("");
       setMontantEuros("");
       setNewActVpModification({ ...EMPTY_VP_MODIFICATION_ACT_VALUE });
+      setNewActVpMiseEnPlace({ ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE });
     } catch (err) {
       console.error(err);
       toast.error(String(err));
@@ -466,6 +507,13 @@ export function PipeSuiviStelliumActAdd({
                       : undefined
                   }
                 />
+              ) : isVpMiseEnPlaceStelliumAct(draft.stellium_label ?? "") ? (
+                <VpMiseEnPlaceActFields
+                  value={draftVpMiseEnPlace[draft.id] ?? { ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE }}
+                  onChange={(value) =>
+                    setDraftVpMiseEnPlace((prev) => ({ ...prev, [draft.id]: value }))
+                  }
+                />
               ) : null}
               <div className="flex flex-wrap items-center justify-end gap-2">
                 {variant === "suivi" &&
@@ -485,6 +533,9 @@ export function PipeSuiviStelliumActAdd({
                             draft.investissement_id ?? undefined,
                           vpModification: toVpModificationPdfFillInput(
                             draftVpModification[draft.id] ?? { ...EMPTY_VP_MODIFICATION_ACT_VALUE }
+                          ),
+                          vpMiseEnPlace: toVpMiseEnPlacePdfFillInput(
+                            draftVpMiseEnPlace[draft.id] ?? { ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE }
                           ),
                         }
                       )
@@ -544,6 +595,9 @@ export function PipeSuiviStelliumActAdd({
                   if (!isVpModificationStelliumAct(label)) {
                     setNewActVpModification({ ...EMPTY_VP_MODIFICATION_ACT_VALUE });
                   }
+                  if (!isVpMiseEnPlaceStelliumAct(label)) {
+                    setNewActVpMiseEnPlace({ ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE });
+                  }
                 }}
                 versementInit={showVersementInit}
               />
@@ -559,6 +613,11 @@ export function PipeSuiviStelliumActAdd({
                           loadVpModificationMontantEurosPrefill(pipe.contact_id, productLabel)
                       : undefined
                   }
+                />
+              ) : newActIsVpMiseEnPlace ? (
+                <VpMiseEnPlaceActFields
+                  value={newActVpMiseEnPlace}
+                  onChange={setNewActVpMiseEnPlace}
                 />
               ) : null}
               <div className="flex flex-wrap justify-end gap-2">
@@ -578,6 +637,7 @@ export function PipeSuiviStelliumActAdd({
                           {
                             suggestedInvestissementId: suggestedId ?? undefined,
                             vpModification: toVpModificationPdfFillInput(newActVpModification),
+                            vpMiseEnPlace: toVpMiseEnPlacePdfFillInput(newActVpMiseEnPlace),
                           }
                         );
                       })();
@@ -594,6 +654,7 @@ export function PipeSuiviStelliumActAdd({
                     setProductLabel("");
                     setMontantEuros("");
                     setNewActVpModification({ ...EMPTY_VP_MODIFICATION_ACT_VALUE });
+      setNewActVpMiseEnPlace({ ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE });
                   }}
                 >
                   Annuler

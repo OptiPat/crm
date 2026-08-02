@@ -9,7 +9,7 @@ import {
 } from "@/lib/placement/stellium-box-placement-labels";
 import { trackVersementAffaireOnPipeCreate } from "@/lib/placement/pipe-placement-tracking";
 import { resolveInvestissementIdForStelliumAct } from "@/lib/placement/resolve-investissement-for-stellium-act";
-import { isVpModificationStelliumAct } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
+import { isVpModificationStelliumAct, isVpMiseEnPlaceStelliumAct } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
 import {
   buildVersementAffaireTitre,
   defaultVersementComplementaireAffaireStage,
@@ -107,7 +107,7 @@ export async function applySuiviStelliumActsAfterPipeCreate(
       stellium_label: actLabel,
       product_label: product,
       investissement_id: investissementId,
-      montant_centimes: isVpModificationStelliumAct(actLabel)
+      montant_centimes: isVpModificationStelliumAct(actLabel) || isVpMiseEnPlaceStelliumAct(actLabel)
         ? act.montantCentimes ?? null
         : null,
     });

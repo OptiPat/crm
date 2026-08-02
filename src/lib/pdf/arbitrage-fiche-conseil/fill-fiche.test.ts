@@ -5,6 +5,13 @@ import {
   VP_MODIFICATION_MONTANT_TEXT_FIELD,
 } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-pdf-fill";
 import { VP_MODIFICATION_PER_OPERATION_TEXT_FIELD } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-per-pdf-fill";
+import {
+  VP_MISE_EN_PLACE_MONTANT_TEXT_FIELD,
+  VP_MISE_EN_PLACE_OUI_RADIO_FIELD,
+  VP_MISE_EN_PLACE_OUI_RADIO_VALUE,
+  VP_MISE_EN_PLACE_PERIO_DROPDOWN_FIELD,
+} from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-pdf-fill";
+import { VP_MISE_EN_PLACE_PER_OPERATION_TEXT_FIELD } from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-per-pdf-fill";
 import { PDFDocument } from "pdf-lib";
 
 async function makeAvVpModificationTemplate(): Promise<Uint8Array> {
@@ -101,6 +108,73 @@ describe("fillArbitrageFicheConseilPdf", () => {
     expect(filledForm.getTextField("invest1").getText()).toBe("DUPONT Jean");
     expect(filledForm.getTextField(VP_MODIFICATION_PER_OPERATION_TEXT_FIELD).getText()).toContain(
       "Montant : 150 €"
+    );
+  });
+
+  it("remplit mise en place VP sur modèle AV", async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage();
+    const form = doc.getForm();
+    form.createTextField("Nomclient").addToPage(page, { x: 50, y: 200 });
+    form.createTextField("Prenomclient").addToPage(page, { x: 50, y: 180 });
+    form.createTextField("enveloppe").addToPage(page, { x: 50, y: 160 });
+    form.createRadioGroup(VP_MISE_EN_PLACE_OUI_RADIO_FIELD).addOptionToPage("1", page, {
+      x: 50,
+      y: 100,
+    });
+    form
+      .getRadioGroup(VP_MISE_EN_PLACE_OUI_RADIO_FIELD)
+      .addOptionToPage("2", page, { x: 80, y: 100 });
+    form.createTextField(VP_MISE_EN_PLACE_MONTANT_TEXT_FIELD).addToPage(page, { x: 50, y: 80 });
+    form
+      .createDropdown(VP_MISE_EN_PLACE_PERIO_DROPDOWN_FIELD)
+      .addOptions(["Mensuel", "Trimestriel", "Semestriel", "Annuel"]);
+    form.getDropdown(VP_MISE_EN_PLACE_PERIO_DROPDOWN_FIELD).addToPage(page, { x: 50, y: 60 });
+    const template = await doc.save();
+
+    const filled = await fillArbitrageFicheConseilPdf(
+      template,
+      "AV",
+      { ...input, vpMiseEnPlace: { montantCentimes: 100_00, frequence: "MENSUEL" } },
+      { templateFamily: "VP_MISE_EN_PLACE" }
+    );
+    const filledForm = (await PDFDocument.load(filled)).getForm();
+    expect(filledForm.getRadioGroup(VP_MISE_EN_PLACE_OUI_RADIO_FIELD).getSelected()).toBe(
+      VP_MISE_EN_PLACE_OUI_RADIO_VALUE
+    );
+    expect(filledForm.getTextField(VP_MISE_EN_PLACE_MONTANT_TEXT_FIELD).getText()).toBe("100");
+    expect(filledForm.getDropdown(VP_MISE_EN_PLACE_PERIO_DROPDOWN_FIELD).getSelected()[0]).toBe(
+      "Mensuel"
+    );
+  });
+
+  it("remplit mise en place VP sur modèle PER (Text3)", async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage();
+    const form = doc.getForm();
+    form.createTextField("invest1").addToPage(page, { x: 50, y: 200 });
+    form.createTextField("numcontrat").addToPage(page, { x: 50, y: 180 });
+    form.createTextField(VP_MISE_EN_PLACE_PER_OPERATION_TEXT_FIELD).addToPage(page, {
+      x: 50,
+      y: 50,
+      width: 300,
+      height: 80,
+    });
+    const template = await doc.save();
+
+    const filled = await fillArbitrageFicheConseilPdf(
+      template,
+      "PER",
+      { ...input, vpMiseEnPlace: { montantCentimes: 200_00, frequence: "MENSUEL" } },
+      { templateFamily: "VP_MISE_EN_PLACE" }
+    );
+    const filledForm = (await PDFDocument.load(filled)).getForm();
+    expect(filledForm.getTextField("invest1").getText()).toBe("DUPONT Jean");
+    expect(filledForm.getTextField(VP_MISE_EN_PLACE_PER_OPERATION_TEXT_FIELD).getText()).toContain(
+      "Mise en place des versements programmés"
+    );
+    expect(filledForm.getTextField(VP_MISE_EN_PLACE_PER_OPERATION_TEXT_FIELD).getText()).toContain(
+      "Montant : 200 €"
     );
   });
 });

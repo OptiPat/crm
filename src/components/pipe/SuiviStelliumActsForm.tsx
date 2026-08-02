@@ -3,10 +3,12 @@ import { Button } from "@/components/ui/button";
 import { StelliumPlacementActFields } from "@/components/pipe/StelliumPlacementActFields";
 import { PlacementMontantField } from "@/components/pipe/PlacementMontantField";
 import { VpModificationActFields } from "@/components/pipe/VpModificationActFields";
+import { VpMiseEnPlaceActFields } from "@/components/pipe/VpMiseEnPlaceActFields";
 import { ArbitrageFicheConseilButton } from "@/components/fiche-conseil/ArbitrageFicheConseilButton";
 import {
   isStelliumActEligibleForFicheConseil,
   isVpModificationStelliumAct,
+  isVpMiseEnPlaceStelliumAct,
 } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
 import { loadVpModificationMontantEurosPrefill } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-prefill";
 import {
@@ -14,6 +16,11 @@ import {
   toVpModificationPdfFillInput,
   type VpModificationActValue,
 } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
+import {
+  EMPTY_VP_MISE_EN_PLACE_ACT_VALUE,
+  toVpMiseEnPlacePdfFillInput,
+  type VpMiseEnPlaceActValue,
+} from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-types";
 import { isVersementComplementaireActLabel } from "@/lib/pipe/pipe-suivi";
 
 export interface SuiviStelliumActRow {
@@ -22,6 +29,7 @@ export interface SuiviStelliumActRow {
   actLabel: string;
   montantEuros: string;
   vpModification: VpModificationActValue;
+  vpMiseEnPlace: VpMiseEnPlaceActValue;
 }
 
 function newActRow(): SuiviStelliumActRow {
@@ -31,6 +39,7 @@ function newActRow(): SuiviStelliumActRow {
     actLabel: "",
     montantEuros: "",
     vpModification: { ...EMPTY_VP_MODIFICATION_ACT_VALUE },
+    vpMiseEnPlace: { ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE },
   };
 }
 
@@ -46,7 +55,10 @@ interface SuiviStelliumActsFormProps {
   onFicheConseil?: (
     actLabel: string,
     productLabel: string,
-    options?: { vpModification?: ReturnType<typeof toVpModificationPdfFillInput> }
+    options?: {
+      vpModification?: ReturnType<typeof toVpModificationPdfFillInput>;
+      vpMiseEnPlace?: ReturnType<typeof toVpMiseEnPlacePdfFillInput>;
+    }
   ) => void;
   ficheConseilDisabled?: boolean;
 }
@@ -61,7 +73,12 @@ export function SuiviStelliumActsForm({
 }: SuiviStelliumActsFormProps) {
   const updateAct = (
     key: string,
-    patch: Partial<Pick<SuiviStelliumActRow, "productLabel" | "actLabel" | "montantEuros" | "vpModification">>
+    patch: Partial<
+      Pick<
+        SuiviStelliumActRow,
+        "productLabel" | "actLabel" | "montantEuros" | "vpModification" | "vpMiseEnPlace"
+      >
+    >
   ) => {
     onChange(acts.map((row) => (row.key === key ? { ...row, ...patch } : row)));
   };
@@ -111,6 +128,9 @@ export function SuiviStelliumActsForm({
                 vpModification: isVpModificationStelliumAct(actLabel)
                   ? row.vpModification
                   : { ...EMPTY_VP_MODIFICATION_ACT_VALUE },
+                vpMiseEnPlace: isVpMiseEnPlaceStelliumAct(actLabel)
+                  ? row.vpMiseEnPlace
+                  : { ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE },
               });
             }}
             disabled={disabled}
@@ -134,6 +154,14 @@ export function SuiviStelliumActsForm({
                 updateAct(row.key, { vpModification });
               }}
             />
+          ) : isVpMiseEnPlaceStelliumAct(row.actLabel) ? (
+            <VpMiseEnPlaceActFields
+              value={row.vpMiseEnPlace}
+              disabled={disabled}
+              onChange={(vpMiseEnPlace) => {
+                updateAct(row.key, { vpMiseEnPlace });
+              }}
+            />
           ) : null}
           {contactId &&
           onFicheConseil &&
@@ -144,6 +172,7 @@ export function SuiviStelliumActsForm({
                 onClick={() =>
                   onFicheConseil(row.actLabel, row.productLabel, {
                     vpModification: toVpModificationPdfFillInput(row.vpModification),
+                    vpMiseEnPlace: toVpMiseEnPlacePdfFillInput(row.vpMiseEnPlace),
                   })
                 }
               />

@@ -12,6 +12,7 @@ const MANIFEST_FILE: &str = "manifest.json";
 pub enum ArbitrageFicheTemplateFamily {
     Arbitrage,
     VpModification,
+    VpMiseEnPlace,
 }
 
 impl ArbitrageFicheTemplateFamily {
@@ -19,7 +20,10 @@ impl ArbitrageFicheTemplateFamily {
         match value.trim().to_ascii_uppercase().replace('-', "_").as_str() {
             "ARBITRAGE" => Ok(Self::Arbitrage),
             "VP_MODIFICATION" | "VP_MODIF" => Ok(Self::VpModification),
-            _ => Err("Famille de fiche invalide (ARBITRAGE ou VP_MODIFICATION).".into()),
+            "VP_MISE_EN_PLACE" | "VP_MEP" => Ok(Self::VpMiseEnPlace),
+            _ => Err(
+                "Famille de fiche invalide (ARBITRAGE, VP_MODIFICATION ou VP_MISE_EN_PLACE).".into(),
+            ),
         }
     }
 }
@@ -52,6 +56,8 @@ impl ArbitrageFicheProduct {
             (ArbitrageFicheTemplateFamily::Arbitrage, Self::Per) => "arbitrage-per",
             (ArbitrageFicheTemplateFamily::VpModification, Self::Av) => "vp-modification-av",
             (ArbitrageFicheTemplateFamily::VpModification, Self::Per) => "vp-modification-per",
+            (ArbitrageFicheTemplateFamily::VpMiseEnPlace, Self::Av) => "vp-mise-en-place-av",
+            (ArbitrageFicheTemplateFamily::VpMiseEnPlace, Self::Per) => "vp-mise-en-place-per",
         }
     }
 }

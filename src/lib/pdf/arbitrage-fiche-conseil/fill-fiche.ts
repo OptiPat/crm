@@ -2,12 +2,16 @@ import type { ArbitrageFicheProductKind, FicheConseilTemplateFamily } from "@/li
 import type { VpModificationPdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
 import { applyVpModificationAvPdfFill } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-pdf-fill";
 import { applyVpModificationPerPdfFill } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-per-pdf-fill";
+import type { VpMiseEnPlacePdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-types";
+import { applyVpMiseEnPlaceAvPdfFill } from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-pdf-fill";
+import { applyVpMiseEnPlacePerPdfFill } from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-per-pdf-fill";
 
 export type ArbitrageFicheConseilFillInput = {
   nomClient: string;
   prenomClient: string;
   numeroContrat?: string | null;
   vpModification?: VpModificationPdfFillInput;
+  vpMiseEnPlace?: VpMiseEnPlacePdfFillInput;
 };
 
 function setTextField(
@@ -54,6 +58,14 @@ export async function fillArbitrageFicheConseilPdf(
       applyVpModificationAvPdfFill(form, input.vpModification);
     } else {
       applyVpModificationPerPdfFill(form, input.vpModification);
+    }
+  }
+
+  if (templateFamily === "VP_MISE_EN_PLACE" && input.vpMiseEnPlace) {
+    if (productKind === "AV") {
+      applyVpMiseEnPlaceAvPdfFill(form, input.vpMiseEnPlace);
+    } else {
+      applyVpMiseEnPlacePerPdfFill(form, input.vpMiseEnPlace);
     }
   }
 

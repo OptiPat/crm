@@ -6,6 +6,7 @@ import { YearlyActivityChart } from "@/components/dashboard/YearlyActivityChart"
 import { ConversionFunnelPanel } from "@/components/dashboard/ConversionFunnelPanel";
 import { DashboardPeriodFilterBar } from "@/components/dashboard/DashboardPeriodFilter";
 import { AlertsPreview } from "@/components/dashboard/AlertsPreview";
+import { ScpiCampaignPreview } from "@/components/dashboard/ScpiCampaignPreview";
 import { DashboardTodayGrid } from "@/components/dashboard/DashboardTodayGrid";
 import {
   DashboardPageHeader,
@@ -278,7 +279,6 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
         {showCockpit ? (
           <>
             <DashboardTodayGrid
-              currentPage={currentPage}
               onNavigate={onNavigate}
               onOpenContact={openDrillDownContact}
             />
@@ -287,6 +287,7 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
               onNavigate={onNavigate}
               onOpenContact={openDrillDownContact}
             />
+            <ScpiCampaignPreview onNavigate={onNavigate} currentPage={currentPage} />
           </>
         ) : (
           <DashboardCockpitSkeleton />

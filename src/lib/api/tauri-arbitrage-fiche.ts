@@ -3,7 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 export type ArbitrageFicheProductKind = "AV" | "PER";
 
 /** Famille de modèles PDF (dossiers séparés sous AppData). */
-export type FicheConseilTemplateFamily = "ARBITRAGE" | "VP_MODIFICATION";
+export type FicheConseilTemplateFamily =
+  | "ARBITRAGE"
+  | "VP_MODIFICATION"
+  | "VP_MISE_EN_PLACE";
 
 export type ArbitrageFicheTemplate = {
   id: string;

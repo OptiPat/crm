@@ -43,7 +43,11 @@ export function buildArbitrageFicheOutputFileName(
   const client = sanitizeFileNamePart(`${nom} ${prenom}`) || "contact";
   const contrat = sanitizeFileNamePart(numeroContrat ?? "") || "sans n° contrat";
   const actLabel =
-    templateFamily === "VP_MODIFICATION" ? "Modification VP" : "Arbitrage";
+    templateFamily === "VP_MODIFICATION"
+      ? "Modification VP"
+      : templateFamily === "VP_MISE_EN_PLACE"
+        ? "Mise en place VP"
+        : "Arbitrage";
   return fitArbitrageFicheFileName(productKind, actLabel, client, contrat);
 }
 

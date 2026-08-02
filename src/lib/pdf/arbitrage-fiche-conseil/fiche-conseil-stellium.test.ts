@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   FICHE_CONSEIL_ARBITRAGE_ACT_LABEL,
+  FICHE_CONSEIL_VP_MISE_EN_PLACE_ACT_LABEL,
   FICHE_CONSEIL_VP_MODIFICATION_ACT_LABEL,
   isStelliumActEligibleForFicheConseil,
   isVpModificationStelliumAct,
+  isVpMiseEnPlaceStelliumAct,
   resolveFicheConseilTemplateFamily,
   resolveStelliumProductLabelFromCrmInvestissement,
   resolveStelliumProductLabelFromNomProduit,
@@ -42,6 +44,31 @@ describe("fiche-conseil-stellium", () => {
     ).toBe("VP_MODIFICATION");
     expect(resolveFicheConseilTemplateFamily("Arbitrage libre")).toBe("ARBITRAGE");
     expect(isVpModificationStelliumAct("Versements programmés : Modification")).toBe(true);
+  });
+
+  it("détecte mise en place VP AV/PER éligible", () => {
+    expect(
+      isStelliumActEligibleForFicheConseil(
+        FICHE_CONSEIL_VP_MISE_EN_PLACE_ACT_LABEL,
+        "Cristalliance Avenir"
+      )
+    ).toBe(true);
+    expect(
+      isStelliumActEligibleForFicheConseil(
+        FICHE_CONSEIL_VP_MISE_EN_PLACE_ACT_LABEL,
+        "Cristalliance EvoluPER"
+      )
+    ).toBe(true);
+    expect(
+      isStelliumActEligibleForFicheConseil(
+        FICHE_CONSEIL_VP_MISE_EN_PLACE_ACT_LABEL,
+        "Corum Origin"
+      )
+    ).toBe(false);
+    expect(
+      resolveFicheConseilTemplateFamily(FICHE_CONSEIL_VP_MISE_EN_PLACE_ACT_LABEL)
+    ).toBe("VP_MISE_EN_PLACE");
+    expect(isVpMiseEnPlaceStelliumAct("Versements programmés : Mise en place")).toBe(true);
   });
 
   it("mappe produit Stellium vers AV/PER", () => {

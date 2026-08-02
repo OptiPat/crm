@@ -11,6 +11,7 @@ import { openDocumentFile } from "@/lib/api/tauri-system";
 import { fillArbitrageFicheConseilPdf } from "@/lib/pdf/arbitrage-fiche-conseil/fill-fiche";
 import { buildArbitrageFicheOutputFileName } from "@/lib/pdf/arbitrage-fiche-conseil/build-output-filename";
 import type { VpModificationPdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
+import type { VpMiseEnPlacePdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-types";
 export type GenerateArbitrageFicheConseilResult = {
   savedPath: string;
   opened: boolean;
@@ -22,7 +23,7 @@ export async function generateArbitrageFicheConseil(
   productKind: ArbitrageFicheProductKind,
   investissementId: number,
   templateFamily: FicheConseilTemplateFamily = "ARBITRAGE",
-  options?: { vpModification?: VpModificationPdfFillInput }
+  options?: { vpModification?: VpModificationPdfFillInput; vpMiseEnPlace?: VpMiseEnPlacePdfFillInput }
 ): Promise<GenerateArbitrageFicheConseilResult> {
   if (!contactId) {
     throw new Error("Aucun contact lié.");
@@ -51,6 +52,7 @@ export async function generateArbitrageFicheConseil(
       prenomClient: contact.prenom,
       numeroContrat: investissement.numero_contrat ?? null,
       vpModification: options?.vpModification,
+      vpMiseEnPlace: options?.vpMiseEnPlace,
     },
     { templateFamily }
   );

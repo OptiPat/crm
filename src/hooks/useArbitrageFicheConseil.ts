@@ -16,6 +16,7 @@ import {
   resolveArbitrageFicheTemplateForGeneration,
 } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-fiche-template";
 import type { VpModificationPdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
+import type { VpMiseEnPlacePdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-types";
 import {
   filterFicheConseilEligibleInvestissements,
   filterFicheConseilContratPickItemsByProductKind,
@@ -53,6 +54,8 @@ export type FicheConseilStartOptions = {
   templateFamily?: FicheConseilTemplateFamily;
   /** Détails modification VP (types cochés + valeurs saisies). */
   vpModification?: VpModificationPdfFillInput;
+  /** Détails mise en place VP AV (montant + périodicité). */
+  vpMiseEnPlace?: VpMiseEnPlacePdfFillInput;
 };
 
 export type ArbitrageFicheTemplatePickPending = {
@@ -82,7 +85,10 @@ export function useArbitrageFicheConseil() {
       productKind: ArbitrageFicheProductKind,
       investissementId: number,
       templateFamily: FicheConseilTemplateFamily = "ARBITRAGE",
-      vpModification?: VpModificationPdfFillInput
+      options?: {
+        vpModification?: VpModificationPdfFillInput;
+        vpMiseEnPlace?: VpMiseEnPlacePdfFillInput;
+      }
     ) => {
       setBusy(true);
       try {
@@ -92,7 +98,7 @@ export function useArbitrageFicheConseil() {
           productKind,
           investissementId,
           templateFamily,
-          { vpModification }
+          options
         );
         toast.success(
           opened
@@ -143,7 +149,10 @@ export function useArbitrageFicheConseil() {
           productKind,
           investissementId,
           templateFamily,
-          context.vpModification
+          {
+            vpModification: context.vpModification,
+            vpMiseEnPlace: context.vpMiseEnPlace,
+          }
         );
         return;
       }
@@ -200,6 +209,7 @@ export function useArbitrageFicheConseil() {
           ...context,
           templateFamily: options?.templateFamily ?? context.templateFamily ?? "ARBITRAGE",
           vpModification: options?.vpModification ?? context.vpModification,
+          vpMiseEnPlace: options?.vpMiseEnPlace ?? context.vpMiseEnPlace,
         };
         if (embeddedId && contrats.some((c) => c.investissementId === embeddedId)) {
           await continueWithInvestissement(contextWithFamily, embeddedId);
@@ -259,7 +269,11 @@ export function useArbitrageFicheConseil() {
       contactId: number,
       stelliumLabel: string,
       productLabel: string,
-      options?: { suggestedInvestissementId?: number; vpModification?: VpModificationPdfFillInput }
+      options?: {
+        suggestedInvestissementId?: number;
+        vpModification?: VpModificationPdfFillInput;
+        vpMiseEnPlace?: VpMiseEnPlacePdfFillInput;
+      }
     ) => {
       if (!isStelliumActEligibleForFicheConseil(stelliumLabel, productLabel)) return;
       const filterProductKind = stelliumProductLabelToFicheProductKind(productLabel);
@@ -273,6 +287,7 @@ export function useArbitrageFicheConseil() {
           suggestedInvestissementId: options?.suggestedInvestissementId,
           templateFamily: resolveFicheConseilTemplateFamily(stelliumLabel),
           vpModification: options?.vpModification,
+          vpMiseEnPlace: options?.vpMiseEnPlace,
         }
       );
     },
@@ -310,7 +325,10 @@ export function useArbitrageFicheConseil() {
           pending.productKind,
           pending.investissementId,
           pending.templateFamily,
-          pending.context.vpModification
+          {
+            vpModification: pending.context.vpModification,
+            vpMiseEnPlace: pending.context.vpMiseEnPlace,
+          }
         );
       }
     },

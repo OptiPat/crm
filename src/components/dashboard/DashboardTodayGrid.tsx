@@ -1,17 +1,14 @@
 import { TachesPreview } from "./TachesPreview";
 import { CalendarTodayPreview } from "./CalendarTodayPreview";
 import { BirthdaysTodayPreview } from "./BirthdaysTodayPreview";
-import { ScpiCampaignPreview } from "./ScpiCampaignPreview";
 import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 
 export function DashboardTodayGrid({
   onNavigate,
   onOpenContact,
-  currentPage,
 }: {
   onNavigate?: (page: string) => void;
   onOpenContact?: DashboardDrillDownOpenContact;
-  currentPage?: string;
 }) {
   return (
     <div className="space-y-5 min-w-0">
@@ -20,7 +17,6 @@ export function DashboardTodayGrid({
         <CalendarTodayPreview onOpenContact={onOpenContact} onNavigate={onNavigate} />
         <BirthdaysTodayPreview onOpenContact={onOpenContact} />
       </div>
-      <ScpiCampaignPreview onNavigate={onNavigate} currentPage={currentPage} />
     </div>
   );
 }

@@ -16,8 +16,16 @@ export const FICHE_CONSEIL_ARBITRAGE_ACT_LABEL = "Arbitrage libre";
 export const FICHE_CONSEIL_VP_MODIFICATION_ACT_LABEL =
   "Versements programmés : Modification";
 
+/** Acte Stellium — mise en place des versements programmés (AV / PER). */
+export const FICHE_CONSEIL_VP_MISE_EN_PLACE_ACT_LABEL =
+  "Versements programmés : Mise en place";
+
 export function isVpModificationStelliumAct(stelliumLabel: string): boolean {
   return stelliumLabel.trim() === FICHE_CONSEIL_VP_MODIFICATION_ACT_LABEL;
+}
+
+export function isVpMiseEnPlaceStelliumAct(stelliumLabel: string): boolean {
+  return stelliumLabel.trim() === FICHE_CONSEIL_VP_MISE_EN_PLACE_ACT_LABEL;
 }
 
 function isAvPerStelliumProduct(productLabel: string): boolean {
@@ -34,6 +42,7 @@ export function isStelliumActEligibleForFicheConseil(
   if (!label || !product) return false;
   if (!isAvPerStelliumProduct(product)) return false;
   if (isVpModificationStelliumAct(label)) return true;
+  if (isVpMiseEnPlaceStelliumAct(label)) return true;
   if (placementOperationTypeFromStelliumLabel(label) !== "ARBITRAGE") return false;
   return true;
 }
@@ -41,7 +50,9 @@ export function isStelliumActEligibleForFicheConseil(
 export function resolveFicheConseilTemplateFamily(
   stelliumLabel: string
 ): FicheConseilTemplateFamily {
-  return isVpModificationStelliumAct(stelliumLabel) ? "VP_MODIFICATION" : "ARBITRAGE";
+  if (isVpModificationStelliumAct(stelliumLabel)) return "VP_MODIFICATION";
+  if (isVpMiseEnPlaceStelliumAct(stelliumLabel)) return "VP_MISE_EN_PLACE";
+  return "ARBITRAGE";
 }
 
 export function stelliumProductLabelToFicheProductKind(

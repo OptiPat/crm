@@ -21,7 +21,11 @@ export async function pickAndInstallArbitrageFicheTemplate(
   templateFamily: FicheConseilTemplateFamily = "ARBITRAGE"
 ): Promise<ArbitrageFicheTemplate | null> {
   const familyLabel =
-    templateFamily === "VP_MODIFICATION" ? "modification VP" : "arbitrage";
+    templateFamily === "VP_MODIFICATION"
+      ? "modification VP"
+      : templateFamily === "VP_MISE_EN_PLACE"
+        ? "mise en place VP"
+        : "arbitrage";
   const selected = await open({
     title: `Modèle fiche conseil ${familyLabel} ${productKind}`,
     multiple: false,
@@ -39,7 +43,11 @@ export async function requireArbitrageFicheTemplates(
   const templates = await listArbitrageFicheTemplates(productKind, templateFamily);
   if (templates.length === 0) {
     const familyHint =
-      templateFamily === "VP_MODIFICATION" ? " modification VP" : " arbitrage";
+      templateFamily === "VP_MODIFICATION"
+        ? " modification VP"
+        : templateFamily === "VP_MISE_EN_PLACE"
+          ? " mise en place VP"
+          : " arbitrage";
     throw new Error(
       `Aucun modèle ${productKind}${familyHint} configuré. Allez dans ${ARBITRAGE_FICHE_TEMPLATE_SETTINGS_HINT}.`
     );

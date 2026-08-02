@@ -20,6 +20,12 @@ describe("buildArbitrageFicheOutputFileName", () => {
     ).toBe("Fiche conseil AV Modification VP - DUPONT Jean - AV-1.pdf");
   });
 
+  it("formate mise en place VP", () => {
+    expect(
+      buildArbitrageFicheOutputFileName("AV", "DUPONT", "Jean", "AV-1", "VP_MISE_EN_PLACE")
+    ).toBe("Fiche conseil AV Mise en place VP - DUPONT Jean - AV-1.pdf");
+  });
+
   it("tronque au-delà de 180 caractères (limite Rust)", () => {
     const longNom = "A".repeat(100);
     const longContrat = "B".repeat(100);

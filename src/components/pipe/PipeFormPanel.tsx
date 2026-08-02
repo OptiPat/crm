@@ -57,6 +57,9 @@ import {
   validateSuiviStelliumActs,
 } from "@/lib/placement/suivi-stellium-acts";
 import { parseMontantEurosToCentimes } from "@/lib/pipe/placement-montant";
+import { isVpModificationStelliumAct, isVpMiseEnPlaceStelliumAct } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
+import { vpModificationMontantCentimesFromAct } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
+import { vpMiseEnPlaceMontantCentimesFromAct } from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-types";
 import { toast } from "sonner";
 import { TeamLockBanner } from "@/components/team/TeamLockBanner";
 import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
@@ -487,9 +490,11 @@ export function PipeFormPanel({
           suiviStelliumActs.map((row) => ({
             productLabel: row.productLabel,
             actLabel: row.actLabel,
-            montantCentimes: row.vpModification.kinds.includes("montant")
-              ? parseMontantEurosToCentimes(row.vpModification.montantEuros)
-              : parseMontantEurosToCentimes(row.montantEuros),
+            montantCentimes: isVpModificationStelliumAct(row.actLabel)
+              ? vpModificationMontantCentimesFromAct(row.vpModification)
+              : isVpMiseEnPlaceStelliumAct(row.actLabel)
+                ? vpMiseEnPlaceMontantCentimesFromAct(row.vpMiseEnPlace)
+                : parseMontantEurosToCentimes(row.montantEuros),
           }))
         );
       }
