@@ -19,6 +19,8 @@ export type FicheConseilContext = {
   vpModification?: VpModificationPdfFillInput;
   /** Détails mise en place VP AV (montant + périodicité). */
   vpMiseEnPlace?: VpMiseEnPlacePdfFillInput;
+  /** Brouillon placement_operations à lier au contrat choisi. */
+  placementOperationDraftId?: number;
 };
 
 export function filterFicheConseilEligibleInvestissements(

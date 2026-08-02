@@ -38,12 +38,6 @@ export const PIPE_STAGE_DESCRIPTIONS: Record<PipeStage, string> = {
   PERDUE_OU_EN_ATTENTE: "Projet refusé, gelé ou en stand-by sans date.",
 };
 
-export const PIPE_TYPE_DESCRIPTIONS: Record<PipeType, string> = {
-  AFFAIRE: "Opportunité commerciale (produit, montant, closing).",
-  ACTE_GESTION: "Une occasion de suivi client (RDV, arbitrage, versement…).",
-  ACTION: "Étape ponctuelle : appel, relance, RDV…",
-};
-
 /** Libellé UI du champ stage (évite le jargon « stage »). */
 export const PIPE_STAGE_FIELD_LABEL = "Avancement";
 

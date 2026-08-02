@@ -531,6 +531,7 @@ export function PipeSuiviStelliumActAdd({
                         {
                           suggestedInvestissementId:
                             draft.investissement_id ?? undefined,
+                          placementOperationDraftId: draft.id,
                           vpModification: toVpModificationPdfFillInput(
                             draftVpModification[draft.id] ?? { ...EMPTY_VP_MODIFICATION_ACT_VALUE }
                           ),

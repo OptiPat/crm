@@ -166,6 +166,18 @@ export async function listPlacementOperationsForPipe(
   return invoke<PlacementOperation[]>("list_placement_operations_for_pipe", { pipeId });
 }
 
+export async function updatePlacementOperationInvestissementId(
+  id: number,
+  investissementId: number
+): Promise<PlacementOperation> {
+  const op = await invoke<PlacementOperation>("update_placement_operation_investissement_id", {
+    id,
+    investissement_id: investissementId,
+  });
+  notifyPlacementOperationsChanged();
+  return op;
+}
+
 export async function updatePlacementOperationPvManual(
   id: number,
   pvManual: number | null

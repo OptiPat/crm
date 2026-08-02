@@ -536,6 +536,46 @@ impl super::Database {
             .ok_or(rusqlite::Error::QueryReturnedNoRows)
     }
 
+    /// Lie un brouillon suivi Stellium au contrat CRM choisi (fiche conseil).
+    pub fn update_placement_operation_investissement_id(
+        &self,
+        id: i64,
+        investissement_id: i64,
+    ) -> Result<super::models::PlacementOperation> {
+        if investissement_id <= 0 {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "investissement_id invalide".into(),
+            ));
+        }
+        let op = self.get_placement_operation_by_id(id)?;
+        if !placement_operation_is_suivi_draft(&op) {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Seuls les brouillons Stellium non confirmés sont modifiables.".into(),
+            ));
+        }
+        let inv = self.get_investissement_by_id(investissement_id)?;
+        match inv.contact_id {
+            Some(cid) if cid == op.contact_id => {}
+            _ => {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "investissement_id ne correspond pas au contact".into(),
+                ));
+            }
+        }
+        if op.investissement_id == Some(investissement_id) {
+            return self.get_placement_operation_by_id(id);
+        }
+        let now = now_unix();
+        let updated = self.conn.execute(
+            "UPDATE placement_operations SET investissement_id = ?1, updated_at = ?2 WHERE id = ?3",
+            params![investissement_id, now, id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        self.get_placement_operation_by_id(id)
+    }
+
     pub fn list_placement_operations_for_pipe(
         &self,
         pipe_id: i64,
@@ -1863,6 +1903,74 @@ mod tests {
 
         assert_eq!(merged.id, draft.id);
         assert_eq!(merged.investissement_id, Some(inv.id));
+    }
+
+    #[test]
+    fn update_suivi_draft_investissement_id() {
+        use crate::database::pipe::PIPE_TYPE_ACTE_GESTION;
+
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        db.migrate_pipes_table().unwrap();
+        let contact = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let inv = db
+            .create_investissement(super::super::models::NewInvestissement {
+                contact_id: Some(contact_id),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "Vie Plus".into(),
+                numero_contrat: Some("AV-2".into()),
+                montant_initial: None,
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+        let suivi = db
+            .create_pipe(super::super::models::NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
+                parent_pipe_id: None,
+                titre: "Suivi VP".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let draft = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(suivi.id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_VERSEMENT.into(),
+                product_label: Some("Cristalliance Avenir".into()),
+                stellium_label: Some("Versements programmés : Mise en place".into()),
+                investissement_id: None,
+                ..Default::default()
+            })
+            .unwrap();
+
+        let updated = db
+            .update_placement_operation_investissement_id(draft.id, inv.id)
+            .unwrap();
+        assert_eq!(updated.investissement_id, Some(inv.id));
     }
 
     #[test]

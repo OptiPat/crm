@@ -3355,6 +3355,19 @@ pub fn list_pipe_remuneration_rows(
 }
 
 #[tauri::command]
+pub fn update_placement_operation_investissement_id(
+    db: State<'_, DbState>,
+    id: i64,
+    investissement_id: i64,
+) -> Result<crate::database::models::PlacementOperation, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .update_placement_operation_investissement_id(id, investissement_id)
+        .map_err(|e| format!("Échec liaison contrat brouillon: {}", e))
+}
+
+#[tauri::command]
 pub fn update_placement_operation_pv_manual(
     db: State<'_, DbState>,
     id: i64,

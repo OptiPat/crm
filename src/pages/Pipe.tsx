@@ -66,6 +66,7 @@ import { PipeRemunerationBoard } from "@/components/pipe/PipeRemunerationBoard";
 import { PipeFormPanel } from "@/components/pipe/PipeFormPanel";
 import { PipeDetailPanel } from "@/components/pipe/PipeDetailPanel";
 import { PipeStageAdvanceDialog } from "@/components/pipe/PipeStageAdvanceDialog";
+import { PipeDetailLayoutToolbar } from "@/components/pipe/PipeDetailLayoutToolbar";
 import { RdvPlanifierDialog } from "@/components/calendar/RdvPlanifierDialog";
 import { toast } from "sonner";
 import { usePipeStageAdvance } from "@/hooks/usePipeStageAdvance";
@@ -124,6 +125,7 @@ export function Pipe() {
     null
   );
   const [dismissingPlacementId, setDismissingPlacementId] = useState<number | null>(null);
+  const [detailExpanded, setDetailExpanded] = useState(false);
   const formIsDirtyRef = useRef(false);
   const placementBoardLoadedRef = useRef(false);
   const pendingPipeFocusRef = useRef<number | null>(consumePipeFocusId());
@@ -131,6 +133,7 @@ export function Pipe() {
   const selectedPipeRef = useRef<PipeRecord | null>(null);
   const loadPipesGenerationRef = useRef(0);
   const loadPlacementBoardRowsGenerationRef = useRef(0);
+  const detailExpandedBeforeFormRef = useRef<boolean | null>(null);
 
   const PIPE_RELOAD_DEBOUNCE_MS = 150;
 
@@ -138,9 +141,41 @@ export function Pipe() {
     formIsDirtyRef.current = isDirty;
   }, []);
 
+  const expandDetail = useCallback(() => {
+    setDetailExpanded(true);
+  }, []);
+
+  const collapseDetail = useCallback(() => {
+    setDetailExpanded(false);
+  }, []);
+
   useEffect(() => {
     if (panelMode !== "edit") {
       formIsDirtyRef.current = false;
+    }
+  }, [panelMode]);
+
+  useEffect(() => {
+    if (panelMode === "edit" || panelMode === "create") {
+      setDetailExpanded((current) => {
+        if (detailExpandedBeforeFormRef.current === null) {
+          detailExpandedBeforeFormRef.current = current;
+        }
+        return true;
+      });
+      return;
+    }
+
+    if (panelMode === "view" && detailExpandedBeforeFormRef.current !== null) {
+      const restore = detailExpandedBeforeFormRef.current;
+      detailExpandedBeforeFormRef.current = null;
+      setDetailExpanded(restore);
+      return;
+    }
+
+    if (panelMode === "empty") {
+      detailExpandedBeforeFormRef.current = null;
+      setDetailExpanded(false);
     }
   }, [panelMode]);
 
@@ -401,6 +436,8 @@ export function Pipe() {
     setSelectedPlacementOperationId(null);
     setSelectedPipe(null);
     setPanelMode("empty");
+    setDetailExpanded(false);
+    detailExpandedBeforeFormRef.current = null;
   };
 
   const childAffaires = useMemo(() => {
@@ -483,6 +520,19 @@ export function Pipe() {
       panelMode === "edit" ||
       (panelMode === "view" && selectedPipe != null));
   const showBoardAside = showAffairesBoardAside || showSuiviStelliumBoardAside;
+  const showDetailChrome =
+    showBoardAside && (panelMode === "view" || panelMode === "create" || panelMode === "edit");
+  const boardLayoutSplit = showBoardAside && !detailExpanded;
+
+  const detailChrome = showDetailChrome ? (
+    <div className="shrink-0 border-b border-border/60 bg-muted/15 px-4 py-2">
+      <PipeDetailLayoutToolbar
+        expanded={detailExpanded}
+        onExpand={expandDetail}
+        onBackToBoard={collapseDetail}
+      />
+    </div>
+  ) : null;
 
   const openEdit = () => {
     if (selectedPipe) setPanelMode("edit");
@@ -679,14 +729,15 @@ export function Pipe() {
         <div
           className={cn(
             "flex flex-1 min-h-0 flex-col gap-0",
-            showBoardAside ? "lg:flex-row" : "",
+            boardLayoutSplit ? "lg:flex-row" : "",
             "rounded-xl border border-border/70 bg-card shadow-sm overflow-hidden"
           )}
         >
           <div
             className={cn(
               "flex flex-1 min-h-[320px] min-w-0 flex-col",
-              showBoardAside ? "lg:min-h-0" : "w-full"
+              boardLayoutSplit ? "lg:min-h-0" : "w-full",
+              showBoardAside && detailExpanded && "hidden"
             )}
           >
             {loading || (section === "suivi_stellium" && placementBoardLoading) ? (
@@ -718,11 +769,14 @@ export function Pipe() {
           {showBoardAside ? (
             <aside
               className={cn(
-                "min-h-[280px] lg:min-h-0 lg:w-[min(100%,400px)] lg:shrink-0",
-                "border-t lg:border-t-0 lg:border-l border-border/70 bg-background/50"
+                "flex min-h-[280px] flex-col bg-background/50",
+                detailExpanded
+                  ? "min-h-0 w-full flex-1"
+                  : "lg:min-h-0 lg:w-[min(100%,400px)] lg:shrink-0 border-t lg:border-t-0 lg:border-l border-border/70"
               )}
             >
-              {detailPanel}
+              {detailChrome}
+              <div className="min-h-0 flex-1 overflow-hidden">{detailPanel}</div>
             </aside>
           ) : null}
         </div>

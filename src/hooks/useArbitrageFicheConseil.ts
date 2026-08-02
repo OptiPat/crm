@@ -1,7 +1,11 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import type { Tache } from "@/lib/api/tauri-taches";
-import type { ArbitrageFicheTemplate, FicheConseilTemplateFamily } from "@/lib/api/tauri-arbitrage-fiche";
+import type {
+  ArbitrageFicheTemplate,
+  FicheConseilTemplateFamily,
+} from "@/lib/api/tauri-arbitrage-fiche";
+import { updatePlacementOperationInvestissementId } from "@/lib/api/tauri-box-placement";
 import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
 import { buildPartenaireNomMap } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-partenaires";
 import {
@@ -56,6 +60,8 @@ export type FicheConseilStartOptions = {
   vpModification?: VpModificationPdfFillInput;
   /** Détails mise en place VP AV (montant + périodicité). */
   vpMiseEnPlace?: VpMiseEnPlacePdfFillInput;
+  /** Brouillon placement_operations à lier au contrat choisi. */
+  placementOperationDraftId?: number;
 };
 
 export type ArbitrageFicheTemplatePickPending = {
@@ -139,6 +145,11 @@ export function useArbitrageFicheConseil() {
         return;
       }
 
+      const draftId = context.placementOperationDraftId;
+      if (draftId != null && draftId > 0) {
+        await updatePlacementOperationInvestissementId(draftId, investissementId);
+      }
+
       const templateFamily = context.templateFamily ?? "ARBITRAGE";
       const templates = await requireArbitrageFicheTemplates(productKind, templateFamily);
       const resolved = resolveArbitrageFicheTemplateForGeneration(templates);
@@ -210,6 +221,8 @@ export function useArbitrageFicheConseil() {
           templateFamily: options?.templateFamily ?? context.templateFamily ?? "ARBITRAGE",
           vpModification: options?.vpModification ?? context.vpModification,
           vpMiseEnPlace: options?.vpMiseEnPlace ?? context.vpMiseEnPlace,
+          placementOperationDraftId:
+            options?.placementOperationDraftId ?? context.placementOperationDraftId,
         };
         if (embeddedId && contrats.some((c) => c.investissementId === embeddedId)) {
           await continueWithInvestissement(contextWithFamily, embeddedId);
@@ -273,6 +286,7 @@ export function useArbitrageFicheConseil() {
         suggestedInvestissementId?: number;
         vpModification?: VpModificationPdfFillInput;
         vpMiseEnPlace?: VpMiseEnPlacePdfFillInput;
+        placementOperationDraftId?: number;
       }
     ) => {
       if (!isStelliumActEligibleForFicheConseil(stelliumLabel, productLabel)) return;
@@ -288,6 +302,7 @@ export function useArbitrageFicheConseil() {
           templateFamily: resolveFicheConseilTemplateFamily(stelliumLabel),
           vpModification: options?.vpModification,
           vpMiseEnPlace: options?.vpMiseEnPlace,
+          placementOperationDraftId: options?.placementOperationDraftId,
         }
       );
     },

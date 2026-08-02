@@ -29,7 +29,6 @@ import {
   PIPE_STAGE_FIELD_LABEL,
   PIPE_STAGE_LABELS,
   PIPE_TYPES,
-  PIPE_TYPE_DESCRIPTIONS,
   PIPE_TYPE_LABELS,
   canBePipeParent,
   defaultPipeStage,
@@ -548,9 +547,6 @@ export function PipeFormPanel({
                 >
                   <Icon className={cn("h-4 w-4 mb-2", active ? "text-primary" : "text-muted-foreground")} />
                   <p className="text-sm font-medium">{PIPE_TYPE_LABELS[type]}</p>
-                  <p className="text-xs text-muted-foreground mt-1 leading-snug">
-                    {PIPE_TYPE_DESCRIPTIONS[type]}
-                  </p>
                 </button>
               );
             })}

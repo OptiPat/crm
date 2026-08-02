@@ -305,7 +305,7 @@ export function PipeDetailPanel({
     <>
       <div className="flex h-full flex-col">
         <div className="border-b px-5 py-4 flex items-start justify-between gap-3 shrink-0">
-          <div className="min-w-0 space-y-2">
+          <div className="min-w-0 space-y-2 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <PipeTypeBadge pipeType={pipe.pipe_type} />
               {pipe.stage ? <PipeStageBadge stage={pipe.stage} pipe={pipe} /> : null}
