@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifyAlertesChanged } from "@/lib/alertes/alert-events";
+import { notifyInteractionsChanged } from "@/lib/interactions/interaction-events";
 import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { notifyTachesChanged } from "@/lib/taches/tache-events";
 
@@ -94,10 +95,22 @@ export async function checkAndCreateArbitrageAlerts(): Promise<Alerte[]> {
   return created;
 }
 
-export async function traiterAlerteArbitrage(alerteId: number): Promise<void> {
-  await invoke<void>("traiter_alerte_arbitrage", { alerteId });
+export async function traiterAlerteArbitrage(
+  alerteId: number,
+  dateDernierArbitrage?: number,
+  dateProchainArbitrage?: number,
+  note?: string
+): Promise<void> {
+  await invoke<void>("traiter_alerte_arbitrage", {
+    alerteId,
+    dateDernierArbitrage: dateDernierArbitrage ?? null,
+    dateProchainArbitrage: dateProchainArbitrage ?? null,
+    note: note?.trim() || null,
+  });
   notifyAlertesChanged();
   notifyTachesChanged();
+  notifyInvestissementsChanged();
+  if (note?.trim()) notifyInteractionsChanged();
 }
 
 export async function reporterAlerteArbitrage(

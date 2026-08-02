@@ -209,3 +209,37 @@ export function echeanceStateForSort(
 ): EcheanceState {
   return echeanceState(tache.date_echeance, tache.statut, nowMs);
 }
+
+/** Horizon cockpit dashboard : échéance ≤ aujourd'hui + N jours (inclus). */
+export const COCKPIT_TACHE_HORIZON_DAYS = 7;
+
+/** Tâche active avec échéance en retard ou dans les N prochains jours (cockpit). */
+export function matchesTacheDashboardCockpitPreview(
+  tache: Tache,
+  nowMs: number = Date.now()
+): boolean {
+  if (!isActive(tache)) return false;
+  if (tache.date_echeance == null) return false;
+  const today = startOfTodayUnix(nowMs);
+  const horizonEnd = today + COCKPIT_TACHE_HORIZON_DAYS * DAY_SEC;
+  return tache.date_echeance <= horizonEnd;
+}
+
+/** Retard d'abord (plus ancien en premier), puis par échéance croissante. */
+export function filterAndSortTachesDashboardCockpit(
+  taches: Tache[],
+  nowMs: number = Date.now()
+): Tache[] {
+  const today = startOfTodayUnix(nowMs);
+  return taches
+    .filter((t) => matchesTacheDashboardCockpitPreview(t, nowMs))
+    .sort((a, b) => {
+      const da = a.date_echeance!;
+      const db = b.date_echeance!;
+      const aOver = da < today;
+      const bOver = db < today;
+      if (aOver !== bOver) return aOver ? -1 : 1;
+      if (da !== db) return da - db;
+      return a.id - b.id;
+    });
+}

@@ -2126,13 +2126,45 @@ pub fn check_and_create_arbitrage_alerts(db: State<'_, DbState>) -> Result<Vec<A
 }
 
 #[tauri::command]
-pub fn traiter_alerte_arbitrage(db: State<'_, DbState>, alerte_id: i64) -> Result<(), String> {
+pub fn traiter_alerte_arbitrage(
+    db: State<'_, DbState>,
+    alerte_id: i64,
+    date_dernier_arbitrage: Option<i64>,
+    date_prochain_arbitrage: Option<i64>,
+    note: Option<String>,
+) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .traiter_alerte_arbitrage(alerte_id)
+        .traiter_alerte_arbitrage(
+            alerte_id,
+            date_dernier_arbitrage,
+            date_prochain_arbitrage,
+            note.as_deref(),
+        )
         .map_err(|e| format!("Failed to treat arbitrage alert: {}", e))
+}
+
+#[tauri::command]
+pub fn complete_arbitrage_tache(
+    db: State<'_, DbState>,
+    tache_id: i64,
+    date_dernier_arbitrage: Option<i64>,
+    date_prochain_arbitrage: Option<i64>,
+    note: Option<String>,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .complete_arbitrage_tache(
+            tache_id,
+            date_dernier_arbitrage,
+            date_prochain_arbitrage,
+            note.as_deref(),
+        )
+        .map_err(|e| format!("Failed to complete arbitrage task: {}", e))
 }
 
 #[tauri::command]

@@ -29,10 +29,12 @@ import {
   updateTache,
   type TacheWithContact,
 } from "@/lib/api/tauri-taches";
+import { isArbitrageAutoTask } from "@/lib/alertes/arbitrage-alerte";
 import { getAlertesNonTraitees } from "@/lib/api/tauri-alertes";
 import { subscribeTachesChanged } from "@/lib/taches/tache-events";
 import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
 import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
+import { useArbitrageTacheDone } from "@/hooks/useArbitrageTacheDone";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { consumeTachesNavigationIntent, TACHES_NAVIGATION_EVENT } from "@/lib/navigation/taches-navigation";
 import {
@@ -46,7 +48,6 @@ import {
   type TacheEcheanceStatFilter,
 } from "@/lib/taches/tache-filters";
 import { buildPostponedTachePayload } from "@/lib/taches/postpone-tache";
-import { spawnedNextTacheToastMessage } from "@/lib/taches/tache-recurrence-ui";
 import {
   loadTachesPagePreferences,
   resetTachesPagePreferences,
@@ -131,6 +132,8 @@ export function Taches({ onNavigate }: TachesProps) {
     };
   }, [load]);
 
+  const { tryComplete, dialog: arbitrageDialog } = useArbitrageTacheDone(() => void load());
+
   const { openContactSheet, sheet: contactDetailSheet } = useContactDetailSheet({
     onNavigate,
     onUpdate: () => void load(),
@@ -205,17 +208,8 @@ export function Taches({ onNavigate }: TachesProps) {
     [prefs, contactLabel]
   );
 
-  const handleToggle = async (tache: TacheWithContact) => {
-    try {
-      const result = await setTacheStatut(
-        tache.id,
-        tache.statut === "FAIT" ? "A_FAIRE" : "FAIT"
-      );
-      const msg = spawnedNextTacheToastMessage(result);
-      if (msg) toast.success(msg);
-    } catch (error) {
-      toast.error(`Erreur : ${String(error)}`);
-    }
+  const handleToggle = (tache: TacheWithContact) => {
+    void tryComplete(tache);
   };
 
   const confirmDelete = async () => {
@@ -242,14 +236,35 @@ export function Taches({ onNavigate }: TachesProps) {
 
   const handleBulkMarkDone = async () => {
     if (selectedIds.size === 0) return;
+    const selected = taches.filter((t) => selectedIds.has(t.id));
+    const arbitrage = selected.filter(isArbitrageAutoTask);
+    const normal = selected.filter((t) => !isArbitrageAutoTask(t));
+
+    if (arbitrage.length > 0 && normal.length === 0) {
+      toast.error(
+        "Les tâches arbitrage se traitent une par une (dates et note optionnelle)."
+      );
+      return;
+    }
+    if (arbitrage.length > 0) {
+      toast.info(
+        `${arbitrage.length} tâche${arbitrage.length > 1 ? "s" : ""} arbitrage ignorée${arbitrage.length > 1 ? "s" : ""} — traitez-les individuellement.`
+      );
+    }
+    if (normal.length === 0) return;
+
     setBulkBusy(true);
     try {
       const results = await Promise.all(
-        [...selectedIds].map((id) => setTacheStatut(id, "FAIT"))
+        normal.map((t) => setTacheStatut(t.id, "FAIT"))
       );
       const spawned = results.filter((r) => r.spawned_next).length;
-      setSelectedIds(new Set());
-      setBulkMode(false);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const t of normal) next.delete(t.id);
+        return next;
+      });
+      if (arbitrage.length === 0) setBulkMode(false);
       toast.success(
         spawned > 0
           ? `Tâches terminées · ${spawned} prochaine(s) occurrence(s) créée(s)`
@@ -428,6 +443,8 @@ export function Taches({ onNavigate }: TachesProps) {
           }}
         />
       )}
+
+      {arbitrageDialog}
 
       <TacheForm
         open={formOpen}

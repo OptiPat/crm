@@ -291,6 +291,7 @@ fn main() {
             check_and_create_demembrement_alerts,
             check_and_create_arbitrage_alerts,
             traiter_alerte_arbitrage,
+            complete_arbitrage_tache,
             reporter_alerte_arbitrage,
             read_pdf_file,
             // Etiquettes

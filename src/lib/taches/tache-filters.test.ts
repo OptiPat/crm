@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   countTachesByEcheanceStat,
+  filterAndSortTachesDashboardCockpit,
   filterTachesList,
   groupTachesBySection,
+  matchesTacheDashboardCockpitPreview,
   matchesTacheEcheanceStatFilter,
 } from "@/lib/taches/tache-filters";
 import type { Tache } from "@/lib/api/tauri-taches";
@@ -72,6 +74,46 @@ describe("groupTachesBySection", () => {
     ];
     const sections = groupTachesBySection(taches, NOW);
     expect(sections.map((s) => s.id)).toEqual(["overdue", "today", "none"]);
+  });
+});
+
+describe("matchesTacheDashboardCockpitPreview", () => {
+  it("inclut retard et échéance ≤ J+7, exclut sans date et au-delà", () => {
+    const overdue = tache({ id: 1, titre: "a", date_echeance: ts("2026-06-01") });
+    const today = tache({ id: 2, titre: "b", date_echeance: ts("2026-06-05") });
+    const inWeek = tache({ id: 3, titre: "c", date_echeance: ts("2026-06-08") });
+    const lastDay = tache({ id: 4, titre: "d", date_echeance: ts("2026-06-12") });
+    const tooFar = tache({ id: 5, titre: "e", date_echeance: ts("2026-06-13") });
+    const none = tache({ id: 6, titre: "f" });
+    const done = tache({
+      id: 7,
+      titre: "g",
+      date_echeance: ts("2026-06-05"),
+      statut: "FAIT",
+    });
+
+    expect(matchesTacheDashboardCockpitPreview(overdue, NOW)).toBe(true);
+    expect(matchesTacheDashboardCockpitPreview(today, NOW)).toBe(true);
+    expect(matchesTacheDashboardCockpitPreview(inWeek, NOW)).toBe(true);
+    expect(matchesTacheDashboardCockpitPreview(lastDay, NOW)).toBe(true);
+    expect(matchesTacheDashboardCockpitPreview(tooFar, NOW)).toBe(false);
+    expect(matchesTacheDashboardCockpitPreview(none, NOW)).toBe(false);
+    expect(matchesTacheDashboardCockpitPreview(done, NOW)).toBe(false);
+  });
+});
+
+describe("filterAndSortTachesDashboardCockpit", () => {
+  it("retourne toutes les tâches du périmètre, retard en premier", () => {
+    const taches = [
+      tache({ id: 3, titre: "semaine", date_echeance: ts("2026-06-10") }),
+      tache({ id: 1, titre: "retard récent", date_echeance: ts("2026-06-04") }),
+      tache({ id: 2, titre: "retard ancien", date_echeance: ts("2026-06-01") }),
+      tache({ id: 4, titre: "loin", date_echeance: ts("2026-06-20") }),
+      tache({ id: 5, titre: "sans date" }),
+    ];
+    expect(filterAndSortTachesDashboardCockpit(taches, NOW).map((t) => t.id)).toEqual([
+      2, 1, 3,
+    ]);
   });
 });
 

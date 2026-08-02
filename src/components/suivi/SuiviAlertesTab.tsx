@@ -34,6 +34,7 @@ import {
 } from "@/components/suivi/suivi-alertes-ui";
 import { PlanifierRdvDialog } from "@/components/calendar/PlanifierRdvDialog";
 import { TacheForm } from "@/components/taches/TacheForm";
+import { ArbitrageCompleteFields } from "@/components/taches/ArbitrageCompleteFields";
 import { EtiquetteEmailSendDialog } from "@/components/etiquettes/EtiquetteEmailSendDialog";
 import {
   marquerAlerteTraitee,
@@ -45,7 +46,12 @@ import {
 } from "@/lib/api/tauri-alertes";
 import type { AlerteWithContact } from "@/lib/api/tauri-dashboard";
 import { getTypeAlerteLabel } from "@/lib/alertes/alerte-labels";
-import { isAlerteArbitrageAvPer } from "@/lib/alertes/arbitrage-alerte";
+import {
+  arbitrageDatesToUnix,
+  defaultProchainArbitrageDateInput,
+  isAlerteArbitrageAvPer,
+} from "@/lib/alertes/arbitrage-alerte";
+import { dateInputToday } from "@/lib/taches/tache-date-shortcuts";
 import { countAlertesByCategory, type AlerteCategoryFilter } from "@/lib/alertes/alerte-category";
 import {
   buildContactIdsWithActiveTaches,
@@ -138,6 +144,11 @@ export function SuiviAlertesTab({
   const [prefs, setPrefs] = useState(loadSuiviAlertesPreferences);
   const [alerteATraiter, setAlerteATraiter] = useState<AlerteWithContact | null>(null);
   const [dateDernierSuivi, setDateDernierSuivi] = useState(todayLocal());
+  const [dateDernierArbitrage, setDateDernierArbitrage] = useState(() => dateInputToday());
+  const [dateProchainArbitrage, setDateProchainArbitrage] = useState(() =>
+    defaultProchainArbitrageDateInput()
+  );
+  const [noteArbitrage, setNoteArbitrage] = useState("");
   const [submittingTraiter, setSubmittingTraiter] = useState(false);
   const [alertEmailItem, setAlertEmailItem] = useState<EtiquetteEmailQueueItem | null>(null);
   const [alertEmailLoadingId, setAlertEmailLoadingId] = useState<number | null>(null);
@@ -219,6 +230,9 @@ export function SuiviAlertesTab({
     if (alerte) {
       setAlerteATraiter(alerte);
       setDateDernierSuivi(todayLocal());
+      setDateDernierArbitrage(dateInputToday());
+      setDateProchainArbitrage(defaultProchainArbitrageDateInput());
+      setNoteArbitrage("");
     } else if (onOpenContact) {
       onOpenContact(pendingContactId, alerteContactIds);
     } else if (onNavigate) {
@@ -239,6 +253,9 @@ export function SuiviAlertesTab({
   const openTraiterDialog = (alerte: AlerteWithContact) => {
     setAlerteATraiter(alerte);
     setDateDernierSuivi(todayLocal());
+    setDateDernierArbitrage(dateInputToday());
+    setDateProchainArbitrage(defaultProchainArbitrageDateInput());
+    setNoteArbitrage("");
   };
 
   const confirmTraiter = async (andNext = false) => {
@@ -246,7 +263,20 @@ export function SuiviAlertesTab({
     setSubmittingTraiter(true);
     try {
       if (isAlerteArbitrageAvPer(alerteATraiter.type_alerte)) {
-        await traiterAlerteArbitrage(alerteATraiter.alerte_id);
+        const parsed = arbitrageDatesToUnix({
+          dateDernier: dateDernierArbitrage,
+          dateProchain: dateProchainArbitrage,
+        });
+        if (!parsed) {
+          toast.error("Dates invalides");
+          return;
+        }
+        await traiterAlerteArbitrage(
+          alerteATraiter.alerte_id,
+          parsed.dateDernier,
+          parsed.dateProchain,
+          noteArbitrage.trim() || undefined
+        );
       } else {
         const contact = await getContactById(alerteATraiter.contact_id);
         await updateContact(
@@ -597,7 +627,7 @@ export function SuiviAlertesTab({
                   {" · "}
                   {getTypeAlerteLabel(alerteATraiter.type_alerte)}
                   {isAlerteArbitrageAvPer(alerteATraiter.type_alerte)
-                    ? " — la date dernier arbitrage sera aujourd'hui et la prochaine échéance sera avancée (ajustable sur le contrat)."
+                    ? " — renseignez la date du prochain arbitrage (6 mois par défaut)."
                     : isAlerteSuiviFilleul(alerteATraiter.type_alerte)
                       ? " — date dernier contact filleul."
                       : " — date dernier contact."}
@@ -605,6 +635,18 @@ export function SuiviAlertesTab({
               )}
             </DialogDescription>
           </DialogHeader>
+          {alerteATraiter && isAlerteArbitrageAvPer(alerteATraiter.type_alerte) && (
+            <ArbitrageCompleteFields
+              idPrefix="suivi-arbitrage"
+              dateDernier={dateDernierArbitrage}
+              dateProchain={dateProchainArbitrage}
+              note={noteArbitrage}
+              onDateDernierChange={setDateDernierArbitrage}
+              onDateProchainChange={setDateProchainArbitrage}
+              onNoteChange={setNoteArbitrage}
+              disabled={submittingTraiter}
+            />
+          )}
           {alerteATraiter && !isAlerteArbitrageAvPer(alerteATraiter.type_alerte) && (
             <div className="space-y-3 py-2">
               <Label htmlFor="date-dernier-suivi">Date du dernier suivi</Label>
@@ -637,7 +679,10 @@ export function SuiviAlertesTab({
                 submittingTraiter ||
                 (!!alerteATraiter &&
                   !isAlerteArbitrageAvPer(alerteATraiter.type_alerte) &&
-                  !dateDernierSuivi)
+                  !dateDernierSuivi) ||
+                (!!alerteATraiter &&
+                  isAlerteArbitrageAvPer(alerteATraiter.type_alerte) &&
+                  (!dateDernierArbitrage || !dateProchainArbitrage))
               }
             >
               Traiter et suivant
@@ -649,7 +694,10 @@ export function SuiviAlertesTab({
                 submittingTraiter ||
                 (!!alerteATraiter &&
                   !isAlerteArbitrageAvPer(alerteATraiter.type_alerte) &&
-                  !dateDernierSuivi)
+                  !dateDernierSuivi) ||
+                (!!alerteATraiter &&
+                  isAlerteArbitrageAvPer(alerteATraiter.type_alerte) &&
+                  (!dateDernierArbitrage || !dateProchainArbitrage))
               }
             >
               {submittingTraiter ? "Enregistrement…" : "Confirmer"}

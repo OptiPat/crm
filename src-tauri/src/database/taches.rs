@@ -155,6 +155,16 @@ impl super::Database {
     pub fn set_tache_statut(&self, id: i64, statut: &str) -> Result<SetTacheStatutResult> {
         let existing = self.get_tache_by_id(id)?;
         let statut = normalize_statut(Some(statut.to_string()));
+
+        if existing.statut != "FAIT"
+            && statut == "FAIT"
+            && super::arbitrage_alerts::is_arbitrage_auto_task_title(&existing.titre)
+        {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "arbitrage_task_use_complete_arbitrage_tache".into(),
+            ));
+        }
+
         let completed_at: Option<i64> = if statut == "FAIT" {
             Some(now_unix())
         } else {
@@ -167,19 +177,7 @@ impl super::Database {
         )?;
 
         let tache = self.get_tache_by_id(id)?;
-        let contact_ids: Vec<i64> = tache.contacts.iter().map(|c| c.contact_id).collect();
         let spawned_next = if existing.statut != "FAIT" && tache.statut == "FAIT" {
-            if let Err(e) = self.try_traiter_arbitrage_alerte_from_tache(
-                &tache.titre,
-                tache.description.as_deref(),
-                &contact_ids,
-            ) {
-                self.conn.execute(
-                    "UPDATE taches SET statut = ?1, completed_at = ?2, updated_at = unixepoch() WHERE id = ?3",
-                    params![existing.statut, existing.completed_at, id],
-                )?;
-                return Err(e);
-            }
             self.maybe_spawn_recurrence(&tache)?
         } else {
             None

@@ -78,6 +78,10 @@ fn add_months_to_timestamp(ts: i64, months: u32) -> i64 {
         .unwrap_or(ts)
 }
 
+fn arbitrage_dernier_timestamp(date_dernier_arbitrage: Option<i64>) -> i64 {
+    date_dernier_arbitrage.unwrap_or_else(start_of_today_unix)
+}
+
 impl super::Database {
     fn get_open_arbitrage_alerte(&self, alerte_id: i64) -> Result<Option<OpenArbitrageAlerte>> {
         self.conn
@@ -135,6 +139,29 @@ impl super::Database {
             |row| row.get(0),
         )?;
         Ok(n > 0)
+    }
+
+    fn maybe_insert_arbitrage_note_interaction(
+        &self,
+        contact_id: i64,
+        sujet: &str,
+        note: Option<&str>,
+        date_dernier_ts: i64,
+    ) -> Result<()> {
+        let Some(contenu) = note.map(str::trim).filter(|s| !s.is_empty()) else {
+            return Ok(());
+        };
+        let date_iso = chrono::DateTime::from_timestamp(date_dernier_ts, 0)
+            .map(|dt| dt.to_rfc3339())
+            .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+        self.create_interaction(super::models::NewInteraction {
+            contact_id,
+            type_interaction: "NOTE".into(),
+            sujet: Some(sujet.to_string()),
+            contenu: Some(contenu.to_string()),
+            date_interaction: Some(date_iso),
+        })?;
+        Ok(())
     }
 
     fn try_create_arbitrage_task(
@@ -300,59 +327,37 @@ impl super::Database {
         Ok(())
     }
 
-    /// Tâche arbitrage terminée : traite l'alerte liée au contrat (investissement_id).
-    pub(crate) fn try_traiter_arbitrage_alerte_from_tache(
-        &self,
-        titre: &str,
-        description: Option<&str>,
-        contact_ids: &[i64],
-    ) -> Result<bool> {
-        if !is_arbitrage_auto_task_title(titre) {
-            return Ok(false);
-        }
-        if let Some(inv_id) = parse_arbitrage_investissement_id_from_description(description) {
-            let alerte_id: Option<i64> = self
-                .conn
-                .query_row(
-                    "SELECT id FROM alertes
-                     WHERE investissement_id = ?1 AND type_alerte = ?2 AND traitee = 0
-                     LIMIT 1",
-                    params![inv_id, TYPE_ALERTE_ARBITRAGE],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            if let Some(alerte_id) = alerte_id {
-                self.traiter_alerte_arbitrage(alerte_id)?;
-                return Ok(true);
-            }
-            return Ok(false);
-        }
-        for contact_id in contact_ids {
-            let alerte_id: Option<i64> = self
-                .conn
-                .query_row(
-                    "SELECT id FROM alertes
-                     WHERE contact_id = ?1 AND type_alerte = ?2 AND message = ?3 AND traitee = 0
-                     LIMIT 1",
-                    params![contact_id, TYPE_ALERTE_ARBITRAGE, titre],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            if let Some(alerte_id) = alerte_id {
-                self.traiter_alerte_arbitrage(alerte_id)?;
-                return Ok(true);
-            }
-        }
-        Ok(false)
-    }
-
-    /// Après save contrat : clôture alertes obsolètes puis crée celles à échéance.
+    /// Après save contrat : clôture alertes obsolètes, aligne la tâche ouverte, puis crée si besoin.
     pub(crate) fn sync_arbitrage_alerts_after_investissement_save(
         &self,
         investissement_id: i64,
     ) -> Result<()> {
         let _ = self.close_obsolete_arbitrage_alerts_for_investissement(investissement_id);
+        let _ = self.sync_open_arbitrage_task_echeance_for_investissement(investissement_id);
         let _ = self.check_and_create_arbitrage_alerts()?;
+        Ok(())
+    }
+
+    /// Aligne l'échéance de la tâche arbitrage ouverte sur `date_prochain_arbitrage` du contrat.
+    fn sync_open_arbitrage_task_echeance_for_investissement(
+        &self,
+        investissement_id: i64,
+    ) -> Result<()> {
+        if !self.has_open_arbitrage_alerte_for_investissement(investissement_id)? {
+            return Ok(());
+        }
+        let due: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT date_prochain_arbitrage FROM investissements WHERE id = ?1",
+                params![investissement_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+        if let Some(due) = due {
+            self.postpone_arbitrage_tasks_for_investissement(investissement_id, due)?;
+        }
         Ok(())
     }
 
@@ -418,7 +423,7 @@ impl super::Database {
             let _ = self.try_create_arbitrage_task(
                 resolved_contact_id,
                 &message,
-                today_start,
+                date_prochain,
                 inv_id,
             );
 
@@ -481,32 +486,161 @@ impl super::Database {
         Ok(())
     }
 
-    fn advance_investissement_arbitrage_dates(&self, investissement_id: i64) -> Result<()> {
+    fn advance_investissement_arbitrage_dates(
+        &self,
+        investissement_id: i64,
+        date_dernier_arbitrage: Option<i64>,
+        date_prochain_arbitrage: Option<i64>,
+    ) -> Result<()> {
         let today_start = start_of_today_unix();
-        let next = add_months_to_timestamp(today_start, 6);
+        let dernier = date_dernier_arbitrage.unwrap_or(today_start);
+        let prochain = date_prochain_arbitrage
+            .unwrap_or_else(|| add_months_to_timestamp(today_start, 6));
         self.conn.execute(
             "UPDATE investissements
              SET date_dernier_arbitrage = ?1,
                  date_prochain_arbitrage = ?2,
                  updated_at = unixepoch()
              WHERE id = ?3",
-            params![today_start, next, investissement_id],
+            params![dernier, prochain, investissement_id],
         )?;
         Ok(())
     }
 
-    /// Arbitrage effectué : avance les dates du contrat (+6 mois) et clôture l'alerte.
-    pub fn traiter_alerte_arbitrage(&self, alerte_id: i64) -> Result<()> {
+    /// Arbitrage effectué : enregistre les dates sur le contrat et clôture l'alerte.
+    pub fn traiter_alerte_arbitrage(
+        &self,
+        alerte_id: i64,
+        date_dernier_arbitrage: Option<i64>,
+        date_prochain_arbitrage: Option<i64>,
+        note: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute_batch("BEGIN IMMEDIATE")?;
+        let result = self.traiter_alerte_arbitrage_in_tx(
+            alerte_id,
+            date_dernier_arbitrage,
+            date_prochain_arbitrage,
+            note,
+        );
+        if result.is_ok() {
+            self.conn.execute_batch("COMMIT")?;
+        } else {
+            let _ = self.conn.execute_batch("ROLLBACK");
+        }
+        result
+    }
+
+    fn traiter_alerte_arbitrage_in_tx(
+        &self,
+        alerte_id: i64,
+        date_dernier_arbitrage: Option<i64>,
+        date_prochain_arbitrage: Option<i64>,
+        note: Option<&str>,
+    ) -> Result<()> {
         let Some(row) = self.get_open_arbitrage_alerte(alerte_id)? else {
             return Ok(());
         };
         let inv_id = row
             .investissement_id
             .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
-        self.advance_investissement_arbitrage_dates(inv_id)?;
+        let dernier = arbitrage_dernier_timestamp(date_dernier_arbitrage);
+        self.advance_investissement_arbitrage_dates(
+            inv_id,
+            date_dernier_arbitrage,
+            date_prochain_arbitrage,
+        )?;
+        self.maybe_insert_arbitrage_note_interaction(
+            row.contact_id,
+            &row.message,
+            note,
+            dernier,
+        )?;
         self.complete_arbitrage_tasks_for_investissement(inv_id)?;
         self.set_alerte_traitee_flag(alerte_id)?;
         Ok(())
+    }
+
+    /// Termine une tâche arbitrage auto et synchronise contrat + alerte liée.
+    pub fn complete_arbitrage_tache(
+        &self,
+        tache_id: i64,
+        date_dernier_arbitrage: Option<i64>,
+        date_prochain_arbitrage: Option<i64>,
+        note: Option<&str>,
+    ) -> Result<()> {
+        let tache = self.get_tache_by_id(tache_id)?;
+        if tache.statut == "FAIT" {
+            return Ok(());
+        }
+        if !is_arbitrage_auto_task_title(&tache.titre) {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "not an arbitrage task".into(),
+            ));
+        }
+        let contact_ids: Vec<i64> = tache.contacts.iter().map(|c| c.contact_id).collect();
+        let contact_id = contact_ids.first().copied();
+
+        if let Some(inv_id) =
+            parse_arbitrage_investissement_id_from_description(tache.description.as_deref())
+        {
+            let alerte_id: Option<i64> = self
+                .conn
+                .query_row(
+                    "SELECT id FROM alertes
+                     WHERE investissement_id = ?1 AND type_alerte = ?2 AND traitee = 0
+                     LIMIT 1",
+                    params![inv_id, TYPE_ALERTE_ARBITRAGE],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if let Some(alerte_id) = alerte_id {
+                return self.traiter_alerte_arbitrage(
+                    alerte_id,
+                    date_dernier_arbitrage,
+                    date_prochain_arbitrage,
+                    note,
+                );
+            }
+            let dernier = arbitrage_dernier_timestamp(date_dernier_arbitrage);
+            self.advance_investissement_arbitrage_dates(
+                inv_id,
+                date_dernier_arbitrage,
+                date_prochain_arbitrage,
+            )?;
+            if let Some(cid) = contact_id {
+                self.maybe_insert_arbitrage_note_interaction(
+                    cid,
+                    &tache.titre,
+                    note,
+                    dernier,
+                )?;
+            }
+            self.complete_arbitrage_tasks_for_investissement(inv_id)?;
+            return Ok(());
+        }
+
+        for contact_id in contact_ids {
+            let alerte_id: Option<i64> = self
+                .conn
+                .query_row(
+                    "SELECT id FROM alertes
+                     WHERE contact_id = ?1 AND type_alerte = ?2 AND message = ?3 AND traitee = 0
+                     LIMIT 1",
+                    params![contact_id, TYPE_ALERTE_ARBITRAGE, tache.titre],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if let Some(alerte_id) = alerte_id {
+                return self.traiter_alerte_arbitrage(
+                    alerte_id,
+                    date_dernier_arbitrage,
+                    date_prochain_arbitrage,
+                    note,
+                );
+            }
+        }
+
+        Err(rusqlite::Error::QueryReturnedNoRows)
     }
 
     /// Reporte l'échéance arbitrage sur le contrat lié et clôture l'alerte.
@@ -691,12 +825,12 @@ mod tests {
         assert!(again.is_empty());
 
         let alerte_id = open[0].id;
-        db.traiter_alerte_arbitrage(alerte_id).unwrap();
+        db.traiter_alerte_arbitrage(alerte_id, None, None, None).unwrap();
         let inv = db.get_investissement_by_id(inv_due.id).unwrap();
         assert!(inv.date_dernier_arbitrage.is_some());
         assert!(inv.date_prochain_arbitrage.unwrap() > today);
 
-        db.traiter_alerte_arbitrage(alerte_id).unwrap();
+        db.traiter_alerte_arbitrage(alerte_id, None, None, None).unwrap();
         let inv2 = db.get_investissement_by_id(inv_due.id).unwrap();
         assert_eq!(inv2.date_prochain_arbitrage, inv.date_prochain_arbitrage);
     }
@@ -781,7 +915,13 @@ mod tests {
             .into_iter()
             .find(|t| is_arbitrage_auto_task_title(&t.titre))
             .expect("arbitrage task");
-        db.set_tache_statut(tache.id, "FAIT").unwrap();
+        db.complete_arbitrage_tache(
+            tache.id,
+            Some(today),
+            Some(add_months_to_timestamp(today, 6)),
+            None,
+        )
+        .unwrap();
 
         let still_open = db
             .get_alertes_non_traitees()
@@ -790,6 +930,39 @@ mod tests {
             .filter(|a| a.type_alerte == TYPE_ALERTE_ARBITRAGE)
             .count();
         assert_eq!(still_open, 0);
+    }
+
+    #[test]
+    fn set_arbitrage_task_statut_fait_is_rejected() {
+        let db = test_db();
+        let contact_id = sample_contact(&db, "Martin", "Paul");
+        let today = start_of_today_unix();
+        let iso_due = chrono::DateTime::from_timestamp(today, 0)
+            .unwrap()
+            .to_rfc3339();
+
+        db.create_investissement(new_investissement(
+            contact_id,
+            "ASSURANCE_VIE",
+            "Contrat AV",
+            "MON_CONSEIL",
+            Some(iso_due),
+            None,
+        ))
+        .unwrap();
+
+        db.check_and_create_arbitrage_alerts().unwrap();
+        let taches = db.get_taches_by_contact(contact_id).unwrap();
+        let tache = taches
+            .into_iter()
+            .find(|t| is_arbitrage_auto_task_title(&t.titre))
+            .expect("arbitrage task");
+
+        let err = db.set_tache_statut(tache.id, "FAIT").unwrap_err();
+        assert!(
+            err.to_string().contains("arbitrage_task_use_complete_arbitrage_tache"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
@@ -841,6 +1014,153 @@ mod tests {
             )
             .unwrap();
         assert_eq!(pending, 2);
+    }
+
+    #[test]
+    fn traiter_arbitrage_note_creates_interaction_history() {
+        let db = test_db();
+        let contact_id = sample_contact(&db, "Dupont", "Jean");
+        let today = start_of_today_unix();
+        let iso_due = chrono::DateTime::from_timestamp(today, 0)
+            .unwrap()
+            .to_rfc3339();
+
+        db.create_investissement(new_investissement(
+            contact_id,
+            "ASSURANCE_VIE",
+            "Contrat AV",
+            "MON_CONSEIL",
+            Some(iso_due),
+            Some("AV-12345".into()),
+        ))
+        .unwrap();
+
+        db.check_and_create_arbitrage_alerts().unwrap();
+        let open: Vec<_> = db
+            .get_alertes_non_traitees()
+            .unwrap()
+            .into_iter()
+            .filter(|a| a.type_alerte == TYPE_ALERTE_ARBITRAGE)
+            .collect();
+        assert_eq!(open.len(), 1);
+
+        let message = open[0].message.clone();
+        db.traiter_alerte_arbitrage(
+            open[0].id,
+            Some(today),
+            Some(add_months_to_timestamp(today, 6)),
+            Some("Réallocation fonds euros vers UC."),
+        )
+        .unwrap();
+
+        let interactions = db.get_interactions_by_contact(contact_id).unwrap();
+        assert_eq!(interactions.len(), 1);
+        assert_eq!(interactions[0].type_interaction, "NOTE");
+        assert_eq!(interactions[0].sujet.as_deref(), Some(message.as_str()));
+        assert_eq!(
+            interactions[0].contenu.as_deref(),
+            Some("Réallocation fonds euros vers UC.")
+        );
+        assert_eq!(interactions[0].date_interaction, today);
+    }
+
+    #[test]
+    fn traiter_arbitrage_with_custom_dates() {
+        let db = test_db();
+        let contact_id = sample_contact(&db, "Durand", "Claire");
+        let today = start_of_today_unix();
+        let yesterday = today - 86_400;
+        let iso_yesterday = chrono::DateTime::from_timestamp(yesterday, 0)
+            .unwrap()
+            .to_rfc3339();
+        let custom_next = add_months_to_timestamp(today, 4);
+
+        let inv = db
+            .create_investissement(new_investissement(
+                contact_id,
+                "PER",
+                "Contrat PER",
+                "MON_CONSEIL",
+                Some(iso_yesterday),
+                None,
+            ))
+            .unwrap();
+
+        db.check_and_create_arbitrage_alerts().unwrap();
+        let open: Vec<_> = db
+            .get_alertes_non_traitees()
+            .unwrap()
+            .into_iter()
+            .filter(|a| a.type_alerte == TYPE_ALERTE_ARBITRAGE)
+            .collect();
+        assert_eq!(open.len(), 1);
+
+        db.traiter_alerte_arbitrage(open[0].id, Some(today), Some(custom_next), None)
+            .unwrap();
+
+        let stored = db.get_investissement_by_id(inv.id).unwrap();
+        assert_eq!(stored.date_dernier_arbitrage, Some(today));
+        assert_eq!(stored.date_prochain_arbitrage, Some(custom_next));
+    }
+
+    #[test]
+    fn arbitrage_task_echeance_matches_contract_date_not_creation_day() {
+        let db = test_db();
+        let contact_id = sample_contact(&db, "Dupont", "Jean");
+        let today = start_of_today_unix();
+        let yesterday = today - 86_400;
+        let iso_yesterday = chrono::DateTime::from_timestamp(yesterday, 0)
+            .unwrap()
+            .to_rfc3339();
+
+        let inv = db
+            .create_investissement(new_investissement(
+                contact_id,
+                "ASSURANCE_VIE",
+                "Contrat AV",
+                "MON_CONSEIL",
+                Some(iso_yesterday),
+                Some("AV-12345".into()),
+            ))
+            .unwrap();
+
+        db.check_and_create_arbitrage_alerts().unwrap();
+
+        let taches = db.get_taches_by_contact(contact_id).unwrap();
+        let tache = taches
+            .into_iter()
+            .find(|t| is_arbitrage_auto_task_title(&t.titre))
+            .expect("arbitrage task");
+        assert_eq!(
+            tache.date_echeance,
+            Some(yesterday),
+            "l'échéance tâche doit suivre la date contrat, pas le jour de création"
+        );
+
+        let iso_today = chrono::DateTime::from_timestamp(today, 0)
+            .unwrap()
+            .to_rfc3339();
+        let mut updated_payload = new_investissement(
+            contact_id,
+            "ASSURANCE_VIE",
+            "Contrat AV",
+            "MON_CONSEIL",
+            Some(iso_today),
+            Some("AV-12345".into()),
+        );
+        updated_payload.date_dernier_arbitrage = None;
+        db.update_investissement(inv.id, &updated_payload).unwrap();
+
+        let taches2 = db.get_taches_by_contact(contact_id).unwrap();
+        let tache2 = taches2
+            .into_iter()
+            .find(|t| is_arbitrage_auto_task_title(&t.titre))
+            .expect("arbitrage task after sync");
+        assert_eq!(
+            tache2.date_echeance,
+            Some(today),
+            "modifier la date contrat doit realigner la tâche ouverte"
+        );
     }
 
     #[test]

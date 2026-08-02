@@ -1,21 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, ListTodo } from "lucide-react";
 import {
-  getAllTaches,
-  setTacheStatut,
-  type Tache,
-} from "@/lib/api/tauri-taches";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ArrowRight, Clock } from "lucide-react";
+import { getAllTaches, updateTache, type Tache } from "@/lib/api/tauri-taches";
 import { subscribeTachesChanged } from "@/lib/taches/tache-events";
 import {
   ECHEANCE_TONE_CLASS,
   echeanceLabel,
   echeanceState,
 } from "@/lib/taches/tache-display";
-import { Checkbox } from "@/components/ui/checkbox";
 import { TacheForm } from "@/components/taches/TacheForm";
 import { cn } from "@/lib/utils";
-import { spawnedNextTacheToastMessage } from "@/lib/taches/tache-recurrence-ui";
+import { filterAndSortTachesDashboardCockpit } from "@/lib/taches/tache-filters";
+import { useArbitrageTacheDone } from "@/hooks/useArbitrageTacheDone";
+import {
+  buildPostponedTachePayload,
+  TACHE_POSTPONE_OPTIONS,
+} from "@/lib/taches/postpone-tache";
 import { toast } from "sonner";
 import { DashboardPanel } from "./dashboard-ui";
 import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
@@ -24,8 +31,6 @@ interface TachesPreviewProps {
   onNavigate?: (page: string) => void;
   onOpenContact?: DashboardDrillDownOpenContact;
 }
-
-const MAX_PREVIEW = 5;
 
 export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps) {
   const [taches, setTaches] = useState<Tache[]>([]);
@@ -44,23 +49,30 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
     }
   }, []);
 
+  const { tryComplete, dialog: arbitrageDialog } = useArbitrageTacheDone(() => void load());
+
   useEffect(() => {
     void load();
     return subscribeTachesChanged(() => void load());
   }, [load]);
 
-  const visibles = taches.slice(0, MAX_PREVIEW);
+  const visibles = filterAndSortTachesDashboardCockpit(taches);
+  const horsScope = taches.length - visibles.length;
   const previewContactIds = visibles.flatMap(
     (t) => t.contacts?.map((c) => c.contact_id) ?? []
   );
 
-  const handleDone = async (tache: Tache) => {
+  const handleDone = (tache: Tache) => {
+    void tryComplete(tache);
+  };
+
+  const handlePostpone = async (tache: Tache, days: number) => {
     try {
-      const result = await setTacheStatut(tache.id, "FAIT");
-      const msg = spawnedNextTacheToastMessage(result);
-      if (msg) toast.success(msg);
+      await updateTache(tache.id, buildPostponedTachePayload(tache, days));
+      toast.success("Échéance reportée");
+      await load();
     } catch (error) {
-      console.error(error);
+      toast.error(`Erreur : ${String(error)}`);
     }
   };
 
@@ -71,9 +83,13 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
 
   const description = loading
     ? "Chargement…"
-    : taches.length > 0
-      ? `${taches.length} tâche${taches.length > 1 ? "s" : ""} à faire`
-      : "Rien à faire pour le moment";
+    : visibles.length > 0
+      ? `${visibles.length} tâche${visibles.length > 1 ? "s" : ""} en retard ou sous 7 jours${
+          horsScope > 0 ? ` · ${horsScope} autre${horsScope > 1 ? "s" : ""} plus tard` : ""
+        }`
+      : taches.length > 0
+        ? `${taches.length} tâche${taches.length > 1 ? "s" : ""} à faire, aucune sous 7 jours`
+        : "Rien à faire pour le moment";
 
   return (
     <DashboardPanel
@@ -100,9 +116,13 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
           ))}
         </div>
       ) : visibles.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-6 text-center">Aucune tâche en attente</p>
+        <p className="text-sm text-muted-foreground py-6 text-center">
+          {taches.length > 0
+            ? "Aucune tâche en retard ou à échéance sous 7 jours"
+            : "Aucune tâche en attente"}
+        </p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2 min-w-0">
           {visibles.map((tache) => {
             const state = echeanceState(tache.date_echeance, tache.statut);
             const firstContact = tache.contacts?.[0] ?? null;
@@ -110,53 +130,87 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
             return (
               <li
                 key={tache.id}
-                className="flex items-center gap-3 p-3 rounded-xl border border-border/70 bg-background/80 hover:bg-accent/50 transition-colors"
+                className="flex items-center gap-2 sm:gap-3 p-3 rounded-xl border border-border/70 bg-background/80 hover:bg-accent/50 transition-colors min-w-0"
               >
-                <Checkbox
-                  checked={false}
-                  onCheckedChange={() => void handleDone(tache)}
-                  onClick={(e) => e.stopPropagation()}
-                  aria-label="Marquer comme faite"
-                />
-                <button
+                <Button
                   type="button"
-                  className="flex-1 min-w-0 text-left"
-                  onClick={() => openTache(tache)}
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 h-8 px-2.5 text-xs"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDone(tache);
+                  }}
                 >
-                  <p className="font-medium text-sm text-foreground truncate">
-                    {tache.titre}
-                  </p>
+                  Fait
+                </Button>
+                <div className="flex-1 min-w-0 overflow-hidden text-left">
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => openTache(tache)}
+                  >
+                    <p className="font-medium text-sm text-foreground truncate">
+                      {tache.titre}
+                    </p>
+                  </button>
                   <div className="flex flex-wrap items-center gap-x-2 text-xs mt-0.5">
                     <span className={cn(ECHEANCE_TONE_CLASS[state])}>
                       {echeanceLabel(tache.date_echeance, tache.statut)}
                     </span>
-                    {firstContact && (
-                      <span className="text-muted-foreground truncate">
-                        · {firstContact.prenom} {firstContact.nom}
-                        {extraCount > 0 ? ` +${extraCount}` : ""}
-                      </span>
-                    )}
+                    {firstContact ? (
+                      <>
+                        <span className="text-muted-foreground">·</span>
+                        {onOpenContact ? (
+                          <button
+                            type="button"
+                            className="text-muted-foreground hover:text-foreground truncate"
+                            onClick={() =>
+                              onOpenContact(firstContact.contact_id, previewContactIds)
+                            }
+                          >
+                            {firstContact.prenom} {firstContact.nom}
+                            {extraCount > 0 ? ` +${extraCount}` : ""}
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground truncate">
+                            {firstContact.prenom} {firstContact.nom}
+                            {extraCount > 0 ? ` +${extraCount}` : ""}
+                          </span>
+                        )}
+                      </>
+                    ) : null}
                   </div>
-                </button>
-                {firstContact && onOpenContact ? (
-                  <button
-                    type="button"
-                    className="text-xs text-muted-foreground hover:text-foreground shrink-0 max-w-[5rem] truncate"
-                    title={`Ouvrir ${firstContact.prenom} ${firstContact.nom}`}
-                    onClick={() =>
-                      onOpenContact(firstContact.contact_id, previewContactIds)
-                    }
+                </div>
+                <div className="shrink-0 ml-auto">
+                  <Select
+                    onValueChange={(v) => {
+                      void handlePostpone(tache, parseInt(v, 10));
+                    }}
                   >
-                    {firstContact.prenom} {firstContact.nom.charAt(0)}.
-                    {extraCount > 0 ? ` +${extraCount}` : ""}
-                  </button>
-                ) : null}
-                <ListTodo className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                    <SelectTrigger
+                      className="h-8 w-[7.25rem] text-xs bg-background"
+                      title="Reporter"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Clock className="h-3.5 w-3.5 mr-1 shrink-0" />
+                      <SelectValue placeholder="Reporter" />
+                    </SelectTrigger>
+                    <SelectContent align="end">
+                      {TACHE_POSTPONE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.id} value={String(opt.days)}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </li>
             );
           })}
         </ul>
       )}
+      {arbitrageDialog}
       <TacheForm
         open={formOpen}
         onOpenChange={setFormOpen}

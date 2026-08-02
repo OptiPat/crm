@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifyAlertesChanged } from "@/lib/alertes/alert-events";
-import { notifyTachesChanged } from "@/lib/taches/tache-events";
+import { notifyInteractionsChanged } from "@/lib/interactions/interaction-events";
 import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
+import { notifyTachesChanged } from "@/lib/taches/tache-events";
 import type { TacheRecurrence } from "@/lib/taches/tache-recurrence";
 
 export type TacheStatut = "A_FAIRE" | "FAIT";
@@ -85,6 +86,24 @@ export async function setTacheStatut(
     notifyInvestissementsChanged();
   }
   return result;
+}
+
+export async function completeArbitrageTache(
+  tacheId: number,
+  dateDernierArbitrage: number,
+  dateProchainArbitrage: number,
+  note?: string
+): Promise<void> {
+  await invoke<void>("complete_arbitrage_tache", {
+    tacheId,
+    dateDernierArbitrage,
+    dateProchainArbitrage,
+    note: note?.trim() || null,
+  });
+  notifyTachesChanged();
+  notifyAlertesChanged();
+  notifyInvestissementsChanged();
+  if (note?.trim()) notifyInteractionsChanged();
 }
 
 export async function deleteTache(id: number): Promise<void> {

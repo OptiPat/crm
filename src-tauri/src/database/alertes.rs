@@ -254,7 +254,7 @@ impl super::Database {
             )
             .optional()?;
         if type_alerte.as_deref() == Some(super::arbitrage_alerts::TYPE_ALERTE_ARBITRAGE) {
-            return self.traiter_alerte_arbitrage(id);
+            return self.traiter_alerte_arbitrage(id, None, None, None);
         }
         self.set_alerte_traitee_flag(id)
     }

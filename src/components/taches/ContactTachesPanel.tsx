@@ -3,14 +3,9 @@ import { Plus, ListTodo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TacheForm } from "@/components/taches/TacheForm";
 import { TacheItem } from "@/components/taches/TacheItem";
-import {
-  getTachesByContact,
-  setTacheStatut,
-  deleteTache,
-  type Tache,
-} from "@/lib/api/tauri-taches";
+import { getTachesByContact, deleteTache, type Tache } from "@/lib/api/tauri-taches";
 import { subscribeTachesChanged } from "@/lib/taches/tache-events";
-import { spawnedNextTacheToastMessage } from "@/lib/taches/tache-recurrence-ui";
+import { useArbitrageTacheDone } from "@/hooks/useArbitrageTacheDone";
 import { toast } from "sonner";
 
 interface ContactTachesPanelProps {
@@ -48,17 +43,10 @@ export function ContactTachesPanel({
     return subscribeTachesChanged(() => void load());
   }, [load]);
 
-  const handleToggle = async (tache: Tache) => {
-    try {
-      const result = await setTacheStatut(
-        tache.id,
-        tache.statut === "FAIT" ? "A_FAIRE" : "FAIT"
-      );
-      const msg = spawnedNextTacheToastMessage(result);
-      if (msg) toast.success(msg);
-    } catch (error) {
-      toast.error(`Erreur : ${String(error)}`);
-    }
+  const { tryComplete, dialog: arbitrageDialog } = useArbitrageTacheDone(() => void load());
+
+  const handleToggle = (tache: Tache) => {
+    void tryComplete(tache);
   };
 
   const handleDelete = async (tache: Tache) => {
@@ -135,6 +123,8 @@ export function ContactTachesPanel({
           )}
         </div>
       )}
+
+      {arbitrageDialog}
 
       <TacheForm
         open={formOpen}
