@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod arbitrage_fiche_templates;
 mod app_branding;
 mod app_runtime;
 mod auth;
@@ -82,6 +83,11 @@ use scpi_bulletin::{get_scpi_campaign_dashboard_cmd, prepare_scpi_bulletins_from
 use secure_files::{
     import_managed_logo_file_cmd, read_local_image_file_cmd, read_public_branding_logo_file_cmd,
     remove_managed_logo_file_cmd, stage_document_file_cmd,
+    list_arbitrage_fiche_templates_cmd, import_arbitrage_fiche_template_cmd,
+    remove_arbitrage_fiche_template_cmd, set_default_arbitrage_fiche_template_cmd,
+    get_arbitrage_fiche_template_path_cmd,
+    write_downloads_file_bytes_cmd,
+    write_contact_document_bytes_cmd,
 };
 use std::sync::Mutex;
 use system_commands::*;
@@ -460,6 +466,13 @@ fn main() {
             create_external_backup_now,
             open_document_file,
             stage_document_file_cmd,
+            list_arbitrage_fiche_templates_cmd,
+            import_arbitrage_fiche_template_cmd,
+            remove_arbitrage_fiche_template_cmd,
+            set_default_arbitrage_fiche_template_cmd,
+            get_arbitrage_fiche_template_path_cmd,
+            write_downloads_file_bytes_cmd,
+            write_contact_document_bytes_cmd,
             import_managed_logo_file_cmd,
             remove_managed_logo_file_cmd,
             read_local_image_file_cmd,

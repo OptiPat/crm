@@ -4,7 +4,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Video } from "lucide-react";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
-
 type ParametresSuiviSectionProps = {
   cgpConfig: CgpConfig;
   onConfigChange: (patch: Partial<CgpConfig>) => void;
@@ -17,8 +16,7 @@ export function ParametresSuiviSection({ cgpConfig, onConfigChange }: Parametres
       description="Liens Google Agenda pour vos templates. Lien Zoom/Teams pour les RDV visio (Google Meet se crée seul)."
     >
       <div className="space-y-8">
-        <AgendaLinksEditor
-          links={cgpConfig.agenda_links ?? []}
+        <AgendaLinksEditor          links={cgpConfig.agenda_links ?? []}
           onChange={(agenda_links) => onConfigChange({ agenda_links })}
           embedded
         />

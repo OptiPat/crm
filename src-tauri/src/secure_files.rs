@@ -252,6 +252,141 @@ pub fn read_public_branding_logo_file_cmd(
     read_validated_image(&path)
 }
 
+#[tauri::command]
+pub fn list_arbitrage_fiche_templates_cmd(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+    product_kind: String,
+) -> Result<Vec<crate::arbitrage_fiche_templates::ArbitrageFicheTemplate>, String> {
+    require_ui_session(&session)?;
+    let product = crate::arbitrage_fiche_templates::ArbitrageFicheProduct::parse(&product_kind)?;
+    let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
+    crate::arbitrage_fiche_templates::list_arbitrage_fiche_templates(&app_data_dir, product)
+}
+
+#[tauri::command]
+pub fn import_arbitrage_fiche_template_cmd(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+    source_path: String,
+    label: String,
+    product_kind: String,
+) -> Result<crate::arbitrage_fiche_templates::ArbitrageFicheTemplate, String> {
+    require_ui_session(&session)?;
+    let product = crate::arbitrage_fiche_templates::ArbitrageFicheProduct::parse(&product_kind)?;
+    let source = require_scoped_file(&app, &source_path)?;
+    let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
+    crate::arbitrage_fiche_templates::import_arbitrage_fiche_template(
+        &app_data_dir,
+        product,
+        &source,
+        &label,
+    )
+}
+
+#[tauri::command]
+pub fn remove_arbitrage_fiche_template_cmd(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+    template_id: String,
+    product_kind: String,
+) -> Result<(), String> {
+    require_ui_session(&session)?;
+    let product = crate::arbitrage_fiche_templates::ArbitrageFicheProduct::parse(&product_kind)?;
+    let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
+    crate::arbitrage_fiche_templates::remove_arbitrage_fiche_template(
+        &app_data_dir,
+        product,
+        &template_id,
+    )
+}
+
+#[tauri::command]
+pub fn set_default_arbitrage_fiche_template_cmd(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+    template_id: String,
+    product_kind: String,
+) -> Result<(), String> {
+    require_ui_session(&session)?;
+    let product = crate::arbitrage_fiche_templates::ArbitrageFicheProduct::parse(&product_kind)?;
+    let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
+    crate::arbitrage_fiche_templates::set_default_arbitrage_fiche_template(
+        &app_data_dir,
+        product,
+        &template_id,
+    )
+}
+
+#[tauri::command]
+pub fn get_arbitrage_fiche_template_path_cmd(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+    template_id: String,
+    product_kind: String,
+) -> Result<String, String> {
+    require_ui_session(&session)?;
+    let product = crate::arbitrage_fiche_templates::ArbitrageFicheProduct::parse(&product_kind)?;
+    let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
+    let path = crate::arbitrage_fiche_templates::arbitrage_fiche_template_file_path(
+        &app_data_dir,
+        product,
+        &template_id,
+    )?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn write_downloads_file_bytes_cmd(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+    file_name: String,
+    bytes: Vec<u8>,
+) -> Result<String, String> {
+    require_ui_session(&session)?;
+    ensure_file_size_bytes(bytes.len() as u64, MAX_DOCUMENT_BYTES)?;
+    let download_dir = app
+        .path()
+        .download_dir()
+        .map_err(|error| format!("Dossier Téléchargements introuvable : {error}"))?;
+    let dest = crate::documents_storage::write_downloads_file_bytes(
+        &download_dir,
+        &file_name,
+        &bytes,
+    )?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn write_contact_document_bytes_cmd(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+    contact_id: i64,
+    file_name: String,
+    bytes: Vec<u8>,
+) -> Result<String, String> {
+    require_ui_session(&session)?;
+    ensure_file_size_bytes(bytes.len() as u64, MAX_DOCUMENT_BYTES)?;
+    let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
+    let dest = crate::documents_storage::write_contact_document_bytes(
+        &app_data_dir,
+        contact_id,
+        &file_name,
+        &bytes,
+    )?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+fn ensure_file_size_bytes(size: u64, max: u64) -> Result<(), String> {
+    if size == 0 {
+        return Err("Fichier vide.".into());
+    }
+    if size > max {
+        return Err("Fichier trop volumineux.".into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

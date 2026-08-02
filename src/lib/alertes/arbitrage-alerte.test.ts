@@ -5,6 +5,10 @@ import {
   defaultProchainArbitrageDateInput,
   isAlerteArbitrageAvPer,
   isArbitrageAutoTask,
+  isArbitrageAvAutoTask,
+  isArbitragePerAutoTask,
+  resolveArbitrageFicheProductKind,
+  parseArbitrageInvestissementId,
   isArbitrageSuiviEligible,
 } from "@/lib/alertes/arbitrage-alerte";
 
@@ -21,6 +25,28 @@ describe("arbitrage-alerte", () => {
       isArbitrageAutoTask({ titre: "Arbitrage assurance vie — DUPONT Jean — 123" })
     ).toBe(true);
     expect(isArbitrageAutoTask({ titre: "Envoyer Perf contrats" })).toBe(false);
+  });
+
+  it("identifie les taches auto arbitrage AV", () => {
+    expect(
+      isArbitrageAvAutoTask({ titre: "Arbitrage assurance vie — DUPONT Jean — 123" })
+    ).toBe(true);
+    expect(isArbitrageAvAutoTask({ titre: "Arbitrage PER — DUPONT Jean — 123" })).toBe(false);
+  });
+
+  it("déduit AV ou PER pour la fiche conseil", () => {
+    expect(resolveArbitrageFicheProductKind({ titre: "Arbitrage assurance vie — X" })).toBe("AV");
+    expect(resolveArbitrageFicheProductKind({ titre: "Arbitrage PER — X" })).toBe("PER");
+    expect(resolveArbitrageFicheProductKind({ titre: "Autre tâche" })).toBeNull();
+  });
+
+  it("identifie les taches auto arbitrage PER", () => {
+    expect(isArbitragePerAutoTask({ titre: "Arbitrage PER — DUPONT Jean — 123" })).toBe(true);
+  });
+
+  it("parse investissement_id depuis description tache", () => {
+    expect(parseArbitrageInvestissementId("crm:investissement_id:42")).toBe(42);
+    expect(parseArbitrageInvestissementId("autre")).toBeNull();
   });
 
   it("calcule la prochaine échéance par défaut à +6 mois UTC", () => {

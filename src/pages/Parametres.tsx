@@ -14,6 +14,7 @@ import { ParametresEmailGoogleContactsSection } from "@/components/settings/Para
 import { ParametresEmailHistoriqueSection } from "@/components/settings/ParametresEmailHistoriqueSection";
 import { StelliumExceltisSettingsPanel } from "@/components/settings/StelliumExceltisSettingsPanel";
 import { ParametresSuiviSection } from "@/components/settings/ParametresSuiviSection";
+import { ParametresFichesConseilSection } from "@/components/settings/ParametresFichesConseilSection";
 import { ParametresRemunerationSection } from "@/components/settings/ParametresRemunerationSection";
 import { ParametresDatabaseSection } from "@/components/settings/ParametresDatabaseSection";
 import { ParametresApplicationSection } from "@/components/settings/ParametresApplicationSection";
@@ -78,6 +79,7 @@ const SECTIONS_WITHOUT_CONFIG_LOAD: SettingsSectionId[] = [
   "email-historique",
   "email-stellium",
   "integrations",
+  "fiches-conseil",
   "application",
   "remuneration",
 ];
@@ -367,6 +369,8 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
         return (
           <ParametresSuiviSection cgpConfig={cgpConfig} onConfigChange={patchCgpConfig} />
         );
+      case "fiches-conseil":
+        return <ParametresFichesConseilSection />;
       case "remuneration":
         return <ParametresRemunerationSection />;
       case "integrations":

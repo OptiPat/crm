@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowRight, Clock } from "lucide-react";
+import { ArrowRight, Clock, FileText } from "lucide-react";
 import { getAllTaches, updateTache, type Tache } from "@/lib/api/tauri-taches";
 import { subscribeTachesChanged } from "@/lib/taches/tache-events";
 import {
@@ -16,9 +16,12 @@ import {
   echeanceState,
 } from "@/lib/taches/tache-display";
 import { TacheForm } from "@/components/taches/TacheForm";
+import { ArbitrageFicheTemplatePickDialog } from "@/components/taches/ArbitrageFicheTemplatePickDialog";
 import { cn } from "@/lib/utils";
 import { filterAndSortTachesDashboardCockpit } from "@/lib/taches/tache-filters";
 import { useArbitrageTacheDone } from "@/hooks/useArbitrageTacheDone";
+import { useArbitrageFicheConseil } from "@/hooks/useArbitrageFicheConseil";
+import { isArbitrageAutoTask } from "@/lib/alertes/arbitrage-alerte";
 import {
   buildPostponedTachePayload,
   TACHE_POSTPONE_OPTIONS,
@@ -50,6 +53,13 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
   }, []);
 
   const { tryComplete, dialog: arbitrageDialog } = useArbitrageTacheDone(() => void load());
+  const {
+    startFicheConseil,
+    pendingPick,
+    setPendingPick,
+    confirmTemplatePick,
+    busy: ficheBusy,
+  } = useArbitrageFicheConseil();
 
   useEffect(() => {
     void load();
@@ -182,7 +192,24 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
                     ) : null}
                   </div>
                 </div>
-                <div className="shrink-0 ml-auto">
+                <div className="shrink-0 ml-auto flex items-center gap-1.5">
+                  {isArbitrageAutoTask(tache) ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2.5 text-xs shrink-0 gap-1"
+                      title="Générer la fiche conseil arbitrage"
+                      disabled={ficheBusy || pendingPick != null}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void startFicheConseil(tache);
+                      }}
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Fiche Conseil
+                    </Button>
+                  ) : null}
                   <Select
                     onValueChange={(v) => {
                       void handlePostpone(tache, parseInt(v, 10));
@@ -211,6 +238,14 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
         </ul>
       )}
       {arbitrageDialog}
+      <ArbitrageFicheTemplatePickDialog
+        open={pendingPick !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingPick(null);
+        }}
+        templates={pendingPick?.templates ?? []}
+        onConfirm={confirmTemplatePick}
+      />
       <TacheForm
         open={formOpen}
         onOpenChange={setFormOpen}

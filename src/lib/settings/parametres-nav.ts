@@ -8,6 +8,7 @@ import {
   History,
   Inbox,
   CalendarClock,
+  FileText,
   Database,
   SlidersHorizontal,
   Workflow,
@@ -118,6 +119,12 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
         label: "Agenda & RDV",
         description: "Agenda, liens et visio",
         icon: CalendarClock,
+      },
+      {
+        id: "fiches-conseil",
+        label: "Fiches conseil",
+        description: "Modèles PDF arbitrage AV",
+        icon: FileText,
       },
       {
         id: "integrations",

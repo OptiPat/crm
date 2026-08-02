@@ -2202,6 +2202,10 @@ pub fn read_pdf_file(
         requested_path,
     )
     .or_else(|initial_error| {
+        crate::arbitrage_fiche_templates::validate_pdf_template_file(&app_data_dir, requested_path)
+            .map_err(|_| initial_error)
+    })
+    .or_else(|initial_error| {
         let document_id =
             crate::workspace::documents::logical_document_id(&file_path).or_else(|| {
                 db.lock().ok().and_then(|guard| {

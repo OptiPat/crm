@@ -39,7 +39,7 @@ pub fn paired_documents_backup_dir_name(db_backup_filename: &str) -> Option<Stri
     Some(format!("{stem}_documents"))
 }
 
-fn normalize_path(path: &Path) -> PathBuf {
+pub(crate) fn normalize_path(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
@@ -102,6 +102,26 @@ fn unique_dest_path(dest_dir: &Path, file_name: &str) -> PathBuf {
     dest_dir.join(format!("{stamp}_{file_name}"))
 }
 
+fn downloads_dest_path(dest_dir: &Path, file_name: &str) -> PathBuf {
+    let direct = dest_dir.join(file_name);
+    if !direct.is_file() {
+        return direct;
+    }
+    let path = std::path::Path::new(file_name);
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("document");
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("pdf");
+    for n in 2..=99 {
+        let candidate = dest_dir.join(format!("{stem} ({n}).{ext}"));
+        if !candidate.is_file() {
+            return candidate;
+        }
+    }
+    unique_dest_path(dest_dir, file_name)
+}
+
 fn store_file_in_dir(
     source: &Path,
     dest_dir: &Path,
@@ -133,6 +153,67 @@ pub fn stage_document_file(app_data_dir: &Path, source: &Path) -> std::io::Resul
         ));
     }
     store_file_in_dir(source, &documents_dir(app_data_dir), false)
+}
+
+fn sanitize_document_file_name(file_name: &str) -> Result<String, String> {
+    let trimmed = file_name.trim();
+    if trimmed.is_empty() {
+        return Err("Nom de fichier vide.".into());
+    }
+    if trimmed.len() > 180 {
+        return Err("Nom de fichier trop long.".into());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
+        return Err("Nom de fichier invalide.".into());
+    }
+    Ok(trimmed.to_string())
+}
+
+pub fn write_contact_document_bytes(
+    app_data_dir: &Path,
+    contact_id: i64,
+    file_name: &str,
+    bytes: &[u8],
+) -> Result<PathBuf, String> {
+    if contact_id <= 0 {
+        return Err("Contact invalide.".into());
+    }
+    let safe_name = sanitize_document_file_name(file_name)?;
+    let dest_dir = contact_documents_dir(app_data_dir, contact_id);
+    fs::create_dir_all(&dest_dir)
+        .map_err(|e| format!("Création du dossier documents impossible : {e}"))?;
+    let dest = unique_dest_path(&dest_dir, &safe_name);
+    crate::atomic_file::write(&dest, bytes)
+        .map_err(|e| format!("Enregistrement du document impossible : {e}"))?;
+    Ok(dest)
+}
+
+pub fn write_downloads_file_bytes(
+    download_dir: &Path,
+    file_name: &str,
+    bytes: &[u8],
+) -> Result<PathBuf, String> {
+    let safe_name = sanitize_document_file_name(file_name)?;
+    fs::create_dir_all(download_dir)
+        .map_err(|e| format!("Création du dossier Téléchargements impossible : {e}"))?;
+    let dest = downloads_dest_path(download_dir, &safe_name);
+    crate::atomic_file::write(&dest, bytes)
+        .map_err(|e| format!("Enregistrement dans Téléchargements impossible : {e}"))?;
+    Ok(dest)
+}
+
+pub fn validate_downloads_file(download_dir: &Path, file_path: &Path) -> Result<PathBuf, String> {
+    if !file_path.is_file() {
+        return Err("Fichier introuvable.".into());
+    }
+    let root = normalize_path(download_dir);
+    let target = file_path
+        .canonicalize()
+        .map_err(|error| format!("Chemin invalide : {error}"))?;
+    if !target.starts_with(&root) {
+        return Err("Accès refusé : fichier hors dossier Téléchargements.".into());
+    }
+    Ok(target)
 }
 
 /// Copie ou déplace le fichier dans le dossier client approprié. Retourne (chemin, taille).

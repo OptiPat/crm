@@ -411,6 +411,11 @@ pub fn open_document_file(
         std::path::Path::new(&path),
     )
     .or_else(|initial_error| {
+        let download_dir = app.path().download_dir().map_err(|error| error.to_string())?;
+        crate::documents_storage::validate_downloads_file(&download_dir, std::path::Path::new(&path))
+            .map_err(|_| initial_error)
+    })
+    .or_else(|initial_error| {
         let document_id = crate::workspace::documents::logical_document_id(&path).or_else(|| {
             db.lock().ok().and_then(|guard| {
                 guard

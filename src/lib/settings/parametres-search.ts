@@ -85,6 +85,27 @@ export const PARAMETRES_SEARCH_INDEX: ParametresSearchItem[] = [
     section: "suivi",
   },
   {
+    id: "arbitrage-fiche-per",
+    label: "Fiche conseil arbitrage PER",
+    keywords: ["per", "retraite", "arbitrage", "fiche", "conseil", "pdf", "modèle"],
+    section: "fiches-conseil",
+  },
+  {
+    id: "arbitrage-fiche-av",
+    label: "Fiche conseil arbitrage AV",
+    keywords: [
+      "arbitrage",
+      "fiche",
+      "conseil",
+      "pdf",
+      "modèle",
+      "template",
+      "assurance vie",
+      "cristalliance",
+    ],
+    section: "fiches-conseil",
+  },
+  {
     id: "telegram",
     label: "Anniversaires Telegram",
     keywords: ["telegram", "anniversaire", "bot", "rappel"],

@@ -29,6 +29,38 @@ export function isArbitrageAutoTask(tache: { titre: string }): boolean {
   );
 }
 
+/** Tâche arbitrage assurance vie uniquement. */
+export function isArbitrageAvAutoTask(tache: { titre: string }): boolean {
+  return tache.titre.startsWith("Arbitrage assurance vie —");
+}
+
+/** Tâche arbitrage PER uniquement. */
+export function isArbitragePerAutoTask(tache: { titre: string }): boolean {
+  return tache.titre.startsWith("Arbitrage PER —");
+}
+
+export type ArbitrageFicheProductKind = "AV" | "PER";
+
+/** Déduit AV ou PER depuis le titre de la tâche arbitrage auto. */
+export function resolveArbitrageFicheProductKind(tache: {
+  titre: string;
+}): ArbitrageFicheProductKind | null {
+  if (isArbitrageAvAutoTask(tache)) return "AV";
+  if (isArbitragePerAutoTask(tache)) return "PER";
+  return null;
+}
+
+const ARBITRAGE_TASK_INV_DESC_PREFIX = "crm:investissement_id:";
+
+export function parseArbitrageInvestissementId(
+  description?: string | null
+): number | null {
+  if (!description?.startsWith(ARBITRAGE_TASK_INV_DESC_PREFIX)) return null;
+  const raw = description.slice(ARBITRAGE_TASK_INV_DESC_PREFIX.length).trim();
+  const id = Number.parseInt(raw, 10);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
 /** Ajoute des mois calendaires UTC à une date input (ou à aujourd'hui si vide). */
 export function dateInputAddMonthsUtc(
   fromInput: string | null | undefined,
