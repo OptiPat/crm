@@ -387,6 +387,21 @@ impl super::Database {
         Ok(())
     }
 
+    fn investissement_belongs_to_placement_contact(
+        &self,
+        inv: &super::models::Investissement,
+        contact_id: i64,
+    ) -> Result<bool> {
+        if let Some(cid) = inv.contact_id {
+            return Ok(cid == contact_id);
+        }
+        let Some(foyer_id) = inv.foyer_id.filter(|id| *id > 0) else {
+            return Ok(false);
+        };
+        let contact = self.get_contact_by_id(contact_id)?;
+        Ok(contact.foyer_id == Some(foyer_id))
+    }
+
     pub fn create_placement_operation(
         &self,
         input: super::models::NewPlacementOperation,
@@ -403,13 +418,10 @@ impl super::Database {
         }
         if let Some(inv_id) = input.investissement_id.filter(|id| *id > 0) {
             let inv = self.get_investissement_by_id(inv_id)?;
-            match inv.contact_id {
-                Some(cid) if cid == input.contact_id => {}
-                _ => {
-                    return Err(rusqlite::Error::InvalidParameterName(
-                        "investissement_id ne correspond pas au contact".into(),
-                    ));
-                }
+            if !self.investissement_belongs_to_placement_contact(&inv, input.contact_id)? {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "investissement_id ne correspond pas au contact".into(),
+                ));
             }
         }
 
@@ -554,13 +566,10 @@ impl super::Database {
             ));
         }
         let inv = self.get_investissement_by_id(investissement_id)?;
-        match inv.contact_id {
-            Some(cid) if cid == op.contact_id => {}
-            _ => {
-                return Err(rusqlite::Error::InvalidParameterName(
-                    "investissement_id ne correspond pas au contact".into(),
-                ));
-            }
+        if !self.investissement_belongs_to_placement_contact(&inv, op.contact_id)? {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "investissement_id ne correspond pas au contact".into(),
+            ));
         }
         if op.investissement_id == Some(investissement_id) {
             return self.get_placement_operation_by_id(id);
@@ -974,6 +983,92 @@ impl super::Database {
         Ok(result)
     }
 
+    /// Opérations sur affaires couple où `contact_id` est contact principal ou co-contact.
+    fn list_placements_for_affaire_participant_and_status(
+        &self,
+        contact_id: i64,
+        status: &str,
+        without_gmail_only: bool,
+    ) -> Result<Vec<super::models::PlacementOperation>> {
+        let gmail_clause = if without_gmail_only {
+            " AND (po.gmail_message_id IS NULL OR po.gmail_message_id = '')"
+        } else {
+            ""
+        };
+        let sql = format!(
+            "SELECT {PLACEMENT_SELECT}
+             FROM placement_operations po
+             INNER JOIN pipes p ON p.id = po.pipe_id
+             WHERE p.pipe_type = ?1
+               AND (p.contact_id = ?2 OR p.secondary_contact_id = ?2)
+               AND po.status = ?3{gmail_clause}
+             ORDER BY po.id DESC"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            params![PIPE_TYPE_AFFAIRE, contact_id, status],
+            map_placement_row,
+        )?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    fn dedupe_placement_operations_by_id(
+        ops: Vec<super::models::PlacementOperation>,
+    ) -> Vec<super::models::PlacementOperation> {
+        let mut seen = std::collections::HashSet::new();
+        ops.into_iter()
+            .filter(|op| seen.insert(op.id))
+            .collect()
+    }
+
+    fn extend_placement_candidates_for_contact_status(
+        &self,
+        contact_id: i64,
+        candidates: &mut Vec<super::models::PlacementOperation>,
+        status: &str,
+        without_gmail_only: bool,
+    ) -> Result<()> {
+        candidates.extend(self.list_placements_for_contact_and_status(
+            contact_id,
+            status,
+            without_gmail_only,
+        )?);
+        candidates.extend(self.list_placements_for_affaire_participant_and_status(
+            contact_id,
+            status,
+            without_gmail_only,
+        )?);
+        Ok(())
+    }
+
+    /// Pipe affaire couple récent où le contact participe (prioritaire au scan Box Placement).
+    pub fn find_affaire_pipe_hint_for_box_placement_participant(
+        &self,
+        contact_id: i64,
+    ) -> Result<Option<i64>> {
+        self.conn
+            .query_row(
+                "SELECT p.id FROM pipes p
+                 WHERE p.pipe_type = ?1
+                   AND (p.contact_id = ?2 OR p.secondary_contact_id = ?2)
+                   AND EXISTS (
+                     SELECT 1 FROM placement_operations po
+                     WHERE po.pipe_id = p.id
+                       AND po.status = ?3
+                       AND (po.dismissed_at IS NULL OR po.dismissed_at <= 0)
+                   )
+                 ORDER BY p.updated_at DESC, p.id DESC
+                 LIMIT 1",
+                params![PIPE_TYPE_AFFAIRE, contact_id, STATUS_PENDING],
+                |row| row.get(0),
+            )
+            .optional()
+    }
+
     fn list_placements_for_pipe_and_status(
         &self,
         pipe_id: i64,
@@ -1114,20 +1209,28 @@ impl super::Database {
         email_received_at: i64,
         pipe_id_hint: Option<i64>,
     ) -> Result<Vec<super::models::PlacementOperation>> {
-        let mut candidates =
-            self.list_placements_for_contact_and_status(contact_id, STATUS_PENDING, false)?;
+        let mut candidates = Vec::new();
+        self.extend_placement_candidates_for_contact_status(
+            contact_id,
+            &mut candidates,
+            STATUS_PENDING,
+            false,
+        )?;
         if new_status == STATUS_CONFORME {
-            candidates.extend(self.list_placements_for_contact_and_status(
+            self.extend_placement_candidates_for_contact_status(
                 contact_id,
+                &mut candidates,
                 STATUS_NON_CONFORME,
                 false,
-            )?);
-            candidates.extend(self.list_placements_for_contact_and_status(
+            )?;
+            self.extend_placement_candidates_for_contact_status(
                 contact_id,
+                &mut candidates,
                 STATUS_CONFORME,
                 true,
-            )?);
+            )?;
         }
+        let candidates = Self::dedupe_placement_operations_by_id(candidates);
         let mut candidates = pool_candidates_for_stellium_label(candidates, stellium_label);
         candidates =
             Self::filter_placement_candidates_by_email_date(candidates, email_received_at);
@@ -1399,6 +1502,13 @@ mod tests {
             nom: nom.into(),
             prenom: prenom.into(),
             statut_suivi: Some("ACTIF".into()),                ..Default::default()
+        }
+    }
+
+    fn sample_contact_with_foyer(nom: &str, prenom: &str, foyer_id: i64) -> NewContact {
+        NewContact {
+            foyer_id: Some(foyer_id),
+            ..sample_contact(nom, prenom)
         }
     }
 
@@ -2404,6 +2514,63 @@ mod tests {
     }
 
     #[test]
+    fn find_email_match_couple_affaire_when_stellium_names_co_contact() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        db.migrate_pipes_table().unwrap();
+        let main = db
+            .create_contact(sample_contact("DUPONT", "Jean"))
+            .unwrap();
+        let co = db
+            .create_contact(sample_contact("LEGRAND", "Marie"))
+            .unwrap();
+        let main_id = main.id.unwrap();
+        let co_id = co.id.unwrap();
+        let affaire = db
+            .create_pipe(super::super::models::NewPipe {
+                contact_id: main_id,
+                secondary_contact_id: Some(co_id),
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Couple SCPI".into(),
+                stage: Some("R3".into()),
+                notes: None,
+            })
+            .unwrap();
+        let op = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id: main_id,
+                pipe_id: Some(affaire.id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_SOUSCRIPTION.into(),
+                product_label: Some("Comète CIF".into()),
+                stellium_label: Some("Souscription".into()),
+                montant_centimes: Some(725_000),
+                ..Default::default()
+            })
+            .unwrap();
+
+        let email_at = email_received_after_operation(&op);
+        let matched = db
+            .find_placement_for_email_match(
+                co_id,
+                "Souscription",
+                STATUS_CONFORME,
+                Some("Comète CIF"),
+                email_at,
+                None,
+            )
+            .unwrap()
+            .expect("match via co-contact on affaire couple");
+        assert_eq!(matched.id, op.id);
+
+        let hint = db
+            .find_affaire_pipe_hint_for_box_placement_participant(co_id)
+            .unwrap();
+        assert_eq!(hint, Some(affaire.id));
+    }
+
+    #[test]
     fn create_dedupes_by_pipe_and_stellium_label() {
         use super::super::models::NewPipeTimelineEntry;
 
@@ -2943,5 +3110,100 @@ mod tests {
             .to_string();
 
         assert!(err.contains("investissement_id ne correspond pas au contact"));
+    }
+
+    #[test]
+    fn foyer_investissement_links_to_placement_operation_for_foyer_contact() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        let foyer = db
+            .create_foyer(super::super::models::NewFoyer {
+                nom: "Foyer test".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                ir_net_a_payer: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+        let main = db
+            .create_contact(sample_contact_with_foyer("DUPONT", "Jean", foyer.id))
+            .unwrap();
+        let co = db
+            .create_contact(sample_contact_with_foyer("LEGRAND", "Marie", foyer.id))
+            .unwrap();
+        let main_id = main.id.unwrap();
+        let co_id = co.id.unwrap();
+        let inv = db
+            .create_investissement(super::super::models::NewInvestissement {
+                contact_id: None,
+                foyer_id: Some(foyer.id),
+                type_produit: "SCPI".into(),
+                partenaire_id: None,
+                nom_produit: "Comete".into(),
+                numero_contrat: None,
+                montant_initial: Some(725_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+
+        let op = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id: co_id,
+                pipe_id: None,
+                pipe_timeline_entry_id: None,
+                operation_type: OP_ARBITRAGE.into(),
+                product_label: Some("Comete".into()),
+                stellium_label: Some("Arbitrage libre".into()),
+                investissement_id: Some(inv.id),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(op.investissement_id, Some(inv.id));
+
+        let suivi = db
+            .create_pipe(super::super::models::NewPipe {
+                contact_id: main_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
+                parent_pipe_id: None,
+                titre: "Suivi".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+        let draft = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id: main_id,
+                pipe_id: Some(suivi.id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_ARBITRAGE.into(),
+                product_label: Some("Comete".into()),
+                stellium_label: Some("Arbitrage libre".into()),
+                ..Default::default()
+            })
+            .unwrap();
+        let linked = db
+            .update_placement_operation_investissement_id(draft.id, inv.id)
+            .unwrap();
+        assert_eq!(linked.investissement_id, Some(inv.id));
     }
 }

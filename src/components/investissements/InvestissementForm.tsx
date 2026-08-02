@@ -719,7 +719,8 @@ export function InvestissementForm({
         : undefined;
 
       const newInvestissement: NewInvestissement = {
-        contact_id: contactId ? parseInt(contactId) : undefined,
+        contact_id:
+          investissementCommun || !contactId ? undefined : parseInt(contactId),
         foyer_id: investissementCommun && foyerId ? parseInt(foyerId) : undefined,
         type_produit: typeProduit,
         partenaire_id: partenaireId ? parseInt(partenaireId) : undefined,

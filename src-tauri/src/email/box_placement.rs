@@ -669,8 +669,11 @@ pub fn scan_box_placement_emails(
                 BoxPlacementKind::NonConforme => STATUS_NON_CONFORME,
             };
             let pipe_id_hint = db
-                .find_latest_suivi_pipe_id_for_contact(contact_id)
-                .map_err(|e| e.to_string())?;
+                .find_affaire_pipe_hint_for_box_placement_participant(contact_id)
+                .map_err(|e| e.to_string())?
+                .or(db
+                    .find_latest_suivi_pipe_id_for_contact(contact_id)
+                    .map_err(|e| e.to_string())?);
 
             let matched = db
                 .find_placement_for_email_match(

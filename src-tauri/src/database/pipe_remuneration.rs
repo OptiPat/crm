@@ -126,6 +126,30 @@ impl super::Database {
         Ok(None)
     }
 
+    /// Propriétaire investissement auto : couple même foyer → investissement commun (`foyer_id`, pas de `contact_id`).
+    fn resolve_pipe_affaire_investissement_owner(
+        &self,
+        pipe: &super::models::Pipe,
+    ) -> Result<(Option<i64>, Option<i64>)> {
+        if pipe
+            .secondary_contact_id
+            .filter(|id| *id > 0)
+            .is_none()
+        {
+            return Ok((Some(pipe.contact_id), None));
+        }
+        let primary = self.get_contact_by_id(pipe.contact_id)?;
+        let Some(foyer_id) = primary.foyer_id.filter(|id| *id > 0) else {
+            return Ok((Some(pipe.contact_id), None));
+        };
+        let secondary_id = pipe.secondary_contact_id.unwrap();
+        let secondary = self.get_contact_by_id(secondary_id)?;
+        if secondary.foyer_id == Some(foyer_id) {
+            return Ok((None, Some(foyer_id)));
+        }
+        Ok((Some(pipe.contact_id), None))
+    }
+
     pub fn maybe_create_investissement_from_gagnee_affaire(
         &self,
         pipe_id: i64,
@@ -168,9 +192,10 @@ impl super::Database {
             .unwrap_or_else(|| "Souscription".to_string());
 
         let closing_ts = closing_date_unix.filter(|t| *t > 0).unwrap_or_else(now_unix);
+        let (contact_id, foyer_id) = self.resolve_pipe_affaire_investissement_owner(&pipe)?;
         let inv = self.create_investissement(super::models::NewInvestissement {
-            contact_id: Some(pipe.contact_id),
-            foyer_id: None,
+            contact_id,
+            foyer_id,
             type_produit,
             partenaire_id: None,
             nom_produit,
@@ -290,7 +315,7 @@ impl super::Database {
 
 #[cfg(test)]
 mod tests {
-    use crate::database::models::{NewContact, NewPipe, NewPlacementOperation};
+    use crate::database::models::{NewContact, NewFoyer, NewPipe, NewPlacementOperation};
     use crate::database::pipe::{PIPE_STAGE_GAGNEE, PIPE_STAGE_R3, PIPE_TYPE_AFFAIRE};
     use crate::database::placement_operations::{OP_SOUSCRIPTION, OP_VERSEMENT};
     use crate::database::Database;
@@ -346,6 +371,85 @@ mod tests {
             .unwrap();
         assert_eq!(inv.montant_initial, Some(5_000_000));
         assert_eq!(inv.type_produit, "SCPI");
+        assert_eq!(inv.contact_id, Some(contact_id));
+        assert!(inv.foyer_id.is_none());
+    }
+
+    #[test]
+    fn create_foyer_investissement_when_couple_affaire_gagnee() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let foyer = db
+            .create_foyer(NewFoyer {
+                nom: "Foyer couple".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                ir_net_a_payer: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+        let main_id = db
+            .create_contact(NewContact {
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                categorie: "PROSPECT_CLIENT".into(),
+                foyer_id: Some(foyer.id),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("main");
+        let co_id = db
+            .create_contact(NewContact {
+                nom: "LEGRAND".into(),
+                prenom: "Marie".into(),
+                categorie: "PROSPECT_CLIENT".into(),
+                foyer_id: Some(foyer.id),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("co");
+        let affaire = db
+            .create_pipe(NewPipe {
+                contact_id: main_id,
+                secondary_contact_id: Some(co_id),
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Couple SCPI".into(),
+                stage: Some(PIPE_STAGE_R3.into()),
+                notes: None,
+            })
+            .unwrap();
+        db.create_placement_operation(NewPlacementOperation {
+            contact_id: main_id,
+            pipe_id: Some(affaire.id),
+            pipe_timeline_entry_id: None,
+            operation_type: OP_SOUSCRIPTION.into(),
+            product_label: Some("Comete".into()),
+            stellium_label: Some("Souscription".into()),
+            montant_centimes: Some(725_000),
+            type_produit: Some("SCPI".into()),
+            investissement_id: None,
+        })
+        .unwrap();
+        db.set_pipe_stage(affaire.id, PIPE_STAGE_GAGNEE, None, None)
+            .unwrap();
+        let op = db
+            .find_remuneration_placement_for_pipe(affaire.id)
+            .unwrap()
+            .unwrap();
+        let inv = db
+            .get_investissement_by_id(op.investissement_id.unwrap())
+            .unwrap();
+        assert!(inv.contact_id.is_none());
+        assert_eq!(inv.foyer_id, Some(foyer.id));
+        assert_eq!(inv.montant_initial, Some(725_000));
+        assert_eq!(db.get_investissements_by_foyer(foyer.id).unwrap().len(), 1);
+        assert_eq!(db.get_investissements_by_contact(co_id).unwrap().len(), 0);
     }
 
     #[test]

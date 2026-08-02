@@ -4,7 +4,11 @@ import { getInteractionsByContact } from "@/lib/api/tauri-interactions";
 import { getContactGmailMessages } from "@/lib/api/tauri-contact-gmail";
 import { groupMailboxMessagesByThread } from "@/lib/contacts/contact-mail-threads";
 import type { Investissement } from "@/lib/api/tauri-investissements";
-import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
+import {
+  getInvestissementsByContact,
+  getInvestissementsByFoyer,
+} from "@/lib/api/tauri-investissements";
+import { getContactById } from "@/lib/api/tauri-contacts";
 import { filterByOrigine } from "@/lib/investissements/patrimoine-tab-utils";
 import type { Document } from "@/lib/api/tauri-documents";
 import { getDocumentsByContact } from "@/lib/api/tauri-documents";
@@ -66,6 +70,23 @@ export interface RelationTimelineExtras {
   investissements?: Investissement[];
   documents?: Document[];
   taches?: Tache[];
+}
+
+/** Patrimoine perso + investissements communs du foyer (sans `contact_id`), dédoublonnés par id. */
+export function mergeContactInvestissementsForRelation(
+  personal: Investissement[],
+  foyerCommun: Investissement[]
+): Investissement[] {
+  const byId = new Map<number, Investissement>();
+  for (const inv of personal) {
+    if (inv.id != null) byId.set(inv.id, inv);
+  }
+  for (const inv of foyerCommun) {
+    if (inv.id != null && (inv.contact_id == null || inv.contact_id <= 0)) {
+      byId.set(inv.id, inv);
+    }
+  }
+  return [...byId.values()];
 }
 
 export function buildContactRelationTimeline(
@@ -237,15 +258,24 @@ export async function loadContactRelationTimeline(
   const { getExchangeHistoryTimelineForContact } = await import(
     "@/lib/api/tauri-interactions"
   );
-  const [allExchanges, manual, mailbox, investissements, documents, taches] =
+  const [allExchanges, manual, mailbox, contact, personalInvestissements, documents, taches] =
     await Promise.all([
       getExchangeHistoryTimelineForContact(contactId),
       getInteractionsByContact(contactId),
       getContactGmailMessages(contactId, true),
+      getContactById(contactId),
       getInvestissementsByContact(contactId),
       getDocumentsByContact(contactId),
       getTachesByContact(contactId),
     ]);
+  const foyerInvestissements =
+    contact.foyer_id != null && contact.foyer_id > 0
+      ? await getInvestissementsByFoyer(contact.foyer_id)
+      : [];
+  const investissements = mergeContactInvestissementsForRelation(
+    personalInvestissements,
+    foyerInvestissements
+  );
   const campaignEntries = allExchanges.filter(
     (e) =>
       e.contact_id === contactId &&

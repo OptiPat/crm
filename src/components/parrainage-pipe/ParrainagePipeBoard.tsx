@@ -3,6 +3,7 @@ import { GripVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { ParrainagePipeRecord } from "@/lib/api/tauri-parrainage-pipe";
 import { groupParrainagePipesByStage } from "@/lib/parrainage-pipe/parrainage-pipe-board-utils";
+import { PARRAINAGE_PIPE_STAGE_BOARD_COLORS } from "@/lib/parrainage-pipe/parrainage-pipe-stage-colors";
 import {
   formatParrainageContactLabel,
   isParrainagePipeStage,
@@ -14,31 +15,14 @@ import { cn } from "@/lib/utils";
 
 const DRAG_THRESHOLD_PX = 6;
 
-const STAGE_COLORS: Record<ParrainagePipeStage, { header: string; card: string }> = {
-  A_CONTACTER: {
-    header: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
-    card: "border-slate-300/60",
-  },
-  PRISE_DE_CONTACT: {
-    header: "bg-blue-500/15 text-blue-700 dark:text-blue-300",
-    card: "border-blue-300/50",
-  },
-  CONFIRME: {
-    header: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
-    card: "border-violet-300/50",
-  },
-  PRESENT: {
-    header: "bg-amber-500/15 text-amber-800 dark:text-amber-300",
-    card: "border-amber-300/50",
-  },
-  INSCRIT: {
-    header: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-    card: "border-emerald-300/50",
-  },
-  REFUSE: {
-    header: "bg-rose-500/15 text-rose-700 dark:text-rose-300",
-    card: "border-rose-300/50",
-  },
+/** Libellés compacts pour tenir en 6 colonnes sans scroll horizontal. */
+const PARRAINAGE_PIPE_BOARD_LABELS: Record<ParrainagePipeStage, string> = {
+  A_CONTACTER: "À contact.",
+  PRISE_DE_CONTACT: "Contact",
+  CONFIRME: "Confirmé",
+  PRESENT: "Présent",
+  INSCRIT: "Inscrit",
+  REFUSE: "Refusé",
 };
 
 function formatUpdatedAt(ts: number): string {
@@ -150,68 +134,99 @@ export function ParrainagePipeBoard({
     <div className="grid h-full min-h-0 flex-1 grid-cols-3 gap-1.5 p-2 sm:grid-cols-6 sm:gap-2 sm:p-3">
       {PARRAINAGE_PIPE_BOARD_STAGES.map((stage) => {
         const list = byStage[stage];
-        const colors = STAGE_COLORS[stage];
-        const isDropTarget = dragOverStage === stage;
+        const colors = PARRAINAGE_PIPE_STAGE_BOARD_COLORS[stage];
+        const isDragOver = dragOverStage === stage;
         return (
-          <div
+          <section
             key={stage}
             data-parrainage-stage={stage}
             className={cn(
-              "flex min-h-0 min-w-0 flex-col rounded-lg border border-border/50 bg-muted/20",
-              isDropTarget && "ring-2 ring-primary/50"
+              "flex min-h-0 min-w-0 flex-col rounded-lg border border-t-2 transition-colors sm:rounded-xl",
+              colors.column,
+              colors.accent,
+              isDragOver && "border-primary bg-primary/5 ring-1 ring-primary/30"
             )}
           >
-            <div
+            <header
               className={cn(
-                "flex items-center justify-between gap-1 border-b border-border/40 px-2 py-1.5 text-[11px] font-medium sm:text-xs",
+                "flex items-center justify-between gap-1 border-b px-1.5 py-1.5 sm:px-2 sm:py-2",
                 colors.header
               )}
+              title={PARRAINAGE_PIPE_STAGE_LABELS[stage]}
             >
-              <span className="truncate">{PARRAINAGE_PIPE_STAGE_LABELS[stage]}</span>
-              <span className="tabular-nums opacity-70">{list.length}</span>
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-1.5">
-              {list.map((pipe) => {
-                const selected = pipe.id === selectedId;
-                const dragging = pipe.id === draggingId;
-                return (
-                  <button
-                    key={pipe.id}
-                    type="button"
-                    onPointerDown={(e) => handlePointerDown(e, pipe)}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={finishPointerDrag}
-                    onPointerCancel={handlePointerCancel}
-                    className={cn(
-                      "group w-full rounded-md border bg-card p-2 text-left shadow-sm transition",
-                      colors.card,
-                      selected && "ring-2 ring-primary",
-                      dragging && "opacity-50"
-                    )}
-                  >
-                    <div className="flex items-start gap-1">
-                      <GripVertical className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/60" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1">
-                          <p className="truncate text-xs font-medium sm:text-sm">
-                            {formatParrainageContactLabel(pipe)}
+              <h3
+                className={cn(
+                  "truncate text-[10px] font-medium leading-tight sm:text-xs",
+                  colors.title
+                )}
+              >
+                <span className="hidden min-[1280px]:inline">
+                  {PARRAINAGE_PIPE_STAGE_LABELS[stage]}
+                </span>
+                <span className="min-[1280px]:hidden">{PARRAINAGE_PIPE_BOARD_LABELS[stage]}</span>
+              </h3>
+              <Badge
+                variant="secondary"
+                className={cn(
+                  "h-5 min-w-5 shrink-0 justify-center px-1 font-normal tabular-nums text-[10px]",
+                  colors.badge
+                )}
+              >
+                {list.length}
+              </Badge>
+            </header>
+
+            <div className="min-h-[80px] flex-1 space-y-1.5 overflow-y-auto p-1 sm:space-y-2 sm:p-1.5">
+              {list.length === 0 ? (
+                <p className="px-0.5 py-4 text-center text-[10px] text-muted-foreground sm:text-xs">
+                  Déposer ici
+                </p>
+              ) : (
+                list.map((pipe) => {
+                  const selected = pipe.id === selectedId;
+                  const dragging = pipe.id === draggingId;
+                  return (
+                    <article
+                      key={pipe.id}
+                      onPointerDown={(e) => handlePointerDown(e, pipe)}
+                      onPointerMove={handlePointerMove}
+                      onPointerUp={finishPointerDrag}
+                      onPointerCancel={handlePointerCancel}
+                      className={cn(
+                        "touch-none rounded-md border bg-card p-1.5 shadow-sm transition-opacity sm:rounded-lg sm:p-2",
+                        "cursor-grab active:cursor-grabbing",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        selected && "border-primary ring-1 ring-primary/40",
+                        dragging && "opacity-50"
+                      )}
+                    >
+                      <div className="flex items-start gap-1 select-none">
+                        <GripVertical
+                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/70 sm:h-4 sm:w-4"
+                          aria-hidden
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1">
+                            <p className="text-[11px] font-medium leading-snug line-clamp-2 sm:text-xs">
+                              {formatParrainageContactLabel(pipe)}
+                            </p>
+                            {pipe.invitation_type && (
+                              <Badge variant="outline" className="h-4 px-1 text-[9px]">
+                                {pipe.invitation_type}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="mt-0.5 text-[9px] text-muted-foreground/80 sm:text-[10px]">
+                            {formatUpdatedAt(pipe.updated_at)}
                           </p>
-                          {pipe.invitation_type && (
-                            <Badge variant="outline" className="h-4 px-1 text-[9px]">
-                              {pipe.invitation_type}
-                            </Badge>
-                          )}
                         </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {formatUpdatedAt(pipe.updated_at)}
-                        </p>
                       </div>
-                    </div>
-                  </button>
-                );
-              })}
+                    </article>
+                  );
+                })
+              )}
             </div>
-          </div>
+          </section>
         );
       })}
     </div>

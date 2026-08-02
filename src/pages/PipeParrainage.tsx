@@ -18,7 +18,6 @@ import { subscribeParrainagePipeChanged } from "@/lib/parrainage-pipe/parrainage
 import {
   currentFiscalYearLabel,
   listSelectableFiscalYearLabels,
-  nextFiscalYearLabel,
 } from "@/lib/pipe/remuneration-fiscal-year";
 import {
   PARRAINAGE_PIPE_STAGE_LABELS,
@@ -33,10 +32,7 @@ export function PipeParrainage() {
     const current = currentFiscalYearLabel();
     return listSelectableFiscalYearLabels().filter((label) => label >= current);
   }, []);
-  const defaultExercice = useMemo(
-    () => nextFiscalYearLabel(currentFiscalYearLabel()) ?? currentFiscalYearLabel(),
-    []
-  );
+  const defaultExercice = useMemo(() => currentFiscalYearLabel(), []);
 
   const [exerciceLabel, setExerciceLabel] = useState(defaultExercice);
   const [pipes, setPipes] = useState<ParrainagePipeRecord[]>([]);
@@ -144,7 +140,7 @@ export function PipeParrainage() {
         </Button>
       </div>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col p-3 sm:p-4">
         {selected ? (
           <ParrainagePipeDetailPanel
             pipe={selected}
@@ -158,17 +154,21 @@ export function PipeParrainage() {
               void loadData();
             }}
           />
-        ) : loading ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            Chargement…
-          </div>
         ) : (
-          <ParrainagePipeBoard
-            pipes={pipes}
-            selectedId={null}
-            onSelect={setSelected}
-            onRequestStageChange={(pipe, stage) => void handleStageChange(pipe, stage)}
-          />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+            {loading ? (
+              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                Chargement…
+              </div>
+            ) : (
+              <ParrainagePipeBoard
+                pipes={pipes}
+                selectedId={null}
+                onSelect={setSelected}
+                onRequestStageChange={(pipe, stage) => void handleStageChange(pipe, stage)}
+              />
+            )}
+          </div>
         )}
       </div>
 

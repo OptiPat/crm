@@ -4,6 +4,7 @@ import type { ExchangeHistoryEntry } from "@/lib/api/tauri-interactions";
 import {
   buildContactRelationTimeline,
   isLegacyCampaignInteraction,
+  mergeContactInvestissementsForRelation,
 } from "@/lib/interactions/contact-relation-timeline";
 import { exchangeEntryKey } from "@/lib/interactions/exchange-history-display";
 
@@ -131,6 +132,50 @@ describe("contact-relation-timeline", () => {
     if (items[0].kind === "investissement") {
       expect(items[0].investissement.id).toBe(1);
     }
+  });
+
+  it("fusionne investissements perso et communs du foyer sans doublon", () => {
+    const merged = mergeContactInvestissementsForRelation(
+      [
+        {
+          id: 1,
+          contact_id: 10,
+          type_produit: "PER",
+          nom_produit: "PER perso",
+          versement_programme: false,
+          reinvestissement_dividendes: false,
+          origine: "MON_CONSEIL",
+          created_at: 1,
+          updated_at: 1,
+        },
+      ],
+      [
+        {
+          id: 2,
+          foyer_id: 8,
+          type_produit: "SCPI",
+          nom_produit: "Comète",
+          versement_programme: false,
+          reinvestissement_dividendes: false,
+          origine: "MON_CONSEIL",
+          created_at: 1,
+          updated_at: 1,
+        },
+        {
+          id: 3,
+          contact_id: 11,
+          foyer_id: 8,
+          type_produit: "SCPI",
+          nom_produit: "Hybride ignore",
+          versement_programme: false,
+          reinvestissement_dividendes: false,
+          origine: "MON_CONSEIL",
+          created_at: 1,
+          updated_at: 1,
+        },
+      ]
+    );
+    expect(merged.map((i) => i.id).sort()).toEqual([1, 2]);
   });
 
   it("intègre investissements, documents et tâches, triés par date décroissante", () => {

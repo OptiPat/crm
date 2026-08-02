@@ -27,11 +27,12 @@ export async function notifyPlacementConformeClientsAfterScan(
     options
   );
 
-  if (!options?.quiet && result.sent > 0) {
+  if (!options?.quiet && result.emailsSent > 0) {
+    const plural = result.emailsSent > 1;
     toast.success(
-      result.sent === 1
-        ? "Email client Box Placement envoyé"
-        : `${result.sent} emails client Box Placement envoyés`
+      plural
+        ? `${result.emailsSent} emails client Box Placement envoyés`
+        : "Email client Box Placement envoyé"
     );
   }
 }
@@ -39,18 +40,18 @@ export async function notifyPlacementConformeClientsAfterScan(
 export async function notifyPlacementConformeClientAfterManualMark(
   operation: PlacementOperation
 ): Promise<void> {
-  const outcome = await maybeSendPlacementConformeEmailForOperation(operation);
+  const { outcome } = await maybeSendPlacementConformeEmailForOperation(operation);
   if (outcome === "sent") {
-    toast.success("Email client Box Placement envoyé");
+    toast.success("Email(s) client Box Placement envoyé(s)");
   }
 }
 
 export async function retryPlacementConformeClientEmail(
   operation: PlacementOperation
 ): Promise<void> {
-  const outcome = await maybeSendPlacementConformeEmailForOperation(operation);
+  const { outcome } = await maybeSendPlacementConformeEmailForOperation(operation);
   if (outcome === "sent") {
-    toast.success("Email client Box Placement envoyé");
+    toast.success("Email(s) client Box Placement envoyé(s)");
   } else if (outcome === "skipped") {
     toast.message("Email client non envoyé — vérifiez le modèle, l'email contact ou la connexion OAuth.");
   }
