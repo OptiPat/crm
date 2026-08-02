@@ -30,21 +30,21 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') {
 
 # package.json
 $pkgPath = Join-Path $Root "package.json"
-$pkgRaw = Get-Content $pkgPath -Raw
+$pkgRaw = Get-Content $pkgPath -Raw -Encoding utf8
 $oldPkg = if ($pkgRaw -match '"version":\s*"([^"]+)"') { $Matches[1] } else { "?" }
 $pkgRaw = $pkgRaw -replace '"version":\s*"[^"]+"', "`"version`": `"$Version`""
 Write-Utf8NoBom -Path $pkgPath -Content $pkgRaw
 
 # tauri.conf.json
 $tauriPath = Join-Path $Root "src-tauri/tauri.conf.json"
-$tauriRaw = Get-Content $tauriPath -Raw
+$tauriRaw = Get-Content $tauriPath -Raw -Encoding utf8
 $oldTauri = if ($tauriRaw -match '"version":\s*"([^"]+)"') { $Matches[1] } else { "?" }
 $tauriRaw = $tauriRaw -replace '"version":\s*"[^"]+"', "`"version`": `"$Version`""
 Write-Utf8NoBom -Path $tauriPath -Content $tauriRaw
 
 # Cargo.toml
 $cargoPath = Join-Path $Root "src-tauri/Cargo.toml"
-$cargo = Get-Content $cargoPath -Raw
+$cargo = Get-Content $cargoPath -Raw -Encoding utf8
 $oldCargo = if ($cargo -match '(?m)^version\s*=\s*"([^"]+)"') { $Matches[1] } else { "?" }
 $cargo = $cargo -replace '(?m)^version\s*=\s*"[^"]+"', "version = `"$Version`""
 Write-Utf8NoBom -Path $cargoPath -Content $cargo
