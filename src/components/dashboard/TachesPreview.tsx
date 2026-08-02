@@ -16,12 +16,13 @@ import {
   echeanceState,
 } from "@/lib/taches/tache-display";
 import { TacheForm } from "@/components/taches/TacheForm";
+import { ArbitrageFicheContratPickDialog } from "@/components/taches/ArbitrageFicheContratPickDialog";
 import { ArbitrageFicheTemplatePickDialog } from "@/components/taches/ArbitrageFicheTemplatePickDialog";
 import { cn } from "@/lib/utils";
 import { filterAndSortTachesDashboardCockpit } from "@/lib/taches/tache-filters";
 import { useArbitrageTacheDone } from "@/hooks/useArbitrageTacheDone";
 import { useArbitrageFicheConseil } from "@/hooks/useArbitrageFicheConseil";
-import { isArbitrageAutoTask } from "@/lib/alertes/arbitrage-alerte";
+import { isFicheConseilTask } from "@/lib/alertes/arbitrage-alerte";
 import {
   buildPostponedTachePayload,
   TACHE_POSTPONE_OPTIONS,
@@ -55,6 +56,9 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
   const { tryComplete, dialog: arbitrageDialog } = useArbitrageTacheDone(() => void load());
   const {
     startFicheConseil,
+    pendingContratPick,
+    setPendingContratPick,
+    confirmContratPick,
     pendingPick,
     setPendingPick,
     confirmTemplatePick,
@@ -193,14 +197,14 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
                   </div>
                 </div>
                 <div className="shrink-0 ml-auto flex items-center gap-1.5">
-                  {isArbitrageAutoTask(tache) ? (
+                  {isFicheConseilTask(tache) ? (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       className="h-8 px-2.5 text-xs shrink-0 gap-1"
                       title="Générer la fiche conseil arbitrage"
-                      disabled={ficheBusy || pendingPick != null}
+                      disabled={ficheBusy || pendingPick != null || pendingContratPick != null}
                       onClick={(e) => {
                         e.stopPropagation();
                         void startFicheConseil(tache);
@@ -238,6 +242,15 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
         </ul>
       )}
       {arbitrageDialog}
+      <ArbitrageFicheContratPickDialog
+        open={pendingContratPick !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingContratPick(null);
+        }}
+        contrats={pendingContratPick?.contrats ?? []}
+        suggestedInvestissementId={pendingContratPick?.suggestedInvestissementId}
+        onConfirm={confirmContratPick}
+      />
       <ArbitrageFicheTemplatePickDialog
         open={pendingPick !== null}
         onOpenChange={(open) => {

@@ -5,6 +5,25 @@ use rusqlite::{params, OptionalExtension, Result};
 pub const TYPE_ALERTE_ARBITRAGE: &str = "ARBITRAGE_AV_PER";
 
 const ARBITRAGE_TASK_INV_DESC_PREFIX: &str = "crm:investissement_id:";
+pub(crate) const FICHE_CONSEIL_EXCELITIS_MARKER: &str = "crm:fiche_conseil_exceltis";
+
+pub(crate) fn is_fiche_conseil_eligible_investissement(inv: &super::models::Investissement) -> bool {
+    inv.statut == "ACTIF"
+        && inv.origine == "MON_CONSEIL"
+        && matches!(inv.type_produit.as_str(), "ASSURANCE_VIE" | "PER")
+}
+
+pub(crate) fn build_exceltis_tache_description(investissement_ids: &[i64]) -> String {
+    let mut desc = FICHE_CONSEIL_EXCELITIS_MARKER.to_string();
+    if investissement_ids.len() == 1 {
+        desc.push('\n');
+        desc.push_str(&format!(
+            "{ARBITRAGE_TASK_INV_DESC_PREFIX}{}",
+            investissement_ids[0]
+        ));
+    }
+    desc
+}
 
 fn arbitrage_task_description(investissement_id: i64) -> String {
     format!("{ARBITRAGE_TASK_INV_DESC_PREFIX}{investissement_id}")

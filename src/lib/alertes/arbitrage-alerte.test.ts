@@ -46,6 +46,9 @@ describe("arbitrage-alerte", () => {
 
   it("parse investissement_id depuis description tache", () => {
     expect(parseArbitrageInvestissementId("crm:investissement_id:42")).toBe(42);
+    expect(
+      parseArbitrageInvestissementId("crm:fiche_conseil_exceltis\ncrm:investissement_id:7")
+    ).toBe(7);
     expect(parseArbitrageInvestissementId("autre")).toBeNull();
   });
 

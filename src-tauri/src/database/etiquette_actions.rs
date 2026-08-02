@@ -375,10 +375,28 @@ impl super::Database {
         let priorite = normalize_priorite(action.tache_priorite.as_str().into());
         let echeance = tache_echeance(eligible_at, action.tache_delai_jours);
 
+        let etiquette = self.get_etiquette_by_id(etiquette_id)?;
+        let description = if crate::email::stellium_exceltis::is_exceltis_etiquette_nom(&etiquette.nom)
+        {
+            let eligible_ids: Vec<i64> = self
+                .get_investissements_by_contact(contact_id)?
+                .into_iter()
+                .filter(|inv| {
+                    crate::database::arbitrage_alerts::is_fiche_conseil_eligible_investissement(inv)
+                })
+                .map(|inv| inv.id)
+                .collect();
+            Some(crate::database::arbitrage_alerts::build_exceltis_tache_description(
+                &eligible_ids,
+            ))
+        } else {
+            None
+        };
+
         self.conn.execute(
-            "INSERT INTO taches (titre, date_echeance, priorite, statut)
-             VALUES (?1, ?2, ?3, 'A_FAIRE')",
-            params![titre, echeance, priorite],
+            "INSERT INTO taches (titre, description, date_echeance, priorite, statut)
+             VALUES (?1, ?2, ?3, ?4, 'A_FAIRE')",
+            params![titre, description, echeance, priorite],
         )?;
         let tache_id = self.conn.last_insert_rowid();
 
@@ -391,6 +409,53 @@ impl super::Database {
             "UPDATE contact_etiquettes SET tache_id = ?1 WHERE id = ?2",
             params![tache_id, ce_id],
         )?;
+        Ok(())
+    }
+
+    /// Marque les tâches Exceltis existantes pour la génération fiche conseil.
+    pub fn migrate_exceltis_tache_fiche_markers(&self) -> Result<()> {
+        use crate::database::arbitrage_alerts::{
+            build_exceltis_tache_description, FICHE_CONSEIL_EXCELITIS_MARKER,
+            is_fiche_conseil_eligible_investissement,
+        };
+
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT t.id, COALESCE(t.description, ''), ce.contact_id, e.nom
+             FROM taches t
+             INNER JOIN contact_etiquettes ce ON ce.tache_id = t.id
+             INNER JOIN etiquettes e ON e.id = ce.etiquette_id
+             WHERE t.statut = 'A_FAIRE'",
+        )?;
+        let rows: Vec<(i64, String, i64, String)> = stmt
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        for (tache_id, description, contact_id, etiquette_nom) in rows {
+            if !crate::email::stellium_exceltis::is_exceltis_etiquette_nom(&etiquette_nom) {
+                continue;
+            }
+            if description.contains(FICHE_CONSEIL_EXCELITIS_MARKER) {
+                continue;
+            }
+            let eligible_ids: Vec<i64> = self
+                .get_investissements_by_contact(contact_id)?
+                .into_iter()
+                .filter(|inv| is_fiche_conseil_eligible_investissement(inv))
+                .map(|inv| inv.id)
+                .collect();
+            let marker_desc = build_exceltis_tache_description(&eligible_ids);
+            let next = if description.is_empty() {
+                marker_desc
+            } else {
+                format!("{description}\n{marker_desc}")
+            };
+            self.conn.execute(
+                "UPDATE taches SET description = ?1 WHERE id = ?2",
+                params![next, tache_id],
+            )?;
+        }
         Ok(())
     }
 }
@@ -559,6 +624,57 @@ mod tests {
             .try_apply_etiquette_tache_for_contact(cid, eid)
             .unwrap());
         assert_eq!(db.get_taches_by_contact(cid).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn exceltis_task_marks_fiche_conseil_description() {
+        use crate::database::arbitrage_alerts::FICHE_CONSEIL_EXCELITIS_MARKER;
+        use crate::database::models::NewInvestissement;
+
+        let db = mem_db();
+        let eid = insert_etiquette(&db, "Exceltis Rendement — Février 2025");
+        let cid = insert_contact(&db, "Jean", "Dupont");
+        db.set_etiquette_action(&action(eid, "Arbitrage {nom}", 15))
+            .unwrap();
+        db.attribuer_etiquette(cid, eid, Some("MANUEL".into()), None)
+            .unwrap();
+        let inv_id = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(cid),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "Contrat test".into(),
+                numero_contrat: Some("AV-123".into()),
+                montant_initial: None,
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap()
+            .id;
+
+        db.apply_etiquette_tache_action(cid, eid, 1_700_200_000)
+            .unwrap();
+
+        let tache = db.get_taches_by_contact(cid).unwrap().into_iter().next().unwrap();
+        let description = tache.description.expect("description");
+        assert!(description.contains(FICHE_CONSEIL_EXCELITIS_MARKER));
+        assert!(description.contains(&format!("crm:investissement_id:{inv_id}")));
     }
 
     #[test]

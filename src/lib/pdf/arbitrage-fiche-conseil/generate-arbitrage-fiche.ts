@@ -7,7 +7,6 @@ import {
   type ArbitrageFicheProductKind,
 } from "@/lib/api/tauri-arbitrage-fiche";
 import { openDocumentFile } from "@/lib/api/tauri-system";
-import { parseArbitrageInvestissementId } from "@/lib/alertes/arbitrage-alerte";
 import { fillArbitrageFicheConseilPdf } from "@/lib/pdf/arbitrage-fiche-conseil/fill-fiche";
 import { buildArbitrageFicheOutputFileName } from "@/lib/pdf/arbitrage-fiche-conseil/build-output-filename";
 import type { Tache } from "@/lib/api/tauri-taches";
@@ -20,12 +19,9 @@ export type GenerateArbitrageFicheConseilResult = {
 export async function generateArbitrageFicheConseil(
   tache: Tache,
   templateId: string,
-  productKind: ArbitrageFicheProductKind
+  productKind: ArbitrageFicheProductKind,
+  investissementId: number
 ): Promise<GenerateArbitrageFicheConseilResult> {
-  const investissementId = parseArbitrageInvestissementId(tache.description);
-  if (investissementId == null) {
-    throw new Error("Tâche arbitrage sans contrat lié.");
-  }
   const contactId = tache.contacts[0]?.contact_id;
   if (!contactId) {
     throw new Error("Aucun contact lié à cette tâche.");
@@ -63,5 +59,6 @@ export async function generateArbitrageFicheConseil(
 /** @deprecated */
 export const generateArbitrageAvFicheConseil = (
   tache: Tache,
-  templateId: string
-) => generateArbitrageFicheConseil(tache, templateId, "AV");
+  templateId: string,
+  investissementId: number
+) => generateArbitrageFicheConseil(tache, templateId, "AV", investissementId);

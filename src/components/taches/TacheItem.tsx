@@ -1,4 +1,4 @@
-import { Calendar, Clock, Pencil, Trash2, User, UserPlus } from "lucide-react";
+import { Calendar, Clock, FileText, Pencil, Trash2, User, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import {
 } from "@/lib/taches/tache-display";
 import { TACHE_POSTPONE_OPTIONS } from "@/lib/taches/postpone-tache";
 import { formatRecurrenceLabel, isActiveRecurrence } from "@/lib/taches/tache-recurrence";
+import { isFicheConseilTask } from "@/lib/alertes/arbitrage-alerte";
 
 interface TacheItemProps {
   tache: Tache | TacheWithContact;
@@ -37,6 +38,8 @@ interface TacheItemProps {
   onPlanifierRdv?: (tache: Tache | TacheWithContact) => void;
   onPostpone?: (tache: Tache | TacheWithContact, days: number) => void;
   onAttachContact?: (tache: Tache | TacheWithContact) => void;
+  onFicheConseil?: (tache: Tache | TacheWithContact) => void;
+  ficheConseilDisabled?: boolean;
 }
 
 export function TacheItem({
@@ -53,6 +56,8 @@ export function TacheItem({
   onPlanifierRdv,
   onPostpone,
   onAttachContact,
+  onFicheConseil,
+  ficheConseilDisabled = false,
 }: TacheItemProps) {
   const done = tache.statut === "FAIT";
   const state = echeanceState(tache.date_echeance, tache.statut);
@@ -143,6 +148,21 @@ export function TacheItem({
 
       {showActions && (
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+          {!done && onFicheConseil && isFicheConseilTask(tache) ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs shrink-0 gap-1"
+              title="Générer la fiche conseil arbitrage"
+              disabled={ficheConseilDisabled}
+              onClick={() => onFicheConseil(tache)}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Fiche Conseil
+            </Button>
+          ) : null}
+
           {!done && onPostpone && (
             <Select onValueChange={(v) => onPostpone(tache, parseInt(v, 10))}>
               <SelectTrigger className="h-8 w-[120px] text-xs" title="Reporter">

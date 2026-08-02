@@ -353,6 +353,8 @@ export function TachesGroupedList({
   onPlanifierRdv,
   onPostpone,
   onAttachContact,
+  onFicheConseil,
+  ficheConseilDisabled,
 }: {
   sections: TacheSection[];
   showContact?: boolean;
@@ -366,6 +368,8 @@ export function TachesGroupedList({
   onPlanifierRdv?: (tache: TacheWithContact) => void;
   onPostpone?: (tache: TacheWithContact, days: number) => void;
   onAttachContact?: (tache: TacheWithContact) => void;
+  onFicheConseil?: (tache: TacheWithContact) => void;
+  ficheConseilDisabled?: boolean;
 }) {
   return (
     <div className="space-y-5">
@@ -412,6 +416,10 @@ export function TachesGroupedList({
                     ? (x) => onAttachContact(x as TacheWithContact)
                     : undefined
                 }
+                onFicheConseil={
+                  onFicheConseil ? (x) => onFicheConseil(x as TacheWithContact) : undefined
+                }
+                ficheConseilDisabled={ficheConseilDisabled}
               />
             ))}
           </div>

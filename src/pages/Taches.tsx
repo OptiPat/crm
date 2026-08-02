@@ -35,6 +35,9 @@ import { subscribeTachesChanged } from "@/lib/taches/tache-events";
 import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
 import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { useArbitrageTacheDone } from "@/hooks/useArbitrageTacheDone";
+import { useArbitrageFicheConseil } from "@/hooks/useArbitrageFicheConseil";
+import { ArbitrageFicheContratPickDialog } from "@/components/taches/ArbitrageFicheContratPickDialog";
+import { ArbitrageFicheTemplatePickDialog } from "@/components/taches/ArbitrageFicheTemplatePickDialog";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { consumeTachesNavigationIntent, TACHES_NAVIGATION_EVENT } from "@/lib/navigation/taches-navigation";
 import {
@@ -133,6 +136,16 @@ export function Taches({ onNavigate }: TachesProps) {
   }, [load]);
 
   const { tryComplete, dialog: arbitrageDialog } = useArbitrageTacheDone(() => void load());
+  const {
+    startFicheConseil,
+    pendingContratPick,
+    setPendingContratPick,
+    confirmContratPick,
+    pendingPick,
+    setPendingPick,
+    confirmTemplatePick,
+    busy: ficheBusy,
+  } = useArbitrageFicheConseil();
 
   const { openContactSheet, sheet: contactDetailSheet } = useContactDetailSheet({
     onNavigate,
@@ -441,10 +454,32 @@ export function Taches({ onNavigate }: TachesProps) {
             setEditing(t);
             setFormOpen(true);
           }}
+          onFicheConseil={(t) => void startFicheConseil(t)}
+          ficheConseilDisabled={
+            ficheBusy || pendingPick != null || pendingContratPick != null
+          }
         />
       )}
 
       {arbitrageDialog}
+
+      <ArbitrageFicheContratPickDialog
+        open={pendingContratPick !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingContratPick(null);
+        }}
+        contrats={pendingContratPick?.contrats ?? []}
+        suggestedInvestissementId={pendingContratPick?.suggestedInvestissementId}
+        onConfirm={confirmContratPick}
+      />
+      <ArbitrageFicheTemplatePickDialog
+        open={pendingPick !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingPick(null);
+        }}
+        templates={pendingPick?.templates ?? []}
+        onConfirm={confirmTemplatePick}
+      />
 
       <TacheForm
         open={formOpen}

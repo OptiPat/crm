@@ -50,15 +50,29 @@ export function resolveArbitrageFicheProductKind(tache: {
   return null;
 }
 
-const ARBITRAGE_TASK_INV_DESC_PREFIX = "crm:investissement_id:";
-
 export function parseArbitrageInvestissementId(
   description?: string | null
 ): number | null {
-  if (!description?.startsWith(ARBITRAGE_TASK_INV_DESC_PREFIX)) return null;
-  const raw = description.slice(ARBITRAGE_TASK_INV_DESC_PREFIX.length).trim();
-  const id = Number.parseInt(raw, 10);
+  if (!description) return null;
+  const match = description.match(/crm:investissement_id:(\d+)/);
+  if (!match) return null;
+  const id = Number.parseInt(match[1], 10);
   return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+export const FICHE_CONSEIL_EXCELITIS_MARKER = "crm:fiche_conseil_exceltis";
+
+/** Tâche créée par une étiquette Exceltis (fiche conseil possible). */
+export function isExceltisFicheConseilTask(tache: { description?: string | null }): boolean {
+  return tache.description?.includes(FICHE_CONSEIL_EXCELITIS_MARKER) ?? false;
+}
+
+/** Tâche éligible au bouton Fiche Conseil (arbitrage auto ou Exceltis). */
+export function isFicheConseilTask(tache: {
+  titre: string;
+  description?: string | null;
+}): boolean {
+  return isArbitrageAutoTask(tache) || isExceltisFicheConseilTask(tache);
 }
 
 /** Ajoute des mois calendaires UTC à une date input (ou à aujourd'hui si vide). */

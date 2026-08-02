@@ -683,6 +683,7 @@ impl Database {
         self.migrate_workspace_sync_tables()?;
         self.migrate_workspace_blob()?;
         self.migrate_workspace_outbox()?;
+        self.migrate_exceltis_tache_fiche_markers()?;
 
         Ok(())
     }
