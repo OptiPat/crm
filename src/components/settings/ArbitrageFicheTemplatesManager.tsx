@@ -7,6 +7,7 @@ import {
   setDefaultArbitrageFicheTemplate,
   type ArbitrageFicheProductKind,
   type ArbitrageFicheTemplate,
+  type FicheConseilTemplateFamily,
 } from "@/lib/api/tauri-arbitrage-fiche";
 import { pickAndInstallArbitrageFicheTemplate } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-fiche-template";
 import { toast } from "sonner";
@@ -14,13 +15,17 @@ import { cn } from "@/lib/utils";
 
 type ArbitrageFicheTemplatesManagerProps = {
   productKind: ArbitrageFicheProductKind;
+  templateFamily?: FicheConseilTemplateFamily;
   title: string;
+  emptyHint?: string;
   embedded?: boolean;
 };
 
 export function ArbitrageFicheTemplatesManager({
   productKind,
+  templateFamily = "ARBITRAGE",
   title,
+  emptyHint,
   embedded = false,
 }: ArbitrageFicheTemplatesManagerProps) {
   const [templates, setTemplates] = useState<ArbitrageFicheTemplate[]>([]);
@@ -30,13 +35,13 @@ export function ArbitrageFicheTemplatesManager({
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setTemplates(await listArbitrageFicheTemplates(productKind));
+      setTemplates(await listArbitrageFicheTemplates(productKind, templateFamily));
     } catch {
       setTemplates([]);
     } finally {
       setLoading(false);
     }
-  }, [productKind]);
+  }, [productKind, templateFamily]);
 
   useEffect(() => {
     void refresh();
@@ -45,7 +50,7 @@ export function ArbitrageFicheTemplatesManager({
   const handleInstall = async () => {
     setUploading(true);
     try {
-      const created = await pickAndInstallArbitrageFicheTemplate(productKind);
+      const created = await pickAndInstallArbitrageFicheTemplate(productKind, templateFamily);
       if (created) {
         await refresh();
         toast.success(`Modèle « ${created.label} » enregistré`);
@@ -60,7 +65,7 @@ export function ArbitrageFicheTemplatesManager({
 
   const handleSetDefault = async (templateId: string) => {
     try {
-      await setDefaultArbitrageFicheTemplate(templateId, productKind);
+      await setDefaultArbitrageFicheTemplate(templateId, productKind, templateFamily);
       await refresh();
     } catch (error) {
       toast.error(`Erreur : ${String(error)}`);
@@ -69,7 +74,7 @@ export function ArbitrageFicheTemplatesManager({
 
   const handleRemove = async (template: ArbitrageFicheTemplate) => {
     try {
-      await removeArbitrageFicheTemplate(template.id, productKind);
+      await removeArbitrageFicheTemplate(template.id, productKind, templateFamily);
       await refresh();
       toast.success("Modèle supprimé");
     } catch (error) {
@@ -138,8 +143,8 @@ export function ArbitrageFicheTemplatesManager({
         </ul>
       ) : (
         <p className="text-xs text-amber-700 dark:text-amber-400">
-          Aucun modèle {productKind} — requis pour le bouton « Fiche » sur les tâches arbitrage{" "}
-          {productKind}.
+          {emptyHint ??
+            `Aucun modèle ${productKind} — requis pour le bouton « Fiche » sur les tâches arbitrage ${productKind}.`}
         </p>
       )}
 

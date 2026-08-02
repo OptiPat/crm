@@ -8,6 +8,8 @@ import {
   placementOperationTypeFromStelliumLabel,
 } from "@/lib/placement/stellium-box-placement-labels";
 import { trackVersementAffaireOnPipeCreate } from "@/lib/placement/pipe-placement-tracking";
+import { resolveInvestissementIdForStelliumAct } from "@/lib/placement/resolve-investissement-for-stellium-act";
+import { isVpModificationStelliumAct } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
 import {
   buildVersementAffaireTitre,
   defaultVersementComplementaireAffaireStage,
@@ -95,13 +97,19 @@ export async function applySuiviStelliumActsAfterPipeCreate(
     }
 
     const product = act.productLabel.trim();
+    const investissementId =
+      act.investissementId ??
+      (await resolveInvestissementIdForStelliumAct(suivi.contact_id, product));
     await createPlacementOperation({
       contact_id: suivi.contact_id,
       pipe_id: suivi.id,
       operation_type: placementOperationTypeFromStelliumLabel(actLabel),
       stellium_label: actLabel,
       product_label: product,
-      investissement_id: act.investissementId ?? null,
+      investissement_id: investissementId,
+      montant_centimes: isVpModificationStelliumAct(actLabel)
+        ? act.montantCentimes ?? null
+        : null,
     });
   }
   notifyPlacementOperationsChanged();

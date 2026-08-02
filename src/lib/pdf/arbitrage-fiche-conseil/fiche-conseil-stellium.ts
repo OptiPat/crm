@@ -1,4 +1,4 @@
-import type { ArbitrageFicheProductKind } from "@/lib/api/tauri-arbitrage-fiche";
+import type { ArbitrageFicheProductKind, FicheConseilTemplateFamily } from "@/lib/api/tauri-arbitrage-fiche";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { placementOperationTypeFromStelliumLabel } from "@/lib/placement/stellium-box-placement-labels";
 import {
@@ -7,9 +7,23 @@ import {
 } from "@/lib/placement/stellium-box-placement-products";
 import { inferTypeProduitFromStelliumProductLabel } from "@/lib/pipe/remuneration-type-produit";
 import { resolveStelliumAvProductLabelFromCrm } from "@/lib/pdf/arbitrage-fiche-conseil/av-stellium-product-map";
+import { resolveStelliumPerProductLabelFromCrm } from "@/lib/pdf/arbitrage-fiche-conseil/per-stellium-product-map";
 
 /** Acte Stellium par défaut pour un arbitrage depuis une tâche fiche conseil. */
 export const FICHE_CONSEIL_ARBITRAGE_ACT_LABEL = "Arbitrage libre";
+
+/** Acte Stellium — modification des versements programmés (pipe acte de gestion). */
+export const FICHE_CONSEIL_VP_MODIFICATION_ACT_LABEL =
+  "Versements programmés : Modification";
+
+export function isVpModificationStelliumAct(stelliumLabel: string): boolean {
+  return stelliumLabel.trim() === FICHE_CONSEIL_VP_MODIFICATION_ACT_LABEL;
+}
+
+function isAvPerStelliumProduct(productLabel: string): boolean {
+  const typeProduit = inferTypeProduitFromStelliumProductLabel(productLabel);
+  return typeProduit === "ASSURANCE_VIE" || typeProduit === "PER";
+}
 
 export function isStelliumActEligibleForFicheConseil(
   stelliumLabel: string,
@@ -18,9 +32,16 @@ export function isStelliumActEligibleForFicheConseil(
   const label = stelliumLabel.trim();
   const product = productLabel.trim();
   if (!label || !product) return false;
+  if (!isAvPerStelliumProduct(product)) return false;
+  if (isVpModificationStelliumAct(label)) return true;
   if (placementOperationTypeFromStelliumLabel(label) !== "ARBITRAGE") return false;
-  const typeProduit = inferTypeProduitFromStelliumProductLabel(product);
-  return typeProduit === "ASSURANCE_VIE" || typeProduit === "PER";
+  return true;
+}
+
+export function resolveFicheConseilTemplateFamily(
+  stelliumLabel: string
+): FicheConseilTemplateFamily {
+  return isVpModificationStelliumAct(stelliumLabel) ? "VP_MODIFICATION" : "ARBITRAGE";
 }
 
 export function stelliumProductLabelToFicheProductKind(
@@ -52,6 +73,14 @@ export function resolveStelliumProductLabelFromCrmInvestissement(input: {
   if (input.type_produit === "ASSURANCE_VIE") {
     return (
       resolveStelliumAvProductLabelFromCrm({
+        nomProduit: input.nom_produit,
+        partenaireNom: input.partenaireNom,
+      }) ?? resolveStelliumProductLabelFromNomProduit(input.nom_produit ?? "")
+    );
+  }
+  if (input.type_produit === "PER") {
+    return (
+      resolveStelliumPerProductLabelFromCrm({
         nomProduit: input.nom_produit,
         partenaireNom: input.partenaireNom,
       }) ?? resolveStelliumProductLabelFromNomProduit(input.nom_produit ?? "")

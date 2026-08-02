@@ -6,9 +6,11 @@ import {
   getInvestissementsByContact,
   type Investissement,
 } from "@/lib/api/tauri-investissements";
+import { listPlacementOperationsForPipe } from "@/lib/api/tauri-box-placement";
 import { createPipe, listPipes, type PipeRecord } from "@/lib/api/tauri-pipe";
 import { defaultSuiviPipeTitre, PIPE_TYPE_SUIVI } from "@/lib/pipe/pipe-suivi";
 import { applySuiviStelliumActsAfterPipeCreate } from "@/lib/placement/suivi-stellium-acts";
+import { placementOperationIsSuiviDraft } from "@/lib/placement/suivi-placement-draft";
 import {
   parseArbitrageInvestissementId,
   resolveArbitrageFicheProductKind,
@@ -138,4 +140,36 @@ export async function createSuiviPipeFromFicheConseilTask(tache: Tache): Promise
   }
 
   return { suivi, actDraftCreated: Boolean(productLabel) };
+}
+
+/** Ajoute le brouillon arbitrage libre sur un suivi existant s'il manque encore. */
+export async function ensureSuiviStelliumActDraftForFicheConseilTask(
+  tache: Tache,
+  suivi: PipeRecord
+): Promise<boolean> {
+  const operations = await listPlacementOperationsForPipe(suivi.id);
+  const hasArbitrageDraft = operations.some(
+    (operation) =>
+      placementOperationIsSuiviDraft(operation) &&
+      operation.stellium_label?.trim() === FICHE_CONSEIL_ARBITRAGE_ACT_LABEL
+  );
+  if (hasArbitrageDraft) return false;
+
+  const investissement = await resolveInvestissementForFicheConseilTask(tache);
+  const partenaireNom = investissement
+    ? await resolvePartenaireNom(investissement.partenaire_id)
+    : null;
+  const productLabel = investissement
+    ? resolveStelliumProductLabelFromInvestissement(investissement, partenaireNom)
+    : null;
+  if (!productLabel) return false;
+
+  await applySuiviStelliumActsAfterPipeCreate(suivi, [
+    {
+      actLabel: FICHE_CONSEIL_ARBITRAGE_ACT_LABEL,
+      productLabel,
+      investissementId: investissement?.id,
+    },
+  ]);
+  return true;
 }

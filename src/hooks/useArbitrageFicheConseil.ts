@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import type { Tache } from "@/lib/api/tauri-taches";
-import type { ArbitrageFicheTemplate } from "@/lib/api/tauri-arbitrage-fiche";
+import type { ArbitrageFicheTemplate, FicheConseilTemplateFamily } from "@/lib/api/tauri-arbitrage-fiche";
 import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
 import { buildPartenaireNomMap } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-partenaires";
 import {
@@ -15,6 +15,7 @@ import {
   requireArbitrageFicheTemplates,
   resolveArbitrageFicheTemplateForGeneration,
 } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-fiche-template";
+import type { VpModificationPdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
 import {
   filterFicheConseilEligibleInvestissements,
   filterFicheConseilContratPickItemsByProductKind,
@@ -26,6 +27,7 @@ import {
 } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-resolve";
 import {
   isStelliumActEligibleForFicheConseil,
+  resolveFicheConseilTemplateFamily,
   stelliumProductLabelToFicheProductKind,
 } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
 
@@ -48,6 +50,9 @@ export type FicheConseilStartOptions = {
   filterProductKind?: ArbitrageFicheProductKind;
   /** Libellé catalogue Stellium (depuis acte pipe) — affine au-delà du type AV/PER. */
   stelliumProductLabel?: string;
+  templateFamily?: FicheConseilTemplateFamily;
+  /** Détails modification VP (types cochés + valeurs saisies). */
+  vpModification?: VpModificationPdfFillInput;
 };
 
 export type ArbitrageFicheTemplatePickPending = {
@@ -55,6 +60,7 @@ export type ArbitrageFicheTemplatePickPending = {
   productKind: ArbitrageFicheProductKind;
   investissementId: number;
   templates: ArbitrageFicheTemplate[];
+  templateFamily: FicheConseilTemplateFamily;
 };
 
 export type ArbitrageFicheContratPickPending = {
@@ -74,7 +80,9 @@ export function useArbitrageFicheConseil() {
       contactId: number,
       templateId: string,
       productKind: ArbitrageFicheProductKind,
-      investissementId: number
+      investissementId: number,
+      templateFamily: FicheConseilTemplateFamily = "ARBITRAGE",
+      vpModification?: VpModificationPdfFillInput
     ) => {
       setBusy(true);
       try {
@@ -82,7 +90,9 @@ export function useArbitrageFicheConseil() {
           contactId,
           templateId,
           productKind,
-          investissementId
+          investissementId,
+          templateFamily,
+          { vpModification }
         );
         toast.success(
           opened
@@ -123,13 +133,27 @@ export function useArbitrageFicheConseil() {
         return;
       }
 
-      const templates = await requireArbitrageFicheTemplates(productKind);
+      const templateFamily = context.templateFamily ?? "ARBITRAGE";
+      const templates = await requireArbitrageFicheTemplates(productKind, templateFamily);
       const resolved = resolveArbitrageFicheTemplateForGeneration(templates);
       if (resolved) {
-        await runGeneration(contactId, resolved.id, productKind, investissementId);
+        await runGeneration(
+          contactId,
+          resolved.id,
+          productKind,
+          investissementId,
+          templateFamily,
+          context.vpModification
+        );
         return;
       }
-      setPendingPick({ context, productKind, investissementId, templates });
+      setPendingPick({
+        context,
+        productKind,
+        investissementId,
+        templates,
+        templateFamily,
+      });
     },
     [runGeneration]
   );
@@ -155,7 +179,7 @@ export function useArbitrageFicheConseil() {
             options.filterProductKind
           );
         }
-        if (options?.stelliumProductLabel) {
+        if (options?.stelliumProductLabel?.trim()) {
           const partenaireNoms = await buildPartenaireNomMap(investissements);
           contrats = filterFicheConseilContratPickItemsByStelliumProduct(
             contrats,
@@ -172,20 +196,29 @@ export function useArbitrageFicheConseil() {
         const embeddedId =
           options?.suggestedInvestissementId ??
           parseArbitrageInvestissementId(context.descriptionHint);
+        const contextWithFamily: FicheConseilContext = {
+          ...context,
+          templateFamily: options?.templateFamily ?? context.templateFamily ?? "ARBITRAGE",
+          vpModification: options?.vpModification ?? context.vpModification,
+        };
         if (embeddedId && contrats.some((c) => c.investissementId === embeddedId)) {
-          await continueWithInvestissement(context, embeddedId);
+          await continueWithInvestissement(contextWithFamily, embeddedId);
           return;
         }
 
         if (contrats.length === 1) {
-          await continueWithInvestissement(context, contrats[0].investissementId);
+          await continueWithInvestissement(contextWithFamily, contrats[0].investissementId);
           return;
         }
 
         const suggestedInvestissementId = contrats.some((c) => c.investissementId === embeddedId)
           ? embeddedId ?? undefined
           : undefined;
-        setPendingContratPick({ context, contrats, suggestedInvestissementId });
+        setPendingContratPick({
+          context: contextWithFamily,
+          contrats,
+          suggestedInvestissementId,
+        });
       } catch (error) {
         console.error(error);
         toast.error(`Erreur : ${String(error)}`);
@@ -226,7 +259,7 @@ export function useArbitrageFicheConseil() {
       contactId: number,
       stelliumLabel: string,
       productLabel: string,
-      options?: { suggestedInvestissementId?: number }
+      options?: { suggestedInvestissementId?: number; vpModification?: VpModificationPdfFillInput }
     ) => {
       if (!isStelliumActEligibleForFicheConseil(stelliumLabel, productLabel)) return;
       const filterProductKind = stelliumProductLabelToFicheProductKind(productLabel);
@@ -234,8 +267,12 @@ export function useArbitrageFicheConseil() {
         { contactId },
         {
           filterProductKind: filterProductKind ?? undefined,
-          stelliumProductLabel: productLabel.trim() || undefined,
+          // PER : comme l'arbitrage auto (filtre type seulement, pas le libellé catalogue).
+          stelliumProductLabel:
+            filterProductKind === "PER" ? undefined : productLabel.trim() || undefined,
           suggestedInvestissementId: options?.suggestedInvestissementId,
+          templateFamily: resolveFicheConseilTemplateFamily(stelliumLabel),
+          vpModification: options?.vpModification,
         }
       );
     },
@@ -271,7 +308,9 @@ export function useArbitrageFicheConseil() {
           pending.context.contactId,
           templateId,
           pending.productKind,
-          pending.investissementId
+          pending.investissementId,
+          pending.templateFamily,
+          pending.context.vpModification
         );
       }
     },

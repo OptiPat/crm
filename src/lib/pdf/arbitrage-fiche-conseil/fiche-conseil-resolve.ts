@@ -2,7 +2,8 @@ import {
   isArbitrageSuiviEligible,
   resolveArbitrageFicheProductKind,
 } from "@/lib/alertes/arbitrage-alerte";
-import type { ArbitrageFicheProductKind } from "@/lib/api/tauri-arbitrage-fiche";
+import type { ArbitrageFicheProductKind, FicheConseilTemplateFamily } from "@/lib/api/tauri-arbitrage-fiche";
+import type { VpModificationPdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { resolveStelliumProductLabelFromCrmInvestissement } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
 
@@ -11,6 +12,10 @@ export type FicheConseilContext = {
   /** Indice AV/PER (titre tâche arbitrage auto, etc.). */
   titreHint?: string;
   descriptionHint?: string | null;
+  /** Modèles PDF à utiliser (arbitrage vs modification VP). */
+  templateFamily?: FicheConseilTemplateFamily;
+  /** Détails modification VP (types cochés + valeurs saisies). */
+  vpModification?: VpModificationPdfFillInput;
 };
 
 export function filterFicheConseilEligibleInvestissements(

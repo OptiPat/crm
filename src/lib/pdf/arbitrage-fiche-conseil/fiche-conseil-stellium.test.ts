@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   FICHE_CONSEIL_ARBITRAGE_ACT_LABEL,
+  FICHE_CONSEIL_VP_MODIFICATION_ACT_LABEL,
   isStelliumActEligibleForFicheConseil,
+  isVpModificationStelliumAct,
+  resolveFicheConseilTemplateFamily,
   resolveStelliumProductLabelFromCrmInvestissement,
   resolveStelliumProductLabelFromNomProduit,
   stelliumProductLabelToFicheProductKind,
@@ -21,6 +24,26 @@ describe("fiche-conseil-stellium", () => {
     ).toBe(false);
   });
 
+  it("détecte modification VP AV/PER éligible", () => {
+    expect(
+      isStelliumActEligibleForFicheConseil(
+        FICHE_CONSEIL_VP_MODIFICATION_ACT_LABEL,
+        "Cristalliance Avenir"
+      )
+    ).toBe(true);
+    expect(
+      isStelliumActEligibleForFicheConseil(
+        FICHE_CONSEIL_VP_MODIFICATION_ACT_LABEL,
+        "Corum Origin"
+      )
+    ).toBe(false);
+    expect(
+      resolveFicheConseilTemplateFamily(FICHE_CONSEIL_VP_MODIFICATION_ACT_LABEL)
+    ).toBe("VP_MODIFICATION");
+    expect(resolveFicheConseilTemplateFamily("Arbitrage libre")).toBe("ARBITRAGE");
+    expect(isVpModificationStelliumAct("Versements programmés : Modification")).toBe(true);
+  });
+
   it("mappe produit Stellium vers AV/PER", () => {
     expect(stelliumProductLabelToFicheProductKind("Cristalliance Avenir")).toBe("AV");
     expect(stelliumProductLabelToFicheProductKind("Cristalliance EvoluPER")).toBe("PER");
@@ -37,6 +60,13 @@ describe("fiche-conseil-stellium", () => {
         partenaireNom: "Suravenir",
       })
     ).toBe("Cristalliance Avenir");
+    expect(
+      resolveStelliumProductLabelFromCrmInvestissement({
+        type_produit: "PER",
+        nom_produit: "EvoluPER",
+        partenaireNom: "Apicil",
+      })
+    ).toBe("Cristalliance EvoluPER");
     expect(resolveStelliumProductLabelFromNomProduit("Produit inconnu")).toBeNull();
   });
 

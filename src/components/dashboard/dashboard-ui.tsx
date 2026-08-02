@@ -35,6 +35,18 @@ export function StatCardSkeleton() {
   );
 }
 
+export function DashboardCockpitSkeleton() {
+  return (
+    <div className="space-y-5 min-w-0 animate-pulse" aria-hidden>
+      <div className="rounded-xl border border-border/70 bg-card/60 h-36" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 min-h-[280px]">
+        <div className="rounded-xl border border-border/70 bg-card/60 min-h-[280px]" />
+        <div className="rounded-xl border border-border/70 bg-card/60 min-h-[280px]" />
+      </div>
+    </div>
+  );
+}
+
 export function ContactInitialsAvatar({
   prenom,
   nom,
@@ -244,7 +256,7 @@ export function DashboardCollapsibleSection({
         <DashboardSectionTitle subtitle={subtitle}>{title}</DashboardSectionTitle>
         <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180 ml-auto" />
       </summary>
-      <div className="pt-3 space-y-3">{children}</div>
+      <div className="pt-3 space-y-3">{open ? children : null}</div>
     </details>
   );
 }

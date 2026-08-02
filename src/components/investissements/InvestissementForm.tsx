@@ -98,6 +98,7 @@ import {
   type OrigineInvestissement,
 } from "@/lib/api/tauri-investissements";
 import { checkAndCreateArbitrageAlerts } from "@/lib/api/tauri-alertes";
+import { notifyAlertesChanged } from "@/lib/alertes/alert-events";
 import { InvestissementEncoursPanel } from "@/components/investissements/InvestissementEncoursPanel";
 import { InvestissementVersementsPanel } from "@/components/investissements/InvestissementVersementsPanel";
 import { InvestissementCloturePanel } from "@/components/investissements/InvestissementCloturePanel";
@@ -798,6 +799,7 @@ export function InvestissementForm({
       if (showArbitrageFields) {
         try {
           await checkAndCreateArbitrageAlerts();
+          notifyAlertesChanged();
         } catch (error) {
           console.error("Error arbitrage alerts:", error);
         }

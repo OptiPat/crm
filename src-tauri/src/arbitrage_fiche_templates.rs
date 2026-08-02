@@ -9,6 +9,29 @@ pub const ARBITRAGE_AV_FICHE_LEGACY_FILE: &str = "arbitrage-av-fiche-conseil.pdf
 const MANIFEST_FILE: &str = "manifest.json";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArbitrageFicheTemplateFamily {
+    Arbitrage,
+    VpModification,
+}
+
+impl ArbitrageFicheTemplateFamily {
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value.trim().to_ascii_uppercase().replace('-', "_").as_str() {
+            "ARBITRAGE" => Ok(Self::Arbitrage),
+            "VP_MODIFICATION" | "VP_MODIF" => Ok(Self::VpModification),
+            _ => Err("Famille de fiche invalide (ARBITRAGE ou VP_MODIFICATION).".into()),
+        }
+    }
+}
+
+pub fn parse_arbitrage_fiche_template_family(value: Option<&str>) -> Result<ArbitrageFicheTemplateFamily, String> {
+    match value.map(str::trim).filter(|s| !s.is_empty()) {
+        None => Ok(ArbitrageFicheTemplateFamily::Arbitrage),
+        Some(raw) => ArbitrageFicheTemplateFamily::parse(raw),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArbitrageFicheProduct {
     Av,
     Per,
@@ -23,10 +46,12 @@ impl ArbitrageFicheProduct {
         }
     }
 
-    fn dir_name(self) -> &'static str {
-        match self {
-            Self::Av => "arbitrage-av",
-            Self::Per => "arbitrage-per",
+    fn dir_name(self, family: ArbitrageFicheTemplateFamily) -> &'static str {
+        match (family, self) {
+            (ArbitrageFicheTemplateFamily::Arbitrage, Self::Av) => "arbitrage-av",
+            (ArbitrageFicheTemplateFamily::Arbitrage, Self::Per) => "arbitrage-per",
+            (ArbitrageFicheTemplateFamily::VpModification, Self::Av) => "vp-modification-av",
+            (ArbitrageFicheTemplateFamily::VpModification, Self::Per) => "vp-modification-per",
         }
     }
 }
@@ -49,16 +74,29 @@ pub fn pdf_templates_dir(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join("pdf-templates")
 }
 
-fn templates_dir(app_data_dir: &Path, product: ArbitrageFicheProduct) -> PathBuf {
-    pdf_templates_dir(app_data_dir).join(product.dir_name())
+fn templates_dir(
+    app_data_dir: &Path,
+    family: ArbitrageFicheTemplateFamily,
+    product: ArbitrageFicheProduct,
+) -> PathBuf {
+    pdf_templates_dir(app_data_dir).join(product.dir_name(family))
 }
 
-fn manifest_path(app_data_dir: &Path, product: ArbitrageFicheProduct) -> PathBuf {
-    templates_dir(app_data_dir, product).join(MANIFEST_FILE)
+fn manifest_path(
+    app_data_dir: &Path,
+    family: ArbitrageFicheTemplateFamily,
+    product: ArbitrageFicheProduct,
+) -> PathBuf {
+    templates_dir(app_data_dir, family, product).join(MANIFEST_FILE)
 }
 
-fn template_pdf_path(app_data_dir: &Path, product: ArbitrageFicheProduct, id: &str) -> PathBuf {
-    templates_dir(app_data_dir, product).join(format!("{id}.pdf"))
+fn template_pdf_path(
+    app_data_dir: &Path,
+    family: ArbitrageFicheTemplateFamily,
+    product: ArbitrageFicheProduct,
+    id: &str,
+) -> PathBuf {
+    templates_dir(app_data_dir, family, product).join(format!("{id}.pdf"))
 }
 
 fn legacy_template_path(app_data_dir: &Path) -> PathBuf {
@@ -70,8 +108,12 @@ fn new_template_id() -> String {
     format!("{}_{suffix:08x}", chrono::Utc::now().timestamp_millis())
 }
 
-fn read_manifest(app_data_dir: &Path, product: ArbitrageFicheProduct) -> Result<Manifest, String> {
-    let path = manifest_path(app_data_dir, product);
+fn read_manifest(
+    app_data_dir: &Path,
+    family: ArbitrageFicheTemplateFamily,
+    product: ArbitrageFicheProduct,
+) -> Result<Manifest, String> {
+    let path = manifest_path(app_data_dir, family, product);
     if !path.is_file() {
         return Ok(Manifest::default());
     }
@@ -81,14 +123,15 @@ fn read_manifest(app_data_dir: &Path, product: ArbitrageFicheProduct) -> Result<
 
 fn write_manifest(
     app_data_dir: &Path,
+    family: ArbitrageFicheTemplateFamily,
     product: ArbitrageFicheProduct,
     manifest: &Manifest,
 ) -> Result<(), String> {
-    let dir = templates_dir(app_data_dir, product);
+    let dir = templates_dir(app_data_dir, family, product);
     fs::create_dir_all(&dir).map_err(|e| format!("Création dossier modèles impossible : {e}"))?;
     let raw =
         serde_json::to_string_pretty(manifest).map_err(|e| format!("Sérialisation manifeste : {e}"))?;
-    fs::write(manifest_path(app_data_dir, product), raw)
+    fs::write(manifest_path(app_data_dir, family, product), raw)
         .map_err(|e| format!("Écriture manifeste impossible : {e}"))
 }
 
@@ -97,14 +140,18 @@ fn migrate_legacy_av_template_if_needed(app_data_dir: &Path) -> Result<(), Strin
     if !legacy.is_file() {
         return Ok(());
     }
-    let mut manifest = read_manifest(app_data_dir, ArbitrageFicheProduct::Av)?;
+    let mut manifest = read_manifest(app_data_dir, ArbitrageFicheTemplateFamily::Arbitrage, ArbitrageFicheProduct::Av)?;
     if !manifest.templates.is_empty() {
         return Ok(());
     }
     let id = new_template_id();
-    let dest = template_pdf_path(app_data_dir, ArbitrageFicheProduct::Av, &id);
-    fs::create_dir_all(templates_dir(app_data_dir, ArbitrageFicheProduct::Av))
-        .map_err(|e| format!("Création dossier modèles impossible : {e}"))?;
+    let dest = template_pdf_path(app_data_dir, ArbitrageFicheTemplateFamily::Arbitrage, ArbitrageFicheProduct::Av, &id);
+    fs::create_dir_all(templates_dir(
+        app_data_dir,
+        ArbitrageFicheTemplateFamily::Arbitrage,
+        ArbitrageFicheProduct::Av,
+    ))
+    .map_err(|e| format!("Création dossier modèles impossible : {e}"))?;
     fs::copy(&legacy, &dest).map_err(|e| format!("Migration modèle legacy impossible : {e}"))?;
     manifest.templates.push(ArbitrageFicheTemplate {
         id,
@@ -112,19 +159,25 @@ fn migrate_legacy_av_template_if_needed(app_data_dir: &Path) -> Result<(), Strin
         is_default: true,
         created_at: chrono::Utc::now().to_rfc3339(),
     });
-    write_manifest(app_data_dir, ArbitrageFicheProduct::Av, &manifest)?;
+    write_manifest(
+        app_data_dir,
+        ArbitrageFicheTemplateFamily::Arbitrage,
+        ArbitrageFicheProduct::Av,
+        &manifest,
+    )?;
     let _ = fs::remove_file(&legacy);
     Ok(())
 }
 
 pub fn list_arbitrage_fiche_templates(
     app_data_dir: &Path,
+    family: ArbitrageFicheTemplateFamily,
     product: ArbitrageFicheProduct,
 ) -> Result<Vec<ArbitrageFicheTemplate>, String> {
-    if product == ArbitrageFicheProduct::Av {
+    if family == ArbitrageFicheTemplateFamily::Arbitrage && product == ArbitrageFicheProduct::Av {
         migrate_legacy_av_template_if_needed(app_data_dir)?;
     }
-    let manifest = read_manifest(app_data_dir, product)?;
+    let manifest = read_manifest(app_data_dir, family, product)?;
     let mut templates = manifest.templates;
     templates.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
     Ok(templates)
@@ -132,6 +185,7 @@ pub fn list_arbitrage_fiche_templates(
 
 pub fn import_arbitrage_fiche_template(
     app_data_dir: &Path,
+    family: ArbitrageFicheTemplateFamily,
     product: ArbitrageFicheProduct,
     source: &Path,
     label: &str,
@@ -151,13 +205,13 @@ pub fn import_arbitrage_fiche_template(
         return Err("Nom du modèle requis.".into());
     }
 
-    if product == ArbitrageFicheProduct::Av {
+    if family == ArbitrageFicheTemplateFamily::Arbitrage && product == ArbitrageFicheProduct::Av {
         migrate_legacy_av_template_if_needed(app_data_dir)?;
     }
-    let mut manifest = read_manifest(app_data_dir, product)?;
+    let mut manifest = read_manifest(app_data_dir, family, product)?;
     let id = new_template_id();
-    let dest = template_pdf_path(app_data_dir, product, &id);
-    fs::create_dir_all(templates_dir(app_data_dir, product))
+    let dest = template_pdf_path(app_data_dir, family, product, &id);
+    fs::create_dir_all(templates_dir(app_data_dir, family, product))
         .map_err(|e| format!("Création dossier modèles impossible : {e}"))?;
     fs::copy(source, &dest).map_err(|e| format!("Copie du modèle impossible : {e}"))?;
 
@@ -169,25 +223,26 @@ pub fn import_arbitrage_fiche_template(
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     manifest.templates.push(entry.clone());
-    write_manifest(app_data_dir, product, &manifest)?;
+    write_manifest(app_data_dir, family, product, &manifest)?;
     Ok(entry)
 }
 
 pub fn remove_arbitrage_fiche_template(
     app_data_dir: &Path,
+    family: ArbitrageFicheTemplateFamily,
     product: ArbitrageFicheProduct,
     id: &str,
 ) -> Result<(), String> {
-    if product == ArbitrageFicheProduct::Av {
+    if family == ArbitrageFicheTemplateFamily::Arbitrage && product == ArbitrageFicheProduct::Av {
         migrate_legacy_av_template_if_needed(app_data_dir)?;
     }
-    let mut manifest = read_manifest(app_data_dir, product)?;
+    let mut manifest = read_manifest(app_data_dir, family, product)?;
     let before = manifest.templates.len();
     manifest.templates.retain(|t| t.id != id);
     if manifest.templates.len() == before {
         return Err("Modèle introuvable.".into());
     }
-    let pdf = template_pdf_path(app_data_dir, product, id);
+    let pdf = template_pdf_path(app_data_dir, family, product, id);
     if pdf.is_file() {
         let _ = fs::remove_file(&pdf);
     }
@@ -196,18 +251,19 @@ pub fn remove_arbitrage_fiche_template(
             first.is_default = true;
         }
     }
-    write_manifest(app_data_dir, product, &manifest)
+    write_manifest(app_data_dir, family, product, &manifest)
 }
 
 pub fn set_default_arbitrage_fiche_template(
     app_data_dir: &Path,
+    family: ArbitrageFicheTemplateFamily,
     product: ArbitrageFicheProduct,
     id: &str,
 ) -> Result<(), String> {
-    if product == ArbitrageFicheProduct::Av {
+    if family == ArbitrageFicheTemplateFamily::Arbitrage && product == ArbitrageFicheProduct::Av {
         migrate_legacy_av_template_if_needed(app_data_dir)?;
     }
-    let mut manifest = read_manifest(app_data_dir, product)?;
+    let mut manifest = read_manifest(app_data_dir, family, product)?;
     let mut found = false;
     for template in &mut manifest.templates {
         let is_target = template.id == id;
@@ -219,18 +275,19 @@ pub fn set_default_arbitrage_fiche_template(
     if !found {
         return Err("Modèle introuvable.".into());
     }
-    write_manifest(app_data_dir, product, &manifest)
+    write_manifest(app_data_dir, family, product, &manifest)
 }
 
 pub fn arbitrage_fiche_template_file_path(
     app_data_dir: &Path,
+    family: ArbitrageFicheTemplateFamily,
     product: ArbitrageFicheProduct,
     id: &str,
 ) -> Result<PathBuf, String> {
-    if product == ArbitrageFicheProduct::Av {
+    if family == ArbitrageFicheTemplateFamily::Arbitrage && product == ArbitrageFicheProduct::Av {
         migrate_legacy_av_template_if_needed(app_data_dir)?;
     }
-    let path = template_pdf_path(app_data_dir, product, id);
+    let path = template_pdf_path(app_data_dir, family, product, id);
     if !path.is_file() {
         return Err("Fichier modèle introuvable.".into());
     }
@@ -279,6 +336,7 @@ mod tests {
         write_dummy_pdf(&av_source);
         import_arbitrage_fiche_template(
             &app_data,
+            ArbitrageFicheTemplateFamily::Arbitrage,
             ArbitrageFicheProduct::Av,
             &av_source,
             "AV test",
@@ -289,18 +347,52 @@ mod tests {
         write_dummy_pdf(&per_source);
         import_arbitrage_fiche_template(
             &app_data,
+            ArbitrageFicheTemplateFamily::Arbitrage,
             ArbitrageFicheProduct::Per,
             &per_source,
             "PER test",
         )
         .unwrap();
 
+        let vp_av_source = app_data.join("vp-av.pdf");
+        write_dummy_pdf(&vp_av_source);
+        import_arbitrage_fiche_template(
+            &app_data,
+            ArbitrageFicheTemplateFamily::VpModification,
+            ArbitrageFicheProduct::Av,
+            &vp_av_source,
+            "VP modif AV",
+        )
+        .unwrap();
+
         assert_eq!(
-            list_arbitrage_fiche_templates(&app_data, ArbitrageFicheProduct::Av).unwrap().len(),
+            list_arbitrage_fiche_templates(
+                &app_data,
+                ArbitrageFicheTemplateFamily::Arbitrage,
+                ArbitrageFicheProduct::Av
+            )
+            .unwrap()
+            .len(),
             1
         );
         assert_eq!(
-            list_arbitrage_fiche_templates(&app_data, ArbitrageFicheProduct::Per).unwrap().len(),
+            list_arbitrage_fiche_templates(
+                &app_data,
+                ArbitrageFicheTemplateFamily::Arbitrage,
+                ArbitrageFicheProduct::Per
+            )
+            .unwrap()
+            .len(),
+            1
+        );
+        assert_eq!(
+            list_arbitrage_fiche_templates(
+                &app_data,
+                ArbitrageFicheTemplateFamily::VpModification,
+                ArbitrageFicheProduct::Av
+            )
+            .unwrap()
+            .len(),
             1
         );
     }

@@ -487,7 +487,9 @@ export function PipeFormPanel({
           suiviStelliumActs.map((row) => ({
             productLabel: row.productLabel,
             actLabel: row.actLabel,
-            montantCentimes: parseMontantEurosToCentimes(row.montantEuros),
+            montantCentimes: row.vpModification.kinds.includes("montant")
+              ? parseMontantEurosToCentimes(row.vpModification.montantEuros)
+              : parseMontantEurosToCentimes(row.montantEuros),
           }))
         );
       }
@@ -658,8 +660,8 @@ export function PipeFormPanel({
               onChange={setSuiviStelliumActs}
               disabled={loading}
               contactId={form.contactId > 0 ? form.contactId : undefined}
-              onFicheConseil={(actLabel, productLabel) =>
-                startFicheConseilForStelliumAct(form.contactId, actLabel, productLabel)
+              onFicheConseil={(actLabel, productLabel, options) =>
+                startFicheConseilForStelliumAct(form.contactId, actLabel, productLabel, options)
               }
               ficheConseilDisabled={ficheDisabled}
             />

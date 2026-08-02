@@ -90,9 +90,7 @@ export async function checkAndCreateDemembrementAlerts(): Promise<Alerte[]> {
 }
 
 export async function checkAndCreateArbitrageAlerts(): Promise<Alerte[]> {
-  const created = await invoke<Alerte[]>("check_and_create_arbitrage_alerts");
-  notifyAlertesChanged();
-  return created;
+  return invoke<Alerte[]>("check_and_create_arbitrage_alerts");
 }
 
 export async function traiterAlerteArbitrage(

@@ -1,9 +1,13 @@
-import type { ArbitrageFicheProductKind } from "@/lib/api/tauri-arbitrage-fiche";
+import type { ArbitrageFicheProductKind, FicheConseilTemplateFamily } from "@/lib/api/tauri-arbitrage-fiche";
+import type { VpModificationPdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
+import { applyVpModificationAvPdfFill } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-pdf-fill";
+import { applyVpModificationPerPdfFill } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-per-pdf-fill";
 
 export type ArbitrageFicheConseilFillInput = {
   nomClient: string;
   prenomClient: string;
   numeroContrat?: string | null;
+  vpModification?: VpModificationPdfFillInput;
 };
 
 function setTextField(
@@ -27,11 +31,13 @@ function clientFullName(input: ArbitrageFicheConseilFillInput): string {
 export async function fillArbitrageFicheConseilPdf(
   templateBytes: Uint8Array,
   productKind: ArbitrageFicheProductKind,
-  input: ArbitrageFicheConseilFillInput
+  input: ArbitrageFicheConseilFillInput,
+  options?: { templateFamily?: FicheConseilTemplateFamily }
 ): Promise<Uint8Array> {
   const { PDFDocument } = await import("pdf-lib");
   const pdfDoc = await PDFDocument.load(templateBytes, { ignoreEncryption: true });
   const form = pdfDoc.getForm();
+  const templateFamily = options?.templateFamily ?? "ARBITRAGE";
 
   if (productKind === "AV") {
     setTextField(form, "Nomclient", input.nomClient);
@@ -41,6 +47,14 @@ export async function fillArbitrageFicheConseilPdf(
     // PER : investisseur 1 = Nom / Prénom (champ unique), n° contrat séparé.
     setTextField(form, "invest1", clientFullName(input));
     setTextField(form, "numcontrat", input.numeroContrat);
+  }
+
+  if (templateFamily === "VP_MODIFICATION" && input.vpModification) {
+    if (productKind === "AV") {
+      applyVpModificationAvPdfFill(form, input.vpModification);
+    } else {
+      applyVpModificationPerPdfFill(form, input.vpModification);
+    }
   }
 
   try {

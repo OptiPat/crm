@@ -5,6 +5,7 @@ import { AppNotificationsBar } from "@/components/notifications/AppNotifications
 import { BackgroundActivityBanner } from "@/components/layout/BackgroundActivityBanner";
 import { EtiquetteEmailSendBanner } from "@/components/etiquettes/EtiquetteEmailSendBanner";
 import { useBackgroundSync } from "@/hooks/useBackgroundSync";
+import { useAlertesBackgroundGeneration } from "@/hooks/useAlertesBackgroundGeneration";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { ContactDetailSheetProvider } from "./ContactDetailSheetProvider";
@@ -18,6 +19,7 @@ interface LayoutProps {
 
 export function Layout({ children, currentPage, onPageChange, onLogout }: LayoutProps) {
   useBackgroundSync();
+  useAlertesBackgroundGeneration();
 
   return (
     <ContactDetailSheetProvider onNavigate={onPageChange}>

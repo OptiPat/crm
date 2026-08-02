@@ -257,11 +257,14 @@ pub fn list_arbitrage_fiche_templates_cmd(
     app: AppHandle,
     session: State<'_, UiSessionState>,
     product_kind: String,
+    template_family: Option<String>,
 ) -> Result<Vec<crate::arbitrage_fiche_templates::ArbitrageFicheTemplate>, String> {
     require_ui_session(&session)?;
     let product = crate::arbitrage_fiche_templates::ArbitrageFicheProduct::parse(&product_kind)?;
+    let family =
+        crate::arbitrage_fiche_templates::parse_arbitrage_fiche_template_family(template_family.as_deref())?;
     let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
-    crate::arbitrage_fiche_templates::list_arbitrage_fiche_templates(&app_data_dir, product)
+    crate::arbitrage_fiche_templates::list_arbitrage_fiche_templates(&app_data_dir, family, product)
 }
 
 #[tauri::command]
@@ -271,13 +274,17 @@ pub fn import_arbitrage_fiche_template_cmd(
     source_path: String,
     label: String,
     product_kind: String,
+    template_family: Option<String>,
 ) -> Result<crate::arbitrage_fiche_templates::ArbitrageFicheTemplate, String> {
     require_ui_session(&session)?;
     let product = crate::arbitrage_fiche_templates::ArbitrageFicheProduct::parse(&product_kind)?;
+    let family =
+        crate::arbitrage_fiche_templates::parse_arbitrage_fiche_template_family(template_family.as_deref())?;
     let source = require_scoped_file(&app, &source_path)?;
     let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
     crate::arbitrage_fiche_templates::import_arbitrage_fiche_template(
         &app_data_dir,
+        family,
         product,
         &source,
         &label,
@@ -290,12 +297,16 @@ pub fn remove_arbitrage_fiche_template_cmd(
     session: State<'_, UiSessionState>,
     template_id: String,
     product_kind: String,
+    template_family: Option<String>,
 ) -> Result<(), String> {
     require_ui_session(&session)?;
     let product = crate::arbitrage_fiche_templates::ArbitrageFicheProduct::parse(&product_kind)?;
+    let family =
+        crate::arbitrage_fiche_templates::parse_arbitrage_fiche_template_family(template_family.as_deref())?;
     let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
     crate::arbitrage_fiche_templates::remove_arbitrage_fiche_template(
         &app_data_dir,
+        family,
         product,
         &template_id,
     )
@@ -307,12 +318,16 @@ pub fn set_default_arbitrage_fiche_template_cmd(
     session: State<'_, UiSessionState>,
     template_id: String,
     product_kind: String,
+    template_family: Option<String>,
 ) -> Result<(), String> {
     require_ui_session(&session)?;
     let product = crate::arbitrage_fiche_templates::ArbitrageFicheProduct::parse(&product_kind)?;
+    let family =
+        crate::arbitrage_fiche_templates::parse_arbitrage_fiche_template_family(template_family.as_deref())?;
     let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
     crate::arbitrage_fiche_templates::set_default_arbitrage_fiche_template(
         &app_data_dir,
+        family,
         product,
         &template_id,
     )
@@ -324,12 +339,16 @@ pub fn get_arbitrage_fiche_template_path_cmd(
     session: State<'_, UiSessionState>,
     template_id: String,
     product_kind: String,
+    template_family: Option<String>,
 ) -> Result<String, String> {
     require_ui_session(&session)?;
     let product = crate::arbitrage_fiche_templates::ArbitrageFicheProduct::parse(&product_kind)?;
+    let family =
+        crate::arbitrage_fiche_templates::parse_arbitrage_fiche_template_family(template_family.as_deref())?;
     let app_data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
     let path = crate::arbitrage_fiche_templates::arbitrage_fiche_template_file_path(
         &app_data_dir,
+        family,
         product,
         &template_id,
     )?;

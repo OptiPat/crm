@@ -215,6 +215,8 @@ export function Suivi({ currentPage, onNavigate }: SuiviProps) {
         if (showLoading) toast.error("Erreur lors de la génération des alertes");
       }
 
+      notifyAlertesChanged();
+
       const data = await getAlertesWithContacts();
       if (!isRefreshGenerationCurrent(alertesRefreshGenRef, token)) return;
       setAlertes(data);

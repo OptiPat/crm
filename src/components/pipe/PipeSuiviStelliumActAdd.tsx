@@ -39,7 +39,15 @@ import { inferTypeProduitFromStelliumProductLabel } from "@/lib/pipe/remuneratio
 import { useArbitrageFicheConseil, isFicheConseilActionsBusy } from "@/hooks/useArbitrageFicheConseil";
 import { ArbitrageFicheConseilDialogs } from "@/components/fiche-conseil/ArbitrageFicheConseilDialogs";
 import { ArbitrageFicheConseilButton } from "@/components/fiche-conseil/ArbitrageFicheConseilButton";
-import { isStelliumActEligibleForFicheConseil } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
+import { isStelliumActEligibleForFicheConseil, isVpModificationStelliumAct } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
+import {
+  EMPTY_VP_MODIFICATION_ACT_VALUE,
+  toVpModificationPdfFillInput,
+  vpModificationMontantCentimesFromAct,
+  type VpModificationActValue,
+} from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
+import { VpModificationActFields } from "@/components/pipe/VpModificationActFields";
+import { loadVpModificationMontantEurosPrefill } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-prefill";
 import { resolveInvestissementIdForStelliumAct } from "@/lib/placement/resolve-investissement-for-stellium-act";
 
 async function resolveDraftInvestissementId(
@@ -124,8 +132,14 @@ export function PipeSuiviStelliumActAdd({
   const [stelliumLabel, setStelliumLabel] = useState("");
   const [productLabel, setProductLabel] = useState("");
   const [montantEuros, setMontantEuros] = useState("");
+  const [newActVpModification, setNewActVpModification] = useState<VpModificationActValue>({
+    ...EMPTY_VP_MODIFICATION_ACT_VALUE,
+  });
   const [draftOccurredAt, setDraftOccurredAt] = useState<Record<number, string>>({});
   const [draftContenu, setDraftContenu] = useState<Record<number, string>>({});
+  const [draftVpModification, setDraftVpModification] = useState<
+    Record<number, VpModificationActValue>
+  >({});
   const [savingId, setSavingId] = useState<number | "new" | null>(null);
   const draftsLoadedRef = useRef(false);
 
@@ -134,6 +148,7 @@ export function PipeSuiviStelliumActAdd({
     stelliumLabel,
     pipeType: pipe.pipe_type,
   });
+  const newActIsVpModification = isVpModificationStelliumAct(stelliumLabel);
 
   const buildRemunerationPayload = (product: string, montantRaw: string) => {
     const montant_centimes = parseMontantEurosToCentimes(montantRaw);
@@ -160,6 +175,26 @@ export function PipeSuiviStelliumActAdd({
       const next: Record<number, string> = {};
       for (const draft of nextDrafts) {
         next[draft.id] = prev[draft.id] ?? "";
+      }
+      return next;
+    });
+    setDraftVpModification((prev) => {
+      const next: Record<number, VpModificationActValue> = {};
+      for (const draft of nextDrafts) {
+        const existing = prev[draft.id] ?? { ...EMPTY_VP_MODIFICATION_ACT_VALUE };
+        if (
+          draft.montant_centimes != null &&
+          draft.montant_centimes > 0 &&
+          !existing.kinds.includes("montant")
+        ) {
+          next[draft.id] = {
+            ...existing,
+            kinds: [...existing.kinds, "montant"],
+            montantEuros: formatMontantCentimesInput(draft.montant_centimes),
+          };
+        } else {
+          next[draft.id] = existing;
+        }
       }
       return next;
     });
@@ -259,6 +294,9 @@ export function PipeSuiviStelliumActAdd({
           product,
           operation.investissement_id
         );
+        const vpMontantCentimes = isVpModificationStelliumAct(label)
+          ? vpModificationMontantCentimesFromAct(draftVpModification[operation.id])
+          : null;
         await createPlacementOperation({
           contact_id: pipe.contact_id,
           pipe_id: pipe.id,
@@ -266,6 +304,7 @@ export function PipeSuiviStelliumActAdd({
           operation_type: placementOperationTypeFromStelliumLabel(label),
           stellium_label: label,
           product_label: product || null,
+          montant_centimes: vpMontantCentimes ?? operation.montant_centimes ?? null,
           investissement_id: investissementId,
         });
         notifyPlacementOperationsChanged();
@@ -323,6 +362,7 @@ export function PipeSuiviStelliumActAdd({
     }
     setSavingId("new");
     try {
+      const vpMontantCentimes = vpModificationMontantCentimesFromAct(newActVpModification);
       const remuneration = buildRemunerationPayload(product, montantEuros);
       const investissementId = await resolveDraftInvestissementId(
         pipe.contact_id,
@@ -335,7 +375,7 @@ export function PipeSuiviStelliumActAdd({
         operation_type: placementOperationTypeFromStelliumLabel(label),
         stellium_label: label,
         product_label: product,
-        montant_centimes: remuneration.montant_centimes,
+        montant_centimes: remuneration.montant_centimes ?? vpMontantCentimes,
         type_produit: remuneration.type_produit,
         investissement_id: investissementId,
       });
@@ -346,6 +386,7 @@ export function PipeSuiviStelliumActAdd({
       setStelliumLabel("");
       setProductLabel("");
       setMontantEuros("");
+      setNewActVpModification({ ...EMPTY_VP_MODIFICATION_ACT_VALUE });
     } catch (err) {
       console.error(err);
       toast.error(String(err));
@@ -409,6 +450,23 @@ export function PipeSuiviStelliumActAdd({
                 rows={2}
                 placeholder="Montant, contexte…"
               />
+              {isVpModificationStelliumAct(draft.stellium_label ?? "") ? (
+                <VpModificationActFields
+                  value={draftVpModification[draft.id] ?? { ...EMPTY_VP_MODIFICATION_ACT_VALUE }}
+                  onChange={(value) =>
+                    setDraftVpModification((prev) => ({ ...prev, [draft.id]: value }))
+                  }
+                  suggestMontantEuros={
+                    draft.product_label?.trim() && pipe.contact_id > 0
+                      ? () =>
+                          loadVpModificationMontantEurosPrefill(
+                            pipe.contact_id,
+                            draft.product_label ?? ""
+                          )
+                      : undefined
+                  }
+                />
+              ) : null}
               <div className="flex flex-wrap items-center justify-end gap-2">
                 {variant === "suivi" &&
                 isStelliumActEligibleForFicheConseil(
@@ -425,6 +483,9 @@ export function PipeSuiviStelliumActAdd({
                         {
                           suggestedInvestissementId:
                             draft.investissement_id ?? undefined,
+                          vpModification: toVpModificationPdfFillInput(
+                            draftVpModification[draft.id] ?? { ...EMPTY_VP_MODIFICATION_ACT_VALUE }
+                          ),
                         }
                       )
                     }
@@ -478,11 +539,27 @@ export function PipeSuiviStelliumActAdd({
                 productLabel={productLabel}
                 stelliumLabel={stelliumLabel}
                 onProductChange={setProductLabel}
-                onStelliumLabelChange={setStelliumLabel}
+                onStelliumLabelChange={(label) => {
+                  setStelliumLabel(label);
+                  if (!isVpModificationStelliumAct(label)) {
+                    setNewActVpModification({ ...EMPTY_VP_MODIFICATION_ACT_VALUE });
+                  }
+                }}
                 versementInit={showVersementInit}
               />
               {newActNeedsMontant || showVersementInit ? (
                 <PlacementMontantField value={montantEuros} onChange={setMontantEuros} />
+              ) : newActIsVpModification ? (
+                <VpModificationActFields
+                  value={newActVpModification}
+                  onChange={setNewActVpModification}
+                  suggestMontantEuros={
+                    productLabel.trim() && pipe.contact_id > 0
+                      ? () =>
+                          loadVpModificationMontantEurosPrefill(pipe.contact_id, productLabel)
+                      : undefined
+                  }
+                />
               ) : null}
               <div className="flex flex-wrap justify-end gap-2">
                 {newActFicheEligible ? (
@@ -500,6 +577,7 @@ export function PipeSuiviStelliumActAdd({
                           productLabel,
                           {
                             suggestedInvestissementId: suggestedId ?? undefined,
+                            vpModification: toVpModificationPdfFillInput(newActVpModification),
                           }
                         );
                       })();
@@ -515,6 +593,7 @@ export function PipeSuiviStelliumActAdd({
                     setStelliumLabel(showVersementInit ? VERSEMENT_COMPLEMENTAIRE_ACT_LABEL : "");
                     setProductLabel("");
                     setMontantEuros("");
+                    setNewActVpModification({ ...EMPTY_VP_MODIFICATION_ACT_VALUE });
                   }}
                 >
                   Annuler

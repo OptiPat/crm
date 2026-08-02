@@ -13,6 +13,7 @@ import {
   DashboardCollapsibleSection,
   DashboardCockpitSection,
   StatCardSkeleton,
+  DashboardCockpitSkeleton,
 } from "@/components/dashboard/dashboard-ui";
 import { formatDashboardCurrency } from "@/components/dashboard/dashboard-format";
 import {
@@ -25,7 +26,6 @@ import {
 } from "lucide-react";
 import { getDashboardStats, type DashboardStats } from "@/lib/api/tauri-dashboard";
 import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
-import { genererAlertesAutomatiques, checkAndCreateArbitrageAlerts, checkAndCreateDemembrementAlerts } from "@/lib/api/tauri-alertes";
 import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
@@ -62,6 +62,7 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
     useState<DashboardInvestissementsSheetVariant | null>(null);
   const [productFamilySheet, setProductFamilySheet] =
     useState<DashboardProductFamilyId | null>(null);
+  const [showCockpit, setShowCockpit] = useState(false);
 
   const refreshDashboardData = useCallback(() => {
     setChartsRefreshKey((k) => k + 1);
@@ -102,15 +103,6 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
         } catch {
           /* déjà initialisé */
         }
-        void checkAndCreateDemembrementAlerts().catch((error) => {
-          console.error("Erreur alertes démembrement:", error);
-        });
-        void checkAndCreateArbitrageAlerts().catch((error) => {
-          console.error("Erreur alertes arbitrage:", error);
-        });
-        void genererAlertesAutomatiques().catch((error) => {
-          console.error("Erreur génération alertes:", error);
-        });
       }
       setStats(await getDashboardStats());
     } catch (error) {
@@ -129,6 +121,17 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
   useEffect(() => {
     void loadStats();
   }, [loadStats]);
+
+  useEffect(() => {
+    if (loading) {
+      setShowCockpit(false);
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      setShowCockpit(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [loading]);
 
   useEffect(() => {
     const debounceRef = { id: null as number | null };
@@ -272,16 +275,22 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
       </div>
 
       <DashboardCockpitSection>
-        <DashboardTodayGrid
-          currentPage={currentPage}
-          onNavigate={onNavigate}
-          onOpenContact={openDrillDownContact}
-        />
-        <AlertsPreview
-          currentPage={currentPage}
-          onNavigate={onNavigate}
-          onOpenContact={openDrillDownContact}
-        />
+        {showCockpit ? (
+          <>
+            <DashboardTodayGrid
+              currentPage={currentPage}
+              onNavigate={onNavigate}
+              onOpenContact={openDrillDownContact}
+            />
+            <AlertsPreview
+              currentPage={currentPage}
+              onNavigate={onNavigate}
+              onOpenContact={openDrillDownContact}
+            />
+          </>
+        ) : (
+          <DashboardCockpitSkeleton />
+        )}
       </DashboardCockpitSection>
 
       <DashboardCollapsibleSection

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import type { Tache } from "@/lib/api/tauri-taches";
-import { createSuiviPipeFromFicheConseilTask, findExistingSuiviPipeForFicheConseilTask } from "@/lib/placement/create-suivi-from-fiche-conseil-task";
+import { createSuiviPipeFromFicheConseilTask, ensureSuiviStelliumActDraftForFicheConseilTask, findExistingSuiviPipeForFicheConseilTask } from "@/lib/placement/create-suivi-from-fiche-conseil-task";
 import { navigateToPipe } from "@/lib/navigation/pipe-navigation";
 
 export function useSendFicheConseilTaskToPipe(onNavigate?: (page: string) => void) {
@@ -22,7 +22,15 @@ export function useSendFicheConseilTaskToPipe(onNavigate?: (page: string) => voi
         }
         const existing = await findExistingSuiviPipeForFicheConseilTask(tache, contactId);
         if (existing) {
-          toast.info("Suivi déjà présent dans le Pipe — ouverture.");
+          const actDraftCreated = await ensureSuiviStelliumActDraftForFicheConseilTask(
+            tache,
+            existing
+          );
+          toast.info(
+            actDraftCreated
+              ? "Suivi déjà présent — acte arbitrage ajouté au pipe"
+              : "Suivi déjà présent dans le Pipe — ouverture."
+          );
           navigateToPipe(onNavigate, existing.id);
           return;
         }

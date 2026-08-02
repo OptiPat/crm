@@ -69,6 +69,26 @@ describe("fiche-conseil-resolve", () => {
     expect(investissementToFicheProductKind("SCPI")).toBeNull();
   });
 
+  it("filtre par libellé produit Stellium PER", () => {
+    const investissements = [
+      inv({ id: 1, type_produit: "PER", nom_produit: "EvoluPER", partenaire_id: 100 }),
+      inv({ id: 2, type_produit: "PER", nom_produit: "PER Spirica", partenaire_id: 200 }),
+    ];
+    const items = toFicheConseilContratPickItems(investissements);
+    const partenaireNoms = new Map<number, string>([
+      [100, "Apicil"],
+      [200, "Spirica"],
+    ]);
+    const filtered = filterFicheConseilContratPickItemsByStelliumProduct(
+      items,
+      investissements,
+      partenaireNoms,
+      "Cristalliance EvoluPER"
+    );
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].investissementId).toBe(1);
+  });
+
   it("filtre par libellé produit Stellium (pas seulement AV/PER)", () => {
     const investissements = [
       inv({ id: 1, nom_produit: "Vie Plus", partenaire_id: 100 }),

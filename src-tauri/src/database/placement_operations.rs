@@ -30,31 +30,26 @@ fn merge_placement_remuneration_fields_on_existing(
     existing_id: i64,
     input: &super::models::NewPlacementOperation,
 ) -> Result<()> {
-    let mut sets: Vec<&str> = Vec::new();
-    let now = now_unix();
-    if input.montant_centimes.filter(|m| *m > 0).is_some() {
-        sets.push("montant_centimes");
-    }
-    if input
+    let has_montant = input.montant_centimes.filter(|m| *m > 0).is_some();
+    let has_type_produit = input
         .type_produit
         .as_ref()
         .map(|s| !s.trim().is_empty())
-        .unwrap_or(false)
-    {
-        sets.push("type_produit");
-    }
-    if sets.is_empty() {
+        .unwrap_or(false);
+    let has_investissement = input.investissement_id.filter(|id| *id > 0).is_some();
+    if !has_montant && !has_type_produit && !has_investissement {
         return Ok(());
     }
-    let sql = format!(
-        "UPDATE placement_operations SET montant_centimes = COALESCE(?1, montant_centimes),
-         type_produit = COALESCE(?2, type_produit), updated_at = ?3 WHERE id = ?4"
-    );
+    let now = now_unix();
     conn.execute(
-        &sql,
+        "UPDATE placement_operations SET montant_centimes = COALESCE(?1, montant_centimes),
+         type_produit = COALESCE(?2, type_produit),
+         investissement_id = COALESCE(?3, investissement_id),
+         updated_at = ?4 WHERE id = ?5",
         params![
             input.montant_centimes,
             input.type_produit,
+            input.investissement_id,
             now,
             existing_id
         ],
@@ -1788,6 +1783,86 @@ mod tests {
 
         assert_eq!(confirmed.id, draft.id);
         assert_eq!(confirmed.montant_centimes, Some(5_000_000));
+    }
+
+    #[test]
+    fn merge_pending_draft_sets_investissement_id_on_confirm() {
+        use crate::database::pipe::PIPE_TYPE_ACTE_GESTION;
+
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        db.migrate_pipes_table().unwrap();
+        let contact = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let inv = db
+            .create_investissement(super::super::models::NewInvestissement {
+                contact_id: Some(contact_id),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "Vie Plus".into(),
+                numero_contrat: Some("AV-1".into()),
+                montant_initial: None,
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+        let suivi = db
+            .create_pipe(super::super::models::NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
+                parent_pipe_id: None,
+                titre: "Suivi VP".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let draft = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(suivi.id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_VERSEMENT.into(),
+                product_label: Some("Cristalliance Avenir".into()),
+                stellium_label: Some("Versements programmés : Modification".into()),
+                investissement_id: None,
+                ..Default::default()
+            })
+            .unwrap();
+        assert!(draft.investissement_id.is_none());
+
+        let merged = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(suivi.id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_VERSEMENT.into(),
+                product_label: Some("Cristalliance Avenir".into()),
+                stellium_label: Some("Versements programmés : Modification".into()),
+                investissement_id: Some(inv.id),
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert_eq!(merged.id, draft.id);
+        assert_eq!(merged.investissement_id, Some(inv.id));
     }
 
     #[test]

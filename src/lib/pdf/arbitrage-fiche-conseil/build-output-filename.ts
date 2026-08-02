@@ -1,4 +1,7 @@
-import type { ArbitrageFicheProductKind } from "@/lib/api/tauri-arbitrage-fiche";
+import type {
+  ArbitrageFicheProductKind,
+  FicheConseilTemplateFamily,
+} from "@/lib/api/tauri-arbitrage-fiche";
 
 function sanitizeFileNamePart(value: string): string {
   return value
@@ -12,13 +15,13 @@ const MAX_FILE_NAME_LEN = 180;
 
 function fitArbitrageFicheFileName(
   productKind: ArbitrageFicheProductKind,
+  actLabel: string,
   client: string,
   contrat: string
 ): string {
   let clientPart = client;
   let contratPart = contrat;
-  const build = () =>
-    `Fiche conseil ${productKind} Arbitrage - ${clientPart} - ${contratPart}.pdf`;
+  const build = () => `Fiche conseil ${productKind} ${actLabel} - ${clientPart} - ${contratPart}.pdf`;
 
   while (build().length > MAX_FILE_NAME_LEN && contratPart.length > 0) {
     contratPart = contratPart.slice(0, -1).trimEnd();
@@ -34,11 +37,14 @@ export function buildArbitrageFicheOutputFileName(
   productKind: ArbitrageFicheProductKind,
   nom: string,
   prenom: string,
-  numeroContrat?: string | null
+  numeroContrat?: string | null,
+  templateFamily: FicheConseilTemplateFamily = "ARBITRAGE"
 ): string {
   const client = sanitizeFileNamePart(`${nom} ${prenom}`) || "contact";
   const contrat = sanitizeFileNamePart(numeroContrat ?? "") || "sans n° contrat";
-  return fitArbitrageFicheFileName(productKind, client, contrat);
+  const actLabel =
+    templateFamily === "VP_MODIFICATION" ? "Modification VP" : "Arbitrage";
+  return fitArbitrageFicheFileName(productKind, actLabel, client, contrat);
 }
 
 /** @deprecated */

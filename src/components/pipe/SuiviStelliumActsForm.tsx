@@ -2,8 +2,18 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StelliumPlacementActFields } from "@/components/pipe/StelliumPlacementActFields";
 import { PlacementMontantField } from "@/components/pipe/PlacementMontantField";
+import { VpModificationActFields } from "@/components/pipe/VpModificationActFields";
 import { ArbitrageFicheConseilButton } from "@/components/fiche-conseil/ArbitrageFicheConseilButton";
-import { isStelliumActEligibleForFicheConseil } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
+import {
+  isStelliumActEligibleForFicheConseil,
+  isVpModificationStelliumAct,
+} from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
+import { loadVpModificationMontantEurosPrefill } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-prefill";
+import {
+  EMPTY_VP_MODIFICATION_ACT_VALUE,
+  toVpModificationPdfFillInput,
+  type VpModificationActValue,
+} from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
 import { isVersementComplementaireActLabel } from "@/lib/pipe/pipe-suivi";
 
 export interface SuiviStelliumActRow {
@@ -11,6 +21,7 @@ export interface SuiviStelliumActRow {
   productLabel: string;
   actLabel: string;
   montantEuros: string;
+  vpModification: VpModificationActValue;
 }
 
 function newActRow(): SuiviStelliumActRow {
@@ -19,6 +30,7 @@ function newActRow(): SuiviStelliumActRow {
     productLabel: "",
     actLabel: "",
     montantEuros: "",
+    vpModification: { ...EMPTY_VP_MODIFICATION_ACT_VALUE },
   };
 }
 
@@ -31,7 +43,11 @@ interface SuiviStelliumActsFormProps {
   onChange: (acts: SuiviStelliumActRow[]) => void;
   disabled?: boolean;
   contactId?: number;
-  onFicheConseil?: (actLabel: string, productLabel: string) => void;
+  onFicheConseil?: (
+    actLabel: string,
+    productLabel: string,
+    options?: { vpModification?: ReturnType<typeof toVpModificationPdfFillInput> }
+  ) => void;
   ficheConseilDisabled?: boolean;
 }
 
@@ -43,10 +59,11 @@ export function SuiviStelliumActsForm({
   onFicheConseil,
   ficheConseilDisabled = false,
 }: SuiviStelliumActsFormProps) {
-  const updateAct = (key: string, patch: Partial<Pick<SuiviStelliumActRow, "productLabel" | "actLabel" | "montantEuros">>) => {
-    onChange(
-      acts.map((row) => (row.key === key ? { ...row, ...patch } : row))
-    );
+  const updateAct = (
+    key: string,
+    patch: Partial<Pick<SuiviStelliumActRow, "productLabel" | "actLabel" | "montantEuros" | "vpModification">>
+  ) => {
+    onChange(acts.map((row) => (row.key === key ? { ...row, ...patch } : row)));
   };
 
   const removeAct = (key: string) => {
@@ -85,8 +102,17 @@ export function SuiviStelliumActsForm({
             suivi
             productLabel={row.productLabel}
             stelliumLabel={row.actLabel}
-            onProductChange={(productLabel) => updateAct(row.key, { productLabel })}
-            onStelliumLabelChange={(actLabel) => updateAct(row.key, { actLabel })}
+            onProductChange={(productLabel) => {
+              updateAct(row.key, { productLabel });
+            }}
+            onStelliumLabelChange={(actLabel) => {
+              updateAct(row.key, {
+                actLabel,
+                vpModification: isVpModificationStelliumAct(actLabel)
+                  ? row.vpModification
+                  : { ...EMPTY_VP_MODIFICATION_ACT_VALUE },
+              });
+            }}
             disabled={disabled}
           />
           {isVersementComplementaireActLabel(row.actLabel) ? (
@@ -95,6 +121,19 @@ export function SuiviStelliumActsForm({
               onChange={(montantEuros) => updateAct(row.key, { montantEuros })}
               disabled={disabled}
             />
+          ) : isVpModificationStelliumAct(row.actLabel) ? (
+            <VpModificationActFields
+              value={row.vpModification}
+              disabled={disabled}
+              suggestMontantEuros={
+                contactId && row.productLabel.trim()
+                  ? () => loadVpModificationMontantEurosPrefill(contactId, row.productLabel)
+                  : undefined
+              }
+              onChange={(vpModification) => {
+                updateAct(row.key, { vpModification });
+              }}
+            />
           ) : null}
           {contactId &&
           onFicheConseil &&
@@ -102,7 +141,11 @@ export function SuiviStelliumActsForm({
             <div className="flex justify-end">
               <ArbitrageFicheConseilButton
                 disabled={disabled || ficheConseilDisabled}
-                onClick={() => onFicheConseil(row.actLabel, row.productLabel)}
+                onClick={() =>
+                  onFicheConseil(row.actLabel, row.productLabel, {
+                    vpModification: toVpModificationPdfFillInput(row.vpModification),
+                  })
+                }
               />
             </div>
           ) : null}
