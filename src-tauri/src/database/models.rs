@@ -1942,6 +1942,31 @@ pub struct FundWatchlistFavoritesReport {
     pub warnings: Vec<String>,
 }
 
+/// Cache marché / structure pour un ISIN (comparateur UC).
+#[derive(Debug, Clone)]
+pub struct UcMarketCacheRowDb {
+    pub isin: String,
+    pub aum_meur: Option<f64>,
+    pub top10_percent: Option<f64>,
+    pub max_drawdown_3y: Option<f64>,
+    #[allow(dead_code)]
+    pub source: String,
+    #[allow(dead_code)]
+    pub updated_at: i64,
+}
+
+/// Enregistrement historique d'un comparatif UC.
+#[derive(Debug, Clone)]
+pub struct UcComparatifRecord {
+    pub id: String,
+    pub date_comparatif: i64,
+    pub scoring_version: String,
+    pub confidence_index: f64,
+    pub verdict: String,
+    pub winner_isin: Option<String>,
+    pub payload_json: String,
+}
+
 /// Preset de rédaction réutilisable (fiche conseil arbitrage).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FicheConseilRedactionPreset {

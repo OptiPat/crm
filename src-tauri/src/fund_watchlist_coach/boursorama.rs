@@ -109,6 +109,24 @@ fn extract_opcvm_symbol_from_href(html: &str) -> Option<String> {
     None
 }
 
+pub fn fetch_top10_percent_for_isin(client: &Client, isin: &str) -> Result<Option<f64>, String> {
+    let Some(symbol) = resolve_opcvm_symbol(client, isin)? else {
+        return Ok(None);
+    };
+    let holdings = fetch_top_holdings(client, &symbol)?;
+    Ok(top10_concentration_percent(&holdings))
+}
+
+/// Somme des poids des 10 premières lignes de composition (en % du portefeuille).
+pub fn top10_concentration_percent(holdings: &[BoursoramaHoldingLine]) -> Option<f64> {
+    let sum: f64 = holdings.iter().filter_map(|line| line.weight_percent).sum();
+    if sum > 0.0 && sum <= 100.0 {
+        Some((sum * 100.0).round() / 100.0)
+    } else {
+        None
+    }
+}
+
 pub fn parse_top_holdings_from_composition_html(html: &str) -> Vec<BoursoramaHoldingLine> {
     let marker = "Composition (les 10 premi";
     let Some(start) = html.find(marker) else {
@@ -233,5 +251,20 @@ mod tests {
         assert!(lines[0].label.contains("Taiwan"));
         assert_eq!(lines[0].weight_percent, Some(5.85));
         assert_eq!(lines[1].weight_percent, Some(3.35));
+    }
+
+    #[test]
+    fn top10_concentration_sums_holdings_weights() {
+        let holdings = vec![
+            BoursoramaHoldingLine {
+                label: "A".into(),
+                weight_percent: Some(9.5),
+            },
+            BoursoramaHoldingLine {
+                label: "B".into(),
+                weight_percent: Some(7.2),
+            },
+        ];
+        assert_eq!(top10_concentration_percent(&holdings), Some(16.7));
     }
 }

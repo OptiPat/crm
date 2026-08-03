@@ -30,6 +30,8 @@ pub mod filleul_dossier;
 pub mod filleul_volumes;
 pub mod filleuls;
 pub mod fund_watchlist;
+pub mod fund_watchlist_market_cache;
+pub mod uc_comparatifs;
 pub mod foyers;
 pub mod google_contact_name_dismissals;
 pub mod interactions;
@@ -687,6 +689,8 @@ impl Database {
         self.migrate_workspace_outbox()?;
         self.migrate_exceltis_tache_fiche_markers()?;
         self.migrate_fund_watchlist_table()?;
+        self.migrate_fund_watchlist_market_cache_table()?;
+        self.migrate_uc_comparatifs_table()?;
         self.migrate_fiche_conseil_redaction_presets_table()?;
 
         Ok(())

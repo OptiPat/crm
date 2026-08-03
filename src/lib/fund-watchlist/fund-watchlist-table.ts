@@ -230,15 +230,20 @@ export function matchesFundWatchlistColumnFilter(
   if (!filter || !columnFilterIsActive(filter)) return true;
 
   if (filter.text?.trim() && isTextColumn(column)) {
-    if (!textMatchesSearch(filter.text, entryTextValue(entry, column))) return false;
+    if (!isFundWatchlistAnnualColumnKey(column)
+      && !textMatchesSearch(filter.text, entryTextValue(entry, column))) {
+      return false;
+    }
   }
 
   if (filter.values && filter.values.length > 0) {
     if (filter.values.length === 1 && filter.values[0] === "__none__") {
       return false;
     }
-    const value = entryTextValue(entry, column) || "—";
-    if (!filter.values.includes(value)) return false;
+    if (!isFundWatchlistAnnualColumnKey(column)) {
+      const value = entryTextValue(entry, column) || "—";
+      if (!filter.values.includes(value)) return false;
+    }
   }
 
   if ((filter.min?.trim() || filter.max?.trim()) && isNumericColumn(column)) {

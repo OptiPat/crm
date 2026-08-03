@@ -1,4 +1,4 @@
-mod boursorama;
+pub mod boursorama;
 mod holdings_kind;
 mod macro_news;
 mod news;

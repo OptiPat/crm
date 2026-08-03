@@ -20,6 +20,9 @@ mod email;
 mod export_archive;
 mod fund_watchlist_commands;
 mod fund_watchlist_coach;
+mod fund_watchlist_market_cache_fetch;
+mod uc_comparator;
+mod uc_comparator_commands;
 mod fiche_conseil_redaction_commands;
 mod licensing;
 mod navigation_guard;
@@ -618,6 +621,7 @@ fn main() {
             fund_watchlist_commands::start_fund_watchlist_favorites_report,
             fund_watchlist_commands::fund_watchlist_coach_report_in_progress,
             fund_watchlist_commands::get_fund_watchlist_coach_last_report,
+            uc_comparator_commands::run_uc_comparison,
             fiche_conseil_redaction_commands::get_all_fiche_conseil_redaction_presets,
             fiche_conseil_redaction_commands::create_fiche_conseil_redaction_preset,
             fiche_conseil_redaction_commands::update_fiche_conseil_redaction_preset,

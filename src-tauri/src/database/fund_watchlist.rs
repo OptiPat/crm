@@ -84,6 +84,39 @@ impl super::Database {
         rows.collect()
     }
 
+    pub fn get_fund_watchlist_entries_by_isins(
+        &self,
+        isins: &[String],
+    ) -> Result<Vec<FundWatchlistEntry>> {
+        if isins.is_empty() {
+            return Ok(Vec::new());
+        }
+        let normalized: Vec<String> = isins
+            .iter()
+            .map(|s| s.trim().to_uppercase())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if normalized.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = normalized
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT {SELECT_COLS} FROM fund_watchlist WHERE isin IN ({placeholders})"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params: Vec<&dyn rusqlite::ToSql> = normalized
+            .iter()
+            .map(|s| s as &dyn rusqlite::ToSql)
+            .collect();
+        let rows = stmt.query_map(params.as_slice(), map_fund_watchlist_row)?;
+        rows.collect()
+    }
+
     pub fn import_fund_watchlist_entries(
         &self,
         rows: Vec<FundWatchlistImportRow>,

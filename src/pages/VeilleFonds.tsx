@@ -9,7 +9,7 @@ import {
   TableCell,
   TableRow,
 } from "@/components/ui/table";
-import { FileUp, LineChart, RefreshCw, Search, Sparkles, Star, X } from "lucide-react";
+import { FileUp, LineChart, RefreshCw, Scale, Search, Sparkles, Star, X, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import {
   getAllFundWatchlistEntries,
@@ -21,6 +21,8 @@ import {
 } from "@/lib/api/tauri-fund-watchlist";
 import { FundWatchlistImportDialog } from "@/components/fund-watchlist/FundWatchlistImportDialog";
 import { FundWatchlistCoachDialog } from "@/components/fund-watchlist/FundWatchlistCoachDialog";
+import { UcComparatorResults } from "@/components/fund-watchlist/UcComparatorResults";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FundWatchlistColumnHeader } from "@/components/fund-watchlist/FundWatchlistColumnHeader";
 import { FundWatchlistOptionalColumnToggles } from "@/components/fund-watchlist/FundWatchlistOptionalColumnToggles";
 import { formatFundPerfPercent, formatFundSharpe, formatFundShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-display";
@@ -51,6 +53,7 @@ import {
   cycleFundWatchlistSort,
   fundWatchlistAnnualColumnKey,
   fundWatchlistCellAlignClass,
+  isFundWatchlistAnnualColumnKey,
   type FundWatchlistColumnFilter,
   type FundWatchlistColumnFilters,
   type FundWatchlistColumnId,
@@ -68,10 +71,15 @@ import {
   type FundWatchlistOptionalColumnGroup,
 } from "@/lib/fund-watchlist/fund-watchlist-table-layout";
 import { cn } from "@/lib/utils";
+import { runUcComparison, type CompareResponse } from "@/lib/api/tauri-uc-comparator";
+
+const MAX_UC_COMPARE = 4;
 
 type VeilleFondsProps = {
   onNavigate?: (page: string) => void;
 };
+
+type VeilleView = "table" | "compare";
 
 type FilterMode = "all" | "favorites";
 
@@ -96,6 +104,10 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   const [sort, setSort] = useState<FundWatchlistSort>(FUND_WATCHLIST_DEFAULT_SORT);
   const [columnFilters, setColumnFilters] = useState<FundWatchlistColumnFilters>({});
   const [expandedOptional, setExpandedOptional] = useState(DEFAULT_OPTIONAL_COLUMNS);
+  const [selectedCompareIsins, setSelectedCompareIsins] = useState<Set<string>>(() => new Set());
+  const [view, setView] = useState<VeilleView>("table");
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareResponse, setCompareResponse] = useState<CompareResponse | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -194,7 +206,9 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     [expandedOptional]
   );
   const tableColumnCount =
-    FUND_WATCHLIST_CORE_COLUMNS.length + annualYears.length + optionalColumns.length;
+    1 + FUND_WATCHLIST_CORE_COLUMNS.length + annualYears.length + optionalColumns.length;
+
+  const selectedCompareCount = selectedCompareIsins.size;
 
   const toggleOptionalGroup = (group: FundWatchlistOptionalColumnGroup) => {
     const collapsing = expandedOptional[group];
@@ -213,9 +227,47 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       }
       return changed ? next : prev;
     });
-    setSort((prev) =>
-      prev && hiddenColumns.includes(prev.column) ? FUND_WATCHLIST_DEFAULT_SORT : prev
-    );
+    setSort((prev) => {
+      if (!prev) return prev;
+      if (isFundWatchlistAnnualColumnKey(prev.column)) return prev;
+      return hiddenColumns.includes(prev.column) ? FUND_WATCHLIST_DEFAULT_SORT : prev;
+    });
+  };
+
+  const toggleCompareSelection = (isin: string, checked: boolean) => {
+    setSelectedCompareIsins((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        if (next.size >= MAX_UC_COMPARE) {
+          toast.error(`Maximum ${MAX_UC_COMPARE} fonds pour une comparaison.`);
+          return prev;
+        }
+        next.add(isin);
+      } else {
+        next.delete(isin);
+      }
+      return next;
+    });
+  };
+
+  const runCompare = async () => {
+    const isins = [...selectedCompareIsins];
+    if (isins.length < 2) {
+      toast.error("Sélectionnez au moins 2 fonds à comparer.");
+      return;
+    }
+    setView("compare");
+    setCompareLoading(true);
+    setCompareResponse(null);
+    try {
+      const result = await runUcComparison({ isins });
+      setCompareResponse(result);
+    } catch (error) {
+      toast.error(String(error));
+      setView("table");
+    } finally {
+      setCompareLoading(false);
+    }
   };
 
   const toggleFavorite = async (entry: FundWatchlistEntry) => {
@@ -423,6 +475,82 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     );
   };
 
+  const selectedCompareEntries = useMemo(
+    () => entries.filter((e) => selectedCompareIsins.has(e.isin)),
+    [entries, selectedCompareIsins]
+  );
+
+  const dialogs = (
+    <>
+      <FundWatchlistImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onApplied={() => void load()}
+      />
+      <FundWatchlistCoachDialog
+        open={coachOpen}
+        onOpenChange={setCoachOpen}
+        report={coachReport}
+      />
+    </>
+  );
+
+  if (view === "compare") {
+    return (
+      <div className="space-y-6 p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <Button variant="ghost" size="sm" className="mb-2 -ml-2" onClick={() => setView("table")}>
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Retour au tableau
+            </Button>
+            <h1 className="text-2xl font-serif font-bold flex items-center gap-2">
+              <Scale className="h-7 w-7 text-primary" />
+              Comparateur UC
+            </h1>
+            <p className="text-muted-foreground mt-1 max-w-2xl">
+              Classement déterministe sur {selectedCompareEntries.length} fonds de même catégorie.
+            </p>
+            {selectedCompareEntries.length > 0 && (
+              <ul className="mt-2 text-sm text-muted-foreground space-y-0.5">
+                {selectedCompareEntries.map((e) => (
+                  <li key={e.isin}>
+                    <span className="font-mono text-xs">{e.isin}</span> — {e.nom}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => void runCompare()}
+            disabled={selectedCompareCount < 2 || compareLoading}
+          >
+            <RefreshCw className={cn("h-4 w-4 mr-2", compareLoading && "animate-spin")} />
+            Recalculer
+          </Button>
+        </div>
+
+        <Card>
+          <CardContent className="pt-6">
+            {compareLoading && (
+              <p className="text-sm text-muted-foreground">
+                Calcul du score relatif… récupération composition Boursorama (Top 10) si nécessaire.
+              </p>
+            )}
+            {!compareLoading && compareResponse && (
+              <UcComparatorResults response={compareResponse} />
+            )}
+            {!compareLoading && !compareResponse && (
+              <p className="text-sm text-muted-foreground">Aucun résultat disponible.</p>
+            )}
+          </CardContent>
+        </Card>
+        {dialogs}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -437,6 +565,14 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
         </div>
         <div className="flex flex-col items-start gap-1 sm:items-end">
           <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => void runCompare()}
+            disabled={selectedCompareCount < 2 || compareLoading}
+          >
+            <Scale className="h-4 w-4 mr-2" />
+            Comparer ({selectedCompareCount}/{MAX_UC_COMPARE})
+          </Button>
           <Button variant="outline" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
             Actualiser
@@ -546,10 +682,6 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
               expanded={expandedOptional}
               onToggle={toggleOptionalGroup}
             />
-            <p className="text-xs text-muted-foreground">
-              Performances toujours visibles — défilez horizontalement si besoin. Cliquez sur
-              Volatilités, Sharpe ou SFDR pour afficher ces colonnes.
-            </p>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -566,6 +698,13 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
               <Table wrapperClassName="overflow-visible" className="!w-max table-fixed text-xs">
                 <thead className="sticky top-0 z-10 bg-card [&_tr]:border-b">
                   <TableRow className="hover:bg-transparent">
+                    <th
+                      className="h-9 w-9 px-1 text-center text-[10px] font-medium text-muted-foreground"
+                      title="Sélection pour comparateur (2 à 4 fonds)"
+                    >
+                      <Scale className="h-3.5 w-3.5 mx-auto opacity-60" aria-hidden />
+                      <span className="sr-only">Comparer</span>
+                    </th>
                     {FUND_WATCHLIST_CORE_COLUMNS.map((column) => (
                       <FundWatchlistColumnHeader
                         key={column}
@@ -647,6 +786,15 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                   ) : (
                     displayed.map((entry) => (
                       <TableRow key={entry.id}>
+                        <TableCell className="w-9 px-1 py-1.5 text-center">
+                          <Checkbox
+                            checked={selectedCompareIsins.has(entry.isin)}
+                            onCheckedChange={(checked) =>
+                              toggleCompareSelection(entry.isin, checked === true)
+                            }
+                            aria-label={`Comparer ${entry.nom}`}
+                          />
+                        </TableCell>
                         {FUND_WATCHLIST_CORE_COLUMNS.map((column) =>
                           renderFundWatchlistCell(entry, column)
                         )}
@@ -675,16 +823,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
         </CardContent>
       </Card>
 
-      <FundWatchlistImportDialog
-        open={importOpen}
-        onOpenChange={setImportOpen}
-        onApplied={() => void load()}
-      />
-      <FundWatchlistCoachDialog
-        open={coachOpen}
-        onOpenChange={setCoachOpen}
-        report={coachReport}
-      />
+      {dialogs}
     </div>
   );
 }
