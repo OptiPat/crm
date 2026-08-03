@@ -1,4 +1,5 @@
 mod boursorama;
+mod holdings_kind;
 mod macro_news;
 mod news;
 mod prompt;
@@ -23,6 +24,7 @@ use crate::newsletter::llm::{call_chat_markdown, LlmProvider};
 use crate::newsletter::store::NewsletterStore;
 
 pub const REPORT_DONE_EVENT: &str = "fund-watchlist-coach-report-done";
+pub const REPORT_PROGRESS_EVENT: &str = "fund-watchlist-coach-report-progress";
 
 const MAX_FAVORITES: usize = 30;
 const FUND_NEWS_LIMIT: usize = 3;
@@ -44,6 +46,23 @@ pub struct FundWatchlistCoachReportEvent {
     pub ok: bool,
     pub report: Option<FundWatchlistFavoritesReport>,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FundWatchlistCoachProgressEvent {
+    /// `collecting` ou `llm`
+    pub phase: String,
+    pub current: usize,
+    pub total: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fund_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fund_isin: Option<String>,
+}
+
+fn emit_progress(app: &AppHandle, event: FundWatchlistCoachProgressEvent) {
+    let _ = app.emit(REPORT_PROGRESS_EVENT, event);
 }
 
 pub fn coach_report_in_progress() -> bool {
@@ -185,13 +204,46 @@ fn generate_favorites_report(app: &AppHandle) -> Result<FundWatchlistFavoritesRe
 
     let boursorama_http = boursorama_client()?;
     let rss_http = rss_client()?;
+    let total = favorites.len();
+    emit_progress(
+        app,
+        FundWatchlistCoachProgressEvent {
+            phase: "collecting".into(),
+            current: 0,
+            total,
+            fund_name: None,
+            fund_isin: None,
+        },
+    );
+
     let mut contexts = Vec::with_capacity(favorites.len());
     for (index, entry) in favorites.iter().enumerate() {
         if index > 0 {
             thread::sleep(Duration::from_millis(INTER_FUND_DELAY_MS));
         }
+        emit_progress(
+            app,
+            FundWatchlistCoachProgressEvent {
+                phase: "collecting".into(),
+                current: index + 1,
+                total,
+                fund_name: Some(entry.nom.clone()),
+                fund_isin: Some(entry.isin.clone()),
+            },
+        );
         contexts.push(collect_fund_context(&boursorama_http, &rss_http, entry)?);
     }
+
+    emit_progress(
+        app,
+        FundWatchlistCoachProgressEvent {
+            phase: "llm".into(),
+            current: total,
+            total,
+            fund_name: None,
+            fund_isin: None,
+        },
+    );
 
     let favorite_names: Vec<String> = favorites.iter().map(|e| e.nom.clone()).collect();
     let context_blocks: Vec<String> = contexts.iter().map(build_fund_context_block).collect();
@@ -211,12 +263,28 @@ fn generate_favorites_report(app: &AppHandle) -> Result<FundWatchlistFavoritesRe
         0.35,
     )?;
 
-    Ok(FundWatchlistFavoritesReport {
+    let report = FundWatchlistFavoritesReport {
         markdown,
         generated_at: chrono::Utc::now().timestamp(),
         favorite_count: favorites.len(),
         warnings,
-    })
+    };
+    persist_last_report(app, &report)?;
+    Ok(report)
+}
+
+fn persist_last_report(app: &AppHandle, report: &FundWatchlistFavoritesReport) -> Result<(), String> {
+    let db_state = app.state::<DbState>();
+    let db_guard = db_state
+        .inner()
+        .lock()
+        .map_err(|_| "Base de données indisponible.".to_string())?;
+    let database = db_guard
+        .as_ref()
+        .ok_or("Database not initialized")?;
+    database
+        .save_fund_watchlist_coach_last_report(report)
+        .map_err(|e| format!("Sauvegarde rapport Coach : {e}"))
 }
 
 fn collect_fund_context(
@@ -314,6 +382,10 @@ fn collect_holding_news(
 ) -> Vec<HoldingNewsBlock> {
     let mut blocks = Vec::new();
     for (index, line) in holdings.iter().take(HOLDINGS_FOR_INDIVIDUAL_NEWS).enumerate() {
+        if holdings_kind::holding_skips_news_search(&line.label) {
+            blocks.push(HoldingNewsBlock { headlines: Vec::new() });
+            continue;
+        }
         let limit = if index < TOP_HOLDINGS_MANDATORY_ANALYSIS {
             NEWS_PER_HOLDING_TOP5
         } else {
@@ -428,6 +500,11 @@ mod tests {
             perf_1an: None,
             perf_3ans: None,
             perf_5ans: None,
+            vol_5ans: None,
+            vol_3ans: None,
+            vol_1an: None,
+            sharpe_ratio: None,
+            perf_annual: None,
             frais_gestion: None,
             sfdr: None,
             source_label: "t".into(),
@@ -459,6 +536,11 @@ mod tests {
             perf_1an: None,
             perf_3ans: None,
             perf_5ans: None,
+            vol_5ans: None,
+            vol_3ans: None,
+            vol_1an: None,
+            sharpe_ratio: None,
+            perf_annual: None,
             frais_gestion: None,
             sfdr: None,
             source_label: "t".into(),
@@ -496,6 +578,11 @@ mod tests {
                 perf_1an: None,
                 perf_3ans: None,
                 perf_5ans: None,
+                vol_5ans: None,
+                vol_3ans: None,
+                vol_1an: None,
+                sharpe_ratio: None,
+                perf_annual: None,
                 frais_gestion: None,
                 sfdr: None,
                 source_label: "t".into(),

@@ -830,6 +830,31 @@ impl Database {
                 .execute("ALTER TABLE fund_watchlist ADD COLUMN perf_1mois REAL", [])?;
             println!("✅ Migration: colonne perf_1mois sur fund_watchlist");
         }
+        if !self.table_has_column("fund_watchlist", "vol_5ans")? {
+            self.conn
+                .execute("ALTER TABLE fund_watchlist ADD COLUMN vol_5ans REAL", [])?;
+            println!("✅ Migration: colonne vol_5ans sur fund_watchlist");
+        }
+        if !self.table_has_column("fund_watchlist", "vol_3ans")? {
+            self.conn
+                .execute("ALTER TABLE fund_watchlist ADD COLUMN vol_3ans REAL", [])?;
+            println!("✅ Migration: colonne vol_3ans sur fund_watchlist");
+        }
+        if !self.table_has_column("fund_watchlist", "vol_1an")? {
+            self.conn
+                .execute("ALTER TABLE fund_watchlist ADD COLUMN vol_1an REAL", [])?;
+            println!("✅ Migration: colonne vol_1an sur fund_watchlist");
+        }
+        if !self.table_has_column("fund_watchlist", "sharpe_ratio")? {
+            self.conn
+                .execute("ALTER TABLE fund_watchlist ADD COLUMN sharpe_ratio REAL", [])?;
+            println!("✅ Migration: colonne sharpe_ratio sur fund_watchlist");
+        }
+        if !self.table_has_column("fund_watchlist", "perf_annual_json")? {
+            self.conn
+                .execute("ALTER TABLE fund_watchlist ADD COLUMN perf_annual_json TEXT", [])?;
+            println!("✅ Migration: colonne perf_annual_json sur fund_watchlist");
+        }
         Ok(())
     }
 

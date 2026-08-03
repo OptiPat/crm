@@ -1,6 +1,11 @@
 import { textMatchesSearch } from "@/lib/search-utils";
 import type { FundWatchlistEntry } from "@/lib/api/tauri-fund-watchlist";
+import { fundWatchlistAnnualPerf } from "@/lib/fund-watchlist/fund-watchlist-annual-years";
 import { computeFundWatchlistShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-short-term-score";
+
+export const FUND_WATCHLIST_ANNUAL_COLUMN_PREFIX = "annual:" as const;
+
+export type FundWatchlistAnnualColumnKey = `${typeof FUND_WATCHLIST_ANNUAL_COLUMN_PREFIX}${string}`;
 
 export type FundWatchlistColumnId =
   | "favorite"
@@ -16,12 +21,36 @@ export type FundWatchlistColumnId =
   | "perf_1an"
   | "perf_3ans"
   | "perf_5ans"
+  | "vol_5ans"
+  | "vol_3ans"
+  | "vol_1an"
+  | "sharpe_ratio"
   | "sfdr";
+
+export type FundWatchlistTableColumnKey = FundWatchlistColumnId | FundWatchlistAnnualColumnKey;
+
+export function fundWatchlistAnnualColumnKey(year: string): FundWatchlistAnnualColumnKey {
+  return `${FUND_WATCHLIST_ANNUAL_COLUMN_PREFIX}${year}`;
+}
+
+export function parseFundWatchlistAnnualYear(
+  column: FundWatchlistTableColumnKey
+): string | null {
+  if (!column.startsWith(FUND_WATCHLIST_ANNUAL_COLUMN_PREFIX)) return null;
+  const year = column.slice(FUND_WATCHLIST_ANNUAL_COLUMN_PREFIX.length);
+  return year.length > 0 ? year : null;
+}
+
+export function isFundWatchlistAnnualColumnKey(
+  column: FundWatchlistTableColumnKey
+): column is FundWatchlistAnnualColumnKey {
+  return parseFundWatchlistAnnualYear(column) != null;
+}
 
 export type FundWatchlistSortDirection = "asc" | "desc";
 
 export type FundWatchlistSort = {
-  column: FundWatchlistColumnId;
+  column: FundWatchlistTableColumnKey;
   direction: FundWatchlistSortDirection;
 } | null;
 
@@ -38,7 +67,7 @@ export type FundWatchlistColumnFilter = {
 };
 
 export type FundWatchlistColumnFilters = Partial<
-  Record<FundWatchlistColumnId, FundWatchlistColumnFilter>
+  Record<FundWatchlistTableColumnKey, FundWatchlistColumnFilter>
 >;
 
 export const FUND_WATCHLIST_COLUMN_LABELS: Record<FundWatchlistColumnId, string> = {
@@ -55,6 +84,10 @@ export const FUND_WATCHLIST_COLUMN_LABELS: Record<FundWatchlistColumnId, string>
   perf_1an: "1 an",
   perf_3ans: "3 ans",
   perf_5ans: "5 ans",
+  vol_5ans: "Vol. 5 ans",
+  vol_3ans: "Vol. 3 ans",
+  vol_1an: "Vol. 1 an",
+  sharpe_ratio: "Sharpe",
   sfdr: "SFDR",
 };
 
@@ -75,6 +108,10 @@ export const FUND_WATCHLIST_COLUMN_ALIGN: Record<
   perf_1an: "right",
   perf_3ans: "right",
   perf_5ans: "right",
+  vol_5ans: "right",
+  vol_3ans: "right",
+  vol_1an: "right",
+  sharpe_ratio: "right",
   sfdr: "left",
 };
 
@@ -118,8 +155,14 @@ function entryTextValue(
 
 function entryNumericValue(
   entry: FundWatchlistEntry,
-  column: FundWatchlistColumnId
+  column: FundWatchlistTableColumnKey
 ): number | null {
+  const annualYear = parseFundWatchlistAnnualYear(column);
+  if (annualYear) {
+    const value = fundWatchlistAnnualPerf(entry, annualYear);
+    return value ?? null;
+  }
+
   switch (column) {
     case "sri":
       return entry.sri ?? null;
@@ -139,6 +182,14 @@ function entryNumericValue(
       return entry.perf_3ans ?? null;
     case "perf_5ans":
       return entry.perf_5ans ?? null;
+    case "vol_5ans":
+      return entry.vol_5ans ?? null;
+    case "vol_3ans":
+      return entry.vol_3ans ?? null;
+    case "vol_1an":
+      return entry.vol_1an ?? null;
+    case "sharpe_ratio":
+      return entry.sharpe_ratio ?? null;
     case "favorite":
       return entry.is_favorite ? 1 : 0;
     default:
@@ -146,16 +197,20 @@ function entryNumericValue(
   }
 }
 
-function isNumericColumn(column: FundWatchlistColumnId): boolean {
+function isNumericColumn(column: FundWatchlistTableColumnKey): boolean {
+  if (isFundWatchlistAnnualColumnKey(column)) return true;
   return (
     column === "sri" ||
     column === "favorite" ||
     column === "score_ct" ||
-    column.startsWith("perf_")
+    column === "sharpe_ratio" ||
+    column.startsWith("perf_") ||
+    column.startsWith("vol_")
   );
 }
 
-function isTextColumn(column: FundWatchlistColumnId): boolean {
+function isTextColumn(column: FundWatchlistTableColumnKey): boolean {
+  if (isFundWatchlistAnnualColumnKey(column)) return false;
   return column === "isin" || column === "nom" || column === "categorie" || column === "sfdr";
 }
 
@@ -169,7 +224,7 @@ export function columnFilterIsActive(filter: FundWatchlistColumnFilter | undefin
 
 export function matchesFundWatchlistColumnFilter(
   entry: FundWatchlistEntry,
-  column: FundWatchlistColumnId,
+  column: FundWatchlistTableColumnKey,
   filter: FundWatchlistColumnFilter | undefined
 ): boolean {
   if (!filter || !columnFilterIsActive(filter)) return true;
@@ -224,7 +279,7 @@ export function filterFundWatchlistEntries(
     if (options.favoritesOnly && !entry.is_favorite) return false;
     if (!matchesFundWatchlistSearch(entry, options.search)) return false;
     for (const [column, filter] of Object.entries(options.columnFilters) as [
-      FundWatchlistColumnId,
+      FundWatchlistTableColumnKey,
       FundWatchlistColumnFilter,
     ][]) {
       if (!matchesFundWatchlistColumnFilter(entry, column, filter)) return false;
@@ -278,7 +333,7 @@ export function compareFundWatchlistEntries(
     return compareText(left.nom, right.nom, "asc");
   }
 
-  if (isNumericColumn(column)) {
+  if (isFundWatchlistAnnualColumnKey(column) || isNumericColumn(column)) {
     return compareNullableNumber(
       entryNumericValue(left, column),
       entryNumericValue(right, column),
@@ -286,7 +341,11 @@ export function compareFundWatchlistEntries(
     );
   }
 
-  return compareText(entryTextValue(left, column), entryTextValue(right, column), direction);
+  return compareText(
+    entryTextValue(left, column as FundWatchlistColumnId),
+    entryTextValue(right, column as FundWatchlistColumnId),
+    direction
+  );
 }
 
 export function sortFundWatchlistEntries(
@@ -325,7 +384,7 @@ export function collectFundWatchlistDistinctValues(
 
 export function cycleFundWatchlistSort(
   current: FundWatchlistSort,
-  column: FundWatchlistColumnId
+  column: FundWatchlistTableColumnKey
 ): FundWatchlistSort {
   if (!current || current.column !== column) {
     return { column, direction: "asc" };

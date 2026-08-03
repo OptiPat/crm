@@ -358,3 +358,128 @@
     padding: 15mm;
   }
 }
+
+/** Export PDF rapport Coach veille fonds — impression navigateur. */
+#coach-print-portal {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  width: 210mm;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.coach-print-doc {
+  font-family: system-ui, "Segoe UI", sans-serif;
+  color: #111827;
+  font-size: 10.5pt;
+  line-height: 1.45;
+}
+
+.coach-print-header {
+  margin-bottom: 6mm;
+  padding-bottom: 4mm;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.coach-print-title {
+  margin: 0;
+  font-size: 18pt;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.coach-print-subtitle {
+  margin: 2mm 0 0;
+  font-size: 10pt;
+  color: #6b7280;
+}
+
+.coach-print-warnings {
+  margin-bottom: 5mm;
+  padding: 3mm 4mm;
+  border: 1px solid #f59e0b;
+  border-radius: 2mm;
+  background: #fffbeb;
+  font-size: 9.5pt;
+}
+
+.coach-print-warnings-title {
+  margin: 0 0 2mm;
+  font-size: 10pt;
+  font-weight: 600;
+}
+
+.coach-print-warnings ul {
+  margin: 0;
+  padding-left: 5mm;
+}
+
+.coach-print-body h1,
+.coach-print-body h2,
+.coach-print-body h3,
+.coach-print-body h4 {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.coach-print-body h3 {
+  margin-top: 5mm;
+}
+
+.coach-print-legal {
+  margin-top: 8mm;
+  padding-top: 4mm;
+  border-top: 1px solid #d1d5db;
+  font-size: 8.5pt;
+  line-height: 1.4;
+  color: #4b5563;
+}
+
+.coach-print-legal-title {
+  margin: 0 0 2mm;
+  font-size: 9pt;
+  font-weight: 600;
+  color: #374151;
+}
+
+.coach-print-legal p:last-child {
+  margin: 0;
+}
+
+@media print {
+  html.coach-printing body > *:not(#coach-print-portal) {
+    display: none !important;
+  }
+
+  html.coach-printing #coach-print-portal {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: auto !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    z-index: auto !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  html.coach-printing #coach-print-portal,
+  html.coach-printing #coach-print-portal * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  html.coach-printing .coach-print-doc {
+    padding: 12mm 15mm;
+  }
+
+  html.coach-printing .coach-print-body h3 {
+    break-before: auto;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+}

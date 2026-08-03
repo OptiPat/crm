@@ -1861,6 +1861,16 @@ pub struct FundWatchlistEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub perf_5ans: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub vol_5ans: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vol_3ans: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vol_1an: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sharpe_ratio: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub perf_annual: Option<std::collections::HashMap<String, f64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub frais_gestion: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sfdr: Option<String>,
@@ -1900,6 +1910,16 @@ pub struct FundWatchlistImportRow {
     pub perf_3ans: Option<f64>,
     #[serde(default)]
     pub perf_5ans: Option<f64>,
+    #[serde(default)]
+    pub vol_5ans: Option<f64>,
+    #[serde(default)]
+    pub vol_3ans: Option<f64>,
+    #[serde(default)]
+    pub vol_1an: Option<f64>,
+    #[serde(default)]
+    pub sharpe_ratio: Option<f64>,
+    #[serde(default)]
+    pub perf_annual: Option<std::collections::HashMap<String, f64>>,
     #[serde(default)]
     pub frais_gestion: Option<f64>,
     #[serde(default)]

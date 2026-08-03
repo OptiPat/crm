@@ -3,6 +3,7 @@ import type { FundWatchlistEntry } from "@/lib/api/tauri-fund-watchlist";
 import {
   applyFundWatchlistTable,
   cycleFundWatchlistSort,
+  fundWatchlistAnnualColumnKey,
   FUND_WATCHLIST_DEFAULT_SORT,
   matchesFundWatchlistColumnFilter,
 } from "./fund-watchlist-table";
@@ -102,5 +103,47 @@ describe("fund-watchlist-table", () => {
     expect(
       cycleFundWatchlistSort({ column: "nom", direction: "desc" }, "nom")
     ).toBeNull();
+  });
+
+  it("filtre et trie une performance annuelle dynamique", () => {
+    const annualRows = [
+      entry({
+        id: 1,
+        isin: "FR001",
+        nom: "Alpha",
+        perf_annual: { "2024": 12, "2025": 3 },
+      }),
+      entry({
+        id: 2,
+        isin: "FR002",
+        nom: "Beta",
+        perf_annual: { "2024": 5, "2025": 8 },
+      }),
+      entry({
+        id: 3,
+        isin: "FR003",
+        nom: "Gamma",
+        perf_annual: { "2024": 20 },
+      }),
+    ];
+    const column2024 = fundWatchlistAnnualColumnKey("2024");
+
+    expect(
+      matchesFundWatchlistColumnFilter(annualRows[0]!, column2024, { min: "10" })
+    ).toBe(true);
+    expect(
+      matchesFundWatchlistColumnFilter(annualRows[1]!, column2024, { min: "10" })
+    ).toBe(false);
+    expect(
+      matchesFundWatchlistColumnFilter(annualRows[2]!, column2024, { max: "15" })
+    ).toBe(false);
+
+    const sorted = applyFundWatchlistTable(annualRows, {
+      search: "",
+      favoritesOnly: false,
+      columnFilters: {},
+      sort: { column: column2024, direction: "desc" },
+    });
+    expect(sorted.map((row) => row.id)).toEqual([3, 1, 2]);
   });
 });

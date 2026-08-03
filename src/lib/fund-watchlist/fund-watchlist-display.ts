@@ -10,6 +10,11 @@ export function formatFundShortTermScore(value: number | null | undefined): stri
   return `${sign}${value.toFixed(1).replace(".", ",")}`;
 }
 
+export function formatFundSharpe(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return value.toFixed(2).replace(".", ",");
+}
+
 export function formatFundNav(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
   return value.toFixed(2).replace(".", ",");

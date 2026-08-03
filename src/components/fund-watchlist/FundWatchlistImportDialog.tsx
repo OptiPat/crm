@@ -149,6 +149,12 @@ export function FundWatchlistImportDialog({
             <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
               <li>{summary.total} fonds reconnus</li>
               <li>{summary.withPerfYtd} avec perf. YTD</li>
+              <li>{summary.withSharpe} avec ratio de Sharpe</li>
+              {summary.annualYears.length > 0 && (
+                <li>
+                  Performances annuelles : {summary.annualYears.slice().reverse().join(", ")}
+                </li>
+              )}
               <li>{summary.withVl} avec données VL (stockées, non affichées)</li>
             </ul>
             <p className="text-muted-foreground">

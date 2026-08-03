@@ -1,6 +1,7 @@
 use crate::commands::DbState;
 use crate::database::models::{
-    FundWatchlistEntry, FundWatchlistImportResult, FundWatchlistImportRow,
+    FundWatchlistEntry, FundWatchlistFavoritesReport, FundWatchlistImportResult,
+    FundWatchlistImportRow,
 };
 use tauri::{AppHandle, State};
 
@@ -50,4 +51,15 @@ pub fn start_fund_watchlist_favorites_report(app: AppHandle) -> Result<(), Strin
 #[tauri::command]
 pub fn fund_watchlist_coach_report_in_progress() -> bool {
     crate::fund_watchlist_coach::coach_report_in_progress()
+}
+
+#[tauri::command]
+pub fn get_fund_watchlist_coach_last_report(
+    db: State<'_, DbState>,
+) -> Result<Option<FundWatchlistFavoritesReport>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_fund_watchlist_coach_last_report()
+        .map_err(|e| format!("Lecture dernier rapport Coach : {e}"))
 }

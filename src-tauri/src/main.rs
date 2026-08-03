@@ -617,6 +617,7 @@ fn main() {
             fund_watchlist_commands::set_fund_watchlist_favorite,
             fund_watchlist_commands::start_fund_watchlist_favorites_report,
             fund_watchlist_commands::fund_watchlist_coach_report_in_progress,
+            fund_watchlist_commands::get_fund_watchlist_coach_last_report,
             fiche_conseil_redaction_commands::get_all_fiche_conseil_redaction_presets,
             fiche_conseil_redaction_commands::create_fiche_conseil_redaction_preset,
             fiche_conseil_redaction_commands::update_fiche_conseil_redaction_preset,

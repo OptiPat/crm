@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,39 +12,45 @@ import {
 import { TableHead } from "@/components/ui/table";
 import {
   type FundWatchlistColumnFilter,
-  type FundWatchlistColumnId,
   type FundWatchlistSort,
   type FundWatchlistSortDirection,
+  type FundWatchlistTableColumnKey,
+  isFundWatchlistAnnualColumnKey,
   columnFilterIsActive,
 } from "@/lib/fund-watchlist/fund-watchlist-table";
 import { cn } from "@/lib/utils";
 
 interface FundWatchlistColumnHeaderProps {
-  column: FundWatchlistColumnId;
+  column: FundWatchlistTableColumnKey;
   label: string;
   align?: "left" | "right" | "center";
   className?: string;
+  style?: CSSProperties;
   sort: FundWatchlistSort;
   filter: FundWatchlistColumnFilter | undefined;
   distinctValues?: string[];
-  onCycleSort: (column: FundWatchlistColumnId) => void;
-  onSetSort: (column: FundWatchlistColumnId, direction: FundWatchlistSortDirection) => void;
+  onCycleSort: (column: FundWatchlistTableColumnKey) => void;
+  onSetSort: (column: FundWatchlistTableColumnKey, direction: FundWatchlistSortDirection) => void;
   onFilterChange: (
-    column: FundWatchlistColumnId,
+    column: FundWatchlistTableColumnKey,
     filter: FundWatchlistColumnFilter | undefined
   ) => void;
 }
 
-function isNumericColumn(column: FundWatchlistColumnId): boolean {
+function isNumericColumn(column: FundWatchlistTableColumnKey): boolean {
+  if (isFundWatchlistAnnualColumnKey(column)) return true;
   return (
     column === "sri" ||
     column === "favorite" ||
     column === "score_ct" ||
-    column.startsWith("perf_")
+    column === "sharpe_ratio" ||
+    column.startsWith("perf_") ||
+    column.startsWith("vol_")
   );
 }
 
-function isCategoricalColumn(column: FundWatchlistColumnId): boolean {
+function isCategoricalColumn(column: FundWatchlistTableColumnKey): boolean {
+  if (isFundWatchlistAnnualColumnKey(column)) return false;
   return (
     column === "favorite" ||
     column === "sri" ||
@@ -66,7 +73,7 @@ function FilterPopoverContent({
   setFilter,
   toggleCategoricalValue,
 }: {
-  column: FundWatchlistColumnId;
+  column: FundWatchlistTableColumnKey;
   label: string;
   align: "left" | "right" | "center";
   activeSort: "asc" | "desc" | null;
@@ -74,9 +81,9 @@ function FilterPopoverContent({
   distinctValues: string[];
   selectedValues: string[];
   activeFilter: boolean;
-  onSetSort: (column: FundWatchlistColumnId, direction: FundWatchlistSortDirection) => void;
+  onSetSort: (column: FundWatchlistTableColumnKey, direction: FundWatchlistSortDirection) => void;
   onFilterChange: (
-    column: FundWatchlistColumnId,
+    column: FundWatchlistTableColumnKey,
     filter: FundWatchlistColumnFilter | undefined
   ) => void;
   setFilter: (next: FundWatchlistColumnFilter) => void;
@@ -189,6 +196,7 @@ export function FundWatchlistColumnHeader({
   label,
   align = "left",
   className,
+  style,
   sort,
   filter,
   distinctValues = [],
@@ -242,7 +250,10 @@ export function FundWatchlistColumnHeader({
   const isCompact = column === "favorite";
 
   return (
-    <TableHead className={cn("h-auto overflow-hidden p-0 align-bottom bg-card", className)}>
+    <TableHead
+      style={style}
+      className={cn("h-auto overflow-hidden p-0 align-bottom bg-card", className)}
+    >
       <div
         className={cn(
           "flex min-h-[3rem] flex-col gap-1 py-1.5",

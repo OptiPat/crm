@@ -1,12 +1,39 @@
 //! Veille fonds (watchlist CGP — catalogue supports sans lien client).
 
 use rusqlite::{params, Result};
+use std::collections::HashMap;
 
-use super::models::{FundWatchlistEntry, FundWatchlistImportResult, FundWatchlistImportRow};
+use super::models::{FundWatchlistEntry, FundWatchlistFavoritesReport, FundWatchlistImportResult, FundWatchlistImportRow};
+
+pub const FUND_WATCHLIST_COACH_LAST_REPORT_SETTING: &str = "fund_watchlist_coach_last_report";
 
 const SELECT_COLS: &str = "id, isin, nom, categorie, notation_morningstar, sri,
     vl_previous, vl_recent, vl_date, perf_ytd, perf_1semaine, perf_1mois, perf_3mois, perf_1an, perf_3ans, perf_5ans,
+    vol_5ans, vol_3ans, vol_1an, sharpe_ratio, perf_annual_json,
     frais_gestion, sfdr, source_label, is_favorite, created_at, updated_at";
+
+fn parse_perf_annual_json(raw: Option<String>) -> Result<Option<HashMap<String, f64>>> {
+    match raw {
+        Some(json) if !json.trim().is_empty() => {
+            let parsed = serde_json::from_str(&json).map_err(|e| {
+                rusqlite::Error::InvalidParameterName(format!("JSON parse error: {e}"))
+            })?;
+            Ok(Some(parsed))
+        }
+        _ => Ok(None),
+    }
+}
+
+fn serialize_perf_annual_json(
+    perf_annual: &Option<HashMap<String, f64>>,
+) -> Result<Option<String>> {
+    match perf_annual {
+        Some(map) if !map.is_empty() => Ok(Some(serde_json::to_string(map).map_err(|e| {
+            rusqlite::Error::InvalidParameterName(format!("JSON serialize error: {e}"))
+        })?)),
+        _ => Ok(None),
+    }
+}
 
 fn map_fund_watchlist_row(row: &rusqlite::Row<'_>) -> Result<FundWatchlistEntry> {
     Ok(FundWatchlistEntry {
@@ -26,12 +53,17 @@ fn map_fund_watchlist_row(row: &rusqlite::Row<'_>) -> Result<FundWatchlistEntry>
         perf_1an: row.get(13)?,
         perf_3ans: row.get(14)?,
         perf_5ans: row.get(15)?,
-        frais_gestion: row.get(16)?,
-        sfdr: row.get(17)?,
-        source_label: row.get(18)?,
-        is_favorite: row.get::<_, i64>(19)? != 0,
-        created_at: row.get(20)?,
-        updated_at: row.get(21)?,
+        vol_5ans: row.get(16)?,
+        vol_3ans: row.get(17)?,
+        vol_1an: row.get(18)?,
+        sharpe_ratio: row.get(19)?,
+        perf_annual: parse_perf_annual_json(row.get(20)?)?,
+        frais_gestion: row.get(21)?,
+        sfdr: row.get(22)?,
+        source_label: row.get(23)?,
+        is_favorite: row.get::<_, i64>(24)? != 0,
+        created_at: row.get(25)?,
+        updated_at: row.get(26)?,
     })
 }
 
@@ -78,6 +110,7 @@ impl super::Database {
             if nom.is_empty() {
                 continue;
             }
+            let perf_annual_json = serialize_perf_annual_json(&row.perf_annual)?;
 
             let existing: Option<i64> = tx
                 .query_row(
@@ -104,10 +137,15 @@ impl super::Database {
                         perf_1an = ?13,
                         perf_3ans = ?14,
                         perf_5ans = ?15,
-                        frais_gestion = ?16,
-                        sfdr = ?17,
-                        source_label = ?18,
-                        updated_at = ?19
+                        vol_5ans = ?16,
+                        vol_3ans = ?17,
+                        vol_1an = ?18,
+                        sharpe_ratio = ?19,
+                        perf_annual_json = ?20,
+                        frais_gestion = ?21,
+                        sfdr = ?22,
+                        source_label = ?23,
+                        updated_at = ?24
                      WHERE isin = ?1",
                     params![
                         &isin,
@@ -125,6 +163,11 @@ impl super::Database {
                         row.perf_1an,
                         row.perf_3ans,
                         row.perf_5ans,
+                        row.vol_5ans,
+                        row.vol_3ans,
+                        row.vol_1an,
+                        row.sharpe_ratio,
+                        perf_annual_json,
                         row.frais_gestion,
                         row.sfdr,
                         source,
@@ -138,9 +181,11 @@ impl super::Database {
                         isin, nom, categorie, notation_morningstar, sri,
                         vl_previous, vl_recent, vl_date,
                         perf_ytd, perf_1semaine, perf_1mois, perf_3mois, perf_1an, perf_3ans, perf_5ans,
+                        vol_5ans, vol_3ans, vol_1an, sharpe_ratio, perf_annual_json,
                         frais_gestion, sfdr, source_label, is_favorite, created_at, updated_at
                      ) VALUES (
-                        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, 0, ?19, ?19
+                        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
+                        ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, 0, ?24, ?24
                      )",
                     params![
                         &isin,
@@ -158,6 +203,11 @@ impl super::Database {
                         row.perf_1an,
                         row.perf_3ans,
                         row.perf_5ans,
+                        row.vol_5ans,
+                        row.vol_3ans,
+                        row.vol_1an,
+                        row.sharpe_ratio,
+                        perf_annual_json,
                         row.frais_gestion,
                         row.sfdr,
                         source,
@@ -189,17 +239,42 @@ impl super::Database {
         }
         Ok(())
     }
+
+    pub fn save_fund_watchlist_coach_last_report(
+        &self,
+        report: &FundWatchlistFavoritesReport,
+    ) -> Result<()> {
+        let json = serde_json::to_string(report).map_err(|e| {
+            rusqlite::Error::InvalidParameterName(format!("JSON serialize error: {e}"))
+        })?;
+        self.set_setting(FUND_WATCHLIST_COACH_LAST_REPORT_SETTING, &json)
+    }
+
+    pub fn get_fund_watchlist_coach_last_report(&self) -> Result<Option<FundWatchlistFavoritesReport>> {
+        match self.get_setting(FUND_WATCHLIST_COACH_LAST_REPORT_SETTING)? {
+            Some(raw) => {
+                let parsed = serde_json::from_str(&raw).map_err(|e| {
+                    rusqlite::Error::InvalidParameterName(format!("JSON parse error: {e}"))
+                })?;
+                Ok(Some(parsed))
+            }
+            None => Ok(None),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use crate::database::models::FundWatchlistImportRow;
     use crate::database::Database;
 
-    #[test]
-    fn import_upserts_and_preserves_favorite() {
-        let db = Database::open_in_memory_for_tests().unwrap();
-        let row = FundWatchlistImportRow {
+    fn sample_import_row() -> FundWatchlistImportRow {
+        let mut perf_annual = HashMap::new();
+        perf_annual.insert("2024".into(), 8.7);
+        perf_annual.insert("2025".into(), 11.2);
+        FundWatchlistImportRow {
             isin: "FR0010135103".into(),
             nom: "Fonds Test A".into(),
             categorie: Some("Actions Europe".into()),
@@ -215,9 +290,20 @@ mod tests {
             perf_1an: Some(8.0),
             perf_3ans: Some(15.0),
             perf_5ans: Some(22.0),
+            vol_5ans: Some(14.7),
+            vol_3ans: Some(12.5),
+            vol_1an: Some(13.6),
+            sharpe_ratio: Some(1.12),
+            perf_annual: Some(perf_annual),
             frais_gestion: Some(1.8),
             sfdr: Some("Article 8".into()),
-        };
+        }
+    }
+
+    #[test]
+    fn import_upserts_and_preserves_favorite() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let row = sample_import_row();
 
         let first = db
             .import_fund_watchlist_entries(vec![row.clone()], "cristalliance")
@@ -241,6 +327,27 @@ mod tests {
         assert_eq!(entries[0].nom, "Fonds Test A Renommé");
         assert!((entries[0].vl_recent.unwrap() - 103.0).abs() < f64::EPSILON);
         assert!((entries[0].perf_1semaine.unwrap() + 0.4).abs() < f64::EPSILON);
+        assert!((entries[0].sharpe_ratio.unwrap() - 1.12).abs() < f64::EPSILON);
+        assert_eq!(entries[0].perf_annual.as_ref().unwrap().get("2025"), Some(&11.2));
         assert!(entries[0].is_favorite);
+    }
+
+    #[test]
+    fn coach_last_report_roundtrip() {
+        use super::super::models::FundWatchlistFavoritesReport;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let report = FundWatchlistFavoritesReport {
+            markdown: "# Test\n\nContenu.".into(),
+            generated_at: 1_700_000_000,
+            favorite_count: 3,
+            warnings: vec!["avertissement".into()],
+        };
+        db.save_fund_watchlist_coach_last_report(&report).unwrap();
+        let loaded = db.get_fund_watchlist_coach_last_report().unwrap().unwrap();
+        assert_eq!(loaded.markdown, report.markdown);
+        assert_eq!(loaded.generated_at, report.generated_at);
+        assert_eq!(loaded.favorite_count, 3);
+        assert_eq!(loaded.warnings, report.warnings);
     }
 }

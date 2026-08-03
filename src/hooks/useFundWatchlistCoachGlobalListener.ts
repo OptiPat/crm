@@ -3,13 +3,16 @@ import { toast } from "sonner";
 import { fundWatchlistCoachReportInProgress } from "@/lib/api/tauri-fund-watchlist";
 import {
   subscribeFundWatchlistCoachReportDone,
+  subscribeFundWatchlistCoachReportProgress,
   FUND_WATCHLIST_COACH_TOAST_ID,
 } from "@/lib/fund-watchlist/fund-watchlist-coach-events";
+import { formatCoachProgressToast } from "@/lib/fund-watchlist/fund-watchlist-coach-progress";
 import {
   clearCoachGenerationPending,
   isCoachGenerationPending,
   requestCoachOpenDialog,
   saveCoachGenerating,
+  saveCoachProgress,
   saveCoachReport,
 } from "@/lib/fund-watchlist/fund-watchlist-coach-store";
 
@@ -38,9 +41,17 @@ export function useFundWatchlistCoachGlobalListener(
     void syncGenerating();
     const poll = window.setInterval(() => void syncGenerating(), POLL_MS);
 
+    const unsubProgress = subscribeFundWatchlistCoachReportProgress((progress) => {
+      saveCoachProgress(progress);
+      toast.loading(formatCoachProgressToast(progress), {
+        id: FUND_WATCHLIST_COACH_TOAST_ID,
+      });
+    });
+
     const unsub = subscribeFundWatchlistCoachReportDone((event) => {
       clearCoachGenerationPending();
       saveCoachGenerating(false);
+      saveCoachProgress(null);
       if (event.ok && event.report) {
         saveCoachReport(event.report);
         const warningCount = event.report.warnings.length;
@@ -68,6 +79,7 @@ export function useFundWatchlistCoachGlobalListener(
     return () => {
       cancelled = true;
       window.clearInterval(poll);
+      unsubProgress();
       unsub();
     };
   }, [enabled, onNavigateToVeilleFonds]);

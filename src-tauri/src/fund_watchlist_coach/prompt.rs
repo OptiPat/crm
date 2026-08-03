@@ -1,5 +1,6 @@
 use crate::database::models::FundWatchlistEntry;
 use crate::fund_watchlist_coach::boursorama::BoursoramaHoldingLine;
+use crate::fund_watchlist_coach::holdings_kind::{self, HoldingLineKind};
 use crate::fund_watchlist_coach::news::{format_headline_inline, format_news_date_prefix, NewsHeadline};
 
 const SPREAD_PENALTY: f64 = 0.4;
@@ -171,10 +172,17 @@ fn append_holdings_compact_lines(
             Some(w) => format!("{w:.1} %"),
             None => "—".into(),
         };
-        let news = holding_news.get(index).map(|b| b.headlines.as_slice()).unwrap_or(&[]);
         block.push_str("  - ");
         block.push_str(&line.label);
         block.push_str(&format!(" ({weight})"));
+        let kind = holdings_kind::classify_holding_label(&line.label);
+        if kind != HoldingLineKind::Company {
+            block.push_str(" | Actu : ");
+            block.push_str(holdings_kind::holding_actu_placeholder(kind));
+            block.push('\n');
+            continue;
+        }
+        let news = holding_news.get(index).map(|b| b.headlines.as_slice()).unwrap_or(&[]);
         if news.is_empty() {
             block.push_str(" | Actu : Aucune actualité récente disponible.\n");
         } else {
@@ -325,6 +333,11 @@ mod tests {
             perf_1an: None,
             perf_3ans: None,
             perf_5ans: None,
+            vol_5ans: None,
+            vol_3ans: None,
+            vol_1an: None,
+            sharpe_ratio: None,
+            perf_annual: None,
             frais_gestion: None,
             sfdr: None,
             source_label: "t".into(),
@@ -354,6 +367,11 @@ mod tests {
             perf_1an: Some(42.4),
             perf_3ans: None,
             perf_5ans: None,
+            vol_5ans: None,
+            vol_3ans: None,
+            vol_1an: None,
+            sharpe_ratio: None,
+            perf_annual: None,
             frais_gestion: None,
             sfdr: None,
             source_label: "t".into(),

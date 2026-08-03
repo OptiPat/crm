@@ -13,6 +13,7 @@ import { FileUp, LineChart, RefreshCw, Search, Sparkles, Star, X } from "lucide-
 import { toast } from "sonner";
 import {
   getAllFundWatchlistEntries,
+  getFundWatchlistCoachLastReport,
   setFundWatchlistFavorite,
   startFundWatchlistFavoritesReport,
   type FundWatchlistEntry,
@@ -21,16 +22,24 @@ import {
 import { FundWatchlistImportDialog } from "@/components/fund-watchlist/FundWatchlistImportDialog";
 import { FundWatchlistCoachDialog } from "@/components/fund-watchlist/FundWatchlistCoachDialog";
 import { FundWatchlistColumnHeader } from "@/components/fund-watchlist/FundWatchlistColumnHeader";
-import { formatFundPerfPercent, formatFundShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-display";
+import { FundWatchlistOptionalColumnToggles } from "@/components/fund-watchlist/FundWatchlistOptionalColumnToggles";
+import { formatFundPerfPercent, formatFundSharpe, formatFundShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-display";
+import {
+  collectFundWatchlistAnnualYears,
+  fundWatchlistAnnualPerf,
+} from "@/lib/fund-watchlist/fund-watchlist-annual-years";
 import { subscribeFundWatchlistChanged } from "@/lib/fund-watchlist/fund-watchlist-events";
 import { FUND_WATCHLIST_COACH_TOAST_ID } from "@/lib/fund-watchlist/fund-watchlist-coach-events";
+import { formatCoachProgressLabel } from "@/lib/fund-watchlist/fund-watchlist-coach-progress";
 import {
   consumeCoachOpenDialog,
   FUND_WATCHLIST_COACH_STORE_EVENT,
   loadCoachGenerating,
+  loadCoachProgress,
   loadCoachReport,
   markCoachGenerationPending,
   saveCoachGenerating,
+  saveCoachReport,
 } from "@/lib/fund-watchlist/fund-watchlist-coach-store";
 import { computeFundWatchlistShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-short-term-score";
 import {
@@ -40,14 +49,24 @@ import {
   applyFundWatchlistTable,
   collectFundWatchlistDistinctValues,
   cycleFundWatchlistSort,
+  fundWatchlistAnnualColumnKey,
   fundWatchlistCellAlignClass,
   type FundWatchlistColumnFilter,
   type FundWatchlistColumnFilters,
   type FundWatchlistColumnId,
+  type FundWatchlistTableColumnKey,
   type FundWatchlistSort,
   type FundWatchlistSortDirection,
   columnFilterIsActive,
 } from "@/lib/fund-watchlist/fund-watchlist-table";
+import {
+  FUND_WATCHLIST_ANNUAL_YEAR_MIN_WIDTH,
+  FUND_WATCHLIST_CORE_COLUMNS,
+  FUND_WATCHLIST_OPTIONAL_GROUPS,
+  fundWatchlistColumnStyle,
+  fundWatchlistOptionalColumns,
+  type FundWatchlistOptionalColumnGroup,
+} from "@/lib/fund-watchlist/fund-watchlist-table-layout";
 import { cn } from "@/lib/utils";
 
 type VeilleFondsProps = {
@@ -56,39 +75,11 @@ type VeilleFondsProps = {
 
 type FilterMode = "all" | "favorites";
 
-const COLUMN_WIDTHS: Record<FundWatchlistColumnId, string> = {
-  favorite: "44px",
-  isin: "88px",
-  nom: "14%",
-  categorie: "9%",
-  sri: "32px",
-  score_ct: "52px",
-  perf_ytd: "6.5%",
-  perf_1semaine: "6.5%",
-  perf_1mois: "6.5%",
-  perf_3mois: "6.5%",
-  perf_1an: "7%",
-  perf_3ans: "6.5%",
-  perf_5ans: "6.5%",
-  sfdr: "88px",
+const DEFAULT_OPTIONAL_COLUMNS: Record<FundWatchlistOptionalColumnGroup, boolean> = {
+  volatility: false,
+  sharpe: false,
+  sfdr: false,
 };
-
-const DATA_COLUMNS: FundWatchlistColumnId[] = [
-  "favorite",
-  "isin",
-  "nom",
-  "categorie",
-  "sri",
-  "score_ct",
-  "perf_ytd",
-  "perf_1semaine",
-  "perf_1mois",
-  "perf_3mois",
-  "perf_1an",
-  "perf_3ans",
-  "perf_5ans",
-  "sfdr",
-];
 
 export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   const [entries, setEntries] = useState<FundWatchlistEntry[]>([]);
@@ -101,8 +92,10 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     loadCoachReport()
   );
   const [coachGenerating, setCoachGenerating] = useState(() => loadCoachGenerating());
+  const [coachProgress, setCoachProgress] = useState(() => loadCoachProgress());
   const [sort, setSort] = useState<FundWatchlistSort>(FUND_WATCHLIST_DEFAULT_SORT);
   const [columnFilters, setColumnFilters] = useState<FundWatchlistColumnFilters>({});
+  const [expandedOptional, setExpandedOptional] = useState(DEFAULT_OPTIONAL_COLUMNS);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -121,9 +114,23 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   }, [load]);
 
   useEffect(() => {
+    if (loadCoachReport()) return;
+    void getFundWatchlistCoachLastReport()
+      .then((report) => {
+        if (!report) return;
+        saveCoachReport(report);
+        setCoachReport(report);
+      })
+      .catch(() => {
+        // Base indisponible avant déverrouillage — ignoré.
+      });
+  }, []);
+
+  useEffect(() => {
     const syncCoachFromStore = () => {
       setCoachReport(loadCoachReport());
       setCoachGenerating(loadCoachGenerating());
+      setCoachProgress(loadCoachProgress());
       if (consumeCoachOpenDialog()) {
         setCoachOpen(true);
       }
@@ -145,7 +152,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     }
     setCoachGenerating(true);
     markCoachGenerationPending();
-    toast.loading("Rapport Coach en cours…", { id: FUND_WATCHLIST_COACH_TOAST_ID });
+    toast.loading("Démarrage du rapport Coach…", { id: FUND_WATCHLIST_COACH_TOAST_ID });
     void startFundWatchlistFavoritesReport().catch((error: unknown) => {
       setCoachGenerating(false);
       saveCoachGenerating(false);
@@ -181,6 +188,36 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     return { total: entries.length, favorites, lastImport };
   }, [entries]);
 
+  const annualYears = useMemo(() => collectFundWatchlistAnnualYears(entries), [entries]);
+  const optionalColumns = useMemo(
+    () => fundWatchlistOptionalColumns(expandedOptional),
+    [expandedOptional]
+  );
+  const tableColumnCount =
+    FUND_WATCHLIST_CORE_COLUMNS.length + annualYears.length + optionalColumns.length;
+
+  const toggleOptionalGroup = (group: FundWatchlistOptionalColumnGroup) => {
+    const collapsing = expandedOptional[group];
+    setExpandedOptional((prev) => ({ ...prev, [group]: !prev[group] }));
+    if (!collapsing) return;
+
+    const hiddenColumns = FUND_WATCHLIST_OPTIONAL_GROUPS[group].columns;
+    setColumnFilters((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const column of hiddenColumns) {
+        if (next[column]) {
+          delete next[column];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    setSort((prev) =>
+      prev && hiddenColumns.includes(prev.column) ? FUND_WATCHLIST_DEFAULT_SORT : prev
+    );
+  };
+
   const toggleFavorite = async (entry: FundWatchlistEntry) => {
     try {
       await setFundWatchlistFavorite(entry.isin, !entry.is_favorite);
@@ -190,7 +227,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   };
 
   const handleColumnFilterChange = (
-    column: FundWatchlistColumnId,
+    column: FundWatchlistTableColumnKey,
     next: FundWatchlistColumnFilter | undefined
   ) => {
     setColumnFilters((prev) => {
@@ -218,6 +255,174 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     sort?.column === FUND_WATCHLIST_DEFAULT_SORT.column &&
     sort?.direction === FUND_WATCHLIST_DEFAULT_SORT.direction;
 
+  const coachButtonLabel = coachGenerating
+    ? coachProgress
+      ? formatCoachProgressLabel(coachProgress)
+      : "Rapport en cours…"
+    : coachReport
+      ? "Voir rapport Coach"
+      : "Rapport Coach";
+
+  const renderFundWatchlistCell = (entry: FundWatchlistEntry, column: FundWatchlistColumnId) => {
+    const alignClass = fundWatchlistCellAlignClass(column);
+    if (column === "favorite") {
+      return (
+        <TableCell
+          key={column}
+          style={fundWatchlistColumnStyle(column)}
+          className={cn("overflow-hidden px-0 py-1.5", alignClass)}
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            aria-label={entry.is_favorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+            onClick={() => void toggleFavorite(entry)}
+          >
+            <Star
+              className={cn(
+                "h-3.5 w-3.5",
+                entry.is_favorite ? "fill-amber-400 text-amber-500" : "text-muted-foreground"
+              )}
+            />
+          </Button>
+        </TableCell>
+      );
+    }
+    if (column === "isin") {
+      return (
+        <TableCell
+          key={column}
+          style={fundWatchlistColumnStyle(column)}
+          className={cn(
+            "overflow-hidden px-1 py-1.5 font-mono text-[11px] leading-tight",
+            alignClass
+          )}
+        >
+          <span className="block truncate" title={entry.isin}>
+            {entry.isin}
+          </span>
+        </TableCell>
+      );
+    }
+    if (column === "nom") {
+      return (
+        <TableCell
+          key={column}
+          style={fundWatchlistColumnStyle(column)}
+          className={cn("px-2 py-2 align-top whitespace-normal", alignClass)}
+        >
+          <span className="block break-words leading-snug">{entry.nom}</span>
+        </TableCell>
+      );
+    }
+    if (column === "categorie") {
+      return (
+        <TableCell
+          key={column}
+          style={fundWatchlistColumnStyle(column)}
+          className={cn("px-1 py-1.5 text-muted-foreground whitespace-normal", alignClass)}
+        >
+          <span className="block break-words leading-snug" title={entry.categorie ?? undefined}>
+            {entry.categorie ?? "—"}
+          </span>
+        </TableCell>
+      );
+    }
+    if (column === "sri") {
+      return (
+        <TableCell
+          key={column}
+          style={fundWatchlistColumnStyle(column)}
+          className={cn("px-1 py-1.5 tabular-nums", alignClass)}
+        >
+          {entry.sri ?? "—"}
+        </TableCell>
+      );
+    }
+    if (column === "score_ct") {
+      const score = computeFundWatchlistShortTermScore(entry);
+      return (
+        <TableCell
+          key={column}
+          style={fundWatchlistColumnStyle(column)}
+          className={cn(
+            "px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap font-medium",
+            alignClass,
+            score == null && "text-muted-foreground"
+          )}
+          title={
+            score == null
+              ? "Les 4 horizons court terme sont requis (1 sem, 1 mois, 3 mois, YTD)"
+              : undefined
+          }
+        >
+          {formatFundShortTermScore(score)}
+        </TableCell>
+      );
+    }
+    if (column.startsWith("perf_") || column.startsWith("vol_")) {
+      const value =
+        column === "perf_ytd"
+          ? entry.perf_ytd
+          : column === "perf_1semaine"
+            ? entry.perf_1semaine
+            : column === "perf_1mois"
+              ? entry.perf_1mois
+              : column === "perf_3mois"
+                ? entry.perf_3mois
+                : column === "perf_1an"
+                  ? entry.perf_1an
+                  : column === "perf_3ans"
+                    ? entry.perf_3ans
+                    : column === "perf_5ans"
+                      ? entry.perf_5ans
+                      : column === "vol_5ans"
+                        ? entry.vol_5ans
+                        : column === "vol_3ans"
+                          ? entry.vol_3ans
+                          : entry.vol_1an;
+      return (
+        <TableCell
+          key={column}
+          style={fundWatchlistColumnStyle(column)}
+          className={cn("px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap", alignClass)}
+        >
+          {formatFundPerfPercent(value)}
+        </TableCell>
+      );
+    }
+    if (column === "sharpe_ratio") {
+      return (
+        <TableCell
+          key={column}
+          style={fundWatchlistColumnStyle(column)}
+          className={cn("px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap", alignClass)}
+        >
+          {formatFundSharpe(entry.sharpe_ratio)}
+        </TableCell>
+      );
+    }
+    return (
+      <TableCell
+        key={column}
+        style={fundWatchlistColumnStyle(column)}
+        className={cn("overflow-hidden pl-2 pr-1 py-1.5", alignClass)}
+      >
+        {entry.sfdr ? (
+          <Badge
+            variant="outline"
+            className="inline-block max-w-full text-[10px] font-normal px-1.5 py-0 whitespace-normal leading-tight"
+          >
+            {entry.sfdr}
+          </Badge>
+        ) : (
+          "—"
+        )}
+      </TableCell>
+    );
+  };
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -230,7 +435,8 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
             Classement par score court terme (1 sem, 1 mois, 3 mois, YTD).
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col items-start gap-1 sm:items-end">
+          <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
             Actualiser
@@ -247,7 +453,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
             disabled={stats.favorites === 0 || coachGenerating}
           >
             <Sparkles className={cn("h-4 w-4 mr-2", coachGenerating && "animate-pulse")} />
-            {coachGenerating ? "Rapport en cours…" : coachReport ? "Voir rapport Coach" : "Rapport Coach"}
+            {coachButtonLabel}
           </Button>
           {!coachGenerating && coachReport && (
             <Button variant="outline" onClick={() => void startCoachReport()} disabled={stats.favorites === 0}>
@@ -258,6 +464,14 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
             <FileUp className="h-4 w-4 mr-2" />
             Importer Excel
           </Button>
+          </div>
+        {coachReport && !coachGenerating && (
+          <p className="text-xs text-muted-foreground text-left sm:text-right">
+            Dernier rapport Coach :{" "}
+            {new Date(coachReport.generated_at * 1000).toLocaleString("fr-FR")} (
+            {coachReport.favorite_count} fonds)
+          </p>
+        )}
         </div>
       </div>
 
@@ -328,6 +542,14 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            <FundWatchlistOptionalColumnToggles
+              expanded={expandedOptional}
+              onToggle={toggleOptionalGroup}
+            />
+            <p className="text-xs text-muted-foreground">
+              Performances toujours visibles — défilez horizontalement si besoin. Cliquez sur
+              Volatilités, Sharpe ou SFDR pour afficher ces colonnes.
+            </p>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -340,25 +562,66 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
               </Button>
             </div>
           ) : (
-            <div className="max-h-[calc(100vh-22rem)] overflow-y-auto overflow-x-hidden">
-              <Table
-                wrapperClassName="overflow-visible"
-                className="table-fixed w-full text-xs"
-              >
-                <colgroup>
-                  {DATA_COLUMNS.map((column) => (
-                    <col key={column} style={{ width: COLUMN_WIDTHS[column] }} />
-                  ))}
-                </colgroup>
+            <div className="max-h-[calc(100vh-22rem)] overflow-auto">
+              <Table wrapperClassName="overflow-visible" className="!w-max table-fixed text-xs">
                 <thead className="sticky top-0 z-10 bg-card [&_tr]:border-b">
                   <TableRow className="hover:bg-transparent">
-                    {DATA_COLUMNS.map((column) => (
+                    {FUND_WATCHLIST_CORE_COLUMNS.map((column) => (
+                      <FundWatchlistColumnHeader
+                        key={column}
+                        column={column}
+                        label={FUND_WATCHLIST_COLUMN_LABELS[column]}
+                        align={FUND_WATCHLIST_COLUMN_ALIGN[column]}
+                        className={
+                          column === "nom"
+                            ? "whitespace-normal"
+                            : column === "categorie"
+                              ? "whitespace-normal px-1"
+                              : undefined
+                        }
+                        style={fundWatchlistColumnStyle(column)}
+                        sort={sort}
+                        filter={columnFilters[column]}
+                        distinctValues={distinctByColumn.get(column)}
+                        onCycleSort={(col) => setSort((prev) => cycleFundWatchlistSort(prev, col))}
+                        onSetSort={(col, direction: FundWatchlistSortDirection) =>
+                          setSort({ column: col, direction })
+                        }
+                        onFilterChange={handleColumnFilterChange}
+                      />
+                    ))}
+                    {annualYears.map((year) => {
+                      const column = fundWatchlistAnnualColumnKey(year);
+                      return (
+                        <FundWatchlistColumnHeader
+                          key={column}
+                          column={column}
+                          label={year}
+                          align="right"
+                          style={{
+                            minWidth: FUND_WATCHLIST_ANNUAL_YEAR_MIN_WIDTH,
+                            width: FUND_WATCHLIST_ANNUAL_YEAR_MIN_WIDTH,
+                          }}
+                          sort={sort}
+                          filter={columnFilters[column]}
+                          onCycleSort={(col) =>
+                            setSort((prev) => cycleFundWatchlistSort(prev, col))
+                          }
+                          onSetSort={(col, direction: FundWatchlistSortDirection) =>
+                            setSort({ column: col, direction })
+                          }
+                          onFilterChange={handleColumnFilterChange}
+                        />
+                      );
+                    })}
+                    {optionalColumns.map((column) => (
                       <FundWatchlistColumnHeader
                         key={column}
                         column={column}
                         label={FUND_WATCHLIST_COLUMN_LABELS[column]}
                         align={FUND_WATCHLIST_COLUMN_ALIGN[column]}
                         className={column === "sfdr" ? "pl-2" : undefined}
+                        style={fundWatchlistColumnStyle(column)}
                         sort={sort}
                         filter={columnFilters[column]}
                         distinctValues={distinctByColumn.get(column)}
@@ -375,7 +638,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                   {displayed.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={DATA_COLUMNS.length}
+                        colSpan={tableColumnCount}
                         className="h-24 text-center text-muted-foreground"
                       >
                         Aucun fonds ne correspond à votre recherche ou vos filtres.
@@ -384,144 +647,24 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                   ) : (
                     displayed.map((entry) => (
                       <TableRow key={entry.id}>
-                        {DATA_COLUMNS.map((column) => {
-                          const alignClass = fundWatchlistCellAlignClass(column);
-                          if (column === "favorite") {
-                            return (
-                              <TableCell
-                                key={column}
-                                className={cn("overflow-hidden px-0 py-1.5", alignClass)}
-                              >
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 shrink-0"
-                                  aria-label={
-                                    entry.is_favorite
-                                      ? "Retirer des favoris"
-                                      : "Ajouter aux favoris"
-                                  }
-                                  onClick={() => void toggleFavorite(entry)}
-                                >
-                                  <Star
-                                    className={cn(
-                                      "h-3.5 w-3.5",
-                                      entry.is_favorite
-                                        ? "fill-amber-400 text-amber-500"
-                                        : "text-muted-foreground"
-                                    )}
-                                  />
-                                </Button>
-                              </TableCell>
-                            );
-                          }
-                          if (column === "isin") {
-                            return (
-                              <TableCell
-                                key={column}
-                                className={cn(
-                                  "overflow-hidden px-1 py-1.5 font-mono text-[11px] leading-tight",
-                                  alignClass
-                                )}
-                              >
-                                <span className="block truncate" title={entry.isin}>
-                                  {entry.isin}
-                                </span>
-                              </TableCell>
-                            );
-                          }
-                          if (column === "nom" || column === "categorie") {
-                            const value = column === "nom" ? entry.nom : entry.categorie;
-                            return (
-                              <TableCell
-                                key={column}
-                                className={cn(
-                                  "overflow-hidden px-1 py-1.5",
-                                  alignClass,
-                                  column === "categorie" && "text-muted-foreground"
-                                )}
-                              >
-                                <span className="line-clamp-2 leading-snug" title={value ?? undefined}>
-                                  {value ?? "—"}
-                                </span>
-                              </TableCell>
-                            );
-                          }
-                          if (column === "sri") {
-                            return (
-                              <TableCell
-                                key={column}
-                                className={cn("px-1 py-1.5 tabular-nums", alignClass)}
-                              >
-                                {entry.sri ?? "—"}
-                              </TableCell>
-                            );
-                          }
-                          if (column === "score_ct") {
-                            const score = computeFundWatchlistShortTermScore(entry);
-                            return (
-                              <TableCell
-                                key={column}
-                                className={cn(
-                                  "px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap font-medium",
-                                  alignClass,
-                                  score == null && "text-muted-foreground"
-                                )}
-                                title={
-                                  score == null
-                                    ? "Les 4 horizons court terme sont requis (1 sem, 1 mois, 3 mois, YTD)"
-                                    : undefined
-                                }
-                              >
-                                {formatFundShortTermScore(score)}
-                              </TableCell>
-                            );
-                          }
-                          if (column.startsWith("perf_")) {
-                            const value =
-                              column === "perf_ytd"
-                                ? entry.perf_ytd
-                                : column === "perf_1semaine"
-                                  ? entry.perf_1semaine
-                                  : column === "perf_1mois"
-                                    ? entry.perf_1mois
-                                    : column === "perf_3mois"
-                                    ? entry.perf_3mois
-                                    : column === "perf_1an"
-                                      ? entry.perf_1an
-                                      : column === "perf_3ans"
-                                        ? entry.perf_3ans
-                                        : entry.perf_5ans;
-                            return (
-                              <TableCell
-                                key={column}
-                                className={cn(
-                                  "px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap",
-                                  alignClass
-                                )}
-                              >
-                                {formatFundPerfPercent(value)}
-                              </TableCell>
-                            );
-                          }
-                          return (
-                            <TableCell
-                              key={column}
-                              className={cn("overflow-hidden pl-2 pr-1 py-1.5", alignClass)}
-                            >
-                              {entry.sfdr ? (
-                                <Badge
-                                  variant="outline"
-                                  className="inline-block max-w-full text-[10px] font-normal px-1.5 py-0 whitespace-normal leading-tight"
-                                >
-                                  {entry.sfdr}
-                                </Badge>
-                              ) : (
-                                "—"
-                              )}
-                            </TableCell>
-                          );
-                        })}
+                        {FUND_WATCHLIST_CORE_COLUMNS.map((column) =>
+                          renderFundWatchlistCell(entry, column)
+                        )}
+                        {annualYears.map((year) => (
+                          <TableCell
+                            key={`${entry.id}-annual-${year}`}
+                            style={{
+                              minWidth: FUND_WATCHLIST_ANNUAL_YEAR_MIN_WIDTH,
+                              width: FUND_WATCHLIST_ANNUAL_YEAR_MIN_WIDTH,
+                            }}
+                            className="px-1 py-1.5 text-right tabular-nums text-[11px] whitespace-nowrap"
+                          >
+                            {formatFundPerfPercent(fundWatchlistAnnualPerf(entry, year))}
+                          </TableCell>
+                        ))}
+                        {optionalColumns.map((column) =>
+                          renderFundWatchlistCell(entry, column)
+                        )}
                       </TableRow>
                     ))
                   )}

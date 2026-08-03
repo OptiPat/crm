@@ -19,6 +19,11 @@ export interface FundWatchlistEntry {
   perf_1an?: number | null;
   perf_3ans?: number | null;
   perf_5ans?: number | null;
+  vol_5ans?: number | null;
+  vol_3ans?: number | null;
+  vol_1an?: number | null;
+  sharpe_ratio?: number | null;
+  perf_annual?: Record<string, number> | null;
   frais_gestion?: number | null;
   sfdr?: string | null;
   source_label: string;
@@ -70,4 +75,8 @@ export async function startFundWatchlistFavoritesReport(): Promise<void> {
 
 export async function fundWatchlistCoachReportInProgress(): Promise<boolean> {
   return await invoke<boolean>("fund_watchlist_coach_report_in_progress");
+}
+
+export async function getFundWatchlistCoachLastReport(): Promise<FundWatchlistFavoritesReport | null> {
+  return await invoke<FundWatchlistFavoritesReport | null>("get_fund_watchlist_coach_last_report");
 }
