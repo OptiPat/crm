@@ -1369,6 +1369,100 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn get_yearly_activity_stats_includes_foyer_only_souscription() {
+        let db = test_db();
+        let foyer = db
+            .create_foyer(NewFoyer {
+                nom: "Foyer NOYEZ GENTIL".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                ir_net_a_payer: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let laurene = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("DECLARANT_1".into()),
+                ..sample_contact("NOYEZ", "Laurene")
+            })
+            .unwrap();
+        db.create_contact(NewContact {
+            foyer_id: Some(foyer.id),
+            role_foyer: Some("DECLARANT_2".into()),
+            ..sample_contact("GENTIL", "Gwendal")
+        })
+        .unwrap();
+
+        let ts = chrono::Utc
+            .with_ymd_and_hms(2026, 8, 1, 0, 0, 0)
+            .unwrap()
+            .timestamp();
+        let iso = chrono::DateTime::from_timestamp(ts, 0)
+            .unwrap()
+            .to_rfc3339();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: None,
+            foyer_id: Some(foyer.id),
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: None,
+            nom_produit: "Contrat foyer".into(),
+            numero_contrat: None,
+            montant_initial: Some(725_000),
+            date_souscription: Some(iso),
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            prevoyance_perso: None,
+            prevoyance_pro: None,
+            prevoyance_versement_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        let start = chrono::Utc
+            .with_ymd_and_hms(2026, 8, 1, 0, 0, 0)
+            .unwrap()
+            .timestamp();
+        let end = chrono::Utc
+            .with_ymd_and_hms(2027, 7, 31, 23, 59, 59)
+            .unwrap()
+            .timestamp();
+
+        let stats = db
+            .get_yearly_activity_stats(Some(start), Some(end), Some("month"))
+            .unwrap();
+        let august = stats.iter().find(|s| s.label == "2026-08").unwrap();
+        assert_eq!(august.clients, 1);
+        assert!((august.panier_moyen - 7_250.0).abs() < 0.01);
+
+        let summary = db.get_activity_period_summary(start, end).unwrap();
+        assert_eq!(summary.clients, 1);
+        assert!((summary.total - 7_250.0).abs() < 0.01);
+
+        let contacts = db
+            .get_activity_bucket_contacts(start, end, "2026-08", Some("month"))
+            .unwrap();
+        assert_eq!(contacts.len(), 1);
+        assert_eq!(contacts[0].contact_id, laurene.id.unwrap());
+    }
+
+    #[test]
     fn get_conversion_client_contacts_r1_matches_funnel_count() {
         let db = test_db();
         let c1 = db.create_contact(sample_contact("Dupont", "Alice")).unwrap();

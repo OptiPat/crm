@@ -35,6 +35,39 @@ fn panier_avec_moi_invest_where() -> String {
     )
 }
 
+/// Contact pour agrégation activité : titulaire direct ou 1er client actif du foyer (MIN id).
+fn activity_flow_contact_id_sql(table_alias: &str) -> String {
+    format!(
+        "COALESCE(
+            {table_alias}.contact_id,
+            (
+                SELECT MIN(c.id) FROM contacts c
+                WHERE c.foyer_id = {table_alias}.foyer_id AND {CLIENT_STATS_EXISTS}
+            )
+        )"
+    )
+}
+
+/// Placement « avec moi » rattaché à un client ou à un foyer avec au moins un client actif.
+fn activity_investissement_eligible_where(table_alias: &str) -> String {
+    format!(
+        "{table_alias}.origine = 'MON_CONSEIL'
+         AND (
+           ({table_alias}.contact_id IS NOT NULL AND EXISTS (
+             SELECT 1 FROM contacts c WHERE c.id = {table_alias}.contact_id AND {CLIENT_STATS_EXISTS}
+           ))
+           OR (
+             {table_alias}.contact_id IS NULL
+             AND {table_alias}.foyer_id IS NOT NULL
+             AND EXISTS (
+               SELECT 1 FROM contacts c
+               WHERE c.foyer_id = {table_alias}.foyer_id AND {CLIENT_STATS_EXISTS}
+             )
+           )
+         )"
+    )
+}
+
 fn activity_bucket_format(bucket: Option<&str>) -> &'static str {
     match bucket {
         Some("month") => "%Y-%m",
@@ -66,18 +99,15 @@ fn activity_souscription_branch(bucket_fmt: Option<&str>, period_clause: &str) -
         ),
         None => String::new(),
     };
+    let contact_id = activity_flow_contact_id_sql("i");
+    let eligible = activity_investissement_eligible_where("i");
     format!(
-        "SELECT {bucket_select}i.contact_id AS contact_id,
+        "SELECT {bucket_select}{contact_id} AS contact_id,
                  COALESCE(i.montant_initial, 0) AS amount_centimes
              FROM investissements i
-             WHERE i.origine = 'MON_CONSEIL'
+             WHERE {eligible}
                AND i.date_souscription IS NOT NULL
-               AND i.contact_id IS NOT NULL
-               AND COALESCE(i.montant_initial, 0) > 0
-               AND EXISTS (
-                   SELECT 1 FROM contacts c
-                   WHERE c.id = i.contact_id AND {CLIENT_STATS_EXISTS}
-               ){period_clause}"
+               AND COALESCE(i.montant_initial, 0) > 0{period_clause}"
     )
 }
 
@@ -88,18 +118,15 @@ fn activity_versement_branch(bucket_fmt: Option<&str>, period_clause: &str) -> S
         ),
         None => String::new(),
     };
+    let contact_id = activity_flow_contact_id_sql("i");
+    let eligible = activity_investissement_eligible_where("i");
     format!(
-        "SELECT {bucket_select}i.contact_id AS contact_id,
+        "SELECT {bucket_select}{contact_id} AS contact_id,
                  vr.montant AS amount_centimes
              FROM investissement_versements vr
              INNER JOIN investissements i ON i.id = vr.investissement_id
-             WHERE i.origine = 'MON_CONSEIL'
-               AND vr.date_versement IS NOT NULL
-               AND i.contact_id IS NOT NULL
-               AND EXISTS (
-                   SELECT 1 FROM contacts c
-                   WHERE c.id = i.contact_id AND {CLIENT_STATS_EXISTS}
-               ){period_clause}"
+             WHERE {eligible}
+               AND vr.date_versement IS NOT NULL{period_clause}"
     )
 }
 
