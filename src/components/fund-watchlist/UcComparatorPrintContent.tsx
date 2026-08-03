@@ -19,7 +19,7 @@ type Props = {
 function verdictLabel(verdict: CompareResponse["verdict"]): string {
   switch (verdict) {
     case "WINNER_DECLARED":
-      return "Recommandation";
+      return "Classement établi";
     case "TIE":
       return "Égalité";
     case "INSUFFICIENT_DATA":
@@ -32,7 +32,7 @@ function verdictLabel(verdict: CompareResponse["verdict"]): string {
 }
 
 function shortName(nom: string): string {
-  return nom.split(" ").slice(0, 3).join(" ");
+  return nom;
 }
 
 function collectExpoLabels(
@@ -51,6 +51,8 @@ export function UcComparatorPrintContent({ response, generatedAt }: Props) {
   const narrative = buildUcComparisonNarrative(response);
   const analystNote = buildUcTechnicalAnalystNote(response);
   const insufficientData = response.verdict === "INSUFFICIENT_DATA";
+  const categoryBlocked = response.verdict === "CATEGORY_MISMATCH";
+  const hideGlobalScores = insufficientData || categoryBlocked;
   const generatedLabel = new Date(generatedAt * 1000).toLocaleString("fr-FR");
   const geoLabels = collectExpoLabels(response, "geo");
   const sectorLabels = collectExpoLabels(response, "sectors");
@@ -61,7 +63,7 @@ export function UcComparatorPrintContent({ response, generatedAt }: Props) {
         <h1 className="uc-comparator-print-title">Comparatif UC</h1>
         <p className="uc-comparator-print-subtitle">
           {response.category ?? "Catégorie non renseignée"} — {ranked.length} fonds — généré le{" "}
-          {generatedLabel} — moteur {response.scoring_version}
+          {generatedLabel}
         </p>
         <p className="uc-comparator-print-meta">
           Confiance {Math.round((response.confidence_index ?? 0) * 100)} % —{" "}
@@ -75,7 +77,7 @@ export function UcComparatorPrintContent({ response, generatedAt }: Props) {
       )}
 
       <section className="uc-comparator-print-section">
-        <h2>{insufficientData ? "Fonds comparés" : "Classement"}</h2>
+        <h2>{hideGlobalScores ? "Fonds comparés" : "Classement"}</h2>
         <table className="uc-comparator-print-table">
           <thead>
             <tr>
@@ -88,12 +90,12 @@ export function UcComparatorPrintContent({ response, generatedAt }: Props) {
             {ranked.map((fund) => (
               <tr key={fund.isin}>
                 <td>
-                  {!insufficientData && `${fund.rank}. `}
+                  {!hideGlobalScores && `${fund.rank}. `}
                   {fund.nom}
                 </td>
                 <td className="uc-comparator-print-mono">{fund.isin}</td>
                 <td className="uc-comparator-print-num">
-                  {insufficientData ? "N/A" : `${fund.score_relative_total.toFixed(1)} / 100`}
+                  {hideGlobalScores ? "N/A" : `${fund.score_relative_total.toFixed(1)} / 100`}
                 </td>
               </tr>
             ))}

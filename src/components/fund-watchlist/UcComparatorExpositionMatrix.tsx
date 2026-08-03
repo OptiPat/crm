@@ -74,8 +74,8 @@ function BreakdownTable({ title, snapshots, funds, keyName }: BreakdownTableProp
             <TableRow className="bg-muted/40">
               <TableHead className="min-w-[140px]">Zone</TableHead>
               {funds.map((fund) => (
-                <TableHead key={fund.isin} className="text-right min-w-[100px]">
-                  {fund.nom.split(" ").slice(0, 2).join(" ")}
+                <TableHead key={fund.isin} className="text-right min-w-[160px] max-w-[240px] text-xs leading-snug align-bottom">
+                  {fund.nom}
                 </TableHead>
               ))}
             </TableRow>
@@ -135,8 +135,8 @@ function TopHoldingsTable({
             <TableRow className="bg-muted/40">
               <TableHead className="w-10">#</TableHead>
               {funds.map((fund) => (
-                <TableHead key={fund.isin} className="min-w-[140px]">
-                  {fund.nom.split(" ").slice(0, 2).join(" ")}
+                <TableHead key={fund.isin} className="min-w-[160px] max-w-[240px] text-xs leading-snug align-bottom">
+                  {fund.nom}
                 </TableHead>
               ))}
             </TableRow>
@@ -248,7 +248,7 @@ export function UcComparatorExpositionMatrix({ response, className }: Props) {
                 key={fund.isin}
                 className="rounded-lg border border-indigo-200/60 bg-indigo-50/30 p-3 space-y-2 text-xs dark:border-indigo-900/40 dark:bg-indigo-950/20"
               >
-                <p className="font-medium">{fund.nom.split(" ").slice(0, 2).join(" ")}</p>
+                <p className="font-medium text-xs leading-snug">{fund.nom}</p>
                 {styleBox ? (
                   <p className="text-indigo-800 dark:text-indigo-200 font-medium">{styleBox.label_fr}</p>
                 ) : snap?.asset_breakdown && snap.asset_breakdown.length > 0 ? (

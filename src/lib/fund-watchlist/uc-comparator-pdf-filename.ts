@@ -29,7 +29,7 @@ export function buildUcComparatorPdfFilename(
   const dd = pad2(date.getDate());
   const labels = fundNames
     .map(shortenFundNameForPdf)
-    .map((name) => sanitizeFilenamePart(name, 32))
+    .map((name) => sanitizeFilenamePart(name, 40))
     .filter(Boolean);
   const fundsPart =
     labels.length > 0 ? labels.join(" vs ") : "Comparatif";

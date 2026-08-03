@@ -35,7 +35,7 @@ import { Check, Minus, Trophy } from "lucide-react";
 function verdictLabel(verdict: CompareResponse["verdict"]): string {
   switch (verdict) {
     case "WINNER_DECLARED":
-      return "Recommandation";
+      return "Classement établi";
     case "TIE":
       return "Égalité";
     case "INSUFFICIENT_DATA":
@@ -208,8 +208,8 @@ export function UcComparatorResults({ response, className }: Props) {
                 <TableRow className="bg-muted/40">
                   <TableHead className="min-w-[140px]">Critère</TableHead>
                   {ranked.map((fund) => (
-                    <TableHead key={fund.isin} className="text-right min-w-[120px]">
-                      {fund.nom.split(" ").slice(0, 2).join(" ")}
+                    <TableHead key={fund.isin} className="text-right min-w-[160px] max-w-[240px] text-xs leading-snug align-bottom">
+                      {fund.nom}
                     </TableHead>
                   ))}
                 </TableRow>
@@ -297,24 +297,22 @@ export function UcComparatorResults({ response, className }: Props) {
 
       {response.verdict === "INSUFFICIENT_DATA" && (
         <p className="text-xs text-muted-foreground">
-          Confiance {Math.round((response.confidence_index ?? 0) * 100)} % — moteur{" "}
-          {response.scoring_version}. Au moins un fonds manque de données long terme (ex. perf. 3 ou
-          5 ans) : comparaison partielle uniquement.
+          Confiance {Math.round((response.confidence_index ?? 0) * 100)} %. Au moins un fonds
+          manque de données long terme (ex. perf. 3 ou 5 ans) : comparaison partielle uniquement.
         </p>
       )}
 
       {response.verdict === "TIE" && (
         <p className="text-xs text-muted-foreground">
-          Confiance {Math.round((response.confidence_index ?? 0) * 100)} % — moteur{" "}
-          {response.scoring_version}. Scores très proches : pas de recommandation automatique.
+          Confiance {Math.round((response.confidence_index ?? 0) * 100)} %. Scores très proches :
+          pas de recommandation automatique.
         </p>
       )}
 
       {response.verdict === "WINNER_DECLARED" && winner && (
         <p className="text-xs text-muted-foreground">
-          Confiance {Math.round((response.confidence_index ?? 0) * 100)} % — moteur{" "}
-          {response.scoring_version}. Ce score aide à arbitrer entre fonds comparables ; il ne
-          remplace pas l&apos;analyse patrimoniale globale.
+          Confiance {Math.round((response.confidence_index ?? 0) * 100)} %. Ce score aide à
+          arbitrer entre fonds comparables ; il ne remplace pas l&apos;analyse patrimoniale globale.
         </p>
       )}
     </div>

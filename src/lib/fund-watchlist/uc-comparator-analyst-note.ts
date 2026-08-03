@@ -32,7 +32,7 @@ const ASIA_GEO_LABELS = [
 const INDUSTRIAL_SECTOR_LABELS = ["Industriels", "Industrie", "Industrial"];
 
 function shortFundName(nom: string): string {
-  return nom.split(" ").slice(0, 3).join(" ");
+  return nom;
 }
 
 function fundByIsin(results: UcFundResultScore[], isin: string): UcFundResultScore | undefined {
@@ -326,7 +326,7 @@ function buildArbitrationSection(
 
   if (response.verdict === "INSUFFICIENT_DATA") {
     paragraphs.push(
-      "Recommandation conseiller : compléter les historiques 3/5 ans (ou retirer le fonds récent du comparatif) avant arbitrage. " +
+      "Conseil : compléter les historiques 3/5 ans (ou retirer le fonds récent du comparatif) avant arbitrage. " +
         "Utiliser uniquement le détail critère disponible et la matrice d'exposition en lecture indicative."
     );
     return paragraphs;
@@ -354,7 +354,7 @@ function buildArbitrationSection(
 
   const winner = fundByIsin(ranked, response.winner_isin ?? leader.isin) ?? leader;
   paragraphs.push(
-    `Recommandation technique : ${shortFundName(winner.nom)} sur la base du score agrégé et du poids Sharpe. ` +
+    `Lecture technique : ${shortFundName(winner.nom)} sur la base du score agrégé et du poids Sharpe. ` +
       `Documenter l'écart ${response.score_gap?.toFixed(1) ?? "—"} pt dans le comité d'investissement / dossier conseil.`
   );
 
@@ -410,7 +410,7 @@ export function buildUcTechnicalAnalystNote(response: CompareResponse): UcTechni
       paragraphs: buildExposureSection(response, ranked),
     },
     {
-      title: "3. Recommandation d'arbitrage (conseiller)",
+      title: "3. Piste d'arbitrage (conseiller)",
       paragraphs: buildArbitrationSection(response, ranked),
     },
   ].filter((s) => s.paragraphs.length > 0);

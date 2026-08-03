@@ -92,6 +92,8 @@ const TABLE_POLICIES: &[(&str, WorkspaceTablePolicy)] = &[
     ("filleul_volume_exercices", WorkspaceTablePolicy::Shared),
     ("filleul_dossier", WorkspaceTablePolicy::Shared),
     ("fund_watchlist", WorkspaceTablePolicy::LocalOnly),
+    ("fund_watchlist_market_cache", WorkspaceTablePolicy::LocalOnly),
+    ("comparatifs_uc", WorkspaceTablePolicy::LocalOnly),
     ("fiche_conseil_redaction_presets", WorkspaceTablePolicy::Shared),
 ];
 

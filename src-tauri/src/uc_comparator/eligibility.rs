@@ -129,6 +129,17 @@ fn unique_nonempty(values: &[String]) -> Vec<String> {
     out
 }
 
+fn fund_has_category(fund: &UcFundInput) -> bool {
+    fund.categorie
+        .as_ref()
+        .map(|c| !c.trim().is_empty())
+        .unwrap_or(false)
+}
+
+fn all_funds_have_category(funds: &[UcFundInput]) -> bool {
+    funds.iter().all(fund_has_category)
+}
+
 pub fn evaluate_categories(funds: &[UcFundInput]) -> CategoryEligibility {
     if funds.len() < 2 {
         return CategoryEligibility {
@@ -136,6 +147,16 @@ pub fn evaluate_categories(funds: &[UcFundInput]) -> CategoryEligibility {
             exact_match: true,
             meta_key: None,
             display_label: funds.first().and_then(|f| f.categorie.clone()),
+            subcategory_warning: None,
+        };
+    }
+
+    if !all_funds_have_category(funds) {
+        return CategoryEligibility {
+            compatible: false,
+            exact_match: false,
+            meta_key: None,
+            display_label: None,
             subcategory_warning: None,
         };
     }
@@ -256,6 +277,15 @@ mod tests {
             fund(Some("Actions Europe")),
             fund(Some("  actions europe ")),
         ]));
+    }
+
+    #[test]
+    fn rejects_when_any_category_missing() {
+        assert!(!categories_match(&[
+            fund(Some("Actions Europe")),
+            fund(None),
+        ]));
+        assert!(!categories_match(&[fund(None), fund(None)]));
     }
 
     #[test]

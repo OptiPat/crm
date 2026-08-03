@@ -82,7 +82,7 @@ pub fn run_uc_comparison(
                 .cloned()
                 .collect();
             return Err(format!(
-                "ISIN introuvable(s) en watchlist : {}. L'import ISIN externe arrive en V1.5.",
+                "ISIN introuvable(s) en watchlist : {}.",
                 missing.join(", ")
             ));
         }

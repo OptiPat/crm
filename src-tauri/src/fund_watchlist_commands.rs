@@ -1,3 +1,4 @@
+use crate::auth::session::{require_ui_session, UiSessionState};
 use crate::commands::DbState;
 use crate::database::models::{
     FundWatchlistEntry, FundWatchlistFavoritesReport, FundWatchlistImportResult,
@@ -44,7 +45,11 @@ pub fn set_fund_watchlist_favorite(
 }
 
 #[tauri::command]
-pub fn start_fund_watchlist_favorites_report(app: AppHandle) -> Result<(), String> {
+pub fn start_fund_watchlist_favorites_report(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<(), String> {
+    require_ui_session(&session)?;
     crate::fund_watchlist_coach::spawn_favorites_report(app)
 }
 
@@ -56,7 +61,9 @@ pub fn fund_watchlist_coach_report_in_progress() -> bool {
 #[tauri::command]
 pub fn get_fund_watchlist_coach_last_report(
     db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
 ) -> Result<Option<FundWatchlistFavoritesReport>, String> {
+    require_ui_session(&session)?;
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
