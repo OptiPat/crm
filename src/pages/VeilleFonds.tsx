@@ -9,7 +9,7 @@ import {
   TableCell,
   TableRow,
 } from "@/components/ui/table";
-import { FileUp, LineChart, RefreshCw, Scale, Search, Sparkles, Star, X, ArrowLeft } from "lucide-react";
+import { FileUp, FileDown, LineChart, RefreshCw, Scale, Search, Sparkles, Star, X, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import {
   getAllFundWatchlistEntries,
@@ -22,6 +22,8 @@ import {
 import { FundWatchlistImportDialog } from "@/components/fund-watchlist/FundWatchlistImportDialog";
 import { FundWatchlistCoachDialog } from "@/components/fund-watchlist/FundWatchlistCoachDialog";
 import { UcComparatorResults } from "@/components/fund-watchlist/UcComparatorResults";
+import { UcComparatorPrintPortal } from "@/components/fund-watchlist/UcComparatorPrintPortal";
+import { useUcComparatorPrintExport } from "@/hooks/useUcComparatorPrintExport";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FundWatchlistColumnHeader } from "@/components/fund-watchlist/FundWatchlistColumnHeader";
 import { FundWatchlistOptionalColumnToggles } from "@/components/fund-watchlist/FundWatchlistOptionalColumnToggles";
@@ -108,6 +110,8 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   const [view, setView] = useState<VeilleView>("table");
   const [compareLoading, setCompareLoading] = useState(false);
   const [compareResponse, setCompareResponse] = useState<CompareResponse | null>(null);
+  const { printBundle: comparePrintBundle, printComparison, isPrinting: comparePrinting } =
+    useUcComparatorPrintExport();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -521,14 +525,26 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
               </ul>
             )}
           </div>
-          <Button
-            variant="outline"
-            onClick={() => void runCompare()}
-            disabled={selectedCompareCount < 2 || compareLoading}
-          >
-            <RefreshCw className={cn("h-4 w-4 mr-2", compareLoading && "animate-spin")} />
-            Recalculer
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void runCompare()}
+              disabled={selectedCompareCount < 2 || compareLoading}
+            >
+              <RefreshCw className={cn("h-4 w-4 mr-2", compareLoading && "animate-spin")} />
+              Recalculer
+            </Button>
+            {compareResponse && (
+              <Button
+                variant="outline"
+                onClick={() => void printComparison(compareResponse)}
+                disabled={compareLoading || comparePrinting}
+              >
+                <FileDown className={cn("h-4 w-4 mr-2", comparePrinting && "animate-pulse")} />
+                {comparePrinting ? "Export…" : "Exporter PDF"}
+              </Button>
+            )}
+          </div>
         </div>
 
         <Card>
@@ -546,6 +562,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
             )}
           </CardContent>
         </Card>
+        <UcComparatorPrintPortal printDoc={comparePrintBundle} />
         {dialogs}
       </div>
     );

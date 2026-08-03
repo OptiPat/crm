@@ -1,5 +1,5 @@
 use crate::uc_comparator::alerts::collect_fund_alerts;
-use crate::uc_comparator::eligibility::{categories_match, shared_category_label};
+use crate::uc_comparator::eligibility::{categories_match, evaluate_categories, shared_category_label};
 use crate::uc_comparator::normalize::{
     min_max_higher_better, score_aum_meur, score_drawdown_group, score_perf5_group,
     score_sharpe_group, score_top10_percent,
@@ -11,7 +11,6 @@ use crate::uc_comparator::types::{
 
 const CONFIDENCE_THRESHOLD: f64 = 0.70;
 const TIE_SCORE_GAP: f64 = 2.0;
-const TIE_WIN_RATIO: f64 = 0.40;
 
 struct CriterionDef {
     key: &'static str,
@@ -92,6 +91,8 @@ pub fn run_comparison(
         return Ok(build_category_mismatch_result(funds, version));
     }
 
+    let category_eval = evaluate_categories(funds);
+
     let criterion_scores = compute_criterion_scores(funds, version);
     let confidence_index = compute_confidence(&criterion_scores, version);
 
@@ -111,7 +112,8 @@ pub fn run_comparison(
     let mut result = UcComparisonResult {
         scoring_version: version,
         category: shared_category_label(funds),
-        is_same_category: true,
+        is_same_category: category_eval.exact_match,
+        category_warning: category_eval.subcategory_warning,
         confidence_index,
         verdict,
         winner_isin,
@@ -235,10 +237,13 @@ fn determine_verdict(
     let (best_idx, second_idx) = top_two_indices(totals);
     let gap = totals[best_idx] - totals[second_idx];
 
-    if gap <= TIE_SCORE_GAP || is_technical_tie(criteria, funds.len()) {
+    // Égalité uniquement si l'écart global est faible. Le partage des critères
+    // (ex. 3-2 sur 5) ne doit pas annuler un écart net significatif (ex. +8,8 pts).
+    if gap <= TIE_SCORE_GAP {
         return (UcVerdict::Tie, None, Some(gap));
     }
 
+    let _ = (criteria, funds.len());
     (
         UcVerdict::WinnerDeclared,
         Some(funds[best_idx].isin.clone()),
@@ -252,29 +257,6 @@ fn top_two_indices(totals: &[f64]) -> (usize, usize) {
     let best = indexed.first().map(|(i, _)| *i).unwrap_or(0);
     let second = indexed.get(1).map(|(i, _)| *i).unwrap_or(best);
     (best, second)
-}
-
-fn is_technical_tie(criteria: &[UcCriterionScore], fund_count: usize) -> bool {
-    let available: Vec<&UcCriterionScore> = criteria.iter().filter(|c| c.available).collect();
-    if available.is_empty() {
-        return true;
-    }
-    let wins_needed = (available.len() as f64 * TIE_WIN_RATIO).ceil() as usize;
-    let mut win_counts = vec![0usize; fund_count];
-    for crit in &available {
-        if let Some(winner) = argmax(&crit.scores) {
-            win_counts[winner] += 1;
-        }
-    }
-    win_counts.iter().filter(|&&w| w >= wins_needed).count() >= 2
-}
-
-fn argmax(values: &[f64]) -> Option<usize> {
-    values
-        .iter()
-        .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-        .map(|(i, _)| i)
 }
 
 fn build_ranked_results(
@@ -377,6 +359,7 @@ fn build_category_mismatch_result(
         scoring_version: version,
         category: None,
         is_same_category: false,
+        category_warning: None,
         confidence_index: 0.40,
         verdict: UcVerdict::CategoryMismatch,
         winner_isin: None,
@@ -410,6 +393,7 @@ fn build_insufficient_data_result(
         scoring_version: version,
         category: shared_category_label(funds),
         is_same_category: true,
+        category_warning: None,
         confidence_index,
         verdict: UcVerdict::InsufficientData,
         winner_isin: None,
@@ -573,5 +557,44 @@ mod tests {
         let pictet_idx = 1;
         assert!(sharpe_crit.scores[fidelity_idx] > 95.0);
         assert!((sharpe_crit.scores[pictet_idx] - 100.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn pictet_vs_fidelity_declares_winner_when_gap_above_tie_threshold() {
+        let pictet = UcFundInput {
+            isin: "LU1279334210".to_string(),
+            nom: "Pictet Robotics".to_string(),
+            categorie: Some("Actions Secteur Technologies".to_string()),
+            sri: Some(6),
+            perf_1an: Some(28.6),
+            perf_3ans: Some(74.4),
+            perf_5ans: Some(78.3),
+            perf_ytd: None,
+            sharpe_3y: Some(1.23),
+            top10_percent: Some(45.7),
+            max_drawdown_3y: None,
+            aum_meur: None,
+        };
+        let fidelity = UcFundInput {
+            isin: "LU0099574567".to_string(),
+            nom: "Fidelity Global Tech".to_string(),
+            categorie: Some("Actions Secteur Technologies".to_string()),
+            sri: Some(6),
+            perf_1an: Some(20.0),
+            perf_3ans: Some(67.0),
+            perf_5ans: Some(88.9),
+            perf_ytd: None,
+            sharpe_3y: Some(1.20),
+            top10_percent: Some(45.1),
+            max_drawdown_3y: None,
+            aum_meur: None,
+        };
+
+        let result = run_comparison(&[pictet, fidelity], UcScoringVersion::V1).expect("comparison");
+
+        assert_eq!(result.verdict, UcVerdict::WinnerDeclared);
+        assert_eq!(result.winner_isin.as_deref(), Some("LU1279334210"));
+        let gap = result.score_gap.expect("gap");
+        assert!(gap > TIE_SCORE_GAP, "gap={gap}");
     }
 }

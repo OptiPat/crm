@@ -1,0 +1,26 @@
+<!-- Fixture anonymisée minimale pour tests parseur composition Boursorama (pas de scrape live). -->
+<html>
+<body>
+Composition (les 10 premières lignes)
+<td class="c-table-gauge__cell c-table-gauge__cell--header">Ligne Fictive A</td>
+<div data-gauge-current-step="9.50"></div>
+<td class="c-table-gauge__cell c-table-gauge__cell--header">Ligne Fictive B</td>
+<div data-gauge-current-step="7.20"></div>
+JSON.parse('{"data":{"amChartConfig":{"brs":{"id":"regional"}},"amChartData":[{"name":"Etats-Unis","value":72.25},{"name":"Allemagne","value":6.37}]}}');
+JSON.parse('{"data":{"amChartConfig":{"brs":{"id":"sector"}},"amChartData":[{"name":"Technologie","value":83.66},{"name":"Sant\u00e9","value":4.83}]}}');
+JSON.parse('{"data":{"amChartConfig":{"brs":{"id":"portfolio"}},"amChartData":[{"name":"Actions","value":95.92},{"name":"Liquidit\u00e9s","value":3.8}]}}');
+<table class="c-morningstar-box">
+  <tr>
+    <td class="c-morningstar-box__text c-morningstar-box__text--top">Valeur</td>
+    <td class="c-morningstar-box__text c-morningstar-box__text--top">Mixte</td>
+    <td class="c-morningstar-box__text c-morningstar-box__text--top">Croiss</td>
+  </tr>
+  <tr>
+    <td class="c-morningstar-box__cell"></td>
+    <td class="c-morningstar-box__cell"></td>
+    <td class="c-morningstar-box__cell c-morningstar-box__cell--full"></td>
+    <td class="c-morningstar-box__text c-morningstar-box__text--right">Grandes<br>Capitalisations</td>
+  </tr>
+</table>
+</body>
+</html>

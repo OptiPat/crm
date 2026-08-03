@@ -12,6 +12,7 @@ impl super::Database {
                 aum_meur REAL,
                 top10_percent REAL,
                 max_drawdown_3y REAL,
+                exposition_json TEXT,
                 source TEXT NOT NULL DEFAULT 'manual',
                 updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
             )",
@@ -22,6 +23,13 @@ impl super::Database {
                 ON fund_watchlist_market_cache (updated_at)",
             [],
         )?;
+        if !self.table_has_column("fund_watchlist_market_cache", "exposition_json")? {
+            self.conn.execute(
+                "ALTER TABLE fund_watchlist_market_cache ADD COLUMN exposition_json TEXT",
+                [],
+            )?;
+            println!("✅ Migration: colonne exposition_json sur fund_watchlist_market_cache");
+        }
         Ok(())
     }
 
@@ -47,7 +55,7 @@ impl super::Database {
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!(
-            "SELECT isin, aum_meur, top10_percent, max_drawdown_3y, source, updated_at
+            "SELECT isin, aum_meur, top10_percent, max_drawdown_3y, exposition_json, source, updated_at
              FROM fund_watchlist_market_cache WHERE isin IN ({placeholders})"
         );
         let mut stmt = self.conn.prepare(&sql)?;
@@ -61,28 +69,30 @@ impl super::Database {
                 aum_meur: row.get(1)?,
                 top10_percent: row.get(2)?,
                 max_drawdown_3y: row.get(3)?,
-                source: row.get(4)?,
-                updated_at: row.get(5)?,
+                exposition_json: row.get(4)?,
+                source: row.get(5)?,
+                updated_at: row.get(6)?,
             })
         })?;
         rows.collect()
     }
 
-    pub fn upsert_fund_watchlist_market_cache_top10(
+    pub fn upsert_fund_watchlist_market_cache_boursorama(
         &self,
         isin: &str,
-        top10_percent: f64,
-        source: &str,
+        top10_percent: Option<f64>,
+        exposition_json: Option<&str>,
     ) -> Result<()> {
         let isin = isin.trim().to_uppercase();
         self.conn.execute(
-            "INSERT INTO fund_watchlist_market_cache (isin, top10_percent, source, updated_at)
-             VALUES (?1, ?2, ?3, strftime('%s', 'now'))
+            "INSERT INTO fund_watchlist_market_cache (isin, top10_percent, exposition_json, source, updated_at)
+             VALUES (?1, ?2, ?3, 'boursorama', strftime('%s', 'now'))
              ON CONFLICT(isin) DO UPDATE SET
-               top10_percent = excluded.top10_percent,
-               source = excluded.source,
+               top10_percent = COALESCE(excluded.top10_percent, fund_watchlist_market_cache.top10_percent),
+               exposition_json = COALESCE(excluded.exposition_json, fund_watchlist_market_cache.exposition_json),
+               source = 'boursorama',
                updated_at = excluded.updated_at",
-            rusqlite::params![isin, top10_percent, source],
+            rusqlite::params![isin, top10_percent, exposition_json],
         )?;
         Ok(())
     }

@@ -56,6 +56,7 @@ const pictetFidelityResponse: CompareResponse = {
     },
   ],
   metrics: [],
+  exposition: [],
   results: [
     {
       isin: "LU1279334210",

@@ -121,6 +121,8 @@ pub struct UcComparisonResult {
     pub scoring_version: UcScoringVersion,
     pub category: Option<String>,
     pub is_same_category: bool,
+    #[serde(default)]
+    pub category_warning: Option<String>,
     pub confidence_index: f64,
     pub verdict: UcVerdict,
     pub winner_isin: Option<String>,
@@ -162,6 +164,78 @@ pub struct CompareRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UcExposureSlice {
+    pub label: String,
+    pub weight_percent: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UcStyleBox {
+    pub cap: String,
+    pub style: String,
+    pub label_fr: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UcFundExposition {
+    pub geo: Vec<UcExposureSlice>,
+    pub sectors: Vec<UcExposureSlice>,
+    #[serde(default)]
+    pub asset_breakdown: Vec<UcExposureSlice>,
+    #[serde(default)]
+    pub holdings: Vec<UcExposureSlice>,
+    pub style_box: Option<UcStyleBox>,
+    #[serde(default)]
+    pub source: String,
+}
+
+impl UcFundExposition {
+    pub fn is_complete(&self) -> bool {
+        !self.geo.is_empty() && !self.sectors.is_empty()
+    }
+
+    pub fn needs_boursorama_refresh(&self) -> bool {
+        if !self.is_complete() {
+            return false;
+        }
+        self.style_box.is_none() || self.holdings.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UcFundExpositionSnapshot {
+    pub isin: String,
+    pub geo: Vec<UcExposureSlice>,
+    pub sectors: Vec<UcExposureSlice>,
+    #[serde(default)]
+    pub asset_breakdown: Vec<UcExposureSlice>,
+    #[serde(default)]
+    pub holdings: Vec<UcExposureSlice>,
+    pub style_box: Option<UcStyleBox>,
+    pub source: Option<String>,
+    pub complete: bool,
+}
+
+impl UcFundExpositionSnapshot {
+    pub fn from_exposition(isin: &str, exposition: &UcFundExposition) -> Self {
+        Self {
+            isin: isin.to_string(),
+            geo: exposition.geo.clone(),
+            sectors: exposition.sectors.clone(),
+            asset_breakdown: exposition.asset_breakdown.clone(),
+            holdings: exposition.holdings.clone(),
+            style_box: exposition.style_box.clone(),
+            source: if exposition.source.is_empty() {
+                None
+            } else {
+                Some(exposition.source.clone())
+            },
+            complete: exposition.is_complete(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompareResponse {
     pub comparatif_id: String,
     pub scoring_version: String,
@@ -170,11 +244,14 @@ pub struct CompareResponse {
     pub winner_isin: Option<String>,
     pub is_category_matched: bool,
     pub category: Option<String>,
+    #[serde(default)]
+    pub category_warning: Option<String>,
     pub score_gap: Option<f64>,
     /// ISIN dans le même ordre que `criteria[].scores`.
     pub fund_order: Vec<String>,
     pub criteria: Vec<UcCriterionScore>,
     pub metrics: Vec<UcFundMetricsSnapshot>,
+    pub exposition: Vec<UcFundExpositionSnapshot>,
     pub results: Vec<UcFundResultScore>,
     pub raw_json_payload: String,
 }

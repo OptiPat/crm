@@ -8,6 +8,6 @@ pub mod types;
 
 pub use engine::run_comparison;
 pub use types::{
-    CompareRequest, CompareResponse, UcFundInput, UcFundMetricsSnapshot, UcMarketCacheRow,
-    UcScoringVersion, UcVerdict,
+    CompareRequest, CompareResponse, UcFundExpositionSnapshot, UcFundInput, UcFundMetricsSnapshot,
+    UcMarketCacheRow, UcScoringVersion, UcVerdict,
 };

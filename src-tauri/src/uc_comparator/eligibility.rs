@@ -1,31 +1,223 @@
 use crate::uc_comparator::types::UcFundInput;
 
-fn normalize_category(raw: &str) -> String {
-    raw.trim().to_lowercase()
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CategoryEligibility {
+    pub compatible: bool,
+    pub exact_match: bool,
+    pub meta_key: Option<String>,
+    pub display_label: Option<String>,
+    pub subcategory_warning: Option<String>,
 }
 
-/// Tous les fonds doivent partager la même catégorie (y compris toutes `None`).
-pub fn categories_match(funds: &[UcFundInput]) -> bool {
-    if funds.len() < 2 {
-        return true;
+fn normalize_category(raw: &str) -> String {
+    raw.trim()
+        .to_lowercase()
+        .replace('’', "'")
+        .replace(['é', 'è', 'ê', 'ë'], "e")
+        .replace(['à', 'â'], "a")
+        .replace(['ù', 'û'], "u")
+        .replace(['î', 'ï'], "i")
+        .replace(['ô', 'ö'], "o")
+        .replace('ç', "c")
+}
+
+/// Méta-catégorie pour regrouper des libellés Morningstar/Boursorama proches.
+fn meta_category_key(normalized: &str) -> Option<&'static str> {
+    if normalized.is_empty() {
+        return None;
     }
-    let first = funds[0]
-        .categorie
-        .as_deref()
-        .map(normalize_category)
-        .unwrap_or_default();
-    funds.iter().all(|f| {
-        let cat = f
-            .categorie
-            .as_deref()
-            .map(normalize_category)
-            .unwrap_or_default();
-        cat == first
-    })
+
+    let rules: [(&[&str], &str); 10] = [
+        (
+            &[
+                "actions secteur technolog",
+                "secteur technolog",
+                "actions technolog",
+                "technologie",
+            ],
+            "actions_tech",
+        ),
+        (
+            &[
+                "asie hors japon",
+                "asia pacific",
+                "asia ex japan",
+                "actions asie",
+                "actions asiatique",
+                "asiatique",
+                "asian",
+                "asie pacifique",
+                "marches emergents asie",
+                "marche emergent asie",
+                "emergents asie",
+                "asia discovery",
+                "asia growth",
+            ],
+            "actions_asie",
+        ),
+        (&["actions japon", "japon"], "actions_japon"),
+        (
+            &["actions europe", "europe grandes", "eurozone", "zone euro"],
+            "actions_europe",
+        ),
+        (
+            &["actions amerique", "actions usa", "etats-unis", "north america"],
+            "actions_us",
+        ),
+        (&["obligations euro", "oblig euro"], "oblig_euro"),
+        (&["obligations"], "oblig"),
+        (&["monetaire", "monétaire", "tresorerie"], "monetaire"),
+        (&["diversifie", "diversifié", "allocation"], "diversifie"),
+        (&["immobilier", "reits"], "immobilier"),
+    ];
+
+    for (needles, key) in rules {
+        if needles.iter().any(|needle| normalized.contains(needle)) {
+            return Some(key);
+        }
+    }
+
+    // Heuristique : "asie" / "asia" hors contexte Japon seul.
+    if (normalized.contains("asie") || normalized.contains("asia"))
+        && !normalized.contains("japon")
+        && !normalized.contains("japan")
+    {
+        return Some("actions_asie");
+    }
+
+    None
+}
+
+fn meta_category_label(key: &str) -> &'static str {
+    match key {
+        "actions_tech" => "Actions Secteur Technologies",
+        "actions_asie" => "Actions Asie",
+        "actions_japon" => "Actions Japon",
+        "actions_europe" => "Actions Europe",
+        "actions_us" => "Actions États-Unis",
+        "oblig_euro" => "Obligations Euro",
+        "oblig" => "Obligations",
+        "monetaire" => "Monétaire",
+        "diversifie" => "Diversifié",
+        "immobilier" => "Immobilier",
+        _ => "Autre",
+    }
+}
+
+fn normalized_categories(funds: &[UcFundInput]) -> Vec<String> {
+    funds
+        .iter()
+        .map(|f| {
+            f.categorie
+                .as_deref()
+                .map(normalize_category)
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+fn unique_nonempty(values: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    for value in values {
+        if value.is_empty() {
+            continue;
+        }
+        if !out.iter().any(|existing| existing == value) {
+            out.push(value.clone());
+        }
+    }
+    out
+}
+
+pub fn evaluate_categories(funds: &[UcFundInput]) -> CategoryEligibility {
+    if funds.len() < 2 {
+        return CategoryEligibility {
+            compatible: true,
+            exact_match: true,
+            meta_key: None,
+            display_label: funds.first().and_then(|f| f.categorie.clone()),
+            subcategory_warning: None,
+        };
+    }
+
+    let normalized = normalized_categories(funds);
+    let unique_exact = unique_nonempty(&normalized);
+
+    if unique_exact.len() <= 1 {
+        let label = funds
+            .iter()
+            .find_map(|f| f.categorie.clone())
+            .or_else(|| unique_exact.first().cloned());
+        return CategoryEligibility {
+            compatible: true,
+            exact_match: true,
+            meta_key: normalized
+                .iter()
+                .find_map(|c| meta_category_key(c))
+                .map(str::to_string),
+            display_label: label,
+            subcategory_warning: None,
+        };
+    }
+
+    let meta_keys: Vec<Option<&str>> = normalized.iter().map(|c| meta_category_key(c)).collect();
+    let unique_meta: Vec<&str> = meta_keys
+        .iter()
+        .filter_map(|k| *k)
+        .fold(Vec::new(), |mut acc, key| {
+            if !acc.contains(&key) {
+                acc.push(key);
+            }
+            acc
+        });
+
+    if unique_meta.len() == 1 {
+        let meta = unique_meta[0];
+        let raw_labels: Vec<String> = funds
+            .iter()
+            .filter_map(|f| f.categorie.clone())
+            .collect();
+        let unique_raw: Vec<String> = raw_labels
+            .iter()
+            .fold(Vec::new(), |mut acc, label| {
+                if !acc.iter().any(|existing| existing == label) {
+                    acc.push(label.clone());
+                }
+                acc
+            });
+        let warning = if unique_raw.len() > 1 {
+            Some(format!(
+                "Sous-catégories distinctes mais comparables : {}.",
+                unique_raw.join(" · ")
+            ))
+        } else {
+            None
+        };
+        return CategoryEligibility {
+            compatible: true,
+            exact_match: false,
+            meta_key: Some(meta.to_string()),
+            display_label: Some(meta_category_label(meta).to_string()),
+            subcategory_warning: warning,
+        };
+    }
+
+    CategoryEligibility {
+        compatible: false,
+        exact_match: false,
+        meta_key: None,
+        display_label: None,
+        subcategory_warning: None,
+    }
+}
+
+/// Compatibilité de comparaison (méta-catégorie ou libellé strictement identique).
+pub fn categories_match(funds: &[UcFundInput]) -> bool {
+    evaluate_categories(funds).compatible
 }
 
 pub fn shared_category_label(funds: &[UcFundInput]) -> Option<String> {
-    funds.first()?.categorie.clone()
+    evaluate_categories(funds).display_label
 }
 
 #[cfg(test)]
@@ -51,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_mixed_categories() {
+    fn rejects_obligations_vs_actions() {
         assert!(!categories_match(&[
             fund(Some("Actions Europe")),
             fund(Some("Obligations Euro")),
@@ -59,10 +251,40 @@ mod tests {
     }
 
     #[test]
-    fn accepts_same_category() {
+    fn accepts_same_category_exact() {
         assert!(categories_match(&[
             fund(Some("Actions Europe")),
             fund(Some("  actions europe ")),
+        ]));
+    }
+
+    #[test]
+    fn accepts_asia_subcategory_variants() {
+        let eval = evaluate_categories(&[
+            fund(Some("Actions Asie Hors Japon Grandes Capitalisations")),
+            fund(Some("Actions Asie Croissance")),
+        ]);
+        assert!(eval.compatible);
+        assert!(!eval.exact_match);
+        assert_eq!(eval.meta_key.as_deref(), Some("actions_asie"));
+        assert!(eval.subcategory_warning.is_some());
+    }
+
+    #[test]
+    fn accepts_templeton_vs_carmignac_asia_style_labels() {
+        let eval = evaluate_categories(&[
+            fund(Some("Actions Asie Pacifique")),
+            fund(Some("Actions Marchés Emergents Asie")),
+        ]);
+        assert!(eval.compatible);
+        assert_eq!(eval.display_label.as_deref(), Some("Actions Asie"));
+    }
+
+    #[test]
+    fn accepts_tech_sector_variants() {
+        assert!(categories_match(&[
+            fund(Some("Actions Secteur Technologies")),
+            fund(Some("Actions Technologie")),
         ]));
     }
 }

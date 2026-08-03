@@ -34,6 +34,28 @@ export interface UcFundMetricsSnapshot {
   top10_percent?: number | null;
 }
 
+export interface UcExposureSlice {
+  label: string;
+  weight_percent: number;
+}
+
+export interface UcStyleBox {
+  cap: string;
+  style: string;
+  label_fr: string;
+}
+
+export interface UcFundExpositionSnapshot {
+  isin: string;
+  geo: UcExposureSlice[];
+  sectors: UcExposureSlice[];
+  asset_breakdown?: UcExposureSlice[];
+  holdings?: UcExposureSlice[];
+  style_box?: UcStyleBox | null;
+  source?: string | null;
+  complete: boolean;
+}
+
 export interface CompareRequest {
   isins: string[];
   forceVersion?: string | null;
@@ -47,10 +69,12 @@ export interface CompareResponse {
   winner_isin?: string | null;
   is_category_matched: boolean;
   category?: string | null;
+  category_warning?: string | null;
   score_gap?: number | null;
   fund_order: string[];
   criteria: UcCriterionScore[];
   metrics: UcFundMetricsSnapshot[];
+  exposition: UcFundExpositionSnapshot[];
   results: UcFundResultScore[];
   raw_json_payload: string;
 }

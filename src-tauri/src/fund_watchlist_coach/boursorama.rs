@@ -11,6 +11,33 @@ pub struct BoursoramaHoldingLine {
     pub weight_percent: Option<f64>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoursoramaBreakdownSlice {
+    pub label: String,
+    pub weight_percent: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoursoramaStyleBox {
+    pub cap: String,
+    pub style: String,
+    pub label_fr: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct BoursoramaExposition {
+    pub geo: Vec<BoursoramaBreakdownSlice>,
+    pub sectors: Vec<BoursoramaBreakdownSlice>,
+    pub asset_breakdown: Vec<BoursoramaBreakdownSlice>,
+    pub style_box: Option<BoursoramaStyleBox>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BoursoramaCompositionData {
+    pub holdings: Vec<BoursoramaHoldingLine>,
+    pub exposition: BoursoramaExposition,
+}
+
 pub fn boursorama_client() -> Result<Client, String> {
     Client::builder()
         .timeout(std::time::Duration::from_secs(20))
@@ -53,8 +80,22 @@ pub fn fetch_top_holdings(
     client: &Client,
     symbol: &str,
 ) -> Result<Vec<BoursoramaHoldingLine>, String> {
+    Ok(fetch_composition_data(client, symbol)?.holdings)
+}
+
+pub fn fetch_composition_data(
+    client: &Client,
+    symbol: &str,
+) -> Result<BoursoramaCompositionData, String> {
     let html = fetch_html(client, &composition_url(symbol))?;
-    Ok(parse_top_holdings_from_composition_html(&html))
+    Ok(parse_composition_html(&html))
+}
+
+pub fn parse_composition_html(html: &str) -> BoursoramaCompositionData {
+    BoursoramaCompositionData {
+        holdings: parse_top_holdings_from_composition_html(html),
+        exposition: parse_exposition_from_composition_html(html),
+    }
 }
 
 pub fn parse_opcvm_symbol_from_search_html(html: &str, isin: &str) -> Result<Option<String>, String> {
@@ -109,12 +150,14 @@ fn extract_opcvm_symbol_from_href(html: &str) -> Option<String> {
     None
 }
 
-pub fn fetch_top10_percent_for_isin(client: &Client, isin: &str) -> Result<Option<f64>, String> {
+pub fn fetch_composition_for_isin(
+    client: &Client,
+    isin: &str,
+) -> Result<Option<BoursoramaCompositionData>, String> {
     let Some(symbol) = resolve_opcvm_symbol(client, isin)? else {
         return Ok(None);
     };
-    let holdings = fetch_top_holdings(client, &symbol)?;
-    Ok(top10_concentration_percent(&holdings))
+    fetch_composition_data(client, &symbol).map(Some)
 }
 
 /// Somme des poids des 10 premières lignes de composition (en % du portefeuille).
@@ -174,6 +217,138 @@ fn decode_html_entities(text: &str) -> String {
         .replace("&quot;", "\"")
         .replace("&lt;", "<")
         .replace("&gt;", ">")
+}
+
+pub fn parse_exposition_from_composition_html(html: &str) -> BoursoramaExposition {
+    BoursoramaExposition {
+        geo: parse_pie_chart_slices(html, "regional"),
+        sectors: parse_pie_chart_slices(html, "sector"),
+        asset_breakdown: parse_pie_chart_slices(html, "portfolio"),
+        style_box: parse_morningstar_style_box(html),
+    }
+}
+
+fn parse_pie_chart_slices(html: &str, chart_id: &str) -> Vec<BoursoramaBreakdownSlice> {
+    let id_needle = format!(r#""id":"{chart_id}""#);
+    let Some(id_pos) = html.find(&id_needle) else {
+        return Vec::new();
+    };
+    let window = &html[id_pos..(id_pos + 2500).min(html.len())];
+    let marker = r#""amChartData":["#;
+    let Some(data_pos) = window.find(marker) else {
+        return Vec::new();
+    };
+    let array_start = data_pos + marker.len() - 1;
+    parse_name_value_array(&window[array_start..])
+}
+
+fn parse_name_value_array(fragment: &str) -> Vec<BoursoramaBreakdownSlice> {
+    let Some(end) = find_matching_bracket(fragment, '[', ']') else {
+        return Vec::new();
+    };
+    let body = &fragment[1..end];
+    let mut slices = Vec::new();
+    let mut search = 0;
+    while let Some(obj_start) = body[search..].find('{') {
+        let off = search + obj_start;
+        let Some(obj_end) = find_matching_bracket(&body[off..], '{', '}') else {
+            break;
+        };
+        let obj = &body[off..=off + obj_end];
+        if let Some((label, weight_percent)) = parse_name_value_object(obj) {
+            slices.push(BoursoramaBreakdownSlice {
+                label,
+                weight_percent,
+            });
+        }
+        search = off + obj_end + 1;
+    }
+    slices
+}
+
+fn parse_name_value_object(obj: &str) -> Option<(String, f64)> {
+    #[derive(serde::Deserialize)]
+    struct ChartItem {
+        name: String,
+        value: f64,
+    }
+    let item: ChartItem = serde_json::from_str(obj).ok()?;
+    let weight = ((item.value * 100.0).round()) / 100.0;
+    Some((item.name, weight))
+}
+
+fn find_matching_bracket(text: &str, open: char, close: char) -> Option<usize> {
+    let first = text.find(open)?;
+    let mut depth = 0;
+    for (idx, ch) in text[first..].char_indices() {
+        if ch == open {
+            depth += 1;
+        } else if ch == close {
+            depth -= 1;
+            if depth == 0 {
+                return Some(first + idx);
+            }
+        }
+    }
+    None
+}
+
+pub fn parse_morningstar_style_box(html: &str) -> Option<BoursoramaStyleBox> {
+    let marker = r#"<table class="c-morningstar-box""#;
+    let start = html.find(marker).or_else(|| html.find("c-morningstar-box\">"))?;
+    let section = &html[start..(start + 4000).min(html.len())];
+    for row in section.split("<tr").skip(1) {
+        if !row.contains("c-morningstar-box__cell--full") {
+            continue;
+        }
+        let cap_key = if row.contains("Grandes") {
+            "large_cap"
+        } else if row.contains("Moyennes") {
+            "mid_cap"
+        } else if row.contains("Petites") {
+            "small_cap"
+        } else {
+            continue;
+        };
+        let mut style_col = None;
+        let mut col = 0;
+        for part in row.split("<td") {
+            if part.contains("c-morningstar-box__cell")
+                && !part.contains("c-morningstar-box__text")
+            {
+                if part.contains("--full") {
+                    style_col = Some(col);
+                }
+                col += 1;
+            }
+        }
+        let style_col = style_col?;
+        let style_key = match style_col {
+            0 => "value",
+            1 => "blend",
+            _ => "growth",
+        };
+        return Some(BoursoramaStyleBox {
+            cap: cap_key.to_string(),
+            style: style_key.to_string(),
+            label_fr: style_box_label_fr(cap_key, style_key),
+        });
+    }
+    None
+}
+
+fn style_box_label_fr(cap: &str, style: &str) -> String {
+    let cap_label = match cap {
+        "large_cap" => "Grandes cap.",
+        "mid_cap" => "Moyennes cap.",
+        _ => "Petites cap.",
+    };
+    let style_label = match style {
+        "value" => "Valeur",
+        "blend" => "Mixte",
+        _ => "Croissance",
+    };
+    format!("{cap_label} / {style_label}")
 }
 
 #[cfg(test)]
@@ -266,5 +441,56 @@ mod tests {
             },
         ];
         assert_eq!(top10_concentration_percent(&holdings), Some(16.7));
+    }
+
+    #[test]
+    fn parse_exposition_extracts_geo_and_sectors_from_chart_json() {
+        let html = r#"
+        JSON.parse('{"data":{"amChartConfig":{"brs":{"id":"regional"}},"amChartData":[{"name":"Etats-Unis","value":72.25},{"name":"Allemagne","value":6.37}]}}');
+        JSON.parse('{"data":{"amChartConfig":{"brs":{"id":"sector"}},"amChartData":[{"name":"Technologie","value":83.66},{"name":"Sant\u00e9","value":4.83}]}}');
+        "#;
+        let expo = parse_exposition_from_composition_html(html);
+        assert_eq!(expo.geo.len(), 2);
+        assert_eq!(expo.geo[0].label, "Etats-Unis");
+        assert_eq!(expo.geo[0].weight_percent, 72.25);
+        assert_eq!(expo.sectors.len(), 2);
+        assert_eq!(expo.sectors[0].label, "Technologie");
+        assert_eq!(expo.sectors[1].label, "Santé");
+    }
+
+    #[test]
+    fn parse_composition_fixture_extracts_full_exposition() {
+        let html = include_str!("fixtures/boursorama_composition_minimal.html");
+        let data = parse_composition_html(html);
+        assert_eq!(top10_concentration_percent(&data.holdings), Some(16.7));
+        assert_eq!(data.exposition.geo.len(), 2);
+        assert_eq!(data.exposition.sectors.len(), 2);
+        assert_eq!(data.exposition.asset_breakdown.len(), 2);
+        let style = data.exposition.style_box.expect("style box");
+        assert_eq!(style.cap, "large_cap");
+        assert_eq!(style.style, "growth");
+    }
+
+    #[test]
+    fn parse_morningstar_style_box_reads_filled_cell() {
+        let html = r#"
+        <table class="c-morningstar-box">
+          <tr>
+            <td class="c-morningstar-box__text--top">Valeur</td>
+            <td class="c-morningstar-box__text--top">Mixte</td>
+            <td class="c-morningstar-box__text--top">Croiss</td>
+          </tr>
+          <tr>
+            <td class="c-morningstar-box__cell"></td>
+            <td class="c-morningstar-box__cell"></td>
+            <td class="c-morningstar-box__cell c-morningstar-box__cell--full"></td>
+            <td class="c-morningstar-box__text--right">Grandes<br>Capitalisations</td>
+          </tr>
+        </table>
+        "#;
+        let style = parse_morningstar_style_box(html).expect("style box");
+        assert_eq!(style.cap, "large_cap");
+        assert_eq!(style.style, "growth");
+        assert!(style.label_fr.contains("Grandes"));
     }
 }

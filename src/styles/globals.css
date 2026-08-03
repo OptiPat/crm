@@ -483,3 +483,172 @@
     page-break-after: avoid;
   }
 }
+
+/** Export PDF comparatif UC — impression navigateur. */
+#uc-comparator-print-portal {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  width: 210mm;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.uc-comparator-print-doc {
+  font-family: system-ui, "Segoe UI", sans-serif;
+  color: #111827;
+  font-size: 9.5pt;
+  line-height: 1.4;
+}
+
+.uc-comparator-print-header {
+  margin-bottom: 5mm;
+  padding-bottom: 3mm;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.uc-comparator-print-title {
+  margin: 0;
+  font-size: 16pt;
+  font-weight: 700;
+}
+
+.uc-comparator-print-subtitle,
+.uc-comparator-print-meta {
+  margin: 1.5mm 0 0;
+  font-size: 9pt;
+  color: #6b7280;
+}
+
+.uc-comparator-print-lead {
+  margin: 0 0 5mm;
+  font-size: 10pt;
+}
+
+.uc-comparator-print-section {
+  margin-bottom: 6mm;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.uc-comparator-print-section h2 {
+  margin: 0 0 2.5mm;
+  font-size: 11pt;
+  font-weight: 700;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.uc-comparator-print-section h3 {
+  margin: 3mm 0 1.5mm;
+  font-size: 10pt;
+  font-weight: 600;
+}
+
+.uc-comparator-print-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8.5pt;
+}
+
+.uc-comparator-print-table th,
+.uc-comparator-print-table td {
+  border: 1px solid #d1d5db;
+  padding: 1.5mm 2mm;
+  vertical-align: top;
+  text-align: left;
+}
+
+.uc-comparator-print-table th {
+  background: #f3f4f6;
+  font-weight: 600;
+}
+
+.uc-comparator-print-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.uc-comparator-print-mono {
+  font-family: ui-monospace, monospace;
+  font-size: 8pt;
+}
+
+.uc-comparator-print-caption {
+  font-size: 7.5pt;
+  color: #6b7280;
+}
+
+.uc-comparator-print-muted {
+  opacity: 0.55;
+}
+
+.uc-comparator-print-alerts {
+  margin: 2mm 0 0;
+  padding-left: 4mm;
+  font-size: 8.5pt;
+  color: #92400e;
+}
+
+.uc-comparator-print-note-block + .uc-comparator-print-note-block {
+  margin-top: 3mm;
+}
+
+.uc-comparator-print-note-block p {
+  margin: 0 0 2mm;
+}
+
+.uc-comparator-print-legal {
+  margin-top: 6mm;
+  padding-top: 3mm;
+  border-top: 1px solid #d1d5db;
+  font-size: 8pt;
+  color: #4b5563;
+}
+
+.uc-comparator-print-legal-title {
+  margin: 0 0 1.5mm;
+  font-weight: 600;
+  color: #374151;
+}
+
+@media print {
+  html.uc-comparator-printing body > *:not(#uc-comparator-print-portal) {
+    display: none !important;
+  }
+
+  html.uc-comparator-printing #uc-comparator-print-portal {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: auto !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    z-index: auto !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  html.uc-comparator-printing #uc-comparator-print-portal,
+  html.uc-comparator-printing #uc-comparator-print-portal * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  html.uc-comparator-printing .uc-comparator-print-doc {
+    padding: 10mm 12mm;
+  }
+
+  html.uc-comparator-printing .uc-comparator-print-table {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  html.uc-comparator-printing .uc-comparator-print-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

@@ -1,11 +1,12 @@
 use crate::commands::DbState;
 use crate::database::models::{UcComparatifRecord, UcMarketCacheRowDb};
 use crate::fund_watchlist_market_cache_fetch::{
-    apply_top10_updates, fetch_top10_for_isins, list_isins_missing_top10,
+    apply_boursorama_cache_updates, exposition_from_cache_json, fetch_boursorama_cache_for_isins,
+    list_isins_missing_boursorama_data,
 };
 use crate::uc_comparator::{
-    run_comparison, CompareRequest, CompareResponse, UcFundInput, UcFundMetricsSnapshot,
-    UcMarketCacheRow, UcScoringVersion, UcVerdict,
+    run_comparison, CompareRequest, CompareResponse, UcFundExpositionSnapshot, UcFundInput,
+    UcFundMetricsSnapshot, UcMarketCacheRow, UcScoringVersion, UcVerdict,
 };
 use tauri::State;
 
@@ -88,17 +89,17 @@ pub fn run_uc_comparison(
         entries
     };
 
-    let missing_top10 = {
+    let missing_boursorama = {
         let db_guard = db.lock().unwrap();
         let database = db_guard.as_ref().ok_or("Database not initialized")?;
-        list_isins_missing_top10(database, &isins)?
+        list_isins_missing_boursorama_data(database, &isins)?
     };
-    if !missing_top10.is_empty() {
-        let updates = fetch_top10_for_isins(&missing_top10)?;
+    if !missing_boursorama.is_empty() {
+        let updates = fetch_boursorama_cache_for_isins(&missing_boursorama)?;
         if !updates.is_empty() {
             let db_guard = db.lock().unwrap();
             let database = db_guard.as_ref().ok_or("Database not initialized")?;
-            apply_top10_updates(database, &updates)?;
+            apply_boursorama_cache_updates(database, &updates)?;
         }
     }
 
@@ -148,6 +149,16 @@ pub fn run_uc_comparison(
         .iter()
         .map(UcFundMetricsSnapshot::from_fund_input)
         .collect();
+    let exposition: Vec<UcFundExpositionSnapshot> = inputs
+        .iter()
+        .map(|fund| {
+            let cached = cache_by_isin.get(&fund.isin);
+            let parsed = cached
+                .and_then(|row| exposition_from_cache_json(row.exposition_json.as_deref()))
+                .unwrap_or_default();
+            UcFundExpositionSnapshot::from_exposition(&fund.isin, &parsed)
+        })
+        .collect();
 
     Ok(CompareResponse {
         comparatif_id,
@@ -157,10 +168,12 @@ pub fn run_uc_comparison(
         winner_isin: comparison.winner_isin,
         is_category_matched: comparison.is_same_category,
         category: comparison.category,
+        category_warning: comparison.category_warning,
         score_gap: comparison.score_gap,
         fund_order,
         criteria: comparison.criteria,
         metrics,
+        exposition,
         results: comparison.funds,
         raw_json_payload: comparison.raw_json_payload,
     })
