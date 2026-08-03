@@ -18,11 +18,13 @@ import {
 } from "@/lib/api/tauri-fund-watchlist";
 import { FundWatchlistImportDialog } from "@/components/fund-watchlist/FundWatchlistImportDialog";
 import { FundWatchlistColumnHeader } from "@/components/fund-watchlist/FundWatchlistColumnHeader";
-import { formatFundPerfPercent } from "@/lib/fund-watchlist/fund-watchlist-display";
+import { formatFundPerfPercent, formatFundShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-display";
 import { subscribeFundWatchlistChanged } from "@/lib/fund-watchlist/fund-watchlist-events";
+import { computeFundWatchlistShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-short-term-score";
 import {
   FUND_WATCHLIST_COLUMN_LABELS,
   FUND_WATCHLIST_COLUMN_ALIGN,
+  FUND_WATCHLIST_DEFAULT_SORT,
   applyFundWatchlistTable,
   collectFundWatchlistDistinctValues,
   cycleFundWatchlistSort,
@@ -48,6 +50,7 @@ const COLUMN_WIDTHS: Record<FundWatchlistColumnId, string> = {
   nom: "14%",
   categorie: "9%",
   sri: "32px",
+  score_ct: "52px",
   perf_ytd: "6.5%",
   perf_1semaine: "6.5%",
   perf_1mois: "6.5%",
@@ -64,6 +67,7 @@ const DATA_COLUMNS: FundWatchlistColumnId[] = [
   "nom",
   "categorie",
   "sri",
+  "score_ct",
   "perf_ytd",
   "perf_1semaine",
   "perf_1mois",
@@ -80,7 +84,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [importOpen, setImportOpen] = useState(false);
-  const [sort, setSort] = useState<FundWatchlistSort>(null);
+  const [sort, setSort] = useState<FundWatchlistSort>(FUND_WATCHLIST_DEFAULT_SORT);
   const [columnFilters, setColumnFilters] = useState<FundWatchlistColumnFilters>({});
 
   const load = useCallback(async () => {
@@ -153,9 +157,16 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   const clearTableFilters = () => {
     setSearch("");
     setColumnFilters({});
-    setSort(null);
+    setSort(FUND_WATCHLIST_DEFAULT_SORT);
     setFilter("all");
   };
+
+  const isDefaultTableView =
+    filter === "all" &&
+    !search.trim() &&
+    activeFilterCount === 0 &&
+    sort?.column === FUND_WATCHLIST_DEFAULT_SORT.column &&
+    sort?.direction === FUND_WATCHLIST_DEFAULT_SORT.direction;
 
   return (
     <div className="space-y-6 p-6">
@@ -166,7 +177,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
             Veille fonds
           </h1>
           <p className="text-muted-foreground mt-1 max-w-2xl">
-            Recherche et tri par colonne sur l&apos;univers supports de votre contrat.
+            Classement par score court terme (1 sem, 1 mois, 3 mois, YTD).
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -231,7 +242,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                 >
                   Favoris
                 </Button>
-                {(search.trim() || activeFilterCount > 0 || sort) && (
+                {!isDefaultTableView && (
                   <Button size="sm" variant="ghost" onClick={clearTableFilters}>
                     <X className="h-4 w-4 mr-1" />
                     Réinitialiser
@@ -374,6 +385,26 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                                 className={cn("px-1 py-1.5 tabular-nums", alignClass)}
                               >
                                 {entry.sri ?? "—"}
+                              </TableCell>
+                            );
+                          }
+                          if (column === "score_ct") {
+                            const score = computeFundWatchlistShortTermScore(entry);
+                            return (
+                              <TableCell
+                                key={column}
+                                className={cn(
+                                  "px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap font-medium",
+                                  alignClass,
+                                  score == null && "text-muted-foreground"
+                                )}
+                                title={
+                                  score == null
+                                    ? "Les 4 horizons court terme sont requis (1 sem, 1 mois, 3 mois, YTD)"
+                                    : undefined
+                                }
+                              >
+                                {formatFundShortTermScore(score)}
                               </TableCell>
                             );
                           }

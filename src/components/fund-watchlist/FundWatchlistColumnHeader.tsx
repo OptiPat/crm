@@ -35,7 +35,12 @@ interface FundWatchlistColumnHeaderProps {
 }
 
 function isNumericColumn(column: FundWatchlistColumnId): boolean {
-  return column === "sri" || column === "favorite" || column.startsWith("perf_");
+  return (
+    column === "sri" ||
+    column === "favorite" ||
+    column === "score_ct" ||
+    column.startsWith("perf_")
+  );
 }
 
 function isCategoricalColumn(column: FundWatchlistColumnId): boolean {

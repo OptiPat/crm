@@ -4,6 +4,12 @@ export function formatFundPerfPercent(value: number | null | undefined): string 
   return `${sign}${value.toFixed(1).replace(".", ",")}\u00a0%`;
 }
 
+export function formatFundShortTermScore(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(1).replace(".", ",")}`;
+}
+
 export function formatFundNav(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
   return value.toFixed(2).replace(".", ",");

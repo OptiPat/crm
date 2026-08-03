@@ -1,5 +1,6 @@
 import { textMatchesSearch } from "@/lib/search-utils";
 import type { FundWatchlistEntry } from "@/lib/api/tauri-fund-watchlist";
+import { computeFundWatchlistShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-short-term-score";
 
 export type FundWatchlistColumnId =
   | "favorite"
@@ -7,6 +8,7 @@ export type FundWatchlistColumnId =
   | "nom"
   | "categorie"
   | "sri"
+  | "score_ct"
   | "perf_ytd"
   | "perf_1semaine"
   | "perf_1mois"
@@ -22,6 +24,11 @@ export type FundWatchlistSort = {
   column: FundWatchlistColumnId;
   direction: FundWatchlistSortDirection;
 } | null;
+
+export const FUND_WATCHLIST_DEFAULT_SORT: NonNullable<FundWatchlistSort> = {
+  column: "score_ct",
+  direction: "desc",
+};
 
 export type FundWatchlistColumnFilter = {
   text?: string;
@@ -40,6 +47,7 @@ export const FUND_WATCHLIST_COLUMN_LABELS: Record<FundWatchlistColumnId, string>
   nom: "Nom",
   categorie: "Catégorie",
   sri: "SRI",
+  score_ct: "Score CT",
   perf_ytd: "YTD",
   perf_1semaine: "1 sem",
   perf_1mois: "1 mois",
@@ -59,6 +67,7 @@ export const FUND_WATCHLIST_COLUMN_ALIGN: Record<
   nom: "left",
   categorie: "left",
   sri: "center",
+  score_ct: "right",
   perf_ytd: "right",
   perf_1semaine: "right",
   perf_1mois: "right",
@@ -114,6 +123,8 @@ function entryNumericValue(
   switch (column) {
     case "sri":
       return entry.sri ?? null;
+    case "score_ct":
+      return computeFundWatchlistShortTermScore(entry);
     case "perf_ytd":
       return entry.perf_ytd ?? null;
     case "perf_1semaine":
@@ -139,6 +150,7 @@ function isNumericColumn(column: FundWatchlistColumnId): boolean {
   return (
     column === "sri" ||
     column === "favorite" ||
+    column === "score_ct" ||
     column.startsWith("perf_")
   );
 }
@@ -251,6 +263,21 @@ export function compareFundWatchlistEntries(
   if (!sort) return 0;
   const { column, direction } = sort;
 
+  if (column === "score_ct") {
+    const leftScore = computeFundWatchlistShortTermScore(left);
+    const rightScore = computeFundWatchlistShortTermScore(right);
+    const leftMissing = leftScore == null;
+    const rightMissing = rightScore == null;
+    if (leftMissing && rightMissing) {
+      return compareText(left.nom, right.nom, "asc");
+    }
+    if (leftMissing) return 1;
+    if (rightMissing) return -1;
+    const byScore = compareNullableNumber(leftScore, rightScore, direction);
+    if (byScore !== 0) return byScore;
+    return compareText(left.nom, right.nom, "asc");
+  }
+
   if (isNumericColumn(column)) {
     return compareNullableNumber(
       entryNumericValue(left, column),
@@ -266,8 +293,9 @@ export function sortFundWatchlistEntries(
   entries: FundWatchlistEntry[],
   sort: FundWatchlistSort
 ): FundWatchlistEntry[] {
-  if (!sort) return entries;
-  return [...entries].sort((a, b) => compareFundWatchlistEntries(a, b, sort));
+  const effectiveSort = sort ?? FUND_WATCHLIST_DEFAULT_SORT;
+  if (!effectiveSort) return entries;
+  return [...entries].sort((a, b) => compareFundWatchlistEntries(a, b, effectiveSort));
 }
 
 export function applyFundWatchlistTable(
