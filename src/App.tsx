@@ -16,6 +16,7 @@ import { Prescripteurs } from "@/pages/Prescripteurs";
 import { Partenaires } from "@/pages/Partenaires";
 import { Organisation } from "@/pages/Organisation";
 import { Investissements } from "@/pages/Investissements";
+import { VeilleFonds } from "@/pages/VeilleFonds";
 import { Documents } from "@/pages/Documents";
 import { SouscriptionCif } from "@/pages/SouscriptionCif";
 import { Interactions } from "@/pages/Interactions";
@@ -274,6 +275,8 @@ function AppInner() {
         return <Organisation onNavigate={setCurrentPage} />;
       case "investissements":
         return <Investissements onNavigate={setCurrentPage} />;
+      case "veille-fonds":
+        return <VeilleFonds onNavigate={setCurrentPage} />;
       case "interactions":
         return (
           <Interactions

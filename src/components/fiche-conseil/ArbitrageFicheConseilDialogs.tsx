@@ -1,5 +1,6 @@
 import { ArbitrageFicheContratPickDialog } from "@/components/taches/ArbitrageFicheContratPickDialog";
 import { ArbitrageFicheTemplatePickDialog } from "@/components/taches/ArbitrageFicheTemplatePickDialog";
+import { ArbitrageFicheRedactionDialog } from "@/components/fiche-conseil/ArbitrageFicheRedactionDialog";
 import type { FicheConseilHook } from "@/hooks/useArbitrageFicheConseil";
 
 interface ArbitrageFicheConseilDialogsProps {
@@ -14,6 +15,9 @@ export function ArbitrageFicheConseilDialogs({ hook }: ArbitrageFicheConseilDial
     pendingPick,
     setPendingPick,
     confirmTemplatePick,
+    pendingRedaction,
+    setPendingRedaction,
+    confirmRedaction,
   } = hook;
 
   return (
@@ -34,6 +38,14 @@ export function ArbitrageFicheConseilDialogs({ hook }: ArbitrageFicheConseilDial
         }}
         templates={pendingPick?.templates ?? []}
         onConfirm={confirmTemplatePick}
+      />
+      <ArbitrageFicheRedactionDialog
+        open={pendingRedaction !== null}
+        generationContext={pendingRedaction}
+        onOpenChange={(open) => {
+          if (!open) setPendingRedaction(null);
+        }}
+        onConfirm={confirmRedaction}
       />
     </>
   );

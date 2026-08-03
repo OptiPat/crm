@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fillArbitrageFicheConseilPdf } from "@/lib/pdf/arbitrage-fiche-conseil/fill-fiche";
+import { ARBITRAGE_AV_REDACTION_PDF_FIELDS } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-redaction-pdf-fields";
 import {
   VP_MODIFICATION_MONTANT_CHECKBOX_FIELD,
   VP_MODIFICATION_MONTANT_TEXT_FIELD,
@@ -61,6 +62,43 @@ describe("fillArbitrageFicheConseilPdf", () => {
     expect(form.getTextField("Prenomclient").getText()).toBe("Jean");
     expect(form.getTextField("enveloppe").getText()).toBe("AV-123456");
     expect(form.getTextField("Nomconsultant").getText() ?? "").toBe("");
+  });
+
+  it("remplit la rédaction arbitrage AV", async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage();
+    const form = doc.getForm();
+    form.createTextField("Nomclient");
+    form.createTextField("Prenomclient");
+    form.createTextField("enveloppe");
+    form.createTextField(ARBITRAGE_AV_REDACTION_PDF_FIELDS.motif);
+    form.createTextField(ARBITRAGE_AV_REDACTION_PDF_FIELDS.supportsDesinvestis);
+    form.createTextField(ARBITRAGE_AV_REDACTION_PDF_FIELDS.supportsInvestis);
+    const template = await doc.save();
+
+    const filled = await fillArbitrageFicheConseilPdf(
+      template,
+      "AV",
+      {
+        ...input,
+        arbitrageRedaction: {
+          motif: "Rééquilibrage suite à la hausse des taux.",
+          supportsDesinvestis: "UC Monétaire",
+          supportsInvestis: "UC Obligataire",
+        },
+      },
+      { templateFamily: "ARBITRAGE" }
+    );
+    const filledForm = (await PDFDocument.load(filled)).getForm();
+    expect(filledForm.getTextField(ARBITRAGE_AV_REDACTION_PDF_FIELDS.motif).getText()).toBe(
+      "Rééquilibrage suite à la hausse des taux."
+    );
+    expect(
+      filledForm.getTextField(ARBITRAGE_AV_REDACTION_PDF_FIELDS.supportsDesinvestis).getText()
+    ).toBe("UC Monétaire");
+    expect(
+      filledForm.getTextField(ARBITRAGE_AV_REDACTION_PDF_FIELDS.supportsInvestis).getText()
+    ).toBe("UC Obligataire");
   });
 
   it("remplit le montant VP sur modèle modification AV", async () => {

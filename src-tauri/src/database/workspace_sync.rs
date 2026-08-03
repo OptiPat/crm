@@ -91,6 +91,8 @@ const TABLE_POLICIES: &[(&str, WorkspaceTablePolicy)] = &[
     ),
     ("filleul_volume_exercices", WorkspaceTablePolicy::Shared),
     ("filleul_dossier", WorkspaceTablePolicy::Shared),
+    ("fund_watchlist", WorkspaceTablePolicy::LocalOnly),
+    ("fiche_conseil_redaction_presets", WorkspaceTablePolicy::Shared),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

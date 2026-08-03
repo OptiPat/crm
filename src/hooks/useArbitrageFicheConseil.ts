@@ -21,6 +21,7 @@ import {
 } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-fiche-template";
 import type { VpModificationPdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
 import type { VpMiseEnPlacePdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-types";
+import type { FicheConseilArbitrageRedactionInput } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-redaction-labels";
 import {
   filterFicheConseilEligibleInvestissements,
   filterFicheConseilContratPickItemsByProductKind,
@@ -39,13 +40,17 @@ import {
 export type FicheConseilHook = ReturnType<typeof useArbitrageFicheConseil>;
 
 export function isFicheConseilActionsBusy(
-  hook: Pick<FicheConseilHook, "busy" | "pendingPick" | "pendingContratPick">,
+  hook: Pick<
+    FicheConseilHook,
+    "busy" | "pendingPick" | "pendingContratPick" | "pendingRedaction"
+  >,
   sendToPipeBusyId?: number | null
 ): boolean {
   return (
     hook.busy ||
     hook.pendingPick != null ||
     hook.pendingContratPick != null ||
+    hook.pendingRedaction != null ||
     sendToPipeBusyId != null
   );
 }
@@ -78,11 +83,24 @@ export type ArbitrageFicheContratPickPending = {
   suggestedInvestissementId?: number;
 };
 
+export type ArbitrageFicheGenerationPending = {
+  contactId: number;
+  templateId: string;
+  productKind: ArbitrageFicheProductKind;
+  investissementId: number;
+  templateFamily: FicheConseilTemplateFamily;
+  vpModification?: VpModificationPdfFillInput;
+  vpMiseEnPlace?: VpMiseEnPlacePdfFillInput;
+};
+
 export function useArbitrageFicheConseil() {
   const [busy, setBusy] = useState(false);
   const [pendingContratPick, setPendingContratPick] =
     useState<ArbitrageFicheContratPickPending | null>(null);
   const [pendingPick, setPendingPick] = useState<ArbitrageFicheTemplatePickPending | null>(null);
+  const [pendingRedaction, setPendingRedaction] = useState<ArbitrageFicheGenerationPending | null>(
+    null
+  );
 
   const runGeneration = useCallback(
     async (
@@ -94,6 +112,7 @@ export function useArbitrageFicheConseil() {
       options?: {
         vpModification?: VpModificationPdfFillInput;
         vpMiseEnPlace?: VpMiseEnPlacePdfFillInput;
+        arbitrageRedaction?: FicheConseilArbitrageRedactionInput;
       }
     ) => {
       setBusy(true);
@@ -119,6 +138,27 @@ export function useArbitrageFicheConseil() {
       }
     },
     []
+  );
+
+  const queueForGeneration = useCallback(
+    (pending: ArbitrageFicheGenerationPending) => {
+      if (pending.templateFamily === "ARBITRAGE" && pending.productKind === "AV") {
+        setPendingRedaction(pending);
+        return;
+      }
+      void runGeneration(
+        pending.contactId,
+        pending.templateId,
+        pending.productKind,
+        pending.investissementId,
+        pending.templateFamily,
+        {
+          vpModification: pending.vpModification,
+          vpMiseEnPlace: pending.vpMiseEnPlace,
+        }
+      );
+    },
+    [runGeneration]
   );
 
   const continueWithInvestissement = useCallback(
@@ -154,17 +194,15 @@ export function useArbitrageFicheConseil() {
       const templates = await requireArbitrageFicheTemplates(productKind, templateFamily);
       const resolved = resolveArbitrageFicheTemplateForGeneration(templates);
       if (resolved) {
-        await runGeneration(
+        queueForGeneration({
           contactId,
-          resolved.id,
+          templateId: resolved.id,
           productKind,
           investissementId,
           templateFamily,
-          {
-            vpModification: context.vpModification,
-            vpMiseEnPlace: context.vpMiseEnPlace,
-          }
-        );
+          vpModification: context.vpModification,
+          vpMiseEnPlace: context.vpMiseEnPlace,
+        });
         return;
       }
       setPendingPick({
@@ -175,12 +213,12 @@ export function useArbitrageFicheConseil() {
         templateFamily,
       });
     },
-    [runGeneration]
+    [queueForGeneration]
   );
 
   const startFicheConseil = useCallback(
     async (context: FicheConseilContext, options?: FicheConseilStartOptions) => {
-      if (busy || pendingPick || pendingContratPick) {
+      if (busy || pendingPick || pendingContratPick || pendingRedaction) {
         toast.info("Génération fiche conseil en cours…");
         return;
       }
@@ -249,7 +287,7 @@ export function useArbitrageFicheConseil() {
         setBusy(false);
       }
     },
-    [busy, pendingPick, pendingContratPick, continueWithInvestissement]
+    [busy, pendingPick, pendingContratPick, pendingRedaction, continueWithInvestissement]
   );
 
   const startFicheConseilForTask = useCallback(
@@ -334,20 +372,40 @@ export function useArbitrageFicheConseil() {
       const pending = pendingPick;
       setPendingPick(null);
       if (pending) {
-        void runGeneration(
-          pending.context.contactId,
+        queueForGeneration({
+          contactId: pending.context.contactId,
           templateId,
-          pending.productKind,
-          pending.investissementId,
-          pending.templateFamily,
-          {
-            vpModification: pending.context.vpModification,
-            vpMiseEnPlace: pending.context.vpMiseEnPlace,
-          }
-        );
+          productKind: pending.productKind,
+          investissementId: pending.investissementId,
+          templateFamily: pending.templateFamily,
+          vpModification: pending.context.vpModification,
+          vpMiseEnPlace: pending.context.vpMiseEnPlace,
+        });
       }
     },
-    [pendingPick, runGeneration]
+    [pendingPick, queueForGeneration]
+  );
+
+  const confirmRedaction = useCallback(
+    (
+      context: ArbitrageFicheGenerationPending,
+      redaction: FicheConseilArbitrageRedactionInput
+    ) => {
+      setPendingRedaction(null);
+      void runGeneration(
+        context.contactId,
+        context.templateId,
+        context.productKind,
+        context.investissementId,
+        context.templateFamily,
+        {
+          vpModification: context.vpModification,
+          vpMiseEnPlace: context.vpMiseEnPlace,
+          arbitrageRedaction: redaction,
+        }
+      );
+    },
+    [runGeneration]
   );
 
   return {
@@ -360,6 +418,9 @@ export function useArbitrageFicheConseil() {
     pendingPick,
     setPendingPick,
     confirmTemplatePick,
+    pendingRedaction,
+    setPendingRedaction,
+    confirmRedaction,
     busy,
   };
 }

@@ -12,6 +12,7 @@ import { fillArbitrageFicheConseilPdf } from "@/lib/pdf/arbitrage-fiche-conseil/
 import { buildArbitrageFicheOutputFileName } from "@/lib/pdf/arbitrage-fiche-conseil/build-output-filename";
 import type { VpModificationPdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
 import type { VpMiseEnPlacePdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-types";
+import type { FicheConseilArbitrageRedactionInput } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-redaction-labels";
 export type GenerateArbitrageFicheConseilResult = {
   savedPath: string;
   opened: boolean;
@@ -23,7 +24,11 @@ export async function generateArbitrageFicheConseil(
   productKind: ArbitrageFicheProductKind,
   investissementId: number,
   templateFamily: FicheConseilTemplateFamily = "ARBITRAGE",
-  options?: { vpModification?: VpModificationPdfFillInput; vpMiseEnPlace?: VpMiseEnPlacePdfFillInput }
+  options?: {
+    vpModification?: VpModificationPdfFillInput;
+    vpMiseEnPlace?: VpMiseEnPlacePdfFillInput;
+    arbitrageRedaction?: FicheConseilArbitrageRedactionInput;
+  }
 ): Promise<GenerateArbitrageFicheConseilResult> {
   if (!contactId) {
     throw new Error("Aucun contact lié.");
@@ -51,6 +56,7 @@ export async function generateArbitrageFicheConseil(
       nomClient: contact.nom,
       prenomClient: contact.prenom,
       numeroContrat: investissement.numero_contrat ?? null,
+      arbitrageRedaction: options?.arbitrageRedaction,
       vpModification: options?.vpModification,
       vpMiseEnPlace: options?.vpMiseEnPlace,
     },

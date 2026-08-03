@@ -1827,3 +1827,116 @@ pub struct PipeRemunerationRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub date_souscription: Option<i64>,
 }
+
+/// Fonds surveillé (veille patrimoniale CGP — sans lien client).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FundWatchlistEntry {
+    pub id: i64,
+    pub isin: String,
+    pub nom: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub categorie: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notation_morningstar: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sri: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vl_previous: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vl_recent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vl_date: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub perf_ytd: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub perf_1semaine: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub perf_1mois: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub perf_3mois: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub perf_1an: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub perf_3ans: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub perf_5ans: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frais_gestion: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sfdr: Option<String>,
+    pub source_label: String,
+    pub is_favorite: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FundWatchlistImportRow {
+    pub isin: String,
+    pub nom: String,
+    #[serde(default)]
+    pub categorie: Option<String>,
+    #[serde(default)]
+    pub notation_morningstar: Option<i64>,
+    #[serde(default)]
+    pub sri: Option<i64>,
+    #[serde(default)]
+    pub vl_previous: Option<f64>,
+    #[serde(default)]
+    pub vl_recent: Option<f64>,
+    #[serde(default)]
+    pub vl_date: Option<i64>,
+    #[serde(default)]
+    pub perf_ytd: Option<f64>,
+    #[serde(default)]
+    pub perf_1semaine: Option<f64>,
+    #[serde(default)]
+    pub perf_1mois: Option<f64>,
+    #[serde(default)]
+    pub perf_3mois: Option<f64>,
+    #[serde(default)]
+    pub perf_1an: Option<f64>,
+    #[serde(default)]
+    pub perf_3ans: Option<f64>,
+    #[serde(default)]
+    pub perf_5ans: Option<f64>,
+    #[serde(default)]
+    pub frais_gestion: Option<f64>,
+    #[serde(default)]
+    pub sfdr: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FundWatchlistImportResult {
+    pub inserted: usize,
+    pub updated: usize,
+    pub total: usize,
+}
+
+/// Preset de rédaction réutilisable (fiche conseil arbitrage).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FicheConseilRedactionPreset {
+    pub id: i64,
+    pub nom: String,
+    pub motif: String,
+    pub supports_desinvestis: String,
+    pub supports_investis: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NewFicheConseilRedactionPreset {
+    pub nom: String,
+    pub motif: String,
+    pub supports_desinvestis: String,
+    pub supports_investis: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UpdateFicheConseilRedactionPreset {
+    pub nom: String,
+    pub motif: String,
+    pub supports_desinvestis: String,
+    pub supports_investis: String,
+}

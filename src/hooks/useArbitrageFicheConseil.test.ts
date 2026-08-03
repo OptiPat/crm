@@ -6,6 +6,7 @@ describe("isFicheConseilActionsBusy", () => {
     busy: false,
     pendingPick: null,
     pendingContratPick: null,
+    pendingRedaction: null,
   };
 
   it("idle sans envoi pipe", () => {
@@ -16,6 +17,7 @@ describe("isFicheConseilActionsBusy", () => {
     expect(isFicheConseilActionsBusy({ ...idle, busy: true })).toBe(true);
     expect(isFicheConseilActionsBusy({ ...idle, pendingPick: {} as never })).toBe(true);
     expect(isFicheConseilActionsBusy({ ...idle, pendingContratPick: {} as never })).toBe(true);
+    expect(isFicheConseilActionsBusy({ ...idle, pendingRedaction: {} as never })).toBe(true);
   });
 
   it("busy pendant envoi pipe", () => {

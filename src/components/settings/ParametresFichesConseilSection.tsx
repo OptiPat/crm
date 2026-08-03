@@ -1,13 +1,19 @@
 import { SettingsPanel } from "@/components/settings/parametres-ui";
 import { ArbitrageFicheTemplatesManager } from "@/components/settings/ArbitrageFicheTemplatesManager";
+import { FicheConseilRedactionPresetsManager } from "@/components/settings/FicheConseilRedactionPresetsManager";
 
 export function ParametresFichesConseilSection() {
   return (
     <SettingsPanel
       title="Fiches conseil"
-      description="Modèles PDF pré-remplis (arbitrage, mise en place et modification des versements programmés). Le CRM complète nom, prénom et n° de contrat à la génération."
+      description="Modèles PDF et textes de rédaction pour les fiches conseil arbitrage."
     >
       <div className="space-y-8">
+        <section className="space-y-4">
+          <p className="text-sm font-medium">Textes arbitrage</p>
+          <FicheConseilRedactionPresetsManager />
+        </section>
+
         <section className="space-y-4">
           <p className="text-sm font-medium">Arbitrage</p>
           <div className="space-y-6">

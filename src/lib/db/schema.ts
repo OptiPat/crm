@@ -620,6 +620,49 @@ export const filleulDossier = sqliteTable("filleul_dossier", {
     .notNull(),
 });
 
+export const fundWatchlist = sqliteTable("fund_watchlist", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  isin: text("isin").notNull().unique(),
+  nom: text("nom").notNull(),
+  categorie: text("categorie"),
+  notationMorningstar: integer("notation_morningstar"),
+  sri: integer("sri"),
+  vlPrevious: real("vl_previous"),
+  vlRecent: real("vl_recent"),
+  vlDate: integer("vl_date"),
+  perfYtd: real("perf_ytd"),
+  perf1semaine: real("perf_1semaine"),
+  perf1mois: real("perf_1mois"),
+  perf3mois: real("perf_3mois"),
+  perf1an: real("perf_1an"),
+  perf3ans: real("perf_3ans"),
+  perf5ans: real("perf_5ans"),
+  fraisGestion: real("frais_gestion"),
+  sfdr: text("sfdr"),
+  sourceLabel: text("source_label").notNull().default("import"),
+  isFavorite: integer("is_favorite", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+});
+
+export const ficheConseilRedactionPresets = sqliteTable("fiche_conseil_redaction_presets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  nom: text("nom").notNull().unique(),
+  motif: text("motif").notNull().default(""),
+  supportsDesinvestis: text("supports_desinvestis").notNull().default(""),
+  supportsInvestis: text("supports_investis").notNull().default(""),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+});
+
 // Types TypeScript pour l'utilisation dans l'application
 export type Foyer = typeof foyers.$inferSelect;
 export type NewFoyer = typeof foyers.$inferInsert;

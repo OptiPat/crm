@@ -1,4 +1,6 @@
 import type { ArbitrageFicheProductKind, FicheConseilTemplateFamily } from "@/lib/api/tauri-arbitrage-fiche";
+import type { FicheConseilArbitrageRedactionInput } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-redaction-labels";
+import { ARBITRAGE_AV_REDACTION_PDF_FIELDS } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-redaction-pdf-fields";
 import type { VpModificationPdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
 import { applyVpModificationAvPdfFill } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-pdf-fill";
 import { applyVpModificationPerPdfFill } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-per-pdf-fill";
@@ -10,6 +12,7 @@ export type ArbitrageFicheConseilFillInput = {
   nomClient: string;
   prenomClient: string;
   numeroContrat?: string | null;
+  arbitrageRedaction?: FicheConseilArbitrageRedactionInput;
   vpModification?: VpModificationPdfFillInput;
   vpMiseEnPlace?: VpMiseEnPlacePdfFillInput;
 };
@@ -47,6 +50,12 @@ export async function fillArbitrageFicheConseilPdf(
     setTextField(form, "Nomclient", input.nomClient);
     setTextField(form, "Prenomclient", input.prenomClient);
     setTextField(form, "enveloppe", input.numeroContrat);
+    if (templateFamily === "ARBITRAGE" && input.arbitrageRedaction) {
+      const { motif, supportsDesinvestis, supportsInvestis } = input.arbitrageRedaction;
+      setTextField(form, ARBITRAGE_AV_REDACTION_PDF_FIELDS.motif, motif);
+      setTextField(form, ARBITRAGE_AV_REDACTION_PDF_FIELDS.supportsDesinvestis, supportsDesinvestis);
+      setTextField(form, ARBITRAGE_AV_REDACTION_PDF_FIELDS.supportsInvestis, supportsInvestis);
+    }
   } else {
     // PER : investisseur 1 = Nom / Prénom (champ unique), n° contrat séparé.
     setTextField(form, "invest1", clientFullName(input));

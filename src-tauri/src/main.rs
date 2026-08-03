@@ -18,6 +18,8 @@ mod database;
 mod documents_storage;
 mod email;
 mod export_archive;
+mod fund_watchlist_commands;
+mod fiche_conseil_redaction_commands;
 mod licensing;
 mod navigation_guard;
 mod newsletter;
@@ -609,6 +611,13 @@ fn main() {
             team_release_lock_cmd,
             team_append_audit_cmd,
             team_list_audit_cmd,
+            fund_watchlist_commands::get_all_fund_watchlist_entries,
+            fund_watchlist_commands::import_fund_watchlist_entries,
+            fund_watchlist_commands::set_fund_watchlist_favorite,
+            fiche_conseil_redaction_commands::get_all_fiche_conseil_redaction_presets,
+            fiche_conseil_redaction_commands::create_fiche_conseil_redaction_preset,
+            fiche_conseil_redaction_commands::update_fiche_conseil_redaction_preset,
+            fiche_conseil_redaction_commands::delete_fiche_conseil_redaction_preset,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

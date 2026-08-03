@@ -25,9 +25,11 @@ pub mod etiquettes;
 pub mod etiquettes_auto_engine;
 pub mod exchange_history;
 pub mod familles;
+pub mod fiche_conseil_redaction_presets;
 pub mod filleul_dossier;
 pub mod filleul_volumes;
 pub mod filleuls;
+pub mod fund_watchlist;
 pub mod foyers;
 pub mod google_contact_name_dismissals;
 pub mod interactions;
@@ -684,7 +686,85 @@ impl Database {
         self.migrate_workspace_blob()?;
         self.migrate_workspace_outbox()?;
         self.migrate_exceltis_tache_fiche_markers()?;
+        self.migrate_fund_watchlist_table()?;
+        self.migrate_fiche_conseil_redaction_presets_table()?;
 
+        Ok(())
+    }
+
+    fn migrate_fiche_conseil_redaction_presets_table(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS fiche_conseil_redaction_presets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL UNIQUE,
+                motif TEXT NOT NULL DEFAULT '',
+                supports_desinvestis TEXT NOT NULL DEFAULT '',
+                supports_investis TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS fiche_conseil_redaction_presets_nom_idx
+             ON fiche_conseil_redaction_presets (nom COLLATE NOCASE)",
+            [],
+        )?;
+        self.ensure_workspace_outbox_triggers_for_table("fiche_conseil_redaction_presets")?;
+        Ok(())
+    }
+
+    fn migrate_fund_watchlist_table(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS fund_watchlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                isin TEXT NOT NULL UNIQUE,
+                nom TEXT NOT NULL,
+                categorie TEXT,
+                notation_morningstar INTEGER,
+                sri INTEGER,
+                vl_previous REAL,
+                vl_recent REAL,
+                vl_date INTEGER,
+                perf_ytd REAL,
+                perf_1semaine REAL,
+                perf_1mois REAL,
+                perf_3mois REAL,
+                perf_1an REAL,
+                perf_3ans REAL,
+                perf_5ans REAL,
+                frais_gestion REAL,
+                sfdr TEXT,
+                source_label TEXT NOT NULL DEFAULT 'import',
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS fund_watchlist_favorite_idx ON fund_watchlist (is_favorite)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS fund_watchlist_nom_idx ON fund_watchlist (nom COLLATE NOCASE)",
+            [],
+        )?;
+        if !self.table_has_column("fund_watchlist", "perf_1semaine")? {
+            self.conn
+                .execute("ALTER TABLE fund_watchlist ADD COLUMN perf_1semaine REAL", [])?;
+            println!("✅ Migration: colonne perf_1semaine sur fund_watchlist");
+        }
+        if !self.table_has_column("fund_watchlist", "perf_3mois")? {
+            self.conn
+                .execute("ALTER TABLE fund_watchlist ADD COLUMN perf_3mois REAL", [])?;
+            println!("✅ Migration: colonne perf_3mois sur fund_watchlist");
+        }
+        if !self.table_has_column("fund_watchlist", "perf_1mois")? {
+            self.conn
+                .execute("ALTER TABLE fund_watchlist ADD COLUMN perf_1mois REAL", [])?;
+            println!("✅ Migration: colonne perf_1mois sur fund_watchlist");
+        }
         Ok(())
     }
 

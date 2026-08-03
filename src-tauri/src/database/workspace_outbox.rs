@@ -358,6 +358,13 @@ impl Database {
         Ok(())
     }
 
+    pub(crate) fn ensure_workspace_outbox_triggers_for_table(&self, table: &str) -> Result<()> {
+        if is_table_exportable(table) {
+            install_table_triggers(&self.conn, table)?;
+        }
+        Ok(())
+    }
+
     #[cfg(test)]
     pub fn workspace_sync_set_capture_enabled(&self, enabled: bool) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
