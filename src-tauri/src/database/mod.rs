@@ -711,6 +711,71 @@ impl Database {
             [],
         )?;
         self.ensure_workspace_outbox_triggers_for_table("fiche_conseil_redaction_presets")?;
+        if !self.table_has_column("fiche_conseil_redaction_presets", "product_kind")? {
+            self.conn.execute(
+                "ALTER TABLE fiche_conseil_redaction_presets ADD COLUMN product_kind TEXT NOT NULL DEFAULT 'AV'",
+                [],
+            )?;
+            println!("✅ Migration: colonne product_kind sur fiche_conseil_redaction_presets");
+        }
+        if !self.table_has_column("fiche_conseil_redaction_presets", "allocation_operation")? {
+            self.conn.execute(
+                "ALTER TABLE fiche_conseil_redaction_presets ADD COLUMN allocation_operation TEXT NOT NULL DEFAULT ''",
+                [],
+            )?;
+            println!("✅ Migration: colonne allocation_operation sur fiche_conseil_redaction_presets");
+        }
+        self.migrate_fiche_conseil_redaction_presets_unique_by_product_kind()?;
+        Ok(())
+    }
+
+    /// Unicité (nom, product_kind) : le même libellé peut exister en AV et en PER.
+    fn migrate_fiche_conseil_redaction_presets_unique_by_product_kind(&self) -> Result<()> {
+        let has_composite: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'index' AND name = 'fiche_conseil_redaction_presets_nom_product_kind_uidx'",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_composite > 0 {
+            return Ok(());
+        }
+
+        self.conn.execute_batch(
+            "CREATE TABLE fiche_conseil_redaction_presets_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL,
+                product_kind TEXT NOT NULL DEFAULT 'AV',
+                motif TEXT NOT NULL DEFAULT '',
+                supports_desinvestis TEXT NOT NULL DEFAULT '',
+                supports_investis TEXT NOT NULL DEFAULT '',
+                allocation_operation TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                UNIQUE (nom, product_kind)
+            );
+            INSERT INTO fiche_conseil_redaction_presets_new
+                (id, nom, product_kind, motif, supports_desinvestis, supports_investis, allocation_operation, created_at, updated_at)
+            SELECT
+                id,
+                nom,
+                COALESCE(NULLIF(trim(product_kind), ''), 'AV'),
+                motif,
+                supports_desinvestis,
+                supports_investis,
+                COALESCE(allocation_operation, ''),
+                created_at,
+                updated_at
+            FROM fiche_conseil_redaction_presets;
+            DROP TABLE fiche_conseil_redaction_presets;
+            ALTER TABLE fiche_conseil_redaction_presets_new RENAME TO fiche_conseil_redaction_presets;
+            CREATE INDEX IF NOT EXISTS fiche_conseil_redaction_presets_nom_idx
+                ON fiche_conseil_redaction_presets (nom COLLATE NOCASE);
+            CREATE UNIQUE INDEX IF NOT EXISTS fiche_conseil_redaction_presets_nom_product_kind_uidx
+                ON fiche_conseil_redaction_presets (nom COLLATE NOCASE, product_kind);",
+        )?;
+        self.ensure_workspace_outbox_triggers_for_table("fiche_conseil_redaction_presets")?;
+        println!("✅ Migration: unicité fiche_conseil_redaction_presets (nom, product_kind)");
         Ok(())
     }
 

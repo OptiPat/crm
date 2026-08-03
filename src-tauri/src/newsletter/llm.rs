@@ -1,6 +1,11 @@
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
+use std::thread;
 use std::time::Duration;
+
+const LLM_MAX_ATTEMPTS: u32 = 3;
+const LLM_RETRY_BASE_DELAY_MS: u64 = 2_000;
+const ANTHROPIC_MAX_OUTPUT_TOKENS: u32 = 16_384;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LlmProvider {
@@ -55,6 +60,27 @@ pub fn call_chat_json(
     messages: Vec<(String, String)>,
     temperature: f32,
 ) -> Result<String, String> {
+    call_chat(provider, api_key, model, messages, temperature, true)
+}
+
+pub fn call_chat_markdown(
+    provider: LlmProvider,
+    api_key: &str,
+    model: &str,
+    messages: Vec<(String, String)>,
+    temperature: f32,
+) -> Result<String, String> {
+    call_chat(provider, api_key, model, messages, temperature, false)
+}
+
+fn call_chat(
+    provider: LlmProvider,
+    api_key: &str,
+    model: &str,
+    messages: Vec<(String, String)>,
+    temperature: f32,
+    json_mode: bool,
+) -> Result<String, String> {
     if messages.is_empty() {
         return Err(format!("Aucun message pour {}.", provider.label()));
     }
@@ -73,7 +99,7 @@ pub fn call_chat_json(
     };
 
     match provider {
-        LlmProvider::Mistral => call_openai_compatible_json(
+        LlmProvider::Mistral => call_openai_compatible_chat(
             provider,
             "https://api.mistral.ai/v1/chat/completions",
             &format!("Bearer {key}"),
@@ -81,8 +107,9 @@ pub fn call_chat_json(
             model,
             messages,
             temperature,
+            json_mode,
         ),
-        LlmProvider::OpenAi => call_openai_compatible_json(
+        LlmProvider::OpenAi => call_openai_compatible_chat(
             provider,
             "https://api.openai.com/v1/chat/completions",
             &format!("Bearer {key}"),
@@ -90,13 +117,26 @@ pub fn call_chat_json(
             model,
             messages,
             temperature,
+            json_mode,
         ),
-        LlmProvider::Anthropic => call_anthropic_json(key, model, messages, temperature),
-        LlmProvider::Google => call_gemini_json(key, model, messages, temperature),
+        LlmProvider::Anthropic => {
+            if json_mode {
+                call_anthropic_json(key, model, messages, temperature)
+            } else {
+                call_anthropic_markdown(key, model, messages, temperature)
+            }
+        }
+        LlmProvider::Google => {
+            if json_mode {
+                call_gemini_json(key, model, messages, temperature)
+            } else {
+                call_gemini_markdown(key, model, messages, temperature)
+            }
+        }
     }
 }
 
-fn call_openai_compatible_json(
+fn call_openai_compatible_chat(
     provider: LlmProvider,
     url: &str,
     auth_header: &str,
@@ -104,6 +144,7 @@ fn call_openai_compatible_json(
     model: &str,
     messages: Vec<(String, String)>,
     temperature: f32,
+    json_mode: bool,
 ) -> Result<String, String> {
     #[derive(Serialize)]
     struct Message {
@@ -120,7 +161,8 @@ fn call_openai_compatible_json(
         model: String,
         temperature: f32,
         messages: Vec<Message>,
-        response_format: ResponseFormat,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        response_format: Option<ResponseFormat>,
     }
     #[derive(Deserialize)]
     struct ChoiceMessage {
@@ -142,39 +184,53 @@ fn call_openai_compatible_json(
             .into_iter()
             .map(|(role, content)| Message { role, content })
             .collect(),
-        response_format: ResponseFormat {
+        response_format: json_mode.then(|| ResponseFormat {
             format_type: "json_object".into(),
-        },
+        }),
     };
 
     let client = http_client()?;
-    let mut req = client
-        .post(url)
-        .header("Authorization", auth_header)
-        .header("Content-Type", "application/json");
-    if let Some((name, value)) = extra_header {
-        req = req.header(name, value);
+    let body_json = serde_json::to_string(&body)
+        .map_err(|e| format!("Corps requête {} : {e}", provider.label()))?;
+
+    for attempt in 0..LLM_MAX_ATTEMPTS {
+        let mut req = client
+            .post(url)
+            .header("Authorization", auth_header)
+            .header("Content-Type", "application/json");
+        if let Some((name, value)) = extra_header {
+            req = req.header(name, value);
+        }
+        let response = req
+            .body(body_json.clone())
+            .send()
+            .map_err(|e| format!("Appel {} : {e}", provider.label()))?;
+        let status = response.status();
+        let text = response
+            .text()
+            .map_err(|e| format!("Lecture réponse {} : {e}", provider.label()))?;
+        if !status.is_success() {
+            if is_retryable_llm_status(status.as_u16()) && attempt + 1 < LLM_MAX_ATTEMPTS {
+                llm_retry_delay(attempt);
+                continue;
+            }
+            return Err(format_http_error(provider, status.as_u16(), &text));
+        }
+        let parsed: Response = serde_json::from_str(&text)
+            .map_err(|e| format!("Réponse {} illisible : {e}", provider.label()))?;
+        return extract_first_content(
+            provider,
+            parsed
+                .choices
+                .first()
+                .map(|c| c.message.content.as_str()),
+        );
     }
-    let response = req
-        .json(&body)
-        .send()
-        .map_err(|e| format!("Appel {} : {e}", provider.label()))?;
-    let status = response.status();
-    let text = response
-        .text()
-        .map_err(|e| format!("Lecture réponse {} : {e}", provider.label()))?;
-    if !status.is_success() {
-        return Err(format_http_error(provider, status.as_u16(), &text));
-    }
-    let parsed: Response = serde_json::from_str(&text)
-        .map_err(|e| format!("Réponse {} illisible : {e}", provider.label()))?;
-    extract_first_content(
-        provider,
-        parsed
-            .choices
-            .first()
-            .map(|c| c.message.content.as_str()),
-    )
+
+    Err(format!(
+        "{} : échec après {LLM_MAX_ATTEMPTS} tentatives.",
+        provider.label()
+    ))
 }
 
 fn call_anthropic_json(
@@ -209,7 +265,7 @@ fn call_anthropic_json(
     let (system, chat_messages) = split_system_messages(messages);
     let body = Request {
         model: model.to_string(),
-        max_tokens: 4096,
+        max_tokens: ANTHROPIC_MAX_OUTPUT_TOKENS,
         temperature,
         system,
         messages: chat_messages
@@ -219,27 +275,59 @@ fn call_anthropic_json(
     };
 
     let client = http_client()?;
-    let response = client
-        .post("https://api.anthropic.com/v1/messages")
-        .header("x-api-key", api_key)
-        .header("anthropic-version", "2023-06-01")
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .send()
-        .map_err(|e| format!("Appel {} : {e}", provider.label()))?;
-    let status = response.status();
-    let text = response
-        .text()
-        .map_err(|e| format!("Lecture réponse {} : {e}", provider.label()))?;
-    if !status.is_success() {
-        return Err(format_http_error(provider, status.as_u16(), &text));
+    let body_json = serde_json::to_string(&body)
+        .map_err(|e| format!("Corps requête {} : {e}", provider.label()))?;
+
+    for attempt in 0..LLM_MAX_ATTEMPTS {
+        let response = client
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .body(body_json.clone())
+            .send()
+            .map_err(|e| format!("Appel {} : {e}", provider.label()))?;
+        let status = response.status();
+        let text = response
+            .text()
+            .map_err(|e| format!("Lecture réponse {} : {e}", provider.label()))?;
+        if !status.is_success() {
+            if is_retryable_llm_status(status.as_u16()) && attempt + 1 < LLM_MAX_ATTEMPTS {
+                llm_retry_delay(attempt);
+                continue;
+            }
+            return Err(format_http_error(provider, status.as_u16(), &text));
+        }
+        let parsed: Response = serde_json::from_str(&text)
+            .map_err(|e| format!("Réponse {} illisible : {e}", provider.label()))?;
+        return extract_first_content(
+            provider,
+            parsed.content.first().map(|c| c.text.as_str()),
+        );
     }
-    let parsed: Response = serde_json::from_str(&text)
-        .map_err(|e| format!("Réponse {} illisible : {e}", provider.label()))?;
-    extract_first_content(
-        provider,
-        parsed.content.first().map(|c| c.text.as_str()),
-    )
+
+    Err(format!(
+        "{} : échec après {LLM_MAX_ATTEMPTS} tentatives.",
+        provider.label()
+    ))
+}
+
+fn call_anthropic_markdown(
+    api_key: &str,
+    model: &str,
+    messages: Vec<(String, String)>,
+    temperature: f32,
+) -> Result<String, String> {
+    call_anthropic_json(api_key, model, messages, temperature)
+}
+
+fn call_gemini_markdown(
+    api_key: &str,
+    model: &str,
+    messages: Vec<(String, String)>,
+    temperature: f32,
+) -> Result<String, String> {
+    call_gemini_chat(api_key, model, messages, temperature, false)
 }
 
 fn call_gemini_json(
@@ -247,6 +335,16 @@ fn call_gemini_json(
     model: &str,
     messages: Vec<(String, String)>,
     temperature: f32,
+) -> Result<String, String> {
+    call_gemini_chat(api_key, model, messages, temperature, true)
+}
+
+fn call_gemini_chat(
+    api_key: &str,
+    model: &str,
+    messages: Vec<(String, String)>,
+    temperature: f32,
+    json_mode: bool,
 ) -> Result<String, String> {
     let provider = LlmProvider::Google;
     #[derive(Serialize)]
@@ -265,7 +363,8 @@ fn call_gemini_json(
     #[derive(Serialize)]
     struct GenerationConfig {
         temperature: f32,
-        response_mime_type: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        response_mime_type: Option<String>,
     }
     #[derive(Serialize)]
     struct Request {
@@ -310,39 +409,54 @@ fn call_gemini_json(
         contents,
         generation_config: GenerationConfig {
             temperature,
-            response_mime_type: "application/json".into(),
+            response_mime_type: json_mode.then(|| "application/json".into()),
         },
     };
 
+    let model = resolve_gemini_model(model);
     let url = format!(
         "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
         model
     );
     let client = http_client()?;
-    let response = client
-        .post(url)
-        .header("Content-Type", "application/json")
-        .header("x-goog-api-key", api_key)
-        .json(&body)
-        .send()
-        .map_err(|e| format!("Appel {} : {e}", provider.label()))?;
-    let status = response.status();
-    let text = response
-        .text()
-        .map_err(|e| format!("Lecture réponse {} : {e}", provider.label()))?;
-    if !status.is_success() {
-        return Err(format_http_error(provider, status.as_u16(), &text));
+    let body_json = serde_json::to_string(&body)
+        .map_err(|e| format!("Corps requête {} : {e}", provider.label()))?;
+
+    for attempt in 0..LLM_MAX_ATTEMPTS {
+        let response = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("x-goog-api-key", api_key)
+            .body(body_json.clone())
+            .send()
+            .map_err(format_gemini_transport_error)?;
+        let status = response.status();
+        let text = response
+            .text()
+            .map_err(|e| format!("Lecture réponse {} : {e}", provider.label()))?;
+        if !status.is_success() {
+            if is_retryable_llm_status(status.as_u16()) && attempt + 1 < LLM_MAX_ATTEMPTS {
+                llm_retry_delay(attempt);
+                continue;
+            }
+            return Err(format_http_error(provider, status.as_u16(), &text));
+        }
+        let parsed: Response = serde_json::from_str(&text)
+            .map_err(|e| format!("Réponse {} illisible : {e}", provider.label()))?;
+        return extract_first_content(
+            provider,
+            parsed
+                .candidates
+                .first()
+                .and_then(|c| c.content.parts.first())
+                .map(|p| p.text.as_str()),
+        );
     }
-    let parsed: Response = serde_json::from_str(&text)
-        .map_err(|e| format!("Réponse {} illisible : {e}", provider.label()))?;
-    extract_first_content(
-        provider,
-        parsed
-            .candidates
-            .first()
-            .and_then(|c| c.content.parts.first())
-            .map(|p| p.text.as_str()),
-    )
+
+    Err(format!(
+        "{} : échec après {LLM_MAX_ATTEMPTS} tentatives.",
+        provider.label()
+    ))
 }
 
 fn split_system_messages(messages: Vec<(String, String)>) -> (String, Vec<(String, String)>) {
@@ -366,6 +480,15 @@ fn extract_first_content(provider: LlmProvider, content: Option<&str>) -> Result
     Ok(text.to_string())
 }
 
+fn is_retryable_llm_status(status: u16) -> bool {
+    matches!(status, 429 | 502 | 503 | 504)
+}
+
+fn llm_retry_delay(attempt: u32) {
+    let factor = 1u64 << attempt.min(4);
+    thread::sleep(Duration::from_millis(LLM_RETRY_BASE_DELAY_MS * factor));
+}
+
 fn format_http_error(provider: LlmProvider, status: u16, text: &str) -> String {
     let hint = if status == 401 {
         format!(
@@ -383,10 +506,33 @@ fn format_http_error(provider: LlmProvider, status: u16, text: &str) -> String {
 }
 
 fn http_client() -> Result<Client, String> {
+    http_client_with_timeout(Duration::from_secs(300))
+}
+
+fn http_client_with_timeout(timeout: Duration) -> Result<Client, String> {
     Client::builder()
-        .timeout(Duration::from_secs(120))
+        .timeout(timeout)
         .build()
         .map_err(|e| format!("Client HTTP : {e}"))
+}
+
+fn resolve_gemini_model(model: &str) -> &str {
+    let trimmed = model.trim();
+    if trimmed.is_empty() {
+        LlmProvider::Google.default_model()
+    } else {
+        trimmed
+    }
+}
+
+fn format_gemini_transport_error(error: reqwest::Error) -> String {
+    if error.is_timeout() {
+        return "Appel Google (Gemini) : délai dépassé — le rapport Coach envoie beaucoup de données (20 fonds). Réessayez ou réduisez les favoris.".into();
+    }
+    if error.is_connect() {
+        return "Appel Google (Gemini) : connexion impossible — vérifiez Internet/VPN/pare-feu. La clé API est probablement OK si la newsletter fonctionne.".into();
+    }
+    format!("Appel Google (Gemini) : {error}")
 }
 
 fn truncate_for_user(text: &str, max_bytes: usize) -> String {
@@ -406,6 +552,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn is_retryable_llm_status_matches_overload_codes() {
+        assert!(is_retryable_llm_status(503));
+        assert!(is_retryable_llm_status(429));
+        assert!(!is_retryable_llm_status(401));
+    }
+
+    #[test]
     fn truncate_for_user_respects_utf8_char_boundaries() {
         let s = "é".repeat(120);
         let out = truncate_for_user(&s, 100);
@@ -422,6 +575,12 @@ mod tests {
         assert_eq!(LlmProvider::parse("anthropic"), LlmProvider::Anthropic);
         assert_eq!(LlmProvider::parse("gemini"), LlmProvider::Google);
         assert_eq!(LlmProvider::parse("unknown"), LlmProvider::Mistral);
+    }
+
+    #[test]
+    fn resolve_gemini_model_uses_default_when_empty() {
+        assert_eq!(resolve_gemini_model(""), "gemini-3.6-flash");
+        assert_eq!(resolve_gemini_model("gemini-3.6-flash"), "gemini-3.6-flash");
     }
 
     #[test]

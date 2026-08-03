@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +28,8 @@ import type { ArbitrageFicheGenerationPending } from "@/hooks/useArbitrageFicheC
 import {
   EMPTY_FICHE_CONSEIL_ARBITRAGE_REDACTION,
   FICHE_CONSEIL_ARBITRAGE_REDACTION_LABELS,
+  isAvArbitrageRedaction,
+  validateArbitrageRedactionInput,
   type FicheConseilArbitrageRedactionInput,
 } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-redaction-labels";
 import { toast } from "sonner";
@@ -50,20 +52,30 @@ export function ArbitrageFicheRedactionDialog({
   onOpenChange,
   onConfirm,
 }: ArbitrageFicheRedactionDialogProps) {
-  const [presets, setPresets] = useState<FicheConseilRedactionPreset[]>([]);
+  const productKind = generationContext?.productKind ?? "AV";
+  const isAv = isAvArbitrageRedaction(productKind);
+
+  const [allPresets, setAllPresets] = useState<FicheConseilRedactionPreset[]>([]);
   const [presetId, setPresetId] = useState(PRESET_NONE);
   const [motif, setMotif] = useState("");
   const [supportsDesinvestis, setSupportsDesinvestis] = useState("");
   const [supportsInvestis, setSupportsInvestis] = useState("");
+  const [allocationOperation, setAllocationOperation] = useState("");
   const [savePreset, setSavePreset] = useState(false);
   const [presetNom, setPresetNom] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const presets = useMemo(
+    () => allPresets.filter((preset) => preset.product_kind === productKind),
+    [allPresets, productKind]
+  );
 
   const resetForm = useCallback(() => {
     setPresetId(PRESET_NONE);
     setMotif("");
     setSupportsDesinvestis("");
     setSupportsInvestis("");
+    setAllocationOperation("");
     setSavePreset(false);
     setPresetNom("");
   }, []);
@@ -73,9 +85,9 @@ export function ArbitrageFicheRedactionDialog({
     resetForm();
     void (async () => {
       try {
-        setPresets(await getAllFicheConseilRedactionPresets());
+        setAllPresets(await getAllFicheConseilRedactionPresets());
       } catch {
-        setPresets([]);
+        setAllPresets([]);
       }
     })();
   }, [open, resetForm]);
@@ -88,18 +100,23 @@ export function ArbitrageFicheRedactionDialog({
     setMotif(preset.motif);
     setSupportsDesinvestis(preset.supports_desinvestis);
     setSupportsInvestis(preset.supports_investis);
+    setAllocationOperation(preset.allocation_operation);
   };
+
+  const buildRedaction = (): FicheConseilArbitrageRedactionInput => ({
+    motif: motif.trim(),
+    supportsDesinvestis: supportsDesinvestis.trim(),
+    supportsInvestis: supportsInvestis.trim(),
+    allocationOperation: allocationOperation.trim(),
+  });
 
   const handleConfirm = async () => {
     if (!generationContext) return;
 
-    const redaction: FicheConseilArbitrageRedactionInput = {
-      motif: motif.trim(),
-      supportsDesinvestis: supportsDesinvestis.trim(),
-      supportsInvestis: supportsInvestis.trim(),
-    };
-    if (!redaction.motif) {
-      toast.error(`${FICHE_CONSEIL_ARBITRAGE_REDACTION_LABELS.motif} est obligatoire.`);
+    const redaction = buildRedaction();
+    const missingLabel = validateArbitrageRedactionInput(productKind, redaction);
+    if (missingLabel) {
+      toast.error(`${missingLabel} est obligatoire.`);
       return;
     }
 
@@ -113,9 +130,11 @@ export function ArbitrageFicheRedactionDialog({
           try {
             await createFicheConseilRedactionPreset({
               nom,
+              product_kind: productKind,
               motif: redaction.motif,
               supports_desinvestis: redaction.supportsDesinvestis,
               supports_investis: redaction.supportsInvestis,
+              allocation_operation: redaction.allocationOperation,
             });
             toast.success("Texte enregistré dans la bibliothèque");
           } catch (error) {
@@ -142,10 +161,10 @@ export function ArbitrageFicheRedactionDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Rédaction arbitrage</DialogTitle>
+          <DialogTitle>Rédaction arbitrage {isAv ? "AV" : "PER"}</DialogTitle>
           <DialogDescription>
-            Complétez les blocs de rédaction de la fiche conseil. Vous pouvez charger un texte
-            enregistré ou en sauvegarder un nouveau.
+            Complétez {isAv ? "les blocs de rédaction" : "le bloc de rédaction"} de la fiche
+            conseil. Vous pouvez charger un texte enregistré ou en sauvegarder un nouveau.
           </DialogDescription>
         </DialogHeader>
 
@@ -169,42 +188,57 @@ export function ArbitrageFicheRedactionDialog({
             </div>
           ) : null}
 
-          <div className="space-y-2">
-            <Label htmlFor="fiche-redaction-motif">
-              {FICHE_CONSEIL_ARBITRAGE_REDACTION_LABELS.motif}
-            </Label>
-            <Textarea
-              id="fiche-redaction-motif"
-              value={motif}
-              onChange={(e) => setMotif(e.target.value)}
-              rows={4}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="fiche-redaction-desinvestis">
-              {FICHE_CONSEIL_ARBITRAGE_REDACTION_LABELS.supportsDesinvestis}
-            </Label>
-            <Textarea
-              id="fiche-redaction-desinvestis"
-              value={supportsDesinvestis}
-              onChange={(e) => setSupportsDesinvestis(e.target.value)}
-              rows={3}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="fiche-redaction-investis">
-              {FICHE_CONSEIL_ARBITRAGE_REDACTION_LABELS.supportsInvestis}
-            </Label>
-            <Textarea
-              id="fiche-redaction-investis"
-              value={supportsInvestis}
-              onChange={(e) => setSupportsInvestis(e.target.value)}
-              rows={3}
-            />
-          </div>
+          {isAv ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="fiche-redaction-motif">
+                  {FICHE_CONSEIL_ARBITRAGE_REDACTION_LABELS.motif}
+                </Label>
+                <Textarea
+                  id="fiche-redaction-motif"
+                  value={motif}
+                  onChange={(e) => setMotif(e.target.value)}
+                  rows={4}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fiche-redaction-desinvestis">
+                  {FICHE_CONSEIL_ARBITRAGE_REDACTION_LABELS.supportsDesinvestis}
+                </Label>
+                <Textarea
+                  id="fiche-redaction-desinvestis"
+                  value={supportsDesinvestis}
+                  onChange={(e) => setSupportsDesinvestis(e.target.value)}
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fiche-redaction-investis">
+                  {FICHE_CONSEIL_ARBITRAGE_REDACTION_LABELS.supportsInvestis}
+                </Label>
+                <Textarea
+                  id="fiche-redaction-investis"
+                  value={supportsInvestis}
+                  onChange={(e) => setSupportsInvestis(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="fiche-redaction-allocation">
+                {FICHE_CONSEIL_ARBITRAGE_REDACTION_LABELS.allocationOperation}
+              </Label>
+              <Textarea
+                id="fiche-redaction-allocation"
+                value={allocationOperation}
+                onChange={(e) => setAllocationOperation(e.target.value)}
+                rows={8}
+                required
+              />
+            </div>
+          )}
 
           <div className="space-y-3 rounded-md border p-3">
             <div className="flex items-center gap-2">

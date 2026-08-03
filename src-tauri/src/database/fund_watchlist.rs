@@ -44,6 +44,14 @@ impl super::Database {
         rows.collect()
     }
 
+    pub fn get_fund_watchlist_favorites(&self) -> Result<Vec<FundWatchlistEntry>> {
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {SELECT_COLS} FROM fund_watchlist WHERE is_favorite = 1 ORDER BY nom COLLATE NOCASE"
+        ))?;
+        let rows = stmt.query_map([], map_fund_watchlist_row)?;
+        rows.collect()
+    }
+
     pub fn import_fund_watchlist_entries(
         &self,
         rows: Vec<FundWatchlistImportRow>,
@@ -59,6 +67,8 @@ impl super::Database {
         let mut inserted = 0usize;
         let mut updated = 0usize;
 
+        let tx = self.conn.unchecked_transaction()?;
+
         for row in rows {
             let isin = row.isin.trim().to_uppercase();
             if isin.is_empty() {
@@ -69,8 +79,7 @@ impl super::Database {
                 continue;
             }
 
-            let existing: Option<i64> = self
-                .conn
+            let existing: Option<i64> = tx
                 .query_row(
                     "SELECT id FROM fund_watchlist WHERE isin = ?1",
                     params![&isin],
@@ -79,7 +88,7 @@ impl super::Database {
                 .ok();
 
             if existing.is_some() {
-                self.conn.execute(
+                tx.execute(
                     "UPDATE fund_watchlist SET
                         nom = ?2,
                         categorie = ?3,
@@ -124,7 +133,7 @@ impl super::Database {
                 )?;
                 updated += 1;
             } else {
-                self.conn.execute(
+                tx.execute(
                     "INSERT INTO fund_watchlist (
                         isin, nom, categorie, notation_morningstar, sri,
                         vl_previous, vl_recent, vl_date,
@@ -159,6 +168,8 @@ impl super::Database {
             }
         }
 
+        tx.commit()?;
+
         Ok(FundWatchlistImportResult {
             inserted,
             updated,
@@ -182,7 +193,6 @@ impl super::Database {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::database::models::FundWatchlistImportRow;
     use crate::database::Database;
 

@@ -11,7 +11,18 @@ export function ParametresFichesConseilSection() {
       <div className="space-y-8">
         <section className="space-y-4">
           <p className="text-sm font-medium">Textes arbitrage</p>
-          <FicheConseilRedactionPresetsManager />
+          <div className="space-y-8">
+            <FicheConseilRedactionPresetsManager
+              productKind="AV"
+              title="Assurance vie"
+              description="Motif de l'opération et supports désinvestis / investis."
+            />
+            <FicheConseilRedactionPresetsManager
+              productKind="PER"
+              title="PER"
+              description="Allocation d'actifs et opération (type, montant…)."
+            />
+          </div>
         </section>
 
         <section className="space-y-4">

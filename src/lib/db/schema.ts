@@ -2,7 +2,7 @@
 // Ce schéma Drizzle est DEV / DOC uniquement (génération SQL, inspection via `db:studio`).
 // Il n'est importé par aucun code applicatif et ne doit PAS servir en production.
 // Toute modification de structure se fait d'abord côté Rust, puis on synchronise ici.
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // ============================================
@@ -649,19 +649,30 @@ export const fundWatchlist = sqliteTable("fund_watchlist", {
     .notNull(),
 });
 
-export const ficheConseilRedactionPresets = sqliteTable("fiche_conseil_redaction_presets", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  nom: text("nom").notNull().unique(),
-  motif: text("motif").notNull().default(""),
-  supportsDesinvestis: text("supports_desinvestis").notNull().default(""),
-  supportsInvestis: text("supports_investis").notNull().default(""),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .default(sql`(unixepoch())`)
-    .notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
-    .default(sql`(unixepoch())`)
-    .notNull(),
-});
+export const ficheConseilRedactionPresets = sqliteTable(
+  "fiche_conseil_redaction_presets",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    nom: text("nom").notNull(),
+    productKind: text("product_kind").notNull().default("AV"),
+    motif: text("motif").notNull().default(""),
+    supportsDesinvestis: text("supports_desinvestis").notNull().default(""),
+    supportsInvestis: text("supports_investis").notNull().default(""),
+    allocationOperation: text("allocation_operation").notNull().default(""),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .default(sql`(unixepoch())`)
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .default(sql`(unixepoch())`)
+      .notNull(),
+  },
+  (table) => ({
+    nomProductKindUnique: uniqueIndex("fiche_conseil_redaction_presets_nom_product_kind_uidx").on(
+      table.nom,
+      table.productKind
+    ),
+  })
+);
 
 // Types TypeScript pour l'utilisation dans l'application
 export type Foyer = typeof foyers.$inferSelect;

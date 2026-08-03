@@ -33,6 +33,13 @@ export interface FundWatchlistImportResult {
   total: number;
 }
 
+export interface FundWatchlistFavoritesReport {
+  markdown: string;
+  generated_at: number;
+  favorite_count: number;
+  warnings: string[];
+}
+
 export async function getAllFundWatchlistEntries(): Promise<FundWatchlistEntry[]> {
   return await invoke<FundWatchlistEntry[]>("get_all_fund_watchlist_entries");
 }
@@ -55,4 +62,12 @@ export async function setFundWatchlistFavorite(
 ): Promise<void> {
   await invoke<void>("set_fund_watchlist_favorite", { isin, isFavorite });
   notifyFundWatchlistChanged();
+}
+
+export async function startFundWatchlistFavoritesReport(): Promise<void> {
+  await invoke<void>("start_fund_watchlist_favorites_report");
+}
+
+export async function fundWatchlistCoachReportInProgress(): Promise<boolean> {
+  return await invoke<boolean>("fund_watchlist_coach_report_in_progress");
 }

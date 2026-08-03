@@ -1,6 +1,6 @@
 import type { ArbitrageFicheProductKind, FicheConseilTemplateFamily } from "@/lib/api/tauri-arbitrage-fiche";
 import type { FicheConseilArbitrageRedactionInput } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-redaction-labels";
-import { ARBITRAGE_AV_REDACTION_PDF_FIELDS } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-redaction-pdf-fields";
+import { ARBITRAGE_AV_REDACTION_PDF_FIELDS, ARBITRAGE_PER_REDACTION_PDF_FIELD } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-redaction-pdf-fields";
 import type { VpModificationPdfFillInput } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
 import { applyVpModificationAvPdfFill } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-pdf-fill";
 import { applyVpModificationPerPdfFill } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-per-pdf-fill";
@@ -60,6 +60,13 @@ export async function fillArbitrageFicheConseilPdf(
     // PER : investisseur 1 = Nom / Prénom (champ unique), n° contrat séparé.
     setTextField(form, "invest1", clientFullName(input));
     setTextField(form, "numcontrat", input.numeroContrat);
+    if (templateFamily === "ARBITRAGE" && input.arbitrageRedaction?.allocationOperation) {
+      setTextField(
+        form,
+        ARBITRAGE_PER_REDACTION_PDF_FIELD,
+        input.arbitrageRedaction.allocationOperation
+      );
+    }
   }
 
   if (templateFamily === "VP_MODIFICATION" && input.vpModification) {

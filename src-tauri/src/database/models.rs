@@ -1913,14 +1913,27 @@ pub struct FundWatchlistImportResult {
     pub total: usize,
 }
 
+/// Rapport Coach Patrimonial (favoris veille fonds).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FundWatchlistFavoritesReport {
+    pub markdown: String,
+    pub generated_at: i64,
+    pub favorite_count: usize,
+    pub warnings: Vec<String>,
+}
+
 /// Preset de rédaction réutilisable (fiche conseil arbitrage).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FicheConseilRedactionPreset {
     pub id: i64,
     pub nom: String,
+    /// AV ou PER
+    pub product_kind: String,
     pub motif: String,
     pub supports_desinvestis: String,
     pub supports_investis: String,
+    /// PER : bloc unique allocation / opération
+    pub allocation_operation: String,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -1928,15 +1941,19 @@ pub struct FicheConseilRedactionPreset {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NewFicheConseilRedactionPreset {
     pub nom: String,
+    pub product_kind: String,
     pub motif: String,
     pub supports_desinvestis: String,
     pub supports_investis: String,
+    pub allocation_operation: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UpdateFicheConseilRedactionPreset {
     pub nom: String,
+    pub product_kind: String,
     pub motif: String,
     pub supports_desinvestis: String,
     pub supports_investis: String,
+    pub allocation_operation: String,
 }

@@ -19,6 +19,7 @@ mod documents_storage;
 mod email;
 mod export_archive;
 mod fund_watchlist_commands;
+mod fund_watchlist_coach;
 mod fiche_conseil_redaction_commands;
 mod licensing;
 mod navigation_guard;
@@ -614,6 +615,8 @@ fn main() {
             fund_watchlist_commands::get_all_fund_watchlist_entries,
             fund_watchlist_commands::import_fund_watchlist_entries,
             fund_watchlist_commands::set_fund_watchlist_favorite,
+            fund_watchlist_commands::start_fund_watchlist_favorites_report,
+            fund_watchlist_commands::fund_watchlist_coach_report_in_progress,
             fiche_conseil_redaction_commands::get_all_fiche_conseil_redaction_presets,
             fiche_conseil_redaction_commands::create_fiche_conseil_redaction_preset,
             fiche_conseil_redaction_commands::update_fiche_conseil_redaction_preset,

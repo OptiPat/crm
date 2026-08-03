@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fillArbitrageFicheConseilPdf } from "@/lib/pdf/arbitrage-fiche-conseil/fill-fiche";
-import { ARBITRAGE_AV_REDACTION_PDF_FIELDS } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-redaction-pdf-fields";
+import { ARBITRAGE_AV_REDACTION_PDF_FIELDS, ARBITRAGE_PER_REDACTION_PDF_FIELD } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-redaction-pdf-fields";
 import {
   VP_MODIFICATION_MONTANT_CHECKBOX_FIELD,
   VP_MODIFICATION_MONTANT_TEXT_FIELD,
@@ -85,6 +85,7 @@ describe("fillArbitrageFicheConseilPdf", () => {
           motif: "Rééquilibrage suite à la hausse des taux.",
           supportsDesinvestis: "UC Monétaire",
           supportsInvestis: "UC Obligataire",
+          allocationOperation: "",
         },
       },
       { templateFamily: "ARBITRAGE" }
@@ -99,6 +100,35 @@ describe("fillArbitrageFicheConseilPdf", () => {
     expect(
       filledForm.getTextField(ARBITRAGE_AV_REDACTION_PDF_FIELDS.supportsInvestis).getText()
     ).toBe("UC Obligataire");
+  });
+
+  it("remplit la rédaction arbitrage PER (Text3)", async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage();
+    const form = doc.getForm();
+    form.createTextField("invest1");
+    form.createTextField("numcontrat");
+    form.createTextField(ARBITRAGE_PER_REDACTION_PDF_FIELD);
+    const template = await doc.save();
+
+    const filled = await fillArbitrageFicheConseilPdf(
+      template,
+      "PER",
+      {
+        ...input,
+        arbitrageRedaction: {
+          motif: "",
+          supportsDesinvestis: "",
+          supportsInvestis: "",
+          allocationOperation: "Arbitrage vers UC actions pour 15 000 €.",
+        },
+      },
+      { templateFamily: "ARBITRAGE" }
+    );
+    const filledForm = (await PDFDocument.load(filled)).getForm();
+    expect(filledForm.getTextField(ARBITRAGE_PER_REDACTION_PDF_FIELD).getText()).toBe(
+      "Arbitrage vers UC actions pour 15 000 €."
+    );
   });
 
   it("remplit le montant VP sur modèle modification AV", async () => {

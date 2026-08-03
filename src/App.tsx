@@ -46,6 +46,8 @@ import { useBackgroundAutomationListener } from "@/hooks/useBackgroundAutomation
 import { useAutomationNotificationListener } from "@/hooks/useAutomationNotificationListener";
 import { useOneDriveBackgroundListener } from "@/hooks/useOneDriveBackgroundListener";
 import { useAutoLock } from "@/hooks/useAutoLock";
+import { useFundWatchlistCoachGlobalListener } from "@/hooks/useFundWatchlistCoachGlobalListener";
+import { loadCoachGenerating } from "@/lib/fund-watchlist/fund-watchlist-coach-store";
 
 const ETIQUETTES_RECALC_SESSION_KEY = "crm_etiquettes_recalc_done";
 
@@ -82,10 +84,18 @@ function AppInner() {
     }
   });
 
+  const navigateVeilleFonds = useCallback(() => {
+    setCurrentPage("veille-fonds");
+  }, []);
+
   useBackgroundAutomationListener(isEngineAvailable);
   useOneDriveBackgroundListener(isEngineAvailable);
   useAutomationNotificationListener(isAuthenticated, setCurrentPage);
   useAutoLock(isAuthenticated, handleLogout, handleSessionLocked);
+  useFundWatchlistCoachGlobalListener(
+    isEngineAvailable && (isAuthenticated || loadCoachGenerating()),
+    navigateVeilleFonds
+  );
 
   useEffect(() => {
     // Vérifier si c'est le premier lancement

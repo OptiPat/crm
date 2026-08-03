@@ -9,17 +9,29 @@ import {
   TableCell,
   TableRow,
 } from "@/components/ui/table";
-import { FileUp, LineChart, RefreshCw, Search, Star, X } from "lucide-react";
+import { FileUp, LineChart, RefreshCw, Search, Sparkles, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   getAllFundWatchlistEntries,
   setFundWatchlistFavorite,
+  startFundWatchlistFavoritesReport,
   type FundWatchlistEntry,
+  type FundWatchlistFavoritesReport,
 } from "@/lib/api/tauri-fund-watchlist";
 import { FundWatchlistImportDialog } from "@/components/fund-watchlist/FundWatchlistImportDialog";
+import { FundWatchlistCoachDialog } from "@/components/fund-watchlist/FundWatchlistCoachDialog";
 import { FundWatchlistColumnHeader } from "@/components/fund-watchlist/FundWatchlistColumnHeader";
 import { formatFundPerfPercent, formatFundShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-display";
 import { subscribeFundWatchlistChanged } from "@/lib/fund-watchlist/fund-watchlist-events";
+import { FUND_WATCHLIST_COACH_TOAST_ID } from "@/lib/fund-watchlist/fund-watchlist-coach-events";
+import {
+  consumeCoachOpenDialog,
+  FUND_WATCHLIST_COACH_STORE_EVENT,
+  loadCoachGenerating,
+  loadCoachReport,
+  markCoachGenerationPending,
+  saveCoachGenerating,
+} from "@/lib/fund-watchlist/fund-watchlist-coach-store";
 import { computeFundWatchlistShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-short-term-score";
 import {
   FUND_WATCHLIST_COLUMN_LABELS,
@@ -84,6 +96,11 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [importOpen, setImportOpen] = useState(false);
+  const [coachOpen, setCoachOpen] = useState(false);
+  const [coachReport, setCoachReport] = useState<FundWatchlistFavoritesReport | null>(() =>
+    loadCoachReport()
+  );
+  const [coachGenerating, setCoachGenerating] = useState(() => loadCoachGenerating());
   const [sort, setSort] = useState<FundWatchlistSort>(FUND_WATCHLIST_DEFAULT_SORT);
   const [columnFilters, setColumnFilters] = useState<FundWatchlistColumnFilters>({});
 
@@ -102,6 +119,39 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     void load();
     return subscribeFundWatchlistChanged(() => void load());
   }, [load]);
+
+  useEffect(() => {
+    const syncCoachFromStore = () => {
+      setCoachReport(loadCoachReport());
+      setCoachGenerating(loadCoachGenerating());
+      if (consumeCoachOpenDialog()) {
+        setCoachOpen(true);
+      }
+    };
+    syncCoachFromStore();
+    window.addEventListener(FUND_WATCHLIST_COACH_STORE_EVENT, syncCoachFromStore);
+    return () => window.removeEventListener(FUND_WATCHLIST_COACH_STORE_EVENT, syncCoachFromStore);
+  }, []);
+
+  const startCoachReport = async () => {
+    const favoriteCount = entries.filter((e) => e.is_favorite).length;
+    if (favoriteCount === 0) {
+      toast.error("Épinglez au moins un fonds favori avant de générer le rapport.");
+      return;
+    }
+    if (coachGenerating) {
+      toast.info("Génération déjà en cours…");
+      return;
+    }
+    setCoachGenerating(true);
+    markCoachGenerationPending();
+    toast.loading("Rapport Coach en cours…", { id: FUND_WATCHLIST_COACH_TOAST_ID });
+    void startFundWatchlistFavoritesReport().catch((error: unknown) => {
+      setCoachGenerating(false);
+      saveCoachGenerating(false);
+      toast.error(String(error), { id: FUND_WATCHLIST_COACH_TOAST_ID });
+    });
+  };
 
   const distinctByColumn = useMemo(() => {
     const map = new Map<FundWatchlistColumnId, string[]>();
@@ -185,6 +235,25 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
             <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
             Actualiser
           </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              if (coachReport && !coachGenerating) {
+                setCoachOpen(true);
+              } else {
+                void startCoachReport();
+              }
+            }}
+            disabled={stats.favorites === 0 || coachGenerating}
+          >
+            <Sparkles className={cn("h-4 w-4 mr-2", coachGenerating && "animate-pulse")} />
+            {coachGenerating ? "Rapport en cours…" : coachReport ? "Voir rapport Coach" : "Rapport Coach"}
+          </Button>
+          {!coachGenerating && coachReport && (
+            <Button variant="outline" onClick={() => void startCoachReport()} disabled={stats.favorites === 0}>
+              Régénérer
+            </Button>
+          )}
           <Button onClick={() => setImportOpen(true)}>
             <FileUp className="h-4 w-4 mr-2" />
             Importer Excel
@@ -467,6 +536,11 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
         open={importOpen}
         onOpenChange={setImportOpen}
         onApplied={() => void load()}
+      />
+      <FundWatchlistCoachDialog
+        open={coachOpen}
+        onOpenChange={setCoachOpen}
+        report={coachReport}
       />
     </div>
   );

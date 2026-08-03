@@ -2,7 +2,7 @@ use crate::commands::DbState;
 use crate::database::models::{
     FundWatchlistEntry, FundWatchlistImportResult, FundWatchlistImportRow,
 };
-use tauri::State;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 pub fn get_all_fund_watchlist_entries(
@@ -40,4 +40,14 @@ pub fn set_fund_watchlist_favorite(
     database
         .set_fund_watchlist_favorite(&isin, is_favorite)
         .map_err(|e| format!("Échec mise à jour favori : {e}"))
+}
+
+#[tauri::command]
+pub fn start_fund_watchlist_favorites_report(app: AppHandle) -> Result<(), String> {
+    crate::fund_watchlist_coach::spawn_favorites_report(app)
+}
+
+#[tauri::command]
+pub fn fund_watchlist_coach_report_in_progress() -> bool {
+    crate::fund_watchlist_coach::coach_report_in_progress()
 }

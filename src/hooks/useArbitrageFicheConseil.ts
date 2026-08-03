@@ -142,7 +142,7 @@ export function useArbitrageFicheConseil() {
 
   const queueForGeneration = useCallback(
     (pending: ArbitrageFicheGenerationPending) => {
-      if (pending.templateFamily === "ARBITRAGE" && pending.productKind === "AV") {
+      if (pending.templateFamily === "ARBITRAGE") {
         setPendingRedaction(pending);
         return;
       }

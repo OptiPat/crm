@@ -1,0 +1,237 @@
+use reqwest::blocking::Client;
+use reqwest::header::{HeaderValue, USER_AGENT};
+
+const BOURSORAMA_BASE: &str = "https://www.boursorama.com";
+const BOURSORAMA_UA: &str =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoursoramaHoldingLine {
+    pub label: String,
+    pub weight_percent: Option<f64>,
+}
+
+pub fn boursorama_client() -> Result<Client, String> {
+    Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| format!("Client HTTP Boursorama : {e}"))
+}
+
+pub fn fetch_html(client: &Client, url: &str) -> Result<String, String> {
+    let response = client
+        .get(url)
+        .header(USER_AGENT, HeaderValue::from_static(BOURSORAMA_UA))
+        .send()
+        .map_err(|e| format!("Requête Boursorama : {e}"))?;
+    let status = response.status();
+    let body = response
+        .text()
+        .map_err(|e| format!("Lecture Boursorama : {e}"))?;
+    if !status.is_success() {
+        return Err(format!("Boursorama HTTP {} pour {url}", status.as_u16()));
+    }
+    Ok(body)
+}
+
+/// Résout le symbole interne Boursorama (ex. MP-829413) à partir de l'ISIN.
+pub fn resolve_opcvm_symbol(client: &Client, isin: &str) -> Result<Option<String>, String> {
+    let isin = isin.trim().to_uppercase();
+    if isin.is_empty() {
+        return Ok(None);
+    }
+    let url = format!("{BOURSORAMA_BASE}/recherche/_instruments/{isin}");
+    let html = fetch_html(client, &url)?;
+    parse_opcvm_symbol_from_search_html(&html, &isin)
+}
+
+pub fn composition_url(symbol: &str) -> String {
+    format!("{BOURSORAMA_BASE}/bourse/opcvm/cours/composition/{symbol}/")
+}
+
+pub fn fetch_top_holdings(
+    client: &Client,
+    symbol: &str,
+) -> Result<Vec<BoursoramaHoldingLine>, String> {
+    let html = fetch_html(client, &composition_url(symbol))?;
+    Ok(parse_top_holdings_from_composition_html(&html))
+}
+
+pub fn parse_opcvm_symbol_from_search_html(html: &str, isin: &str) -> Result<Option<String>, String> {
+    let isin_upper = isin.to_uppercase();
+    let mut isin_matches = Vec::new();
+    let mut data_row_symbols = Vec::new();
+
+    for row_html in html.split("<tr").skip(1) {
+        // Ignorer les lignes d'en-tête (pas de résultat OPCVM exploitable).
+        if row_html.contains("<th") {
+            continue;
+        }
+        if !row_html.contains("/bourse/opcvm/cours/") {
+            continue;
+        }
+        let Some(symbol) = extract_opcvm_symbol_from_href(row_html) else {
+            continue;
+        };
+        data_row_symbols.push(symbol.clone());
+        if row_html.to_uppercase().contains(&isin_upper) {
+            isin_matches.push(symbol);
+        }
+    }
+
+    if let Some(symbol) = isin_matches.into_iter().next() {
+        return Ok(Some(symbol));
+    }
+
+    // Recherche par ISIN : Boursorama renvoie souvent une seule ligne OPCVM sans
+    // afficher l'ISIN dans le `<tr>` (il est seulement dans l'URL de recherche).
+    let mut unique = Vec::new();
+    for symbol in data_row_symbols {
+        if !unique.iter().any(|existing| existing == &symbol) {
+            unique.push(symbol);
+        }
+    }
+    if unique.len() == 1 {
+        return Ok(Some(unique.remove(0)));
+    }
+
+    Ok(None)
+}
+
+fn extract_opcvm_symbol_from_href(html: &str) -> Option<String> {
+    for fragment in html.split("/bourse/opcvm/cours/").skip(1) {
+        let symbol = fragment.split(['/', '"', '?', '\'']).next()?.trim();
+        if symbol.is_empty() {
+            continue;
+        }
+        return Some(symbol.to_string());
+    }
+    None
+}
+
+pub fn parse_top_holdings_from_composition_html(html: &str) -> Vec<BoursoramaHoldingLine> {
+    let marker = "Composition (les 10 premi";
+    let Some(start) = html.find(marker) else {
+        return Vec::new();
+    };
+    let section = &html[start..];
+    let mut lines = Vec::new();
+    let mut search_from = 0;
+    while lines.len() < 10 {
+        let Some(header_idx) = section[search_from..]
+            .find("c-table-gauge__cell--header")
+        else {
+            break;
+        };
+        let offset = search_from + header_idx;
+        let after_header = &section[offset..];
+        let Some(gt) = after_header.find('>') else { break };
+        let after_gt = &after_header[gt + 1..];
+        let Some(lt) = after_gt.find('<') else { break };
+        let label = decode_html_entities(after_gt[..lt].trim());
+        if label.is_empty() {
+            search_from = offset + 1;
+            continue;
+        }
+        let weight = extract_gauge_weight(after_header);
+        lines.push(BoursoramaHoldingLine {
+            label,
+            weight_percent: weight,
+        });
+        search_from = offset + 1;
+    }
+    lines
+}
+
+fn extract_gauge_weight(fragment: &str) -> Option<f64> {
+    let marker = "data-gauge-current-step=\"";
+    let start = fragment.find(marker)? + marker.len();
+    let end = fragment[start..].find('"')? + start;
+    fragment[start..end].trim().parse::<f64>().ok()
+}
+
+fn decode_html_entities(text: &str) -> String {
+    text.replace("&#039;", "'")
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_search_html_extracts_opcvm_symbol() {
+        let html = r#"
+        <table data-result-search>
+          <tbody class="c-table__body">
+            <tr class="c-table__row">
+              <td><a class="c-link" href="/bourse/opcvm/cours/MP-829413/">Carmignac Patrimoine</a></td>
+              <td>FR0010135103</td>
+              <td>OPCVM</td>
+            </tr>
+          </tbody>
+        </table>
+        "#;
+        assert_eq!(
+            parse_opcvm_symbol_from_search_html(html, "FR0010135103").unwrap(),
+            Some("MP-829413".into())
+        );
+    }
+
+    #[test]
+    fn parse_search_html_single_opcvm_without_isin_in_row() {
+        let html = r#"
+        <tr class="c-table__row">
+          <td><a href="/bourse/opcvm/cours/MP-191553/">Carmignac Pf Asia Discovery A EUR Acc</a></td>
+          <td>OPCVM</td>
+        </tr>
+        "#;
+        assert_eq!(
+            parse_opcvm_symbol_from_search_html(html, "LU0336083810").unwrap(),
+            Some("MP-191553".into())
+        );
+    }
+
+    #[test]
+    fn parse_search_html_multiple_opcvm_without_isin_returns_none() {
+        let html = r#"
+        <tr><td><a href="/bourse/opcvm/cours/MP-WRONG/">Autre fonds</a></td><td>OPCVM</td></tr>
+        <tr><td><a href="/bourse/opcvm/cours/MP-OTHER/">Encore un</a></td><td>OPCVM</td></tr>
+        "#;
+        assert_eq!(
+            parse_opcvm_symbol_from_search_html(html, "LU0336083810").unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_search_html_ignores_opcvm_without_isin() {
+        let html = r#"
+        <tr><td><a href="/bourse/opcvm/cours/MP-WRONG/">Autre fonds</a></td><td>OPCVM</td></tr>
+        <tr><td><a href="/bourse/opcvm/cours/MP-RIGHT/">Bon fonds</a></td><td>LU0336083810</td></tr>
+        "#;
+        assert_eq!(
+            parse_opcvm_symbol_from_search_html(html, "LU0336083810").unwrap(),
+            Some("MP-RIGHT".into())
+        );
+    }
+
+    #[test]
+    fn parse_composition_html_extracts_holdings() {
+        let html = r#"
+        Composition (les 10 premières lignes)
+        <td class="c-table-gauge__cell c-table-gauge__cell--header">Taiwan Semiconductor Manufacturing Co Ltd</td>
+        <div data-gauge-current-step="5.85"></div>
+        <td class="c-table-gauge__cell c-table-gauge__cell--header">NVIDIA Corp</td>
+        <div data-gauge-current-step="3.35"></div>
+        "#;
+        let lines = parse_top_holdings_from_composition_html(html);
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].label.contains("Taiwan"));
+        assert_eq!(lines[0].weight_percent, Some(5.85));
+        assert_eq!(lines[1].weight_percent, Some(3.35));
+    }
+}
