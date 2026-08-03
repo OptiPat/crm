@@ -490,19 +490,42 @@ fn llm_retry_delay(attempt: u32) {
 }
 
 fn format_http_error(provider: LlmProvider, status: u16, text: &str) -> String {
-    let hint = if status == 401 {
-        format!(
-            "Clé API {} invalide (Newsletter → Paramètres).",
-            provider.label()
-        )
+    let hint = http_error_hint(provider, status);
+    let detail = truncate_for_user(text, 200);
+    if detail.is_empty() {
+        format!("{} HTTP {status} — {hint}", provider.label())
     } else {
-        "Vérifiez votre connexion et la clé API.".to_string()
-    };
-    format!(
-        "{} HTTP {status} — {} ({hint})",
-        provider.label(),
-        truncate_for_user(text, 200)
-    )
+        format!("{} HTTP {status} — {detail} ({hint})", provider.label())
+    }
+}
+
+fn http_error_hint(provider: LlmProvider, status: u16) -> String {
+    match status {
+        401 => format!(
+            "Clé API {} invalide — vérifiez Newsletter → Paramètres.",
+            provider.label()
+        ),
+        429 => match provider {
+            LlmProvider::Google => "Quota Gemini dépassé — attendez (souvent 1 min ou jusqu'à minuit PT), \
+                vérifiez usage/facturation sur Google AI Studio, ou changez de fournisseur (Newsletter → Paramètres). \
+                Rapport Coach : réduisez les favoris si le quota est serré."
+                .to_string(),
+            _ => format!(
+                "Quota ou limite de requêtes {} dépassé — attendez puis réessayez, \
+                ou changez de fournisseur (Newsletter → Paramètres).",
+                provider.label()
+            ),
+        },
+        402 | 403 => format!(
+            "Accès {} refusé ou facturation requise — vérifiez le forfait et les droits de la clé API (Newsletter → Paramètres).",
+            provider.label()
+        ),
+        502 | 503 | 504 => format!(
+            "Service {} temporairement indisponible — réessayez dans quelques minutes.",
+            provider.label()
+        ),
+        _ => "Vérifiez votre connexion, la clé API (Newsletter → Paramètres) et le message ci-dessus.".to_string(),
+    }
 }
 
 fn http_client() -> Result<Client, String> {
@@ -581,6 +604,31 @@ mod tests {
     fn resolve_gemini_model_uses_default_when_empty() {
         assert_eq!(resolve_gemini_model(""), "gemini-3.6-flash");
         assert_eq!(resolve_gemini_model("gemini-3.6-flash"), "gemini-3.6-flash");
+    }
+
+    #[test]
+    fn http_error_hint_429_gemini_mentions_quota() {
+        let hint = http_error_hint(LlmProvider::Google, 429);
+        assert!(hint.contains("Quota Gemini"));
+        assert!(hint.contains("Newsletter"));
+        assert!(!hint.contains("connexion"));
+    }
+
+    #[test]
+    fn http_error_hint_401_mentions_invalid_key() {
+        let hint = http_error_hint(LlmProvider::Mistral, 401);
+        assert!(hint.contains("invalide"));
+    }
+
+    #[test]
+    fn format_http_error_includes_hint_for_429() {
+        let msg = format_http_error(
+            LlmProvider::Google,
+            429,
+            r#"{"error":{"code":429,"message":"quota"}}"#,
+        );
+        assert!(msg.contains("HTTP 429"));
+        assert!(msg.contains("Quota Gemini"));
     }
 
     #[test]
