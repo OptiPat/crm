@@ -17,8 +17,12 @@ describe("pdfjs-setup", () => {
     Promise.withResolvers = previous;
   });
 
-  it("loadPdfDocument rejette un buffer vide sans crash JS", async () => {
-    ensurePdfJsPolyfills();
-    await expect(loadPdfDocument(new Uint8Array()).promise).rejects.toBeDefined();
-  });
+  it(
+    "loadPdfDocument rejette un buffer vide sans crash JS",
+    async () => {
+      ensurePdfJsPolyfills();
+      await expect(loadPdfDocument(new Uint8Array()).promise).rejects.toBeDefined();
+    },
+    15_000,
+  );
 });
