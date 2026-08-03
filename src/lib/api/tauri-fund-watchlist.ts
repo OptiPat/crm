@@ -45,6 +45,37 @@ export interface FundWatchlistFavoritesReport {
   warnings: string[];
 }
 
+export interface FundWatchlistBenchmark {
+  isin: string;
+  categoryPerf1an: number | null;
+  label: string;
+}
+
+export async function syncFundWatchlistBoursoramaBenchmarks(
+  isins: string[]
+): Promise<FundWatchlistBenchmark[]> {
+  return await invoke<FundWatchlistBenchmark[]>("sync_fund_watchlist_boursorama_benchmarks", {
+    isins,
+  });
+}
+
+/** Cache local uniquement — pas d'appel HTTP Boursorama. */
+export async function getFundWatchlistBoursoramaBenchmarksCached(
+  isins: string[]
+): Promise<FundWatchlistBenchmark[]> {
+  return await invoke<FundWatchlistBenchmark[]>(
+    "get_fund_watchlist_boursorama_benchmarks_cached",
+    { isins }
+  );
+}
+
+/** Sync HTTP Boursorama en arrière-plan (événements de progression). */
+export async function spawnFundWatchlistBoursoramaBenchmarksSync(
+  isins: string[]
+): Promise<void> {
+  await invoke("spawn_fund_watchlist_boursorama_benchmarks_sync", { isins });
+}
+
 export async function getAllFundWatchlistEntries(): Promise<FundWatchlistEntry[]> {
   return await invoke<FundWatchlistEntry[]>("get_all_fund_watchlist_entries");
 }

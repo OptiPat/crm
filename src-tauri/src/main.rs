@@ -18,6 +18,7 @@ mod database;
 mod documents_storage;
 mod email;
 mod export_archive;
+mod fund_watchlist_benchmark_sync;
 mod fund_watchlist_commands;
 mod fund_watchlist_coach;
 mod fund_watchlist_market_cache_fetch;
@@ -621,6 +622,9 @@ fn main() {
             fund_watchlist_commands::start_fund_watchlist_favorites_report,
             fund_watchlist_commands::fund_watchlist_coach_report_in_progress,
             fund_watchlist_commands::get_fund_watchlist_coach_last_report,
+            fund_watchlist_commands::sync_fund_watchlist_boursorama_benchmarks,
+            fund_watchlist_commands::get_fund_watchlist_boursorama_benchmarks_cached,
+            fund_watchlist_commands::spawn_fund_watchlist_boursorama_benchmarks_sync,
             uc_comparator_commands::run_uc_comparison,
             fiche_conseil_redaction_commands::get_all_fiche_conseil_redaction_presets,
             fiche_conseil_redaction_commands::create_fiche_conseil_redaction_preset,

@@ -9,9 +9,24 @@ import {
   TableCell,
   TableRow,
 } from "@/components/ui/table";
-import { FileUp, FileDown, LineChart, RefreshCw, Scale, Search, Sparkles, Star, X, ArrowLeft } from "lucide-react";
+import {
+  ArrowLeft,
+  Clock,
+  FileDown,
+  FileUp,
+  Layers,
+  LineChart,
+  RefreshCw,
+  Scale,
+  Search,
+  Sparkles,
+  Star,
+  X,
+} from "lucide-react";
+import { StatCard } from "@/components/dashboard/StatCard";
 import { toast } from "sonner";
 import {
+  getFundWatchlistBoursoramaBenchmarksCached,
   getAllFundWatchlistEntries,
   getFundWatchlistCoachLastReport,
   setFundWatchlistFavorite,
@@ -27,7 +42,7 @@ import { useUcComparatorPrintExport } from "@/hooks/useUcComparatorPrintExport";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FundWatchlistColumnHeader } from "@/components/fund-watchlist/FundWatchlistColumnHeader";
 import { FundWatchlistOptionalColumnToggles } from "@/components/fund-watchlist/FundWatchlistOptionalColumnToggles";
-import { formatFundPerfPercent, formatFundSharpe, formatFundShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-display";
+import { formatFundPerfPercent, formatFundSharpe, formatFundShortTermScore, fundPerfSignTextClass } from "@/lib/fund-watchlist/fund-watchlist-display";
 import {
   collectFundWatchlistAnnualYears,
   fundWatchlistAnnualPerf,
@@ -46,6 +61,10 @@ import {
   saveCoachReport,
 } from "@/lib/fund-watchlist/fund-watchlist-coach-store";
 import { computeFundWatchlistShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-short-term-score";
+import { buildFundWatchlistDiagnostics } from "@/lib/fund-watchlist/fund-watchlist-diagnostic";
+import type { FundBenchmarkReference } from "@/lib/fund-watchlist/fund-watchlist-diagnostic";
+import { saveCoachDiagnosticSnapshot } from "@/lib/fund-watchlist/fund-watchlist-coach-diagnostic-narrative";
+import { waitForFundWatchlistBenchmarkSync } from "@/lib/fund-watchlist/wait-for-benchmark-sync";
 import {
   FUND_WATCHLIST_COLUMN_LABELS,
   FUND_WATCHLIST_COLUMN_ALIGN,
@@ -76,6 +95,19 @@ import { cn } from "@/lib/utils";
 import { runUcComparison, type CompareResponse } from "@/lib/api/tauri-uc-comparator";
 
 const MAX_UC_COMPARE = 4;
+
+function benchmarksToMap(
+  rows: { isin: string; categoryPerf1an?: number | null; label: string }[]
+): Map<string, FundBenchmarkReference> {
+  const map = new Map<string, FundBenchmarkReference>();
+  for (const row of rows) {
+    map.set(row.isin, {
+      category_perf_1an: row.categoryPerf1an ?? null,
+      label: row.label,
+    });
+  }
+  return map;
+}
 
 type VeilleFondsProps = {
   onNavigate?: (page: string) => void;
@@ -110,6 +142,9 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   const [view, setView] = useState<VeilleView>("table");
   const [compareLoading, setCompareLoading] = useState(false);
   const [compareResponse, setCompareResponse] = useState<CompareResponse | null>(null);
+  const [boursoramaBenchmarks, setBoursoramaBenchmarks] = useState<
+    Map<string, FundBenchmarkReference>
+  >(() => new Map());
   const { printBundle: comparePrintBundle, printComparison, isPrinting: comparePrinting } =
     useUcComparatorPrintExport();
 
@@ -156,9 +191,40 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     return () => window.removeEventListener(FUND_WATCHLIST_COACH_STORE_EVENT, syncCoachFromStore);
   }, []);
 
+  const favoriteIsinsKey = useMemo(
+    () =>
+      entries
+        .filter((e) => e.is_favorite)
+        .map((e) => e.isin)
+        .sort()
+        .join(","),
+    [entries]
+  );
+
+  useEffect(() => {
+    if (!favoriteIsinsKey) {
+      setBoursoramaBenchmarks(new Map());
+      return;
+    }
+    let cancelled = false;
+    const isins = favoriteIsinsKey.split(",");
+    void getFundWatchlistBoursoramaBenchmarksCached(isins)
+      .then((rows) => {
+        if (cancelled) return;
+        setBoursoramaBenchmarks(benchmarksToMap(rows));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setBoursoramaBenchmarks(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [favoriteIsinsKey]);
+
   const startCoachReport = async () => {
-    const favoriteCount = entries.filter((e) => e.is_favorite).length;
-    if (favoriteCount === 0) {
+    const favorites = entries.filter((e) => e.is_favorite);
+    if (favorites.length === 0) {
       toast.error("Épinglez au moins un fonds favori avant de générer le rapport.");
       return;
     }
@@ -168,13 +234,54 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     }
     setCoachGenerating(true);
     markCoachGenerationPending();
-    toast.loading("Démarrage du rapport Coach…", { id: FUND_WATCHLIST_COACH_TOAST_ID });
+    toast.loading("Mise à jour des références marché (Boursorama)…", {
+      id: FUND_WATCHLIST_COACH_TOAST_ID,
+    });
+
+    let benchmarks = boursoramaBenchmarks;
+    try {
+      const rows = await waitForFundWatchlistBenchmarkSync(
+        favorites.map((e) => e.isin),
+        (current, total) => {
+          if (total <= 0) return;
+          toast.loading(`Références marché ${current}/${total}…`, {
+            id: FUND_WATCHLIST_COACH_TOAST_ID,
+          });
+        }
+      );
+      benchmarks = benchmarksToMap(rows);
+      setBoursoramaBenchmarks(benchmarks);
+    } catch (error) {
+      const detail =
+        error instanceof Error ? error.message : "réseau ou Boursorama indisponible";
+      toast.warning(
+        `Références Boursorama non mises à jour (${detail}). Médiane watchlist utilisée pour la lecture patrimoniale.`,
+        { id: FUND_WATCHLIST_COACH_TOAST_ID, duration: 8000 }
+      );
+    }
+
+    saveCoachDiagnosticSnapshot(
+      favorites,
+      buildFundWatchlistDiagnostics(entries, benchmarks)
+    );
+    toast.loading("Collecte des actualités et génération du rapport…", {
+      id: FUND_WATCHLIST_COACH_TOAST_ID,
+    });
     void startFundWatchlistFavoritesReport().catch((error: unknown) => {
       setCoachGenerating(false);
       saveCoachGenerating(false);
       toast.error(String(error), { id: FUND_WATCHLIST_COACH_TOAST_ID });
     });
   };
+
+  const diagnostics = useMemo(
+    () => buildFundWatchlistDiagnostics(entries, boursoramaBenchmarks),
+    [entries, boursoramaBenchmarks]
+  );
+  const favoriteEntries = useMemo(
+    () => entries.filter((e) => e.is_favorite),
+    [entries]
+  );
 
   const distinctByColumn = useMemo(() => {
     const map = new Map<FundWatchlistColumnId, string[]>();
@@ -403,9 +510,9 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
           key={column}
           style={fundWatchlistColumnStyle(column)}
           className={cn(
-            "px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap font-medium",
+            "px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap",
             alignClass,
-            score == null && "text-muted-foreground"
+            fundPerfSignTextClass(score)
           )}
           title={
             score == null
@@ -438,11 +545,16 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                         : column === "vol_3ans"
                           ? entry.vol_3ans
                           : entry.vol_1an;
+      const isPerf = column.startsWith("perf_");
       return (
         <TableCell
           key={column}
           style={fundWatchlistColumnStyle(column)}
-          className={cn("px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap", alignClass)}
+          className={cn(
+            "px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap",
+            alignClass,
+            isPerf ? fundPerfSignTextClass(value) : undefined
+          )}
         >
           {formatFundPerfPercent(value)}
         </TableCell>
@@ -495,6 +607,8 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
         open={coachOpen}
         onOpenChange={setCoachOpen}
         report={coachReport}
+        entries={favoriteEntries}
+        diagnostics={diagnostics}
       />
     </>
   );
@@ -570,87 +684,115 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-serif font-bold flex items-center gap-2">
-            <LineChart className="h-7 w-7 text-primary" />
-            Veille fonds
-          </h1>
-          <p className="text-muted-foreground mt-1 max-w-2xl">
-            Classement par score court terme (1 sem, 1 mois, 3 mois, YTD).
-          </p>
-        </div>
-        <div className="flex flex-col items-start gap-1 sm:items-end">
-          <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={() => void runCompare()}
-            disabled={selectedCompareCount < 2 || compareLoading}
-          >
-            <Scale className="h-4 w-4 mr-2" />
-            Comparer ({selectedCompareCount}/{MAX_UC_COMPARE})
-          </Button>
-          <Button variant="outline" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
-            Actualiser
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              if (coachReport && !coachGenerating) {
-                setCoachOpen(true);
-              } else {
-                void startCoachReport();
-              }
-            }}
-            disabled={stats.favorites === 0 || coachGenerating}
-          >
-            <Sparkles className={cn("h-4 w-4 mr-2", coachGenerating && "animate-pulse")} />
-            {coachButtonLabel}
-          </Button>
-          {!coachGenerating && coachReport && (
-            <Button variant="outline" onClick={() => void startCoachReport()} disabled={stats.favorites === 0}>
-              Régénérer
-            </Button>
-          )}
-          <Button onClick={() => setImportOpen(true)}>
-            <FileUp className="h-4 w-4 mr-2" />
-            Importer Excel
-          </Button>
+      <div className="rounded-2xl border border-border/70 bg-gradient-to-br from-primary/8 via-card to-amber-500/10 dark:from-primary/15 dark:via-card dark:to-amber-500/10 p-4 sm:p-5 space-y-5 shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <span className="w-1 h-7 rounded-full bg-primary/80 shrink-0" aria-hidden />
+              <h1 className="text-2xl font-serif font-bold flex items-center gap-2">
+                <LineChart className="h-7 w-7 text-primary" />
+                Veille fonds
+              </h1>
+            </div>
+            <p className="text-muted-foreground mt-1 max-w-2xl ml-4">
+              Classement par score court terme (1 sem, 1 mois, 3 mois, YTD).
+            </p>
           </div>
-        {coachReport && !coachGenerating && (
-          <p className="text-xs text-muted-foreground text-left sm:text-right">
-            Dernier rapport Coach :{" "}
-            {new Date(coachReport.generated_at * 1000).toLocaleString("fr-FR")} (
-            {coachReport.favorite_count} fonds)
-          </p>
-        )}
+          <div className="flex flex-col items-start gap-1 sm:items-end">
+            <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void runCompare()}
+              disabled={selectedCompareCount < 2 || compareLoading}
+            >
+              <Scale className="h-4 w-4 mr-2" />
+              Comparer ({selectedCompareCount}/{MAX_UC_COMPARE})
+            </Button>
+            <Button variant="outline" onClick={() => void load()} disabled={loading}>
+              <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
+              Actualiser
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                if (coachReport && !coachGenerating) {
+                  setCoachOpen(true);
+                } else {
+                  void startCoachReport();
+                }
+              }}
+              disabled={stats.favorites === 0 || coachGenerating}
+            >
+              <Sparkles className={cn("h-4 w-4 mr-2", coachGenerating && "animate-pulse")} />
+              {coachButtonLabel}
+            </Button>
+            {!coachGenerating && coachReport && (
+              <Button variant="outline" onClick={() => void startCoachReport()} disabled={stats.favorites === 0}>
+                Régénérer
+              </Button>
+            )}
+            <Button onClick={() => setImportOpen(true)}>
+              <FileUp className="h-4 w-4 mr-2" />
+              Importer Excel
+            </Button>
+            </div>
+          {coachReport && !coachGenerating && (
+            <p className="text-xs text-muted-foreground text-left sm:text-right">
+              Dernier rapport Coach :{" "}
+              {new Date(coachReport.generated_at * 1000).toLocaleString("fr-FR")} (
+              {coachReport.favorite_count} fonds)
+            </p>
+          )}
+          </div>
         </div>
-      </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Fonds en base</CardDescription>
-            <CardTitle className="text-2xl">{stats.total}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Favoris épinglés</CardDescription>
-            <CardTitle className="text-2xl">{stats.favorites}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Dernière mise à jour</CardDescription>
-            <CardTitle className="text-lg font-normal">
-              {stats.lastImport > 0
-                ? new Date(stats.lastImport * 1000).toLocaleString("fr-FR")
-                : "—"}
-            </CardTitle>
-          </CardHeader>
-        </Card>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <StatCard
+            title="Fonds en base"
+            value={stats.total}
+            description="Catalogue importé"
+            icon={Layers}
+            accentColor="#3B82F6"
+            iconColor="text-blue-600"
+            iconBgColor="bg-blue-50"
+            onClick={() => setFilter("all")}
+          />
+          <StatCard
+            title="Favoris épinglés"
+            value={stats.favorites}
+            description="Pour le rapport Coach"
+            icon={Star}
+            accentColor="#F59E0B"
+            iconColor="text-amber-600"
+            iconBgColor="bg-amber-50"
+            highlight={stats.favorites > 0}
+            onClick={() => setFilter("favorites")}
+          />
+          <StatCard
+            title="Dernière mise à jour"
+            value={
+              stats.lastImport > 0
+                ? new Date(stats.lastImport * 1000).toLocaleDateString("fr-FR", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })
+                : "—"
+            }
+            description={
+              stats.lastImport > 0
+                ? new Date(stats.lastImport * 1000).toLocaleTimeString("fr-FR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "Aucun import"
+            }
+            icon={Clock}
+            accentColor="#10B981"
+            iconColor="text-emerald-600"
+            iconBgColor="bg-emerald-50"
+          />
+        </div>
       </div>
 
       <Card>
@@ -815,18 +957,24 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                         {FUND_WATCHLIST_CORE_COLUMNS.map((column) =>
                           renderFundWatchlistCell(entry, column)
                         )}
-                        {annualYears.map((year) => (
+                        {annualYears.map((year) => {
+                          const annualValue = fundWatchlistAnnualPerf(entry, year);
+                          return (
                           <TableCell
                             key={`${entry.id}-annual-${year}`}
                             style={{
                               minWidth: FUND_WATCHLIST_ANNUAL_YEAR_MIN_WIDTH,
                               width: FUND_WATCHLIST_ANNUAL_YEAR_MIN_WIDTH,
                             }}
-                            className="px-1 py-1.5 text-right tabular-nums text-[11px] whitespace-nowrap"
+                            className={cn(
+                              "px-1 py-1.5 text-right tabular-nums text-[11px] whitespace-nowrap",
+                              fundPerfSignTextClass(annualValue)
+                            )}
                           >
-                            {formatFundPerfPercent(fundWatchlistAnnualPerf(entry, year))}
+                            {formatFundPerfPercent(annualValue)}
                           </TableCell>
-                        ))}
+                          );
+                        })}
                         {optionalColumns.map((column) =>
                           renderFundWatchlistCell(entry, column)
                         )}

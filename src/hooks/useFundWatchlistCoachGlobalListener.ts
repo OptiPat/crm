@@ -15,6 +15,10 @@ import {
   saveCoachProgress,
   saveCoachReport,
 } from "@/lib/fund-watchlist/fund-watchlist-coach-store";
+import {
+  loadCoachDiagnosticSnapshot,
+  mergeCoachReportWithDiagnosticNarrative,
+} from "@/lib/fund-watchlist/fund-watchlist-coach-diagnostic-narrative";
 
 const POLL_MS = 5_000;
 
@@ -53,7 +57,16 @@ export function useFundWatchlistCoachGlobalListener(
       saveCoachGenerating(false);
       saveCoachProgress(null);
       if (event.ok && event.report) {
-        saveCoachReport(event.report);
+        const snapshot = loadCoachDiagnosticSnapshot();
+        const report =
+          snapshot != null
+            ? mergeCoachReportWithDiagnosticNarrative(
+                event.report,
+                snapshot.entries,
+                snapshot.diagnostics
+              )
+            : event.report;
+        saveCoachReport(report);
         const warningCount = event.report.warnings.length;
         toast.success("Rapport Coach prêt.", {
           id: FUND_WATCHLIST_COACH_TOAST_ID,

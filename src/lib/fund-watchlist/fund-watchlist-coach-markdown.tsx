@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
@@ -14,7 +14,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   });
 }
 
-export function FundWatchlistCoachMarkdown({ markdown }: { markdown: string }) {
+function parseCoachMarkdown(markdown: string): ReactNode[] {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const blocks: ReactNode[] = [];
   let listItems: ReactNode[] = [];
@@ -48,7 +48,7 @@ export function FundWatchlistCoachMarkdown({ markdown }: { markdown: string }) {
     if (trimmed.startsWith("#### ")) {
       flushList();
       blocks.push(
-        <h4 key={`h4-${i}`} className="mt-3 mb-1.5 text-sm font-semibold">
+        <h4 key={`h4-${i}`} className="mt-3 mb-1.5 text-sm font-semibold [content-visibility:auto]">
           {renderInline(trimmed.slice(5), `h4-${i}`)}
         </h4>
       );
@@ -58,7 +58,7 @@ export function FundWatchlistCoachMarkdown({ markdown }: { markdown: string }) {
     if (trimmed.startsWith("### ")) {
       flushList();
       blocks.push(
-        <h3 key={`h3-${i}`} className="mt-4 mb-2 text-base font-semibold">
+        <h3 key={`h3-${i}`} className="mt-4 mb-2 text-base font-semibold [content-visibility:auto]">
           {renderInline(trimmed.slice(4), `h3-${i}`)}
         </h3>
       );
@@ -68,7 +68,7 @@ export function FundWatchlistCoachMarkdown({ markdown }: { markdown: string }) {
     if (trimmed.startsWith("## ")) {
       flushList();
       blocks.push(
-        <h2 key={`h2-${i}`} className="mt-5 mb-2 text-lg font-semibold">
+        <h2 key={`h2-${i}`} className="mt-5 mb-2 text-lg font-semibold [content-visibility:auto]">
           {renderInline(trimmed.slice(3), `h2-${i}`)}
         </h2>
       );
@@ -78,7 +78,7 @@ export function FundWatchlistCoachMarkdown({ markdown }: { markdown: string }) {
     if (trimmed.startsWith("# ")) {
       flushList();
       blocks.push(
-        <h1 key={`h1-${i}`} className="mt-5 mb-3 text-xl font-bold">
+        <h1 key={`h1-${i}`} className="mt-5 mb-3 text-xl font-bold [content-visibility:auto]">
           {renderInline(trimmed.slice(2), `h1-${i}`)}
         </h1>
       );
@@ -90,7 +90,7 @@ export function FundWatchlistCoachMarkdown({ markdown }: { markdown: string }) {
       blocks.push(
         <blockquote
           key={`bq-${i}`}
-          className="my-2 border-l-2 border-primary/40 pl-3 text-muted-foreground italic"
+          className="my-2 border-l-2 border-primary/40 pl-3 text-muted-foreground italic [content-visibility:auto]"
         >
           {renderInline(trimmed.slice(2), `bq-${i}`)}
         </blockquote>
@@ -107,13 +107,21 @@ export function FundWatchlistCoachMarkdown({ markdown }: { markdown: string }) {
 
     flushList();
     blocks.push(
-      <p key={`p-${i}`} className="my-2 leading-relaxed">
+      <p key={`p-${i}`} className="my-2 leading-relaxed [content-visibility:auto]">
         {renderInline(trimmed, `p-${i}`)}
       </p>
     );
   }
 
   flushList();
-
-  return <div className="text-sm">{blocks}</div>;
+  return blocks;
 }
+
+export const FundWatchlistCoachMarkdown = memo(function FundWatchlistCoachMarkdown({
+  markdown,
+}: {
+  markdown: string;
+}) {
+  const blocks = useMemo(() => parseCoachMarkdown(markdown), [markdown]);
+  return <div className="text-sm contain-content">{blocks}</div>;
+});

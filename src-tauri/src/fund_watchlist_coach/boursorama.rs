@@ -76,6 +76,148 @@ pub fn composition_url(symbol: &str) -> String {
     format!("{BOURSORAMA_BASE}/bourse/opcvm/cours/composition/{symbol}/")
 }
 
+pub fn cours_url(symbol: &str) -> String {
+    format!("{BOURSORAMA_BASE}/bourse/opcvm/cours/{symbol}/")
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BoursoramaPerformancesSnapshot {
+    pub perf_ytd: Option<f64>,
+    pub perf_1mois: Option<f64>,
+    pub perf_1an: Option<f64>,
+    pub perf_3ans: Option<f64>,
+    pub perf_5ans: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BoursoramaCoursPerformances {
+    pub fund: BoursoramaPerformancesSnapshot,
+    /// Ligne « CATEGORIE » Boursorama (moyenne Morningstar de la catégorie).
+    pub category: BoursoramaPerformancesSnapshot,
+    pub source: String,
+}
+
+pub fn fetch_cours_performances(
+    client: &Client,
+    symbol: &str,
+) -> Result<Option<BoursoramaCoursPerformances>, String> {
+    let html = fetch_html(client, &cours_url(symbol))?;
+    Ok(parse_cours_performances_html(&html))
+}
+
+pub fn parse_cours_performances_html(html: &str) -> Option<BoursoramaCoursPerformances> {
+    let table = find_glissantes_performance_table(html)?;
+    let fund = parse_performance_row_in_table(&table, "FONDS")?;
+    let category = parse_performance_row_in_table(&table, "CATEGORIE")?;
+    Some(BoursoramaCoursPerformances {
+        fund,
+        category,
+        source: "boursorama_cours".to_string(),
+    })
+}
+
+fn find_glissantes_performance_table(html: &str) -> Option<String> {
+    let marker = "c-fund-performances__table";
+    let mut search_from = 0;
+    while let Some(rel) = html[search_from..].find(marker) {
+        let table_start = search_from + rel;
+        let table_end = html[table_start..]
+            .find("</table>")
+            .map(|idx| table_start + idx + "</table>".len())
+            .unwrap_or_else(|| html.len().min(table_start + 8000));
+        let table_fragment = html[table_start..table_end].to_string();
+        if let Some(headers) = parse_performance_table_headers(&table_fragment) {
+            if headers.iter().any(|h| h.contains("1 MOIS"))
+                && headers.iter().any(|h| h.contains("3 ANS"))
+            {
+                return Some(table_fragment);
+            }
+        }
+        search_from = table_start + marker.len();
+    }
+    None
+}
+
+fn parse_performance_row_in_table(
+    table_fragment: &str,
+    row_label: &str,
+) -> Option<BoursoramaPerformancesSnapshot> {
+    let needle = format!(">{row_label}<");
+    let row_start = table_fragment.find(&needle)?;
+    let row_fragment = &table_fragment[row_start..];
+    let headers = parse_performance_table_headers(table_fragment)?;
+    let values = parse_performance_row_cells(row_fragment)?;
+    Some(BoursoramaPerformancesSnapshot {
+        perf_ytd: value_at_header(&headers, &values, &["1ER JANV", "1ER JANV."]),
+        perf_1mois: value_at_header(&headers, &values, &["1 MOIS"]),
+        perf_1an: value_at_header(&headers, &values, &["1 AN"]),
+        perf_3ans: value_at_header(&headers, &values, &["3 ANS"]),
+        perf_5ans: value_at_header(&headers, &values, &["5 ANS"]),
+    })
+}
+
+fn parse_performance_table_headers(table_fragment: &str) -> Option<Vec<String>> {
+    let thead_end = table_fragment.find("</thead>")?;
+    let thead = &table_fragment[..thead_end];
+    let mut headers = Vec::new();
+    for th in thead.split("<th").skip(1) {
+        let inner = extract_tag_text(th)?;
+        let normalized = normalize_performance_header(&inner);
+        if !normalized.is_empty() {
+            headers.push(normalized);
+        }
+    }
+    if headers.len() < 4 {
+        return None;
+    }
+    Some(headers)
+}
+
+fn normalize_performance_header(raw: &str) -> String {
+    decode_html_entities(raw)
+        .to_uppercase()
+        .replace(['.', '\n', '\r'], "")
+        .trim()
+        .to_string()
+}
+
+fn parse_performance_row_cells(row_fragment: &str) -> Option<Vec<Option<f64>>> {
+    let row_end = row_fragment.find("</tr>").unwrap_or(row_fragment.len());
+    let row = &row_fragment[..row_end];
+    let mut values = Vec::new();
+    for td in row.split("<td").skip(1) {
+        let text = extract_tag_text(td)?;
+        values.push(parse_french_percent(&text));
+    }
+    if values.is_empty() {
+        return None;
+    }
+    Some(values)
+}
+
+fn value_at_header(
+    headers: &[String],
+    values: &[Option<f64>],
+    aliases: &[&str],
+) -> Option<f64> {
+    let idx = headers.iter().position(|header| aliases.iter().any(|alias| header == alias))?;
+    values.get(idx).and_then(|v| *v)
+}
+
+fn extract_tag_text(fragment: &str) -> Option<String> {
+    let gt = fragment.find('>')? + 1;
+    let lt = fragment[gt..].find('<')? + gt;
+    Some(decode_html_entities(fragment[gt..lt].trim()))
+}
+
+fn parse_french_percent(raw: &str) -> Option<f64> {
+    let cleaned = raw.trim().replace('%', "").replace(',', ".").trim().to_string();
+    if cleaned.is_empty() || cleaned == "-" {
+        return None;
+    }
+    cleaned.parse::<f64>().ok()
+}
+
 pub fn fetch_top_holdings(
     client: &Client,
     symbol: &str,
@@ -492,5 +634,15 @@ mod tests {
         assert_eq!(style.cap, "large_cap");
         assert_eq!(style.style, "growth");
         assert!(style.label_fr.contains("Grandes"));
+    }
+
+    #[test]
+    fn parse_cours_performances_extracts_fund_and_category() {
+        let html = include_str!("fixtures/boursorama_cours_performances_minimal.html");
+        let parsed = parse_cours_performances_html(html).expect("performances");
+        assert_eq!(parsed.fund.perf_1an, Some(75.84));
+        assert_eq!(parsed.category.perf_1an, Some(2.73));
+        assert_eq!(parsed.fund.perf_3ans, Some(122.56));
+        assert_eq!(parsed.category.perf_5ans, Some(31.47));
     }
 }

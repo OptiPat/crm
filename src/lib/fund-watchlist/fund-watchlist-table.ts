@@ -231,7 +231,7 @@ export function matchesFundWatchlistColumnFilter(
 
   if (filter.text?.trim() && isTextColumn(column)) {
     if (!isFundWatchlistAnnualColumnKey(column)
-      && !textMatchesSearch(filter.text, entryTextValue(entry, column))) {
+      && !textMatchesSearch(filter.text, entryTextValue(entry, column as FundWatchlistColumnId))) {
       return false;
     }
   }
@@ -241,7 +241,7 @@ export function matchesFundWatchlistColumnFilter(
       return false;
     }
     if (!isFundWatchlistAnnualColumnKey(column)) {
-      const value = entryTextValue(entry, column) || "—";
+      const value = entryTextValue(entry, column as FundWatchlistColumnId) || "—";
       if (!filter.values.includes(value)) return false;
     }
   }

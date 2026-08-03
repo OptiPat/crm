@@ -1950,6 +1950,7 @@ pub struct UcMarketCacheRowDb {
     pub top10_percent: Option<f64>,
     pub max_drawdown_3y: Option<f64>,
     pub exposition_json: Option<String>,
+    pub benchmark_json: Option<String>,
     #[allow(dead_code)]
     pub source: String,
     #[allow(dead_code)]

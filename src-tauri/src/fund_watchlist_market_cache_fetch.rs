@@ -5,8 +5,9 @@ use std::time::Duration;
 
 use crate::database::Database;
 use crate::fund_watchlist_coach::boursorama::{
-    boursorama_client, fetch_composition_for_isin, top10_concentration_percent,
-    BoursoramaExposition, BoursoramaHoldingLine,
+    boursorama_client, fetch_composition_for_isin, fetch_cours_performances, resolve_opcvm_symbol,
+    top10_concentration_percent, BoursoramaCoursPerformances, BoursoramaExposition,
+    BoursoramaHoldingLine,
 };
 use crate::uc_comparator::types::UcFundExposition;
 
@@ -16,6 +17,7 @@ pub struct BoursoramaCacheUpdate {
     pub isin: String,
     pub top10_percent: Option<f64>,
     pub exposition: UcFundExposition,
+    pub benchmark: Option<BoursoramaCoursPerformances>,
 }
 
 pub fn list_isins_missing_boursorama_data(
@@ -41,6 +43,7 @@ pub fn list_isins_missing_boursorama_data(
                 Some(row) => {
                     row.top10_percent.is_none()
                         || row.exposition_json.is_none()
+                        || !benchmark_cache_has_category_perf_1an(row.benchmark_json.as_deref())
                         || exposition_from_cache_json(row.exposition_json.as_deref())
                             .map(|expo| expo.needs_boursorama_refresh())
                             .unwrap_or(false)
@@ -66,6 +69,8 @@ pub fn fetch_boursorama_cache_for_isins(
         let Some(data) = fetch_composition_for_isin(&client, isin)? else {
             continue;
         };
+        let benchmark = resolve_opcvm_symbol(&client, isin)?
+            .and_then(|symbol| fetch_cours_performances(&client, &symbol).ok().flatten());
         let top10 = top10_concentration_percent(&data.holdings);
         let exposition = exposition_to_uc(&data.exposition, &data.holdings);
         if top10.is_none()
@@ -73,6 +78,7 @@ pub fn fetch_boursorama_cache_for_isins(
             && exposition.sectors.is_empty()
             && exposition.holdings.is_empty()
             && exposition.style_box.is_none()
+            && benchmark.is_none()
         {
             continue;
         }
@@ -80,6 +86,7 @@ pub fn fetch_boursorama_cache_for_isins(
             isin: isin.clone(),
             top10_percent: top10,
             exposition,
+            benchmark,
         });
     }
     Ok(updates)
@@ -103,15 +110,31 @@ pub fn apply_boursorama_cache_updates(
                     .map_err(|e| format!("Sérialisation exposition ({}) : {e}", update.isin))?,
             )
         };
+        let benchmark_json = update
+            .benchmark
+            .as_ref()
+            .and_then(|bench| serde_json::to_string(bench).ok());
         database
             .upsert_fund_watchlist_market_cache_boursorama(
                 &update.isin,
                 update.top10_percent,
                 exposition_json.as_deref(),
+                benchmark_json.as_deref(),
             )
             .map_err(|e| format!("Écriture cache Boursorama ({}) : {e}", update.isin))?;
     }
     Ok(updates.len())
+}
+
+pub fn benchmark_from_cache_json(json: Option<&str>) -> Option<BoursoramaCoursPerformances> {
+    let raw = json?;
+    serde_json::from_str(raw).ok()
+}
+
+pub fn benchmark_cache_has_category_perf_1an(json: Option<&str>) -> bool {
+    benchmark_from_cache_json(json)
+        .and_then(|bench| bench.category.perf_1an)
+        .is_some()
 }
 
 pub fn exposition_from_cache_json(json: Option<&str>) -> Option<UcFundExposition> {
@@ -164,6 +187,166 @@ fn slices_to_uc(
         .collect()
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FundWatchlistBenchmarkDto {
+    pub isin: String,
+    pub category_perf_1an: Option<f64>,
+    pub label: String,
+}
+
+fn normalize_fund_watchlist_isins(isins: &[String]) -> Vec<String> {
+    isins
+        .iter()
+        .map(|s| s.trim().to_uppercase())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+pub(crate) fn normalize_fund_watchlist_isins_for_command(isins: &[String]) -> Vec<String> {
+    normalize_fund_watchlist_isins(isins)
+}
+
+/// Lecture cache locale uniquement (pas d'appel HTTP Boursorama).
+pub fn get_boursorama_benchmarks_cached(
+    database: &crate::database::Database,
+    isins: &[String],
+) -> Result<Vec<FundWatchlistBenchmarkDto>, String> {
+    let normalized = normalize_fund_watchlist_isins(isins);
+    if normalized.is_empty() {
+        return Ok(Vec::new());
+    }
+    let rows = database
+        .get_fund_watchlist_market_cache_bulk(&normalized)
+        .map_err(|e| format!("Lecture cache benchmark : {e}"))?;
+    Ok(benchmarks_from_cache_rows(&normalized, &rows))
+}
+
+pub fn benchmarks_from_cache_rows(
+    isins: &[String],
+    rows: &[crate::database::models::UcMarketCacheRowDb],
+) -> Vec<FundWatchlistBenchmarkDto> {
+    isins
+        .iter()
+        .map(|isin| {
+            let normalized = isin.trim().to_uppercase();
+            let row = rows.iter().find(|row| row.isin == normalized);
+            let category_perf_1an = row
+                .and_then(|row| benchmark_from_cache_json(row.benchmark_json.as_deref()))
+                .and_then(|bench| bench.category.perf_1an);
+            FundWatchlistBenchmarkDto {
+                isin: normalized,
+                category_perf_1an,
+                label: "Catégorie Boursorama".to_string(),
+            }
+        })
+        .collect()
+}
+
+const BENCHMARK_CLIENT_RETRY_MS: u64 = 800;
+
+fn boursorama_client_with_retry() -> Result<reqwest::blocking::Client, String> {
+    match boursorama_client() {
+        Ok(client) => Ok(client),
+        Err(first) => {
+            thread::sleep(Duration::from_millis(BENCHMARK_CLIENT_RETRY_MS));
+            boursorama_client().map_err(|second| {
+                format!(
+                    "Connexion Boursorama impossible ({first} — nouvelle tentative : {second})"
+                )
+            })
+        }
+    }
+}
+
+pub fn fetch_boursorama_benchmark_updates_with_progress(
+    isins: &[String],
+    mut on_progress: impl FnMut(usize, usize, &str),
+) -> Result<Vec<(String, String)>, String> {
+    if isins.is_empty() {
+        return Ok(Vec::new());
+    }
+    let client = boursorama_client_with_retry()?;
+    let mut updates = Vec::new();
+    let mut failures = 0usize;
+    let total = isins.len();
+    for (index, isin) in isins.iter().enumerate() {
+        if index > 0 {
+            thread::sleep(Duration::from_millis(FETCH_PAUSE_MS));
+        }
+        on_progress(index + 1, total, isin);
+        if let Some(update) = fetch_boursorama_benchmark_update_for_isin(&client, isin) {
+            updates.push(update);
+        } else {
+            failures += 1;
+        }
+    }
+    if failures == isins.len() {
+        return Err(format!(
+            "Aucune référence catégorie récupérée pour {} fond(s) (symbole introuvable ou page Boursorama indisponible).",
+            isins.len()
+        ));
+    }
+    Ok(updates)
+}
+
+pub fn fetch_boursorama_benchmark_update_for_isin(
+    client: &reqwest::blocking::Client,
+    isin: &str,
+) -> Option<(String, String)> {
+    let symbol = resolve_opcvm_symbol(client, isin).ok().flatten()?;
+    let benchmark = fetch_cours_performances(client, &symbol)
+        .ok()
+        .flatten()
+        .filter(|bench| bench.category.perf_1an.is_some())?;
+    let benchmark_json = serde_json::to_string(&benchmark).ok()?;
+    Some((isin.trim().to_uppercase(), benchmark_json))
+}
+
+pub fn apply_boursorama_benchmark_updates(
+    database: &Database,
+    updates: &[(String, String)],
+) -> Result<usize, String> {
+    for (isin, benchmark_json) in updates {
+        database
+            .upsert_fund_watchlist_market_cache_boursorama(
+                isin,
+                None,
+                None,
+                Some(benchmark_json.as_str()),
+            )
+            .map_err(|e| format!("Écriture benchmark ({isin}) : {e}"))?;
+    }
+    Ok(updates.len())
+}
+
+pub fn list_isins_missing_usable_benchmark(
+    database: &Database,
+    isins: &[String],
+) -> Result<Vec<String>, String> {
+    if isins.is_empty() {
+        return Ok(Vec::new());
+    }
+    let normalized: Vec<String> = isins
+        .iter()
+        .map(|s| s.trim().to_uppercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let cached = database
+        .get_fund_watchlist_market_cache_bulk(&normalized)
+        .map_err(|e| format!("Lecture cache marché : {e}"))?;
+    Ok(normalized
+        .into_iter()
+        .filter(|isin| {
+            let row = cached.iter().find(|row| row.isin == *isin);
+            match row {
+                None => true,
+                Some(row) => !benchmark_cache_has_category_perf_1an(row.benchmark_json.as_deref()),
+            }
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,6 +370,7 @@ mod tests {
             Some(
                 r#"{"geo":[{"label":"France","weight_percent":50}],"sectors":[{"label":"Tech","weight_percent":80}],"asset_breakdown":[],"holdings":[],"style_box":{"cap":"large_cap","style":"growth","label_fr":"Grandes cap. / Croissance"},"source":"boursorama"}"#,
             ),
+            None,
         )
         .expect("seed");
         let missing =
@@ -203,6 +387,7 @@ mod tests {
             Some(
                 r#"{"geo":[{"label":"France","weight_percent":50}],"sectors":[{"label":"Tech","weight_percent":80}],"asset_breakdown":[],"holdings":[{"label":"Ligne A","weight_percent":9.5}],"style_box":{"cap":"large_cap","style":"growth","label_fr":"Grandes cap. / Croissance"},"source":"boursorama"}"#,
             ),
+            Some(r#"{"fund":{"perf_ytd":null,"perf_1mois":null,"perf_1an":10.0,"perf_3ans":null,"perf_5ans":null},"category":{"perf_ytd":null,"perf_1mois":null,"perf_1an":8.0,"perf_3ans":null,"perf_5ans":null},"source":"boursorama_cours"}"#),
         )
         .expect("seed");
         let missing =
@@ -219,6 +404,7 @@ mod tests {
             Some(
                 r#"{"geo":[{"label":"France","weight_percent":50}],"sectors":[{"label":"Tech","weight_percent":80}],"asset_breakdown":[],"source":"boursorama"}"#,
             ),
+            None,
         )
         .expect("seed");
         let missing =
