@@ -466,7 +466,7 @@ mod tests {
         assert_eq!(result.scoring_profile, "obligations");
         assert_ne!(result.verdict, UcVerdict::InsufficientData);
         assert!(result.confidence_index >= 0.60);
-        assert_eq!(result.winner_isin.as_deref(), Some("FR002"));
+        assert_eq!(result.winner_isin.as_deref(), Some("FR001"));
         assert!(result
             .criteria
             .iter()

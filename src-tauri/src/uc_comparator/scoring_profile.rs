@@ -1,4 +1,3 @@
-use crate::uc_comparator::eligibility::evaluate_categories;
 use crate::uc_comparator::types::UcFundInput;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,11 +23,28 @@ impl ScoringProfile {
 }
 
 pub fn resolve_scoring_profile(funds: &[UcFundInput]) -> ScoringProfile {
-    let meta = evaluate_categories(funds).meta_key;
-    match meta.as_deref() {
-        Some("oblig" | "oblig_euro") => ScoringProfile::Obligations,
-        _ => ScoringProfile::Equity,
+    if !funds.is_empty()
+        && funds.iter().all(|f| {
+            f.categorie
+                .as_deref()
+                .is_some_and(|c| normalized_oblig_category(c).contains("oblig"))
+        })
+    {
+        return ScoringProfile::Obligations;
     }
+    ScoringProfile::Equity
+}
+
+fn normalized_oblig_category(raw: &str) -> String {
+    raw.trim()
+        .to_lowercase()
+        .replace('’', "'")
+        .replace(['é', 'è', 'ê', 'ë'], "e")
+        .replace(['à', 'â'], "a")
+        .replace(['ù', 'û'], "u")
+        .replace(['î', 'ï'], "i")
+        .replace(['ô', 'ö'], "o")
+        .replace('ç', "c")
 }
 
 #[derive(Clone, Copy)]
