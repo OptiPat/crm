@@ -172,7 +172,7 @@ export async function updatePlacementOperationInvestissementId(
 ): Promise<PlacementOperation> {
   const op = await invoke<PlacementOperation>("update_placement_operation_investissement_id", {
     id,
-    investissement_id: investissementId,
+    investissementId,
   });
   notifyPlacementOperationsChanged();
   return op;
@@ -184,7 +184,7 @@ export async function updatePlacementOperationPvManual(
 ): Promise<PlacementOperation> {
   const op = await invoke<PlacementOperation>("update_placement_operation_pv_manual", {
     id,
-    pv_manual: pvManual,
+    pvManual,
   });
   notifyPlacementOperationsChanged();
   return op;
