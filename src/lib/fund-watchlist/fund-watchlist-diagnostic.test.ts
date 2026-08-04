@@ -157,7 +157,8 @@ describe("fund-watchlist-diagnostic", () => {
     const diag = computeFundDiagnostic(all[2], all);
     expect(diag.volatility_class).toBe("rates");
     expect(diag.status).toBe("sous_surveillance");
-    expect(diag.delta_1an_vs_category).toBe(-1);
+    // Médiane des deux vrais pairs (5 et 4,5) = 4,75 : le fonds observé n'entre plus dans le calcul.
+    expect(diag.delta_1an_vs_category).toBe(-1.2);
   });
 
   it("regroupe les pairs par méta-catégorie", () => {
@@ -167,8 +168,51 @@ describe("fund-watchlist-diagnostic", () => {
       entry({ isin: "C", nom: "Laggard", categorie: "Actions Asie Discovery", perf_1an: 8 }),
     ];
     const diag = computeFundDiagnostic(all[2], all);
-    expect(diag.peer_count).toBe(3);
+    expect(diag.peer_count).toBe(2);
     expect(diag.status).toBe("sous_surveillance");
+  });
+
+  it("ne se compare pas à lui-même quand il est seul dans sa catégorie", () => {
+    const all = [entry({ isin: "SOLO", nom: "Solo", categorie: "Actions Inde", perf_1an: 10 })];
+    const diag = computeFundDiagnostic(all[0], all);
+    expect(diag.status).toBe("inconnu");
+    expect(diag.peer_count).toBe(0);
+    expect(diag.delta_1an_vs_category).toBeNull();
+    expect(diag.delta_reference_label).toBeNull();
+    expect(diag.reasons.join(" ")).toContain("Pas de référence catégorie");
+  });
+
+  it("refuse la médiane watchlist avec un seul pair", () => {
+    const all = [
+      entry({ isin: "A", nom: "A", categorie: "Actions Inde", perf_1an: 10 }),
+      entry({ isin: "B", nom: "B", categorie: "Actions Inde", perf_1an: 30 }),
+    ];
+    const diag = computeFundDiagnostic(all[0], all);
+    expect(diag.status).toBe("inconnu");
+    expect(diag.peer_count).toBe(1);
+  });
+
+  it("utilise la référence Boursorama même sans pair dans la watchlist", () => {
+    const all = [entry({ isin: "SOLO", nom: "Solo", categorie: "Actions Inde", perf_1an: 10 })];
+    const diag = computeFundDiagnostic(all[0], all, {
+      category_perf_1an: 18,
+      label: "Catégorie Boursorama",
+    });
+    expect(diag.status).not.toBe("inconnu");
+    expect(diag.delta_1an_vs_category).toBe(-8);
+    expect(diag.peer_count).toBe(0);
+  });
+
+  it("annonce un Δ nul au niveau de la référence, sans « légèrement sous »", () => {
+    const all = [
+      entry({ isin: "A", nom: "A", perf_1an: 12 }),
+      entry({ isin: "B", nom: "B", perf_1an: 8 }),
+      entry({ isin: "C", nom: "Pile", perf_1an: 10 }),
+    ];
+    const diag = computeFundDiagnostic(all[2], all);
+    expect(diag.delta_1an_vs_category).toBe(0);
+    expect(diag.context_reasons).toContain("1 an au niveau de la référence");
+    expect(diag.context_reasons.some((r) => r.includes("Légèrement sous"))).toBe(false);
   });
 
   it("n'affiche pas « au-dessus » pour un léger écart négatif sous le seuil", () => {

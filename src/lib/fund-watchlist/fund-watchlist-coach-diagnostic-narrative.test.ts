@@ -47,6 +47,7 @@ describe("fund-watchlist-coach-diagnostic-narrative", () => {
     ];
     const all = [
       entry({ isin: "FR0000000001", nom: "Leader", perf_1an: 20 }),
+      entry({ isin: "FR0000000002", nom: "Mid", perf_1an: 18 }),
       ...favorites,
     ];
     const diagnostics = buildFundWatchlistDiagnostics(all);

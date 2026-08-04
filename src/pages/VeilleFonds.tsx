@@ -14,6 +14,7 @@ import {
   Clock,
   FileDown,
   FileUp,
+  Globe,
   Layers,
   LineChart,
   RefreshCw,
@@ -102,6 +103,8 @@ import { runUcComparison, type CompareResponse } from "@/lib/api/tauri-uc-compar
 
 const MAX_UC_COMPARE = 4;
 
+const FUND_WATCHLIST_BENCHMARK_TOAST_ID = "fund-watchlist-benchmark-sync";
+
 function benchmarksToMap(
   rows: { isin: string; categoryPerf1an?: number | null; label: string }[]
 ): Map<string, FundBenchmarkReference> {
@@ -153,6 +156,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   const [boursoramaBenchmarks, setBoursoramaBenchmarks] = useState<
     Map<string, FundBenchmarkReference>
   >(() => new Map());
+  const [benchmarkSyncing, setBenchmarkSyncing] = useState(false);
   const { printBundle: comparePrintBundle, printComparison, isPrinting: comparePrinting } =
     useUcComparatorPrintExport();
 
@@ -212,23 +216,20 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     return () => window.removeEventListener(FUND_WATCHLIST_COACH_STORE_EVENT, syncCoachFromStore);
   }, []);
 
-  const favoriteIsinsKey = useMemo(
-    () =>
-      entries
-        .filter((e) => e.is_favorite)
-        .map((e) => e.isin)
-        .sort()
-        .join(","),
+  // Lecture cache locale (pas de réseau) : les badges de toute la watchlist méritent leur
+  // référence catégorie, pas seulement les favoris.
+  const watchlistIsinsKey = useMemo(
+    () => entries.map((e) => e.isin).sort().join(","),
     [entries]
   );
 
   useEffect(() => {
-    if (!favoriteIsinsKey) {
+    if (!watchlistIsinsKey) {
       setBoursoramaBenchmarks(new Map());
       return;
     }
     let cancelled = false;
-    const isins = favoriteIsinsKey.split(",");
+    const isins = watchlistIsinsKey.split(",");
     void getFundWatchlistBoursoramaBenchmarksCached(isins)
       .then((rows) => {
         if (cancelled) return;
@@ -241,7 +242,41 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     return () => {
       cancelled = true;
     };
-  }, [favoriteIsinsKey]);
+  }, [watchlistIsinsKey]);
+
+  /** Synchronisation à la demande sur toute la watchlist (les favoris se rafraîchissent aussi
+   *  automatiquement à la génération du rapport Coach). */
+  const syncAllBenchmarks = async () => {
+    if (entries.length === 0 || benchmarkSyncing) return;
+    setBenchmarkSyncing(true);
+    toast.loading("Mise à jour des références catégorie…", {
+      id: FUND_WATCHLIST_BENCHMARK_TOAST_ID,
+    });
+    try {
+      const rows = await waitForFundWatchlistBenchmarkSync(
+        entries.map((e) => e.isin),
+        (current, total) => {
+          if (total <= 0) return;
+          toast.loading(`Références catégorie ${current}/${total}…`, {
+            id: FUND_WATCHLIST_BENCHMARK_TOAST_ID,
+          });
+        }
+      );
+      setBoursoramaBenchmarks(benchmarksToMap(rows));
+      toast.success("Références catégorie à jour.", {
+        id: FUND_WATCHLIST_BENCHMARK_TOAST_ID,
+      });
+    } catch (error) {
+      const detail =
+        error instanceof Error ? error.message : "réseau ou Boursorama indisponible";
+      toast.error(
+        `Références non mises à jour (${detail}). Les badges utilisent la médiane watchlist.`,
+        { id: FUND_WATCHLIST_BENCHMARK_TOAST_ID, duration: 8000 }
+      );
+    } finally {
+      setBenchmarkSyncing(false);
+    }
+  };
 
   const startCoachReport = async () => {
     const favorites = entries.filter((e) => e.is_favorite);
@@ -761,6 +796,15 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
             <Button variant="outline" onClick={() => void load()} disabled={loading}>
               <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
               Actualiser
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void syncAllBenchmarks()}
+              disabled={entries.length === 0 || benchmarkSyncing}
+              title="Récupère la performance de catégorie Boursorama pour toute la watchlist"
+            >
+              <Globe className={cn("h-4 w-4 mr-2", benchmarkSyncing && "animate-spin")} />
+              Références catégorie
             </Button>
             <Button
               variant="secondary"

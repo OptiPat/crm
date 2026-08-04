@@ -22,7 +22,7 @@ export type FundDiagnostic = {
   delta_1an_vs_category: number | null;
   /** Libellé de la référence utilisée pour le Δ 1 an. */
   delta_reference_label: string | null;
-  /** Nombre de fonds dans la catégorie avec perf 1 an (dont le fonds). */
+  /** Nombre de pairs de la catégorie avec perf 1 an (hors le fonds lui-même). */
   peer_count: number;
   /** Profil de volatilité utilisé pour les seuils Δ. */
   volatility_class: FundDiagnosticVolatilityClass;
@@ -73,6 +73,7 @@ export const FUND_DIAGNOSTIC_DELTA_SURVEILLANCE_PTS =
   FUND_DIAGNOSTIC_THRESHOLDS_BY_CLASS.actions.surveillance;
 export const FUND_DIAGNOSTIC_DELTA_ARBITRAGE_PTS =
   FUND_DIAGNOSTIC_THRESHOLDS_BY_CLASS.actions.arbitrage;
+/** Pairs requis **hors le fonds lui-même** pour que la médiane watchlist fasse référence. */
 export const FUND_DIAGNOSTIC_MIN_PEERS = 2;
 
 function median(values: number[]): number | null {
@@ -178,12 +179,16 @@ export function computeFundDiagnostic(
 
   const peers = allEntries.filter(
     (other) =>
+      other.isin !== entry.isin &&
       isSameFundWatchlistPeerCategory(other.categorie, entry.categorie) &&
       other.perf_1an != null &&
       Number.isFinite(other.perf_1an)
   );
   const peerPerfs = peers.map((p) => p.perf_1an as number);
-  const peerMedian = median(peerPerfs);
+  // Un fonds ne peut pas être sa propre référence : sans assez de pairs, aucune médiane.
+  // Sinon un fonds seul dans sa catégorie obtiendrait Δ = 0 et un « Conserver » trompeur.
+  const peerMedian =
+    peerPerfs.length >= FUND_DIAGNOSTIC_MIN_PEERS ? median(peerPerfs) : null;
 
   const boursoramaRef =
     benchmark?.category_perf_1an != null && Number.isFinite(benchmark.category_perf_1an)
@@ -204,7 +209,10 @@ export function computeFundDiagnostic(
       delta_reference_label: referenceLabel,
       peer_count: peerPerfs.length,
       volatility_class: thresholds.volatilityClass,
-      reasons: [`Pairs insuffisants dans la catégorie (min. ${FUND_DIAGNOSTIC_MIN_PEERS})`],
+      reasons: [
+        `Pas de référence catégorie : ${peerPerfs.length} pair(s) comparable(s) dans la watchlist ` +
+          `(min. ${FUND_DIAGNOSTIC_MIN_PEERS})`,
+      ],
     });
   }
 
@@ -212,9 +220,11 @@ export function computeFundDiagnostic(
   const refName = referenceLabel ?? "référence";
   if (delta > 0) {
     contextReasons.push(`1 an au-dessus de la référence (+${delta} pt)`);
+  } else if (delta === 0) {
+    contextReasons.push("1 an au niveau de la référence");
   } else if (delta > thresholds.surveillance) {
     contextReasons.push(`Légèrement sous la référence (${delta} pt)`);
-  } else if (delta !== 0) {
+  } else {
     triggerReasons.push(`Écart vs ${refName} 1 an : ${delta} pt`);
   }
 

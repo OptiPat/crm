@@ -12,6 +12,15 @@ const SELECT_COLS: &str = "id, isin, nom, categorie, notation_morningstar, sri,
     vol_5ans, vol_3ans, vol_1an, sharpe_ratio, perf_annual_json,
     frais_gestion, sfdr, source_label, is_favorite, created_at, updated_at";
 
+/// Bruit flottant ignoré : seule une vraie variation de perf 1 an périme la référence catégorie.
+fn perf_1an_changed(previous: Option<f64>, next: Option<f64>) -> bool {
+    match (previous, next) {
+        (Some(a), Some(b)) => (a - b).abs() > 1e-9,
+        (None, None) => false,
+        _ => true,
+    }
+}
+
 fn parse_perf_annual_json(raw: Option<String>) -> Result<Option<HashMap<String, f64>>> {
     match raw {
         Some(json) if !json.trim().is_empty() => {
@@ -145,15 +154,15 @@ impl super::Database {
             }
             let perf_annual_json = serialize_perf_annual_json(&row.perf_annual)?;
 
-            let existing: Option<i64> = tx
+            let existing: Option<(i64, Option<f64>)> = tx
                 .query_row(
-                    "SELECT id FROM fund_watchlist WHERE isin = ?1",
+                    "SELECT id, perf_1an FROM fund_watchlist WHERE isin = ?1",
                     params![&isin],
-                    |r| r.get(0),
+                    |r| Ok((r.get(0)?, r.get(1)?)),
                 )
                 .ok();
 
-            if existing.is_some() {
+            if let Some((_, previous_perf_1an)) = existing {
                 tx.execute(
                     "UPDATE fund_watchlist SET
                         nom = ?2,
@@ -208,6 +217,19 @@ impl super::Database {
                     ],
                 )?;
                 updated += 1;
+
+                // La référence catégorie Boursorama a été captée à une autre date. Dès que la
+                // perf 1 an bouge, l'écart affiché comparerait deux photos décalées : on périme
+                // la référence, le diagnostic retombe sur la médiane watchlist (fraîche, issue du
+                // même import) jusqu'à la prochaine synchronisation Boursorama.
+                if perf_1an_changed(previous_perf_1an, row.perf_1an) {
+                    tx.execute(
+                        "UPDATE fund_watchlist_market_cache
+                            SET benchmark_json = NULL
+                          WHERE isin = ?1",
+                        params![&isin],
+                    )?;
+                }
             } else {
                 tx.execute(
                     "INSERT INTO fund_watchlist (
@@ -363,6 +385,74 @@ mod tests {
         assert!((entries[0].sharpe_ratio.unwrap() - 1.12).abs() < f64::EPSILON);
         assert_eq!(entries[0].perf_annual.as_ref().unwrap().get("2025"), Some(&11.2));
         assert!(entries[0].is_favorite);
+    }
+
+    fn cached_benchmark(db: &Database, isin: &str) -> Option<String> {
+        db.get_fund_watchlist_market_cache_bulk(&[isin.to_string()])
+            .unwrap()
+            .into_iter()
+            .next()
+            .and_then(|row| row.benchmark_json)
+    }
+
+    fn seed_benchmark(db: &Database, isin: &str) {
+        db.upsert_fund_watchlist_market_cache_boursorama(
+            isin,
+            Some(40.0),
+            None,
+            Some(r#"{"category":{"perf_1an":12.0}}"#),
+        )
+        .unwrap();
+    }
+
+    /// Une perf 1 an qui bouge rend l'écart vs référence incohérent : la référence doit être
+    /// périmée par l'import lui-même, sinon le badge compare deux dates différentes.
+    #[test]
+    fn import_expires_category_benchmark_when_perf_1an_moves() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let row = sample_import_row();
+        db.import_fund_watchlist_entries(vec![row.clone()], "cristalliance")
+            .unwrap();
+        seed_benchmark(&db, "FR0010135103");
+        assert!(cached_benchmark(&db, "FR0010135103").is_some());
+
+        let mut moved = row;
+        moved.perf_1an = Some(9.4);
+        db.import_fund_watchlist_entries(vec![moved], "cristalliance")
+            .unwrap();
+
+        assert_eq!(cached_benchmark(&db, "FR0010135103"), None);
+    }
+
+    /// Réimporter le même fichier ne doit pas jeter des références encore valables.
+    #[test]
+    fn import_keeps_benchmark_when_perf_1an_unchanged() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let row = sample_import_row();
+        db.import_fund_watchlist_entries(vec![row.clone()], "cristalliance")
+            .unwrap();
+        seed_benchmark(&db, "FR0010135103");
+
+        let mut renamed = row;
+        renamed.nom = "Fonds Test A (nouveau libellé)".into();
+        renamed.vl_recent = Some(103.0);
+        db.import_fund_watchlist_entries(vec![renamed], "cristalliance")
+            .unwrap();
+
+        assert!(cached_benchmark(&db, "FR0010135103").is_some());
+    }
+
+    /// Épingler un favori touche `updated_at` mais ne change aucune perf : rien à périmer.
+    #[test]
+    fn setting_favorite_does_not_expire_benchmark() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.import_fund_watchlist_entries(vec![sample_import_row()], "cristalliance")
+            .unwrap();
+        seed_benchmark(&db, "FR0010135103");
+
+        db.set_fund_watchlist_favorite("FR0010135103", true).unwrap();
+
+        assert!(cached_benchmark(&db, "FR0010135103").is_some());
     }
 
     #[test]
