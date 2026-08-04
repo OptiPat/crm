@@ -66,6 +66,12 @@ import type { FundBenchmarkReference } from "@/lib/fund-watchlist/fund-watchlist
 import { saveCoachDiagnosticSnapshot } from "@/lib/fund-watchlist/fund-watchlist-coach-diagnostic-narrative";
 import { waitForFundWatchlistBenchmarkSync } from "@/lib/fund-watchlist/wait-for-benchmark-sync";
 import {
+  compareSelectionSetsEqual,
+  filterCompareSelectionToKnown,
+  loadFundWatchlistCompareSelection,
+  saveFundWatchlistCompareSelection,
+} from "@/lib/fund-watchlist/fund-watchlist-compare-selection";
+import {
   FUND_WATCHLIST_COLUMN_LABELS,
   FUND_WATCHLIST_COLUMN_ALIGN,
   FUND_WATCHLIST_DEFAULT_SORT,
@@ -138,7 +144,9 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   const [sort, setSort] = useState<FundWatchlistSort>(FUND_WATCHLIST_DEFAULT_SORT);
   const [columnFilters, setColumnFilters] = useState<FundWatchlistColumnFilters>({});
   const [expandedOptional, setExpandedOptional] = useState(DEFAULT_OPTIONAL_COLUMNS);
-  const [selectedCompareIsins, setSelectedCompareIsins] = useState<Set<string>>(() => new Set());
+  const [selectedCompareIsins, setSelectedCompareIsins] = useState<Set<string>>(
+    () => new Set(loadFundWatchlistCompareSelection())
+  );
   const [view, setView] = useState<VeilleView>("table");
   const [compareLoading, setCompareLoading] = useState(false);
   const [compareResponse, setCompareResponse] = useState<CompareResponse | null>(null);
@@ -163,6 +171,19 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     void load();
     return subscribeFundWatchlistChanged(() => void load());
   }, [load]);
+
+  useEffect(() => {
+    if (entries.length === 0) return;
+    const known = new Set(entries.map((e) => e.isin));
+    setSelectedCompareIsins((prev) => {
+      const filtered = filterCompareSelectionToKnown(prev, known, MAX_UC_COMPARE);
+      return compareSelectionSetsEqual(prev, filtered) ? prev : filtered;
+    });
+  }, [entries]);
+
+  useEffect(() => {
+    saveFundWatchlistCompareSelection(selectedCompareIsins);
+  }, [selectedCompareIsins]);
 
   useEffect(() => {
     if (loadCoachReport()) return;
@@ -345,6 +366,10 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     });
   };
 
+  const clearCompareSelection = () => {
+    setSelectedCompareIsins(new Set());
+  };
+
   const toggleCompareSelection = (isin: string, checked: boolean) => {
     setSelectedCompareIsins((prev) => {
       const next = new Set(prev);
@@ -388,6 +413,17 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       toast.error(String(error));
     }
   };
+
+  const toggleFavoriteByIsin = (isin: string) => {
+    const entry = entries.find((e) => e.isin === isin);
+    if (!entry) return;
+    void toggleFavorite(entry);
+  };
+
+  const favoriteIsins = useMemo(
+    () => new Set(entries.filter((e) => e.is_favorite).map((e) => e.isin)),
+    [entries]
+  );
 
   const handleColumnFilterChange = (
     column: FundWatchlistTableColumnKey,
@@ -648,6 +684,11 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
               <RefreshCw className={cn("h-4 w-4 mr-2", compareLoading && "animate-spin")} />
               Recalculer
             </Button>
+            {selectedCompareCount > 0 && (
+              <Button variant="ghost" onClick={clearCompareSelection}>
+                Tout décocher
+              </Button>
+            )}
             {compareResponse && (
               <Button
                 variant="outline"
@@ -669,7 +710,11 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
               </p>
             )}
             {!compareLoading && compareResponse && (
-              <UcComparatorResults response={compareResponse} />
+              <UcComparatorResults
+                response={compareResponse}
+                favoriteIsins={favoriteIsins}
+                onToggleFavorite={toggleFavoriteByIsin}
+              />
             )}
             {!compareLoading && !compareResponse && (
               <p className="text-sm text-muted-foreground">Aucun résultat disponible.</p>
@@ -708,6 +753,11 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
               <Scale className="h-4 w-4 mr-2" />
               Comparer ({selectedCompareCount}/{MAX_UC_COMPARE})
             </Button>
+            {selectedCompareCount > 0 && (
+              <Button variant="ghost" size="sm" onClick={clearCompareSelection}>
+                Tout décocher
+              </Button>
+            )}
             <Button variant="outline" onClick={() => void load()} disabled={loading}>
               <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
               Actualiser
@@ -820,6 +870,11 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                 >
                   Favoris
                 </Button>
+                {selectedCompareCount > 0 && (
+                  <Button size="sm" variant="ghost" onClick={clearCompareSelection}>
+                    Tout décocher ({selectedCompareCount})
+                  </Button>
+                )}
                 {!isDefaultTableView && (
                   <Button size="sm" variant="ghost" onClick={clearTableFilters}>
                     <X className="h-4 w-4 mr-1" />

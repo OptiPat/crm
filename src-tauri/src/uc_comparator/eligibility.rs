@@ -27,7 +27,7 @@ fn meta_category_key(normalized: &str) -> Option<&'static str> {
         return None;
     }
 
-    let rules: [(&[&str], &str); 10] = [
+    let rules: [(&[&str], &str); 9] = [
         (
             &[
                 "actions secteur technolog",
@@ -52,10 +52,12 @@ fn meta_category_key(normalized: &str) -> Option<&'static str> {
                 "emergents asie",
                 "asia discovery",
                 "asia growth",
+                "actions japon",
+                "japon",
+                "japan",
             ],
-            "actions_asie",
+            "actions_asie_pacifique",
         ),
-        (&["actions japon", "japon"], "actions_japon"),
         (
             &["actions europe", "europe grandes", "eurozone", "zone euro"],
             "actions_europe",
@@ -77,12 +79,12 @@ fn meta_category_key(normalized: &str) -> Option<&'static str> {
         }
     }
 
-    // Heuristique : "asie" / "asia" hors contexte Japon seul.
-    if (normalized.contains("asie") || normalized.contains("asia"))
-        && !normalized.contains("japon")
-        && !normalized.contains("japan")
+    if normalized.contains("asie")
+        || normalized.contains("asia")
+        || normalized.contains("japon")
+        || normalized.contains("japan")
     {
-        return Some("actions_asie");
+        return Some("actions_asie_pacifique");
     }
 
     None
@@ -91,8 +93,7 @@ fn meta_category_key(normalized: &str) -> Option<&'static str> {
 fn meta_category_label(key: &str) -> &'static str {
     match key {
         "actions_tech" => "Actions Secteur Technologies",
-        "actions_asie" => "Actions Asie",
-        "actions_japon" => "Actions Japon",
+        "actions_asie_pacifique" => "Actions Asie / Japon",
         "actions_europe" => "Actions Europe",
         "actions_us" => "Actions États-Unis",
         "oblig_euro" => "Obligations Euro",
@@ -296,8 +297,28 @@ mod tests {
         ]);
         assert!(eval.compatible);
         assert!(!eval.exact_match);
-        assert_eq!(eval.meta_key.as_deref(), Some("actions_asie"));
+        assert_eq!(eval.meta_key.as_deref(), Some("actions_asie_pacifique"));
         assert!(eval.subcategory_warning.is_some());
+    }
+
+    #[test]
+    fn accepts_japan_morningstar_subcategory_variants() {
+        let eval = evaluate_categories(&[
+            fund(Some("Japan Large-Cap Growth Equity")),
+            fund(Some("Japan Large-Cap Blend Equity")),
+        ]);
+        assert!(eval.compatible);
+        assert!(!eval.exact_match);
+        assert_eq!(eval.meta_key.as_deref(), Some("actions_asie_pacifique"));
+        assert_eq!(eval.display_label.as_deref(), Some("Actions Asie / Japon"));
+    }
+
+    #[test]
+    fn accepts_japan_with_asia_pacific_in_same_bucket() {
+        assert!(categories_match(&[
+            fund(Some("Japan Large-Cap Blend Equity")),
+            fund(Some("Actions Asie Pacifique")),
+        ]));
     }
 
     #[test]
@@ -307,7 +328,7 @@ mod tests {
             fund(Some("Actions Marchés Emergents Asie")),
         ]);
         assert!(eval.compatible);
-        assert_eq!(eval.display_label.as_deref(), Some("Actions Asie"));
+        assert_eq!(eval.display_label.as_deref(), Some("Actions Asie / Japon"));
     }
 
     #[test]

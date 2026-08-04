@@ -163,6 +163,7 @@ pub fn run_uc_comparison(
     Ok(CompareResponse {
         comparatif_id,
         scoring_version: version.as_str().to_string(),
+        scoring_profile: comparison.scoring_profile.clone(),
         confidence_index: comparison.confidence_index,
         verdict: verdict_to_string(comparison.verdict).to_string(),
         winner_isin: comparison.winner_isin,

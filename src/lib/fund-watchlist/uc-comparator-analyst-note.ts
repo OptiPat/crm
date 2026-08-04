@@ -8,6 +8,7 @@ import {
   fundsInRankOrder,
   metricsForIsin,
   resolveCriterionWinners,
+  ucConfidenceThreshold,
 } from "@/lib/fund-watchlist/uc-comparator-summary";
 
 export type UcTechnicalAnalystSection = {
@@ -122,16 +123,19 @@ function buildVerdictSection(response: CompareResponse, ranked: UcFundResultScor
   }
 
   if (response.verdict === "INSUFFICIENT_DATA") {
+    const thresholdPct = Math.round(ucConfidenceThreshold(response.scoring_profile) * 100);
     const missing = response.criteria
       .filter((c) => !c.available)
       .map((c) => c.label.toLowerCase());
     paragraphs.push(
-      `Confiance ${Math.round((response.confidence_index ?? 0) * 100)} % — en dessous du seuil opérationnel (70 %). ` +
+      `Confiance ${Math.round((response.confidence_index ?? 0) * 100)} % — en dessous du seuil opérationnel (${thresholdPct} %). ` +
         `Score global non retenu : historique incomplet sur au moins un fonds` +
         (missing.length > 0 ? ` (critères absents : ${missing.join(", ")}).` : ".")
     );
     paragraphs.push(
-      "Lecture partielle possible sur Sharpe, perf. 1 an et exposition ci-dessous ; ne pas utiliser pour un arbitrage chiffré sans compléter les données long terme."
+      response.scoring_profile === "obligations"
+        ? "Lecture partielle possible sur Sharpe, perf. 1 an et exposition ci-dessous ; barème obligations sans perf. 5 ans ni Top 10."
+        : "Lecture partielle possible sur Sharpe, perf. 1 an et exposition ci-dessous ; ne pas utiliser pour un arbitrage chiffré sans compléter les données long terme."
     );
     return paragraphs;
   }

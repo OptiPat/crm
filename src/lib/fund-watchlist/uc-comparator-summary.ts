@@ -18,7 +18,18 @@ const CRITERION_HELP: Record<string, string> = {
     "Part cumulée des 10 plus grosses lignes du portefeuille (composition Boursorama). Récupérée automatiquement à la comparaison si absente du cache.",
   sharpe_3y:
     "Rendement ajusté du risque sur 3 ans. Un Sharpe ≤ 0 obtient 0 ; les Sharpe positifs sont comparés avec un plancher à 0 (pas de « couperet » entre deux fonds proches).",
+  max_drawdown:
+    "Perte maximale observée sur 3 ans — plus le drawdown est faible, mieux c'est (critère obligataire v1.5).",
+  aum: "Encours du fonds en M€ — liquidité et pérennité (critère obligataire v1.5).",
 };
+
+export function ucConfidenceThreshold(profile?: string | null): number {
+  return profile === "obligations" ? 0.6 : 0.7;
+}
+
+export function ucScoringProfileLabel(profile?: string | null): string {
+  return profile === "obligations" ? "Obligations" : "Actions / diversifié";
+}
 
 export function criterionHelpText(key: string): string | undefined {
   return CRITERION_HELP[key];
@@ -84,6 +95,14 @@ export function formatCriterionRawValue(
       return metrics.top10_percent != null
         ? `${metrics.top10_percent.toFixed(1).replace(".", ",")} %`
         : "—";
+    case "max_drawdown":
+      return metrics.max_drawdown_3y != null
+        ? `${metrics.max_drawdown_3y.toFixed(1).replace(".", ",")} %`
+        : "—";
+    case "aum":
+      return metrics.aum_meur != null
+        ? `${metrics.aum_meur.toFixed(0).replace(".", ",")} M€`
+        : "—";
     default:
       return "—";
   }
@@ -135,7 +154,8 @@ export function buildUcComparisonNarrative(response: CompareResponse): string {
     return "Les fonds ne sont pas dans la même catégorie : aucun classement n'est proposé.";
   }
   if (response.verdict === "INSUFFICIENT_DATA") {
-    return "Trop de données manquent pour proposer un gagnant fiable (confiance < 70 %).";
+    const thresholdPct = Math.round(ucConfidenceThreshold(response.scoring_profile) * 100);
+    return `Trop de données manquent pour proposer un gagnant fiable (confiance < ${thresholdPct} %).`;
   }
   if (response.verdict === "TIE") {
     const names =

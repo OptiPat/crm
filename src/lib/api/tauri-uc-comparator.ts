@@ -14,6 +14,8 @@ export interface UcFundResultScore {
   pilier_scores: UcPilierScores;
   criterion_scores: number[];
   alerts: string[];
+  bond_credit_quality?: string | null;
+  bond_strategy?: string | null;
 }
 
 export interface UcCriterionScore {
@@ -32,6 +34,8 @@ export interface UcFundMetricsSnapshot {
   perf_ytd?: number | null;
   sharpe_3y?: number | null;
   top10_percent?: number | null;
+  max_drawdown_3y?: number | null;
+  aum_meur?: number | null;
 }
 
 export interface UcExposureSlice {
@@ -64,6 +68,7 @@ export interface CompareRequest {
 export interface CompareResponse {
   comparatif_id: string;
   scoring_version: string;
+  scoring_profile?: string;
   confidence_index: number;
   verdict: UcVerdict;
   winner_isin?: string | null;

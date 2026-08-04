@@ -1,83 +1,19 @@
 use crate::uc_comparator::alerts::collect_fund_alerts;
+use crate::uc_comparator::bond_strategy::infer_bond_fund_profile;
 use crate::uc_comparator::eligibility::{categories_match, evaluate_categories, shared_category_label};
 use crate::uc_comparator::normalize::{
     min_max_higher_better, score_aum_meur, score_drawdown_group, score_perf5_group,
     score_sharpe_group, score_top10_percent,
+};
+use crate::uc_comparator::scoring_profile::{
+    criteria_for_profile, resolve_scoring_profile, CriterionDef, Pilier, ScoringProfile,
 };
 use crate::uc_comparator::types::{
     UcComparisonResult, UcCriterionScore, UcFundInput, UcFundResultScore, UcPilierScores,
     UcScoringVersion, UcVerdict,
 };
 
-const CONFIDENCE_THRESHOLD: f64 = 0.70;
 const TIE_SCORE_GAP: f64 = 2.0;
-
-struct CriterionDef {
-    key: &'static str,
-    label: &'static str,
-    weight_v1: f64,
-    weight_v15: f64,
-    pilier: Pilier,
-}
-
-#[derive(Clone, Copy)]
-enum Pilier {
-    Performance,
-    Risque,
-    Structure,
-}
-
-const CRITERIA: [CriterionDef; 7] = [
-    CriterionDef {
-        key: "perf_1an",
-        label: "Perf. 1 an",
-        weight_v1: 0.08,
-        weight_v15: 0.05,
-        pilier: Pilier::Performance,
-    },
-    CriterionDef {
-        key: "perf_3ans",
-        label: "Perf. 3 ans",
-        weight_v1: 0.16,
-        weight_v15: 0.10,
-        pilier: Pilier::Performance,
-    },
-    CriterionDef {
-        key: "perf_5ans",
-        label: "Perf. 5 ans",
-        weight_v1: 0.16,
-        weight_v15: 0.10,
-        pilier: Pilier::Performance,
-    },
-    CriterionDef {
-        key: "sharpe_3y",
-        label: "Sharpe 3 ans",
-        weight_v1: 0.45,
-        weight_v15: 0.35,
-        pilier: Pilier::Risque,
-    },
-    CriterionDef {
-        key: "max_drawdown",
-        label: "Max drawdown",
-        weight_v1: 0.0,
-        weight_v15: 0.20,
-        pilier: Pilier::Risque,
-    },
-    CriterionDef {
-        key: "aum",
-        label: "Encours",
-        weight_v1: 0.0,
-        weight_v15: 0.10,
-        pilier: Pilier::Structure,
-    },
-    CriterionDef {
-        key: "top10",
-        label: "Concentration Top 10",
-        weight_v1: 0.15,
-        weight_v15: 0.10,
-        pilier: Pilier::Structure,
-    },
-];
 
 pub fn run_comparison(
     funds: &[UcFundInput],
@@ -92,14 +28,17 @@ pub fn run_comparison(
     }
 
     let category_eval = evaluate_categories(funds);
+    let profile = resolve_scoring_profile(funds);
+    let confidence_threshold = profile.confidence_threshold();
 
-    let criterion_scores = compute_criterion_scores(funds, version);
-    let confidence_index = compute_confidence(&criterion_scores, version);
+    let criterion_scores = compute_criterion_scores(funds, version, profile);
+    let confidence_index = compute_confidence(&criterion_scores, version, profile);
 
-    if confidence_index < CONFIDENCE_THRESHOLD {
+    if confidence_index < confidence_threshold {
         return Ok(build_insufficient_data_result(
             funds,
             version,
+            profile,
             confidence_index,
             criterion_scores,
         ));
@@ -107,10 +46,11 @@ pub fn run_comparison(
 
     let totals = compute_weighted_totals(&criterion_scores);
     let (verdict, winner_isin, score_gap) = determine_verdict(funds, &totals, &criterion_scores);
-    let ranked = build_ranked_results(funds, &totals, &criterion_scores, version);
+    let ranked = build_ranked_results(funds, &totals, &criterion_scores, version, profile);
 
     let mut result = UcComparisonResult {
         scoring_version: version,
+        scoring_profile: profile.as_str().to_string(),
         category: shared_category_label(funds),
         is_same_category: category_eval.exact_match,
         category_warning: category_eval.subcategory_warning,
@@ -130,14 +70,12 @@ pub fn run_comparison(
 fn compute_criterion_scores(
     funds: &[UcFundInput],
     version: UcScoringVersion,
+    profile: ScoringProfile,
 ) -> Vec<UcCriterionScore> {
-    CRITERIA
+    criteria_for_profile(profile)
         .iter()
         .filter_map(|def| {
-            let weight = match version {
-                UcScoringVersion::V1 => def.weight_v1,
-                UcScoringVersion::V15 => def.weight_v15,
-            };
+            let weight = criterion_weight(def, version);
             if weight <= 0.0 {
                 return None;
             }
@@ -160,6 +98,13 @@ fn compute_criterion_scores(
             })
         })
         .collect()
+}
+
+fn criterion_weight(def: &CriterionDef, version: UcScoringVersion) -> f64 {
+    match version {
+        UcScoringVersion::V1 => def.weight_v1,
+        UcScoringVersion::V15 => def.weight_v15,
+    }
 }
 
 fn extract_raw_values(funds: &[UcFundInput], key: &str) -> Vec<Option<f64>> {
@@ -190,14 +135,16 @@ fn compute_scores_for_criterion(key: &str, raw: &[Option<f64>]) -> Vec<Option<f6
     }
 }
 
-fn compute_confidence(criteria: &[UcCriterionScore], version: UcScoringVersion) -> f64 {
-    let total_theoretical = CRITERIA
+fn compute_confidence(
+    criteria: &[UcCriterionScore],
+    version: UcScoringVersion,
+    profile: ScoringProfile,
+) -> f64 {
+    let total_theoretical: f64 = criteria_for_profile(profile)
         .iter()
-        .map(|d| match version {
-            UcScoringVersion::V1 => d.weight_v1,
-            UcScoringVersion::V15 => d.weight_v15,
-        })
-        .sum::<f64>();
+        .map(|d| criterion_weight(d, version))
+        .filter(|w| *w > 0.0)
+        .sum();
     let available_weight: f64 = criteria
         .iter()
         .filter(|c| c.available)
@@ -237,8 +184,6 @@ fn determine_verdict(
     let (best_idx, second_idx) = top_two_indices(totals);
     let gap = totals[best_idx] - totals[second_idx];
 
-    // Égalité uniquement si l'écart global est faible. Le partage des critères
-    // (ex. 3-2 sur 5) ne doit pas annuler un écart net significatif (ex. +8,8 pts).
     if gap <= TIE_SCORE_GAP {
         return (UcVerdict::Tie, None, Some(gap));
     }
@@ -259,11 +204,20 @@ fn top_two_indices(totals: &[f64]) -> (usize, usize) {
     (best, second)
 }
 
+fn bond_fields_for_fund(fund: &UcFundInput, profile: ScoringProfile) -> (Option<String>, Option<String>) {
+    if profile != ScoringProfile::Obligations {
+        return (None, None);
+    }
+    let inferred = infer_bond_fund_profile(fund.categorie.as_deref(), &fund.nom);
+    (inferred.credit_quality, inferred.strategy)
+}
+
 fn build_ranked_results(
     funds: &[UcFundInput],
     totals: &[f64],
     criteria: &[UcCriterionScore],
     version: UcScoringVersion,
+    profile: ScoringProfile,
 ) -> Vec<UcFundResultScore> {
     let mut indexed: Vec<(usize, f64)> = totals.iter().copied().enumerate().collect();
     indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -272,19 +226,23 @@ fn build_ranked_results(
         .into_iter()
         .enumerate()
         .map(|(rank, (fund_idx, total))| {
-            let pilier = compute_pilier_scores(fund_idx, criteria, version);
+            let fund = &funds[fund_idx];
+            let pilier = compute_pilier_scores(fund_idx, criteria, version, profile);
             let criterion_scores: Vec<f64> = criteria
                 .iter()
                 .map(|c| c.scores.get(fund_idx).copied().unwrap_or(0.0))
                 .collect();
+            let (bond_credit_quality, bond_strategy) = bond_fields_for_fund(fund, profile);
             UcFundResultScore {
-                isin: funds[fund_idx].isin.clone(),
-                nom: funds[fund_idx].nom.clone(),
+                isin: fund.isin.clone(),
+                nom: fund.nom.clone(),
                 rank: rank + 1,
                 score_relative_total: total,
                 pilier_scores: pilier,
                 criterion_scores,
-                alerts: collect_fund_alerts(&funds[fund_idx]),
+                alerts: collect_fund_alerts(fund, profile),
+                bond_credit_quality,
+                bond_strategy,
             }
         })
         .collect()
@@ -294,16 +252,14 @@ fn compute_pilier_scores(
     fund_idx: usize,
     criteria: &[UcCriterionScore],
     version: UcScoringVersion,
+    profile: ScoringProfile,
 ) -> UcPilierScores {
     let mut perf = Vec::new();
     let mut risque = Vec::new();
     let mut structure = Vec::new();
 
-    for def in CRITERIA.iter() {
-        let weight = match version {
-            UcScoringVersion::V1 => def.weight_v1,
-            UcScoringVersion::V15 => def.weight_v15,
-        };
+    for def in criteria_for_profile(profile).iter() {
+        let weight = criterion_weight(def, version);
         if weight <= 0.0 {
             continue;
         }
@@ -342,21 +298,28 @@ fn build_category_mismatch_result(
     funds: &[UcFundInput],
     version: UcScoringVersion,
 ) -> UcComparisonResult {
+    let profile = resolve_scoring_profile(funds);
     let ranked = funds
         .iter()
         .enumerate()
-        .map(|(i, f)| UcFundResultScore {
-            isin: f.isin.clone(),
-            nom: f.nom.clone(),
-            rank: i + 1,
-            score_relative_total: 0.0,
-            pilier_scores: UcPilierScores::default(),
-            criterion_scores: vec![],
-            alerts: collect_fund_alerts(f),
+        .map(|(i, f)| {
+            let (bond_credit_quality, bond_strategy) = bond_fields_for_fund(f, profile);
+            UcFundResultScore {
+                isin: f.isin.clone(),
+                nom: f.nom.clone(),
+                rank: i + 1,
+                score_relative_total: 0.0,
+                pilier_scores: UcPilierScores::default(),
+                criterion_scores: vec![],
+                alerts: collect_fund_alerts(f, profile),
+                bond_credit_quality,
+                bond_strategy,
+            }
         })
         .collect();
     UcComparisonResult {
         scoring_version: version,
+        scoring_profile: profile.as_str().to_string(),
         category: None,
         is_same_category: false,
         category_warning: None,
@@ -373,24 +336,31 @@ fn build_category_mismatch_result(
 fn build_insufficient_data_result(
     funds: &[UcFundInput],
     version: UcScoringVersion,
+    profile: ScoringProfile,
     confidence_index: f64,
     criteria: Vec<UcCriterionScore>,
 ) -> UcComparisonResult {
     let ranked = funds
         .iter()
         .enumerate()
-        .map(|(i, f)| UcFundResultScore {
-            isin: f.isin.clone(),
-            nom: f.nom.clone(),
-            rank: i + 1,
-            score_relative_total: 0.0,
-            pilier_scores: UcPilierScores::default(),
-            criterion_scores: vec![],
-            alerts: collect_fund_alerts(f),
+        .map(|(i, f)| {
+            let (bond_credit_quality, bond_strategy) = bond_fields_for_fund(f, profile);
+            UcFundResultScore {
+                isin: f.isin.clone(),
+                nom: f.nom.clone(),
+                rank: i + 1,
+                score_relative_total: 0.0,
+                pilier_scores: UcPilierScores::default(),
+                criterion_scores: vec![],
+                alerts: collect_fund_alerts(f, profile),
+                bond_credit_quality,
+                bond_strategy,
+            }
         })
         .collect();
     UcComparisonResult {
         scoring_version: version,
+        scoring_profile: profile.as_str().to_string(),
         category: shared_category_label(funds),
         is_same_category: true,
         category_warning: None,
@@ -433,6 +403,29 @@ mod tests {
         }
     }
 
+    fn oblig_candidate(
+        isin: &str,
+        nom: &str,
+        p1: f64,
+        p3: Option<f64>,
+        sharpe: f64,
+    ) -> UcFundInput {
+        UcFundInput {
+            isin: isin.to_string(),
+            nom: nom.to_string(),
+            categorie: Some("Obligations".to_string()),
+            sri: Some(2),
+            perf_1an: Some(p1),
+            perf_3ans: p3,
+            perf_5ans: None,
+            perf_ytd: None,
+            sharpe_3y: Some(sharpe),
+            top10_percent: Some(94.6),
+            max_drawdown_3y: None,
+            aum_meur: None,
+        }
+    }
+
     #[test]
     fn engine_v1_characterization_alpha_vs_beta() {
         let alpha = candidate("FR001", 5.0, 20.0, 35.0, 0.70, 35.0);
@@ -442,6 +435,7 @@ mod tests {
 
         assert_eq!(result.verdict, UcVerdict::WinnerDeclared);
         assert_eq!(result.winner_isin.as_deref(), Some("FR001"));
+        assert_eq!(result.scoring_profile, "equity");
         assert!((result.confidence_index - 1.0).abs() < f64::EPSILON);
 
         let score_alpha = result
@@ -460,6 +454,39 @@ mod tests {
         assert!((score_alpha - 89.50).abs() < 0.01, "alpha={score_alpha}");
         assert!((score_beta - 32.29).abs() < 0.01, "beta={score_beta}");
         assert!((score_alpha - score_beta) > 2.0);
+    }
+
+    #[test]
+    fn obligations_declares_winner_without_perf5_and_top10() {
+        let funds = [
+            oblig_candidate("FR001", "Amundi Oblig Internationales Flexible", 6.7, Some(13.3), 1.09),
+            oblig_candidate("FR002", "Schelcher Short Term Z", 2.4, Some(11.0), 4.46),
+        ];
+        let result = run_comparison(&funds, UcScoringVersion::V1).expect("comparison");
+        assert_eq!(result.scoring_profile, "obligations");
+        assert_ne!(result.verdict, UcVerdict::InsufficientData);
+        assert!(result.confidence_index >= 0.60);
+        assert_eq!(result.winner_isin.as_deref(), Some("FR002"));
+        assert!(result
+            .criteria
+            .iter()
+            .all(|c| c.key != "top10" && c.key != "perf_5ans"));
+    }
+
+    #[test]
+    fn obligations_attach_strategy_and_skip_top10_alert() {
+        let fund = oblig_candidate("FR001", "Ostrum Credit Ultra Short Plus RE", 2.2, Some(2.0), 1.39);
+        let peer = oblig_candidate("FR002", "Schelcher Short Term Z", 2.4, Some(11.0), 4.46);
+        let result = run_comparison(&[fund, peer], UcScoringVersion::V1).expect("comparison");
+        let ostrum = result.funds.iter().find(|f| f.isin == "FR001").expect("ostrum");
+        assert_eq!(
+            ostrum.bond_strategy.as_deref(),
+            Some("Ultra court terme / monétaire")
+        );
+        assert!(ostrum
+            .alerts
+            .iter()
+            .all(|a| !a.contains("Concentration Top 10")));
     }
 
     #[test]
@@ -543,7 +570,6 @@ mod tests {
             .map(|f| f.score_relative_total)
             .expect("fidelity");
 
-        // Avant correctif Sharpe : Fidelity ~41/100 et écart +56. Après : scores proches.
         assert!(fidelity_score > 90.0, "fidelity={fidelity_score}");
         assert!(pictet_score > 95.0, "pictet={pictet_score}");
         assert!((pictet_score - fidelity_score) < 6.0, "gap={}", pictet_score - fidelity_score);

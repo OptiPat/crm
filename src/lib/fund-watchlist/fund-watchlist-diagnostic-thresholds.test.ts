@@ -24,7 +24,19 @@ describe("fund-watchlist-diagnostic-thresholds", () => {
     expect(getFundDiagnosticDeltaThresholds("Fonds diversifié").arbitrage).toBe(-3);
   });
 
-  it("associe des libellés Asie proches en méta-catégorie", () => {
+  it("associe Japon Morningstar (Growth / Blend) et Asie en méta-catégorie", () => {
+    expect(
+      isSameFundWatchlistPeerCategory(
+        "Japan Large-Cap Growth Equity",
+        "Japan Large-Cap Blend Equity"
+      )
+    ).toBe(true);
+    expect(
+      isSameFundWatchlistPeerCategory(
+        "Japan Large-Cap Blend Equity",
+        "Actions Asie Pacifique"
+      )
+    ).toBe(true);
     expect(
       isSameFundWatchlistPeerCategory(
         "Actions Asie Pacifique",

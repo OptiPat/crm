@@ -107,6 +107,10 @@ pub struct UcFundResultScore {
     pub pilier_scores: UcPilierScores,
     pub criterion_scores: Vec<f64>,
     pub alerts: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bond_credit_quality: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bond_strategy: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -119,6 +123,8 @@ pub struct UcPilierScores {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UcComparisonResult {
     pub scoring_version: UcScoringVersion,
+    #[serde(default = "default_scoring_profile")]
+    pub scoring_profile: String,
     pub category: Option<String>,
     pub is_same_category: bool,
     #[serde(default)]
@@ -141,6 +147,10 @@ pub struct UcFundMetricsSnapshot {
     pub perf_ytd: Option<f64>,
     pub sharpe_3y: Option<f64>,
     pub top10_percent: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_drawdown_3y: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aum_meur: Option<f64>,
 }
 
 impl UcFundMetricsSnapshot {
@@ -153,8 +163,14 @@ impl UcFundMetricsSnapshot {
             perf_ytd: fund.perf_ytd,
             sharpe_3y: fund.sharpe_3y,
             top10_percent: fund.top10_percent,
+            max_drawdown_3y: fund.max_drawdown_3y,
+            aum_meur: fund.aum_meur,
         }
     }
+}
+
+fn default_scoring_profile() -> String {
+    "equity".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -239,6 +255,8 @@ impl UcFundExpositionSnapshot {
 pub struct CompareResponse {
     pub comparatif_id: String,
     pub scoring_version: String,
+    #[serde(default = "default_scoring_profile")]
+    pub scoring_profile: String,
     pub confidence_index: f64,
     pub verdict: String,
     pub winner_isin: Option<String>,

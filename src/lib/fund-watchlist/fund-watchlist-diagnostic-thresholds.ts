@@ -52,10 +52,12 @@ export function fundWatchlistMetaCategoryKey(normalized: string): string | null 
         "emergents asie",
         "asia discovery",
         "asia growth",
+        "actions japon",
+        "japon",
+        "japan",
       ],
-      key: "actions_asie",
+      key: "actions_asie_pacifique",
     },
-    { needles: ["actions japon", "japon"], key: "actions_japon" },
     {
       needles: ["actions europe", "europe grandes", "eurozone", "zone euro"],
       key: "actions_europe",
@@ -78,11 +80,12 @@ export function fundWatchlistMetaCategoryKey(normalized: string): string | null 
   }
 
   if (
-    (normalized.includes("asie") || normalized.includes("asia")) &&
-    !normalized.includes("japon") &&
-    !normalized.includes("japan")
+    normalized.includes("asie") ||
+    normalized.includes("asia") ||
+    normalized.includes("japon") ||
+    normalized.includes("japan")
   ) {
-    return "actions_asie";
+    return "actions_asie_pacifique";
   }
 
   return null;
@@ -90,8 +93,7 @@ export function fundWatchlistMetaCategoryKey(normalized: string): string | null 
 
 const META_TO_VOLATILITY: Record<string, FundDiagnosticVolatilityClass> = {
   actions_tech: "actions",
-  actions_asie: "actions",
-  actions_japon: "actions",
+  actions_asie_pacifique: "actions",
   actions_europe: "actions",
   actions_us: "actions",
   immobilier: "actions",

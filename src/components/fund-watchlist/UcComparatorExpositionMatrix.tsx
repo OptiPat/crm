@@ -186,6 +186,7 @@ type Props = {
 export function UcComparatorExpositionMatrix({ response, className }: Props) {
   const ranked = fundsInRankOrder(response.results ?? []);
   const snapshots = response.exposition ?? [];
+  const isObligations = response.scoring_profile === "obligations";
   const hasAnyData = snapshots.some(
     (snap) =>
       snap.geo.length > 0 ||
@@ -208,8 +209,9 @@ export function UcComparatorExpositionMatrix({ response, className }: Props) {
           Matrice d&apos;exposition
         </h3>
         <p className="text-xs text-muted-foreground">
-          Lecture complémentaire hors score — lignes, géographie, secteurs et style Morningstar
-          (Boursorama).
+          {isObligations
+            ? "Lecture complémentaire hors score — lignes, géographie et répartition actifs (Boursorama)."
+            : "Lecture complémentaire hors score — lignes, géographie, secteurs et style Morningstar (Boursorama)."}
         </p>
         {!allComplete && (
           <p className="text-xs text-amber-700 dark:text-amber-400">
@@ -228,15 +230,19 @@ export function UcComparatorExpositionMatrix({ response, className }: Props) {
         keyName="geo"
       />
 
-      <BreakdownTable
-        title="Secteur d'activité"
-        snapshots={snapshots}
-        funds={funds}
-        keyName="sectors"
-      />
+      {!isObligations && (
+        <BreakdownTable
+          title="Secteur d'activité"
+          snapshots={snapshots}
+          funds={funds}
+          keyName="sectors"
+        />
+      )}
 
       <div className="space-y-2">
-        <h4 className="text-sm font-medium">Type d&apos;entreprise (Morningstar)</h4>
+        <h4 className="text-sm font-medium">
+          {isObligations ? "Répartition & zones" : "Type d'entreprise (Morningstar)"}
+        </h4>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {funds.map((fund) => {
             const snap = snapshots.find((item) => item.isin === fund.isin);
@@ -249,7 +255,7 @@ export function UcComparatorExpositionMatrix({ response, className }: Props) {
                 className="rounded-lg border border-indigo-200/60 bg-indigo-50/30 p-3 space-y-2 text-xs dark:border-indigo-900/40 dark:bg-indigo-950/20"
               >
                 <p className="font-medium text-xs leading-snug">{fund.nom}</p>
-                {styleBox ? (
+                {styleBox && !isObligations ? (
                   <p className="text-indigo-800 dark:text-indigo-200 font-medium">{styleBox.label_fr}</p>
                 ) : snap?.asset_breakdown && snap.asset_breakdown.length > 0 ? (
                   <div>
@@ -267,7 +273,9 @@ export function UcComparatorExpositionMatrix({ response, className }: Props) {
                   </div>
                 ) : (
                   <p className="text-muted-foreground">
-                    Style Morningstar non publié par Boursorama pour ce fonds.
+                    {isObligations
+                      ? "Répartition actifs non publiée par Boursorama pour ce fonds."
+                      : "Style Morningstar non publié par Boursorama pour ce fonds."}
                   </p>
                 )}
                 {topGeo.length > 0 && (
@@ -285,7 +293,7 @@ export function UcComparatorExpositionMatrix({ response, className }: Props) {
                     </ul>
                   </div>
                 )}
-                {topSector.length > 0 && (
+                {topSector.length > 0 && !isObligations && (
                   <div>
                     <p className="text-muted-foreground mb-1">Top secteurs</p>
                     <ul className="space-y-0.5">

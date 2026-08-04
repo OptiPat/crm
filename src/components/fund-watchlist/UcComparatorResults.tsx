@@ -20,6 +20,8 @@ import {
   metricsForIsin,
   resolveCriterionWinners,
   scoreForFundOnCriterion,
+  ucConfidenceThreshold,
+  ucScoringProfileLabel,
 } from "@/lib/fund-watchlist/uc-comparator-summary";
 import {
   criterionScoreClass,
@@ -30,7 +32,8 @@ import {
   verdictVisual,
 } from "@/lib/fund-watchlist/uc-comparator-visual";
 import { cn } from "@/lib/utils";
-import { Check, Minus, Trophy } from "lucide-react";
+import { Check, Minus, Star, Trophy } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 function verdictLabel(verdict: CompareResponse["verdict"]): string {
   switch (verdict) {
@@ -47,6 +50,24 @@ function verdictLabel(verdict: CompareResponse["verdict"]): string {
   }
 }
 
+function FundBondProfile({ fund }: { fund: UcFundResultScore }) {
+  if (!fund.bond_strategy && !fund.bond_credit_quality) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
+      {fund.bond_strategy && (
+        <Badge variant="secondary" className="text-[10px] font-normal">
+          {fund.bond_strategy}
+        </Badge>
+      )}
+      {fund.bond_credit_quality && (
+        <Badge variant="outline" className="text-[10px] font-normal">
+          {fund.bond_credit_quality}
+        </Badge>
+      )}
+    </div>
+  );
+}
+
 function FundAlerts({ fund }: { fund: UcFundResultScore }) {
   if (!fund.alerts?.length) return null;
   return (
@@ -61,9 +82,16 @@ function FundAlerts({ fund }: { fund: UcFundResultScore }) {
 type Props = {
   response: CompareResponse;
   className?: string;
+  favoriteIsins?: ReadonlySet<string>;
+  onToggleFavorite?: (isin: string) => void;
 };
 
-export function UcComparatorResults({ response, className }: Props) {
+export function UcComparatorResults({
+  response,
+  className,
+  favoriteIsins,
+  onToggleFavorite,
+}: Props) {
   const ranked = fundsInRankOrder(response.results ?? []);
   const winner = ranked.find((f) => f.isin === response.winner_isin);
   const narrative = buildUcComparisonNarrative(response);
@@ -72,6 +100,8 @@ export function UcComparatorResults({ response, className }: Props) {
   const categoryBlocked = response.verdict === "CATEGORY_MISMATCH";
   const hideGlobalScores = insufficientData || categoryBlocked;
   const tone = verdictVisual(response.verdict);
+  const isObligations = response.scoring_profile === "obligations";
+  const confidenceThresholdPct = Math.round(ucConfidenceThreshold(response.scoring_profile) * 100);
 
   if (ranked.length === 0) {
     return (
@@ -89,6 +119,11 @@ export function UcComparatorResults({ response, className }: Props) {
           {response.category && (
             <span className="text-xs text-muted-foreground">{response.category}</span>
           )}
+          {response.scoring_profile && (
+            <Badge variant="outline" className="text-[10px] font-normal">
+              Barème {ucScoringProfileLabel(response.scoring_profile)}
+            </Badge>
+          )}
           <span className={cn("text-xs font-medium ml-auto", tone.accent)}>
             Confiance {Math.round((response.confidence_index ?? 0) * 100)} %
           </span>
@@ -101,15 +136,15 @@ export function UcComparatorResults({ response, className }: Props) {
         )}
         {!hideGlobalScores && (
           <p className="text-xs text-muted-foreground">
-            Chaque critère est noté de 0 à 100 dans le groupe (100 = meilleur). Le Sharpe compte le
-            plus (45 % nominal en v1). Si un critère manque (ex. Top 10), son poids est redistribué —
-            le total reste sur 100.
+            {isObligations
+              ? "Barème obligations : Sharpe 3 ans et perf. 1 an dominent ; pas de Top 10 ni perf. 5 ans dans le score. Stratégie et qualité crédit (HY / IG) déduites du nom et de la catégorie."
+              : "Chaque critère est noté de 0 à 100 dans le groupe (100 = meilleur). Le Sharpe compte le plus (45 % nominal en v1). Si un critère manque (ex. Top 10), son poids est redistribué — le total reste sur 100."}
           </p>
         )}
         {insufficientData && (
           <p className="text-xs text-muted-foreground">
             Le détail critère par critère reste consultable ci-dessous, mais aucun score global ni
-            classement n&apos;est affiché tant que la confiance reste sous 70 %.
+            classement n&apos;est affiché tant que la confiance reste sous {confidenceThresholdPct} %.
           </p>
         )}
         {categoryBlocked && (
@@ -132,6 +167,7 @@ export function UcComparatorResults({ response, className }: Props) {
         <div className="space-y-3">
           {ranked.map((fund) => {
             const isWinner = !hideGlobalScores && fund.isin === response.winner_isin;
+            const isFavorite = favoriteIsins?.has(fund.isin) ?? false;
             return (
               <div
                 key={fund.isin}
@@ -152,13 +188,35 @@ export function UcComparatorResults({ response, className }: Props) {
                     </span>
                   )}
                   <div>
-                    <p className="font-medium flex items-center gap-1.5">
+                    <p className="font-medium flex items-center gap-1.5 flex-wrap">
+                      {onToggleFavorite && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 -ml-1"
+                          aria-label={
+                            isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"
+                          }
+                          onClick={() => onToggleFavorite(fund.isin)}
+                        >
+                          <Star
+                            className={cn(
+                              "h-4 w-4",
+                              isFavorite
+                                ? "fill-amber-400 text-amber-500"
+                                : "text-muted-foreground"
+                            )}
+                          />
+                        </Button>
+                      )}
                       {isWinner && <Trophy className="h-4 w-4 text-emerald-600 shrink-0" />}
                       {hideGlobalScores
                         ? fund.nom
                         : `${fund.rank === 1 ? "1er" : `${fund.rank}e`} — ${fund.nom}`}
                     </p>
                     <p className="text-xs text-muted-foreground font-mono">{fund.isin}</p>
+                    <FundBondProfile fund={fund} />
                     <div className="mt-2">
                       <FundAlerts fund={fund} />
                     </div>
