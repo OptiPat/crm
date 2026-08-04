@@ -4,18 +4,38 @@ const PERF5_NEGATIVE_CAP: f64 = 30.0;
 const DRAWDOWN_HIGH_CAP: f64 = 20.0;
 const DRAWDOWN_HIGH_THRESHOLD: f64 = 40.0;
 
-/// Min-max relatif « plus haut = mieux ». Δ = 0 → 50 pour tous.
-pub fn min_max_higher_better(values: &[Option<f64>]) -> Vec<Option<f64>> {
+/// Amplitude minimale entre scores pour qu'un critère départage réellement les fonds.
+pub const SCORE_DISCRIMINANT_EPSILON: f64 = 0.01;
+
+/// Min-max relatif « plus haut = mieux ». Écart brut sous `min_significant_delta` → 50 pour tous.
+pub fn min_max_higher_better(
+    values: &[Option<f64>],
+    min_significant_delta: f64,
+) -> Vec<Option<f64>> {
     let present: Vec<f64> = values.iter().filter_map(|v| *v).collect();
     if present.is_empty() {
         return vec![None; values.len()];
     }
     let min = present.iter().copied().fold(f64::INFINITY, f64::min);
     let max = present.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    if max - min < min_significant_delta {
+        return values.iter().map(|raw| raw.map(|_| 50.0)).collect();
+    }
     values
         .iter()
         .map(|raw| raw.map(|v| min_max_value(v, min, max)))
         .collect()
+}
+
+/// Un critère dont tous les scores sont identiques n'apporte aucune information au classement
+/// (perfs sous le seuil de significativité, ou Sharpe de tous les fonds ≤ 0 en marché baissier).
+pub fn scores_are_discriminant(scores: &[f64]) -> bool {
+    if scores.len() < 2 {
+        return false;
+    }
+    let min = scores.iter().copied().fold(f64::INFINITY, f64::min);
+    let max = scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    max - min > SCORE_DISCRIMINANT_EPSILON
 }
 
 /// Min-max relatif inversé sur |DD| (plus petit drawdown = mieux).
@@ -86,8 +106,11 @@ pub fn score_sharpe_group(sharpes: &[Option<f64>]) -> Vec<Option<f64>> {
 }
 
 /// Perf 5 ans : min-max relatif puis cap à 30 si perf brute < 0.
-pub fn score_perf5_group(raw_perfs: &[Option<f64>]) -> Vec<Option<f64>> {
-    let relative = min_max_higher_better(raw_perfs);
+pub fn score_perf5_group(
+    raw_perfs: &[Option<f64>],
+    min_significant_delta: f64,
+) -> Vec<Option<f64>> {
+    let relative = min_max_higher_better(raw_perfs, min_significant_delta);
     relative
         .into_iter()
         .zip(raw_perfs.iter())
@@ -145,8 +168,41 @@ mod tests {
     #[test]
     fn min_max_delta_zero_returns_fifty() {
         let vals = vec![Some(5.0), Some(5.0)];
-        let scores = min_max_higher_better(&vals);
+        let scores = min_max_higher_better(&vals, 0.0);
         assert_eq!(scores, vec![Some(50.0), Some(50.0)]);
+    }
+
+    #[test]
+    fn min_max_below_significant_delta_returns_fifty_for_all() {
+        let scores = min_max_higher_better(&[Some(12.0), Some(12.1)], 1.5);
+        assert_eq!(scores, vec![Some(50.0), Some(50.0)]);
+    }
+
+    #[test]
+    fn min_max_above_significant_delta_keeps_relative_spread() {
+        let scores = min_max_higher_better(&[Some(12.0), Some(20.0)], 1.5);
+        assert_eq!(scores, vec![Some(0.0), Some(100.0)]);
+    }
+
+    #[test]
+    fn perf5_ignores_gap_below_threshold_but_keeps_negative_cap() {
+        assert_eq!(
+            score_perf5_group(&[Some(50.0), Some(50.5)], 5.0),
+            vec![Some(50.0), Some(50.0)]
+        );
+        // Sous le seuil mais perf négative : le cap absolu à 30 continue de s'appliquer.
+        assert_eq!(
+            score_perf5_group(&[Some(-2.0), Some(-2.5)], 5.0),
+            vec![Some(30.0), Some(30.0)]
+        );
+    }
+
+    #[test]
+    fn scores_all_equal_are_not_discriminant() {
+        assert!(!scores_are_discriminant(&[50.0, 50.0]));
+        assert!(!scores_are_discriminant(&[0.0, 0.0, 0.0]));
+        assert!(scores_are_discriminant(&[0.0, 100.0]));
+        assert!(scores_are_discriminant(&[97.56, 100.0]));
     }
 
     #[test]

@@ -4,10 +4,13 @@ import {
   buildUcComparisonNarrative,
   formatCriterionRawValue,
   formatCriterionWeightLabel,
+  formatNonDiscriminantNotice,
   fundsInRankOrder,
+  isCriterionDiscriminant,
   metricsForIsin,
   resolveCriterionWinners,
   scoreForFundOnCriterion,
+  UC_CRITERION_NON_DISCRIMINANT_LABEL,
 } from "@/lib/fund-watchlist/uc-comparator-summary";
 import { UC_TOP_HOLDINGS_DISPLAY } from "@/lib/fund-watchlist/uc-comparator-visual";
 
@@ -53,6 +56,7 @@ export function UcComparatorPrintContent({ response, generatedAt }: Props) {
   const insufficientData = response.verdict === "INSUFFICIENT_DATA";
   const categoryBlocked = response.verdict === "CATEGORY_MISMATCH";
   const hideGlobalScores = insufficientData || categoryBlocked;
+  const nonDiscriminantNotice = formatNonDiscriminantNotice(response.criteria);
   const generatedLabel = new Date(generatedAt * 1000).toLocaleString("fr-FR");
   const geoLabels = collectExpoLabels(response, "geo");
   const sectorLabels = collectExpoLabels(response, "sectors");
@@ -74,6 +78,9 @@ export function UcComparatorPrintContent({ response, generatedAt }: Props) {
       {narrative && <p className="uc-comparator-print-lead">{narrative}</p>}
       {response.category_warning && (
         <p className="uc-comparator-print-note">{response.category_warning}</p>
+      )}
+      {!hideGlobalScores && nonDiscriminantNotice && (
+        <p className="uc-comparator-print-note">{nonDiscriminantNotice}</p>
       )}
 
       <section className="uc-comparator-print-section">
@@ -136,6 +143,11 @@ export function UcComparatorPrintContent({ response, generatedAt }: Props) {
                     <div className="uc-comparator-print-caption">
                       {formatCriterionWeightLabel(criterion, response.criteria)}
                     </div>
+                    {criterion.available && !isCriterionDiscriminant(criterion) && (
+                      <div className="uc-comparator-print-caption">
+                        {UC_CRITERION_NON_DISCRIMINANT_LABEL}
+                      </div>
+                    )}
                   </td>
                   {ranked.map((fund) => {
                     const relScore = scoreForFundOnCriterion(

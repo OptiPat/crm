@@ -3,7 +3,7 @@ use crate::uc_comparator::bond_strategy::infer_bond_fund_profile;
 use crate::uc_comparator::eligibility::{categories_match, evaluate_categories, shared_category_label};
 use crate::uc_comparator::normalize::{
     min_max_higher_better, score_aum_meur, score_drawdown_group, score_perf5_group,
-    score_sharpe_group, score_top10_percent,
+    score_sharpe_group, score_top10_percent, scores_are_discriminant,
 };
 use crate::uc_comparator::scoring_profile::{
     criteria_for_profile, resolve_scoring_profile, CriterionDef, Pilier, ScoringProfile,
@@ -82,19 +82,21 @@ fn compute_criterion_scores(
             let raw = extract_raw_values(funds, def.key);
             let available = raw.iter().all(|v| v.is_some());
             let scores: Vec<f64> = if available {
-                compute_scores_for_criterion(def.key, &raw)
+                compute_scores_for_criterion(def, &raw)
                     .into_iter()
                     .map(|s| s.unwrap_or(0.0))
                     .collect()
             } else {
                 vec![0.0; funds.len()]
             };
+            let discriminant = available && scores_are_discriminant(&scores);
             Some(UcCriterionScore {
                 key: def.key.to_string(),
                 label: def.label.to_string(),
                 weight_global: weight,
                 scores,
                 available,
+                discriminant,
             })
         })
         .collect()
@@ -123,10 +125,10 @@ fn extract_raw_values(funds: &[UcFundInput], key: &str) -> Vec<Option<f64>> {
         .collect()
 }
 
-fn compute_scores_for_criterion(key: &str, raw: &[Option<f64>]) -> Vec<Option<f64>> {
-    match key {
-        "perf_1an" | "perf_3ans" => min_max_higher_better(raw),
-        "perf_5ans" => score_perf5_group(raw),
+fn compute_scores_for_criterion(def: &CriterionDef, raw: &[Option<f64>]) -> Vec<Option<f64>> {
+    match def.key {
+        "perf_1an" | "perf_3ans" => min_max_higher_better(raw, def.min_significant_delta),
+        "perf_5ans" => score_perf5_group(raw, def.min_significant_delta),
         "sharpe_3y" => score_sharpe_group(raw),
         "max_drawdown" => score_drawdown_group(raw),
         "aum" => raw.iter().map(|v| v.map(score_aum_meur)).collect(),
@@ -471,6 +473,17 @@ mod tests {
             .criteria
             .iter()
             .all(|c| c.key != "top10" && c.key != "perf_5ans"));
+        // Calibrage obligataire : 2,3 pts d'écart sur 3 ans doivent départager. Le seuil actions
+        // (3 pts) les effacerait et ferait basculer le vainqueur sur le seul Sharpe.
+        assert!(
+            result
+                .criteria
+                .iter()
+                .find(|c| c.key == "perf_3ans")
+                .expect("perf_3ans")
+                .discriminant,
+            "seuil obligataire trop large"
+        );
     }
 
     #[test]
@@ -487,6 +500,62 @@ mod tests {
             .alerts
             .iter()
             .all(|a| !a.contains("Concentration Top 10")));
+    }
+
+    #[test]
+    fn near_identical_funds_end_in_technical_tie() {
+        let a = candidate("FR001", 12.0, 30.0, 50.0, 0.80, 40.0);
+        let b = candidate("FR002", 12.1, 30.2, 50.5, 0.82, 40.0);
+
+        let result = run_comparison(&[a, b], UcScoringVersion::V1).expect("comparison");
+
+        assert_eq!(result.verdict, UcVerdict::Tie);
+        assert!(result.winner_isin.is_none());
+
+        for key in ["perf_1an", "perf_3ans", "perf_5ans"] {
+            let crit = result.criteria.iter().find(|c| c.key == key).expect(key);
+            assert!(crit.available, "{key} disponible");
+            assert!(!crit.discriminant, "{key} ne doit pas départager 0,1 pt d'écart");
+            assert_eq!(crit.scores, vec![50.0, 50.0], "{key}");
+        }
+
+        let sharpe = result
+            .criteria
+            .iter()
+            .find(|c| c.key == "sharpe_3y")
+            .expect("sharpe");
+        assert!(sharpe.discriminant, "le Sharpe reste sur une échelle proportionnelle");
+
+        let gap = result.score_gap.expect("gap");
+        assert!(gap <= TIE_SCORE_GAP, "gap={gap}");
+    }
+
+    #[test]
+    fn sharpe_is_non_discriminant_when_all_funds_are_negative() {
+        let a = candidate("FR001", 20.0, 40.0, 60.0, -0.10, 35.0);
+        let b = candidate("FR002", 10.0, 20.0, 30.0, -0.50, 45.0);
+
+        let result = run_comparison(&[a, b], UcScoringVersion::V1).expect("comparison");
+
+        let sharpe = result
+            .criteria
+            .iter()
+            .find(|c| c.key == "sharpe_3y")
+            .expect("sharpe");
+        assert!(sharpe.available, "les deux Sharpe sont renseignés");
+        assert!(
+            !sharpe.discriminant,
+            "aucun Sharpe positif : le critère ne classe personne"
+        );
+        assert_eq!(sharpe.scores, vec![0.0, 0.0]);
+
+        // Le poids Sharpe (45 %) reste compté sans rien rapporter : plafond à 55/100.
+        let best = result
+            .funds
+            .iter()
+            .map(|f| f.score_relative_total)
+            .fold(f64::MIN, f64::max);
+        assert!(best <= 55.0, "best={best}");
     }
 
     #[test]

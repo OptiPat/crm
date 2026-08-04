@@ -179,3 +179,71 @@ pub fn run_uc_comparison(
         raw_json_payload: comparison.raw_json_payload,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn input(max_drawdown_3y: Option<f64>, aum_meur: Option<f64>) -> UcFundInput {
+        UcFundInput {
+            isin: "FR001".into(),
+            nom: "Test".into(),
+            categorie: Some("Actions Europe".into()),
+            sri: None,
+            perf_1an: Some(10.0),
+            perf_3ans: Some(20.0),
+            perf_5ans: Some(30.0),
+            perf_ytd: None,
+            sharpe_3y: Some(0.5),
+            top10_percent: Some(40.0),
+            max_drawdown_3y,
+            aum_meur,
+        }
+    }
+
+    fn request(force_version: Option<&str>) -> CompareRequest {
+        CompareRequest {
+            isins: vec!["FR001".into(), "FR002".into()],
+            force_version: force_version.map(str::to_string),
+        }
+    }
+
+    /// Verrou : `max_drawdown_3y` et `aum_meur` n'ont aucun writer en production, donc la v1.5
+    /// ne doit jamais s'activer par effet de bord. Si ce test casse, quelqu'un a branché une
+    /// source pour ces champs — vérifier que le changement complet de barème est bien voulu.
+    #[test]
+    fn resolves_v1_while_drawdown_and_aum_have_no_writer() {
+        let inputs = [input(None, None), input(None, None)];
+        assert_eq!(
+            resolve_scoring_version(&request(None), &inputs),
+            UcScoringVersion::V1
+        );
+    }
+
+    #[test]
+    fn resolves_v15_only_when_every_fund_has_drawdown_and_aum() {
+        let complete = [
+            input(Some(-25.0), Some(300.0)),
+            input(Some(-18.0), Some(120.0)),
+        ];
+        assert_eq!(
+            resolve_scoring_version(&request(None), &complete),
+            UcScoringVersion::V15
+        );
+
+        let partial = [input(Some(-25.0), Some(300.0)), input(None, Some(120.0))];
+        assert_eq!(
+            resolve_scoring_version(&request(None), &partial),
+            UcScoringVersion::V1
+        );
+    }
+
+    #[test]
+    fn force_version_overrides_data_detection() {
+        let inputs = [input(None, None), input(None, None)];
+        assert_eq!(
+            resolve_scoring_version(&request(Some("v1.5")), &inputs),
+            UcScoringVersion::V15
+        );
+    }
+}

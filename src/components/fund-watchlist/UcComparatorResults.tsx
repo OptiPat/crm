@@ -15,13 +15,16 @@ import {
   criterionHelpText,
   formatCriterionRawValue,
   formatCriterionWeightLabel,
+  formatNonDiscriminantNotice,
   fundsInRankOrder,
   isCriteriaWeightRenormalized,
+  isCriterionDiscriminant,
   metricsForIsin,
   resolveCriterionWinners,
   scoreForFundOnCriterion,
   ucConfidenceThreshold,
   ucScoringProfileLabel,
+  UC_CRITERION_NON_DISCRIMINANT_LABEL,
 } from "@/lib/fund-watchlist/uc-comparator-summary";
 import {
   criterionScoreClass,
@@ -102,6 +105,7 @@ export function UcComparatorResults({
   const tone = verdictVisual(response.verdict);
   const isObligations = response.scoring_profile === "obligations";
   const confidenceThresholdPct = Math.round(ucConfidenceThreshold(response.scoring_profile) * 100);
+  const nonDiscriminantNotice = formatNonDiscriminantNotice(response.criteria);
 
   if (ranked.length === 0) {
     return (
@@ -156,6 +160,11 @@ export function UcComparatorResults({
         {isCriteriaWeightRenormalized(response.criteria) && (
           <p className="text-xs text-muted-foreground">
             Les poids « effectifs » du tableau tiennent compte de cette redistribution.
+          </p>
+        )}
+        {!hideGlobalScores && nonDiscriminantNotice && (
+          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 dark:text-amber-200 dark:bg-amber-950/40 dark:border-amber-900/60">
+            ℹ️ {nonDiscriminantNotice}
           </p>
         )}
       </div>
@@ -292,6 +301,11 @@ export function UcComparatorResults({
                         <span className="block text-muted-foreground">
                           {formatCriterionWeightLabel(criterion, response.criteria)}
                         </span>
+                        {criterion.available && !isCriterionDiscriminant(criterion) && (
+                          <span className="block text-amber-700 dark:text-amber-400">
+                            {UC_CRITERION_NON_DISCRIMINANT_LABEL}
+                          </span>
+                        )}
                         {criterionHelpText(criterion.key) && (
                           <span className="block text-muted-foreground mt-1 max-w-[200px]">
                             {criterionHelpText(criterion.key)}

@@ -70,6 +70,29 @@ export function formatCriterionWeightLabel(
   return `poids ${formatCriterionWeight(criterion.weight_global)}`;
 }
 
+/** Comparatifs archivés avant le champ `discriminant` : considérés comme discriminants. */
+export function isCriterionDiscriminant(criterion: UcCriterionScore): boolean {
+  return criterion.discriminant !== false;
+}
+
+export function nonDiscriminantCriteria(criteria: UcCriterionScore[]): UcCriterionScore[] {
+  return criteria.filter((c) => c.available && !isCriterionDiscriminant(c));
+}
+
+export const UC_CRITERION_NON_DISCRIMINANT_LABEL = "écart non significatif — noté à égalité";
+
+/** Avertit quand des critères disponibles ne départagent pas les fonds comparés. */
+export function formatNonDiscriminantNotice(criteria: UcCriterionScore[]): string | null {
+  const flat = nonDiscriminantCriteria(criteria);
+  if (flat.length === 0) return null;
+  const labels = flat.map((c) => c.label).join(", ");
+  const weight = flat.reduce((sum, c) => sum + c.weight_global, 0);
+  return (
+    `Écart non significatif sur : ${labels}. Ces critères sont notés à égalité ` +
+    `et ne départagent pas les fonds (${formatCriterionWeight(weight)} du barème sans effet sur le classement).`
+  );
+}
+
 export function metricsForIsin(
   metrics: UcFundMetricsSnapshot[],
   isin: string
@@ -117,6 +140,9 @@ export function resolveCriterionWinners(
   return criteria.map((criterion) => {
     if (!criterion.available) {
       return { criterion, winnerIsin: null, winnerLabel: null, tie: false };
+    }
+    if (!isCriterionDiscriminant(criterion)) {
+      return { criterion, winnerIsin: null, winnerLabel: null, tie: true };
     }
     const max = Math.max(...criterion.scores);
     const leaders = criterion.scores

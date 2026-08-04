@@ -4,6 +4,9 @@ import {
   buildUcComparisonNarrative,
   effectiveCriterionWeight,
   formatCriterionWeightLabel,
+  formatNonDiscriminantNotice,
+  isCriterionDiscriminant,
+  nonDiscriminantCriteria,
   resolveCriterionWinners,
   sharedFundAlerts,
 } from "@/lib/fund-watchlist/uc-comparator-summary";
@@ -133,5 +136,54 @@ describe("uc-comparator-summary", () => {
     expect(text).toContain("Pictet - Robotics P EUR");
     expect(text).toContain("redistribué");
     expect(text).toContain("Concentration Top 10");
+  });
+
+  it("traite un comparatif archivé sans le champ discriminant comme discriminant", () => {
+    for (const criterion of pictetFidelityResponse.criteria) {
+      expect(isCriterionDiscriminant(criterion)).toBe(true);
+    }
+    expect(nonDiscriminantCriteria(pictetFidelityResponse.criteria)).toEqual([]);
+    expect(formatNonDiscriminantNotice(pictetFidelityResponse.criteria)).toBeNull();
+  });
+
+  it("signale les critères disponibles qui ne départagent pas les fonds", () => {
+    const flattened: CompareResponse = {
+      ...pictetFidelityResponse,
+      criteria: pictetFidelityResponse.criteria.map((c) =>
+        c.key === "perf_1an" || c.key === "perf_3ans"
+          ? { ...c, scores: [50, 50], discriminant: false }
+          : c
+      ),
+    };
+
+    const flat = nonDiscriminantCriteria(flattened.criteria);
+    expect(flat.map((c) => c.key)).toEqual(["perf_1an", "perf_3ans"]);
+
+    const notice = formatNonDiscriminantNotice(flattened.criteria);
+    expect(notice).toContain("Perf. 1 an");
+    expect(notice).toContain("Perf. 3 ans");
+    expect(notice).toContain("24 %");
+  });
+
+  it("n'attribue aucun gagnant sur un critère non discriminant", () => {
+    const flattened: CompareResponse = {
+      ...pictetFidelityResponse,
+      criteria: pictetFidelityResponse.criteria.map((c) =>
+        c.key === "perf_1an" ? { ...c, scores: [50, 50], discriminant: false } : c
+      ),
+    };
+
+    const perf1an = resolveCriterionWinners(flattened).find(
+      (w) => w.criterion.key === "perf_1an"
+    );
+    expect(perf1an?.winnerIsin).toBeNull();
+    expect(perf1an?.tie).toBe(true);
+  });
+
+  it("ignore un critère indisponible dans l'avertissement", () => {
+    const notice = formatNonDiscriminantNotice([
+      { key: "top10", label: "Concentration Top 10", weight_global: 0.15, scores: [0, 0], available: false },
+    ]);
+    expect(notice).toBeNull();
   });
 });

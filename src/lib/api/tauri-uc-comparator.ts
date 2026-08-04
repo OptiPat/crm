@@ -24,6 +24,8 @@ export interface UcCriterionScore {
   weight_global: number;
   scores: number[];
   available: boolean;
+  /** `false` si tous les fonds ont le même score : le critère ne départage rien. */
+  discriminant?: boolean;
 }
 
 export interface UcFundMetricsSnapshot {

@@ -96,6 +96,14 @@ pub struct UcCriterionScore {
     pub weight_global: f64,
     pub scores: Vec<f64>,
     pub available: bool,
+    /// `false` quand tous les fonds obtiennent le même score : le critère ne départage rien.
+    /// Défaut `true` pour rester compatible avec les comparatifs archivés avant ce champ.
+    #[serde(default = "default_criterion_discriminant")]
+    pub discriminant: bool,
+}
+
+fn default_criterion_discriminant() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
