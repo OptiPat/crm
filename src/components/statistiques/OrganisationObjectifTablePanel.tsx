@@ -1,4 +1,3 @@
-import { useJdFunnelTracker } from "@/hooks/useJdFunnelTracker";
 import { useOrganisationObjectifPlan } from "@/hooks/useOrganisationObjectifPlan";
 import { currentFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
 import { computeGrowthObjective } from "@/lib/statistiques/organisation-growth-objective";
@@ -150,6 +149,11 @@ export function OrganisationObjectifTablePanel({
     setProjectionYearOverrideField,
     resetProjectionYear,
     savePlan,
+    jdFunnelExerciceOptions,
+    jdFunnelTrackedExerciceLabel,
+    jdFunnelCounts,
+    setJdFunnelTrackedExerciceLabel,
+    setJdFunnelStageCount,
   } = useOrganisationObjectifPlan(exerciceLabel);
 
   const targetGrowthPercent = tablePrefs.targetGrowthPercent ?? defaultTargetGrowthPercent;
@@ -209,11 +213,10 @@ export function OrganisationObjectifTablePanel({
     });
   };
 
-  const jdFunnelTracker = useJdFunnelTracker();
   // Le volume « actuel » ne vaut comme progression que pour l'exercice en cours : un exercice futur
   // suivi en amont (funnel JD) n'a par définition encore aucun volume réel — la jauge doit rester à 0,
   // pas reprendre le volume de l'exercice en cours qui n'a rien à voir avec l'exercice suivi.
-  const isTrackingCurrentExercice = jdFunnelTracker.exerciceLabel === currentFiscalYearLabel();
+  const isTrackingCurrentExercice = jdFunnelTrackedExerciceLabel === currentFiscalYearLabel();
 
   const canCompute = currentConsultantCount != null && defaultAttritionPercent != null;
   const result = canCompute
@@ -289,11 +292,11 @@ export function OrganisationObjectifTablePanel({
               <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 Progression suivie pour l'exercice
                 <select
-                  value={jdFunnelTracker.exerciceLabel}
-                  onChange={(e) => jdFunnelTracker.setExerciceLabel(e.target.value)}
+                  value={jdFunnelTrackedExerciceLabel}
+                  onChange={(e) => setJdFunnelTrackedExerciceLabel(e.target.value)}
                   className="rounded-md border border-border/70 bg-background px-1.5 py-0.5 text-xs"
                 >
-                  {jdFunnelTracker.exerciceOptions.map((label) => (
+                  {jdFunnelExerciceOptions.map((label) => (
                     <option key={label} value={label}>
                       {label}
                     </option>
@@ -451,8 +454,8 @@ export function OrganisationObjectifTablePanel({
                   <td className="px-3 py-2 text-right align-top border-l-2 border-primary/30 bg-primary/[0.03]">
                     <JdFunnelCounterCell
                       target={result.recruitsForTarget}
-                      current={jdFunnelTracker.counts.parrainages}
-                      onChange={(value) => jdFunnelTracker.setStageCount("parrainages", value)}
+                      current={jdFunnelCounts.parrainages}
+                      onChange={(value) => setJdFunnelStageCount("parrainages", value)}
                     />
                   </td>
                   <td className="px-3 py-2 text-right align-top tabular-nums text-amber-700 dark:text-amber-400 border-l-2 border-amber-400/30 bg-amber-500/[0.03]">
@@ -465,8 +468,8 @@ export function OrganisationObjectifTablePanel({
                   <td className="px-3 py-2 text-right align-top border-l-2 border-primary/30 bg-primary/[0.03]">
                     <JdFunnelCounterCell
                       target={result.jdPresencesForTarget}
-                      current={jdFunnelTracker.counts.presences}
-                      onChange={(value) => jdFunnelTracker.setStageCount("presences", value)}
+                      current={jdFunnelCounts.presences}
+                      onChange={(value) => setJdFunnelStageCount("presences", value)}
                     />
                   </td>
                   <td className="px-3 py-2 text-right align-top tabular-nums text-amber-700 dark:text-amber-400 border-l-2 border-amber-400/30 bg-amber-500/[0.03]">
@@ -479,8 +482,8 @@ export function OrganisationObjectifTablePanel({
                   <td className="px-3 py-2 text-right align-top border-l-2 border-primary/30 bg-primary/[0.03]">
                     <JdFunnelCounterCell
                       target={result.jdConfirmationsForTarget}
-                      current={jdFunnelTracker.counts.confirmations}
-                      onChange={(value) => jdFunnelTracker.setStageCount("confirmations", value)}
+                      current={jdFunnelCounts.confirmations}
+                      onChange={(value) => setJdFunnelStageCount("confirmations", value)}
                     />
                   </td>
                   <td className="px-3 py-2 text-right align-top tabular-nums text-amber-700 dark:text-amber-400 border-l-2 border-amber-400/30 bg-amber-500/[0.03]">
@@ -616,7 +619,7 @@ export function OrganisationObjectifTablePanel({
             </li>
             {!isTrackingCurrentExercice && (
               <li>
-                Les jauges de volume repartent de 0 : l'exercice {jdFunnelTracker.exerciceLabel} suivi
+                Les jauges de volume repartent de 0 : l'exercice {jdFunnelTrackedExerciceLabel} suivi
                 ci-dessus n'a pas encore démarré, il n'a donc pas encore de volume réel.
               </li>
             )}
