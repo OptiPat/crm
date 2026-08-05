@@ -4,6 +4,7 @@ import {
   listContratSupports,
   type ContratSupportLine,
 } from "@/lib/api/tauri-contrat-supports";
+import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import {
   formatFundEncours,
   formatFundPerfPercent,
@@ -24,20 +25,40 @@ export function InvestissementSupportsSection({
   investissementId: number;
 }) {
   const [lines, setLines] = useState<ContratSupportLine[]>([]);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
-    listContratSupports(investissementId)
-      .then((rows) => {
-        if (active) setLines(rows);
-      })
-      .catch(() => {
-        if (active) setLines([]);
-      });
+    const load = (refresh: boolean) => {
+      listContratSupports(investissementId, { refresh })
+        .then((rows) => {
+          if (!active) return;
+          setLines(rows);
+          setFailed(false);
+        })
+        .catch(() => {
+          if (!active) return;
+          setLines([]);
+          setFailed(true);
+        });
+    };
+    load(false);
+    // Un import de positions doit se voir sans rouvrir la fiche.
+    const unsubscribe = subscribeInvestissementsChanged(() => load(true));
     return () => {
       active = false;
+      unsubscribe();
     };
   }, [investissementId]);
+
+  // Une panne de lecture ne doit pas ressembler à un contrat sans positions importées.
+  if (failed) {
+    return (
+      <p className="mt-2 px-2.5 text-xs text-muted-foreground">
+        Composition indisponible.
+      </p>
+    );
+  }
 
   if (lines.length === 0) return null;
 

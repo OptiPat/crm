@@ -89,6 +89,8 @@ export interface InvestissementWithDetails {
   partenaire_nom?: string;
   nom_produit: string;
   numero_contrat?: string;
+  /** Lien direct vers le contrat sur l'extranet assureur (AV/PER/capi). */
+  url_contrat?: string;
   montant_initial?: number;
   date_souscription?: number;
   date_fin_demembrement?: number;

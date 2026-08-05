@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ContratSupportImportRow } from "@/lib/fund-watchlist/contrat-supports-import";
+import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
 
 export interface ContratSupportHorsVeille {
   isin: string;
@@ -46,20 +47,40 @@ export interface ContratSupportLine {
   date_valeur?: number | null;
 }
 
+/**
+ * Chaque carte Patrimoine éligible demande sa composition : sans mémoire, ouvrir un client à
+ * quinze contrats relance quinze appels à chaque rendu de la liste. Les positions ne changent
+ * qu'à l'import, d'où le cache — contourné avec `refresh` quand une mutation est signalée.
+ */
+const supportsCache = new Map<number, Promise<ContratSupportLine[]>>();
+
 export async function listContratSupports(
-  investissementId: number
+  investissementId: number,
+  options?: { refresh?: boolean }
 ): Promise<ContratSupportLine[]> {
-  return await invoke<ContratSupportLine[]>("list_contrat_supports", {
+  const cached = supportsCache.get(investissementId);
+  if (cached && !options?.refresh) return cached;
+
+  const request = invoke<ContratSupportLine[]>("list_contrat_supports", {
     investissementId,
+  }).catch((error) => {
+    // Une erreur ne doit pas rester en cache, sinon la composition ne revient jamais.
+    supportsCache.delete(investissementId);
+    throw error;
   });
+  supportsCache.set(investissementId, request);
+  return request;
 }
 
 export async function importContratSupports(
   rows: ContratSupportImportRow[],
   sourceLabel = "supports"
 ): Promise<ContratSupportsImportResult> {
-  return await invoke<ContratSupportsImportResult>("import_contrat_supports", {
+  const result = await invoke<ContratSupportsImportResult>("import_contrat_supports", {
     rows,
     sourceLabel,
   });
+  supportsCache.clear();
+  notifyInvestissementsChanged();
+  return result;
 }

@@ -657,6 +657,25 @@ export function InvestissementForm({
     setExceltisChoice(choice);
   };
 
+  /**
+   * Le lien extranet se sauvegarde par une commande distincte du payload d'investissement : son
+   * échec ne doit ni faire croire que rien n'a été enregistré, ni pousser à recréer le placement.
+   */
+  const persistUrlContrat = async (
+    id: number,
+    next: string,
+    previous: string
+  ): Promise<boolean> => {
+    if (next === previous) return true;
+    try {
+      await setInvestissementUrlContrat(id, next || null);
+      return true;
+    } catch (error) {
+      console.error("Error saving url_contrat:", error);
+      return false;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -669,7 +688,7 @@ export function InvestissementForm({
 
     const urlContratTrim = showNumeroContratField ? urlContrat.trim() : "";
     if (urlContratTrim && !/^https?:\/\//i.test(urlContratTrim)) {
-      toast.error("Le lien du contrat doit commencer par https://");
+      toast.error("Le lien du contrat doit commencer par http:// ou https://");
       return;
     }
 
@@ -772,21 +791,23 @@ export function InvestissementForm({
         origine,
       };
 
-      const urlContratSave = showNumeroContratField ? urlContrat.trim() : "";
-
       if (investissement) {
         await updateInvestissement(investissement.id, newInvestissement);
-        if (urlContratSave !== (investissement.url_contrat ?? "")) {
-          await setInvestissementUrlContrat(
-            investissement.id,
-            urlContratSave || null
-          );
-        }
-        toast.success("Investissement modifié");
+        const urlSaved = await persistUrlContrat(
+          investissement.id,
+          urlContratTrim,
+          investissement.url_contrat ?? ""
+        );
+        toast.success(
+          urlSaved
+            ? "Investissement modifié"
+            : "Investissement modifié — lien du contrat non enregistré"
+        );
       } else {
         const created = await createInvestissement(newInvestissement);
-        if (urlContratSave) {
-          await setInvestissementUrlContrat(created.id, urlContratSave);
+        const urlSaved = await persistUrlContrat(created.id, urlContratTrim, "");
+        if (!urlSaved) {
+          toast.error("Lien du contrat non enregistré — à ressaisir en modification");
         }
 
         if (exceltisOption && exceltisChoice.hasExceltis) {

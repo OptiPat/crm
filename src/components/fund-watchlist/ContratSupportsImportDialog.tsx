@@ -123,6 +123,7 @@ export function ContratSupportsImportDialog({
               onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
               role="button"
               tabIndex={0}
+              aria-label="Sélectionner le fichier CSV des positions"
             >
               {busy ? (
                 <Loader2 className="h-8 w-8 mx-auto animate-spin text-muted-foreground" />
@@ -137,6 +138,7 @@ export function ContratSupportsImportDialog({
               ref={inputRef}
               type="file"
               accept=".csv,text/csv"
+              aria-label="Fichier CSV des positions clients"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];

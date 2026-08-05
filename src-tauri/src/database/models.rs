@@ -576,6 +576,8 @@ pub struct InvestissementWithDetails {
     pub partenaire_nom: Option<String>,
     pub nom_produit: String,
     pub numero_contrat: Option<String>,
+    /// Lien direct vers le contrat sur l'extranet assureur (AV/PER/capi).
+    pub url_contrat: Option<String>,
     pub montant_initial: Option<i64>,
     pub date_souscription: Option<i64>,
     pub date_fin_demembrement: Option<i64>,

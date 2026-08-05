@@ -12,7 +12,10 @@ const SELECT_COLS: &str = "id, isin, nom, categorie, notation_morningstar, sri,
     vol_5ans, vol_3ans, vol_1an, sharpe_ratio, perf_annual_json,
     frais_gestion, sfdr, source_label, is_favorite, created_at, updated_at,
     (SELECT COUNT(*) FROM contrat_supports cs WHERE cs.isin = fund_watchlist.isin),
-    (SELECT COUNT(DISTINCT cs.contact_id) FROM contrat_supports cs WHERE cs.isin = fund_watchlist.isin),
+    -- Détenteurs distincts : un contrat de foyer n'a pas de contact_id, il compte alors pour
+    -- lui-même plutôt que de disparaître du décompte.
+    (SELECT COUNT(DISTINCT COALESCE('c' || cs.contact_id, 'i' || cs.investissement_id))
+       FROM contrat_supports cs WHERE cs.isin = fund_watchlist.isin),
     (SELECT COALESCE(SUM(cs.encours), 0) FROM contrat_supports cs WHERE cs.isin = fund_watchlist.isin)";
 
 /// Bruit flottant ignoré : seule une vraie variation de perf 1 an périme la référence catégorie.

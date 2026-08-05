@@ -20,11 +20,13 @@ fn normalize_numero_contrat(value: Option<String>) -> Option<String> {
     })
 }
 
-/// Lien extranet : seuls http(s) sont conservés (ouverture navigateur).
+/// Lien extranet : seuls http(s) sont conservés (ouverture navigateur). La casse du schéma est
+/// indifférente, l'utilisateur collant parfois une URL en majuscules.
 fn normalize_url_contrat(value: Option<String>) -> Option<String> {
     value.and_then(|s| {
         let t = s.trim().to_string();
-        if t.starts_with("http://") || t.starts_with("https://") {
+        let scheme = t.to_ascii_lowercase();
+        if scheme.starts_with("http://") || scheme.starts_with("https://") {
             Some(t)
         } else {
             None
@@ -218,11 +220,12 @@ impl super::Database {
             // Colonnes 29–30 : dates arbitrage (non exposées dans InvestissementWithDetails).
             created_at: row.get(31)?,
             updated_at: row.get(32)?,
-            encours_actuel: row.get(33)?,
-            encours_date: row.get(34)?,
-            montant_investi_total: row.get(35)?,
-            stellium_versements_nets_centimes: row.get(36)?,
-            stellium_perf_euro_centimes: row.get(37)?,
+            url_contrat: row.get(33)?,
+            encours_actuel: row.get(34)?,
+            encours_date: row.get(35)?,
+            montant_investi_total: row.get(36)?,
+            stellium_versements_nets_centimes: row.get(37)?,
+            stellium_perf_euro_centimes: row.get(38)?,
         })
     }
 
@@ -242,6 +245,7 @@ impl super::Database {
                     i.versement_programme, i.montant_versement_programme, i.frequence_versement,
                     i.reinvestissement_dividendes, i.notes, i.origine, i.statut, i.date_cloture,
                     i.date_dernier_arbitrage, i.date_prochain_arbitrage, i.created_at, i.updated_at,
+                    i.url_contrat,
                     {}
              FROM investissements i
              LEFT JOIN contacts c ON i.contact_id = c.id
@@ -1276,6 +1280,78 @@ mod tests {
 
         let updated = db.get_investissement_by_id(id).unwrap();
         assert_eq!(updated.numero_contrat.as_deref(), Some("AV-12345"));
+    }
+
+    /// Le lien extranet vit hors du payload complet : il tolère une URL en majuscules, refuse tout
+    /// autre schéma, et survit à une modification du contrat.
+    #[test]
+    fn url_contrat_accepts_any_case_rejects_other_schemes_and_survives_update() {
+        use super::super::models::NewInvestissement;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.get_connection()
+            .execute(
+                "INSERT INTO contacts (categorie, nom, prenom, created_at, updated_at)
+                 VALUES ('CLIENT', 'LEGRAND', 'Paul', 1, 1)",
+                [],
+            )
+            .unwrap();
+        let contact_id: i64 = db
+            .get_connection()
+            .query_row("SELECT id FROM contacts LIMIT 1", [], |r| r.get(0))
+            .unwrap();
+
+        let payload = |numero: Option<&str>| NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: None,
+            nom_produit: "Contrat test".into(),
+            numero_contrat: numero.map(|n| n.to_string()),
+            montant_initial: Some(10_000_00),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            prevoyance_perso: None,
+            prevoyance_pro: None,
+            prevoyance_versement_mensuel: None,
+            versement_programme: Some(false),
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: Some(false),
+            notes: None,
+            origine: None,
+        };
+
+        let id = db.create_investissement(payload(Some("AV-99"))).unwrap().id;
+
+        let saved = db
+            .set_investissement_url_contrat(
+                id,
+                Some("  HTTPS://Extranet.example.com/contrat/42  ".into()),
+            )
+            .unwrap();
+        assert_eq!(
+            saved.url_contrat.as_deref(),
+            Some("HTTPS://Extranet.example.com/contrat/42")
+        );
+
+        db.update_investissement(id, &payload(None)).unwrap();
+        assert!(db
+            .get_investissement_by_id(id)
+            .unwrap()
+            .url_contrat
+            .is_some());
+
+        // Un schéma non http(s) n'est jamais conservé : il ne doit pas atteindre le navigateur.
+        db.set_investissement_url_contrat(id, Some("javascript:alert(1)".into()))
+            .unwrap();
+        assert_eq!(db.get_investissement_by_id(id).unwrap().url_contrat, None);
     }
 
     #[test]

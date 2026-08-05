@@ -97,6 +97,74 @@ fn contract_key(value: &str) -> String {
         .collect()
 }
 
+fn sum_optional(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+    match (a, b) {
+        (None, None) => None,
+        (x, y) => Some(x.unwrap_or(0.0) + y.unwrap_or(0.0)),
+    }
+}
+
+/// Un même ISIN peut revenir deux fois sur un contrat (poches distinctes de l'export) : on cumule
+/// les quantités en une seule position, sinon l'index unique `(investissement_id, isin)` ferait
+/// échouer l'insertion et annulerait l'import de **tout** le fichier.
+///
+/// Renvoie les positions dans l'ordre du fichier et le nombre de lignes écartées (ISIN ou libellé
+/// vide), pour que le compte rendu reste fidèle à l'export.
+fn merge_contract_lines(
+    lines: &[&ContratSupportImportRow],
+) -> (Vec<ContratSupportImportRow>, usize) {
+    let mut order: Vec<String> = Vec::new();
+    let mut merged: HashMap<String, ContratSupportImportRow> = HashMap::new();
+    let mut ignorees = 0usize;
+
+    for line in lines {
+        let isin = line.isin.trim().to_uppercase();
+        if isin.is_empty() || line.libelle.trim().is_empty() {
+            ignorees += 1;
+            continue;
+        }
+        match merged.get_mut(&isin) {
+            Some(existing) => {
+                // La plus ou moins-value est un pourcentage : elle se cumule au prorata des encours.
+                existing.plus_moins_value_pct = weighted_pct(existing, line);
+                existing.nb_parts = sum_optional(existing.nb_parts, line.nb_parts);
+                existing.encours = sum_optional(existing.encours, line.encours);
+                existing.date_valeur = match (existing.date_valeur, line.date_valeur) {
+                    (Some(a), Some(b)) => Some(a.max(b)),
+                    (a, b) => a.or(b),
+                };
+            }
+            None => {
+                let mut row = (*line).clone();
+                row.isin = isin.clone();
+                order.push(isin.clone());
+                merged.insert(isin, row);
+            }
+        }
+    }
+
+    let positions = order
+        .into_iter()
+        .filter_map(|isin| merged.remove(&isin))
+        .collect();
+    (positions, ignorees)
+}
+
+fn weighted_pct(a: &ContratSupportImportRow, b: &ContratSupportImportRow) -> Option<f64> {
+    match (a.plus_moins_value_pct, b.plus_moins_value_pct) {
+        (Some(pct_a), Some(pct_b)) => {
+            let enc_a = a.encours.unwrap_or(0.0);
+            let enc_b = b.encours.unwrap_or(0.0);
+            let total = enc_a + enc_b;
+            if total.abs() < f64::EPSILON {
+                return Some((pct_a + pct_b) / 2.0);
+            }
+            Some((pct_a * enc_a + pct_b * enc_b) / total)
+        }
+        (a_pct, b_pct) => a_pct.or(b_pct),
+    }
+}
+
 /// Un code non conforme (fonds euro, produit structuré) ne sera jamais dans la veille fonds :
 /// l'y signaler n'apporte rien, seuls les vrais ISIN absents méritent l'attention.
 fn is_isin_like(code: &str) -> bool {
@@ -248,11 +316,13 @@ impl super::Database {
 
             if let Some((investissement_id, contact_id)) = matched {
                 result.contrats_reconnus += 1;
+                let (positions, ignorees) = merge_contract_lines(lines);
+                result.lignes_ignorees += ignorees;
                 tx.execute(
                     "DELETE FROM contrat_supports WHERE investissement_id = ?1",
                     params![investissement_id],
                 )?;
-                for line in lines {
+                for line in &positions {
                     tx.execute(
                         "INSERT INTO contrat_supports (
                             investissement_id, contact_id, numero_contrat, isin, libelle,
@@ -277,7 +347,6 @@ impl super::Database {
                             now,
                         ],
                     )?;
-                    result.lignes_importees += 1;
                     result.encours_total += line.encours.unwrap_or(0.0);
 
                     if !watchlist.contains(&line.isin) && is_isin_like(&line.isin) {
@@ -291,6 +360,9 @@ impl super::Database {
                         entry.encours += line.encours.unwrap_or(0.0);
                     }
                 }
+                // Compté sur les lignes de l'export, pas sur les positions fusionnées : le compte
+                // rendu doit se relire face au fichier.
+                result.lignes_importees += lines.len() - ignorees;
             } else {
                 result
                     .contrats_inconnus
@@ -305,20 +377,17 @@ impl super::Database {
                 else {
                     continue;
                 };
+                let isin = line.isin.trim().to_uppercase();
+                if isin.is_empty() {
+                    continue;
+                }
                 tx.execute(
                     "INSERT INTO support_vl_history (isin, date_valeur, valeur_unitaire, libelle, source_label, created_at)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                      ON CONFLICT(isin, date_valeur) DO UPDATE SET
                         valeur_unitaire = MAX(valeur_unitaire, excluded.valeur_unitaire),
                         libelle = COALESCE(excluded.libelle, libelle)",
-                    params![
-                        line.isin,
-                        date_valeur,
-                        valeur,
-                        line.libelle,
-                        source,
-                        now,
-                    ],
+                    params![isin, date_valeur, valeur, line.libelle, source, now],
                 )?;
             }
         }
@@ -442,6 +511,109 @@ mod tests {
             .collect::<Result<_>>()
             .unwrap();
         assert_eq!(isins, vec!["FR0000000011", "FR0000000033"]);
+    }
+
+    /// Deux poches du même fonds sur un contrat : l'index unique ferait échouer l'insertion et
+    /// annulerait tout le fichier, donc les lignes fusionnent en une position.
+    #[test]
+    fn merges_duplicate_isin_on_the_same_contract() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let inv = seed_contract(&db, "2399922");
+
+        let mut premiere = row("2399922", "FR0000000011", "Fonds Test A", 100.0, 1000.0);
+        premiere.plus_moins_value_pct = Some(10.0);
+        let mut seconde = row("2399922", "FR0000000011", "Fonds Test A", 100.0, 3000.0);
+        seconde.plus_moins_value_pct = Some(2.0);
+
+        let result = db
+            .import_contrat_supports(vec![premiere, seconde], "supports")
+            .unwrap();
+
+        assert_eq!(result.contrats_reconnus, 1);
+        assert_eq!(result.lignes_importees, 2);
+        assert_eq!(count_supports(&db, inv), 1);
+
+        let (nb_parts, encours, pct): (f64, f64, f64) = db
+            .conn
+            .query_row(
+                "SELECT nb_parts, encours, plus_moins_value_pct FROM contrat_supports
+                 WHERE investissement_id = ?1",
+                params![inv],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert!((nb_parts - 20.0).abs() < 1e-9);
+        assert!((encours - 4000.0).abs() < 1e-9);
+        // Pondérée par les encours : (10 × 1000 + 2 × 3000) / 4000 = 4.
+        assert!((pct - 4.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn ignores_lines_without_isin_or_label_and_normalizes_case() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let inv = seed_contract(&db, "2399922");
+
+        let result = db
+            .import_contrat_supports(
+                vec![
+                    row("2399922", " fr0000000011 ", "Fonds Test A", 100.0, 1000.0),
+                    row("2399922", "", "Sans ISIN", 10.0, 50.0),
+                    row("2399922", "FR0000000022", "   ", 10.0, 50.0),
+                ],
+                "supports",
+            )
+            .unwrap();
+
+        assert_eq!(result.lignes_importees, 1);
+        assert_eq!(result.lignes_ignorees, 2);
+        let isin: String = db
+            .conn
+            .query_row(
+                "SELECT isin FROM contrat_supports WHERE investissement_id = ?1",
+                params![inv],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(isin, "FR0000000011");
+    }
+
+    /// Un contrat de foyer n'a pas de `contact_id` : il doit quand même compter pour un détenteur,
+    /// sinon la veille fonds et le coach annoncent un encours « chez 0 client ».
+    #[test]
+    fn foyer_contract_counts_as_one_holder() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO foyers (nom, type_foyer) VALUES ('Foyer Test', 'COUPLE')",
+                [],
+            )
+            .unwrap();
+        let foyer_id = db.conn.last_insert_rowid();
+        db.conn
+            .execute(
+                "INSERT INTO investissements (foyer_id, type_produit, nom_produit, numero_contrat)
+                 VALUES (?1, 'ASSURANCE_VIE', 'Contrat Foyer', '5500001')",
+                params![foyer_id],
+            )
+            .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO fund_watchlist (isin, nom) VALUES ('FR0000000011', 'Fonds Test A')",
+                [],
+            )
+            .unwrap();
+
+        db.import_contrat_supports(
+            vec![row("5500001", "FR0000000011", "Fonds Test A", 100.0, 1000.0)],
+            "supports",
+        )
+        .unwrap();
+
+        let entries = db.get_all_fund_watchlist_entries().unwrap();
+        let detention = entries[0].detention.as_ref().expect("détention attendue");
+        assert_eq!(detention.contrats, 1);
+        assert_eq!(detention.clients, 1);
+        assert!((detention.encours - 1000.0).abs() < 1e-9);
     }
 
     #[test]

@@ -2,7 +2,15 @@
 // Ce schéma Drizzle est DEV / DOC uniquement (génération SQL, inspection via `db:studio`).
 // Il n'est importé par aucun code applicatif et ne doit PAS servir en production.
 // Toute modification de structure se fait d'abord côté Rust, puis on synchronise ici.
-import { sqliteTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  index,
+  primaryKey,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // ============================================
@@ -655,6 +663,64 @@ export const fundWatchlist = sqliteTable("fund_watchlist", {
     .default(sql`(unixepoch())`)
     .notNull(),
 });
+
+/**
+ * Positions détenues par contrat (export « Supports » de la plateforme) : photo remplacée à
+ * chaque import pour le contrat concerné.
+ */
+export const contratSupports = sqliteTable(
+  "contrat_supports",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    investissementId: integer("investissement_id")
+      .notNull()
+      .references(() => investissements.id, { onDelete: "cascade" }),
+    contactId: integer("contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    numeroContrat: text("numero_contrat").notNull(),
+    isin: text("isin").notNull(),
+    libelle: text("libelle").notNull(),
+    societeGestion: text("societe_gestion"),
+    typeSupport: text("type_support"),
+    sri: integer("sri"),
+    nbParts: real("nb_parts"),
+    valeurUnitaire: real("valeur_unitaire"),
+    encours: real("encours"),
+    plusMoinsValuePct: real("plus_moins_value_pct"),
+    dateValeur: integer("date_valeur"),
+    sourceLabel: text("source_label").notNull().default("import"),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .default(sql`(unixepoch())`)
+      .notNull(),
+  },
+  (table) => ({
+    investissementIsinUnique: uniqueIndex("contrat_supports_inv_isin_uidx").on(
+      table.investissementId,
+      table.isin
+    ),
+    isinIdx: index("contrat_supports_isin_idx").on(table.isin),
+    contactIdx: index("contrat_supports_contact_idx").on(table.contactId),
+  })
+);
+
+/** Historique des valeurs liquidatives par support : jamais écrasé, il se construit au fil des imports. */
+export const supportVlHistory = sqliteTable(
+  "support_vl_history",
+  {
+    isin: text("isin").notNull(),
+    dateValeur: integer("date_valeur").notNull(),
+    valeurUnitaire: real("valeur_unitaire").notNull(),
+    libelle: text("libelle"),
+    sourceLabel: text("source_label").notNull().default("import"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .default(sql`(unixepoch())`)
+      .notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.isin, table.dateValeur] }),
+  })
+);
 
 export const ficheConseilRedactionPresets = sqliteTable(
   "fiche_conseil_redaction_presets",
