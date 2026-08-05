@@ -372,8 +372,21 @@ fn extract_tag_text(fragment: &str) -> Option<String> {
     Some(decode_html_entities(fragment[gt..lt].trim()))
 }
 
+/// Boursorama écrit ses nombres à la française : signe « moins » typographique (U+2212), espace
+/// insécable devant le `%` et pour les milliers. `parse::<f64>` refuse tout cela, et une valeur
+/// refusée se lit comme une donnée absente — une perte annuelle disparaissait silencieusement.
 fn parse_french_percent(raw: &str) -> Option<f64> {
-    let cleaned = raw.trim().replace('%', "").replace(',', ".").trim().to_string();
+    let cleaned: String = raw
+        .chars()
+        .filter_map(|c| match c {
+            // Le tiret cadratin sert aussi de « pas de valeur » : réduit à « - », il ressort None.
+            '−' | '–' | '—' | '‐' | '‑' => Some('-'),
+            ',' => Some('.'),
+            '%' => None,
+            c if c.is_whitespace() => None,
+            c => Some(c),
+        })
+        .collect();
     if cleaned.is_empty() || cleaned == "-" {
         return None;
     }
@@ -517,6 +530,9 @@ fn extract_gauge_weight(fragment: &str) -> Option<f64> {
 
 fn decode_html_entities(text: &str) -> String {
     text.replace("&#039;", "'")
+        // Espace insécable : laissée telle quelle, elle faisait échouer la lecture des nombres.
+        .replace("&nbsp;", " ")
+        .replace("&#160;", " ")
         .replace("&amp;", "&")
         .replace("&quot;", "\"")
         .replace("&lt;", "<")
@@ -869,5 +885,22 @@ mod tests {
     #[test]
     fn parse_category_history_returns_none_without_the_block() {
         assert_eq!(parse_category_history_html("<html><body/></html>"), None);
+    }
+
+    /// Boursorama écrit « −12,4 % » avec le vrai signe moins et une espace insécable : refusés par
+    /// `parse::<f64>`, ces nombres se lisaient comme des données absentes et privaient le
+    /// comparateur de son pilier risque sans le signaler.
+    #[test]
+    fn parse_french_percent_reads_typographic_minus_and_hard_spaces() {
+        assert_eq!(parse_french_percent("\u{2212}12,4 %"), Some(-12.4));
+        assert_eq!(parse_french_percent("+8,10\u{00a0}%"), Some(8.1));
+        assert_eq!(parse_french_percent("1\u{202f}234,5"), Some(1234.5));
+        assert_eq!(
+            parse_french_percent(&decode_html_entities("12,4&nbsp;%")),
+            Some(12.4)
+        );
+        // Le tiret cadratin est le « pas de valeur » de Boursorama, pas un nombre.
+        assert_eq!(parse_french_percent("—"), None);
+        assert_eq!(parse_french_percent(""), None);
     }
 }

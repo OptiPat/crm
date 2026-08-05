@@ -629,6 +629,7 @@ mod tests {
             delta_reference_label: None,
             trigger_reasons: Vec::new(),
             reasons: Vec::new(),
+            context_reasons: Vec::new(),
         }
     }
 

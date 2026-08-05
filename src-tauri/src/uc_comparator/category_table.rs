@@ -28,6 +28,9 @@ pub(super) fn normalize_category(raw: &str) -> String {
 struct RawFamily {
     key: String,
     label: String,
+    /// `actions` | `diversified` | `rates` : profil de repli quand la volatilité 3 ans mesurée
+    /// manque. Même champ que celui lu côté TypeScript, donc jamais deux tables à maintenir.
+    volatility: String,
     categories: Vec<String>,
 }
 
@@ -41,6 +44,7 @@ struct RawTable {
 struct CategoryTable {
     family_by_label: HashMap<String, String>,
     label_by_family: HashMap<String, String>,
+    volatility_by_family: HashMap<String, String>,
     excluded: HashSet<String>,
 }
 
@@ -51,15 +55,18 @@ fn table() -> &'static CategoryTable {
             .expect("fund-categories.json invalide (table de comparabilité)");
         let mut family_by_label = HashMap::new();
         let mut label_by_family = HashMap::new();
+        let mut volatility_by_family = HashMap::new();
         for family in raw.families {
             for categorie in &family.categories {
                 family_by_label.insert(normalize_category(categorie), family.key.clone());
             }
+            volatility_by_family.insert(family.key.clone(), family.volatility);
             label_by_family.insert(family.key, family.label);
         }
         CategoryTable {
             family_by_label,
             label_by_family,
+            volatility_by_family,
             excluded: raw.excluded.iter().map(|c| normalize_category(c)).collect(),
         }
     })
@@ -73,6 +80,13 @@ pub(super) fn family_for_normalized(normalized: &str) -> Option<&'static str> {
 /// Libellé lisible d'une famille de la table, `None` pour les clés issues des mots-clés.
 pub(super) fn label_for_family(key: &str) -> Option<&'static str> {
     table().label_by_family.get(key).map(String::as_str)
+}
+
+/// Profil de volatilité de repli d'un libellé Cristalliance (`actions` / `diversified` / `rates`),
+/// `None` si la table ne connaît pas le libellé.
+pub(crate) fn volatility_class_for_category(raw: &str) -> Option<&'static str> {
+    let family = table().family_by_label.get(&normalize_category(raw))?;
+    table().volatility_by_family.get(family).map(String::as_str)
 }
 
 /// Catégories sans diagnostic ni comparaison possible (valorisation lissée).
@@ -118,5 +132,14 @@ mod tests {
         assert_eq!(label_for_family("cle_inexistante"), None);
         assert!(is_excluded_normalized(&normalize_category("FCPR")));
         assert!(!is_excluded_normalized(&normalize_category("Actions Italie")));
+        assert_eq!(
+            volatility_class_for_category("Actions France Grandes Cap."),
+            Some("actions")
+        );
+        assert_eq!(
+            volatility_class_for_category("Obligations EUR Très Court Terme"),
+            Some("rates")
+        );
+        assert_eq!(volatility_class_for_category("libelle inconnu"), None);
     }
 }

@@ -29,8 +29,10 @@ export function FundWatchlistDiagnosticBadge({ diagnostic, className, compact }:
   const title = [
     FUND_DIAGNOSTIC_STATUS_USER_LABELS[diagnostic.status],
     diagnostic.short_term_respiration ? "Respiration court terme (CT)" : null,
+    // La référence n'est pas toujours la catégorie de marché : annoncer « vs catégorie » sur un
+    // écart mesuré contre la médiane de la watchlist donnait plus de portée qu'il n'en a.
     diagnostic.delta_1an_vs_category != null
-      ? `Écart 1 an vs catégorie : ${diagnostic.delta_1an_vs_category > 0 ? "+" : ""}${diagnostic.delta_1an_vs_category} pt`
+      ? `Écart 1 an vs ${diagnostic.delta_reference_label ?? "catégorie"} : ${diagnostic.delta_1an_vs_category > 0 ? "+" : ""}${diagnostic.delta_1an_vs_category} pt`
       : null,
     ...diagnostic.trigger_reasons.map(humanizeDiagnosticReason),
     ...diagnostic.context_reasons.map(humanizeDiagnosticReason),

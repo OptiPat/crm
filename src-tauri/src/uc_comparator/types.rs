@@ -92,10 +92,11 @@ impl Default for UcMarketCacheRow {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// La v1.5 (max drawdown + encours) n'a jamais eu de writer : aucun comparatif archivé ne la
+/// porte, et ses deux critères sont désormais remplacés par la volatilité mesurée et la pire
+/// année civile. Elle est retirée plutôt que laissée en barème mort atteignable de force.
 pub enum UcScoringVersion {
     V1,
-    #[serde(rename = "v1.5")]
-    V15,
     V2,
 }
 
@@ -103,7 +104,6 @@ impl UcScoringVersion {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::V1 => "v1",
-            Self::V15 => "v1.5",
             Self::V2 => "v2",
         }
     }
@@ -111,7 +111,6 @@ impl UcScoringVersion {
     pub fn parse(raw: &str) -> Option<Self> {
         match raw.trim() {
             "v1" | "V1" => Some(Self::V1),
-            "v1.5" | "V1.5" => Some(Self::V15),
             "v2" | "V2" => Some(Self::V2),
             _ => None,
         }

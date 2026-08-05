@@ -14,7 +14,7 @@ fonds, apportée par l'import Cristalliance. La table porte seulement le profil 
 (champ `volatility` de `fund-categories.json`), utilisé quand cette mesure manque ; il sert
 aussi au comparateur pour reconnaître les fonds obligataires que le mot-clé « oblig » rate.
 
-Deux règles complètent le calcul du badge, côté `fund-watchlist-diagnostic.ts` :
+Trois règles complètent le calcul du badge, côté `fund-watchlist-diagnostic.ts` :
 
 - Les seuils de **performance absolue** (horizon faible, correction à 1 mois, année solide)
   suivent le même profil que les seuils d'écart. Un recul de 3 % en un mois est du bruit pour un
@@ -23,6 +23,10 @@ Deux règles complètent le calcul du badge, côté `fund-watchlist-diagnostic.t
 - Un fonds **devant sa référence** sur un an ne passe pas sous surveillance du seul fait d'une
   faiblesse absolue : le repli vient alors du marché, pas du fonds. La faiblesse est signalée en
   contexte, ce qui évite de tout allumer lors d'une baisse générale.
+- La médiane de repli exige au moins `FUND_DIAGNOSTIC_MIN_PEERS` pairs (4) **hors le fonds
+  lui-même**, et le libellé de la référence annonce le nombre de fonds retenus. Sous ce seuil,
+  aucun badge : une médiane de deux fonds n'a pas le poids statistique que l'écart suggère, et
+  l'ajout d'un seul fonds dans la famille pouvait faire disparaître l'alerte.
 
 95 libellés Cristalliance : 94 répartis dans **41 familles**, plus le FCPR exclu du diagnostic.
 Les 41 familles comptent 29 familles principales et 12 familles sectorielles d'un seul libellé

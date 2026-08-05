@@ -2,6 +2,7 @@ use crate::database::models::FundWatchlistEntry;
 use crate::fund_watchlist_coach::boursorama::BoursoramaHoldingLine;
 use crate::fund_watchlist_coach::holdings_kind::{self, HoldingLineKind};
 use crate::fund_watchlist_coach::news::{format_headline_inline, format_news_date_prefix, NewsHeadline};
+use crate::uc_comparator::category_table::volatility_class_for_category;
 use serde::Deserialize;
 
 const SPREAD_PENALTY: f64 = 0.4;
@@ -70,16 +71,23 @@ pub struct FundCoachDiagnostic {
     /// insuffisantes » arriverait au modèle sans la raison de cette abstention.
     #[serde(default)]
     pub reasons: Vec<String>,
+    /// Nuances que le badge affiche déjà au CGP (« correction 1 mois avec YTD encore solide »,
+    /// « respiration court terme ») : sans elles le modèle ne voyait que le statut, et concluait
+    /// plus durement que le badge posé juste à côté.
+    #[serde(default)]
+    pub context_reasons: Vec<String>,
 }
 
 /// Ordre d'analyse : les fonds les plus dégradés d'abord (ils sont aussi les premiers retenus
-/// quand le nombre de favoris dépasse la limite envoyée au modèle).
+/// quand le nombre de favoris dépasse la limite envoyée au modèle). Un fonds non mesurable passe
+/// en dernier : il n'a aucun signal à traiter en priorité, et le classer devant les fonds sains
+/// leur faisait perdre leur place dans le rapport dès que les favoris dépassaient la limite.
 pub fn diagnostic_severity_rank(status: &str) -> u8 {
     match status {
         "signal_arbitrage" => 0,
         "sous_surveillance" => 1,
-        "conserver" => 3,
-        _ => 2,
+        "conserver" => 2,
+        _ => 3,
     }
 }
 
@@ -262,6 +270,12 @@ fn append_diagnostic_lines(block: &mut String, diag: &FundCoachDiagnostic) {
             diag.reasons.join(" · ")
         ));
     }
+    if !diag.context_reasons.is_empty() {
+        block.push_str(&format!(
+            "- Nuances relevées par le CRM : {}\n",
+            diag.context_reasons.join(" · ")
+        ));
+    }
 }
 
 fn append_holdings_compact_lines(
@@ -334,6 +348,7 @@ Pour CHAQUE fonds, respecte STRICTEMENT la structure suivante :
 - Interdiction : si la performance 1 an ou YTD reste solide malgré une baisse à 1 mois, le statut maximum est SOUS SURVEILLANCE (pas d'arbitrage de « sécurisation »).
 - Diagnostic déterministe CRM : quand un fonds en fournit un, il fait autorité sur l'écart de performance face à sa catégorie. Tu ne peux pas conclure CONSERVER sur un fonds diagnostiqué SIGNAL ARBITRAGE, ni ARBITRAGE CONSEILLÉ sur un fonds diagnostiqué CONSERVER, sans exposer en une phrase ce qui, dans les positions ou les actualités fournies, justifie de t'en écarter.
 - Diagnostic DONNÉES INSUFFISANTES : le CRM n'a trouvé aucune référence de catégorie fiable pour ce fonds. Tu peux conclure à partir de ses performances et de ses positions, mais tu dis alors en une phrase qu'aucune comparaison de catégorie n'était disponible, et tu n'affirmes jamais qu'il devance ou retarde sa catégorie.
+- Nuances relevées par le CRM : quand elles sont fournies, elles reprennent ce que le badge affiche déjà au CGP (correction récente sur une année encore solide, respiration court terme, fonds au-dessus de sa référence). Prends-les en compte avant de durcir un statut — un rapport qui contredit le badge affiché juste à côté n'est pas exploitable.
 - Référence de l'écart : si la référence de l'écart 1 an mentionne « watchlist », elle ne compare le fonds qu'aux autres fonds de la watchlist et non à son marché — le nombre de fonds retenus est indiqué, et plus il est faible plus tu dois rester prudent dans tes conclusions. Mesuré contre une catégorie Boursorama, c'est une véritable référence de marché.
 - Risque : sers-toi du Sharpe et de la volatilité pour distinguer une performance obtenue calmement d'une performance heurtée. Un Sharpe négatif sur 3 ans renforce un diagnostic de dégradation, mais ne suffit jamais seul à justifier un arbitrage.
 - Justification CGP : 1 phrase synthétique appuyée sur les positions et la cohérence des horizons de performance.
@@ -357,22 +372,86 @@ Règles de rédaction et contraintes :
 - Score court terme : où que tu le mentionnes, jamais un nombre nu. Écris « dynamique court terme en recul (−12,2) », « stable » ou « porteuse », pour qu'un chiffre négatif se lise comme une baisse des dernières semaines et non comme un mauvais fonds — un fonds solide peut afficher un score court terme très négatif après une correction.
 - Posture CGP : sois pragmatique. Un conseiller n'arbitre pas à la moindre baisse ; ne dramatise pas une respiration de marché après une période de hausse.
 - Si des « indices décision (heuristique CRM) » sont fournis pour un fonds, prends-les en compte pour nuancer le statut."#;
+/// Seuils de performance absolue du profil de volatilité du fonds, alignés sur ceux du diagnostic
+/// frontend (`fund-watchlist-diagnostic-thresholds.ts`). Un seuil unique donnait deux sens opposés
+/// au même chiffre : −3 % en un mois est une respiration pour un fonds actions, un accident pour un
+/// fonds prudent.
+struct HintThresholds {
+    /// Recul sur un horizon au-delà duquel il compte comme faible.
+    weak_horizon: f64,
+    /// Recul à 1 mois signant une correction plutôt qu'une dégradation.
+    correction: f64,
+    /// Performance annuelle encore considérée comme solide malgré ce recul.
+    solid_year: f64,
+}
+
+const HINTS_ACTIONS: HintThresholds = HintThresholds {
+    weak_horizon: -5.0,
+    correction: -8.0,
+    solid_year: 10.0,
+};
+const HINTS_DIVERSIFIED: HintThresholds = HintThresholds {
+    weak_horizon: -3.0,
+    correction: -5.0,
+    solid_year: 6.0,
+};
+const HINTS_RATES: HintThresholds = HintThresholds {
+    weak_horizon: -1.5,
+    correction: -2.5,
+    solid_year: 3.0,
+};
+
+/// Mêmes coupures de volatilité 3 ans mesurée que le diagnostic frontend.
+const HINTS_RATES_CEILING: f64 = 5.0;
+const HINTS_ACTIONS_FLOOR: f64 = 12.0;
+
+fn hint_thresholds(entry: &FundWatchlistEntry) -> HintThresholds {
+    let measured = entry
+        .vol_3ans
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .map(|v| {
+            if v < HINTS_RATES_CEILING {
+                "rates"
+            } else if v < HINTS_ACTIONS_FLOOR {
+                "diversified"
+            } else {
+                "actions"
+            }
+        });
+    // Sans volatilité mesurée, la table de catégories tranche ; sinon on garde le profil le plus
+    // large, qui déclenche le moins d'indices.
+    let class = measured
+        .or_else(|| {
+            entry
+                .categorie
+                .as_deref()
+                .and_then(volatility_class_for_category)
+        })
+        .unwrap_or("actions");
+    match class {
+        "rates" => HINTS_RATES,
+        "diversified" => HINTS_DIVERSIFIED,
+        _ => HINTS_ACTIONS,
+    }
+}
+
 pub fn decision_hints(entry: &FundWatchlistEntry) -> Vec<String> {
     let mut hints = Vec::new();
+    let thresholds = hint_thresholds(entry);
     let m1 = entry.perf_1mois;
     let m3 = entry.perf_3mois;
     let ytd = entry.perf_ytd;
     let y1 = entry.perf_1an;
 
     if let (Some(m1), Some(y1)) = (m1, y1) {
-        if m1 <= -5.0 && y1 >= 15.0 {
+        if m1 <= thresholds.correction && y1 >= thresholds.solid_year * 1.5 {
             hints.push(
-                "Baisse court terme mais performance 1 an encore très élevée — privilégier SOUS SURVEILLANCE plutôt qu'ARBITRAGE.".into(),
+                "Baisse court terme mais performance 1 an encore très élevée pour son profil de volatilité — privilégier SOUS SURVEILLANCE plutôt qu'ARBITRAGE.".into(),
             );
         }
     }
     if let (Some(m1), Some(ytd)) = (m1, ytd) {
-        if m1 <= -5.0 && ytd >= 10.0 {
+        if m1 <= thresholds.correction && ytd >= thresholds.solid_year {
             hints.push(
                 "Correction sur 1 mois mais YTD toujours nettement positif — ne pas arbitrer sur la seule base du score CT.".into(),
             );
@@ -381,11 +460,11 @@ pub fn decision_hints(entry: &FundWatchlistEntry) -> Vec<String> {
     let weak_horizons = [m1, m3, ytd]
         .into_iter()
         .flatten()
-        .filter(|v| *v < -3.0)
+        .filter(|v| *v < thresholds.weak_horizon)
         .count();
     if weak_horizons >= 2 {
         hints.push(
-            "Faiblesse sur au moins 2 horizons récents (1 mois, 3 mois, YTD) — arbitrage envisageable seulement si les actus des top 5 confirment une rupture durable, pas une simple prise de bénéfices.".into(),
+            "Recul supérieur au seuil de son profil de volatilité sur au moins 2 horizons récents (1 mois, 3 mois, YTD) — arbitrage envisageable seulement si les actus des top 5 confirment une rupture durable, pas une simple prise de bénéfices.".into(),
         );
     }
     if let (Some(y1), Some(m1)) = (y1, m1) {
@@ -558,6 +637,7 @@ mod tests {
             delta_reference_label: Some("Actions Asie hors Japon (Boursorama)".into()),
             trigger_reasons: vec!["Faiblesse sur 3 horizons".into()],
             reasons: Vec::new(),
+            context_reasons: Vec::new(),
         })));
         assert!(block.contains("Diagnostic déterministe CRM"));
         assert!(block.contains("SIGNAL ARBITRAGE"));
@@ -575,11 +655,14 @@ mod tests {
             delta_reference_label: None,
             trigger_reasons: Vec::new(),
             reasons: vec!["Pas de référence catégorie : 2 pair(s) comparable(s) (min. 4)".into()],
+            context_reasons: vec!["Respiration court terme (score CT négatif)".into()],
         })));
         assert!(block.contains("DONNÉES INSUFFISANTES"));
         assert!(block.contains("Motif du diagnostic : Pas de référence catégorie"));
         // Le CRM ne tranche pas : les heuristiques restent le seul filet du modèle.
         assert!(block.contains("heuristique CRM"));
+        // Les nuances du badge doivent parvenir au modèle, sinon il conclut plus durement.
+        assert!(block.contains("Nuances relevées par le CRM : Respiration court terme"));
     }
 
     #[test]
@@ -589,10 +672,73 @@ mod tests {
         assert!(!block.contains("Diagnostic déterministe CRM"));
     }
 
+    /// Un fonds non mesurable n'a aucun signal à traiter : il passe après les fonds sains, sinon
+    /// il leur volait leur place dans le rapport dès que les favoris dépassaient la limite.
     #[test]
-    fn severity_rank_puts_arbitrage_first_and_conserver_last() {
+    fn severity_rank_puts_arbitrage_first_and_unmeasurable_last() {
         assert!(diagnostic_severity_rank("signal_arbitrage") < diagnostic_severity_rank("sous_surveillance"));
-        assert!(diagnostic_severity_rank("sous_surveillance") < diagnostic_severity_rank("inconnu"));
-        assert!(diagnostic_severity_rank("inconnu") < diagnostic_severity_rank("conserver"));
+        assert!(diagnostic_severity_rank("sous_surveillance") < diagnostic_severity_rank("conserver"));
+        assert!(diagnostic_severity_rank("conserver") < diagnostic_severity_rank("inconnu"));
+    }
+
+    fn hint_entry(vol_3ans: Option<f64>, perf_1mois: f64, perf_3mois: f64) -> FundWatchlistEntry {
+        FundWatchlistEntry {
+            id: 1,
+            isin: "FR0000000001".into(),
+            nom: "Fonds test".into(),
+            categorie: None,
+            notation_morningstar: None,
+            sri: None,
+            vl_previous: None,
+            vl_recent: None,
+            vl_date: None,
+            perf_ytd: Some(0.5),
+            perf_1semaine: None,
+            perf_1mois: Some(perf_1mois),
+            perf_3mois: Some(perf_3mois),
+            perf_1an: Some(1.0),
+            perf_3ans: None,
+            perf_5ans: None,
+            vol_5ans: None,
+            vol_3ans,
+            vol_1an: None,
+            sharpe_ratio: None,
+            perf_annual: None,
+            frais_gestion: None,
+            sfdr: None,
+            source_label: "t".into(),
+            is_favorite: true,
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    /// −2 % sur deux horizons est du bruit pour un fonds actions et un décrochage pour un fonds
+    /// prudent : un seuil unique soufflait « faiblesse » au modèle dans les deux cas.
+    #[test]
+    fn decision_hints_scale_the_weakness_threshold_with_measured_volatility() {
+        let calme = decision_hints(&hint_entry(Some(3.0), -2.0, -2.0));
+        assert!(calme.iter().any(|h| h.contains("au moins 2 horizons")));
+
+        let volatil = decision_hints(&hint_entry(Some(20.0), -2.0, -2.0));
+        assert!(!volatil.iter().any(|h| h.contains("au moins 2 horizons")));
+        assert!(volatil.iter().any(|h| h.contains("Pas de signal d'arbitrage")));
+    }
+
+    /// Sans volatilité mesurée, la table de catégories donne le profil ; un libellé inconnu garde
+    /// le profil le plus large, qui déclenche le moins d'indices.
+    #[test]
+    fn decision_hints_fall_back_on_the_category_table() {
+        let mut prudent = hint_entry(None, -2.0, -2.0);
+        prudent.categorie = Some("Obligations EUR Très Court Terme".into());
+        assert!(decision_hints(&prudent)
+            .iter()
+            .any(|h| h.contains("au moins 2 horizons")));
+
+        let mut inconnu = hint_entry(None, -2.0, -2.0);
+        inconnu.categorie = Some("Libellé jamais vu".into());
+        assert!(!decision_hints(&inconnu)
+            .iter()
+            .any(|h| h.contains("au moins 2 horizons")));
     }
 }

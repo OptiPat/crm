@@ -62,7 +62,10 @@ import {
 } from "@/lib/fund-watchlist/fund-watchlist-coach-store";
 import { computeFundWatchlistShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-short-term-score";
 import { buildFundCoachDiagnosticPayload } from "@/lib/fund-watchlist/fund-watchlist-coach-diagnostic-payload";
-import { buildFundWatchlistDiagnostics } from "@/lib/fund-watchlist/fund-watchlist-diagnostic";
+import {
+  buildFundWatchlistDiagnostics,
+  FUND_DIAGNOSTIC_MIN_PEERS,
+} from "@/lib/fund-watchlist/fund-watchlist-diagnostic";
 import type { FundBenchmarkReference } from "@/lib/fund-watchlist/fund-watchlist-diagnostic";
 import { saveCoachDiagnosticSnapshot } from "@/lib/fund-watchlist/fund-watchlist-coach-diagnostic-narrative";
 import { waitForFundWatchlistBenchmarkSync } from "@/lib/fund-watchlist/wait-for-benchmark-sync";
@@ -273,7 +276,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       const detail =
         error instanceof Error ? error.message : "réseau ou Boursorama indisponible";
       toast.error(
-        `Références non mises à jour (${detail}). Les badges utilisent la médiane watchlist.`,
+        `Références non mises à jour (${detail}). Les badges se replient sur la médiane de la watchlist, et seulement à partir de ${FUND_DIAGNOSTIC_MIN_PEERS} fonds de la même famille — sinon aucun badge.`,
         { id: FUND_WATCHLIST_BENCHMARK_TOAST_ID, duration: 8000 }
       );
     } finally {

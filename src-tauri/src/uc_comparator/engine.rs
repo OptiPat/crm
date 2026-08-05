@@ -2,9 +2,8 @@ use crate::uc_comparator::alerts::collect_fund_alerts;
 use crate::uc_comparator::bond_strategy::infer_bond_fund_profile;
 use crate::uc_comparator::eligibility::{categories_match, evaluate_categories, shared_category_label};
 use crate::uc_comparator::normalize::{
-    min_max_higher_better, min_max_lower_better, score_aum_meur, score_category_rank,
-    score_drawdown_group, score_perf5_group, score_sharpe_group, score_top10_percent,
-    scores_are_discriminant,
+    min_max_higher_better, min_max_lower_better, score_category_rank, score_perf5_group,
+    score_sharpe_group, score_top10_percent, scores_are_discriminant,
 };
 use crate::uc_comparator::scoring_profile::{
     criteria_for_profile, resolve_scoring_profile, CriterionDef, Pilier, ScoringProfile,
@@ -106,7 +105,6 @@ fn compute_criterion_scores(
 fn criterion_weight(def: &CriterionDef, version: UcScoringVersion) -> f64 {
     match version {
         UcScoringVersion::V1 => def.weight_v1,
-        UcScoringVersion::V15 => def.weight_v15,
         UcScoringVersion::V2 => def.weight_v2,
     }
 }
@@ -122,8 +120,6 @@ fn extract_raw_values(funds: &[UcFundInput], key: &str) -> Vec<Option<f64>> {
             "vol_3ans" => f.vol_3ans,
             "worst_year" => f.worst_year_perf,
             "rang_categorie" => f.category_rank_avg,
-            "max_drawdown" => f.max_drawdown_3y,
-            "aum" => f.aum_meur,
             "top10" => f.top10_percent,
             _ => None,
         })
@@ -139,8 +135,6 @@ fn compute_scores_for_criterion(def: &CriterionDef, raw: &[Option<f64>]) -> Vec<
         "sharpe_3y" => score_sharpe_group(raw),
         "vol_3ans" => min_max_lower_better(raw, def.min_significant_delta),
         "rang_categorie" => raw.iter().map(|v| v.map(score_category_rank)).collect(),
-        "max_drawdown" => score_drawdown_group(raw),
-        "aum" => raw.iter().map(|v| v.map(score_aum_meur)).collect(),
         "top10" => raw.iter().map(|v| v.map(score_top10_percent)).collect(),
         _ => vec![None; raw.len()],
     }

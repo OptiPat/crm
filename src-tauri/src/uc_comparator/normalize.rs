@@ -1,8 +1,6 @@
 //! Normalisation des critères : caps absolus, min-max relatif, scores absolus directs.
 
 const PERF5_NEGATIVE_CAP: f64 = 30.0;
-const DRAWDOWN_HIGH_CAP: f64 = 20.0;
-const DRAWDOWN_HIGH_THRESHOLD: f64 = 40.0;
 
 /// Amplitude minimale entre scores pour qu'un critère départage réellement les fonds.
 pub const SCORE_DISCRIMINANT_EPSILON: f64 = 0.01;
@@ -64,24 +62,6 @@ pub fn min_max_lower_better(
 pub fn score_category_rank(rank: f64) -> f64 {
     let clamped = rank.clamp(1.0, 100.0);
     ((100.0 - clamped) / 99.0) * 100.0
-}
-
-/// Min-max relatif inversé sur |DD| (plus petit drawdown = mieux).
-pub fn min_max_drawdown(values: &[Option<f64>]) -> Vec<Option<f64>> {
-    let abs_vals: Vec<Option<f64>> = values
-        .iter()
-        .map(|v| v.map(|dd| dd.abs()))
-        .collect();
-    let present: Vec<f64> = abs_vals.iter().filter_map(|v| *v).collect();
-    if present.is_empty() {
-        return vec![None; values.len()];
-    }
-    let min = present.iter().copied().fold(f64::INFINITY, f64::min);
-    let max = present.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    abs_vals
-        .iter()
-        .map(|raw| raw.map(|abs_dd| min_max_value_inverted(abs_dd, min, max)))
-        .collect()
 }
 
 fn min_max_value(value: f64, min: f64, max: f64) -> f64 {
@@ -147,35 +127,6 @@ pub fn score_perf5_group(
             (other, _) => other,
         })
         .collect()
-}
-
-/// Drawdown : min-max inversé puis cap à 20 si |DD| > 40 %.
-pub fn score_drawdown_group(raw_dds: &[Option<f64>]) -> Vec<Option<f64>> {
-    let relative = min_max_drawdown(raw_dds);
-    relative
-        .into_iter()
-        .zip(raw_dds.iter())
-        .map(|(score, raw)| match (score, raw) {
-            (Some(s), Some(dd)) if dd.abs() > DRAWDOWN_HIGH_THRESHOLD => {
-                Some(s.min(DRAWDOWN_HIGH_CAP))
-            }
-            (other, _) => other,
-        })
-        .collect()
-}
-
-/// Encours (M€) — score absolu logarithmique, pas de min-max.
-pub fn score_aum_meur(aum: f64) -> f64 {
-    if aum <= 10.0 {
-        return 0.0;
-    }
-    if aum >= 200.0 {
-        return 100.0;
-    }
-    let ln_aum = aum.ln();
-    let ln_10 = 10.0_f64.ln();
-    let ln_200 = 200.0_f64.ln();
-    ((ln_aum - ln_10) / (ln_200 - ln_10)) * 100.0
 }
 
 /// Concentration top 10 — score absolu linéaire inversé.

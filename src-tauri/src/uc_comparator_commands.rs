@@ -239,16 +239,15 @@ mod tests {
         );
     }
 
-    /// La v1.5 (max drawdown + encours) n'a jamais eu de writer : elle n'est plus atteignable que
-    /// par une demande explicite, et le rang catégorie remplace l'encours comme critère utile.
+    /// Un barème inconnu (dont l'ancienne v1.5, retirée) ne fait pas échouer la comparaison : on
+    /// retombe sur la détection par les données.
     #[test]
     fn force_version_overrides_data_detection() {
-        let inputs = [input(None, None), input(None, None)];
-        assert_eq!(
-            resolve_scoring_version(&request(Some("v1.5")), &inputs),
-            UcScoringVersion::V15
-        );
         let ready = [input(Some(12.0), Some(-18.0)), input(Some(9.0), Some(-25.0))];
+        assert_eq!(
+            resolve_scoring_version(&request(Some("v1.5")), &ready),
+            UcScoringVersion::V2
+        );
         assert_eq!(
             resolve_scoring_version(&request(Some("v1")), &ready),
             UcScoringVersion::V1

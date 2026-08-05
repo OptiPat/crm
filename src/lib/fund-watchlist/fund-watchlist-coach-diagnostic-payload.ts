@@ -16,6 +16,11 @@ export type FundCoachDiagnosticPayload = {
   trigger_reasons: string[];
   /** Motif d'abstention quand le CRM ne déclenche rien (référence catégorie absente, par ex.). */
   reasons: string[];
+  /**
+   * Nuances déjà visibles par le CGP sur le badge (correction sur une année encore solide,
+   * respiration court terme) : sans elles, le coach durcissait un statut que le badge nuançait.
+   */
+  context_reasons: string[];
 };
 
 /**
@@ -38,6 +43,7 @@ export function buildFundCoachDiagnosticPayload(
       delta_reference_label: diagnostic.delta_reference_label,
       trigger_reasons: diagnostic.trigger_reasons,
       reasons: diagnostic.reasons,
+      context_reasons: diagnostic.context_reasons,
     });
   }
   return payload;

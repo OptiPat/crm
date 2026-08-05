@@ -18,9 +18,6 @@ const CRITERION_HELP: Record<string, string> = {
     "Part cumulée des 10 plus grosses lignes du portefeuille (composition Boursorama). Récupérée automatiquement à la comparaison si absente du cache.",
   sharpe_3y:
     "Rendement ajusté du risque sur 3 ans. Un Sharpe ≤ 0 obtient 0 ; les Sharpe positifs sont comparés avec un plancher à 0 (pas de « couperet » entre deux fonds proches).",
-  max_drawdown:
-    "Perte maximale observée sur 3 ans — plus le drawdown est faible, mieux c'est (critère obligataire v1.5).",
-  aum: "Encours du fonds en M€ — liquidité et pérennité (critère obligataire v1.5).",
   vol_3ans:
     "Volatilité 3 ans mesurée (import Cristalliance) : à performance égale, le fonds le plus calme est préféré. Un écart inférieur à 1 point (0,4 en obligataire) n'est pas départagé.",
   worst_year:
@@ -123,14 +120,6 @@ export function formatCriterionRawValue(
     case "top10":
       return metrics.top10_percent != null
         ? `${metrics.top10_percent.toFixed(1).replace(".", ",")} %`
-        : "—";
-    case "max_drawdown":
-      return metrics.max_drawdown_3y != null
-        ? `${metrics.max_drawdown_3y.toFixed(1).replace(".", ",")} %`
-        : "—";
-    case "aum":
-      return metrics.aum_meur != null
-        ? `${metrics.aum_meur.toFixed(0).replace(".", ",")} M€`
         : "—";
     case "vol_3ans":
       return metrics.vol_3ans != null

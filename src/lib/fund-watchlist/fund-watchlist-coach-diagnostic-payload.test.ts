@@ -46,6 +46,7 @@ describe("buildFundCoachDiagnosticPayload", () => {
           delta_1an_vs_category: -6.2,
           delta_reference_label: "Actions Europe (Boursorama)",
           trigger_reasons: ["Écart vs Actions Europe (Boursorama) 1 an : -6.2 pt"],
+          context_reasons: ["Correction 1 mois avec YTD encore solide"],
         }),
       ],
     ]);
@@ -57,6 +58,8 @@ describe("buildFundCoachDiagnosticPayload", () => {
         delta_reference_label: "Actions Europe (Boursorama)",
         trigger_reasons: ["Écart vs Actions Europe (Boursorama) 1 an : -6.2 pt"],
         reasons: [],
+        // Les nuances du badge suivent le statut : sans elles le coach durcissait son verdict.
+        context_reasons: ["Correction 1 mois avec YTD encore solide"],
       },
     ]);
   });

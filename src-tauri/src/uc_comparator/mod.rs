@@ -1,4 +1,4 @@
-//! Comparateur UC — moteur déterministe de scoring (V1 / V1.5).
+//! Comparateur UC — moteur déterministe de scoring (v1 archivé, v2 courant).
 
 pub mod alerts;
 pub mod bond_strategy;
