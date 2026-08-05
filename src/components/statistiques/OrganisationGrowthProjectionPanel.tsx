@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { RotateCcw } from "lucide-react";
 import {
   Bar,
@@ -18,10 +18,6 @@ import {
 } from "@/components/dashboard/dashboard-format";
 import { ChartTooltipBox } from "@/components/dashboard/dashboard-ui";
 import { nextFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
-import {
-  loadProjectionOverridesByYear,
-  saveProjectionYearOverride,
-} from "@/lib/statistiques/organisation-growth-projection-preferences";
 import {
   projectGrowthObjectiveOverYears,
   resolveYearlyGrowthLevers,
@@ -101,6 +97,9 @@ export function OrganisationGrowthProjectionPanel({
   baseline,
   jdPresenceToRecruitRatePercent,
   jdConfirmationToPresenceRatePercent,
+  projectionOverridesByYear,
+  onProjectionYearOverrideField,
+  onResetProjectionYear,
 }: {
   /** Exercice affiché par le tableau ci-dessus (l'Année 1 de la projection porte sur le suivant). */
   exerciceLabel: string;
@@ -109,12 +108,17 @@ export function OrganisationGrowthProjectionPanel({
   baseline: YearlyGrowthLevers;
   jdPresenceToRecruitRatePercent: number;
   jdConfirmationToPresenceRatePercent: number;
+  projectionOverridesByYear: Record<number, Partial<YearlyGrowthLevers>>;
+  onProjectionYearOverrideField: (
+    year: number,
+    key: keyof YearlyGrowthLevers,
+    value: number | undefined
+  ) => void;
+  onResetProjectionYear: (year: number) => void;
 }) {
-  const [overridesByYear, setOverridesByYear] = useState(() => loadProjectionOverridesByYear());
-
   const yearlyLevers = useMemo(
-    () => resolveYearlyGrowthLevers(PROJECTION_YEARS, overridesByYear, baseline),
-    [overridesByYear, baseline]
+    () => resolveYearlyGrowthLevers(PROJECTION_YEARS, projectionOverridesByYear, baseline),
+    [projectionOverridesByYear, baseline]
   );
 
   const firstProjectedExerciceLabel = nextFiscalYearLabel(exerciceLabel) ?? exerciceLabel;
@@ -134,34 +138,6 @@ export function OrganisationGrowthProjectionPanel({
       firstProjectedExerciceLabel,
     ]
   );
-
-  function setYearOverride(year: number, key: keyof YearlyGrowthLevers, value: number | undefined) {
-    setOverridesByYear((prev) => {
-      const nextYearOverride = { ...prev[year] };
-      if (value === undefined) {
-        delete nextYearOverride[key];
-      } else {
-        nextYearOverride[key] = value;
-      }
-      const next = { ...prev };
-      if (Object.keys(nextYearOverride).length === 0) {
-        delete next[year];
-      } else {
-        next[year] = nextYearOverride;
-      }
-      saveProjectionYearOverride(year, nextYearOverride);
-      return next;
-    });
-  }
-
-  function resetYear(year: number) {
-    setOverridesByYear((prev) => {
-      const next = { ...prev };
-      delete next[year];
-      saveProjectionYearOverride(year, {});
-      return next;
-    });
-  }
 
   const chartData = rows.map((row) => ({ ...row, label: `An ${row.year}` }));
 
@@ -273,10 +249,10 @@ export function OrganisationGrowthProjectionPanel({
                     <span className={cn(row.year === 1 ? "text-primary" : "text-foreground")}>
                       An {row.year} <span className="font-normal text-muted-foreground">{row.exerciceLabel}</span>
                     </span>
-                    {row.year > 1 && overridesByYear[row.year] != null && (
+                    {row.year > 1 && projectionOverridesByYear[row.year] != null && (
                       <button
                         type="button"
-                        onClick={() => resetYear(row.year)}
+                        onClick={() => onResetProjectionYear(row.year)}
                         title="Réinitialiser cette année (revenir à l'héritage de l'année précédente)"
                         className="text-muted-foreground hover:text-foreground"
                       >
@@ -295,7 +271,7 @@ export function OrganisationGrowthProjectionPanel({
                 {yearlyLevers.map((levers, index) => {
                   const year = index + 1;
                   const value = levers[leverRow.key];
-                  const isOverridden = overridesByYear[year]?.[leverRow.key] !== undefined;
+                  const isOverridden = projectionOverridesByYear[year]?.[leverRow.key] !== undefined;
                   return (
                     <td
                       key={year}
@@ -312,12 +288,14 @@ export function OrganisationGrowthProjectionPanel({
                               value={value.toLocaleString("fr-FR")}
                               onChange={(e) => {
                                 const digits = e.target.value.replace(/[^\d-]/g, "");
-                                // Champ vidé = pas de surcharge (retour à l'héritage en cascade), pas 0 explicite.
-                                setYearOverride(
-                                  year,
-                                  leverRow.key,
-                                  digits === "" || digits === "-" ? undefined : Number(digits)
-                                );
+                                if (digits === "" || digits === "-") return;
+                                onProjectionYearOverrideField(year, leverRow.key, Number(digits));
+                              }}
+                              onBlur={(e) => {
+                                const digits = e.target.value.replace(/[^\d-]/g, "");
+                                if (digits === "" || digits === "-") {
+                                  onProjectionYearOverrideField(year, leverRow.key, undefined);
+                                }
                               }}
                               className={cn(
                                 "w-24 rounded border px-1 py-0.5 text-right tabular-nums",
@@ -331,13 +309,15 @@ export function OrganisationGrowthProjectionPanel({
                               type="number"
                               step={leverRow.step}
                               value={value}
-                              onChange={(e) =>
-                                setYearOverride(
-                                  year,
-                                  leverRow.key,
-                                  e.target.value === "" ? undefined : Number(e.target.value)
-                                )
-                              }
+                              onChange={(e) => {
+                                if (e.target.value === "") return;
+                                onProjectionYearOverrideField(year, leverRow.key, Number(e.target.value));
+                              }}
+                              onBlur={(e) => {
+                                if (e.target.value === "") {
+                                  onProjectionYearOverrideField(year, leverRow.key, undefined);
+                                }
+                              }}
                               className={cn(
                                 "w-16 rounded border px-1 py-0.5 text-right tabular-nums",
                                 isOverridden

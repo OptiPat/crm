@@ -1,14 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
 import { useJdFunnelTracker } from "@/hooks/useJdFunnelTracker";
+import { useOrganisationObjectifPlan } from "@/hooks/useOrganisationObjectifPlan";
 import { currentFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
 import { computeGrowthObjective } from "@/lib/statistiques/organisation-growth-objective";
-import {
-  loadOrganisationObjectifTablePrefs,
-  saveOrganisationObjectifTablePrefs,
-} from "@/lib/statistiques/organisation-objectif-table-preferences";
 import type { OrganisationObjectifObservedStats } from "@/lib/statistiques/organisation-objectif-observed-stats";
+import { formatOrganisationObjectifPlanSavedAt } from "@/lib/statistiques/organisation-objectif-plan-storage";
 import type { StatistiquesBenchmarkSettings } from "@/lib/statistiques/statistiques-benchmark-settings";
 import { ChartLoading } from "@/components/dashboard/dashboard-ui";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { JdFunnelCounterCell } from "./JdFunnelCounterCell";
 import { OrganisationGrowthProjectionPanel } from "./OrganisationGrowthProjectionPanel";
@@ -25,6 +23,70 @@ import {
 import { StatistiquesPanel } from "./statistiques-ui";
 
 const DEFAULT_JD_RATE_PERCENT = 50;
+
+function ObjectifPlanSaveStatus({
+  saveStatus,
+  loadError,
+  isDirty,
+  savedAt,
+  onSave,
+}: {
+  saveStatus: ReturnType<typeof useOrganisationObjectifPlan>["saveStatus"];
+  loadError: boolean;
+  isDirty: boolean;
+  savedAt: number | null;
+  onSave: () => void;
+}) {
+  if (saveStatus === "loading") {
+    return (
+      <span className="text-[11px] text-muted-foreground">Chargement du plan…</span>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <span className="text-[11px] text-destructive">Impossible de charger le plan enregistré</span>
+    );
+  }
+
+  const statusLabel =
+    saveStatus === "saving"
+      ? "Enregistrement…"
+      : saveStatus === "save_error"
+        ? "Erreur d'enregistrement"
+        : isDirty
+          ? "Modifications non enregistrées"
+          : savedAt != null
+            ? `Enregistré le ${formatOrganisationObjectifPlanSavedAt(savedAt)}`
+            : "Aucun plan enregistré";
+
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className={cn(
+          "text-[11px] tabular-nums",
+          saveStatus === "save_error"
+            ? "text-destructive"
+            : isDirty
+              ? "text-amber-700 dark:text-amber-400"
+              : "text-muted-foreground"
+        )}
+      >
+        {statusLabel}
+      </span>
+      <Button
+        type="button"
+        variant={isDirty || saveStatus === "save_error" ? "default" : "outline"}
+        size="sm"
+        className="h-7 text-xs"
+        disabled={saveStatus === "saving" || loadError || (!isDirty && saveStatus !== "save_error")}
+        onClick={onSave}
+      >
+        {saveStatus === "saving" ? "Enregistrement…" : "Enregistrer"}
+      </Button>
+    </div>
+  );
+}
 
 export function OrganisationObjectifTablePanel({
   loading,
@@ -76,121 +138,73 @@ export function OrganisationObjectifTablePanel({
 
   const observedExerciceLabel = observedStats.exerciceLabel;
 
-  // Lu une seule fois au montage : les hypothèses personnalisées (différentes de la valeur
-  // observée) sont conservées d'une session à l'autre, cf. organisation-objectif-table-preferences.ts.
-  const persistedPrefs = useMemo(() => loadOrganisationObjectifTablePrefs(), []);
+  const {
+    isLoading: planLoading,
+    loadError,
+    saveStatus,
+    isDirty,
+    savedAt,
+    tablePrefs,
+    projectionOverridesByYear,
+    updateTablePrefs,
+    setProjectionYearOverrideField,
+    resetProjectionYear,
+    savePlan,
+  } = useOrganisationObjectifPlan(exerciceLabel);
 
-  const [targetGrowthPercent, setTargetGrowthPercentState] = useState(
-    persistedPrefs.targetGrowthPercent ?? defaultTargetGrowthPercent
-  );
-  const [attritionPercent, setAttritionPercentState] = useState(
-    persistedPrefs.attritionPercent ?? (defaultAttritionPercent ?? 0)
-  );
-  const [targetPersonalVolume, setTargetPersonalVolumeState] = useState(
-    persistedPrefs.targetPersonalVolume ?? Math.round(currentPersonalVolume ?? 0)
-  );
-  const [targetTeamAverageVolume, setTargetTeamAverageVolumeState] = useState(
-    persistedPrefs.targetTeamAverageVolume ?? Math.round(currentTeamAverageVolume ?? 0)
-  );
-  const [targetTeamActiveRatePercent, setTargetTeamActiveRatePercentState] = useState(
-    persistedPrefs.targetTeamActiveRatePercent ?? defaultTeamActiveRatePercent
-  );
-  const [targetSponsorsRatePercent, setTargetSponsorsRatePercentState] = useState(
-    persistedPrefs.targetSponsorsRatePercent ?? defaultSponsorsRatePercent
-  );
-  const [jdPresenceToRecruitRatePercent, setJdPresenceToRecruitRatePercentState] = useState(
-    persistedPrefs.jdPresenceToRecruitRatePercent ?? DEFAULT_JD_RATE_PERCENT
-  );
-  const [jdConfirmationToPresenceRatePercent, setJdConfirmationToPresenceRatePercentState] = useState(
-    persistedPrefs.jdConfirmationToPresenceRatePercent ?? DEFAULT_JD_RATE_PERCENT
-  );
+  const targetGrowthPercent = tablePrefs.targetGrowthPercent ?? defaultTargetGrowthPercent;
+  const attritionPercent = tablePrefs.attritionPercent ?? (defaultAttritionPercent ?? 0);
+  const targetPersonalVolume =
+    tablePrefs.targetPersonalVolume ?? Math.round(currentPersonalVolume ?? 0);
+  const targetTeamAverageVolume =
+    tablePrefs.targetTeamAverageVolume ?? Math.round(currentTeamAverageVolume ?? 0);
+  const targetTeamActiveRatePercent =
+    tablePrefs.targetTeamActiveRatePercent ?? defaultTeamActiveRatePercent;
+  const targetSponsorsRatePercent =
+    tablePrefs.targetSponsorsRatePercent ?? defaultSponsorsRatePercent;
+  const jdPresenceToRecruitRatePercent =
+    tablePrefs.jdPresenceToRecruitRatePercent ?? DEFAULT_JD_RATE_PERCENT;
+  const jdConfirmationToPresenceRatePercent =
+    tablePrefs.jdConfirmationToPresenceRatePercent ?? DEFAULT_JD_RATE_PERCENT;
 
-  // Ne resynchronise sur la valeur observée que si l'utilisateur n'a pas de préférence enregistrée
-  // pour ce champ — sinon une préférence persistée serait écrasée dès que les données réelles
-  // (souvent chargées de façon asynchrone) arrivent ou changent.
-  useEffect(() => {
-    if (persistedPrefs.targetGrowthPercent == null) {
-      setTargetGrowthPercentState(defaultTargetGrowthPercent);
-    }
-  }, [defaultTargetGrowthPercent, persistedPrefs.targetGrowthPercent]);
-
-  useEffect(() => {
-    if (persistedPrefs.attritionPercent == null) {
-      setAttritionPercentState(defaultAttritionPercent ?? 0);
-    }
-  }, [defaultAttritionPercent, persistedPrefs.attritionPercent]);
-
-  useEffect(() => {
-    if (persistedPrefs.targetPersonalVolume == null) {
-      setTargetPersonalVolumeState(Math.round(currentPersonalVolume ?? 0));
-    }
-  }, [currentPersonalVolume, persistedPrefs.targetPersonalVolume]);
-
-  useEffect(() => {
-    if (persistedPrefs.targetTeamAverageVolume == null) {
-      setTargetTeamAverageVolumeState(Math.round(currentTeamAverageVolume ?? 0));
-    }
-  }, [currentTeamAverageVolume, persistedPrefs.targetTeamAverageVolume]);
-
-  useEffect(() => {
-    if (persistedPrefs.targetTeamActiveRatePercent == null) {
-      setTargetTeamActiveRatePercentState(defaultTeamActiveRatePercent);
-    }
-  }, [defaultTeamActiveRatePercent, persistedPrefs.targetTeamActiveRatePercent]);
-
-  useEffect(() => {
-    if (persistedPrefs.targetSponsorsRatePercent == null) {
-      setTargetSponsorsRatePercentState(defaultSponsorsRatePercent);
-    }
-  }, [defaultSponsorsRatePercent, persistedPrefs.targetSponsorsRatePercent]);
-
-  // Wrappers qui persistent la saisie — sauf si elle revient à la valeur observée (le bouton
-  // « réinitialiser » repasse alors le champ en suivi automatique, cf. useEffect ci-dessus).
   const setTargetGrowthPercent = (value: number) => {
-    setTargetGrowthPercentState(value);
-    saveOrganisationObjectifTablePrefs({
+    updateTablePrefs({
       targetGrowthPercent: value === defaultTargetGrowthPercent ? undefined : value,
     });
   };
   const setAttritionPercent = (value: number) => {
-    setAttritionPercentState(value);
-    saveOrganisationObjectifTablePrefs({
+    updateTablePrefs({
       attritionPercent: value === (defaultAttritionPercent ?? 0) ? undefined : value,
     });
   };
   const setTargetPersonalVolume = (value: number) => {
-    setTargetPersonalVolumeState(value);
-    saveOrganisationObjectifTablePrefs({
+    updateTablePrefs({
       targetPersonalVolume: value === Math.round(currentPersonalVolume ?? 0) ? undefined : value,
     });
   };
   const setTargetTeamAverageVolume = (value: number) => {
-    setTargetTeamAverageVolumeState(value);
-    saveOrganisationObjectifTablePrefs({
-      targetTeamAverageVolume: value === Math.round(currentTeamAverageVolume ?? 0) ? undefined : value,
+    updateTablePrefs({
+      targetTeamAverageVolume:
+        value === Math.round(currentTeamAverageVolume ?? 0) ? undefined : value,
     });
   };
   const setTargetTeamActiveRatePercent = (value: number) => {
-    setTargetTeamActiveRatePercentState(value);
-    saveOrganisationObjectifTablePrefs({
+    updateTablePrefs({
       targetTeamActiveRatePercent: value === defaultTeamActiveRatePercent ? undefined : value,
     });
   };
   const setTargetSponsorsRatePercent = (value: number) => {
-    setTargetSponsorsRatePercentState(value);
-    saveOrganisationObjectifTablePrefs({
+    updateTablePrefs({
       targetSponsorsRatePercent: value === defaultSponsorsRatePercent ? undefined : value,
     });
   };
   const setJdPresenceToRecruitRatePercent = (value: number) => {
-    setJdPresenceToRecruitRatePercentState(value);
-    saveOrganisationObjectifTablePrefs({
+    updateTablePrefs({
       jdPresenceToRecruitRatePercent: value === DEFAULT_JD_RATE_PERCENT ? undefined : value,
     });
   };
   const setJdConfirmationToPresenceRatePercent = (value: number) => {
-    setJdConfirmationToPresenceRatePercentState(value);
-    saveOrganisationObjectifTablePrefs({
+    updateTablePrefs({
       jdConfirmationToPresenceRatePercent: value === DEFAULT_JD_RATE_PERCENT ? undefined : value,
     });
   };
@@ -242,13 +256,18 @@ export function OrganisationObjectifTablePanel({
 
   return (
     <StatistiquesPanel
-      title="Tableau d'objectifs (brouillon)"
+      title="Tableau d'objectifs"
       description="Combien parrainer cette année pour atteindre votre croissance visée — modifiez croissance, attrition, taux et volumes visés pour recalculer en direct, et comparez à une projection basée sur les références groupe."
       collapsible
       panelId="filleul_org_objectif_table"
     >
-      {loading ? (
+      {loading || planLoading ? (
         <ChartLoading />
+      ) : loadError ? (
+        <p className="text-sm text-destructive rounded-lg border border-dashed border-destructive/40 bg-destructive/5 px-3 py-2.5">
+          Impossible de charger le plan enregistré pour l&apos;exercice {exerciceLabel}. Vos
+          hypothèses ne seront pas modifiées tant que le chargement n&apos;a pas réussi.
+        </p>
       ) : !canCompute || result == null || groupResult == null ? (
         <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border/70 bg-muted/10 px-3 py-2.5">
           Pas assez de données sur cet exercice pour calculer un objectif.
@@ -259,20 +278,29 @@ export function OrganisationObjectifTablePanel({
             <p className="text-xs text-muted-foreground">
               {formatCount(currentConsultantCount)} consultants actuels — ajustez les hypothèses ci-dessous.
             </p>
-            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              Progression suivie pour l'exercice
-              <select
-                value={jdFunnelTracker.exerciceLabel}
-                onChange={(e) => jdFunnelTracker.setExerciceLabel(e.target.value)}
-                className="rounded-md border border-border/70 bg-background px-1.5 py-0.5 text-xs"
-              >
-                {jdFunnelTracker.exerciceOptions.map((label) => (
-                  <option key={label} value={label}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <ObjectifPlanSaveStatus
+                saveStatus={saveStatus}
+                loadError={loadError}
+                isDirty={isDirty}
+                savedAt={savedAt}
+                onSave={() => void savePlan()}
+              />
+              <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                Progression suivie pour l'exercice
+                <select
+                  value={jdFunnelTracker.exerciceLabel}
+                  onChange={(e) => jdFunnelTracker.setExerciceLabel(e.target.value)}
+                  className="rounded-md border border-border/70 bg-background px-1.5 py-0.5 text-xs"
+                >
+                  {jdFunnelTracker.exerciceOptions.map((label) => (
+                    <option key={label} value={label}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
             <AssumptionField
@@ -565,6 +593,9 @@ export function OrganisationObjectifTablePanel({
               }}
               jdPresenceToRecruitRatePercent={jdPresenceToRecruitRatePercent}
               jdConfirmationToPresenceRatePercent={jdConfirmationToPresenceRatePercent}
+              projectionOverridesByYear={projectionOverridesByYear}
+              onProjectionYearOverrideField={setProjectionYearOverrideField}
+              onResetProjectionYear={resetProjectionYear}
             />
           </div>
 
