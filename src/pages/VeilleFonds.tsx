@@ -21,6 +21,7 @@ import {
   Search,
   Sparkles,
   Star,
+  Users,
   X,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -35,6 +36,7 @@ import {
   type FundWatchlistFavoritesReport,
 } from "@/lib/api/tauri-fund-watchlist";
 import { FundWatchlistImportDialog } from "@/components/fund-watchlist/FundWatchlistImportDialog";
+import { ContratSupportsImportDialog } from "@/components/fund-watchlist/ContratSupportsImportDialog";
 import { FundWatchlistCoachDialog } from "@/components/fund-watchlist/FundWatchlistCoachDialog";
 import { UcComparatorResults } from "@/components/fund-watchlist/UcComparatorResults";
 import { UcComparatorPrintPortal } from "@/components/fund-watchlist/UcComparatorPrintPortal";
@@ -42,7 +44,8 @@ import { useUcComparatorPrintExport } from "@/hooks/useUcComparatorPrintExport";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FundWatchlistColumnHeader } from "@/components/fund-watchlist/FundWatchlistColumnHeader";
 import { FundWatchlistOptionalColumnToggles } from "@/components/fund-watchlist/FundWatchlistOptionalColumnToggles";
-import { formatFundPerfPercent, formatFundSharpe, formatFundShortTermScore, fundPerfSignTextClass } from "@/lib/fund-watchlist/fund-watchlist-display";
+import { formatFundEncours, formatFundPerfPercent, formatFundSharpe, formatFundShortTermScore, fundPerfSignTextClass } from "@/lib/fund-watchlist/fund-watchlist-display";
+import { FundHoldersDialog } from "@/components/fund-watchlist/FundHoldersDialog";
 import {
   collectFundWatchlistAnnualYears,
   fundWatchlistAnnualPerf,
@@ -141,6 +144,8 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [importOpen, setImportOpen] = useState(false);
+  const [positionsImportOpen, setPositionsImportOpen] = useState(false);
+  const [holdersFund, setHoldersFund] = useState<{ isin: string; nom: string } | null>(null);
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachReport, setCoachReport] = useState<FundWatchlistFavoritesReport | null>(() =>
     loadCoachReport()
@@ -585,6 +590,29 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
         </TableCell>
       );
     }
+    if (column === "detention") {
+      const detention = entry.detention;
+      return (
+        <TableCell
+          key={column}
+          style={fundWatchlistColumnStyle(column)}
+          className={cn("px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap", alignClass)}
+        >
+          {detention ? (
+            <button
+              type="button"
+              className="underline decoration-dotted hover:text-foreground"
+              onClick={() => setHoldersFund({ isin: entry.isin, nom: entry.nom })}
+              title={`${detention.clients} client(s) · ${detention.contrats} contrat(s)`}
+            >
+              {formatFundEncours(detention.encours)}
+            </button>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </TableCell>
+      );
+    }
     if (column === "score_ct") {
       const score = computeFundWatchlistShortTermScore(entry);
       return (
@@ -684,6 +712,16 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
         open={importOpen}
         onOpenChange={setImportOpen}
         onApplied={() => void handleImportApplied()}
+      />
+      <ContratSupportsImportDialog
+        open={positionsImportOpen}
+        onOpenChange={setPositionsImportOpen}
+        onApplied={() => void load()}
+      />
+      <FundHoldersDialog
+        isin={holdersFund?.isin ?? null}
+        nom={holdersFund?.nom ?? null}
+        onClose={() => setHoldersFund(null)}
       />
       <FundWatchlistCoachDialog
         open={coachOpen}
@@ -823,6 +861,10 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                 Régénérer
               </Button>
             )}
+            <Button variant="outline" onClick={() => setPositionsImportOpen(true)}>
+              <Users className="h-4 w-4 mr-2" />
+              Importer positions
+            </Button>
             <Button onClick={() => setImportOpen(true)}>
               <FileUp className="h-4 w-4 mr-2" />
               Importer Excel

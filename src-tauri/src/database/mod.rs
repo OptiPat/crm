@@ -9,6 +9,7 @@ pub mod client_onedrive;
 pub mod compta;
 pub mod contact_row;
 pub mod contacts;
+pub mod contrat_supports;
 pub mod custom_fields;
 pub mod dashboard_stats;
 pub mod documents;
@@ -691,6 +692,7 @@ impl Database {
         self.migrate_fund_watchlist_table()?;
         self.migrate_fund_watchlist_market_cache_table()?;
         self.migrate_uc_comparatifs_table()?;
+        self.migrate_contrat_supports_tables()?;
         self.migrate_fiche_conseil_redaction_presets_table()?;
 
         Ok(())
@@ -780,6 +782,60 @@ impl Database {
         )?;
         self.ensure_workspace_outbox_triggers_for_table("fiche_conseil_redaction_presets")?;
         println!("✅ Migration: unicité fiche_conseil_redaction_presets (nom, product_kind)");
+        Ok(())
+    }
+
+    /// Positions détenues par contrat (photo remplacée à chaque import) et historique des valeurs
+    /// liquidatives par support (jamais écrasé : il permettra de mesurer l'écart au plus haut).
+    fn migrate_contrat_supports_tables(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS contrat_supports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                investissement_id INTEGER NOT NULL,
+                contact_id INTEGER,
+                numero_contrat TEXT NOT NULL,
+                isin TEXT NOT NULL,
+                libelle TEXT NOT NULL,
+                societe_gestion TEXT,
+                type_support TEXT,
+                sri INTEGER,
+                nb_parts REAL,
+                valeur_unitaire REAL,
+                encours REAL,
+                plus_moins_value_pct REAL,
+                date_valeur INTEGER,
+                source_label TEXT NOT NULL DEFAULT 'import',
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (investissement_id) REFERENCES investissements(id) ON DELETE CASCADE,
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS contrat_supports_inv_isin_uidx
+                ON contrat_supports (investissement_id, isin)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS contrat_supports_isin_idx ON contrat_supports (isin)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS contrat_supports_contact_idx ON contrat_supports (contact_id)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS support_vl_history (
+                isin TEXT NOT NULL,
+                date_valeur INTEGER NOT NULL,
+                valeur_unitaire REAL NOT NULL,
+                libelle TEXT,
+                source_label TEXT NOT NULL DEFAULT 'import',
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                PRIMARY KEY (isin, date_valeur)
+            )",
+            [],
+        )?;
         Ok(())
     }
 

@@ -618,6 +618,8 @@ fn main() {
             team_list_audit_cmd,
             fund_watchlist_commands::get_all_fund_watchlist_entries,
             fund_watchlist_commands::import_fund_watchlist_entries,
+            fund_watchlist_commands::import_contrat_supports,
+            fund_watchlist_commands::list_fund_holders,
             fund_watchlist_commands::set_fund_watchlist_favorite,
             fund_watchlist_commands::start_fund_watchlist_favorites_report,
             fund_watchlist_commands::fund_watchlist_coach_report_in_progress,

@@ -10,7 +10,10 @@ pub const FUND_WATCHLIST_COACH_LAST_REPORT_SETTING: &str = "fund_watchlist_coach
 const SELECT_COLS: &str = "id, isin, nom, categorie, notation_morningstar, sri,
     vl_previous, vl_recent, vl_date, perf_ytd, perf_1semaine, perf_1mois, perf_3mois, perf_1an, perf_3ans, perf_5ans,
     vol_5ans, vol_3ans, vol_1an, sharpe_ratio, perf_annual_json,
-    frais_gestion, sfdr, source_label, is_favorite, created_at, updated_at";
+    frais_gestion, sfdr, source_label, is_favorite, created_at, updated_at,
+    (SELECT COUNT(*) FROM contrat_supports cs WHERE cs.isin = fund_watchlist.isin),
+    (SELECT COUNT(DISTINCT cs.contact_id) FROM contrat_supports cs WHERE cs.isin = fund_watchlist.isin),
+    (SELECT COALESCE(SUM(cs.encours), 0) FROM contrat_supports cs WHERE cs.isin = fund_watchlist.isin)";
 
 /// Bruit flottant ignoré : seule une vraie variation de perf 1 an périme la référence catégorie.
 fn perf_1an_changed(previous: Option<f64>, next: Option<f64>) -> bool {
@@ -73,7 +76,22 @@ fn map_fund_watchlist_row(row: &rusqlite::Row<'_>) -> Result<FundWatchlistEntry>
         is_favorite: row.get::<_, i64>(24)? != 0,
         created_at: row.get(25)?,
         updated_at: row.get(26)?,
+        detention: map_fund_watchlist_detention(row)?,
     })
+}
+
+fn map_fund_watchlist_detention(
+    row: &rusqlite::Row<'_>,
+) -> Result<Option<super::models::FundWatchlistDetention>> {
+    let contrats: i64 = row.get(27)?;
+    if contrats == 0 {
+        return Ok(None);
+    }
+    Ok(Some(super::models::FundWatchlistDetention {
+        contrats,
+        clients: row.get(28)?,
+        encours: row.get(29)?,
+    }))
 }
 
 impl super::Database {

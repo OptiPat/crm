@@ -1876,8 +1876,20 @@ pub struct FundWatchlistEntry {
     pub sfdr: Option<String>,
     pub source_label: String,
     pub is_favorite: bool,
+    /// Absent tant qu'aucune position client n'a été importée : « pas de donnée » n'est pas
+    /// la même information que « détenu par personne ».
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detention: Option<FundWatchlistDetention>,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+/// Ce que les clients détiennent réellement sur un fonds (issu de l'export « Supports »).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FundWatchlistDetention {
+    pub encours: f64,
+    pub clients: i64,
+    pub contrats: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

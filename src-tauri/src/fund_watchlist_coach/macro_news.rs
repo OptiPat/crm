@@ -165,6 +165,7 @@ mod tests {
             sfdr: None,
             source_label: "t".into(),
             is_favorite: true,
+            detention: None,
             created_at: 0,
             updated_at: 0,
         }

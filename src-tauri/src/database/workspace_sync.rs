@@ -93,6 +93,10 @@ const TABLE_POLICIES: &[(&str, WorkspaceTablePolicy)] = &[
     ("filleul_dossier", WorkspaceTablePolicy::Shared),
     ("fund_watchlist", WorkspaceTablePolicy::LocalOnly),
     ("fund_watchlist_market_cache", WorkspaceTablePolicy::LocalOnly),
+    // Positions et historique VL : reconstruits par l'import de l'export « Supports », qui n'a
+    // lieu que sur le poste détenant le fichier. Rien ne part vers SharePoint.
+    ("contrat_supports", WorkspaceTablePolicy::LocalOnly),
+    ("support_vl_history", WorkspaceTablePolicy::LocalOnly),
     ("comparatifs_uc", WorkspaceTablePolicy::LocalOnly),
     ("fiche_conseil_redaction_presets", WorkspaceTablePolicy::Shared),
 ];

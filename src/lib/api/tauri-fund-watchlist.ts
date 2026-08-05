@@ -29,8 +29,16 @@ export interface FundWatchlistEntry {
   sfdr?: string | null;
   source_label: string;
   is_favorite: boolean;
+  /** Absent tant qu'aucune position client n'a été importée. */
+  detention?: FundWatchlistDetention | null;
   created_at: number;
   updated_at: number;
+}
+
+export interface FundWatchlistDetention {
+  encours: number;
+  clients: number;
+  contrats: number;
 }
 
 export interface FundWatchlistImportResult {

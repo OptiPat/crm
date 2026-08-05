@@ -13,6 +13,7 @@ export type FundWatchlistColumnId =
   | "nom"
   | "categorie"
   | "sri"
+  | "detention"
   | "score_ct"
   | "perf_ytd"
   | "perf_1semaine"
@@ -76,6 +77,7 @@ export const FUND_WATCHLIST_COLUMN_LABELS: Record<FundWatchlistColumnId, string>
   nom: "Nom",
   categorie: "Catégorie",
   sri: "SRI",
+  detention: "Détenu",
   score_ct: "Score CT",
   perf_ytd: "YTD",
   perf_1semaine: "1 sem",
@@ -100,6 +102,7 @@ export const FUND_WATCHLIST_COLUMN_ALIGN: Record<
   nom: "left",
   categorie: "left",
   sri: "center",
+  detention: "right",
   score_ct: "right",
   perf_ytd: "right",
   perf_1semaine: "right",
@@ -166,6 +169,8 @@ function entryNumericValue(
   switch (column) {
     case "sri":
       return entry.sri ?? null;
+    case "detention":
+      return entry.detention?.encours ?? null;
     case "score_ct":
       return computeFundWatchlistShortTermScore(entry);
     case "perf_ytd":
@@ -202,6 +207,7 @@ function isNumericColumn(column: FundWatchlistTableColumnKey): boolean {
   return (
     column === "sri" ||
     column === "favorite" ||
+    column === "detention" ||
     column === "score_ct" ||
     column === "sharpe_ratio" ||
     column.startsWith("perf_") ||

@@ -30,6 +30,17 @@ export function formatFundFees(value: number | null | undefined): string {
   return `${value.toFixed(2).replace(".", ",")} %`;
 }
 
+const EURO_FORMAT = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+  maximumFractionDigits: 0,
+});
+
+export function formatFundEncours(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return EURO_FORMAT.format(value);
+}
+
 /** Couleur texte selon le signe d'une perf ou d'un score (vert / rouge / neutre). */
 export function fundPerfSignTextClass(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "text-muted-foreground";
