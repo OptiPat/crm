@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { CristallianceSupportsImportRow } from "@/lib/fund-watchlist/cristalliance-supports-import";
+import type { FundCoachDiagnosticPayload } from "@/lib/fund-watchlist/fund-watchlist-coach-diagnostic-payload";
 import { notifyFundWatchlistChanged } from "@/lib/fund-watchlist/fund-watchlist-events";
 
 export interface FundWatchlistEntry {
@@ -100,8 +101,10 @@ export async function setFundWatchlistFavorite(
   notifyFundWatchlistChanged();
 }
 
-export async function startFundWatchlistFavoritesReport(): Promise<void> {
-  await invoke<void>("start_fund_watchlist_favorites_report");
+export async function startFundWatchlistFavoritesReport(
+  diagnostics: FundCoachDiagnosticPayload[]
+): Promise<void> {
+  await invoke<void>("start_fund_watchlist_favorites_report", { diagnostics });
 }
 
 export async function fundWatchlistCoachReportInProgress(): Promise<boolean> {

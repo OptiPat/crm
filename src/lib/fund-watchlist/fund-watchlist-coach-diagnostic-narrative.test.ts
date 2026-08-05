@@ -40,16 +40,19 @@ function entry(
   };
 }
 
+/** Assez de pairs pour que la médiane watchlist fasse référence, autour de 18-20 % sur 1 an. */
+function peerGroup(): FundWatchlistEntry[] {
+  return [20, 18, 19, 17].map((perf, i) =>
+    entry({ isin: `FR000000000${i + 1}`, nom: `Peer ${i + 1}`, perf_1an: perf })
+  );
+}
+
 describe("fund-watchlist-coach-diagnostic-narrative", () => {
   it("injecte le diagnostic sous l'en-tête fonds", () => {
     const favorites = [
       entry({ isin: "FR0000284689", nom: "Laggard", perf_1an: 5, perf_1mois: -6, perf_3mois: -5 }),
     ];
-    const all = [
-      entry({ isin: "FR0000000001", nom: "Leader", perf_1an: 20 }),
-      entry({ isin: "FR0000000002", nom: "Mid", perf_1an: 18 }),
-      ...favorites,
-    ];
+    const all = [...peerGroup(), ...favorites];
     const diagnostics = buildFundWatchlistDiagnostics(all);
     const injected = injectDiagnosticIntoCoachReport(
       "FR0000284689 — Laggard\n\n#### Pourquoi le fonds monte ou baisse ?",
@@ -76,8 +79,9 @@ describe("fund-watchlist-coach-diagnostic-narrative", () => {
       }),
     ];
     const all = [
-      entry({ isin: "FR0000000001", nom: "Peer A", perf_1an: 10 }),
-      entry({ isin: "FR0000000002", nom: "Peer B", perf_1an: 11 }),
+      ...[10, 11, 10.5, 10.2].map((perf, i) =>
+        entry({ isin: `FR000000000${i + 1}`, nom: `Peer ${i + 1}`, perf_1an: perf })
+      ),
       ...favorites,
     ];
     const diagnostics = buildFundWatchlistDiagnostics(all);
@@ -89,11 +93,7 @@ describe("fund-watchlist-coach-diagnostic-narrative", () => {
 
   it("fusionne le rapport Coach avec synthèse et injection sans dupliquer", () => {
     const favorites = [entry({ isin: "FR0000284689", nom: "Weak", perf_1an: 2 })];
-    const all = [
-      entry({ isin: "FR0000000001", nom: "Leader", perf_1an: 20 }),
-      entry({ isin: "FR0000000002", nom: "Mid", perf_1an: 18 }),
-      ...favorites,
-    ];
+    const all = [...peerGroup(), ...favorites];
     const diagnostics = buildFundWatchlistDiagnostics(all);
     const merged = mergeCoachReportWithDiagnosticNarrative(
       {

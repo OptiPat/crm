@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,6 @@ import {
   Clock,
   FileDown,
   FileUp,
-  Globe,
   Layers,
   LineChart,
   RefreshCw,
@@ -62,6 +61,7 @@ import {
   saveCoachReport,
 } from "@/lib/fund-watchlist/fund-watchlist-coach-store";
 import { computeFundWatchlistShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-short-term-score";
+import { buildFundCoachDiagnosticPayload } from "@/lib/fund-watchlist/fund-watchlist-coach-diagnostic-payload";
 import { buildFundWatchlistDiagnostics } from "@/lib/fund-watchlist/fund-watchlist-diagnostic";
 import type { FundBenchmarkReference } from "@/lib/fund-watchlist/fund-watchlist-diagnostic";
 import { saveCoachDiagnosticSnapshot } from "@/lib/fund-watchlist/fund-watchlist-coach-diagnostic-narrative";
@@ -156,16 +156,19 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   const [boursoramaBenchmarks, setBoursoramaBenchmarks] = useState<
     Map<string, FundBenchmarkReference>
   >(() => new Map());
-  const [benchmarkSyncing, setBenchmarkSyncing] = useState(false);
+  const benchmarkSyncingRef = useRef(false);
   const { printBundle: comparePrintBundle, printComparison, isPrinting: comparePrinting } =
     useUcComparatorPrintExport();
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setEntries(await getAllFundWatchlistEntries());
+      const rows = await getAllFundWatchlistEntries();
+      setEntries(rows);
+      return rows;
     } catch (error) {
       toast.error(String(error));
+      return [];
     } finally {
       setLoading(false);
     }
@@ -244,17 +247,17 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     };
   }, [watchlistIsinsKey]);
 
-  /** Synchronisation à la demande sur toute la watchlist (les favoris se rafraîchissent aussi
-   *  automatiquement à la génération du rapport Coach). */
-  const syncAllBenchmarks = async () => {
-    if (entries.length === 0 || benchmarkSyncing) return;
-    setBenchmarkSyncing(true);
+  /** L'import périme les références dont la perf 1 an a bougé : on les recharge en arrière-plan
+   *  pour que chaque badge compare deux chiffres de la même date. */
+  const syncAllBenchmarks = async (isins: string[]) => {
+    if (isins.length === 0 || benchmarkSyncingRef.current) return;
+    benchmarkSyncingRef.current = true;
     toast.loading("Mise à jour des références catégorie…", {
       id: FUND_WATCHLIST_BENCHMARK_TOAST_ID,
     });
     try {
       const rows = await waitForFundWatchlistBenchmarkSync(
-        entries.map((e) => e.isin),
+        isins,
         (current, total) => {
           if (total <= 0) return;
           toast.loading(`Références catégorie ${current}/${total}…`, {
@@ -274,8 +277,13 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
         { id: FUND_WATCHLIST_BENCHMARK_TOAST_ID, duration: 8000 }
       );
     } finally {
-      setBenchmarkSyncing(false);
+      benchmarkSyncingRef.current = false;
     }
+  };
+
+  const handleImportApplied = async () => {
+    const rows = await load();
+    await syncAllBenchmarks(rows.map((e) => e.isin));
   };
 
   const startCoachReport = async () => {
@@ -316,14 +324,14 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       );
     }
 
-    saveCoachDiagnosticSnapshot(
-      favorites,
-      buildFundWatchlistDiagnostics(entries, benchmarks)
-    );
+    const coachDiagnostics = buildFundWatchlistDiagnostics(entries, benchmarks);
+    saveCoachDiagnosticSnapshot(favorites, coachDiagnostics);
     toast.loading("Collecte des actualités et génération du rapport…", {
       id: FUND_WATCHLIST_COACH_TOAST_ID,
     });
-    void startFundWatchlistFavoritesReport().catch((error: unknown) => {
+    void startFundWatchlistFavoritesReport(
+      buildFundCoachDiagnosticPayload(favorites, coachDiagnostics)
+    ).catch((error: unknown) => {
       setCoachGenerating(false);
       saveCoachGenerating(false);
       toast.error(String(error), { id: FUND_WATCHLIST_COACH_TOAST_ID });
@@ -672,7 +680,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       <FundWatchlistImportDialog
         open={importOpen}
         onOpenChange={setImportOpen}
-        onApplied={() => void load()}
+        onApplied={() => void handleImportApplied()}
       />
       <FundWatchlistCoachDialog
         open={coachOpen}
@@ -793,19 +801,6 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                 Tout décocher
               </Button>
             )}
-            <Button variant="outline" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
-              Actualiser
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => void syncAllBenchmarks()}
-              disabled={entries.length === 0 || benchmarkSyncing}
-              title="Récupère la performance de catégorie Boursorama pour toute la watchlist"
-            >
-              <Globe className={cn("h-4 w-4 mr-2", benchmarkSyncing && "animate-spin")} />
-              Références catégorie
-            </Button>
             <Button
               variant="secondary"
               onClick={() => {

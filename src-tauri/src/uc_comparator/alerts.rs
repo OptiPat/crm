@@ -59,9 +59,11 @@ mod tests {
             perf_5ans: None,
             perf_ytd: ytd,
             sharpe_3y: None,
+            vol_3ans: None,
             top10_percent: top10,
             max_drawdown_3y: None,
             aum_meur: None,
+            ..Default::default()
         }
     }
 

@@ -4,6 +4,7 @@ use crate::database::models::{
     FundWatchlistEntry, FundWatchlistFavoritesReport, FundWatchlistImportResult,
     FundWatchlistImportRow,
 };
+use crate::fund_watchlist_coach::FundCoachDiagnostic;
 use tauri::{AppHandle, State};
 
 #[tauri::command]
@@ -48,9 +49,10 @@ pub fn set_fund_watchlist_favorite(
 pub fn start_fund_watchlist_favorites_report(
     app: AppHandle,
     session: State<'_, UiSessionState>,
+    diagnostics: Option<Vec<FundCoachDiagnostic>>,
 ) -> Result<(), String> {
     require_ui_session(&session)?;
-    crate::fund_watchlist_coach::spawn_favorites_report(app)
+    crate::fund_watchlist_coach::spawn_favorites_report(app, diagnostics.unwrap_or_default())
 }
 
 #[tauri::command]

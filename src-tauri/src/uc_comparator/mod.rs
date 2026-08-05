@@ -2,6 +2,7 @@
 
 pub mod alerts;
 pub mod bond_strategy;
+pub mod category_table;
 pub mod eligibility;
 pub mod engine;
 pub mod normalize;

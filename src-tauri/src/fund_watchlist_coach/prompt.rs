@@ -2,6 +2,7 @@ use crate::database::models::FundWatchlistEntry;
 use crate::fund_watchlist_coach::boursorama::BoursoramaHoldingLine;
 use crate::fund_watchlist_coach::holdings_kind::{self, HoldingLineKind};
 use crate::fund_watchlist_coach::news::{format_headline_inline, format_news_date_prefix, NewsHeadline};
+use serde::Deserialize;
 
 const SPREAD_PENALTY: f64 = 0.4;
 const NEGATIVE_PENALTY: f64 = 0.5;
@@ -45,6 +46,52 @@ pub fn format_optional_score(value: Option<f64>) -> String {
     }
 }
 
+/// Volatilité : toujours positive, un signe « + » n'apporterait rien.
+pub fn format_optional_volatility(value: Option<f64>) -> String {
+    match value {
+        Some(v) if v.is_finite() => format!("{v:.1} %"),
+        _ => "—".into(),
+    }
+}
+
+/// Diagnostic déterministe calculé côté frontend (source unique des règles, en TypeScript) et
+/// transmis au coach pour qu'il décide avec la même information que le badge affiché.
+#[derive(Debug, Clone, Deserialize)]
+pub struct FundCoachDiagnostic {
+    pub isin: String,
+    pub status: String,
+    #[serde(default)]
+    pub delta_1an_vs_category: Option<f64>,
+    #[serde(default)]
+    pub delta_reference_label: Option<String>,
+    #[serde(default)]
+    pub trigger_reasons: Vec<String>,
+    /// Motif retenu par le CRM quand il ne déclenche rien : sans lui, un statut « données
+    /// insuffisantes » arriverait au modèle sans la raison de cette abstention.
+    #[serde(default)]
+    pub reasons: Vec<String>,
+}
+
+/// Ordre d'analyse : les fonds les plus dégradés d'abord (ils sont aussi les premiers retenus
+/// quand le nombre de favoris dépasse la limite envoyée au modèle).
+pub fn diagnostic_severity_rank(status: &str) -> u8 {
+    match status {
+        "signal_arbitrage" => 0,
+        "sous_surveillance" => 1,
+        "conserver" => 3,
+        _ => 2,
+    }
+}
+
+fn diagnostic_status_label(status: &str) -> &'static str {
+    match status {
+        "signal_arbitrage" => "SIGNAL ARBITRAGE",
+        "sous_surveillance" => "SOUS SURVEILLANCE",
+        "conserver" => "CONSERVER",
+        _ => "DONNÉES INSUFFISANTES",
+    }
+}
+
 pub struct FundCoachContext {
     pub entry: FundWatchlistEntry,
     pub boursorama_url: Option<String>,
@@ -53,6 +100,7 @@ pub struct FundCoachContext {
     pub fund_news: Vec<NewsHeadline>,
     pub holding_news: Vec<HoldingNewsBlock>,
     pub warnings: Vec<String>,
+    pub diagnostic: Option<FundCoachDiagnostic>,
 }
 
 #[derive(Debug, Clone)]
@@ -85,11 +133,26 @@ pub fn build_fund_context_block(ctx: &FundCoachContext) -> String {
         format_optional_percent(entry.perf_5ans),
     ));
     block.push_str(&format!(
+        "- Risque : Sharpe 3 ans {} | Volatilité 3 ans {} | Volatilité 1 an {}\n",
+        format_optional_score(entry.sharpe_ratio),
+        format_optional_volatility(entry.vol_3ans),
+        format_optional_volatility(entry.vol_1an),
+    ));
+    block.push_str(&format!(
         "- Score court terme (4 horizons requis) : {}\n",
         format_optional_score(short_term_score(entry))
     ));
-    for hint in decision_hints(entry) {
-        block.push_str(&format!("- Indice décision (heuristique CRM) : {hint}\n"));
+    match ctx.diagnostic.as_ref() {
+        Some(diag) => {
+            append_diagnostic_lines(&mut block, diag);
+            // Un diagnostic « données insuffisantes » ne tranche rien : sans les heuristiques, le
+            // modèle statuerait sur les seules performances brutes, sans aucun filet.
+            if diagnostic_is_undecided(&diag.status) {
+                append_decision_hints(&mut block, entry);
+            }
+        }
+        // Sans diagnostic (catégorie exclue, libellé inconnu), les heuristiques servent de filet.
+        None => append_decision_hints(&mut block, entry),
     }
     if let Some(url) = ctx.boursorama_url.as_deref() {
         block.push_str(&format!("- Fiche Boursorama : {url}\n"));
@@ -157,6 +220,48 @@ pub fn build_fund_context_block(ctx: &FundCoachContext) -> String {
         }
     }
     block
+}
+
+/// Statuts sur lesquels le CRM ne se prononce pas : le coach doit alors le dire, pas trancher seul.
+fn diagnostic_is_undecided(status: &str) -> bool {
+    !matches!(
+        status,
+        "signal_arbitrage" | "sous_surveillance" | "conserver"
+    )
+}
+
+fn append_decision_hints(block: &mut String, entry: &FundWatchlistEntry) {
+    for hint in decision_hints(entry) {
+        block.push_str(&format!("- Indice décision (heuristique CRM) : {hint}\n"));
+    }
+}
+
+fn append_diagnostic_lines(block: &mut String, diag: &FundCoachDiagnostic) {
+    block.push_str(&format!(
+        "- Diagnostic déterministe CRM (fait autorité sur l'écart de performance) : {}\n",
+        diagnostic_status_label(&diag.status)
+    ));
+    if let Some(delta) = diag.delta_1an_vs_category.filter(|d| d.is_finite()) {
+        let reference = diag
+            .delta_reference_label
+            .as_deref()
+            .unwrap_or("référence catégorie");
+        let sign = if delta > 0.0 { "+" } else { "" };
+        block.push_str(&format!(
+            "- Écart 1 an vs {reference} : {sign}{delta:.1} pt\n"
+        ));
+    }
+    if !diag.trigger_reasons.is_empty() {
+        block.push_str(&format!(
+            "- Déclencheurs du diagnostic : {}\n",
+            diag.trigger_reasons.join(" · ")
+        ));
+    } else if !diag.reasons.is_empty() {
+        block.push_str(&format!(
+            "- Motif du diagnostic : {}\n",
+            diag.reasons.join(" · ")
+        ));
+    }
 }
 
 fn append_holdings_compact_lines(
@@ -227,14 +332,19 @@ Pour CHAQUE fonds, respecte STRICTEMENT la structure suivante :
   * SOUS SURVEILLANCE : correction court terme, volatilité ponctuelle, ou incertitude sur quelques lignes — sans dégradation structurelle de la thèse de gestion.
   * ARBITRAGE CONSEILLÉ (exceptionnel) : uniquement en cas de faiblesse avérée et durable sur plusieurs horizons (1 mois ET 3 mois ET YTD dégradés, ou 1 an nettement négatif) COMBINÉE à une rupture fondamentale sur les principales lignes. Un score court terme négatif ne suffit JAMAIS à justifier un arbitrage.
 - Interdiction : si la performance 1 an ou YTD reste solide malgré une baisse à 1 mois, le statut maximum est SOUS SURVEILLANCE (pas d'arbitrage de « sécurisation »).
+- Diagnostic déterministe CRM : quand un fonds en fournit un, il fait autorité sur l'écart de performance face à sa catégorie. Tu ne peux pas conclure CONSERVER sur un fonds diagnostiqué SIGNAL ARBITRAGE, ni ARBITRAGE CONSEILLÉ sur un fonds diagnostiqué CONSERVER, sans exposer en une phrase ce qui, dans les positions ou les actualités fournies, justifie de t'en écarter.
+- Diagnostic DONNÉES INSUFFISANTES : le CRM n'a trouvé aucune référence de catégorie fiable pour ce fonds. Tu peux conclure à partir de ses performances et de ses positions, mais tu dis alors en une phrase qu'aucune comparaison de catégorie n'était disponible, et tu n'affirmes jamais qu'il devance ou retarde sa catégorie.
+- Référence de l'écart : si la référence de l'écart 1 an mentionne « watchlist », elle ne compare le fonds qu'aux autres fonds de la watchlist et non à son marché — le nombre de fonds retenus est indiqué, et plus il est faible plus tu dois rester prudent dans tes conclusions. Mesuré contre une catégorie Boursorama, c'est une véritable référence de marché.
+- Risque : sers-toi du Sharpe et de la volatilité pour distinguer une performance obtenue calmement d'une performance heurtée. Un Sharpe négatif sur 3 ans renforce un diagnostic de dégradation, mais ne suffit jamais seul à justifier un arbitrage.
 - Justification CGP : 1 phrase synthétique appuyée sur les positions et la cohérence des horizons de performance.
 - Argumentaire client : 2 à 3 phrases, ton professionnel et mesuré, sans promesse de rendement, explicatif et rassurant.
 
 ---
 
 ### SYNTHÈSE GLOBALE
-- Fonds solides (moteur de performance / stabilité) — cite le score court terme (CT) quand il est fourni
-- Fonds sous surveillance (corrections temporaires / à suivre) — cite le score CT si pertinent
+- Fonds solides (moteur de performance / stabilité)
+- Fonds sous surveillance (corrections temporaires / à suivre)
+- Reprends la consigne générale sur le score court terme : jamais un nombre nu.
 - Arbitrages suggérés (exclusivement les fonds structurellement dégradés)
 - Propositions de rotation : uniquement si un arbitrage est formellement validé et qu'une alternative pertinente existe dans la watchlist
 
@@ -243,6 +353,8 @@ Règles de rédaction et contraintes :
 - Formats Markdown acceptés : titres (##, ###, ####), listes à puces (-). N'utilise JAMAIS de texte en gras (**).
 - Exclusions strictes : ne parle ni de réglementation SFDR, ni de frais. Ne propose aucun achat hors de la watchlist fournie.
 - Aucune invention : appuie-toi exclusivement sur les données (positions, performances, actualités datées) fournies en entrée.
+- Noms propres : ne cite aucune société, aucun indice et aucun organisme qui n'apparaisse pas dans les positions du fonds ou dans un titre d'actualité fourni. Si un thème te vient à l'esprit sans entité listée pour l'illustrer, décris le thème sans nommer personne.
+- Score court terme : où que tu le mentionnes, jamais un nombre nu. Écris « dynamique court terme en recul (−12,2) », « stable » ou « porteuse », pour qu'un chiffre négatif se lise comme une baisse des dernières semaines et non comme un mauvais fonds — un fonds solide peut afficher un score court terme très négatif après une correction.
 - Posture CGP : sois pragmatique. Un conseiller n'arbitre pas à la moindre baisse ; ne dramatise pas une respiration de marché après une période de hausse.
 - Si des « indices décision (heuristique CRM) » sont fournis pour un fonds, prends-les en compte pour nuancer le statut."#;
 pub fn decision_hints(entry: &FundWatchlistEntry) -> Vec<String> {
@@ -381,5 +493,106 @@ mod tests {
         };
         let hints = decision_hints(&entry);
         assert!(hints.iter().any(|h| h.contains("SOUS SURVEILLANCE")));
+    }
+
+    /// Profil qui déclenche une heuristique « SOUS SURVEILLANCE » (repli à 1 mois, année solide).
+    fn dip_entry() -> FundWatchlistEntry {
+        FundWatchlistEntry {
+            id: 1,
+            isin: "LU0336083810".into(),
+            nom: "Carmignac Asia".into(),
+            categorie: Some("Actions Asie hors Japon".into()),
+            notation_morningstar: None,
+            sri: None,
+            vl_previous: None,
+            vl_recent: None,
+            vl_date: None,
+            perf_ytd: Some(28.7),
+            perf_1semaine: Some(-9.0),
+            perf_1mois: Some(-14.7),
+            perf_3mois: Some(-2.0),
+            perf_1an: Some(42.4),
+            perf_3ans: None,
+            perf_5ans: None,
+            vol_5ans: None,
+            vol_3ans: Some(16.4),
+            vol_1an: Some(18.2),
+            sharpe_ratio: Some(-0.3),
+            perf_annual: None,
+            frais_gestion: None,
+            sfdr: None,
+            source_label: "t".into(),
+            is_favorite: true,
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    fn context(diagnostic: Option<FundCoachDiagnostic>) -> FundCoachContext {
+        FundCoachContext {
+            entry: dip_entry(),
+            boursorama_url: None,
+            holdings: Vec::new(),
+            macro_news: Vec::new(),
+            fund_news: Vec::new(),
+            holding_news: Vec::new(),
+            warnings: Vec::new(),
+            diagnostic,
+        }
+    }
+
+    #[test]
+    fn context_block_exposes_risk_metrics() {
+        let block = build_fund_context_block(&context(None));
+        assert!(block.contains("Sharpe 3 ans -0.3"));
+        assert!(block.contains("Volatilité 3 ans 16.4 %"));
+        assert!(block.contains("Volatilité 1 an 18.2 %"));
+    }
+
+    #[test]
+    fn context_block_prefers_diagnostic_over_heuristic_hints() {
+        let block = build_fund_context_block(&context(Some(FundCoachDiagnostic {
+            isin: "LU0336083810".into(),
+            status: "signal_arbitrage".into(),
+            delta_1an_vs_category: Some(-6.2),
+            delta_reference_label: Some("Actions Asie hors Japon (Boursorama)".into()),
+            trigger_reasons: vec!["Faiblesse sur 3 horizons".into()],
+            reasons: Vec::new(),
+        })));
+        assert!(block.contains("Diagnostic déterministe CRM"));
+        assert!(block.contains("SIGNAL ARBITRAGE"));
+        assert!(block.contains("Écart 1 an vs Actions Asie hors Japon (Boursorama) : -6.2 pt"));
+        assert!(block.contains("Déclencheurs du diagnostic : Faiblesse sur 3 horizons"));
+        assert!(!block.contains("heuristique CRM"));
+    }
+
+    #[test]
+    fn context_block_keeps_hints_when_the_diagnostic_does_not_decide() {
+        let block = build_fund_context_block(&context(Some(FundCoachDiagnostic {
+            isin: "LU0336083810".into(),
+            status: "inconnu".into(),
+            delta_1an_vs_category: None,
+            delta_reference_label: None,
+            trigger_reasons: Vec::new(),
+            reasons: vec!["Pas de référence catégorie : 2 pair(s) comparable(s) (min. 4)".into()],
+        })));
+        assert!(block.contains("DONNÉES INSUFFISANTES"));
+        assert!(block.contains("Motif du diagnostic : Pas de référence catégorie"));
+        // Le CRM ne tranche pas : les heuristiques restent le seul filet du modèle.
+        assert!(block.contains("heuristique CRM"));
+    }
+
+    #[test]
+    fn context_block_falls_back_to_hints_without_diagnostic() {
+        let block = build_fund_context_block(&context(None));
+        assert!(block.contains("heuristique CRM"));
+        assert!(!block.contains("Diagnostic déterministe CRM"));
+    }
+
+    #[test]
+    fn severity_rank_puts_arbitrage_first_and_conserver_last() {
+        assert!(diagnostic_severity_rank("signal_arbitrage") < diagnostic_severity_rank("sous_surveillance"));
+        assert!(diagnostic_severity_rank("sous_surveillance") < diagnostic_severity_rank("inconnu"));
+        assert!(diagnostic_severity_rank("inconnu") < diagnostic_severity_rank("conserver"));
     }
 }

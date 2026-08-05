@@ -1,3 +1,6 @@
+use crate::uc_comparator::category_table::{
+    family_for_normalized, is_excluded_normalized, label_for_family, normalize_category,
+};
 use crate::uc_comparator::types::UcFundInput;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -9,25 +12,19 @@ pub struct CategoryEligibility {
     pub subcategory_warning: Option<String>,
 }
 
-fn normalize_category(raw: &str) -> String {
-    raw.trim()
-        .to_lowercase()
-        .replace('’', "'")
-        .replace(['é', 'è', 'ê', 'ë'], "e")
-        .replace(['à', 'â'], "a")
-        .replace(['ù', 'û'], "u")
-        .replace(['î', 'ï'], "i")
-        .replace(['ô', 'ö'], "o")
-        .replace('ç', "c")
-}
-
 /// Méta-catégorie pour regrouper des libellés Morningstar/Boursorama proches.
 fn meta_category_key(normalized: &str) -> Option<&'static str> {
     if normalized.is_empty() {
         return None;
     }
 
-    let rules: [(&[&str], &str); 9] = [
+    // Table explicite d'abord ; les mots-clés ci-dessous ne servent plus qu'aux libellés
+    // absents de la table (Boursorama / Morningstar hors catalogue Cristalliance).
+    if let Some(family) = family_for_normalized(normalized) {
+        return Some(family);
+    }
+
+    let rules: [(&[&str], &str); 10] = [
         (
             &[
                 "actions secteur technolog",
@@ -57,6 +54,20 @@ fn meta_category_key(normalized: &str) -> Option<&'static str> {
                 "japan",
             ],
             "actions_asie_pacifique",
+        ),
+        (
+            &[
+                "actions international",
+                "international gdes cap",
+                "international grandes cap",
+                "global large",
+                "global equity",
+                "world large",
+                "world equity",
+                "foreign large",
+                "actions monde",
+            ],
+            "actions_international",
         ),
         (
             &["actions europe", "europe grandes", "eurozone", "zone euro"],
@@ -91,9 +102,13 @@ fn meta_category_key(normalized: &str) -> Option<&'static str> {
 }
 
 fn meta_category_label(key: &str) -> &'static str {
+    if let Some(label) = label_for_family(key) {
+        return label;
+    }
     match key {
         "actions_tech" => "Actions Secteur Technologies",
         "actions_asie_pacifique" => "Actions Asie / Japon",
+        "actions_international" => "Actions International",
         "actions_europe" => "Actions Europe",
         "actions_us" => "Actions États-Unis",
         "oblig_euro" => "Obligations Euro",
@@ -163,6 +178,19 @@ pub fn evaluate_categories(funds: &[UcFundInput]) -> CategoryEligibility {
     }
 
     let normalized = normalized_categories(funds);
+
+    // Valorisation trimestrielle et lissée : un score de performance relative n'y a pas de sens,
+    // au même titre que le badge de diagnostic qui n'est pas calculé pour ces catégories.
+    if normalized.iter().any(|c| is_excluded_normalized(c)) {
+        return CategoryEligibility {
+            compatible: false,
+            exact_match: false,
+            meta_key: None,
+            display_label: None,
+            subcategory_warning: None,
+        };
+    }
+
     let unique_exact = unique_nonempty(&normalized);
 
     if unique_exact.len() <= 1 {
@@ -258,9 +286,11 @@ mod tests {
             perf_5ans: None,
             perf_ytd: None,
             sharpe_3y: None,
+            vol_3ans: None,
             top10_percent: None,
             max_drawdown_3y: None,
             aum_meur: None,
+            ..Default::default()
         }
     }
 
@@ -287,6 +317,44 @@ mod tests {
             fund(None),
         ]));
         assert!(!categories_match(&[fund(None), fund(None)]));
+    }
+
+    #[test]
+    fn refuses_categories_excluded_from_diagnostic() {
+        assert!(!categories_match(&[fund(Some("FCPR")), fund(Some("FCPR"))]));
+    }
+
+    #[test]
+    fn groups_through_the_explicit_table() {
+        let eval = evaluate_categories(&[
+            fund(Some("Actions France Grandes Cap.")),
+            fund(Some("Actions Europe Gdes Cap. Mixte")),
+        ]);
+        assert!(eval.compatible);
+        assert_eq!(eval.meta_key.as_deref(), Some("actions_europe_grandes"));
+        assert_eq!(
+            eval.display_label.as_deref(),
+            Some("Actions Europe grandes cap.")
+        );
+    }
+
+    #[test]
+    fn separates_labels_the_keyword_rules_confused() {
+        // « zone euro » était testé avant « immobilier » : l'immobilier tombait dans les actions.
+        assert!(!categories_match(&[
+            fund(Some("Immobilier - Indirect Zone Euro")),
+            fund(Some("Actions Zone Euro Grandes Cap.")),
+        ]));
+        // « diversified » contient « diversifie » : ce fonds obligataire passait pour un diversifié.
+        assert!(!categories_match(&[
+            fund(Some("Global Diversified Bond")),
+            fund(Some("Allocation EUR Flexible")),
+        ]));
+        // Grandes et petites capitalisations européennes ne se comparent plus.
+        assert!(!categories_match(&[
+            fund(Some("Actions Europe Gdes Cap. Mixte")),
+            fund(Some("Actions Europe Petites Cap.")),
+        ]));
     }
 
     #[test]
@@ -333,9 +401,44 @@ mod tests {
 
     #[test]
     fn accepts_tech_sector_variants() {
+        // Deux libellés hors table : les mots-clés les rapprochent toujours.
         assert!(categories_match(&[
+            fund(Some("Actions Technologie")),
+            fund(Some("Actions Secteur Technologie Monde")),
+        ]));
+    }
+
+    #[test]
+    fn refuses_table_label_paired_with_foreign_label() {
+        // « Actions Secteur Technologies » vient du catalogue Cristalliance, l'autre non : rien
+        // ne prouve qu'ils couvrent le même univers (les mots-clés confondent d'ailleurs
+        // technologie et biotechnologie). Mieux vaut refuser la comparaison que la fausser.
+        assert!(!categories_match(&[
             fund(Some("Actions Secteur Technologies")),
             fund(Some("Actions Technologie")),
+        ]));
+    }
+
+    #[test]
+    fn accepts_international_large_cap_growth_and_blend() {
+        let eval = evaluate_categories(&[
+            fund(Some("Actions International Gdes Cap. Croissance")),
+            fund(Some("Actions International Gdes Cap. Mixte")),
+            fund(Some("Actions International Gdes Cap. Croissance")),
+        ]);
+        assert!(eval.compatible);
+        assert!(!eval.exact_match);
+        assert_eq!(eval.meta_key.as_deref(), Some("actions_international"));
+        assert_eq!(eval.display_label.as_deref(), Some("Actions International"));
+        assert!(eval.subcategory_warning.is_some());
+    }
+
+    #[test]
+    fn accepts_comgest_ecofi_echiquier_world_labels() {
+        assert!(categories_match(&[
+            fund(Some("Actions International Gdes Cap. Croissance")),
+            fund(Some("Actions International Gdes Cap. Mixte")),
+            fund(Some("World Large-Cap Growth Equity")),
         ]));
     }
 }

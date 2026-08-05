@@ -21,6 +21,12 @@ const CRITERION_HELP: Record<string, string> = {
   max_drawdown:
     "Perte maximale observée sur 3 ans — plus le drawdown est faible, mieux c'est (critère obligataire v1.5).",
   aum: "Encours du fonds en M€ — liquidité et pérennité (critère obligataire v1.5).",
+  vol_3ans:
+    "Volatilité 3 ans mesurée (import Cristalliance) : à performance égale, le fonds le plus calme est préféré. Un écart inférieur à 1 point (0,4 en obligataire) n'est pas départagé.",
+  worst_year:
+    "Perte de la plus mauvaise année civile connue du fonds. Substitut vérifiable du max drawdown, que Boursorama réserve à ses clients — c'est ce qu'un client aurait vécu dans sa pire année.",
+  rang_categorie:
+    "Rang Morningstar moyen du fonds dans sa catégorie (1 = meilleur, 100 = pire), sur les années publiées par Boursorama. Noté en absolu : deux rangs voisins restent proches.",
 };
 
 export function ucConfidenceThreshold(profile?: string | null): number {
@@ -126,6 +132,17 @@ export function formatCriterionRawValue(
       return metrics.aum_meur != null
         ? `${metrics.aum_meur.toFixed(0).replace(".", ",")} M€`
         : "—";
+    case "vol_3ans":
+      return metrics.vol_3ans != null
+        ? `${metrics.vol_3ans.toFixed(1).replace(".", ",")} %`
+        : "—";
+    case "worst_year":
+      return formatFundPerfPercent(metrics.worst_year_perf);
+    case "rang_categorie":
+      // Rang Morningstar en centile : 1 = tête de catégorie, 100 = queue.
+      return metrics.category_rank_avg != null
+        ? `${metrics.category_rank_avg.toFixed(0)}/100`
+        : "—";
     default:
       return "—";
   }
@@ -208,6 +225,9 @@ export function buildUcComparisonNarrative(response: CompareResponse): string {
         : ".")
   );
 
+  const alphaSentence = categoryAlphaSentence(winner);
+  if (alphaSentence) parts.push(alphaSentence);
+
   if (wonByWinner.length > 0) {
     const labels = wonByWinner
       .sort((a, b) => b.criterion.weight_global - a.criterion.weight_global)
@@ -242,6 +262,25 @@ export function buildUcComparisonNarrative(response: CompareResponse): string {
   }
 
   return parts.join(" ");
+}
+
+// Seuil sous lequel l'écart annuel moyen face à la catégorie ne mérite pas d'être commenté.
+const CATEGORY_ALPHA_MIN = 0.3;
+
+/**
+ * L'alpha ne change pas le classement — les fonds comparés partagent leur catégorie, donc leur
+ * référence — mais il dit si le gagnant bat son marché ou s'il en est seulement le moins en retard.
+ */
+function categoryAlphaSentence(winner: UcFundResultScore): string | null {
+  const alpha = winner.category_alpha_avg;
+  if (alpha == null || !Number.isFinite(alpha) || Math.abs(alpha) < CATEGORY_ALPHA_MIN) {
+    return null;
+  }
+  const value = Math.abs(alpha).toFixed(1);
+  if (alpha > 0) {
+    return `Sur les années publiées, il devance sa catégorie de ${value} point par an en moyenne.`;
+  }
+  return `Sur les années publiées, il reste en retard de ${value} point par an sur sa catégorie : il gagne la comparaison sans battre son marché.`;
 }
 
 export function fundsInRankOrder(results: UcFundResultScore[]): UcFundResultScore[] {

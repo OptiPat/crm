@@ -1,0 +1,327 @@
+{
+  "comment": "Source unique de vérité du classement des catégories Cristalliance. Lue par le diagnostic (TypeScript) et par le comparateur (Rust, include_str!). Décisions documentées dans docs/CATEGORIES-VEILLE-FONDS.md. Un libellé absent retombe sur la reconnaissance par mots-clés. Le champ volatility est le profil de repli quand la volatilité 3 ans mesurée manque dans l'import.",
+  "excluded": ["FCPR"],
+  "families": [
+    {
+      "key": "actions_europe_grandes",
+      "label": "Actions Europe grandes cap.",
+      "volatility": "actions",
+      "categories": [
+        "Actions Zone Euro Grandes Cap.",
+        "Actions Zone Euro Flex Cap",
+        "Actions Europe Flex Cap",
+        "Actions Europe Gdes Cap. \"Value\"",
+        "Actions Europe Gdes Cap. Croissance",
+        "Actions Europe Gdes Cap. Mixte",
+        "Actions Europe du Nord",
+        "Actions France Grandes Cap.",
+        "Actions Allemagne Gdes Cap.",
+        "Actions Italie",
+        "Actions Suisse Grandes Cap."
+      ]
+    },
+    {
+      "key": "actions_europe_petites_moyennes",
+      "label": "Actions Europe petites & moyennes cap.",
+      "volatility": "actions",
+      "categories": [
+        "Actions Zone Euro Moyennes Cap.",
+        "Actions Zone Euro Petites Cap.",
+        "Actions Europe Moyennes Cap.",
+        "Actions Europe Petites Cap.",
+        "Actions Europe hors UK Petites & Moy. Cap.",
+        "Actions Europe du Nord Petites & Moy. Cap.",
+        "Actions France Petites & Moy. Cap."
+      ]
+    },
+    {
+      "key": "actions_us",
+      "label": "Actions États-Unis",
+      "volatility": "actions",
+      "categories": [
+        "Actions Etats-Unis Gdes Cap. \"Value\"",
+        "Actions Etats-Unis Gdes Cap. Croissance",
+        "Actions Etats-Unis Gdes Cap. Mixte",
+        "US Equity Income"
+      ]
+    },
+    {
+      "key": "actions_asie_pacifique",
+      "label": "Actions Asie / Japon",
+      "volatility": "actions",
+      "categories": [
+        "Actions Asie hors Japon",
+        "Actions Asie hors Japon Petites & Moy. Cap.",
+        "Actions Asie-Pacifique avec Japon",
+        "Actions Asie-Pacifique hors Japon",
+        "Japan Large-Cap Blend Equity",
+        "Japan Large-Cap Growth Equity"
+      ]
+    },
+    {
+      "key": "actions_chine",
+      "label": "Actions Chine",
+      "volatility": "actions",
+      "categories": ["Actions Chine", "Actions Chine - A Shares"]
+    },
+    {
+      "key": "actions_emergents",
+      "label": "Actions marchés émergents",
+      "volatility": "actions",
+      "categories": [
+        "Actions Marchés Emergents",
+        "Actions Marchés Emergents Petites & Moy. Cap.",
+        "Actions Inde",
+        "Allocation Marchés Emergents"
+      ]
+    },
+    {
+      "key": "actions_international",
+      "label": "Actions International",
+      "volatility": "actions",
+      "categories": [
+        "Actions International Flex-Cap.",
+        "Actions International Gdes Cap. Croissance",
+        "Actions International Gdes Cap. Mixte",
+        "Actions International Petites Cap.",
+        "Actions International Rendement",
+        "Actions International Chariah Islamique"
+      ]
+    },
+    {
+      "key": "actions_secteur_technologies",
+      "label": "Actions Secteur Technologies",
+      "volatility": "actions",
+      "categories": ["Actions Secteur Technologies"]
+    },
+    {
+      "key": "actions_secteur_sante",
+      "label": "Actions Secteur Santé",
+      "volatility": "actions",
+      "categories": ["Actions Secteur Santé"]
+    },
+    {
+      "key": "actions_secteur_biotechnologie",
+      "label": "Actions Secteur Biotechnologie",
+      "volatility": "actions",
+      "categories": ["Actions Secteur Biotechnologie"]
+    },
+    {
+      "key": "actions_secteur_finance",
+      "label": "Actions Secteur Finance",
+      "volatility": "actions",
+      "categories": ["Actions Secteur Finance"]
+    },
+    {
+      "key": "actions_secteur_eau",
+      "label": "Actions Secteur Eau",
+      "volatility": "actions",
+      "categories": ["Actions Secteur Eau"]
+    },
+    {
+      "key": "actions_secteur_ecologie",
+      "label": "Actions Secteur Ecologie",
+      "volatility": "actions",
+      "categories": ["Actions Secteur Ecologie"]
+    },
+    {
+      "key": "actions_secteur_energies_alternatives",
+      "label": "Actions Secteur Energies Alternatives",
+      "volatility": "actions",
+      "categories": ["Actions Secteur Energies Alternatives"]
+    },
+    {
+      "key": "actions_secteur_materiaux_industrie",
+      "label": "Actions Secteur Matériaux & Industrie",
+      "volatility": "actions",
+      "categories": ["Actions Secteur Matériaux & Industrie"]
+    },
+    {
+      "key": "actions_secteur_metaux_precieux",
+      "label": "Actions Secteur Métaux Précieux",
+      "volatility": "actions",
+      "categories": ["Actions Secteur Métaux Précieux"]
+    },
+    {
+      "key": "actions_secteur_ressources_naturelles",
+      "label": "Actions Secteur Ressources Naturelles",
+      "volatility": "actions",
+      "categories": ["Actions Secteur Ressources Naturelles"]
+    },
+    {
+      "key": "actions_secteur_biens_conso",
+      "label": "Actions Secteur Biens Conso. & Services",
+      "volatility": "actions",
+      "categories": ["Actions Secteur Biens Conso. & Services"]
+    },
+    {
+      "key": "actions_secteur_autres",
+      "label": "Actions Secteur Autres",
+      "volatility": "actions",
+      "categories": ["Actions Secteur Autres"]
+    },
+    {
+      "key": "allocation_prudente",
+      "label": "Allocation prudente",
+      "volatility": "rates",
+      "categories": ["Allocation EUR Prudente", "Allocation EUR Prudente - International"]
+    },
+    {
+      "key": "allocation_moderee",
+      "label": "Allocation modérée",
+      "volatility": "diversified",
+      "categories": [
+        "Allocation EUR Modérée",
+        "Allocation EUR Modérée - International",
+        "Allocation USD Modérée"
+      ]
+    },
+    {
+      "key": "allocation_agressive",
+      "label": "Allocation agressive",
+      "volatility": "actions",
+      "categories": [
+        "Allocation EUR Agressive",
+        "Allocation EUR Agressive - International",
+        "Allocation USD Agressive"
+      ]
+    },
+    {
+      "key": "allocation_flexible",
+      "label": "Allocation flexible",
+      "volatility": "diversified",
+      "categories": ["Allocation EUR Flexible", "Allocation EUR Flexible - International"]
+    },
+    {
+      "key": "allocation_autres",
+      "label": "Allocation Autres",
+      "volatility": "diversified",
+      "categories": ["Allocation Autres"]
+    },
+    {
+      "key": "oblig_etat_euro",
+      "label": "Obligations emprunts d'État euro",
+      "volatility": "rates",
+      "categories": ["Obligations EUR Emprunts d'Etat"]
+    },
+    {
+      "key": "oblig_credit_euro",
+      "label": "Obligations crédit euro",
+      "volatility": "rates",
+      "categories": [
+        "Obligations EUR Emprunts Privés",
+        "Obligations EUR Diversifiées",
+        "Obligations EUR Flexibles"
+      ]
+    },
+    {
+      "key": "oblig_court_terme_euro",
+      "label": "Obligations court terme euro",
+      "volatility": "rates",
+      "categories": [
+        "Obligations EUR Très Court Terme",
+        "Obligations EUR Diversifiées Court Terme",
+        "Obligations EUR Emprunts Privés Court Terme"
+      ]
+    },
+    {
+      "key": "oblig_haut_rendement",
+      "label": "Obligations haut rendement",
+      "volatility": "diversified",
+      "categories": [
+        "Obligations EUR Haut Rendement",
+        "Obligations International Haut Rendement Couvertes en EUR"
+      ]
+    },
+    {
+      "key": "oblig_emergents",
+      "label": "Obligations marchés émergents",
+      "volatility": "diversified",
+      "categories": [
+        "Obligations Marchés Emergents",
+        "Global Emerging Markets Corporate Bond - EUR Hedged"
+      ]
+    },
+    {
+      "key": "oblig_international_flexible",
+      "label": "Obligations internationales flexibles",
+      "volatility": "rates",
+      "categories": [
+        "Obligations Internationales Flexibles",
+        "Obligations Internationales Flexibles Couvertes en EUR",
+        "Obligations Internationales Flexibles Couvertes en USD",
+        "Global Diversified Bond",
+        "Global Diversified Bond - EUR Hedged"
+      ]
+    },
+    {
+      "key": "oblig_inflation",
+      "label": "Obligations indexées inflation",
+      "volatility": "rates",
+      "categories": ["Obligations Internationales Indexées sur l'Inflation Couvertes en EUR"]
+    },
+    {
+      "key": "oblig_echeance",
+      "label": "Obligations à échéance",
+      "volatility": "rates",
+      "categories": ["Obligations à échéance", "Fonds à horizon 2026-2030"]
+    },
+    {
+      "key": "oblig_subordonnees",
+      "label": "Obligations subordonnées",
+      "volatility": "diversified",
+      "categories": ["EUR Subordinated Bond"]
+    },
+    {
+      "key": "oblig_chariah",
+      "label": "Obligations Chariah",
+      "volatility": "rates",
+      "categories": ["Obligations International Chariah Islamique"]
+    },
+    {
+      "key": "convertibles",
+      "label": "Convertibles",
+      "volatility": "diversified",
+      "categories": ["Convertibles Europe", "Convertibles International"]
+    },
+    {
+      "key": "alt_market_neutral",
+      "label": "Alternatif market neutral",
+      "volatility": "rates",
+      "categories": ["Alt - Market Neutral - Actions"]
+    },
+    {
+      "key": "alt_event_driven",
+      "label": "Alternatif event driven",
+      "volatility": "rates",
+      "categories": ["Alt - Event Driven"]
+    },
+    {
+      "key": "alt_long_short",
+      "label": "Alternatif long/short actions",
+      "volatility": "diversified",
+      "categories": [
+        "Alt - Long/Short Actions - Europe",
+        "Alt - Long/Short Actions - International"
+      ]
+    },
+    {
+      "key": "immobilier_indirect",
+      "label": "Immobilier indirect",
+      "volatility": "actions",
+      "categories": ["Immobilier - Indirect Zone Euro"]
+    },
+    {
+      "key": "immobilier_direct",
+      "label": "Immobilier direct",
+      "volatility": "actions",
+      "categories": ["IMMOBILIER - DIRECT AUTRES"]
+    },
+    {
+      "key": "capital_garanti_protege",
+      "label": "Capital garanti / protégé",
+      "volatility": "rates",
+      "categories": ["FONDS A CAPITAL GARANTI", "FONDS A CAPITAL PROTEGE"]
+    }
+  ]
+}

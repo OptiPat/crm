@@ -2,8 +2,9 @@ use crate::uc_comparator::alerts::collect_fund_alerts;
 use crate::uc_comparator::bond_strategy::infer_bond_fund_profile;
 use crate::uc_comparator::eligibility::{categories_match, evaluate_categories, shared_category_label};
 use crate::uc_comparator::normalize::{
-    min_max_higher_better, score_aum_meur, score_drawdown_group, score_perf5_group,
-    score_sharpe_group, score_top10_percent, scores_are_discriminant,
+    min_max_higher_better, min_max_lower_better, score_aum_meur, score_category_rank,
+    score_drawdown_group, score_perf5_group, score_sharpe_group, score_top10_percent,
+    scores_are_discriminant,
 };
 use crate::uc_comparator::scoring_profile::{
     criteria_for_profile, resolve_scoring_profile, CriterionDef, Pilier, ScoringProfile,
@@ -106,6 +107,7 @@ fn criterion_weight(def: &CriterionDef, version: UcScoringVersion) -> f64 {
     match version {
         UcScoringVersion::V1 => def.weight_v1,
         UcScoringVersion::V15 => def.weight_v15,
+        UcScoringVersion::V2 => def.weight_v2,
     }
 }
 
@@ -117,6 +119,9 @@ fn extract_raw_values(funds: &[UcFundInput], key: &str) -> Vec<Option<f64>> {
             "perf_3ans" => f.perf_3ans,
             "perf_5ans" => f.perf_5ans,
             "sharpe_3y" => f.sharpe_3y,
+            "vol_3ans" => f.vol_3ans,
+            "worst_year" => f.worst_year_perf,
+            "rang_categorie" => f.category_rank_avg,
             "max_drawdown" => f.max_drawdown_3y,
             "aum" => f.aum_meur,
             "top10" => f.top10_percent,
@@ -127,9 +132,13 @@ fn extract_raw_values(funds: &[UcFundInput], key: &str) -> Vec<Option<f64>> {
 
 fn compute_scores_for_criterion(def: &CriterionDef, raw: &[Option<f64>]) -> Vec<Option<f64>> {
     match def.key {
-        "perf_1an" | "perf_3ans" => min_max_higher_better(raw, def.min_significant_delta),
+        "perf_1an" | "perf_3ans" | "worst_year" => {
+            min_max_higher_better(raw, def.min_significant_delta)
+        }
         "perf_5ans" => score_perf5_group(raw, def.min_significant_delta),
         "sharpe_3y" => score_sharpe_group(raw),
+        "vol_3ans" => min_max_lower_better(raw, def.min_significant_delta),
+        "rang_categorie" => raw.iter().map(|v| v.map(score_category_rank)).collect(),
         "max_drawdown" => score_drawdown_group(raw),
         "aum" => raw.iter().map(|v| v.map(score_aum_meur)).collect(),
         "top10" => raw.iter().map(|v| v.map(score_top10_percent)).collect(),
@@ -245,6 +254,7 @@ fn build_ranked_results(
                 alerts: collect_fund_alerts(fund, profile),
                 bond_credit_quality,
                 bond_strategy,
+                category_alpha_avg: fund.category_alpha_avg,
             }
         })
         .collect()
@@ -316,6 +326,7 @@ fn build_category_mismatch_result(
                 alerts: collect_fund_alerts(f, profile),
                 bond_credit_quality,
                 bond_strategy,
+                category_alpha_avg: f.category_alpha_avg,
             }
         })
         .collect();
@@ -357,6 +368,7 @@ fn build_insufficient_data_result(
                 alerts: collect_fund_alerts(f, profile),
                 bond_credit_quality,
                 bond_strategy,
+                category_alpha_avg: f.category_alpha_avg,
             }
         })
         .collect();
@@ -399,9 +411,11 @@ mod tests {
             perf_5ans: Some(p5),
             perf_ytd: None,
             sharpe_3y: Some(sharpe),
+            vol_3ans: None,
             top10_percent: Some(top10),
             max_drawdown_3y: None,
             aum_meur: None,
+            ..Default::default()
         }
     }
 
@@ -422,9 +436,11 @@ mod tests {
             perf_5ans: None,
             perf_ytd: None,
             sharpe_3y: Some(sharpe),
+            vol_3ans: None,
             top10_percent: Some(94.6),
             max_drawdown_3y: None,
             aum_meur: None,
+            ..Default::default()
         }
     }
 
@@ -587,9 +603,11 @@ mod tests {
             perf_5ans: Some(88.9),
             perf_ytd: None,
             sharpe_3y: Some(1.20),
+            vol_3ans: None,
             top10_percent: None,
             max_drawdown_3y: None,
             aum_meur: None,
+            ..Default::default()
         };
         let pictet = UcFundInput {
             isin: "LU1279334210".to_string(),
@@ -601,9 +619,11 @@ mod tests {
             perf_5ans: Some(78.3),
             perf_ytd: None,
             sharpe_3y: Some(1.23),
+            vol_3ans: None,
             top10_percent: None,
             max_drawdown_3y: None,
             aum_meur: None,
+            ..Default::default()
         };
         let sextant = UcFundInput {
             isin: "FR0011050863".to_string(),
@@ -615,9 +635,11 @@ mod tests {
             perf_5ans: Some(5.4),
             perf_ytd: None,
             sharpe_3y: Some(-0.22),
+            vol_3ans: None,
             top10_percent: None,
             max_drawdown_3y: None,
             aum_meur: None,
+            ..Default::default()
         };
 
         let result = run_comparison(
@@ -666,9 +688,11 @@ mod tests {
             perf_5ans: Some(78.3),
             perf_ytd: None,
             sharpe_3y: Some(1.23),
+            vol_3ans: None,
             top10_percent: Some(45.7),
             max_drawdown_3y: None,
             aum_meur: None,
+            ..Default::default()
         };
         let fidelity = UcFundInput {
             isin: "LU0099574567".to_string(),
@@ -680,9 +704,11 @@ mod tests {
             perf_5ans: Some(88.9),
             perf_ytd: None,
             sharpe_3y: Some(1.20),
+            vol_3ans: None,
             top10_percent: Some(45.1),
             max_drawdown_3y: None,
             aum_meur: None,
+            ..Default::default()
         };
 
         let result = run_comparison(&[pictet, fidelity], UcScoringVersion::V1).expect("comparison");
@@ -691,5 +717,99 @@ mod tests {
         assert_eq!(result.winner_isin.as_deref(), Some("LU1279334210"));
         let gap = result.score_gap.expect("gap");
         assert!(gap > TIE_SCORE_GAP, "gap={gap}");
+    }
+
+    fn v2_candidate(
+        isin: &str,
+        perf: f64,
+        sharpe: f64,
+        vol: f64,
+        worst_year: f64,
+        rank: Option<f64>,
+    ) -> UcFundInput {
+        UcFundInput {
+            isin: isin.to_string(),
+            nom: format!("Fonds {isin}"),
+            categorie: Some("Actions Europe".to_string()),
+            sri: Some(5),
+            perf_1an: Some(perf),
+            perf_3ans: Some(perf * 3.0),
+            perf_5ans: Some(perf * 5.0),
+            sharpe_3y: Some(sharpe),
+            vol_3ans: Some(vol),
+            top10_percent: Some(40.0),
+            worst_year_perf: Some(worst_year),
+            category_rank_avg: rank,
+            ..Default::default()
+        }
+    }
+
+    /// Le Sharpe pesait 45 % en v1 : deux fonds au Sharpe voisin y étaient déclarés à égalité
+    /// même si l'un avait divisé par deux la perte de sa pire année.
+    #[test]
+    fn v2_departage_sur_le_risque_quand_les_perfs_se_valent() {
+        let calme = v2_candidate("FR001", 10.0, 0.82, 9.0, -8.0, None);
+        let heurte = v2_candidate("FR002", 10.4, 0.80, 18.0, -31.0, None);
+
+        let v1 = run_comparison(&[calme.clone(), heurte.clone()], UcScoringVersion::V1)
+            .expect("comparison v1");
+        assert_eq!(v1.verdict, UcVerdict::Tie);
+
+        let v2 = run_comparison(&[calme, heurte], UcScoringVersion::V2).expect("comparison v2");
+        assert_eq!(v2.verdict, UcVerdict::WinnerDeclared);
+        assert_eq!(v2.winner_isin.as_deref(), Some("FR001"));
+    }
+
+    #[test]
+    fn v2_note_le_rang_categorie_en_absolu() {
+        let regulier = v2_candidate("FR001", 10.0, 0.80, 12.0, -20.0, Some(12.0));
+        let irregulier = v2_candidate("FR002", 10.0, 0.80, 12.0, -20.0, Some(78.0));
+
+        let result = run_comparison(&[regulier, irregulier], UcScoringVersion::V2)
+            .expect("comparison");
+        let rang = result
+            .criteria
+            .iter()
+            .find(|c| c.key == "rang_categorie")
+            .expect("critère rang");
+        assert!(rang.available && rang.discriminant);
+        // Échelle absolue : le rang 12 vaut ~89, le rang 78 ~22. Pas de 0 contre 100.
+        assert!((rang.scores[0] - 88.9).abs() < 0.5, "{:?}", rang.scores);
+        assert!((rang.scores[1] - 22.2).abs() < 0.5, "{:?}", rang.scores);
+        assert_eq!(result.winner_isin.as_deref(), Some("FR001"));
+    }
+
+    /// Le rang vient du web : son absence doit redistribuer son poids, pas bloquer la comparaison.
+    #[test]
+    fn v2_reste_exploitable_sans_rang_categorie() {
+        let result = run_comparison(
+            &[
+                v2_candidate("FR001", 12.0, 0.90, 10.0, -9.0, None),
+                v2_candidate("FR002", 6.0, 0.40, 17.0, -28.0, None),
+            ],
+            UcScoringVersion::V2,
+        )
+        .expect("comparison");
+        assert_eq!(result.verdict, UcVerdict::WinnerDeclared);
+        assert!(result.confidence_index >= 0.70, "{}", result.confidence_index);
+    }
+
+    #[test]
+    fn v2_neutralise_un_ecart_de_volatilite_insignifiant() {
+        let result = run_comparison(
+            &[
+                v2_candidate("FR001", 10.0, 0.80, 12.0, -20.0, None),
+                v2_candidate("FR002", 10.0, 0.80, 12.4, -20.0, None),
+            ],
+            UcScoringVersion::V2,
+        )
+        .expect("comparison");
+        let vol = result
+            .criteria
+            .iter()
+            .find(|c| c.key == "vol_3ans")
+            .expect("critère volatilité");
+        assert!(!vol.discriminant, "{:?}", vol.scores);
+        assert_eq!(result.verdict, UcVerdict::Tie);
     }
 }

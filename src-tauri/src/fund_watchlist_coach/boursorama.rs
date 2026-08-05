@@ -80,6 +80,168 @@ pub fn cours_url(symbol: &str) -> String {
     format!("{BOURSORAMA_BASE}/bourse/opcvm/cours/{symbol}/")
 }
 
+pub fn performances_risques_url(symbol: &str) -> String {
+    format!("{BOURSORAMA_BASE}/bourse/opcvm/cours/performances-risques/{symbol}/")
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BoursoramaCategoryYear {
+    pub year: String,
+    pub fund: Option<f64>,
+    pub category: Option<f64>,
+    /// Rang Morningstar dans la catégorie : 1 = meilleur, 100 = pire.
+    pub rank: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BoursoramaCategoryHistory {
+    pub years: Vec<BoursoramaCategoryYear>,
+}
+
+/// Années minimales pour qu'un rang moyen traduise une régularité plutôt qu'un millésime.
+const CATEGORY_RANK_MIN_YEARS: usize = 3;
+
+impl BoursoramaCategoryHistory {
+    /// Moyenne simple des rangs disponibles : c'est la régularité du gérant qu'on cherche à
+    /// mesurer, pas sa dernière année.
+    pub fn rank_avg(&self) -> Option<f64> {
+        let ranks: Vec<f64> = self
+            .years
+            .iter()
+            .filter_map(|y| y.rank)
+            .filter(|r| r.is_finite())
+            .collect();
+        if ranks.len() < CATEGORY_RANK_MIN_YEARS {
+            return None;
+        }
+        Some(ranks.iter().sum::<f64>() / ranks.len() as f64)
+    }
+
+    /// Écart annuel moyen face à la catégorie (alpha), sur les années où les deux sont connues.
+    pub fn alpha_avg(&self) -> Option<f64> {
+        let deltas: Vec<f64> = self
+            .years
+            .iter()
+            .filter_map(|y| Some(y.fund? - y.category?))
+            .filter(|d| d.is_finite())
+            .collect();
+        if deltas.is_empty() {
+            return None;
+        }
+        Some(deltas.iter().sum::<f64>() / deltas.len() as f64)
+    }
+}
+
+pub fn fetch_category_history(
+    client: &Client,
+    symbol: &str,
+) -> Result<Option<BoursoramaCategoryHistory>, String> {
+    let html = fetch_html(client, &performances_risques_url(symbol))?;
+    Ok(parse_category_history_html(&html))
+}
+
+/// Tableau « performances annuelles des 5 dernières années » : lignes Fonds / Catégorie / Rang.
+/// Les blocs volatilité et mesure de risque de la même page sont vides hors session BoursoBank,
+/// d'où le repli sur la pire année civile pour juger le risque.
+pub fn parse_category_history_html(html: &str) -> Option<BoursoramaCategoryHistory> {
+    let table = find_annual_history_table(html)?;
+    let years = parse_annual_history_years(&table)?;
+    let fund = parse_annual_history_row(&table, "Fonds");
+    let category = parse_annual_history_row(&table, "Catégorie");
+    let rank = parse_annual_history_row(&table, "Rang");
+    if fund.is_none() && category.is_none() && rank.is_none() {
+        return None;
+    }
+    let cell = |row: &Option<Vec<Option<f64>>>, idx: usize| -> Option<f64> {
+        row.as_ref().and_then(|values| values.get(idx).copied().flatten())
+    };
+    Some(BoursoramaCategoryHistory {
+        years: years
+            .into_iter()
+            .enumerate()
+            .map(|(idx, year)| BoursoramaCategoryYear {
+                year,
+                fund: cell(&fund, idx),
+                category: cell(&category, idx),
+                rank: cell(&rank, idx),
+            })
+            .collect(),
+    })
+}
+
+fn find_annual_history_table(html: &str) -> Option<String> {
+    let anchor = html
+        .find("<div id=\"historical\"")
+        .or_else(|| html.find("id=\"historical\""))?;
+    let rest = &html[anchor..];
+    let table_start = rest.find("<table")?;
+    let table_end = rest[table_start..].find("</table>")? + table_start + "</table>".len();
+    Some(rest[table_start..table_end].to_string())
+}
+
+fn parse_annual_history_years(table_fragment: &str) -> Option<Vec<String>> {
+    let thead_end = table_fragment.find("</thead>")?;
+    let years: Vec<String> = table_fragment[..thead_end]
+        .split("<th")
+        .skip(1)
+        .map(cell_text)
+        .filter(|text| text.len() == 4 && text.chars().all(|c| c.is_ascii_digit()))
+        .collect();
+    if years.is_empty() {
+        None
+    } else {
+        Some(years)
+    }
+}
+
+fn parse_annual_history_row(table_fragment: &str, label: &str) -> Option<Vec<Option<f64>>> {
+    let tbody_start = table_fragment.find("<tbody")?;
+    for row in table_fragment[tbody_start..].split("<tr").skip(1) {
+        let row = &row[..row.find("</tr>").unwrap_or(row.len())];
+        let Some(header) = row.split("<th").nth(1).map(cell_text) else {
+            continue;
+        };
+        if header != label {
+            continue;
+        }
+        return Some(
+            row.split("<td")
+                .skip(1)
+                .map(|cell| parse_french_percent(&cell_text(cell)))
+                .collect(),
+        );
+    }
+    None
+}
+
+/// Contenu d'une cellule, borné à sa propre balise de fermeture : sans cette borne, le texte de
+/// l'en-tête de ligne débordait sur les cellules de valeurs qui la suivent.
+fn cell_text(fragment: &str) -> String {
+    let end = ["</th>", "</td>"]
+        .iter()
+        .filter_map(|tag| fragment.find(tag))
+        .min()
+        .unwrap_or(fragment.len());
+    strip_tags_text(&fragment[..end])
+}
+
+/// Contenu textuel d'un fragment, balises internes retirées : les en-têtes d'année sont dans un
+/// `<h3>` imbriqué, que `extract_tag_text` ne sait pas traverser.
+fn strip_tags_text(fragment: &str) -> String {
+    let start = fragment.find('>').map(|i| i + 1).unwrap_or(0);
+    let mut text = String::new();
+    let mut depth = 0usize;
+    for ch in fragment[start..].chars() {
+        match ch {
+            '<' => depth += 1,
+            '>' => depth = depth.saturating_sub(1),
+            _ if depth == 0 => text.push(ch),
+            _ => {}
+        }
+    }
+    decode_html_entities(text.trim())
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct BoursoramaPerformancesSnapshot {
     pub perf_ytd: Option<f64>,
@@ -644,5 +806,68 @@ mod tests {
         assert_eq!(parsed.category.perf_1an, Some(2.73));
         assert_eq!(parsed.fund.perf_3ans, Some(122.56));
         assert_eq!(parsed.category.perf_5ans, Some(31.47));
+    }
+
+    fn category_history_fixture() -> BoursoramaCategoryHistory {
+        parse_category_history_html(include_str!(
+            "fixtures/boursorama_performances_risques_minimal.html"
+        ))
+        .expect("historique catégorie")
+    }
+
+    #[test]
+    fn parse_category_history_extracts_years_fund_category_and_rank() {
+        let history = category_history_fixture();
+        assert_eq!(history.years.len(), 5);
+        let first = &history.years[0];
+        assert_eq!(first.year, "2021");
+        assert_eq!(first.fund, Some(-0.88));
+        assert_eq!(first.category, Some(9.41));
+        assert_eq!(first.rank, Some(99.0));
+        let last = &history.years[4];
+        assert_eq!(last.year, "2025");
+        assert_eq!(last.fund, Some(12.12));
+        // Catégorie non encore publiée pour l'année en cours.
+        assert_eq!(last.category, None);
+        assert_eq!(last.rank, Some(7.0));
+    }
+
+    #[test]
+    fn rank_avg_averages_available_years() {
+        let avg = category_history_fixture().rank_avg().expect("rang moyen");
+        assert!((avg - 57.4).abs() < 0.01, "rang moyen inattendu : {avg}");
+    }
+
+    #[test]
+    fn rank_avg_needs_three_years_to_mean_regularity() {
+        let history = BoursoramaCategoryHistory {
+            years: vec![
+                BoursoramaCategoryYear {
+                    year: "2024".into(),
+                    fund: Some(5.0),
+                    category: Some(4.0),
+                    rank: Some(20.0),
+                },
+                BoursoramaCategoryYear {
+                    year: "2025".into(),
+                    fund: Some(6.0),
+                    category: Some(4.0),
+                    rank: Some(10.0),
+                },
+            ],
+        };
+        assert_eq!(history.rank_avg(), None);
+    }
+
+    #[test]
+    fn alpha_avg_ignores_years_without_category() {
+        let alpha = category_history_fixture().alpha_avg().expect("alpha");
+        // (-0,88-9,41) + (-9,38+12,94) + (2,20-8,34) + (7,06-8,53) sur 4 années publiées.
+        assert!((alpha - (-3.585)).abs() < 0.01, "alpha inattendu : {alpha}");
+    }
+
+    #[test]
+    fn parse_category_history_returns_none_without_the_block() {
+        assert_eq!(parse_category_history_html("<html><body/></html>"), None);
     }
 }

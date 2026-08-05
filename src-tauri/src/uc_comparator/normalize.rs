@@ -38,6 +38,34 @@ pub fn scores_are_discriminant(scores: &[f64]) -> bool {
     max - min > SCORE_DISCRIMINANT_EPSILON
 }
 
+/// Min-max relatif « plus bas = mieux » (volatilité). Écart brut sous `min_significant_delta`
+/// → 50 pour tous : deux fonds séparés par 0,3 point de volatilité ne se départagent pas.
+pub fn min_max_lower_better(
+    values: &[Option<f64>],
+    min_significant_delta: f64,
+) -> Vec<Option<f64>> {
+    let present: Vec<f64> = values.iter().filter_map(|v| *v).collect();
+    if present.is_empty() {
+        return vec![None; values.len()];
+    }
+    let min = present.iter().copied().fold(f64::INFINITY, f64::min);
+    let max = present.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    if max - min < min_significant_delta {
+        return values.iter().map(|raw| raw.map(|_| 50.0)).collect();
+    }
+    values
+        .iter()
+        .map(|raw| raw.map(|v| min_max_value_inverted(v, min, max)))
+        .collect()
+}
+
+/// Rang Morningstar dans la catégorie : déjà un centile (1 = meilleur, 100 = pire), donc noté en
+/// absolu. Pas de min-max, qui transformerait deux rangs voisins en 0 et 100.
+pub fn score_category_rank(rank: f64) -> f64 {
+    let clamped = rank.clamp(1.0, 100.0);
+    ((100.0 - clamped) / 99.0) * 100.0
+}
+
 /// Min-max relatif inversé sur |DD| (plus petit drawdown = mieux).
 pub fn min_max_drawdown(values: &[Option<f64>]) -> Vec<Option<f64>> {
     let abs_vals: Vec<Option<f64>> = values

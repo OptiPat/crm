@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::database::models::FundWatchlistEntry;
 
 /// Données d'entrée normalisées pour un fonds dans une comparaison UC.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UcFundInput {
     pub isin: String,
     pub nom: String,
@@ -14,9 +15,33 @@ pub struct UcFundInput {
     pub perf_5ans: Option<f64>,
     pub perf_ytd: Option<f64>,
     pub sharpe_3y: Option<f64>,
+    /// Volatilité 3 ans mesurée (import Cristalliance) — décide du barème, cf. `scoring_profile`.
+    #[serde(default)]
+    pub vol_3ans: Option<f64>,
     pub top10_percent: Option<f64>,
     pub max_drawdown_3y: Option<f64>,
     pub aum_meur: Option<f64>,
+    /// Pire performance civile annuelle observée — substitut vérifiable du max drawdown, que
+    /// Boursorama réserve à ses clients.
+    #[serde(default)]
+    pub worst_year_perf: Option<f64>,
+    /// Rang Morningstar moyen dans la catégorie (1 = meilleur, 100 = pire).
+    #[serde(default)]
+    pub category_rank_avg: Option<f64>,
+    #[serde(default)]
+    pub category_alpha_avg: Option<f64>,
+}
+
+/// Années minimales pour que la pire année civile mesure un risque plutôt qu'un accident isolé.
+const WORST_YEAR_MIN_YEARS: usize = 3;
+
+fn worst_year_perf(perf_annual: &Option<HashMap<String, f64>>) -> Option<f64> {
+    let years = perf_annual.as_ref()?;
+    let values: Vec<f64> = years.values().copied().filter(|v| v.is_finite()).collect();
+    if values.len() < WORST_YEAR_MIN_YEARS {
+        return None;
+    }
+    values.into_iter().reduce(f64::min)
 }
 
 impl UcFundInput {
@@ -31,9 +56,13 @@ impl UcFundInput {
             perf_5ans: entry.perf_5ans,
             perf_ytd: entry.perf_ytd,
             sharpe_3y: entry.sharpe_ratio,
+            vol_3ans: entry.vol_3ans,
             top10_percent: market.top10_percent,
             max_drawdown_3y: market.max_drawdown_3y,
             aum_meur: market.aum_meur,
+            worst_year_perf: worst_year_perf(&entry.perf_annual),
+            category_rank_avg: market.category_rank_avg,
+            category_alpha_avg: market.category_alpha_avg,
         }
     }
 }
@@ -43,6 +72,10 @@ pub struct UcMarketCacheRow {
     pub top10_percent: Option<f64>,
     pub max_drawdown_3y: Option<f64>,
     pub aum_meur: Option<f64>,
+    #[serde(default)]
+    pub category_rank_avg: Option<f64>,
+    #[serde(default)]
+    pub category_alpha_avg: Option<f64>,
 }
 
 impl Default for UcMarketCacheRow {
@@ -51,6 +84,8 @@ impl Default for UcMarketCacheRow {
             top10_percent: None,
             max_drawdown_3y: None,
             aum_meur: None,
+            category_rank_avg: None,
+            category_alpha_avg: None,
         }
     }
 }
@@ -61,6 +96,7 @@ pub enum UcScoringVersion {
     V1,
     #[serde(rename = "v1.5")]
     V15,
+    V2,
 }
 
 impl UcScoringVersion {
@@ -68,6 +104,7 @@ impl UcScoringVersion {
         match self {
             Self::V1 => "v1",
             Self::V15 => "v1.5",
+            Self::V2 => "v2",
         }
     }
 
@@ -75,6 +112,7 @@ impl UcScoringVersion {
         match raw.trim() {
             "v1" | "V1" => Some(Self::V1),
             "v1.5" | "V1.5" => Some(Self::V15),
+            "v2" | "V2" => Some(Self::V2),
             _ => None,
         }
     }
@@ -119,6 +157,11 @@ pub struct UcFundResultScore {
     pub bond_credit_quality: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bond_strategy: Option<String>,
+    /// Écart annuel moyen face à la catégorie. Hors classement — deux fonds d'une même famille
+    /// partagent leur référence, la soustraire ne changerait pas l'ordre — mais il dit si le
+    /// gagnant bat son marché ou s'il est seulement le moins en retard.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category_alpha_avg: Option<f64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -159,6 +202,13 @@ pub struct UcFundMetricsSnapshot {
     pub max_drawdown_3y: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub aum_meur: Option<f64>,
+    // Critères du barème v2 : sans eux le tableau affiche un score sans la valeur qui le motive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vol_3ans: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worst_year_perf: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category_rank_avg: Option<f64>,
 }
 
 impl UcFundMetricsSnapshot {
@@ -173,6 +223,9 @@ impl UcFundMetricsSnapshot {
             top10_percent: fund.top10_percent,
             max_drawdown_3y: fund.max_drawdown_3y,
             aum_meur: fund.aum_meur,
+            vol_3ans: fund.vol_3ans,
+            worst_year_perf: fund.worst_year_perf,
+            category_rank_avg: fund.category_rank_avg,
         }
     }
 }

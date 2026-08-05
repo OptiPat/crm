@@ -1,9 +1,11 @@
 import type { FundWatchlistEntry } from "@/lib/api/tauri-fund-watchlist";
 import { computeFundWatchlistShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-short-term-score";
 import {
+  FUND_DIAGNOSTIC_ABSOLUTE_THRESHOLDS_BY_CLASS,
   FUND_DIAGNOSTIC_THRESHOLDS_BY_CLASS,
   FUND_DIAGNOSTIC_VOLATILITY_CLASS_LABELS,
-  getFundDiagnosticDeltaThresholds,
+  getFundDiagnosticDeltaThresholdsFromMeasure,
+  isFundCategoryExcludedFromDiagnostic,
   isSameFundWatchlistPeerCategory,
   normalizeFundWatchlistCategory,
   type FundDiagnosticVolatilityClass,
@@ -73,8 +75,12 @@ export const FUND_DIAGNOSTIC_DELTA_SURVEILLANCE_PTS =
   FUND_DIAGNOSTIC_THRESHOLDS_BY_CLASS.actions.surveillance;
 export const FUND_DIAGNOSTIC_DELTA_ARBITRAGE_PTS =
   FUND_DIAGNOSTIC_THRESHOLDS_BY_CLASS.actions.arbitrage;
-/** Pairs requis **hors le fonds lui-même** pour que la médiane watchlist fasse référence. */
-export const FUND_DIAGNOSTIC_MIN_PEERS = 2;
+/**
+ * Pairs requis **hors le fonds lui-même** pour que la médiane watchlist fasse référence. Avec
+ * deux pairs, la « médiane » n'était que la moyenne de deux fonds : un écart de plusieurs points
+ * s'affichait avec un aplomb que le calcul ne justifiait pas.
+ */
+export const FUND_DIAGNOSTIC_MIN_PEERS = 4;
 
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -86,7 +92,7 @@ function median(values: number[]): number | null {
   return sorted[mid];
 }
 
-/** Horizons pris en compte pour la faiblesse multi-périodes (seuil &lt; −3 %). */
+/** Horizons pris en compte pour la faiblesse multi-périodes (seuil selon le profil de volatilité). */
 export const FUND_DIAGNOSTIC_WEAK_HORIZON_LABELS = [
   "1 mois",
   "3 mois",
@@ -95,7 +101,7 @@ export const FUND_DIAGNOSTIC_WEAK_HORIZON_LABELS = [
   "5 ans",
 ] as const;
 
-function listWeakHorizonLabels(entry: FundWatchlistEntry): string[] {
+function listWeakHorizonLabels(entry: FundWatchlistEntry, threshold: number): string[] {
   const pairs: [string, number | null | undefined][] = [
     ["1 mois", entry.perf_1mois],
     ["3 mois", entry.perf_3mois],
@@ -104,12 +110,8 @@ function listWeakHorizonLabels(entry: FundWatchlistEntry): string[] {
     ["5 ans", entry.perf_5ans],
   ];
   return pairs
-    .filter(([, value]) => value != null && value < -3)
+    .filter(([, value]) => value != null && value < threshold)
     .map(([label]) => label);
-}
-
-function countWeakHorizons(entry: FundWatchlistEntry): number {
-  return listWeakHorizonLabels(entry).length;
 }
 
 function round1(n: number): number {
@@ -153,7 +155,10 @@ export function computeFundDiagnostic(
   const triggerReasons: string[] = [];
   const contextReasons: string[] = [];
   const categoryKey = normalizeFundWatchlistCategory(entry.categorie);
-  const thresholds = getFundDiagnosticDeltaThresholds(entry.categorie);
+  const thresholds = getFundDiagnosticDeltaThresholdsFromMeasure(
+    entry.vol_3ans,
+    entry.categorie
+  );
 
   if (!categoryKey) {
     return emptyDiagnostic({
@@ -198,7 +203,8 @@ export function computeFundDiagnostic(
     boursoramaRef != null
       ? benchmark?.label ?? "Catégorie Boursorama"
       : peerPerfs.length >= FUND_DIAGNOSTIC_MIN_PEERS
-        ? "médiane catégorie (watchlist)"
+        ? // Le nombre de pairs dit sur quoi l'écart repose : 4 fonds ou 30 ne se lisent pas pareil.
+          `médiane catégorie (watchlist, ${peerPerfs.length} fonds)`
         : null;
   const referenceValue = boursoramaRef ?? peerMedian;
 
@@ -235,7 +241,9 @@ export function computeFundDiagnostic(
     );
   }
 
-  const weakHorizons = countWeakHorizons(entry);
+  const absolute = FUND_DIAGNOSTIC_ABSOLUTE_THRESHOLDS_BY_CLASS[thresholds.volatilityClass];
+  const weakLabels = listWeakHorizonLabels(entry, absolute.weakHorizon);
+  const weakHorizons = weakLabels.length;
   const ct = computeFundWatchlistShortTermScore(entry);
   const sharpe = entry.sharpe_ratio;
   const m1 = entry.perf_1mois;
@@ -243,11 +251,14 @@ export function computeFundDiagnostic(
   const y1 = entry.perf_1an;
 
   const marketCorrection =
-    m1 != null && ytd != null && m1 <= -5 && ytd >= 10;
+    m1 != null && ytd != null && m1 <= absolute.correction && ytd >= absolute.solidYear;
   const shortTermRespiration = ct != null && ct < 0;
+  // Devancer sa référence sur un an dit que le repli vient du marché, pas du fonds : la
+  // faiblesse absolue devient alors du contexte, elle ne déclenche plus de surveillance.
+  const aheadOfReference = delta > 0;
 
   if (marketCorrection) {
-    triggerReasons.push("Correction 1 mois avec YTD encore solide");
+    contextReasons.push("Correction 1 mois avec YTD encore solide");
   }
 
   if (shortTermRespiration) {
@@ -255,10 +266,12 @@ export function computeFundDiagnostic(
   }
 
   if (weakHorizons >= 2) {
-    const weakLabels = listWeakHorizonLabels(entry);
-    triggerReasons.push(
-      `Faiblesse sur ${weakHorizons} horizons (${weakLabels.join(", ")})`
-    );
+    const label = `Faiblesse sur ${weakHorizons} horizons (${weakLabels.join(", ")})`;
+    if (aheadOfReference) {
+      contextReasons.push(`${label} — mais au-dessus de sa référence`);
+    } else {
+      triggerReasons.push(label);
+    }
   }
 
   const durableWeakness =
@@ -278,12 +291,7 @@ export function computeFundDiagnostic(
     });
   }
 
-  if (
-    delta <= thresholds.arbitrage ||
-    delta <= thresholds.surveillance ||
-    marketCorrection ||
-    weakHorizons >= 2
-  ) {
+  if (delta <= thresholds.surveillance || (weakHorizons >= 2 && !aheadOfReference)) {
     appendSharpeAmplifier(triggerReasons, sharpe);
     return emptyDiagnostic({
       status: "sous_surveillance",
@@ -323,6 +331,8 @@ export function buildFundWatchlistDiagnostics(
 ): Map<string, FundDiagnostic> {
   const map = new Map<string, FundDiagnostic>();
   for (const entry of entries) {
+    // Absent de la map = aucun badge, plutôt qu'un badge faux (cf. FCPR).
+    if (isFundCategoryExcludedFromDiagnostic(entry.categorie)) continue;
     map.set(
       entry.isin,
       computeFundDiagnostic(entry, entries, benchmarks?.get(entry.isin))

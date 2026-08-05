@@ -222,10 +222,13 @@ impl super::Database {
                 // perf 1 an bouge, l'écart affiché comparerait deux photos décalées : on périme
                 // la référence, le diagnostic retombe sur la médiane watchlist (fraîche, issue du
                 // même import) jusqu'à la prochaine synchronisation Boursorama.
+                // L'historique annuel subit le même décalage : le comparateur en tire le rang de
+                // catégorie et l'alpha, qui décriraient un fonds dont les performances ont bougé.
                 if perf_1an_changed(previous_perf_1an, row.perf_1an) {
                     tx.execute(
                         "UPDATE fund_watchlist_market_cache
-                            SET benchmark_json = NULL
+                            SET benchmark_json = NULL,
+                                category_history_json = NULL
                           WHERE isin = ?1",
                         params![&isin],
                     )?;
@@ -395,12 +398,21 @@ mod tests {
             .and_then(|row| row.benchmark_json)
     }
 
+    fn cached_category_history(db: &Database, isin: &str) -> Option<String> {
+        db.get_fund_watchlist_market_cache_bulk(&[isin.to_string()])
+            .unwrap()
+            .into_iter()
+            .next()
+            .and_then(|row| row.category_history_json)
+    }
+
     fn seed_benchmark(db: &Database, isin: &str) {
         db.upsert_fund_watchlist_market_cache_boursorama(
             isin,
             Some(40.0),
             None,
             Some(r#"{"category":{"perf_1an":12.0}}"#),
+            Some(r#"{"years":[{"year":"2024","fund":8.0,"category":6.0,"rank":30.0}]}"#),
         )
         .unwrap();
     }
@@ -415,6 +427,7 @@ mod tests {
             .unwrap();
         seed_benchmark(&db, "FR0010135103");
         assert!(cached_benchmark(&db, "FR0010135103").is_some());
+        assert!(cached_category_history(&db, "FR0010135103").is_some());
 
         let mut moved = row;
         moved.perf_1an = Some(9.4);
@@ -422,6 +435,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(cached_benchmark(&db, "FR0010135103"), None);
+        // Le rang de catégorie et l'alpha du comparateur viennent de cette série annuelle.
+        assert_eq!(cached_category_history(&db, "FR0010135103"), None);
     }
 
     /// Réimporter le même fichier ne doit pas jeter des références encore valables.
@@ -440,6 +455,7 @@ mod tests {
             .unwrap();
 
         assert!(cached_benchmark(&db, "FR0010135103").is_some());
+        assert!(cached_category_history(&db, "FR0010135103").is_some());
     }
 
     /// Épingler un favori touche `updated_at` mais ne change aucune perf : rien à périmer.

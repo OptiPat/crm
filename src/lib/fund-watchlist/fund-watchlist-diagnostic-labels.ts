@@ -29,7 +29,9 @@ export function humanizeDiagnosticReason(reason: string): string {
   const weak = reason.match(WEAK_HORIZONS_RE);
   if (weak) {
     const horizons = weak[2] ?? "";
-    return `Perf. inférieure à −3 % sur ${weak[1]} horizon(s) : ${horizons}`;
+    // Pas de seuil chiffré ici : il dépend de la volatilité du fonds (−5 % en actions, −1,5 % sur
+    // un fonds prudent). L'annoncer en dur affichait un chiffre faux.
+    return `Recul marqué sur ${weak[1]} horizon(s) : ${horizons}`;
   }
   const delta = reason.match(DELTA_RE);
   if (delta) {

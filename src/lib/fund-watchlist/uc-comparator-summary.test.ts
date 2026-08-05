@@ -3,6 +3,7 @@ import type { CompareResponse } from "@/lib/api/tauri-uc-comparator";
 import {
   buildUcComparisonNarrative,
   effectiveCriterionWeight,
+  formatCriterionRawValue,
   formatCriterionWeightLabel,
   formatNonDiscriminantNotice,
   isCriterionDiscriminant,
@@ -105,6 +106,21 @@ describe("uc-comparator-summary", () => {
     );
   });
 
+  it("affiche la valeur brute des critères du barème v2", () => {
+    // Sans ces cas, le tableau montrait un score sur trois critères et un tiret à la place
+    // de la mesure qui le justifie.
+    const metrics = {
+      isin: "LU1279334210",
+      vol_3ans: 17.42,
+      worst_year_perf: -28.6,
+      category_rank_avg: 23.4,
+    };
+    expect(formatCriterionRawValue("vol_3ans", metrics)).toBe("17,4 %");
+    expect(formatCriterionRawValue("worst_year", metrics)).toContain("28,6");
+    expect(formatCriterionRawValue("rang_categorie", metrics)).toBe("23/100");
+    expect(formatCriterionRawValue("vol_3ans", { isin: "X" })).toBe("—");
+  });
+
   it("ne garde que les alertes vraiment communes", () => {
     const alerts = sharedFundAlerts(pictetFidelityResponse.results);
     expect(alerts).toEqual(["⚠️ Momentum YTD en décrochage"]);
@@ -136,6 +152,26 @@ describe("uc-comparator-summary", () => {
     expect(text).toContain("Pictet - Robotics P EUR");
     expect(text).toContain("redistribué");
     expect(text).toContain("Concentration Top 10");
+  });
+
+  it("dit si le gagnant bat sa catégorie ou seulement ses concurrents", () => {
+    const withAlpha = (alpha: number | null): CompareResponse => ({
+      ...pictetFidelityResponse,
+      results: [
+        { ...pictetFidelityResponse.results[0], category_alpha_avg: alpha },
+        pictetFidelityResponse.results[1],
+      ],
+    });
+
+    expect(buildUcComparisonNarrative(withAlpha(2.4))).toContain(
+      "devance sa catégorie de 2.4 point par an"
+    );
+    const behind = buildUcComparisonNarrative(withAlpha(-3.1));
+    expect(behind).toContain("en retard de 3.1 point par an");
+    expect(behind).toContain("sans battre son marché");
+    // Écart négligeable ou donnée absente : aucune phrase, pas de faux signal.
+    expect(buildUcComparisonNarrative(withAlpha(0.1))).not.toContain("sa catégorie de");
+    expect(buildUcComparisonNarrative(withAlpha(null))).not.toContain("sa catégorie de");
   });
 
   it("traite un comparatif archivé sans le champ discriminant comme discriminant", () => {

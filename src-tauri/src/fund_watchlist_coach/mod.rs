@@ -4,15 +4,17 @@ mod macro_news;
 mod news;
 mod prompt;
 
+use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
 use boursorama::{boursorama_client, composition_url, fetch_top_holdings, resolve_opcvm_symbol};
 use news::{fetch_google_news_rss, rss_client};
+pub use prompt::FundCoachDiagnostic;
 use prompt::{
-    build_fund_context_block, build_user_prompt, short_term_score, FundCoachContext, HoldingNewsBlock,
-    COACH_SYSTEM_PROMPT,
+    build_fund_context_block, build_user_prompt, diagnostic_severity_rank, short_term_score,
+    FundCoachContext, HoldingNewsBlock, COACH_SYSTEM_PROMPT,
 };
 use reqwest::blocking::Client;
 use serde::Serialize;
@@ -78,7 +80,10 @@ fn set_report_running(running: bool) {
     }
 }
 
-pub fn spawn_favorites_report(app: AppHandle) -> Result<(), String> {
+pub fn spawn_favorites_report(
+    app: AppHandle,
+    diagnostics: Vec<FundCoachDiagnostic>,
+) -> Result<(), String> {
     {
         let mut guard = REPORT_RUNNING
             .get_or_init(|| Mutex::new(false))
@@ -94,7 +99,7 @@ pub fn spawn_favorites_report(app: AppHandle) -> Result<(), String> {
         .name("fund-watchlist-coach".into())
         .spawn(move || {
             let payload = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                generate_favorites_report(&app)
+                generate_favorites_report(&app, &diagnostics)
             })) {
                 Ok(Ok(report)) => FundWatchlistCoachReportEvent {
                     ok: true,
@@ -126,24 +131,38 @@ pub fn spawn_favorites_report(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn sort_favorites_for_coach(favorites: &mut [FundWatchlistEntry]) {
+/// Gravité du diagnostic d'abord, score court terme ensuite : le modèle traite les fonds
+/// dégradés en premier, et ce sont eux qui survivent à la troncature `MAX_FAVORITES`.
+fn sort_favorites_for_coach(
+    favorites: &mut [FundWatchlistEntry],
+    diagnostics: &HashMap<String, FundCoachDiagnostic>,
+) {
+    let rank = |entry: &FundWatchlistEntry| {
+        diagnostics
+            .get(&entry.isin)
+            .map(|d| diagnostic_severity_rank(&d.status))
+            .unwrap_or_else(|| diagnostic_severity_rank("inconnu"))
+    };
     favorites.sort_by(|left, right| {
-        let sl = short_term_score(left);
-        let sr = short_term_score(right);
-        match (sl, sr) {
-            (Some(l), Some(r)) => l
-                .partial_cmp(&r)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| left.nom.cmp(&right.nom)),
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, None) => left.nom.cmp(&right.nom),
-        }
+        rank(left).cmp(&rank(right)).then_with(|| {
+            let sl = short_term_score(left);
+            let sr = short_term_score(right);
+            match (sl, sr) {
+                (Some(l), Some(r)) => l
+                    .partial_cmp(&r)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| left.nom.cmp(&right.nom)),
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, None) => left.nom.cmp(&right.nom),
+            }
+        })
     });
 }
 
 fn load_favorites_snapshot(
     app: &AppHandle,
+    diagnostics: &HashMap<String, FundCoachDiagnostic>,
 ) -> Result<(Vec<FundWatchlistEntry>, usize), String> {
     let db_state = app.state::<DbState>();
     let db_guard = db_state
@@ -157,14 +176,21 @@ fn load_favorites_snapshot(
         .get_fund_watchlist_favorites()
         .map_err(|e| format!("Lecture favoris : {e}"))?;
     let total_favorites = favorites.len();
-    sort_favorites_for_coach(&mut favorites);
+    sort_favorites_for_coach(&mut favorites, diagnostics);
     favorites.truncate(MAX_FAVORITES);
     Ok((favorites, total_favorites))
 }
 
-fn generate_favorites_report(app: &AppHandle) -> Result<FundWatchlistFavoritesReport, String> {
+fn generate_favorites_report(
+    app: &AppHandle,
+    diagnostics: &[FundCoachDiagnostic],
+) -> Result<FundWatchlistFavoritesReport, String> {
+    let diagnostics: HashMap<String, FundCoachDiagnostic> = diagnostics
+        .iter()
+        .map(|d| (d.isin.clone(), d.clone()))
+        .collect();
     // Lecture DB brève — le verrou est relâché avant toute requête HTTP / appel LLM.
-    let (favorites, total_favorites) = load_favorites_snapshot(app)?;
+    let (favorites, total_favorites) = load_favorites_snapshot(app, &diagnostics)?;
 
     if favorites.is_empty() {
         return Err("Aucun fonds favori — épinglez des fonds avec l'étoile.".into());
@@ -198,7 +224,7 @@ fn generate_favorites_report(app: &AppHandle) -> Result<FundWatchlistFavoritesRe
     let mut warnings = Vec::new();
     if total_favorites > MAX_FAVORITES {
         warnings.push(format!(
-            "Seuls les {MAX_FAVORITES} premiers favoris (tri score CT croissant — priorité surveillance) ont été analysés sur {total_favorites}."
+            "Seuls les {MAX_FAVORITES} premiers favoris (tri diagnostic puis score CT — priorité aux fonds dégradés) ont été analysés sur {total_favorites}."
         ));
     }
 
@@ -231,7 +257,9 @@ fn generate_favorites_report(app: &AppHandle) -> Result<FundWatchlistFavoritesRe
                 fund_isin: Some(entry.isin.clone()),
             },
         );
-        contexts.push(collect_fund_context(&boursorama_http, &rss_http, entry)?);
+        let mut context = collect_fund_context(&boursorama_http, &rss_http, entry)?;
+        context.diagnostic = diagnostics.get(&entry.isin).cloned();
+        contexts.push(context);
     }
 
     emit_progress(
@@ -341,6 +369,7 @@ fn collect_fund_context(
         fund_news,
         holding_news,
         warnings,
+        diagnostic: None,
     })
 }
 
@@ -558,12 +587,11 @@ mod tests {
         assert_eq!(holding_news_label("NVIDIA Corp"), "NVIDIA");
     }
 
-    #[test]
-    fn sort_favorites_puts_lowest_ct_first() {
-        fn sample(nom: &str, perfs: [Option<f64>; 4]) -> FundWatchlistEntry {
+    fn sort_sample(nom: &str, perfs: [Option<f64>; 4]) -> FundWatchlistEntry {
+        {
             FundWatchlistEntry {
                 id: 0,
-                isin: "FR0000000000".into(),
+                isin: format!("FR000000{nom}"),
                 nom: nom.into(),
                 categorie: None,
                 notation_morningstar: None,
@@ -591,13 +619,44 @@ mod tests {
                 updated_at: 0,
             }
         }
+    }
+
+    fn diagnostic(isin: &str, status: &str) -> FundCoachDiagnostic {
+        FundCoachDiagnostic {
+            isin: isin.into(),
+            status: status.into(),
+            delta_1an_vs_category: None,
+            delta_reference_label: None,
+            trigger_reasons: Vec::new(),
+            reasons: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn sort_favorites_puts_lowest_ct_first() {
         let mut favorites = vec![
-            sample("Bon", [Some(1.0), Some(2.0), Some(3.0), Some(4.0)]),
-            sample("Mauvais", [Some(-9.0), Some(-14.0), Some(-2.0), Some(28.0)]),
+            sort_sample("Bon", [Some(1.0), Some(2.0), Some(3.0), Some(4.0)]),
+            sort_sample("Mauvais", [Some(-9.0), Some(-14.0), Some(-2.0), Some(28.0)]),
         ];
-        sort_favorites_for_coach(&mut favorites);
+        sort_favorites_for_coach(&mut favorites, &HashMap::new());
         assert_eq!(favorites[0].nom, "Mauvais");
         assert_eq!(favorites[1].nom, "Bon");
+    }
+
+    #[test]
+    fn sort_favorites_puts_arbitrage_diagnostic_before_better_ct_score() {
+        let mut favorites = vec![
+            sort_sample("Faible", [Some(-9.0), Some(-14.0), Some(-2.0), Some(28.0)]),
+            sort_sample("Degrade", [Some(1.0), Some(2.0), Some(3.0), Some(4.0)]),
+        ];
+        let diagnostics = HashMap::from([(
+            "FR000000Degrade".to_string(),
+            diagnostic("FR000000Degrade", "signal_arbitrage"),
+        )]);
+        sort_favorites_for_coach(&mut favorites, &diagnostics);
+        // Le score CT du fonds « Faible » est pire, mais seul « Degrade » décroche vs sa catégorie.
+        assert_eq!(favorites[0].nom, "Degrade");
+        assert_eq!(favorites[1].nom, "Faible");
     }
 
     /// Vérification terrain live (Boursorama + RSS) — `cargo test coach_live_sample -- --ignored --nocapture`

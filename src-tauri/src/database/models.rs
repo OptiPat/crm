@@ -1951,6 +1951,9 @@ pub struct UcMarketCacheRowDb {
     pub max_drawdown_3y: Option<f64>,
     pub exposition_json: Option<String>,
     pub benchmark_json: Option<String>,
+    /// Performances annuelles fonds / catégorie et rang Morningstar (page Boursorama
+    /// « performances et risques »), sérialisées en JSON.
+    pub category_history_json: Option<String>,
     #[allow(dead_code)]
     pub source: String,
     #[allow(dead_code)]

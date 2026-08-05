@@ -16,6 +16,8 @@ export interface UcFundResultScore {
   alerts: string[];
   bond_credit_quality?: string | null;
   bond_strategy?: string | null;
+  // Écart annuel moyen face à la catégorie : information de contexte, hors classement.
+  category_alpha_avg?: number | null;
 }
 
 export interface UcCriterionScore {
@@ -38,6 +40,9 @@ export interface UcFundMetricsSnapshot {
   top10_percent?: number | null;
   max_drawdown_3y?: number | null;
   aum_meur?: number | null;
+  vol_3ans?: number | null;
+  worst_year_perf?: number | null;
+  category_rank_avg?: number | null;
 }
 
 export interface UcExposureSlice {

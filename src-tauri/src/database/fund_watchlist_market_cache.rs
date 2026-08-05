@@ -37,6 +37,13 @@ impl super::Database {
             )?;
             println!("✅ Migration: colonne benchmark_json sur fund_watchlist_market_cache");
         }
+        if !self.table_has_column("fund_watchlist_market_cache", "category_history_json")? {
+            self.conn.execute(
+                "ALTER TABLE fund_watchlist_market_cache ADD COLUMN category_history_json TEXT",
+                [],
+            )?;
+            println!("✅ Migration: colonne category_history_json sur fund_watchlist_market_cache");
+        }
         Ok(())
     }
 
@@ -62,7 +69,7 @@ impl super::Database {
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!(
-            "SELECT isin, aum_meur, top10_percent, max_drawdown_3y, exposition_json, benchmark_json, source, updated_at
+            "SELECT isin, aum_meur, top10_percent, max_drawdown_3y, exposition_json, benchmark_json, category_history_json, source, updated_at
              FROM fund_watchlist_market_cache WHERE isin IN ({placeholders})"
         );
         let mut stmt = self.conn.prepare(&sql)?;
@@ -78,8 +85,9 @@ impl super::Database {
                 max_drawdown_3y: row.get(3)?,
                 exposition_json: row.get(4)?,
                 benchmark_json: row.get(5)?,
-                source: row.get(6)?,
-                updated_at: row.get(7)?,
+                category_history_json: row.get(6)?,
+                source: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         })?;
         rows.collect()
@@ -91,18 +99,26 @@ impl super::Database {
         top10_percent: Option<f64>,
         exposition_json: Option<&str>,
         benchmark_json: Option<&str>,
+        category_history_json: Option<&str>,
     ) -> Result<()> {
         let isin = isin.trim().to_uppercase();
         self.conn.execute(
-            "INSERT INTO fund_watchlist_market_cache (isin, top10_percent, exposition_json, benchmark_json, source, updated_at)
-             VALUES (?1, ?2, ?3, ?4, 'boursorama', strftime('%s', 'now'))
+            "INSERT INTO fund_watchlist_market_cache (isin, top10_percent, exposition_json, benchmark_json, category_history_json, source, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, 'boursorama', strftime('%s', 'now'))
              ON CONFLICT(isin) DO UPDATE SET
                top10_percent = COALESCE(excluded.top10_percent, fund_watchlist_market_cache.top10_percent),
                exposition_json = COALESCE(excluded.exposition_json, fund_watchlist_market_cache.exposition_json),
                benchmark_json = COALESCE(excluded.benchmark_json, fund_watchlist_market_cache.benchmark_json),
+               category_history_json = COALESCE(excluded.category_history_json, fund_watchlist_market_cache.category_history_json),
                source = 'boursorama',
                updated_at = excluded.updated_at",
-            rusqlite::params![isin, top10_percent, exposition_json, benchmark_json],
+            rusqlite::params![
+                isin,
+                top10_percent,
+                exposition_json,
+                benchmark_json,
+                category_history_json
+            ],
         )?;
         Ok(())
     }
