@@ -61,21 +61,21 @@ describe("computeOrganisationDiagnostic", () => {
     expect(entries[0]).toMatchObject({ ruleId: "tauxManagers", severity: "ok" });
   });
 
-  it("classe l'attrition ok / watch / alert selon les seuils heuristiques", () => {
+  it("classe l'attrition ok / watch / alert selon la référence groupe (20 %, seuil proche 80 %)", () => {
     expect(
       computeOrganisationDiagnostic(baseInput({ attritionPercent: 20 }))[0].severity
     ).toBe("ok");
     expect(
-      computeOrganisationDiagnostic(baseInput({ attritionPercent: 40 }))[0].severity
+      computeOrganisationDiagnostic(baseInput({ attritionPercent: 22 }))[0].severity
     ).toBe("watch");
     expect(
-      computeOrganisationDiagnostic(baseInput({ attritionPercent: 60 }))[0].severity
+      computeOrganisationDiagnostic(baseInput({ attritionPercent: 40 }))[0].severity
     ).toBe("alert");
   });
 
-  it("détecte une attrition critique après 2 exercices > 50 % consécutifs", () => {
+  it("détecte une attrition critique après 2 exercices sous la référence groupe consécutifs", () => {
     const entries = computeOrganisationDiagnostic(
-      baseInput({ attritionPercent: 55, previousAttritionPercent: 60 })
+      baseInput({ attritionPercent: 35, previousAttritionPercent: 40 })
     );
     expect(entries[0]).toMatchObject({ ruleId: "attrition", severity: "critical" });
   });

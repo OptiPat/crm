@@ -56,6 +56,21 @@ export const FILLEUL_ORGANISATION_EXERCICE_SUMMARY_DEFAULT_COUNT = 5;
 
 export { isLiveFilleulExerciceVolumes };
 
+/** Volume organisation ÷ nombre de consultants net (effectif à la clôture). */
+export function computeAverageOrganisationVolumePerConsultant(
+  organisationBranchVolume: number | null | undefined,
+  consultantNetCount: number
+): number | null {
+  if (
+    organisationBranchVolume == null ||
+    !Number.isFinite(organisationBranchVolume) ||
+    consultantNetCount <= 0
+  ) {
+    return null;
+  }
+  return organisationBranchVolume / consultantNetCount;
+}
+
 export type FilleulOrganisationExerciceSummaryRow = {
   exerciceLabel: string;
   /** Consultants actifs sur l'exercice (non désinscrits avant la fin). */
@@ -64,6 +79,8 @@ export type FilleulOrganisationExerciceSummaryRow = {
   parrainageCount: number;
   organisationBranchVolume: number | null;
   averageVolume: number | null;
+  /** Volume organisation ÷ nombre de consultants net. */
+  averageVolumePerConsultant: number | null;
   activePercent: number;
   parraineurPercent: number;
   parrainagesPerParraineur: number | null;
@@ -283,6 +300,12 @@ export function computeFilleulOrganisationExerciceSummaryRow(
     parrainageCount: parrainagePerParraineurStats.totalParrainages,
     organisationBranchVolume,
     averageVolume: volumeStats.averageVolume,
+    averageVolumePerConsultant: volumeResolvable
+      ? computeAverageOrganisationVolumePerConsultant(
+          organisationBranchVolume,
+          netGrowthStats.currentCount
+        )
+      : null,
     activePercent: volumeStats.activePercent,
     parraineurPercent: parraineurStats.parraineurPercent,
     parrainagesPerParraineur: parrainagePerParraineurStats.averagePerParraineur,
@@ -309,6 +332,7 @@ export type FilleulOrganisationExerciceSummaryMetricId =
   | "parrainageCount"
   | "organisationBranchVolume"
   | "averageVolume"
+  | "averageVolumePerConsultant"
   | "activePercent"
   | "parraineurPercent"
   | "parrainagesPerParraineur"
@@ -350,6 +374,14 @@ export const FILLEUL_ORGANISATION_EXERCICE_SUMMARY_METRICS: FilleulOrganisationE
       label: "Volume moyen (actifs)",
       format: (row) =>
         row.averageVolume != null ? formatFilleulVolumeDisplayWhole(row.averageVolume) : "—",
+    },
+    {
+      id: "averageVolumePerConsultant",
+      label: "Volume moyen / consultant",
+      format: (row) =>
+        row.averageVolumePerConsultant != null
+          ? formatFilleulVolumeDisplayWhole(row.averageVolumePerConsultant)
+          : "—",
     },
     {
       id: "activePercent",

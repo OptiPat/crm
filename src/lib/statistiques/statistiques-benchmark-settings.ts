@@ -1,6 +1,9 @@
 /** Référence groupe par défaut — volume moyen / consultant actif (exercice). */
 export const DEFAULT_GROUP_ACTIVE_CONSULTANT_VOLUME_BENCHMARK_EUROS = 547_000;
 
+/** Référence groupe par défaut — volume organisation moyen / consultant net (exercice). */
+export const DEFAULT_GROUP_CONSULTANT_AVERAGE_VOLUME_BENCHMARK_EUROS = 228_000;
+
 /** Référence groupe par défaut — taux d'actifs (consultants présents ≥ 1 €). */
 export const DEFAULT_GROUP_ACTIVE_CONSULTANT_RATE_BENCHMARK_PERCENT = 30;
 
@@ -12,6 +15,9 @@ export const DEFAULT_GROUP_PARRAINAGES_PER_PARRAINEUR_BENCHMARK = 1.9;
 
 /** Référence groupe par défaut — croissance nette sur exercice (% vs exercice précédent). */
 export const DEFAULT_GROUP_NET_GROWTH_BENCHMARK_PERCENT = 30;
+
+/** Référence groupe par défaut — taux d'attrition sur exercice (% de la cohorte). */
+export const DEFAULT_GROUP_ATTRITION_BENCHMARK_PERCENT = 20;
 
 /** Référence groupe par défaut — délai moyen avant 1er VAA ou VA (mois). */
 export const DEFAULT_GROUP_VAA_DURATION_BENCHMARK_MONTHS = 14.62;
@@ -27,6 +33,8 @@ export type FilleulVolumeBenchmarkStatus = "above_group" | "near_group" | "below
 export type StatistiquesBenchmarkSettings = {
   /** Volume moyen consultant actif — référence nationale / groupe (€). */
   groupActiveConsultantVolumeEuros: number;
+  /** Volume organisation moyen / consultant net — référence nationale / groupe (€). */
+  groupConsultantAverageVolumeEuros: number;
   /** Taux d'actifs — référence groupe (% consultants présents ≥ 1 €). */
   groupActiveConsultantRatePercent: number;
   /** Taux de parraineurs — référence nationale / groupe (%). */
@@ -35,6 +43,8 @@ export type StatistiquesBenchmarkSettings = {
   groupParrainagesPerParraineur: number;
   /** Croissance nette — référence nationale / groupe (% vs exercice précédent). */
   groupNetGrowthPercent: number;
+  /** Attrition — référence nationale / groupe (% de la cohorte présente au 01/08). */
+  groupAttritionPercent: number;
   /** Délai moyen avant 1er VAA ou VA — référence nationale / groupe (mois). */
   groupVaaDurationMonths: number;
   /** Délai moyen avant 1ère habilitation — référence nationale / groupe (mois). */
@@ -53,10 +63,12 @@ export const STATISTIQUES_BENCHMARK_SETTINGS_CHANGED = "statistiques-benchmark-s
 export function defaultStatistiquesBenchmarkSettings(): StatistiquesBenchmarkSettings {
   return {
     groupActiveConsultantVolumeEuros: DEFAULT_GROUP_ACTIVE_CONSULTANT_VOLUME_BENCHMARK_EUROS,
+    groupConsultantAverageVolumeEuros: DEFAULT_GROUP_CONSULTANT_AVERAGE_VOLUME_BENCHMARK_EUROS,
     groupActiveConsultantRatePercent: DEFAULT_GROUP_ACTIVE_CONSULTANT_RATE_BENCHMARK_PERCENT,
     groupSponsorRatePercent: DEFAULT_GROUP_SPONSOR_RATE_BENCHMARK_PERCENT,
     groupParrainagesPerParraineur: DEFAULT_GROUP_PARRAINAGES_PER_PARRAINEUR_BENCHMARK,
     groupNetGrowthPercent: DEFAULT_GROUP_NET_GROWTH_BENCHMARK_PERCENT,
+    groupAttritionPercent: DEFAULT_GROUP_ATTRITION_BENCHMARK_PERCENT,
     groupVaaDurationMonths: DEFAULT_GROUP_VAA_DURATION_BENCHMARK_MONTHS,
     groupHabilitationDurationMonths: DEFAULT_GROUP_HABILITATION_DURATION_BENCHMARK_MONTHS,
     nearGroupBenchmarkRatio: DEFAULT_NEAR_GROUP_BENCHMARK_RATIO,
@@ -68,16 +80,25 @@ function normalizeBenchmarkSettings(
 ): StatistiquesBenchmarkSettings {
   const defaults = defaultStatistiquesBenchmarkSettings();
   const euros = raw?.groupActiveConsultantVolumeEuros;
+  const consultantAverageEuros = raw?.groupConsultantAverageVolumeEuros;
   const activeRate = raw?.groupActiveConsultantRatePercent;
   const sponsorRate = raw?.groupSponsorRatePercent;
   const parrainagesPerParraineur = raw?.groupParrainagesPerParraineur;
   const netGrowthPercent = raw?.groupNetGrowthPercent;
+  const attritionPercent = raw?.groupAttritionPercent;
   const vaaDurationMonths = raw?.groupVaaDurationMonths;
   const habilitationDurationMonths = raw?.groupHabilitationDurationMonths;
   const ratio = raw?.nearGroupBenchmarkRatio;
 
   const groupActiveConsultantVolumeEuros =
     typeof euros === "number" && Number.isFinite(euros) && euros > 0 ? euros : defaults.groupActiveConsultantVolumeEuros;
+
+  const groupConsultantAverageVolumeEuros =
+    typeof consultantAverageEuros === "number" &&
+    Number.isFinite(consultantAverageEuros) &&
+    consultantAverageEuros > 0
+      ? consultantAverageEuros
+      : defaults.groupConsultantAverageVolumeEuros;
 
   const groupActiveConsultantRatePercent =
     typeof activeRate === "number" &&
@@ -106,6 +127,14 @@ function normalizeBenchmarkSettings(
       ? netGrowthPercent
       : defaults.groupNetGrowthPercent;
 
+  const groupAttritionPercent =
+    typeof attritionPercent === "number" &&
+    Number.isFinite(attritionPercent) &&
+    attritionPercent >= 0 &&
+    attritionPercent <= 100
+      ? attritionPercent
+      : defaults.groupAttritionPercent;
+
   const groupVaaDurationMonths =
     typeof vaaDurationMonths === "number" &&
     Number.isFinite(vaaDurationMonths) &&
@@ -127,10 +156,12 @@ function normalizeBenchmarkSettings(
 
   return {
     groupActiveConsultantVolumeEuros,
+    groupConsultantAverageVolumeEuros,
     groupActiveConsultantRatePercent,
     groupSponsorRatePercent,
     groupParrainagesPerParraineur,
     groupNetGrowthPercent,
+    groupAttritionPercent,
     groupVaaDurationMonths,
     groupHabilitationDurationMonths,
     nearGroupBenchmarkRatio,
@@ -182,6 +213,17 @@ export function getFilleulVolumeBenchmarkStatus(
   );
 }
 
+export function getFilleulConsultantAverageVolumeBenchmarkStatus(
+  averageVolumePerConsultant: number,
+  settings: StatistiquesBenchmarkSettings
+): FilleulVolumeBenchmarkStatus {
+  return getGroupBenchmarkStatus(
+    averageVolumePerConsultant,
+    settings.groupConsultantAverageVolumeEuros,
+    settings.nearGroupBenchmarkRatio
+  );
+}
+
 export function getFilleulActiveConsultantRateBenchmarkStatus(
   activeRatePercent: number,
   settings: StatistiquesBenchmarkSettings
@@ -223,6 +265,18 @@ export function getFilleulNetGrowthBenchmarkStatus(
     netGrowthPercent,
     settings.groupNetGrowthPercent,
     settings.nearGroupBenchmarkRatio
+  );
+}
+
+/** Attrition plus basse = mieux : vert ≤ réf., orange juste au-dessus, rouge au-delà. */
+export function getFilleulAttritionBenchmarkStatus(
+  attritionPercent: number,
+  settings: StatistiquesBenchmarkSettings
+): FilleulVolumeBenchmarkStatus {
+  return getLowerIsBetterDurationBenchmarkStatus(
+    attritionPercent,
+    settings.groupAttritionPercent,
+    settings
   );
 }
 
@@ -275,6 +329,16 @@ export function formatVolumeVsGroupBenchmarkPercent(
   return formatVsGroupBenchmarkPercent(averageVolume, settings.groupActiveConsultantVolumeEuros);
 }
 
+export function formatConsultantAverageVolumeVsGroupBenchmarkPercent(
+  averageVolumePerConsultant: number,
+  settings: StatistiquesBenchmarkSettings
+): string {
+  return formatVsGroupBenchmarkPercent(
+    averageVolumePerConsultant,
+    settings.groupConsultantAverageVolumeEuros
+  );
+}
+
 export function formatActiveConsultantRateVsGroupBenchmarkPercent(
   activeRatePercent: number,
   settings: StatistiquesBenchmarkSettings
@@ -307,6 +371,13 @@ export function formatNetGrowthVsGroupBenchmarkPercent(
   settings: StatistiquesBenchmarkSettings
 ): string {
   return formatVsGroupBenchmarkPercent(netGrowthPercent, settings.groupNetGrowthPercent);
+}
+
+export function formatAttritionVsGroupBenchmarkPercent(
+  attritionPercent: number,
+  settings: StatistiquesBenchmarkSettings
+): string {
+  return formatVsGroupBenchmarkPercent(attritionPercent, settings.groupAttritionPercent);
 }
 
 export function formatVaaDurationVsGroupBenchmarkPercent(
@@ -355,4 +426,12 @@ export function filleulHabilitationDurationBenchmarkStatusLabel(
   status: FilleulVolumeBenchmarkStatus
 ): string {
   return filleulVaaDurationBenchmarkStatusLabel(status);
+}
+
+export function filleulAttritionBenchmarkStatusLabel(
+  status: FilleulVolumeBenchmarkStatus
+): string {
+  if (status === "above_group") return "Attrition inférieure à la référence groupe";
+  if (status === "near_group") return "Attrition proche de la référence groupe";
+  return "Attrition supérieure à la référence groupe";
 }

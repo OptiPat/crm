@@ -6,6 +6,7 @@ import {
   loadOrganisationObjectifTablePrefs,
   saveOrganisationObjectifTablePrefs,
 } from "@/lib/statistiques/organisation-objectif-table-preferences";
+import type { OrganisationObjectifObservedStats } from "@/lib/statistiques/organisation-objectif-observed-stats";
 import type { StatistiquesBenchmarkSettings } from "@/lib/statistiques/statistiques-benchmark-settings";
 import { ChartLoading } from "@/components/dashboard/dashboard-ui";
 import { cn } from "@/lib/utils";
@@ -37,6 +38,7 @@ export function OrganisationObjectifTablePanel({
   currentTeamActiveConsultantCount,
   currentTeamActiveRatePercent,
   defaultTargetGrowthPercent,
+  observedStats,
   benchmarkSettings,
 }: {
   loading: boolean;
@@ -49,8 +51,7 @@ export function OrganisationObjectifTablePanel({
    * Taux de parraineurs observé (%) — calculé sur les mêmes consultants « survivants » que
    * `currentConsultantCount` (encore inscrits à la clôture), PAS sur la base plus large (présents à
    * un moment de l'exercice, désinscrits compris) utilisée par le « Taux de parraineurs » affiché
-   * ailleurs dans le panneau. Sert uniquement de valeur par défaut/tooltip pour le champ visé, afin
-   * que le calcul (effectif visé × taux) reste cohérent avec `currentConsultantCount`.
+   * ailleurs dans le panneau. Sert de valeur par défaut du champ visé (exercice courant).
    */
   currentSponsorsRatePercent: number | null;
   currentPersonalVolume: number | null;
@@ -63,6 +64,8 @@ export function OrganisationObjectifTablePanel({
    */
   currentTeamActiveRatePercent: number | null;
   defaultTargetGrowthPercent: number;
+  /** Stats de l'exercice n-1 — affichées sous les champs en « obs. ». */
+  observedStats: OrganisationObjectifObservedStats;
   /** Références groupe (nationales) affichées en tooltip sur les champs éditables. */
   benchmarkSettings: StatistiquesBenchmarkSettings;
 }) {
@@ -70,6 +73,8 @@ export function OrganisationObjectifTablePanel({
     currentTeamActiveRatePercent != null ? Math.round(currentTeamActiveRatePercent * 10) / 10 : 0;
   const defaultSponsorsRatePercent =
     currentSponsorsRatePercent != null ? Math.round(currentSponsorsRatePercent * 10) / 10 : 0;
+
+  const observedExerciceLabel = observedStats.exerciceLabel;
 
   // Lu une seule fois au montage : les hypothèses personnalisées (différentes de la valeur
   // observée) sont conservées d'une session à l'autre, cf. organisation-objectif-table-preferences.ts.
@@ -276,6 +281,8 @@ export function OrganisationObjectifTablePanel({
               suffix="%"
               value={targetGrowthPercent}
               defaultValue={defaultTargetGrowthPercent}
+              observedValue={observedStats.targetGrowthPercent}
+              observedExerciceLabel={observedExerciceLabel}
               step={1}
               width="w-16"
               onChange={setTargetGrowthPercent}
@@ -287,9 +294,12 @@ export function OrganisationObjectifTablePanel({
               suffix="%"
               value={attritionPercent}
               defaultValue={defaultAttritionPercent ?? 0}
+              observedValue={observedStats.attritionPercent}
+              observedExerciceLabel={observedExerciceLabel}
               step={1}
               width="w-16"
               onChange={setAttritionPercent}
+              groupValue={benchmarkSettings.groupAttritionPercent}
             />
             <AssumptionField
               id="objectif-taux-actifs-input"
@@ -297,6 +307,8 @@ export function OrganisationObjectifTablePanel({
               suffix="%"
               value={targetTeamActiveRatePercent}
               defaultValue={defaultTeamActiveRatePercent}
+              observedValue={observedStats.teamActiveRatePercent}
+              observedExerciceLabel={observedExerciceLabel}
               step={1}
               width="w-16"
               onChange={setTargetTeamActiveRatePercent}
@@ -308,6 +320,8 @@ export function OrganisationObjectifTablePanel({
               suffix="%"
               value={targetSponsorsRatePercent}
               defaultValue={defaultSponsorsRatePercent}
+              observedValue={observedStats.sponsorsRatePercent}
+              observedExerciceLabel={observedExerciceLabel}
               step={1}
               width="w-16"
               onChange={setTargetSponsorsRatePercent}
@@ -319,6 +333,8 @@ export function OrganisationObjectifTablePanel({
               suffix="€"
               value={targetPersonalVolume}
               defaultValue={Math.round(currentPersonalVolume ?? 0)}
+              observedValue={observedStats.personalVolume}
+              observedExerciceLabel={observedExerciceLabel}
               width="w-28"
               onChange={setTargetPersonalVolume}
               groupValue={benchmarkSettings.groupActiveConsultantVolumeEuros}
@@ -330,6 +346,8 @@ export function OrganisationObjectifTablePanel({
               suffix="€"
               value={targetTeamAverageVolume}
               defaultValue={Math.round(currentTeamAverageVolume ?? 0)}
+              observedValue={observedStats.teamAverageVolume}
+              observedExerciceLabel={observedExerciceLabel}
               width="w-28"
               onChange={setTargetTeamAverageVolume}
               groupValue={benchmarkSettings.groupActiveConsultantVolumeEuros}
@@ -551,7 +569,11 @@ export function OrganisationObjectifTablePanel({
           </div>
 
           <ul className="space-y-1 text-[11px] text-muted-foreground list-disc pl-4 marker:text-muted-foreground/50">
-            <li>La croissance ne s'applique qu'à l'effectif ; les autres lignes = effectif visé × taux de la ligne.</li>
+            <li>
+              « obs. » = résultat réel de l'exercice précédent
+              {observedExerciceLabel != null ? ` (${observedExerciceLabel})` : ""}, pour comparer vos hypothèses
+              visées à ce que vous avez effectivement réalisé l'année dernière.
+            </li>
             <li>Groupe = mêmes croissance/attrition/volume perso que Objectif ; seuls taux et volume équipe passent en référence nationale.</li>
             <li>« Actifs organisation » affiche le chiffre décimal exact (arrondi indiqué en dessous) pour que le volume se vérifie à la main.</li>
             <li>L'attrition visée porte sur le parrainage brut (existants + recrues), pas sur l'effectif/volume final.</li>

@@ -3,6 +3,7 @@ import type { Contact } from "@/lib/api/tauri-contacts";
 import { fiscalYearStartUnix } from "@/lib/pipe/remuneration-fiscal-year";
 import {
   buildFilleulOrganisationExerciceLabels,
+  computeAverageOrganisationVolumePerConsultant,
   computeFilleulOrganisationExerciceSummaryRow,
   isLiveFilleulExerciceVolumes,
   pickFilleulOrganisationExerciceLabelsForDisplay,
@@ -120,6 +121,12 @@ describe("filleul-organisation-exercice-summary", () => {
     expect(currentRow.parrainageCount).toBe(0);
   });
 
+  it("calcule le volume moyen / consultant comme volume org. ÷ effectif net", () => {
+    expect(computeAverageOrganisationVolumePerConsultant(1_894_732, 12)).toBeCloseTo(157_894.33, 1);
+    expect(computeAverageOrganisationVolumePerConsultant(null, 12)).toBeNull();
+    expect(computeAverageOrganisationVolumePerConsultant(100_000, 0)).toBeNull();
+  });
+
   it("calcule volume organisation (branche CGP) sur exercice courant", () => {
     const selfId = 1;
     const contacts = [
@@ -155,6 +162,7 @@ describe("filleul-organisation-exercice-summary", () => {
 
     expect(row.organisationBranchVolume).toBe(350_000);
     expect(row.averageVolume).toBeCloseTo(116_666.67, 1);
+    expect(row.averageVolumePerConsultant).toBeCloseTo(116_666.67, 1);
     expect(row.activePercent).toBe(100);
     expect(row.parrainageCount).toBe(2);
   });
@@ -177,5 +185,6 @@ describe("filleul-organisation-exercice-summary", () => {
 
     expect(row.organisationBranchVolume).toBeNull();
     expect(row.averageVolume).toBeNull();
+    expect(row.averageVolumePerConsultant).toBeNull();
   });
 });

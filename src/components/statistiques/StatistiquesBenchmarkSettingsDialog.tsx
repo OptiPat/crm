@@ -62,10 +62,12 @@ export function StatistiquesBenchmarkSettingsDialog({
   onOpenChange,
 }: StatistiquesBenchmarkSettingsDialogProps) {
   const [referenceEuros, setReferenceEuros] = useState("");
+  const [consultantAverageReferenceEuros, setConsultantAverageReferenceEuros] = useState("");
   const [activeConsultantRatePercent, setActiveConsultantRatePercent] = useState("");
   const [sponsorRatePercent, setSponsorRatePercent] = useState("");
   const [parrainagesPerParraineur, setParrainagesPerParraineur] = useState("");
   const [netGrowthPercent, setNetGrowthPercent] = useState("");
+  const [attritionPercent, setAttritionPercent] = useState("");
   const [vaaDurationMonths, setVaaDurationMonths] = useState("");
   const [habilitationDurationMonths, setHabilitationDurationMonths] = useState("");
   const [nearPercent, setNearPercent] = useState("80");
@@ -75,6 +77,9 @@ export function StatistiquesBenchmarkSettingsDialog({
     if (!open) return;
     const settings = loadStatistiquesBenchmarkSettings();
     setReferenceEuros(formatFilleulVolumeField(settings.groupActiveConsultantVolumeEuros));
+    setConsultantAverageReferenceEuros(
+      formatFilleulVolumeField(settings.groupConsultantAverageVolumeEuros)
+    );
     setActiveConsultantRatePercent(
       String(settings.groupActiveConsultantRatePercent).replace(".", ",")
     );
@@ -83,6 +88,7 @@ export function StatistiquesBenchmarkSettingsDialog({
       String(settings.groupParrainagesPerParraineur).replace(".", ",")
     );
     setNetGrowthPercent(String(settings.groupNetGrowthPercent).replace(".", ","));
+    setAttritionPercent(String(settings.groupAttritionPercent).replace(".", ","));
     setVaaDurationMonths(String(settings.groupVaaDurationMonths).replace(".", ","));
     setHabilitationDurationMonths(
       String(settings.groupHabilitationDurationMonths).replace(".", ",")
@@ -94,6 +100,9 @@ export function StatistiquesBenchmarkSettingsDialog({
   const handleReset = () => {
     const defaults = defaultStatistiquesBenchmarkSettings();
     setReferenceEuros(formatFilleulVolumeField(defaults.groupActiveConsultantVolumeEuros));
+    setConsultantAverageReferenceEuros(
+      formatFilleulVolumeField(defaults.groupConsultantAverageVolumeEuros)
+    );
     setActiveConsultantRatePercent(
       String(defaults.groupActiveConsultantRatePercent).replace(".", ",")
     );
@@ -102,6 +111,7 @@ export function StatistiquesBenchmarkSettingsDialog({
       String(defaults.groupParrainagesPerParraineur).replace(".", ",")
     );
     setNetGrowthPercent(String(defaults.groupNetGrowthPercent).replace(".", ","));
+    setAttritionPercent(String(defaults.groupAttritionPercent).replace(".", ","));
     setVaaDurationMonths(String(defaults.groupVaaDurationMonths).replace(".", ","));
     setHabilitationDurationMonths(
       String(defaults.groupHabilitationDurationMonths).replace(".", ",")
@@ -114,6 +124,13 @@ export function StatistiquesBenchmarkSettingsDialog({
     const parsedReference = parseFilleulVolumeField(referenceEuros.replace(/\s/g, ""));
     if (parsedReference == null || parsedReference <= 0) {
       setError("Saisissez un montant de référence strictement positif.");
+      return;
+    }
+    const parsedConsultantAverageReference = parseFilleulVolumeField(
+      consultantAverageReferenceEuros.replace(/\s/g, "")
+    );
+    if (parsedConsultantAverageReference == null || parsedConsultantAverageReference <= 0) {
+      setError("Saisissez un volume moyen / consultant (actif ou non) strictement positif.");
       return;
     }
     const activeRateRaw = activeConsultantRatePercent.trim();
@@ -146,6 +163,15 @@ export function StatistiquesBenchmarkSettingsDialog({
       setError("La référence croissance nette doit être strictement positive (%).");
       return;
     }
+    const parsedAttritionPercent = Number.parseFloat(attritionPercent.trim().replace(",", "."));
+    if (
+      !Number.isFinite(parsedAttritionPercent) ||
+      parsedAttritionPercent < 0 ||
+      parsedAttritionPercent > 100
+    ) {
+      setError("Le taux d'attrition de référence doit être entre 0 et 100 %.");
+      return;
+    }
     const parsedVaaDuration = Number.parseFloat(vaaDurationMonths.trim().replace(",", "."));
     if (!Number.isFinite(parsedVaaDuration) || parsedVaaDuration <= 0) {
       setError("Le délai VAA/VA de référence doit être strictement positif (en mois).");
@@ -165,10 +191,12 @@ export function StatistiquesBenchmarkSettingsDialog({
     }
     saveStatistiquesBenchmarkSettings({
       groupActiveConsultantVolumeEuros: parsedReference,
+      groupConsultantAverageVolumeEuros: parsedConsultantAverageReference,
       groupActiveConsultantRatePercent: parsedActiveConsultantRate,
       groupSponsorRatePercent: parsedSponsorRate,
       groupParrainagesPerParraineur: parsedParrainagesPerParraineur,
       groupNetGrowthPercent: parsedNetGrowthPercent,
+      groupAttritionPercent: parsedAttritionPercent,
       groupVaaDurationMonths: parsedVaaDuration,
       groupHabilitationDurationMonths: parsedHabilitationDuration,
       nearGroupBenchmarkRatio: pct / 100,
@@ -177,6 +205,9 @@ export function StatistiquesBenchmarkSettingsDialog({
   };
 
   const previewReference = parseFilleulVolumeField(referenceEuros.replace(/\s/g, ""));
+  const previewConsultantAverageReference = parseFilleulVolumeField(
+    consultantAverageReferenceEuros.replace(/\s/g, "")
+  );
   const previewActiveConsultantRate = Number.parseFloat(
     activeConsultantRatePercent.trim().replace(",", ".")
   );
@@ -185,6 +216,7 @@ export function StatistiquesBenchmarkSettingsDialog({
     parrainagesPerParraineur.trim().replace(",", ".")
   );
   const previewNetGrowthPercent = Number.parseFloat(netGrowthPercent.trim().replace(",", "."));
+  const previewAttritionPercent = Number.parseFloat(attritionPercent.trim().replace(",", "."));
   const previewVaaDuration = Number.parseFloat(vaaDurationMonths.trim().replace(",", "."));
   const previewHabilitationDuration = Number.parseFloat(
     habilitationDurationMonths.trim().replace(",", ".")
@@ -197,6 +229,14 @@ export function StatistiquesBenchmarkSettingsDialog({
     previewPct > 0 &&
     previewPct < 100
       ? previewReference * (previewPct / 100)
+      : null;
+  const previewConsultantAverageFloor =
+    previewConsultantAverageReference != null &&
+    previewConsultantAverageReference > 0 &&
+    Number.isFinite(previewPct) &&
+    previewPct > 0 &&
+    previewPct < 100
+      ? previewConsultantAverageReference * (previewPct / 100)
       : null;
   const previewSponsorFloor =
     Number.isFinite(previewSponsorRate) &&
@@ -230,6 +270,14 @@ export function StatistiquesBenchmarkSettingsDialog({
     previewPct < 100
       ? previewNetGrowthPercent * (previewPct / 100)
       : null;
+  const previewAttritionCeiling =
+    Number.isFinite(previewAttritionPercent) &&
+    previewAttritionPercent >= 0 &&
+    Number.isFinite(previewPct) &&
+    previewPct > 0 &&
+    previewPct < 100
+      ? previewAttritionPercent / (previewPct / 100)
+      : null;
   const previewVaaCeiling =
     Number.isFinite(previewVaaDuration) &&
     previewVaaDuration > 0 &&
@@ -262,7 +310,7 @@ export function StatistiquesBenchmarkSettingsDialog({
           <div className="space-y-5">
             <BenchmarkSection
               title="Organisation filleuls"
-              description="Panneaux volume, taux d'actifs, taux de parraineurs, parrainages / parraineur, croissance nette, délai VAA/VA et délai habilitation — comparaison à la moyenne groupe."
+              description="Panneaux volume, taux d'actifs, taux de parraineurs, parrainages / parraineur, croissance nette, attrition, délai VAA/VA et délai habilitation — comparaison à la moyenne groupe."
             >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2 sm:col-span-2">
@@ -283,6 +331,27 @@ export function StatistiquesBenchmarkSettingsDialog({
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     Moyenne nationale sur l&apos;exercice en cours (volume propre, consultants actifs
                     ≥ 1 €).
+                  </p>
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="stat-benchmark-consultant-average-reference">
+                    Volume moyen / consultant — référence groupe (€)
+                  </Label>
+                  <Input
+                    id="stat-benchmark-consultant-average-reference"
+                    inputMode="decimal"
+                    placeholder="228 000"
+                    className="h-10"
+                    value={consultantAverageReferenceEuros}
+                    onChange={(event) => {
+                      setConsultantAverageReferenceEuros(event.target.value);
+                      setError(null);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Volume organisation ÷ nombre de consultants net (effectif à la clôture de
+                    l&apos;exercice).
                   </p>
                 </div>
 
@@ -371,6 +440,27 @@ export function StatistiquesBenchmarkSettingsDialog({
                 </div>
 
                 <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="stat-benchmark-attrition-rate">
+                    Taux d&apos;attrition — référence groupe (%)
+                  </Label>
+                  <Input
+                    id="stat-benchmark-attrition-rate"
+                    inputMode="decimal"
+                    placeholder="20"
+                    className="h-10"
+                    value={attritionPercent}
+                    onChange={(event) => {
+                      setAttritionPercent(event.target.value);
+                      setError(null);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Moyenne nationale : part des désinscriptions parmi la cohorte présente au 01/08
+                    sur l&apos;exercice. Une attrition plus basse est favorable.
+                  </p>
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="stat-benchmark-vaa-duration">
                     Délai avant 1er VAA ou VA — référence groupe (mois)
                   </Label>
@@ -453,6 +543,26 @@ export function StatistiquesBenchmarkSettingsDialog({
                             </>
                           ) : null}
                         </p>
+                        {previewConsultantAverageReference != null &&
+                        previewConsultantAverageReference > 0 ? (
+                          <p>
+                            Volume moyen / consultant — réf. :{" "}
+                            <span className="font-medium text-foreground tabular-nums">
+                              {formatFilleulVolumeDisplay(previewConsultantAverageReference)}
+                            </span>
+                            {previewConsultantAverageFloor != null ? (
+                              <>
+                                {" · "}
+                                zone orange{" "}
+                                <span className="font-medium text-foreground tabular-nums">
+                                  {formatFilleulVolumeDisplay(previewConsultantAverageFloor)}
+                                </span>
+                                {" → "}
+                                {formatFilleulVolumeDisplay(previewConsultantAverageReference)}
+                              </>
+                            ) : null}
+                          </p>
+                        ) : null}
                         {Number.isFinite(previewActiveConsultantRate) &&
                         previewActiveConsultantRate > 0 ? (
                           <p>
@@ -536,6 +646,25 @@ export function StatistiquesBenchmarkSettingsDialog({
                                 </span>
                                 {" → "}
                                 +{previewNetGrowthPercent.toString().replace(".", ",")} %
+                              </>
+                            ) : null}
+                          </p>
+                        ) : null}
+                        {Number.isFinite(previewAttritionPercent) && previewAttritionPercent >= 0 ? (
+                          <p>
+                            Attrition — réf. :{" "}
+                            <span className="font-medium text-foreground tabular-nums">
+                              {previewAttritionPercent.toString().replace(".", ",")} %
+                            </span>
+                            {previewAttritionCeiling != null ? (
+                              <>
+                                {" · "}
+                                zone orange{" "}
+                                <span className="font-medium text-foreground tabular-nums">
+                                  {previewAttritionPercent.toString().replace(".", ",")} %
+                                </span>
+                                {" → "}
+                                {previewAttritionCeiling.toFixed(1).replace(".", ",")} %
                               </>
                             ) : null}
                           </p>

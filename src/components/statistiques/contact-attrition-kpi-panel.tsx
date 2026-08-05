@@ -1,6 +1,14 @@
 import { ChevronRight } from "lucide-react";
 import type { ContactAttritionStatResult } from "@/lib/statistiques/contact-attrition-stats";
 import { ChartEmpty, ChartLoading } from "@/components/dashboard/dashboard-ui";
+import { useStatistiquesBenchmarkSettings } from "@/hooks/useStatistiquesBenchmarkSettings";
+import {
+  filleulAttritionBenchmarkStatusLabel,
+  filleulVolumeBenchmarkStatusBoxClasses,
+  filleulVolumeBenchmarkStatusValueClasses,
+  formatAttritionVsGroupBenchmarkPercent,
+  getFilleulAttritionBenchmarkStatus,
+} from "@/lib/statistiques/statistiques-benchmark-settings";
 import { cn } from "@/lib/utils";
 import { StatistiquesPanel } from "./statistiques-ui";
 import type { StatistiquesPanelId } from "@/lib/statistiques/statistiques-page-preferences";
@@ -72,6 +80,11 @@ export function AttritionKpiPanel({
   formatExerciceSubtitle,
   formatCumulativeIndex,
 }: AttritionKpiPanelProps) {
+  const benchmarkSettings = useStatistiquesBenchmarkSettings();
+  const benchmarkStatus =
+    exerciceLabel != null && stats.totalCount > 0
+      ? getFilleulAttritionBenchmarkStatus(stats.attritionPercent, benchmarkSettings)
+      : null;
   const pctLabel = stats.attritionPercent.toFixed(1).replace(".0", "");
   const subtitle =
     exerciceLabel && formatExerciceSubtitle
@@ -86,7 +99,15 @@ export function AttritionKpiPanel({
         <ChartEmpty title="Aucun contact éligible pour cette statistique." height={180} />
       ) : (
         <div className="space-y-4">
-          <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
+          <div
+            className={cn(
+              "rounded-xl border px-4 py-3 flex items-center justify-between gap-4 transition-colors",
+              benchmarkStatus
+                ? filleulVolumeBenchmarkStatusBoxClasses(benchmarkStatus)
+                : "border-border/60 bg-muted/20"
+            )}
+            title={benchmarkStatus ? filleulAttritionBenchmarkStatusLabel(benchmarkStatus) : undefined}
+          >
             <div>
               {exerciceLabel ? (
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -95,7 +116,14 @@ export function AttritionKpiPanel({
               ) : (
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Attrition</p>
               )}
-              <p className="text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5 text-primary">
+              <p
+                className={cn(
+                  "text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5",
+                  benchmarkStatus
+                    ? filleulVolumeBenchmarkStatusValueClasses(benchmarkStatus)
+                    : "text-primary"
+                )}
+              >
                 {pctLabel} %
               </p>
               {exerciceLabel ? (
@@ -104,7 +132,19 @@ export function AttritionKpiPanel({
                 </p>
               ) : null}
             </div>
-            <p className="text-xs text-muted-foreground text-right max-w-xs">{subtitle}</p>
+            <div className="text-xs text-muted-foreground text-right max-w-xs space-y-0.5">
+              <p>{subtitle}</p>
+              {benchmarkStatus ? (
+                <>
+                  <p className="tabular-nums">
+                    Réf. groupe {benchmarkSettings.groupAttritionPercent.toString().replace(".", ",")} %
+                  </p>
+                  <p className="font-medium text-foreground tabular-nums">
+                    {formatAttritionVsGroupBenchmarkPercent(stats.attritionPercent, benchmarkSettings)}
+                  </p>
+                </>
+              ) : null}
+            </div>
           </div>
 
           {cumulativeStats && formatCumulativeIndex ? (

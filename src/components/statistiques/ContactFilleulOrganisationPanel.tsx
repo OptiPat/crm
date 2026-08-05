@@ -54,6 +54,7 @@ import {
   formatParrainagePerParraineurVsGroupBenchmarkPercent,
   formatNetGrowthVsGroupBenchmarkPercent,
   formatVolumeVsGroupBenchmarkPercent,
+  formatConsultantAverageVolumeVsGroupBenchmarkPercent,
   formatActiveConsultantRateVsGroupBenchmarkPercent,
   formatVaaDurationVsGroupBenchmarkPercent,
   formatHabilitationDurationVsGroupBenchmarkPercent,
@@ -63,6 +64,7 @@ import {
   getFilleulVaaDurationBenchmarkStatus,
   getFilleulHabilitationDurationBenchmarkStatus,
   getFilleulVolumeBenchmarkStatus,
+  getFilleulConsultantAverageVolumeBenchmarkStatus,
   getFilleulActiveConsultantRateBenchmarkStatus,
   filleulVaaDurationBenchmarkStatusLabel,
   filleulHabilitationDurationBenchmarkStatusLabel,
@@ -74,6 +76,11 @@ import {
 } from "@/lib/statistiques/organisation-diagnostic";
 import { OrganisationDiagnosticPanel } from "./OrganisationDiagnosticPanel";
 import { OrganisationObjectifTablePanel } from "./OrganisationObjectifTablePanel";
+import { computeOrganisationObjectifObservedStats } from "@/lib/statistiques/organisation-objectif-observed-stats";
+import {
+  computeAverageOrganisationVolumePerConsultant,
+  computeOrganisationBranchVolumeForExercice,
+} from "@/lib/statistiques/filleul-organisation-exercice-summary";
 import { DashboardDrillDownBackdrop } from "@/components/dashboard/DashboardDrillDownBackdrop";
 import { DashboardStatContactsSheet } from "@/components/dashboard/DashboardStatContactsSheet";
 import { ChartEmpty, ChartLoading } from "@/components/dashboard/dashboard-ui";
@@ -318,18 +325,27 @@ function VolumeKpiPanel({
   unavailable,
   exerciceLabel,
   stats,
+  averageVolumePerConsultant,
   onOpenList,
 }: {
   loading: boolean;
   unavailable?: boolean;
   exerciceLabel: string;
   stats: FilleulAverageVolumeStatResult;
+  averageVolumePerConsultant: number | null;
   onOpenList: (kind: FilleulVolumeListKind) => void;
 }) {
   const benchmarkSettings = useStatistiquesBenchmarkSettings();
   const volumeBenchmarkStatus =
     stats.averageVolume != null
       ? getFilleulVolumeBenchmarkStatus(stats.averageVolume, benchmarkSettings)
+      : null;
+  const consultantAverageVolumeBenchmarkStatus =
+    averageVolumePerConsultant != null
+      ? getFilleulConsultantAverageVolumeBenchmarkStatus(
+          averageVolumePerConsultant,
+          benchmarkSettings
+        )
       : null;
   const activeRateBenchmarkStatus =
     stats.totalEligible > 0
@@ -358,7 +374,7 @@ function VolumeKpiPanel({
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
               Exercice {exerciceLabel}
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
                   Volume moyen (actifs)
@@ -392,6 +408,46 @@ function VolumeKpiPanel({
                       </span>
                     </>
                   ) : null}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  Volume moyen / consultant
+                </p>
+                <p
+                  className={cn(
+                    "text-3xl font-serif font-bold tabular-nums tracking-tight mt-0.5",
+                    consultantAverageVolumeBenchmarkStatus
+                      ? filleulVolumeBenchmarkStatusValueClasses(consultantAverageVolumeBenchmarkStatus)
+                      : "text-primary"
+                  )}
+                  title={
+                    consultantAverageVolumeBenchmarkStatus
+                      ? filleulVolumeBenchmarkStatusLabel(consultantAverageVolumeBenchmarkStatus)
+                      : undefined
+                  }
+                >
+                  {averageVolumePerConsultant != null
+                    ? formatFilleulVolumeDisplay(averageVolumePerConsultant)
+                    : "—"}
+                </p>
+                <p className="text-xs text-muted-foreground tabular-nums mt-1">
+                  Réf.{" "}
+                  {formatFilleulVolumeDisplay(benchmarkSettings.groupConsultantAverageVolumeEuros)}
+                  {averageVolumePerConsultant != null ? (
+                    <>
+                      {" · "}
+                      <span className="font-medium text-foreground">
+                        {formatConsultantAverageVolumeVsGroupBenchmarkPercent(
+                          averageVolumePerConsultant,
+                          benchmarkSettings
+                        )}
+                      </span>
+                    </>
+                  ) : null}
+                </p>
+                <p className="text-[10px] text-muted-foreground/80 mt-0.5">
+                  Volume org. ÷ consultant net
                 </p>
               </div>
               <div>
@@ -1400,9 +1456,9 @@ export function ContactFilleulOrganisationPanel({
   const [closedExerciceLabels, setClosedExerciceLabels] = useState<string[]>([]);
   const [selectedExercice, setSelectedExercice] =
     useState<OrganisationExerciceSelection>(ORGANISATION_CURRENT_EXERCICE);
-  const [historyRecords, setHistoryRecords] = useState<
-    Awaited<ReturnType<typeof getFilleulVolumeExercicesByLabel>>
-  >([]);
+  const [historyRecordsByLabel, setHistoryRecordsByLabel] = useState<
+    Map<string, Awaited<ReturnType<typeof getFilleulVolumeExercicesByLabel>>>
+  >(new Map());
   const [historyLoading, setHistoryLoading] = useState(false);
   const [dossiersByContactId, setDossiersByContactId] = useState<Map<number, FilleulDossier>>(
     new Map()
@@ -1431,26 +1487,52 @@ export function ContactFilleulOrganisationPanel({
     [selectedExercice]
   );
 
+  const previousExerciceLabelForObjectif = useMemo(
+    () => previousFiscalYearLabel(resolvedExerciceLabel),
+    [resolvedExerciceLabel]
+  );
+
+  const exerciceLabelsNeedingHistory = useMemo(() => {
+    const labels = new Set<string>();
+    if (!isLiveFilleulExerciceVolumes(resolvedExerciceLabel, closedExerciceLabels)) {
+      labels.add(resolvedExerciceLabel);
+    }
+    if (
+      previousExerciceLabelForObjectif != null &&
+      !isLiveFilleulExerciceVolumes(previousExerciceLabelForObjectif, closedExerciceLabels)
+    ) {
+      labels.add(previousExerciceLabelForObjectif);
+    }
+    return [...labels];
+  }, [resolvedExerciceLabel, previousExerciceLabelForObjectif, closedExerciceLabels]);
+
   const viewingLiveVolumes = useMemo(
     () => isLiveFilleulExerciceVolumes(resolvedExerciceLabel, closedExerciceLabels),
     [resolvedExerciceLabel, closedExerciceLabels]
   );
 
   useEffect(() => {
-    if (viewingLiveVolumes) {
-      setHistoryRecords([]);
+    if (exerciceLabelsNeedingHistory.length === 0) {
+      setHistoryRecordsByLabel(new Map());
       setHistoryLoading(false);
       return;
     }
     let cancelled = false;
     setHistoryLoading(true);
-    setHistoryRecords([]);
-    void getFilleulVolumeExercicesByLabel(resolvedExerciceLabel)
-      .then((records) => {
-        if (!cancelled) {
-          setHistoryRecords(records);
-          setHistoryLoading(false);
+    void Promise.all(
+      exerciceLabelsNeedingHistory.map(async (label) => {
+        const records = await getFilleulVolumeExercicesByLabel(label);
+        return { label, records };
+      })
+    )
+      .then((results) => {
+        if (cancelled) return;
+        const map = new Map<string, Awaited<ReturnType<typeof getFilleulVolumeExercicesByLabel>>>();
+        for (const { label, records } of results) {
+          map.set(label, records);
         }
+        setHistoryRecordsByLabel(map);
+        setHistoryLoading(false);
       })
       .catch((error) => {
         console.error(error);
@@ -1459,11 +1541,11 @@ export function ContactFilleulOrganisationPanel({
     return () => {
       cancelled = true;
     };
-  }, [resolvedExerciceLabel, viewingLiveVolumes, dataRefreshKey]);
+  }, [exerciceLabelsNeedingHistory, dataRefreshKey]);
 
-  const historyRecordsByLabel = useMemo(
-    () => new Map([[resolvedExerciceLabel, historyRecords]]),
-    [resolvedExerciceLabel, historyRecords]
+  const historyRecords = useMemo(
+    () => historyRecordsByLabel.get(resolvedExerciceLabel) ?? [],
+    [historyRecordsByLabel, resolvedExerciceLabel]
   );
 
   const useHistoricalVolumes = useMemo(
@@ -1748,6 +1830,42 @@ export function ContactFilleulOrganisationPanel({
       ),
     [contactsForStats, resolvedExerciceLabel, parraineurStatsOptions]
   );
+  const organisationBranchVolume = useMemo(
+    () =>
+      volumeStatsUnavailable
+        ? null
+        : computeOrganisationBranchVolumeForExercice(
+            contacts,
+            resolvedExerciceLabel,
+            closedExerciceLabels,
+            historyRecordsByLabel,
+            cgp ?? {},
+            dossiersByContactId
+          ),
+    [
+      volumeStatsUnavailable,
+      contacts,
+      resolvedExerciceLabel,
+      closedExerciceLabels,
+      historyRecordsByLabel,
+      cgp,
+      dossiersByContactId,
+    ]
+  );
+  const averageVolumePerConsultant = useMemo(
+    () =>
+      volumeStatsUnavailable
+        ? null
+        : computeAverageOrganisationVolumePerConsultant(
+            organisationBranchVolume,
+            filleulNetGrowthExerciceStats.currentCount
+          ),
+    [
+      volumeStatsUnavailable,
+      organisationBranchVolume,
+      filleulNetGrowthExerciceStats.currentCount,
+    ]
+  );
   /**
    * Contacts « survivants » — mêmes consultants que les « X actuels » (encore inscrits à la
    * clôture, base `wasActifConsultantDuringExercice`), PAS la base plus large « présent à un
@@ -1854,7 +1972,7 @@ export function ContactFilleulOrganisationPanel({
   );
 
   const diagnosticBenchmarkSettings = useStatistiquesBenchmarkSettings();
-  const previousExerciceLabelForDiagnostic = previousFiscalYearLabel(resolvedExerciceLabel);
+  const previousExerciceLabelForDiagnostic = previousExerciceLabelForObjectif;
   const previousNetGrowthStatsForDiagnostic = useMemo(
     () =>
       previousExerciceLabelForDiagnostic
@@ -1921,6 +2039,24 @@ export function ContactFilleulOrganisationPanel({
       filleulAttritionExerciceStats,
       previousAttritionStatsForDiagnostic,
       parrainageDurationExerciceStats,
+    ]
+  );
+
+  const objectifObservedStats = useMemo(
+    () =>
+      computeOrganisationObjectifObservedStats(contacts, resolvedExerciceLabel, {
+        closedExerciceLabels,
+        dossiersByContactId,
+        organisationSelfContactId: selfContactId,
+        historyRecordsByLabel,
+      }),
+    [
+      contacts,
+      resolvedExerciceLabel,
+      closedExerciceLabels,
+      dossiersByContactId,
+      selfContactId,
+      historyRecordsByLabel,
     ]
   );
 
@@ -2439,6 +2575,7 @@ export function ContactFilleulOrganisationPanel({
                 : survivorsTeamOnlyVolumeStats.activePercent
             }
             defaultTargetGrowthPercent={diagnosticBenchmarkSettings.groupNetGrowthPercent}
+            observedStats={objectifObservedStats}
             benchmarkSettings={diagnosticBenchmarkSettings}
           />
         </div>
@@ -2457,6 +2594,7 @@ export function ContactFilleulOrganisationPanel({
           unavailable={volumeStatsUnavailable}
           exerciceLabel={resolvedExerciceLabel}
           stats={volumeStats}
+          averageVolumePerConsultant={averageVolumePerConsultant}
           onOpenList={openVolumeList}
         />
         <ParraineurKpiPanel

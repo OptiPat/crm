@@ -82,6 +82,8 @@ export function AssumptionField({
   onChange,
   groupValue,
   groupLabel,
+  observedValue,
+  observedExerciceLabel,
   mode = "number",
 }: {
   id: string;
@@ -96,6 +98,10 @@ export function AssumptionField({
   groupValue?: number | null;
   /** Libellé utilisé dans le tooltip, ex. « Réf. groupe ». */
   groupLabel?: string;
+  /** Valeur observée (exercice n-1) affichée sous le champ — distincte de defaultValue si besoin. */
+  observedValue?: number | null;
+  /** Libellé de l'exercice source de la valeur observée (ex. « 2025-2026 »). */
+  observedExerciceLabel?: string | null;
   /** "money" affiche un champ texte avec séparateurs de milliers, sans flèches numériques, plus lisible pour des € (ex. 164 024 plutôt que 164024). */
   mode?: "number" | "money";
 }) {
@@ -103,7 +109,9 @@ export function AssumptionField({
     groupValue != null
       ? `${groupLabel ?? "Réf. groupe"} : ${groupValue.toLocaleString("fr-FR")} ${suffix}`
       : undefined;
-  const isModified = value !== defaultValue;
+  const hasObservedValue = observedValue != null;
+  const referenceValue = hasObservedValue ? observedValue : defaultValue;
+  const isModified = value !== referenceValue;
   return (
     <div
       className="flex flex-col gap-1 rounded-lg border border-border/50 bg-muted/20 px-2.5 py-2"
@@ -145,8 +153,8 @@ export function AssumptionField({
         {isModified && (
           <button
             type="button"
-            onClick={() => onChange(defaultValue)}
-            title={`Réinitialiser à la valeur observée (${defaultValue.toLocaleString("fr-FR")} ${suffix})`}
+            onClick={() => onChange(referenceValue)}
+            title={`Réinitialiser à la valeur observée (${referenceValue.toLocaleString("fr-FR")} ${suffix})`}
             className="ml-auto text-muted-foreground hover:text-foreground shrink-0"
           >
             <RotateCcw className="size-3.5" />
@@ -154,7 +162,11 @@ export function AssumptionField({
         )}
       </div>
       <div className="h-3.5 text-[10px] text-muted-foreground/70 leading-tight">
-        {isModified ? `obs. ${defaultValue.toLocaleString("fr-FR")} ${suffix}` : "\u00A0"}
+        {isModified
+          ? hasObservedValue
+            ? `obs.${observedExerciceLabel != null ? ` (${observedExerciceLabel})` : ""} ${referenceValue.toLocaleString("fr-FR")} ${suffix}`
+            : `obs. ${referenceValue.toLocaleString("fr-FR")} ${suffix}`
+          : "\u00A0"}
       </div>
     </div>
   );

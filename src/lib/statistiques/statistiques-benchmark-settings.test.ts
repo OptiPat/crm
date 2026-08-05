@@ -1,27 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_GROUP_ACTIVE_CONSULTANT_VOLUME_BENCHMARK_EUROS,
+  DEFAULT_GROUP_CONSULTANT_AVERAGE_VOLUME_BENCHMARK_EUROS,
   DEFAULT_GROUP_ACTIVE_CONSULTANT_RATE_BENCHMARK_PERCENT,
   DEFAULT_GROUP_SPONSOR_RATE_BENCHMARK_PERCENT,
   DEFAULT_GROUP_PARRAINAGES_PER_PARRAINEUR_BENCHMARK,
   DEFAULT_GROUP_NET_GROWTH_BENCHMARK_PERCENT,
+  DEFAULT_GROUP_ATTRITION_BENCHMARK_PERCENT,
   DEFAULT_GROUP_VAA_DURATION_BENCHMARK_MONTHS,
   DEFAULT_GROUP_HABILITATION_DURATION_BENCHMARK_MONTHS,
   defaultStatistiquesBenchmarkSettings,
   formatHabilitationDurationVsGroupBenchmarkPercent,
   formatNetGrowthVsGroupBenchmarkPercent,
+  formatAttritionVsGroupBenchmarkPercent,
   formatParrainagePerParraineurVsGroupBenchmarkPercent,
   formatSponsorRateVsGroupBenchmarkPercent,
   formatVaaDurationVsGroupBenchmarkPercent,
   formatVolumeVsGroupBenchmarkPercent,
+  formatConsultantAverageVolumeVsGroupBenchmarkPercent,
   formatActiveConsultantRateVsGroupBenchmarkPercent,
   getFilleulActiveConsultantRateBenchmarkStatus,
   getFilleulHabilitationDurationBenchmarkStatus,
   getFilleulNetGrowthBenchmarkStatus,
+  getFilleulAttritionBenchmarkStatus,
   getFilleulParrainagePerParraineurBenchmarkStatus,
   getFilleulSponsorRateBenchmarkStatus,
   getFilleulVaaDurationBenchmarkStatus,
   getFilleulVolumeBenchmarkStatus,
+  getFilleulConsultantAverageVolumeBenchmarkStatus,
   loadStatistiquesBenchmarkSettings,
   saveStatistiquesBenchmarkSettings,
 } from "./statistiques-benchmark-settings";
@@ -50,6 +56,9 @@ describe("statistiques-benchmark-settings", () => {
     expect(settings.groupActiveConsultantVolumeEuros).toBe(
       DEFAULT_GROUP_ACTIVE_CONSULTANT_VOLUME_BENCHMARK_EUROS
     );
+    expect(settings.groupConsultantAverageVolumeEuros).toBe(
+      DEFAULT_GROUP_CONSULTANT_AVERAGE_VOLUME_BENCHMARK_EUROS
+    );
     expect(settings.groupActiveConsultantRatePercent).toBe(
       DEFAULT_GROUP_ACTIVE_CONSULTANT_RATE_BENCHMARK_PERCENT
     );
@@ -58,6 +67,7 @@ describe("statistiques-benchmark-settings", () => {
       DEFAULT_GROUP_PARRAINAGES_PER_PARRAINEUR_BENCHMARK
     );
     expect(settings.groupNetGrowthPercent).toBe(DEFAULT_GROUP_NET_GROWTH_BENCHMARK_PERCENT);
+    expect(settings.groupAttritionPercent).toBe(DEFAULT_GROUP_ATTRITION_BENCHMARK_PERCENT);
     expect(settings.groupVaaDurationMonths).toBe(DEFAULT_GROUP_VAA_DURATION_BENCHMARK_MONTHS);
     expect(settings.groupHabilitationDurationMonths).toBe(
       DEFAULT_GROUP_HABILITATION_DURATION_BENCHMARK_MONTHS
@@ -68,20 +78,24 @@ describe("statistiques-benchmark-settings", () => {
   it("persiste et recharge les réglages", () => {
     saveStatistiquesBenchmarkSettings({
       groupActiveConsultantVolumeEuros: 600_000,
+      groupConsultantAverageVolumeEuros: 250_000,
       groupActiveConsultantRatePercent: 65,
       groupSponsorRatePercent: 30,
       groupParrainagesPerParraineur: 2.1,
       groupNetGrowthPercent: 25,
+      groupAttritionPercent: 18,
       groupVaaDurationMonths: 12,
       groupHabilitationDurationMonths: 7,
       nearGroupBenchmarkRatio: 0.75,
     });
     const loaded = loadStatistiquesBenchmarkSettings();
     expect(loaded.groupActiveConsultantVolumeEuros).toBe(600_000);
+    expect(loaded.groupConsultantAverageVolumeEuros).toBe(250_000);
     expect(loaded.groupActiveConsultantRatePercent).toBe(65);
     expect(loaded.groupSponsorRatePercent).toBe(30);
     expect(loaded.groupParrainagesPerParraineur).toBe(2.1);
     expect(loaded.groupNetGrowthPercent).toBe(25);
+    expect(loaded.groupAttritionPercent).toBe(18);
     expect(loaded.groupVaaDurationMonths).toBe(12);
     expect(loaded.groupHabilitationDurationMonths).toBe(7);
     expect(loaded.nearGroupBenchmarkRatio).toBe(0.75);
@@ -94,6 +108,18 @@ describe("statistiques-benchmark-settings", () => {
     expect(getFilleulVolumeBenchmarkStatus(500_000, settings)).toBe("near_group");
     expect(getFilleulVolumeBenchmarkStatus(437_600, settings)).toBe("near_group");
     expect(getFilleulVolumeBenchmarkStatus(437_599, settings)).toBe("below_group");
+  });
+
+  it("classe le volume moyen / consultant (actif ou non) vs référence groupe", () => {
+    const settings = defaultStatistiquesBenchmarkSettings();
+    expect(getFilleulConsultantAverageVolumeBenchmarkStatus(250_000, settings)).toBe("above_group");
+    expect(getFilleulConsultantAverageVolumeBenchmarkStatus(228_000, settings)).toBe("above_group");
+    expect(getFilleulConsultantAverageVolumeBenchmarkStatus(200_000, settings)).toBe("near_group");
+    expect(getFilleulConsultantAverageVolumeBenchmarkStatus(182_400, settings)).toBe("near_group");
+    expect(getFilleulConsultantAverageVolumeBenchmarkStatus(180_000, settings)).toBe("below_group");
+    expect(formatConsultantAverageVolumeVsGroupBenchmarkPercent(250_000, settings)).toBe(
+      "+10 % vs réf."
+    );
   });
 
   it("formate l'écart en pourcentage", () => {
@@ -141,6 +167,16 @@ describe("statistiques-benchmark-settings", () => {
     expect(getFilleulNetGrowthBenchmarkStatus(24, settings)).toBe("near_group");
     expect(getFilleulNetGrowthBenchmarkStatus(20, settings)).toBe("below_group");
     expect(formatNetGrowthVsGroupBenchmarkPercent(35, settings)).toBe("+17 % vs réf.");
+  });
+
+  it("classe l'attrition vs référence groupe (plus bas = mieux)", () => {
+    const settings = defaultStatistiquesBenchmarkSettings();
+    expect(getFilleulAttritionBenchmarkStatus(15, settings)).toBe("above_group");
+    expect(getFilleulAttritionBenchmarkStatus(20, settings)).toBe("above_group");
+    expect(getFilleulAttritionBenchmarkStatus(22, settings)).toBe("near_group");
+    expect(getFilleulAttritionBenchmarkStatus(25, settings)).toBe("near_group");
+    expect(getFilleulAttritionBenchmarkStatus(30, settings)).toBe("below_group");
+    expect(formatAttritionVsGroupBenchmarkPercent(15, settings)).toBe("-25 % vs réf.");
   });
 
   it("classe le délai VAA/VA vs référence groupe (plus court = mieux)", () => {

@@ -32,6 +32,7 @@ export type FilleulManagerStatResult = {
 };
 
 export type FilleulAverageVolumeStatResult = {
+  /** Volume propre moyen des consultants actifs (≥ 1 €). */
   averageVolume: number | null;
   /** Part des consultants présents avec volume propre ≥ 1 € (%). */
   activePercent: number;

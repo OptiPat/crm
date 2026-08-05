@@ -16,6 +16,7 @@ import { formatFilleulManagerPercent } from "./contact-filleul-organisation-stat
 import { formatFilleulVaaDurationMonths } from "./filleul-vaa-duration-stats";
 import {
   getFilleulActiveConsultantRateBenchmarkStatus,
+  getFilleulAttritionBenchmarkStatus,
   getFilleulHabilitationDurationBenchmarkStatus,
   getFilleulNetGrowthBenchmarkStatus,
   getFilleulParrainagePerParraineurBenchmarkStatus,
@@ -255,16 +256,21 @@ function buildTauxManagersEntry(
 
 function buildAttritionEntry(input: OrganisationDiagnosticInput): OrganisationDiagnosticEntry | null {
   if (input.attritionPercent == null) return null;
-  const severity: OrganisationDiagnosticSeverity =
-    input.attritionPercent > 50 ? "alert" : input.attritionPercent >= 30 ? "watch" : "ok";
-  const twoYearsAbove50 = severity === "alert" && (input.previousAttritionPercent ?? 0) > 50;
+  const ref = input.benchmarkSettings.groupAttritionPercent;
+  const status = getFilleulAttritionBenchmarkStatus(input.attritionPercent, input.benchmarkSettings);
+  const severity = severityFromBenchmarkStatus(status);
+  const previousStatus =
+    input.previousAttritionPercent != null
+      ? getFilleulAttritionBenchmarkStatus(input.previousAttritionPercent, input.benchmarkSettings)
+      : null;
+  const twoYearsBelowGroup = severity === "alert" && previousStatus === "below_group";
   return {
     ruleId: "attrition",
-    severity: twoYearsAbove50 ? "critical" : severity,
+    severity: twoYearsBelowGroup ? "critical" : severity,
     title: "Attrition",
-    message: twoYearsAbove50
-      ? `Attrition supérieure à 50 % 2 exercices consécutifs (actuel : ${formatFilleulManagerPercent(input.attritionPercent)}).`
-      : `Attrition ${formatFilleulManagerPercent(input.attritionPercent)}.`,
+    message: twoYearsBelowGroup
+      ? `Attrition supérieure à la référence groupe (${formatFilleulManagerPercent(ref)}) 2 exercices consécutifs (actuel : ${formatFilleulManagerPercent(input.attritionPercent)}).`
+      : `Attrition ${formatFilleulManagerPercent(input.attritionPercent)} (réf. groupe ${formatFilleulManagerPercent(ref)}).`,
     recommendation:
       severity === "ok"
         ? "Point fort à préserver."
