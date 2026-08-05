@@ -488,6 +488,8 @@ pub struct Investissement {
     pub nom_produit: String,
     /// N° contrat assureur / Stellium (matching import perf mensuel).
     pub numero_contrat: Option<String>,
+    /// Lien direct vers le contrat sur l'extranet assureur (AV/PER/capi).
+    pub url_contrat: Option<String>,
     pub montant_initial: Option<i64>,
     pub date_souscription: Option<i64>,
     pub date_fin_demembrement: Option<i64>,

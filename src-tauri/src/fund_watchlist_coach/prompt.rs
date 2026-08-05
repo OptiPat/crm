@@ -109,11 +109,50 @@ pub struct FundCoachContext {
     pub holding_news: Vec<HoldingNewsBlock>,
     pub warnings: Vec<String>,
     pub diagnostic: Option<FundCoachDiagnostic>,
+    /// Vrai dès qu'un import de positions existe : sans lui, « détenu par personne » serait
+    /// une affirmation gratuite, et le bloc reste muet sur la détention.
+    pub positions_known: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct HoldingNewsBlock {
     pub headlines: Vec<NewsHeadline>,
+}
+
+/// Montant lisible dans un prompt : « 312 000 € », sans espace insécable.
+fn format_encours_euros(value: f64) -> String {
+    let rounded = value.round().abs() as u64;
+    let digits = rounded.to_string();
+    let mut grouped = String::new();
+    for (index, ch) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index) % 3 == 0 {
+            grouped.push(' ');
+        }
+        grouped.push(ch);
+    }
+    let sign = if value.round() < 0.0 { "-" } else { "" };
+    format!("{sign}{grouped} €")
+}
+
+/// Seuls des agrégats partent vers le modèle (prestataire externe) : un montant et un nombre de
+/// clients, jamais un nom ni un numéro de contrat.
+///
+/// Le périmètre est nommé dans la ligne elle-même : il ne couvre que les contrats dont l'export a
+/// été importé, et le rattachement se fait sur l'ISIN exact. Une absence de détention ne prouve
+/// donc rien — le fonds peut être détenu sur une autre plateforme ou sous une autre classe de
+/// parts, ce qui ferait conclure à tort qu'il n'y a rien à arbitrer.
+fn detention_line(ctx: &FundCoachContext) -> Option<String> {
+    match ctx.entry.detention.as_ref() {
+        Some(detention) => Some(format!(
+            "- Détenu (contrats importés) : {} chez {} client(s)\n",
+            format_encours_euros(detention.encours),
+            detention.clients
+        )),
+        None if ctx.positions_known => {
+            Some("- Détenu (contrats importés) : aucun client\n".to_string())
+        }
+        None => None,
+    }
 }
 
 pub fn build_fund_context_block(ctx: &FundCoachContext) -> String {
@@ -129,6 +168,9 @@ pub fn build_fund_context_block(ctx: &FundCoachContext) -> String {
     }
     if let Some(stars) = entry.notation_morningstar {
         block.push_str(&format!("- Morningstar : {stars}/5\n"));
+    }
+    if let Some(line) = detention_line(ctx) {
+        block.push_str(&line);
     }
     block.push_str(&format!(
         "- Perfs : 1 sem {} | 1 mois {} | 3 mois {} | YTD {} | 1 an {} | 3 ans {} | 5 ans {}\n",
@@ -350,6 +392,7 @@ Pour CHAQUE fonds, respecte STRICTEMENT la structure suivante :
 - Diagnostic DONNÉES INSUFFISANTES : le CRM n'a trouvé aucune référence de catégorie fiable pour ce fonds. Tu peux conclure à partir de ses performances et de ses positions, mais tu dis alors en une phrase qu'aucune comparaison de catégorie n'était disponible, et tu n'affirmes jamais qu'il devance ou retarde sa catégorie.
 - Nuances relevées par le CRM : quand elles sont fournies, elles reprennent ce que le badge affiche déjà au CGP (correction récente sur une année encore solide, respiration court terme, fonds au-dessus de sa référence). Prends-les en compte avant de durcir un statut — un rapport qui contredit le badge affiché juste à côté n'est pas exploitable.
 - Référence de l'écart : si la référence de l'écart 1 an mentionne « watchlist », elle ne compare le fonds qu'aux autres fonds de la watchlist et non à son marché — le nombre de fonds retenus est indiqué, et plus il est faible plus tu dois rester prudent dans tes conclusions. Mesuré contre une catégorie Boursorama, c'est une véritable référence de marché.
+- Encours détenu : ligne OBLIGATOIRE dès que la donnée « Détenu (contrats importés) » figure dans le contexte du fonds — tu écris alors « - Encours détenu : » suivi du montant et du nombre de clients repris tels quels, sans arrondi ni reformulation du chiffre. Elle dit ce qui est en jeu chez les clients sur les seuls contrats déjà importés, et calibre le ton sans jamais changer le statut : un signal d'arbitrage reste un signal quel que soit le montant. Sur une position importante, précise l'enjeu et le nombre de clients concernés. Quand la donnée indique « aucun client », tu écris qu'aucune position n'apparaît sur le périmètre importé, et tu n'en conclus rien de plus : le fonds peut être détenu sur un contrat non importé ou sous une autre classe de parts, donc jamais « sans impact sur la clientèle ». Tu ne disposes d'aucun nom de client ni numéro de contrat : n'en invente jamais.
 - Risque : sers-toi du Sharpe et de la volatilité pour distinguer une performance obtenue calmement d'une performance heurtée. Un Sharpe négatif sur 3 ans renforce un diagnostic de dégradation, mais ne suffit jamais seul à justifier un arbitrage.
 - Justification CGP : 1 phrase synthétique appuyée sur les positions et la cohérence des horizons de performance.
 - Argumentaire client : 2 à 3 phrases, ton professionnel et mesuré, sans promesse de rendement, explicatif et rassurant.
@@ -620,6 +663,7 @@ mod tests {
             holding_news: Vec::new(),
             warnings: Vec::new(),
             diagnostic,
+            positions_known: false,
         }
     }
 
@@ -666,6 +710,33 @@ mod tests {
         assert!(block.contains("heuristique CRM"));
         // Les nuances du badge doivent parvenir au modèle, sinon il conclut plus durement.
         assert!(block.contains("Nuances relevées par le CRM : Respiration court terme"));
+    }
+
+    /// Le montant part au modèle en agrégat : jamais de nom de client ni de numéro de contrat.
+    #[test]
+    fn context_block_states_holdings_as_aggregates() {
+        let mut ctx = context(None);
+        ctx.positions_known = true;
+        ctx.entry.detention = Some(crate::database::models::FundWatchlistDetention {
+            encours: 312_450.0,
+            clients: 7,
+            contrats: 9,
+        });
+        let block = build_fund_context_block(&ctx);
+        assert!(block.contains("Détenu (contrats importés) : 312 450 € chez 7 client(s)"));
+    }
+
+    /// « Détenu par personne » n'a de sens qu'après un import, et seulement sur le périmètre
+    /// importé : une autre classe de parts ou un contrat non importé suffit à rendre l'absence
+    /// trompeuse, le libellé doit donc toujours porter le périmètre.
+    #[test]
+    fn context_block_only_claims_nobody_holds_it_after_an_import() {
+        let silent = build_fund_context_block(&context(None));
+        assert!(!silent.contains("Détenu"));
+
+        let mut ctx = context(None);
+        ctx.positions_known = true;
+        assert!(build_fund_context_block(&ctx).contains("Détenu (contrats importés) : aucun client"));
     }
 
     #[test]

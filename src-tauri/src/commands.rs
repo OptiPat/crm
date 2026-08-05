@@ -1917,6 +1917,20 @@ pub fn update_investissement(
 }
 
 #[tauri::command]
+pub fn set_investissement_url_contrat(
+    db: State<'_, DbState>,
+    id: i64,
+    url: Option<String>,
+) -> Result<Investissement, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .set_investissement_url_contrat(id, url)
+        .map_err(|e| format!("Failed to set url_contrat: {}", e))
+}
+
+#[tauri::command]
 pub fn delete_investissement(db: State<'_, DbState>, id: i64) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;

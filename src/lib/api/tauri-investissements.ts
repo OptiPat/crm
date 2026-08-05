@@ -14,6 +14,8 @@ export interface Investissement {
   nom_produit: string;
   /** N° contrat assureur / Stellium (import perf mensuel). */
   numero_contrat?: string;
+  /** Lien direct vers le contrat sur l'extranet assureur (AV/PER/capi). */
+  url_contrat?: string;
   montant_initial?: number;
   date_souscription?: number;
   date_fin_demembrement?: number;
@@ -189,6 +191,19 @@ export async function updateInvestissement(
     notifyContactsChanged();
     notifyInvestissementsChanged();
   }
+  return updated;
+}
+
+/** Lien extranet du contrat (AV/PER/capi) — `null` ou URL non http(s) efface le lien. */
+export async function setInvestissementUrlContrat(
+  id: number,
+  url: string | null
+): Promise<Investissement> {
+  const updated = await invoke<Investissement>("set_investissement_url_contrat", {
+    id,
+    url,
+  });
+  notifyInvestissementsChanged();
   return updated;
 }
 

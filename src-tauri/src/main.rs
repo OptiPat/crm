@@ -16,6 +16,7 @@ mod compta;
 mod contact_name;
 mod database;
 mod documents_storage;
+mod contrat_supports_commands;
 mod email;
 mod export_archive;
 mod fund_watchlist_benchmark_sync;
@@ -288,6 +289,7 @@ fn main() {
             create_investissement,
             get_investissement_by_id,
             update_investissement,
+            set_investissement_url_contrat,
             delete_investissement,
             close_investissement,
             reopen_investissement,
@@ -618,8 +620,9 @@ fn main() {
             team_list_audit_cmd,
             fund_watchlist_commands::get_all_fund_watchlist_entries,
             fund_watchlist_commands::import_fund_watchlist_entries,
-            fund_watchlist_commands::import_contrat_supports,
-            fund_watchlist_commands::list_fund_holders,
+            contrat_supports_commands::import_contrat_supports,
+            contrat_supports_commands::list_fund_holders,
+            contrat_supports_commands::list_contrat_supports,
             fund_watchlist_commands::set_fund_watchlist_favorite,
             fund_watchlist_commands::start_fund_watchlist_favorites_report,
             fund_watchlist_commands::fund_watchlist_coach_report_in_progress,

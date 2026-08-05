@@ -605,6 +605,7 @@ impl Database {
         self.migrate_add_date_fin_pret()?;
         self.migrate_add_investissement_immo_financing_fields()?;
         self.migrate_add_investissement_numero_contrat()?;
+        self.migrate_add_investissement_url_contrat()?;
         self.migrate_add_investissement_statut()?;
         self.migrate_add_investissement_prevoyance_fields()?;
         self.migrate_add_investissement_arbitrage_dates()?;
@@ -2298,6 +2299,18 @@ impl Database {
              WHERE numero_contrat IS NOT NULL AND TRIM(numero_contrat) != ''",
             [],
         )?;
+        Ok(())
+    }
+
+    /// Migration : URL directe du contrat sur l'extranet assureur (AV/PER/capi).
+    fn migrate_add_investissement_url_contrat(&self) -> Result<()> {
+        if !self.table_has_column("investissements", "url_contrat")? {
+            self.conn.execute(
+                "ALTER TABLE investissements ADD COLUMN url_contrat TEXT",
+                [],
+            )?;
+            println!("✅ Migration appliquée : colonne url_contrat sur investissements");
+        }
         Ok(())
     }
 

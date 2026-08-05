@@ -131,8 +131,11 @@ pub fn spawn_favorites_report(
     Ok(())
 }
 
-/// Gravité du diagnostic d'abord, score court terme ensuite : le modèle traite les fonds
-/// dégradés en premier, et ce sont eux qui survivent à la troncature `MAX_FAVORITES`.
+/// Gravité du diagnostic d'abord, encours détenu ensuite, score court terme en dernier ressort :
+/// le modèle traite les fonds dégradés en premier, et à gravité égale ceux qui pèsent réellement
+/// chez les clients. La gravité reste prioritaire à dessein — un signal sur une petite ligne passe
+/// avant un gros fonds en bonne santé, sinon le rapport contredirait les badges. Ce tri décide
+/// aussi qui survit à la troncature `MAX_FAVORITES`.
 fn sort_favorites_for_coach(
     favorites: &mut [FundWatchlistEntry],
     diagnostics: &HashMap<String, FundCoachDiagnostic>,
@@ -143,27 +146,47 @@ fn sort_favorites_for_coach(
             .map(|d| diagnostic_severity_rank(&d.status))
             .unwrap_or_else(|| diagnostic_severity_rank("inconnu"))
     };
+    let encours = |entry: &FundWatchlistEntry| {
+        entry
+            .detention
+            .as_ref()
+            .map(|detention| detention.encours)
+            .unwrap_or(0.0)
+    };
     favorites.sort_by(|left, right| {
-        rank(left).cmp(&rank(right)).then_with(|| {
-            let sl = short_term_score(left);
-            let sr = short_term_score(right);
-            match (sl, sr) {
-                (Some(l), Some(r)) => l
-                    .partial_cmp(&r)
+        rank(left)
+            .cmp(&rank(right))
+            .then_with(|| {
+                encours(right)
+                    .partial_cmp(&encours(left))
                     .unwrap_or(std::cmp::Ordering::Equal)
-                    .then_with(|| left.nom.cmp(&right.nom)),
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, None) => left.nom.cmp(&right.nom),
-            }
-        })
+            })
+            .then_with(|| {
+                let sl = short_term_score(left);
+                let sr = short_term_score(right);
+                match (sl, sr) {
+                    (Some(l), Some(r)) => l
+                        .partial_cmp(&r)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .then_with(|| left.nom.cmp(&right.nom)),
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, None) => left.nom.cmp(&right.nom),
+                }
+            })
     });
+}
+
+struct FavoritesSnapshot {
+    favorites: Vec<FundWatchlistEntry>,
+    total_favorites: usize,
+    positions_known: bool,
 }
 
 fn load_favorites_snapshot(
     app: &AppHandle,
     diagnostics: &HashMap<String, FundCoachDiagnostic>,
-) -> Result<(Vec<FundWatchlistEntry>, usize), String> {
+) -> Result<FavoritesSnapshot, String> {
     let db_state = app.state::<DbState>();
     let db_guard = db_state
         .inner()
@@ -176,9 +199,16 @@ fn load_favorites_snapshot(
         .get_fund_watchlist_favorites()
         .map_err(|e| format!("Lecture favoris : {e}"))?;
     let total_favorites = favorites.len();
+    let positions_known = database
+        .has_contrat_supports()
+        .map_err(|e| format!("Lecture positions clients : {e}"))?;
     sort_favorites_for_coach(&mut favorites, diagnostics);
     favorites.truncate(MAX_FAVORITES);
-    Ok((favorites, total_favorites))
+    Ok(FavoritesSnapshot {
+        favorites,
+        total_favorites,
+        positions_known,
+    })
 }
 
 fn generate_favorites_report(
@@ -190,7 +220,11 @@ fn generate_favorites_report(
         .map(|d| (d.isin.clone(), d.clone()))
         .collect();
     // Lecture DB brève — le verrou est relâché avant toute requête HTTP / appel LLM.
-    let (favorites, total_favorites) = load_favorites_snapshot(app, &diagnostics)?;
+    let FavoritesSnapshot {
+        favorites,
+        total_favorites,
+        positions_known,
+    } = load_favorites_snapshot(app, &diagnostics)?;
 
     if favorites.is_empty() {
         return Err("Aucun fonds favori — épinglez des fonds avec l'étoile.".into());
@@ -224,7 +258,7 @@ fn generate_favorites_report(
     let mut warnings = Vec::new();
     if total_favorites > MAX_FAVORITES {
         warnings.push(format!(
-            "Seuls les {MAX_FAVORITES} premiers favoris (tri diagnostic puis score CT — priorité aux fonds dégradés) ont été analysés sur {total_favorites}."
+            "Seuls les {MAX_FAVORITES} premiers favoris (tri diagnostic, puis encours détenu, puis score CT — priorité aux fonds dégradés) ont été analysés sur {total_favorites}."
         ));
     }
 
@@ -259,6 +293,7 @@ fn generate_favorites_report(
         );
         let mut context = collect_fund_context(&boursorama_http, &rss_http, entry)?;
         context.diagnostic = diagnostics.get(&entry.isin).cloned();
+        context.positions_known = positions_known;
         contexts.push(context);
     }
 
@@ -370,6 +405,7 @@ fn collect_fund_context(
         holding_news,
         warnings,
         diagnostic: None,
+        positions_known: false,
     })
 }
 
@@ -645,6 +681,52 @@ mod tests {
         sort_favorites_for_coach(&mut favorites, &HashMap::new());
         assert_eq!(favorites[0].nom, "Mauvais");
         assert_eq!(favorites[1].nom, "Bon");
+    }
+
+    /// À gravité égale, ce qui pèse chez les clients passe devant : c'est aussi ce qui survit à
+    /// la troncature quand les favoris dépassent la limite envoyée au modèle.
+    #[test]
+    fn sort_favorites_puts_the_biggest_holding_first_at_equal_severity() {
+        let mut petit = sort_sample("Petit", [Some(1.0), Some(2.0), Some(3.0), Some(4.0)]);
+        petit.detention = Some(crate::database::models::FundWatchlistDetention {
+            encours: 4_000.0,
+            clients: 1,
+            contrats: 1,
+        });
+        let mut gros = sort_sample("Gros", [Some(2.0), Some(3.0), Some(4.0), Some(5.0)]);
+        gros.detention = Some(crate::database::models::FundWatchlistDetention {
+            encours: 300_000.0,
+            clients: 7,
+            contrats: 9,
+        });
+        let mut favorites = vec![petit, gros];
+        sort_favorites_for_coach(&mut favorites, &HashMap::new());
+        assert_eq!(favorites[0].nom, "Gros");
+    }
+
+    /// L'encours ne prend jamais le pas sur la gravité : un signal sur une petite ligne reste
+    /// traité avant un gros fonds sain, sinon le rapport contredirait les badges.
+    #[test]
+    fn sort_favorites_keeps_severity_above_holdings() {
+        let mut signal = sort_sample("Degrade", [Some(1.0), Some(2.0), Some(3.0), Some(4.0)]);
+        signal.detention = Some(crate::database::models::FundWatchlistDetention {
+            encours: 4_000.0,
+            clients: 1,
+            contrats: 1,
+        });
+        let mut sain = sort_sample("Sain", [Some(2.0), Some(3.0), Some(4.0), Some(5.0)]);
+        sain.detention = Some(crate::database::models::FundWatchlistDetention {
+            encours: 300_000.0,
+            clients: 7,
+            contrats: 9,
+        });
+        let mut favorites = vec![sain, signal];
+        let diagnostics = HashMap::from([(
+            "FR000000Degrade".to_string(),
+            diagnostic("FR000000Degrade", "signal_arbitrage"),
+        )]);
+        sort_favorites_for_coach(&mut favorites, &diagnostics);
+        assert_eq!(favorites[0].nom, "Degrade");
     }
 
     #[test]

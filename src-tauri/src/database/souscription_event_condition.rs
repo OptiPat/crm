@@ -87,6 +87,7 @@ mod tests {
             partenaire_id: None,
             nom_produit: "Test".into(),
             numero_contrat: None,
+            url_contrat: None,
             montant_initial: None,
             date_souscription: Some(1_700_000_000),
             date_fin_demembrement: None,

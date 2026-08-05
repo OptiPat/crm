@@ -257,6 +257,8 @@ export const investissements = sqliteTable("investissements", {
   nomProduit: text("nom_produit").notNull(),
   /** N° contrat assureur / Stellium (import perf mensuel). */
   numeroContrat: text("numero_contrat"),
+  /** Lien direct vers le contrat sur l'extranet assureur (AV/PER/capi). */
+  urlContrat: text("url_contrat"),
 
   // Montants
   montantInitial: integer("montant_initial"), // En centimes

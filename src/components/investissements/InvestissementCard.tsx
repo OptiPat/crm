@@ -6,8 +6,10 @@ import {
   formatNomProduit,
   getTypeProduitBgColor,
   getTypeProduitTextClass,
+  isNumeroContratEligible,
   INVESTISSEMENT_META_TONE_CLASS,
 } from "@/lib/investissements/investissement-display";
+import { InvestissementSupportsSection } from "@/components/investissements/InvestissementSupportsSection";
 import {
   getEffectiveEncoursCentimes,
   isPlacementEncoursEligible,
@@ -34,12 +36,15 @@ import {
   Building2,
   Calendar,
   ChevronRight,
+  ExternalLink,
   RefreshCw,
   Repeat,
   Tag,
   TrendingUp,
   User,
 } from "lucide-react";
+import { toast } from "sonner";
+import { openExternalUrl } from "@/lib/api/tauri-system";
 
 export type InvestissementProprietaireVariant = "self" | "foyer" | "member";
 
@@ -307,6 +312,22 @@ export function InvestissementCard({
                 {scpiCreditLabel}
               </InvestissementMetaRow>
             )}
+            {isNumeroContratEligible(inv.type_produit) && inv.url_contrat && (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void openExternalUrl(inv.url_contrat!).catch(() =>
+                    toast.error("Impossible d'ouvrir le lien du contrat")
+                  );
+                }}
+                title={inv.url_contrat}
+              >
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Ouvrir le contrat
+              </button>
+            )}
           </div>
         </div>
         <div className="flex shrink-0 items-center justify-end gap-1.5 self-end sm:self-start">
@@ -327,6 +348,9 @@ export function InvestissementCard({
           ) : null}
         </div>
       </div>
+      {inv.id != null && isNumeroContratEligible(inv.type_produit) && (
+        <InvestissementSupportsSection investissementId={inv.id} />
+      )}
     </div>
   );
 }

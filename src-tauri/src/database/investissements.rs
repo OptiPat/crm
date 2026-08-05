@@ -10,12 +10,25 @@ const INVESTISSEMENT_SELECT_COLS: &str = "id, contact_id, foyer_id, type_produit
     prevoyance_perso, prevoyance_pro, prevoyance_versement_mensuel,
     versement_programme, montant_versement_programme, frequence_versement,
     reinvestissement_dividendes, notes, origine, statut, date_cloture,
-    date_dernier_arbitrage, date_prochain_arbitrage, created_at, updated_at";
+    date_dernier_arbitrage, date_prochain_arbitrage, created_at, updated_at,
+    url_contrat";
 
 fn normalize_numero_contrat(value: Option<String>) -> Option<String> {
     value.and_then(|s| {
         let t = s.trim().to_string();
         if t.is_empty() { None } else { Some(t) }
+    })
+}
+
+/// Lien extranet : seuls http(s) sont conservés (ouverture navigateur).
+fn normalize_url_contrat(value: Option<String>) -> Option<String> {
+    value.and_then(|s| {
+        let t = s.trim().to_string();
+        if t.starts_with("http://") || t.starts_with("https://") {
+            Some(t)
+        } else {
+            None
+        }
     })
 }
 
@@ -59,11 +72,12 @@ impl super::Database {
             date_prochain_arbitrage: row.get(26)?,
             created_at: row.get(27)?,
             updated_at: row.get(28)?,
-            encours_actuel: row.get(29)?,
-            encours_date: row.get(30)?,
-            montant_investi_total: row.get(31)?,
-            stellium_versements_nets_centimes: row.get(32)?,
-            stellium_perf_euro_centimes: row.get(33)?,
+            url_contrat: row.get(29)?,
+            encours_actuel: row.get(30)?,
+            encours_date: row.get(31)?,
+            montant_investi_total: row.get(32)?,
+            stellium_versements_nets_centimes: row.get(33)?,
+            stellium_perf_euro_centimes: row.get(34)?,
         })
     }
 
@@ -437,6 +451,20 @@ impl super::Database {
         );
         self.conn
             .query_row(&sql, params![id], Self::map_investissement_row)
+    }
+
+    /// Lien extranet du contrat (AV/PER/capi) — champ isolé, édité hors payload complet.
+    pub fn set_investissement_url_contrat(
+        &self,
+        id: i64,
+        url: Option<String>,
+    ) -> Result<super::models::Investissement> {
+        let url_contrat = normalize_url_contrat(url);
+        self.conn.execute(
+            "UPDATE investissements SET url_contrat = ?1, updated_at = unixepoch() WHERE id = ?2",
+            params![&url_contrat, id],
+        )?;
+        self.get_investissement_by_id(id)
     }
 
     pub fn update_investissement(

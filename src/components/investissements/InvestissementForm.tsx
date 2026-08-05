@@ -90,6 +90,7 @@ import { suggestPartenaireTypeForProduit } from "@/lib/partenaires/partenaire-di
 import {
   createInvestissement,
   updateInvestissement,
+  setInvestissementUrlContrat,
   getInvestissementById,
   getNomProduitSuggestions,
   type Investissement,
@@ -276,6 +277,7 @@ export function InvestissementForm({
   const [partenaireId, setPartenaireId] = useState<string>("");
   const [nomProduit, setNomProduit] = useState("");
   const [numeroContrat, setNumeroContrat] = useState("");
+  const [urlContrat, setUrlContrat] = useState("");
   const [montantInitial, setMontantInitial] = useState("");
   const [dateSouscription, setDateSouscription] = useState("");
   const [dateFinDemembrement, setDateFinDemembrement] = useState("");
@@ -510,6 +512,7 @@ export function InvestissementForm({
         setPartenaireId(investissement.partenaire_id?.toString() || "");
         setNomProduit(investissement.nom_produit);
         setNumeroContrat(investissement.numero_contrat ?? "");
+        setUrlContrat(investissement.url_contrat ?? "");
         setMontantInitial(investissement.montant_initial ? (investissement.montant_initial / 100).toString() : "");
         setDateSouscription(
           investissement.date_souscription
@@ -618,6 +621,7 @@ export function InvestissementForm({
     setPartenaireId("");
     setNomProduit("");
     setNumeroContrat("");
+    setUrlContrat("");
     setNomProduitSuggestions([]);
     setMontantInitial("");
     setDateSouscription("");
@@ -660,6 +664,12 @@ export function InvestissementForm({
     const hasOwner = investissementCommun ? !!foyerId : !!contactId;
     if (!hasOwner || !typeProduit || !nomProduit) {
       toast.error("Veuillez remplir tous les champs obligatoires");
+      return;
+    }
+
+    const urlContratTrim = showNumeroContratField ? urlContrat.trim() : "";
+    if (urlContratTrim && !/^https?:\/\//i.test(urlContratTrim)) {
+      toast.error("Le lien du contrat doit commencer par https://");
       return;
     }
 
@@ -762,11 +772,22 @@ export function InvestissementForm({
         origine,
       };
 
+      const urlContratSave = showNumeroContratField ? urlContrat.trim() : "";
+
       if (investissement) {
         await updateInvestissement(investissement.id, newInvestissement);
+        if (urlContratSave !== (investissement.url_contrat ?? "")) {
+          await setInvestissementUrlContrat(
+            investissement.id,
+            urlContratSave || null
+          );
+        }
         toast.success("Investissement modifié");
       } else {
-        await createInvestissement(newInvestissement);
+        const created = await createInvestissement(newInvestissement);
+        if (urlContratSave) {
+          await setInvestissementUrlContrat(created.id, urlContratSave);
+        }
 
         if (exceltisOption && exceltisChoice.hasExceltis) {
           const alreadyAssigned = contactHasExceltisAssignment(
@@ -1172,6 +1193,24 @@ export function InvestissementForm({
               <p className="text-xs text-muted-foreground">
                 Reprendre le « N° de contrat » ou « Identifiant du contrat » de l&apos;export mensuel
                 — permet l&apos;import automatique des performances.
+              </p>
+            </div>
+          )}
+
+          {showNumeroContratField && (
+            <div className="space-y-2">
+              <Label htmlFor="url-contrat">Lien extranet du contrat</Label>
+              <Input
+                id="url-contrat"
+                value={urlContrat}
+                onChange={(e) => setUrlContrat(e.target.value)}
+                placeholder="https://..."
+                inputMode="url"
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                Coller l&apos;adresse de la page du contrat chez l&apos;assureur (Vie Plus, APICIL…)
+                — un bouton d&apos;ouverture directe apparaît sur la carte Patrimoine.
               </p>
             </div>
           )}

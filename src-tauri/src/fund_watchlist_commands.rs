@@ -4,9 +4,6 @@ use crate::database::models::{
     FundWatchlistEntry, FundWatchlistFavoritesReport, FundWatchlistImportResult,
     FundWatchlistImportRow,
 };
-use crate::database::contrat_supports::{
-    ContratSupportImportRow, ContratSupportsImportResult, FundHolder,
-};
 use crate::fund_watchlist_coach::FundCoachDiagnostic;
 use tauri::{AppHandle, State};
 
@@ -33,29 +30,6 @@ pub fn import_fund_watchlist_entries(
     database
         .import_fund_watchlist_entries(rows, &label)
         .map_err(|e| format!("Échec import veille fonds : {e}"))
-}
-
-#[tauri::command]
-pub fn import_contrat_supports(
-    db: State<'_, DbState>,
-    rows: Vec<ContratSupportImportRow>,
-    source_label: Option<String>,
-) -> Result<ContratSupportsImportResult, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    let label = source_label.unwrap_or_else(|| "supports".to_string());
-    database
-        .import_contrat_supports(rows, &label)
-        .map_err(|e| format!("Échec import positions clients : {e}"))
-}
-
-#[tauri::command]
-pub fn list_fund_holders(db: State<'_, DbState>, isin: String) -> Result<Vec<FundHolder>, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    database
-        .list_fund_holders(&isin)
-        .map_err(|e| format!("Échec lecture détenteurs : {e}"))
 }
 
 #[tauri::command]

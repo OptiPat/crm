@@ -74,6 +74,20 @@ pub struct FundHolder {
     pub date_valeur: Option<i64>,
 }
 
+/// Une ligne de la composition d'un contrat, telle qu'affichée dans la fiche client.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ContratSupportLine {
+    pub isin: String,
+    pub libelle: String,
+    pub type_support: Option<String>,
+    pub sri: Option<i64>,
+    pub nb_parts: Option<f64>,
+    pub valeur_unitaire: Option<f64>,
+    pub encours: Option<f64>,
+    pub plus_moins_value_pct: Option<f64>,
+    pub date_valeur: Option<i64>,
+}
+
 /// Clé de rapprochement : les numéros saisis dans le CRM peuvent porter espaces, points ou tirets.
 fn contract_key(value: &str) -> String {
     value
@@ -121,6 +135,41 @@ impl super::Database {
     fn watchlist_isins(&self) -> Result<HashSet<String>> {
         let mut stmt = self.conn.prepare("SELECT isin FROM fund_watchlist")?;
         let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        rows.collect()
+    }
+
+    /// Sans aucune position importée, « détenu par personne » ne veut rien dire : le coach doit
+    /// pouvoir se taire plutôt que d'affirmer qu'un fonds n'est chez aucun client.
+    pub fn has_contrat_supports(&self) -> Result<bool> {
+        self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM contrat_supports)",
+            [],
+            |row| row.get::<_, i64>(0).map(|n| n != 0),
+        )
+    }
+
+    /// Composition d'un contrat : ce que le client détient réellement, du plus gros au plus petit.
+    pub fn list_contrat_supports(&self, investissement_id: i64) -> Result<Vec<ContratSupportLine>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT isin, libelle, type_support, sri, nb_parts, valeur_unitaire,
+                    encours, plus_moins_value_pct, date_valeur
+             FROM contrat_supports
+             WHERE investissement_id = ?1
+             ORDER BY encours DESC",
+        )?;
+        let rows = stmt.query_map(params![investissement_id], |row| {
+            Ok(ContratSupportLine {
+                isin: row.get(0)?,
+                libelle: row.get(1)?,
+                type_support: row.get(2)?,
+                sri: row.get(3)?,
+                nb_parts: row.get(4)?,
+                valeur_unitaire: row.get(5)?,
+                encours: row.get(6)?,
+                plus_moins_value_pct: row.get(7)?,
+                date_valeur: row.get(8)?,
+            })
+        })?;
         rows.collect()
     }
 
@@ -499,6 +548,26 @@ mod tests {
         assert!((holders[0].encours.unwrap() - 4000.0).abs() < f64::EPSILON);
         assert_eq!(holders[0].nom, "DUPONT");
         assert_eq!(holders[1].numero_contrat, "2399922");
+    }
+
+    #[test]
+    fn lists_contract_composition_biggest_first() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let inv = seed_contract(&db, "2399922");
+        db.import_contrat_supports(
+            vec![
+                row("2399922", "FR0000000011", "Fonds Test A", 100.0, 1000.0),
+                row("2399922", "FR0000000022", "Fonds Test B", 50.0, 4000.0),
+            ],
+            "supports",
+        )
+        .unwrap();
+
+        let lines = db.list_contrat_supports(inv).unwrap();
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].libelle, "Fonds Test B");
+        assert!((lines[0].encours.unwrap() - 4000.0).abs() < f64::EPSILON);
+        assert!(db.list_contrat_supports(inv + 1000).unwrap().is_empty());
     }
 
     /// Le tableau doit distinguer « personne ne le détient » de « aucune position importée ».
