@@ -83,6 +83,9 @@ describe("SMS_ANTICIPATION_PROFILE_WAITING_REPLIES", () => {
       "Positif",
     ]);
     expect(replies?.[0]?.template).toContain("Ah mince...");
+    expect(replies?.find((r) => r.id === "TIEDE")?.followUp?.template).toContain(
+      "Faut qu'on s'appelle 5 min que tu me racontes ça"
+    );
   });
 });
 

@@ -56,12 +56,12 @@ export const SMS_ANTICIPATION_PROFILE_DEFS: Record<SmsAnticipationProfile, SmsAn
       A: {
         label: "Variante A (Souvenir simple)",
         template:
-          "Salut {{prenom}} ! Je repensais à toi l'autre jour, ça fait un bail ! J'espère que tout va bien. Tu es toujours dans la même boîte ?",
+          "Salut {{prenom}} ! Je repensais à toi l'autre jour, ça fait un bail ! J'espère que tout va bien de ton côté. Toujours dans la même boîte ?",
       },
       B: {
         label: "Variante B (Nouvelles globales)",
         template:
-          "Salut {{prenom}} ! J'espère que toute la famille va bien. Ça fait un moment ! C'est quoi les nouvelles de ton côté ?",
+          "Salut {{prenom}} ! J'espère que toute la famille va bien. Ça fait un moment ! Quelles sont les nouvelles de ton côté ?",
       },
     },
   },
@@ -248,6 +248,11 @@ export interface SmsAnticipationProfileReplyOption {
   id: string;
   label: string;
   template: string;
+  /** 2ᵉ relance affichée sous le 1ᵉʳ SMS (ex. tiède → frustration). */
+  followUp?: {
+    label: string;
+    template: string;
+  };
 }
 
 /** Relances « attente de réponse » spécifiques à un profil (un texte par type de réponse). */
@@ -259,25 +264,35 @@ export const SMS_ANTICIPATION_PROFILE_WAITING_REPLIES: Partial<
       id: "FRUSTRATION",
       label: "Frustration",
       template:
-        "Ah mince... Je te comprends. Faut qu'on s'appelle 5 min, que tu me racontes. Tu as un moment ce soir ou demain vers 18h ?",
+        "Ah mince... Je te comprends. Faut qu'on s'appelle 5 min que tu me racontes ça. Tu as un moment ce soir vers 18h ou demain midi ?",
     },
     {
       id: "TIEDE",
       label: "Tiède",
       template:
-        "Haha le fameux 'on fait avec' ! 😉 Faut qu'on s'appelle 5 min pour se donner de vraies nouvelles. Tu as un moment ce soir ou demain vers 18h ?",
+        "Haha le fameux 'on fait avec' ! 😉 C'est quoi qui te pèse le plus en ce moment ? Le rythme, la routine ?",
+      followUp: {
+        label: "Attente de réponse",
+        template:
+          "Ah mince... Je te comprends. Faut qu'on s'appelle 5 min que tu me racontes ça. Tu as un moment ce soir vers 18h ou demain midi ?",
+      },
     },
     {
       id: "ESQUIVE",
       label: "Esquive",
       template:
-        "Tout va bien chez nous aussi merci ! Et le boulot alors, c'est si terrible que tu n'en parles pas ? 😂 Faut qu'on s'appelle 5 min, tu as un moment ce soir ou demain vers 18h ?",
+        "Tout va bien chez nous aussi merci ! Et le boulot, t'as esquivé la question, c'est si terrible que ça ? 😂",
+      followUp: {
+        label: "Attente de réponse",
+        template:
+          "Ah mince... Je te comprends. Faut qu'on s'appelle 5 min que tu me racontes ça. Tu as un moment ce soir vers 18h ou demain midi ?",
+      },
     },
     {
       id: "POSITIF",
       label: "Positif",
       template:
-        "Trop bien, ça fait plaisir à lire ! Faut qu'on se passe un coup de tél rapide pour se capter. Tu as 5 min ce soir ou demain vers 18h ?",
+        "Trop bien, ça fait plaisir à lire ! Écoute ça va nickel ! Plein de nouveautés et de super projets de mon côté, je te raconterai ça de vive voix ! Tu as un moment ce soir vers 18h ou demain midi ?",
     },
   ],
 };

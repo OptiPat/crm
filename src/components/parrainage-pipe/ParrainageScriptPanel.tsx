@@ -42,6 +42,8 @@ import { PARRAINAGE_PIPE_STAGE_LABELS, type ParrainagePipeStage } from "@/lib/pa
 import { fireConfettiBurst } from "@/lib/ui/confetti-burst";
 import { toast } from "sonner";
 
+const PROFILE_REPLY_IDS_WITHOUT_INSISTE_SMS = new Set(["FRUSTRATION", "TIEDE", "ESQUIVE"]);
+
 function SmsAnticipationPicker({
   pipe,
   text,
@@ -139,25 +141,35 @@ function SmsAnticipationPicker({
 function SmsAnticipationProfileReplyPicker({
   profile,
   text,
+  followUpText,
   onTextChange,
+  onFollowUpTextChange,
+  onSelectedOptionChange,
 }: {
   profile: SmsAnticipationProfile;
   text: string;
+  followUpText: string;
   onTextChange: (text: string) => void;
+  onFollowUpTextChange: (text: string) => void;
+  onSelectedOptionChange?: (optionId: string) => void;
 }) {
   const options = smsAnticipationProfileWaitingReplies(profile) ?? [];
   const [selectedId, setSelectedId] = useState(options[0]?.id ?? "");
+
+  const selectedOption = options.find((o) => o.id === selectedId);
 
   const applyOption = (optionId: string) => {
     const option = options.find((o) => o.id === optionId);
     if (!option) return;
     setSelectedId(optionId);
     onTextChange(option.template);
+    onFollowUpTextChange(option.followUp?.template ?? "");
+    onSelectedOptionChange?.(optionId);
   };
 
-  const copy = async () => {
+  const copy = async (value: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(value);
       toast.success("Copié");
     } catch {
       toast.error("Copie impossible");
@@ -187,7 +199,13 @@ function SmsAnticipationProfileReplyPicker({
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-2">
           <Label className="text-xs text-muted-foreground">Réponse à envoyer</Label>
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => void copy()}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2"
+            onClick={() => void copy(text)}
+          >
             <Copy className="size-3.5" />
           </Button>
         </div>
@@ -198,6 +216,29 @@ function SmsAnticipationProfileReplyPicker({
           className="text-sm"
         />
       </div>
+
+      {selectedOption?.followUp && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs text-muted-foreground">{selectedOption.followUp.label}</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => void copy(followUpText)}
+            >
+              <Copy className="size-3.5" />
+            </Button>
+          </div>
+          <Textarea
+            value={followUpText}
+            onChange={(e) => onFollowUpTextChange(e.target.value)}
+            rows={3}
+            className="text-sm"
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -413,7 +454,15 @@ function SmsAnticipationWaitingSection({
   const defaultReplyText =
     profileReplies?.[0]?.template ?? SMS_ANTICIPATION_REPLY_DEFS.FRUSTRATION.options.A.template;
 
+  const defaultFollowUpText = profileReplies?.[0]?.followUp?.template ?? "";
+
   const [replyText, setReplyText] = useState(defaultReplyText);
+  const [followUpText, setFollowUpText] = useState(defaultFollowUpText);
+  const [selectedProfileReplyId, setSelectedProfileReplyId] = useState(
+    () => profileReplies?.[0]?.id ?? ""
+  );
+  const showInsisteSmsPicker =
+    !profileReplies || !PROFILE_REPLY_IDS_WITHOUT_INSISTE_SMS.has(selectedProfileReplyId);
   const [objectionText, setObjectionText] = useState(
     () => SMS_ANTICIPATION_INSISTE_SMS_DEF.options.A.template
   );
@@ -421,7 +470,9 @@ function SmsAnticipationWaitingSection({
 
   useEffect(() => {
     setReplyText(defaultReplyText);
-  }, [pipe.id, profile, defaultReplyText]);
+    setFollowUpText(defaultFollowUpText);
+    setSelectedProfileReplyId(profileReplies?.[0]?.id ?? "");
+  }, [pipe.id, profile, defaultReplyText, defaultFollowUpText, profileReplies]);
 
   const markRelanceSent = async (event: React.MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -431,11 +482,16 @@ function SmsAnticipationWaitingSection({
       if (advanced === false) {
         return;
       }
-      const combined = `Relance (selon sa réponse) :\n${replyText}\n\nSi insiste pour du SMS :\n${objectionText}`;
+      const relanceNote = followUpText.trim()
+        ? `Relance (selon sa réponse) :\n${replyText}\n\n${followUpText}`
+        : `Relance (selon sa réponse) :\n${replyText}`;
+      const combined = showInsisteSmsPicker
+        ? `${relanceNote}\n\nSi insiste pour du SMS :\n${objectionText}`
+        : relanceNote;
       await createParrainagePipeTimelineNote(pipe.id, combined);
       onNoteSaved?.();
       fireConfettiBurst({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
-      toast.success("Relance envoyée — étape « Prise de contact »");
+      toast.success("Rebond envoyé — étape « Prise de contact »");
     } catch (error) {
       toast.error(String(error));
     } finally {
@@ -456,16 +512,22 @@ function SmsAnticipationWaitingSection({
       </p>
       {profile && profileReplies ? (
         <SmsAnticipationProfileReplyPicker
+          key={`${pipe.id}-${profile}`}
           profile={profile}
           text={replyText}
+          followUpText={followUpText}
           onTextChange={setReplyText}
+          onFollowUpTextChange={setFollowUpText}
+          onSelectedOptionChange={setSelectedProfileReplyId}
         />
       ) : (
         <SmsAnticipationReplyPicker text={replyText} onTextChange={setReplyText} />
       )}
-      <SmsAnticipationObjectionPicker text={objectionText} onTextChange={setObjectionText} />
+      {showInsisteSmsPicker && (
+        <SmsAnticipationObjectionPicker text={objectionText} onTextChange={setObjectionText} />
+      )}
       <Button type="button" size="sm" onClick={(e) => void markRelanceSent(e)} disabled={advancing}>
-        Relance envoyée → Prise de contact
+        Rebond envoyé → Prise de contact
       </Button>
     </div>
   );
