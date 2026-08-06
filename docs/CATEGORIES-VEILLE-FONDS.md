@@ -28,9 +28,9 @@ Trois règles complètent le calcul du badge, côté `fund-watchlist-diagnostic.
   aucun badge : une médiane de deux fonds n'a pas le poids statistique que l'écart suggère, et
   l'ajout d'un seul fonds dans la famille pouvait faire disparaître l'alerte.
 
-95 libellés Cristalliance : 94 répartis dans **41 familles**, plus le FCPR exclu du diagnostic.
-Les 41 familles comptent 29 familles principales et 12 familles sectorielles d'un seul libellé
-chacune, puisque aucun regroupement entre secteurs n'est retenu.
+95 libellés Cristalliance : 94 répartis dans **40 familles**, plus le FCPR exclu du diagnostic.
+Les 40 familles comptent 29 familles principales et 11 familles sectorielles, dont 10 d'un seul
+libellé et une qui réunit les ressources naturelles et les métaux précieux.
 
 ---
 
@@ -114,10 +114,9 @@ famille.
 
 ## Actions — sectorielles
 
-Décision : **aucun regroupement entre secteurs**. La biotechnologie n'est pas comparable à la
-santé, les énergies alternatives ne sont pas comparables à l'écologie, les ressources
-naturelles ne sont pas comparables aux métaux précieux. Chaque libellé ne fait référence qu'à
-lui-même, une famille par libellé.
+Décision : **une famille par libellé**, sauf les ressources naturelles et les métaux précieux.
+La biotechnologie n'est pas comparable à la santé, les énergies alternatives ne sont pas
+comparables à l'écologie.
 
 - Actions Secteur Technologies
 - Actions Secteur Santé
@@ -127,10 +126,19 @@ lui-même, une famille par libellé.
 - Actions Secteur Ecologie
 - Actions Secteur Energies Alternatives
 - Actions Secteur Matériaux & Industrie
-- Actions Secteur Métaux Précieux
-- Actions Secteur Ressources Naturelles
 - Actions Secteur Biens Conso. & Services
 - Actions Secteur Autres
+
+### actions_secteur_ressources_metaux
+
+Décision révisée : les deux libellés forment **une seule famille**. La source range des fonds
+aurifères dans les ressources naturelles (AXA Or et Matières Premières), ce qui bloquait la
+comparaison de trois fonds sur l'or. Contrepartie assumée : un fonds énergie ou agriculture
+devient comparable à un fonds de mines d'or, alors que l'or suit les taux réels et le pétrole
+le cycle. À revoir si les badges ou les verdicts de cette famille paraissent incohérents.
+
+- Actions Secteur Métaux Précieux
+- Actions Secteur Ressources Naturelles
 
 ---
 

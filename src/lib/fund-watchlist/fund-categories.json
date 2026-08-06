@@ -137,16 +137,13 @@
       "categories": ["Actions Secteur Matériaux & Industrie"]
     },
     {
-      "key": "actions_secteur_metaux_precieux",
-      "label": "Actions Secteur Métaux Précieux",
+      "key": "actions_secteur_ressources_metaux",
+      "label": "Actions Secteur Ressources Naturelles & Métaux Précieux",
       "volatility": "actions",
-      "categories": ["Actions Secteur Métaux Précieux"]
-    },
-    {
-      "key": "actions_secteur_ressources_naturelles",
-      "label": "Actions Secteur Ressources Naturelles",
-      "volatility": "actions",
-      "categories": ["Actions Secteur Ressources Naturelles"]
+      "categories": [
+        "Actions Secteur Métaux Précieux",
+        "Actions Secteur Ressources Naturelles"
+      ]
     },
     {
       "key": "actions_secteur_biens_conso",
