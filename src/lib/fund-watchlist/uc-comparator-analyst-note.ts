@@ -4,6 +4,7 @@ import type {
   UcFundResultScore,
 } from "@/lib/api/tauri-uc-comparator";
 import {
+  criterionDesignatesLeader,
   formatCriterionRawValue,
   fundsInRankOrder,
   metricsForIsin,
@@ -31,6 +32,12 @@ const ASIA_GEO_LABELS = [
 ];
 
 const INDUSTRIAL_SECTOR_LABELS = ["Industriels", "Industrie", "Industrial"];
+
+const PERF_HORIZON_LABELS: Record<string, string> = {
+  perf_1an: "1 an",
+  perf_3ans: "3 ans",
+  perf_5ans: "5 ans",
+};
 
 function shortFundName(nom: string): string {
   return nom;
@@ -79,6 +86,71 @@ function dominantSector(expo: UcFundExpositionSnapshot): { label: string; weight
   return { label: top.label, weight: top.weight_percent };
 }
 
+/**
+ * Un secteur lourd chez un fonds et absent des autres change le moteur de performance, même quand
+ * tous partagent le même secteur dominant. Trois fonds « or » notés ensemble avaient tous
+ * « Matières premières de base » en dominant, et le tiers d'énergie de l'un d'eux (Exxon Mobil en
+ * 4e ligne) n'apparaissait nulle part dans la note remise en comité.
+ */
+const SECTOR_DIVERGENCE_MIN_WEIGHT = 20;
+const SECTOR_DIVERGENCE_MAX_OTHERS = 5;
+
+function exclusiveExposures(
+  funds: UcFundResultScore[],
+  exposition: UcFundExpositionSnapshot[],
+  pick: (expo: UcFundExpositionSnapshot) => { label: string; weight_percent: number }[]
+): { label: string; nom: string; weight: number }[] {
+  const snapshots = funds.flatMap((fund) => {
+    const expo = expositionForIsin(exposition, fund.isin);
+    return expo ? [{ fund, expo }] : [];
+  });
+  if (snapshots.length < 2) return [];
+
+  const labels = new Set(snapshots.flatMap((s) => pick(s.expo).map((slice) => slice.label)));
+  const divergences: { label: string; nom: string; weight: number }[] = [];
+
+  for (const label of labels) {
+    const weights = snapshots.map((s) => ({
+      nom: s.fund.nom,
+      weight: weightInSlices(pick(s.expo), (l) => l === label),
+    }));
+    const top = weights.reduce((a, b) => (b.weight > a.weight ? b : a));
+    if (top.weight < SECTOR_DIVERGENCE_MIN_WEIGHT) continue;
+    const others = weights.filter((w) => w !== top);
+    if (others.some((w) => w.weight > SECTOR_DIVERGENCE_MAX_OTHERS)) continue;
+    divergences.push({ label, nom: top.nom, weight: top.weight });
+  }
+
+  return divergences.sort((a, b) => b.weight - a.weight).slice(0, 2);
+}
+
+function sectorDivergences(
+  funds: UcFundResultScore[],
+  exposition: UcFundExpositionSnapshot[]
+): string[] {
+  return exclusiveExposures(funds, exposition, (expo) => expo.sectors).map(
+    (d) =>
+      `Divergence sectorielle — ${shortFundName(d.nom)} porte ${d.weight.toFixed(1)} % ${d.label}, ` +
+      `secteur quasi absent des autres fonds comparés : son moteur de performance diffère malgré la catégorie commune.`
+  );
+}
+
+/**
+ * Même logique sur les zones. Indispensable pour les familles qui réunissent volontairement des
+ * sous-catégories voisines : un fonds « Asie-Pacifique avec Japon » à 21 % de Japon face à des
+ * fonds « hors Japon » n'a pas le même marché, et le cumul « Asie » de la note l'effaçait.
+ */
+function geoDivergences(
+  funds: UcFundResultScore[],
+  exposition: UcFundExpositionSnapshot[]
+): string[] {
+  return exclusiveExposures(funds, exposition, (expo) => expo.geo).map(
+    (d) =>
+      `Divergence géographique — ${shortFundName(d.nom)} porte ${d.weight.toFixed(1)} % ${d.label}, ` +
+      `zone quasi absente des autres fonds comparés : cycle et devise distincts malgré la catégorie commune.`
+  );
+}
+
 function isIndustrialHeavy(expo: UcFundExpositionSnapshot): boolean {
   const industrial = weightInSlices(expo.sectors, (l) =>
     INDUSTRIAL_SECTOR_LABELS.some((s) => l.toLowerCase().includes(s.toLowerCase()))
@@ -92,7 +164,12 @@ function criteriaWonByFund(
 ): { key: string; label: string; raw: string }[] {
   const metrics = metricsForIsin(response.metrics ?? [], isin);
   return resolveCriterionWinners(response)
-    .filter((w) => w.criterion.available && w.winnerIsin === isin)
+    .filter(
+      (w) =>
+        w.criterion.available &&
+        w.winnerIsin === isin &&
+        criterionDesignatesLeader(w.criterion)
+    )
     .map((w) => ({
       key: w.criterion.key,
       label: w.criterion.label,
@@ -290,6 +367,11 @@ function buildExposureSection(
     }
   }
 
+  // Balayage sur tous les fonds comparés : l'atypique du groupe est souvent celui que le
+  // classement relègue, donc hors de la comparaison par paire ci-dessus.
+  paragraphs.push(...sectorDivergences(focusFunds, exposition));
+  paragraphs.push(...geoDivergences(focusFunds, exposition));
+
   const others = ranked.filter((f) => !focusFunds.some((ff) => ff.isin === f.isin));
   for (const fund of others.slice(0, 2)) {
     const expo = expositionForIsin(exposition, fund.isin);
@@ -357,8 +439,15 @@ function buildArbitrationSection(
   }
 
   const winner = fundByIsin(ranked, response.winner_isin ?? leader.isin) ?? leader;
+  // Créditer le Sharpe serait faux quand il ne départage pas : on nomme les critères décisifs.
+  // `shortHorizonKeys` ne connaît que les horizons de perf : il masquerait le rang, la volatilité
+  // et la pire année, qui sont souvent les critères décisifs.
+  const winnerWins = criteriaWonByFund(response, winner.isin)
+    .map((w) => w.label.toLowerCase())
+    .join(", ");
   paragraphs.push(
-    `Lecture technique : ${shortFundName(winner.nom)} sur la base du score agrégé et du poids Sharpe. ` +
+    `Lecture technique : ${shortFundName(winner.nom)} sur la base du score agrégé pondéré` +
+      `${winnerWins ? `, départagé sur ${winnerWins}` : ""}. ` +
       `Documenter l'écart ${response.score_gap?.toFixed(1) ?? "—"} pt dans le comité d'investissement / dossier conseil.`
   );
 
@@ -373,9 +462,15 @@ function buildArbitrationSection(
   const challenger = ranked.find((f) => f.isin !== winner.isin);
   if (challenger) {
     const challWins = criteriaWonByFund(response, challenger.isin);
-    if (challWins.some((w) => w.key === "perf_5ans" || w.key === "perf_3ans")) {
+    // Nommer les horizons réellement gagnés : annoncer « 3-5 ans » quand le challenger ne mène
+    // que le 3 ans (le gagnant tenant le 5 ans) est un contresens devant un client.
+    const horizons = challWins
+      .map((w) => PERF_HORIZON_LABELS[w.key])
+      .filter((label): label is string => label != null);
+    if (horizons.length > 0) {
       paragraphs.push(
-        `${shortFundName(challenger.nom)} reste une alternative crédible sur l'historique long terme si le mandat client privilégie la performance absolue 3-5 ans sur l'efficience récente.`
+        `${shortFundName(challenger.nom)} reste une alternative crédible si le mandat client ` +
+          `privilégie la performance brute à ${horizons.join(" et ")} plutôt que le score pondéré d'ensemble.`
       );
     }
   }

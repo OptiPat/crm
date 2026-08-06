@@ -199,6 +199,105 @@ describe("uc-comparator-analyst-note", () => {
     expect(verdict).not.toContain("Égalité technique");
   });
 
+  it("signale le secteur qu'un seul fonds porte, même s'il est dernier du classement", () => {
+    // Trois fonds « or » : tous ont « Matières premières de base » en secteur dominant, donc la
+    // détection par secteur dominant restait muette sur le tiers d'énergie du troisième.
+    const goldResponse: CompareResponse = {
+      ...pictetEchiquierTieResponse,
+      verdict: "WINNER_DECLARED",
+      winner_isin: "FR0007390174",
+      category: "Actions Secteur Ressources Naturelles & Métaux Précieux",
+      score_gap: 2.4,
+      fund_order: ["FR0007390174", "FR0010664086", "FR0010011171"],
+      metrics: [],
+      exposition: [
+        {
+          isin: "FR0007390174",
+          geo: [{ label: "Canada", weight_percent: 65.7 }],
+          sectors: [{ label: "Matières premières de base", weight_percent: 85.8 }],
+          style_box: { cap: "mid_cap", style: "growth", label_fr: "Moyennes cap. / Croissance" },
+          complete: true,
+        },
+        {
+          isin: "FR0010664086",
+          geo: [{ label: "Canada", weight_percent: 74.6 }],
+          sectors: [{ label: "Matières premières de base", weight_percent: 99.2 }],
+          style_box: { cap: "mid_cap", style: "growth", label_fr: "Moyennes cap. / Croissance" },
+          complete: true,
+        },
+        {
+          isin: "FR0010011171",
+          geo: [{ label: "Canada", weight_percent: 39.7 }],
+          sectors: [
+            { label: "Matières premières de base", weight_percent: 65.8 },
+            { label: "Énergie", weight_percent: 33.7 },
+          ],
+          style_box: null,
+          complete: true,
+        },
+      ],
+      results: [
+        { ...pictetEchiquierTieResponse.results[0], isin: "FR0007390174", nom: "CM-AM Global Gold RC", rank: 1 },
+        { ...pictetEchiquierTieResponse.results[1], isin: "FR0010664086", nom: "EdR Goldsphere A EUR", rank: 2 },
+        { ...pictetEchiquierTieResponse.results[2], isin: "FR0010011171", nom: "AXA Or et Matières Premières C", rank: 3 },
+      ],
+    };
+
+    const exposure =
+      buildUcTechnicalAnalystNote(goldResponse)?.sections[1].paragraphs.join(" ") ?? "";
+    expect(exposure).toContain("Divergence sectorielle");
+    expect(exposure).toContain("AXA Or et Matières Premières C porte 33.7 % Énergie");
+    // Le secteur commun aux trois ne doit pas produire de fausse divergence.
+    expect(exposure).not.toContain("porte 99.2 %");
+  });
+
+  it("signale la zone qu'un seul fonds porte, que le cumul Asie masquait", () => {
+    // Famille « Asie / Japon » : elle réunit volontairement « avec Japon » et « hors Japon ».
+    // Le cumul Asie affichait 72,6 % et 74,6 %, deux profils presque identiques en apparence,
+    // alors qu'un seul des deux fonds détient du Japon.
+    const asiaResponse: CompareResponse = {
+      ...pictetEchiquierTieResponse,
+      verdict: "WINNER_DECLARED",
+      winner_isin: "LU1670618187",
+      category: "Actions Asie / Japon",
+      fund_order: ["LU1670618187", "LU0368678339"],
+      metrics: [],
+      exposition: [
+        {
+          isin: "LU1670618187",
+          geo: [
+            { label: "Corée du Sud", weight_percent: 24.1 },
+            { label: "Chine", weight_percent: 21.7 },
+          ],
+          sectors: [{ label: "Technologie", weight_percent: 35.5 }],
+          style_box: { cap: "large_cap", style: "blend", label_fr: "Grandes cap. / Mixte" },
+          complete: true,
+        },
+        {
+          isin: "LU0368678339",
+          geo: [
+            { label: "Japon", weight_percent: 21.2 },
+            { label: "Corée du Sud", weight_percent: 20.3 },
+          ],
+          sectors: [{ label: "Technologie", weight_percent: 35.5 }],
+          style_box: { cap: "large_cap", style: "blend", label_fr: "Grandes cap. / Mixte" },
+          complete: true,
+        },
+      ],
+      results: [
+        { ...pictetEchiquierTieResponse.results[0], isin: "LU1670618187", nom: "M&G Asian Fund", rank: 1 },
+        { ...pictetEchiquierTieResponse.results[1], isin: "LU0368678339", nom: "Fidelity Pacific", rank: 2 },
+      ],
+    };
+
+    const exposure =
+      buildUcTechnicalAnalystNote(asiaResponse)?.sections[1].paragraphs.join(" ") ?? "";
+    expect(exposure).toContain("Divergence géographique");
+    expect(exposure).toContain("Fidelity Pacific porte 21.2 % Japon");
+    // La Corée est détenue par les deux : ce n'est pas une divergence.
+    expect(exposure).not.toContain("Corée du Sud,");
+  });
+
   it("adapte la recommandation pour données insuffisantes", () => {
     const note = buildUcTechnicalAnalystNote({
       ...pictetEchiquierTieResponse,

@@ -129,11 +129,11 @@ fn extract_raw_values(funds: &[UcFundInput], key: &str) -> Vec<Option<f64>> {
 fn compute_scores_for_criterion(def: &CriterionDef, raw: &[Option<f64>]) -> Vec<Option<f64>> {
     match def.key {
         "perf_1an" | "perf_3ans" | "worst_year" => {
-            min_max_higher_better(raw, def.min_significant_delta)
+            min_max_higher_better(raw, def.min_significant_delta, def.full_spread_delta)
         }
-        "perf_5ans" => score_perf5_group(raw, def.min_significant_delta),
+        "perf_5ans" => score_perf5_group(raw, def.min_significant_delta, def.full_spread_delta),
         "sharpe_3y" => score_sharpe_group(raw),
-        "vol_3ans" => min_max_lower_better(raw, def.min_significant_delta),
+        "vol_3ans" => min_max_lower_better(raw, def.min_significant_delta, def.full_spread_delta),
         "rang_categorie" => raw.iter().map(|v| v.map(score_category_rank)).collect(),
         "top10" => raw.iter().map(|v| v.map(score_top10_percent)).collect(),
         _ => vec![None; raw.len()],
@@ -463,8 +463,10 @@ mod tests {
             .map(|f| f.score_relative_total)
             .expect("beta");
 
-        assert!((score_alpha - 89.50).abs() < 0.01, "alpha={score_alpha}");
-        assert!((score_beta - 32.29).abs() < 0.01, "beta={score_beta}");
+        // Échelle ancrée : les perfs ne saturent plus à 0/100. Alpha = 33,3 (perf 1 an, il est
+        // derrière) + 54,2 (3 ans) + 60 (5 ans) + 100 (Sharpe) + 83,3 (top 10) pondérés en v1.
+        assert!((score_alpha - 78.43).abs() < 0.01, "alpha={score_alpha}");
+        assert!((score_beta - 43.35).abs() < 0.01, "beta={score_beta}");
         assert!((score_alpha - score_beta) > 2.0);
     }
 
@@ -534,7 +536,11 @@ mod tests {
             .iter()
             .find(|c| c.key == "sharpe_3y")
             .expect("sharpe");
-        assert!(sharpe.discriminant, "le Sharpe reste sur une échelle proportionnelle");
+        // Échelle proportionnelle conservée (pas de couperet à 0), mais 0,02 de Sharpe d'écart ne
+        // désigne aucun gagnant de critère.
+        assert!(sharpe.scores[1] > sharpe.scores[0], "{:?}", sharpe.scores);
+        assert!(sharpe.scores[0] > 90.0, "{:?}", sharpe.scores);
+        assert!(!sharpe.discriminant, "{:?}", sharpe.scores);
 
         let gap = result.score_gap.expect("gap");
         assert!(gap <= TIE_SCORE_GAP, "gap={gap}");
@@ -655,9 +661,23 @@ mod tests {
             .map(|f| f.score_relative_total)
             .expect("fidelity");
 
-        assert!(fidelity_score > 90.0, "fidelity={fidelity_score}");
-        assert!(pictet_score > 95.0, "pictet={pictet_score}");
+        let sextant_score = result
+            .funds
+            .iter()
+            .find(|f| f.isin == "FR0011050863")
+            .map(|f| f.score_relative_total)
+            .expect("sextant");
+
+        // L'échelle est centrée sur la médiane du groupe : avec un fonds décroché, les deux
+        // leaders tournent autour de 80 au lieu d'être bornés à 100. Ce que ce test protège reste
+        // vrai — ils se tiennent de près et laissent le retardataire loin derrière.
+        assert!(fidelity_score > 75.0, "fidelity={fidelity_score}");
+        assert!(pictet_score > fidelity_score, "pictet={pictet_score}");
         assert!((pictet_score - fidelity_score) < 6.0, "gap={}", pictet_score - fidelity_score);
+        assert!(
+            fidelity_score - sextant_score > 50.0,
+            "sextant={sextant_score}"
+        );
 
         let sharpe_crit = result
             .criteria
@@ -805,5 +825,60 @@ mod tests {
             .expect("critère volatilité");
         assert!(!vol.discriminant, "{:?}", vol.scores);
         assert_eq!(result.verdict, UcVerdict::Tie);
+    }
+
+    /// Mines d'or : la dispersion à 3 ans y atteint 71 points de perf cumulée. Avec une référence
+    /// à 30, les deux premiers étaient bornés à 100 et le vainqueur se jouait sur la concentration
+    /// du portefeuille (10 % du barème) faute de mieux.
+    #[test]
+    fn perf_3ans_ne_sature_pas_sur_un_secteur_tres_disperse() {
+        let gold = |isin: &str,
+                    p1: f64,
+                    p3: f64,
+                    p5: f64,
+                    rang: f64,
+                    sharpe: f64,
+                    vol: f64,
+                    worst: f64,
+                    top10: f64| UcFundInput {
+            isin: isin.to_string(),
+            nom: format!("Fonds {isin}"),
+            categorie: Some("Actions Secteur Métaux Précieux".to_string()),
+            sri: Some(6),
+            perf_1an: Some(p1),
+            perf_3ans: Some(p3),
+            perf_5ans: Some(p5),
+            sharpe_3y: Some(sharpe),
+            vol_3ans: Some(vol),
+            top10_percent: Some(top10),
+            worst_year_perf: Some(worst),
+            category_rank_avg: Some(rang),
+            ..Default::default()
+        };
+
+        let result = run_comparison(
+            &[
+                gold("FR0007390174", 55.6, 160.5, 146.2, 48.0, 1.15, 31.2, -5.9, 41.1),
+                gold("FR0010664086", 52.8, 174.8, 156.9, 39.0, 1.10, 33.1, -8.0, 51.1),
+                gold("FR0010011171", 44.1, 103.2, 124.3, 39.0, 1.31, 23.1, -4.6, 55.9),
+            ],
+            UcScoringVersion::V2,
+        )
+        .expect("comparison");
+
+        let p3 = result
+            .criteria
+            .iter()
+            .find(|c| c.key == "perf_3ans")
+            .expect("critère perf 3 ans");
+        // +174,8 % doit primer sur +160,5 % au lieu d'être noté à égalité. L'échelle est centrée
+        // sur la médiane du groupe, donc le fonds médian vaut exactement 50.
+        assert!((p3.scores[1] - 73.8).abs() < 0.5, "{:?}", p3.scores);
+        assert!((p3.scores[0] - 50.0).abs() < 0.1, "{:?}", p3.scores);
+
+        // L'écart final tombe de 4,0 à 2,2 pt : le classement ne repose plus sur le seul top 10.
+        let gap = result.score_gap.expect("gap");
+        assert!(gap < 3.0, "gap={gap}");
+        assert_eq!(result.winner_isin.as_deref(), Some("FR0007390174"));
     }
 }

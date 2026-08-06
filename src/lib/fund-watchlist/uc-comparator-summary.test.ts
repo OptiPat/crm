@@ -154,6 +154,19 @@ describe("uc-comparator-summary", () => {
     expect(text).toContain("Concentration Top 10");
   });
 
+  it("ne revendique pas un critère où le gagnant et son challenger sont à égalité", () => {
+    // Sharpe 97,6 contre 100 (1,20 contre 1,23) : le backend le déclare discriminant dès qu'un
+    // fonds du groupe décroche, mais il ne départage pas ces deux-là.
+    const text = buildUcComparisonNarrative(pictetFidelityResponse);
+    expect(text).not.toContain("sharpe");
+    expect(text).toContain("Points forts : perf. 3 ans, perf. 1 an.");
+    // Le tableau garde son leader sur ce critère : la cellule verte reste exacte.
+    const sharpe = resolveCriterionWinners(pictetFidelityResponse).find(
+      (w) => w.criterion.key === "sharpe_3y"
+    );
+    expect(sharpe?.winnerIsin).toBe("LU1279334210");
+  });
+
   it("dit si le gagnant bat sa catégorie ou seulement ses concurrents", () => {
     const withAlpha = (alpha: number | null): CompareResponse => ({
       ...pictetFidelityResponse,
@@ -164,10 +177,14 @@ describe("uc-comparator-summary", () => {
     });
 
     expect(buildUcComparisonNarrative(withAlpha(2.4))).toContain(
-      "devance sa catégorie de 2.4 point par an"
+      "devance sa catégorie de 2.4 points par an"
+    );
+    // Pluriel à partir de 2 : « 1.5 points » se voit dans un dossier conseil.
+    expect(buildUcComparisonNarrative(withAlpha(1.5))).toContain(
+      "devance sa catégorie de 1.5 point par an"
     );
     const behind = buildUcComparisonNarrative(withAlpha(-3.1));
-    expect(behind).toContain("en retard de 3.1 point par an");
+    expect(behind).toContain("en retard de 3.1 points par an");
     expect(behind).toContain("sans battre son marché");
     // Écart négligeable ou donnée absente : aucune phrase, pas de faux signal.
     expect(buildUcComparisonNarrative(withAlpha(0.1))).not.toContain("sa catégorie de");

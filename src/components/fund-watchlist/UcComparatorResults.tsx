@@ -142,7 +142,7 @@ export function UcComparatorResults({
           <p className="text-xs text-muted-foreground">
             {isObligations
               ? "Barème obligations : Sharpe 3 ans et perf. 1 an dominent ; pas de Top 10 ni perf. 5 ans dans le score. Stratégie et qualité crédit (HY / IG) déduites du nom et de la catégorie."
-              : "Chaque critère est noté de 0 à 100 dans le groupe (100 = meilleur). Le Sharpe compte le plus (45 % nominal en v1). Si un critère manque (ex. Top 10), son poids est redistribué — le total reste sur 100."}
+              : "Chaque critère est noté de 0 à 100 dans le groupe (100 = meilleur). Le poids appliqué figure sous chaque critère du tableau ci-dessous ; le Sharpe 3 ans est le plus élevé. Si un critère manque (ex. Top 10), son poids est redistribué — le total reste sur 100."}
           </p>
         )}
         {insufficientData && (

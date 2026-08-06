@@ -78,6 +78,12 @@ pub struct CriterionDef {
     /// Calibré par classe d'actif — la dispersion obligataire est bien plus faible qu'en actions.
     /// `0.0` = pas de plancher (critère sur échelle absolue ou proportionnelle).
     pub min_significant_delta: f64,
+    /// Écart brut qui mérite toute l'échelle 0–100. Sans lui, le min-max relatif donnait 0 contre
+    /// 100 dès que l'écart dépassait le plancher : 7 points de perf 3 ans cumulée pesaient autant
+    /// que 30. L'écart de score reste désormais proportionnel à l'écart réel, ce qui évite qu'un
+    /// critère faiblement pondéré décide seul du classement dans un groupe de deux fonds.
+    /// `0.0` = min-max pur (critère déjà sur échelle absolue).
+    pub full_spread_delta: f64,
 }
 
 const EQUITY_CRITERIA: [CriterionDef; 8] = [
@@ -88,6 +94,7 @@ const EQUITY_CRITERIA: [CriterionDef; 8] = [
         weight_v2: 0.06,
         pilier: Pilier::Performance,
         min_significant_delta: 1.5,
+        full_spread_delta: 15.0,
     },
     CriterionDef {
         key: "perf_3ans",
@@ -96,6 +103,10 @@ const EQUITY_CRITERIA: [CriterionDef; 8] = [
         weight_v2: 0.12,
         pilier: Pilier::Performance,
         min_significant_delta: 3.0,
+        // 30 saturait : trois fonds aurifères s'étalaient sur 71 points de perf cumulée, donc les
+        // deux premiers étaient bornés à 100 et leurs 14 points d'écart réel ne comptaient plus.
+        // Le vainqueur se jouait alors sur la concentration du portefeuille, critère à 10 %.
+        full_spread_delta: 60.0,
     },
     CriterionDef {
         key: "perf_5ans",
@@ -104,6 +115,7 @@ const EQUITY_CRITERIA: [CriterionDef; 8] = [
         weight_v2: 0.12,
         pilier: Pilier::Performance,
         min_significant_delta: 5.0,
+        full_spread_delta: 50.0,
     },
     CriterionDef {
         key: "rang_categorie",
@@ -112,6 +124,7 @@ const EQUITY_CRITERIA: [CriterionDef; 8] = [
         weight_v2: 0.15,
         pilier: Pilier::Performance,
         min_significant_delta: 0.0,
+        full_spread_delta: 0.0,
     },
     CriterionDef {
         key: "sharpe_3y",
@@ -120,6 +133,7 @@ const EQUITY_CRITERIA: [CriterionDef; 8] = [
         weight_v2: 0.25,
         pilier: Pilier::Risque,
         min_significant_delta: 0.0,
+        full_spread_delta: 0.0,
     },
     CriterionDef {
         key: "vol_3ans",
@@ -128,6 +142,7 @@ const EQUITY_CRITERIA: [CriterionDef; 8] = [
         weight_v2: 0.08,
         pilier: Pilier::Risque,
         min_significant_delta: 1.0,
+        full_spread_delta: 8.0,
     },
     CriterionDef {
         key: "worst_year",
@@ -136,6 +151,7 @@ const EQUITY_CRITERIA: [CriterionDef; 8] = [
         weight_v2: 0.12,
         pilier: Pilier::Risque,
         min_significant_delta: 2.0,
+        full_spread_delta: 15.0,
     },
     CriterionDef {
         key: "top10",
@@ -144,6 +160,7 @@ const EQUITY_CRITERIA: [CriterionDef; 8] = [
         weight_v2: 0.10,
         pilier: Pilier::Structure,
         min_significant_delta: 0.0,
+        full_spread_delta: 0.0,
     },
 ];
 
@@ -155,6 +172,7 @@ const OBLIGATIONS_CRITERIA: [CriterionDef; 6] = [
         weight_v2: 0.20,
         pilier: Pilier::Performance,
         min_significant_delta: 0.5,
+        full_spread_delta: 2.0,
     },
     CriterionDef {
         key: "perf_3ans",
@@ -163,6 +181,7 @@ const OBLIGATIONS_CRITERIA: [CriterionDef; 6] = [
         weight_v2: 0.15,
         pilier: Pilier::Performance,
         min_significant_delta: 1.0,
+        full_spread_delta: 3.0,
     },
     CriterionDef {
         key: "rang_categorie",
@@ -171,6 +190,7 @@ const OBLIGATIONS_CRITERIA: [CriterionDef; 6] = [
         weight_v2: 0.15,
         pilier: Pilier::Performance,
         min_significant_delta: 0.0,
+        full_spread_delta: 0.0,
     },
     CriterionDef {
         key: "sharpe_3y",
@@ -179,6 +199,7 @@ const OBLIGATIONS_CRITERIA: [CriterionDef; 6] = [
         weight_v2: 0.25,
         pilier: Pilier::Risque,
         min_significant_delta: 0.0,
+        full_spread_delta: 0.0,
     },
     CriterionDef {
         key: "vol_3ans",
@@ -187,6 +208,7 @@ const OBLIGATIONS_CRITERIA: [CriterionDef; 6] = [
         weight_v2: 0.10,
         pilier: Pilier::Risque,
         min_significant_delta: 0.4,
+        full_spread_delta: 1.5,
     },
     CriterionDef {
         key: "worst_year",
@@ -195,6 +217,7 @@ const OBLIGATIONS_CRITERIA: [CriterionDef; 6] = [
         weight_v2: 0.15,
         pilier: Pilier::Risque,
         min_significant_delta: 0.8,
+        full_spread_delta: 2.5,
     },
 ];
 

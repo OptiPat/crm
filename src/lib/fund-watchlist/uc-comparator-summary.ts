@@ -78,11 +78,26 @@ export function isCriterionDiscriminant(criterion: UcCriterionScore): boolean {
   return criterion.discriminant !== false;
 }
 
+/**
+ * Écart de score minimal entre les deux meilleurs d'un critère pour qu'il désigne un leader dans
+ * le récit. Le backend teste l'amplitude du groupe entier (`SCORE_DISCRIMINANT_EPSILON`,
+ * `src-tauri/src/uc_comparator/normalize.rs`) : un Sharpe de 1,20 contre 1,23 y passe dès qu'un
+ * troisième fonds décroche, et le rapport annonçait alors « reste meilleur sur le Sharpe » entre
+ * deux fonds à égalité. Le tableau garde son leader et sa cellule verte, qui restent exacts.
+ */
+const CRITERION_LEADER_MIN_SCORE_GAP = 5;
+
+export function criterionDesignatesLeader(criterion: UcCriterionScore): boolean {
+  const sorted = [...criterion.scores].sort((a, b) => b - a);
+  if (sorted.length < 2) return false;
+  return sorted[0] - sorted[1] > CRITERION_LEADER_MIN_SCORE_GAP;
+}
+
 export function nonDiscriminantCriteria(criteria: UcCriterionScore[]): UcCriterionScore[] {
   return criteria.filter((c) => c.available && !isCriterionDiscriminant(c));
 }
 
-export const UC_CRITERION_NON_DISCRIMINANT_LABEL = "écart non significatif — noté à égalité";
+export const UC_CRITERION_NON_DISCRIMINANT_LABEL = "écart non significatif — ne départage pas";
 
 /** Avertit quand des critères disponibles ne départagent pas les fonds comparés. */
 export function formatNonDiscriminantNotice(criteria: UcCriterionScore[]): string | null {
@@ -91,8 +106,8 @@ export function formatNonDiscriminantNotice(criteria: UcCriterionScore[]): strin
   const labels = flat.map((c) => c.label).join(", ");
   const weight = flat.reduce((sum, c) => sum + c.weight_global, 0);
   return (
-    `Écart non significatif sur : ${labels}. Ces critères sont notés à égalité ` +
-    `et ne départagent pas les fonds (${formatCriterionWeight(weight)} du barème sans effet sur le classement).`
+    `Écart non significatif sur : ${labels}. L'écart de score y est trop faible pour désigner ` +
+    `un gagnant (${formatCriterionWeight(weight)} du barème sans effet notable sur le classement).`
   );
 }
 
@@ -200,7 +215,9 @@ export function buildUcComparisonNarrative(response: CompareResponse): string {
   const winner = results.find((f) => f.isin === response.winner_isin) ?? leader;
   const second = results.find((f) => f.rank === 2);
 
-  const winners = resolveCriterionWinners(response).filter((w) => w.criterion.available);
+  const winners = resolveCriterionWinners(response).filter(
+    (w) => w.criterion.available && criterionDesignatesLeader(w.criterion)
+  );
   const wonByWinner = winners.filter((w) => w.winnerIsin === winner.isin);
   const lostByWinner = winners.filter(
     (w) => w.winnerIsin && w.winnerIsin !== winner.isin && !w.tie
@@ -266,10 +283,11 @@ function categoryAlphaSentence(winner: UcFundResultScore): string | null {
     return null;
   }
   const value = Math.abs(alpha).toFixed(1);
+  const unit = Math.abs(alpha) >= 2 ? "points" : "point";
   if (alpha > 0) {
-    return `Sur les années publiées, il devance sa catégorie de ${value} point par an en moyenne.`;
+    return `Sur les années publiées, il devance sa catégorie de ${value} ${unit} par an en moyenne.`;
   }
-  return `Sur les années publiées, il reste en retard de ${value} point par an sur sa catégorie : il gagne la comparaison sans battre son marché.`;
+  return `Sur les années publiées, il reste en retard de ${value} ${unit} par an sur sa catégorie : il gagne la comparaison sans battre son marché.`;
 }
 
 export function fundsInRankOrder(results: UcFundResultScore[]): UcFundResultScore[] {
