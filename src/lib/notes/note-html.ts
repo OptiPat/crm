@@ -1,4 +1,5 @@
 import { MAX_NOTE_IMAGE_EMBED_BYTES } from "@/lib/notes/note-image-import";
+import { linkifyPlainUrlsInElement, linkifyPlainUrlsInHtmlString, normalizeNoteHref } from "@/lib/notes/note-linkify";
 
 const ALLOWED_NOTE_TAGS = new Set([
   "p",
@@ -194,10 +195,9 @@ function sanitizeNoteHtmlNode(el: Element): void {
     }
     for (const attr of [...child.attributes]) {
       if (tag === "a" && attr.name === "href") {
-        const href = attr.value.trim();
-        if (!/^https?:\/\//i.test(href) && !/^mailto:/i.test(href)) {
-          child.removeAttribute("href");
-        }
+        const href = normalizeNoteHref(attr.value);
+        if (href) child.setAttribute("href", href);
+        else child.removeAttribute("href");
         continue;
       }
       if (tag === "div" && attr.name === "dir" && attr.value === "ltr") {
@@ -220,7 +220,7 @@ export function sanitizeNoteHtml(html: string): string {
   const trimmed = html.trim();
   if (!trimmed) return "";
   if (typeof DOMParser === "undefined") {
-    return trimmed
+    const sanitized = trimmed
       .replace(/<script[\s\S]*?<\/script>/gi, "")
       .replace(/<style[\s\S]*?<\/style>/gi, "")
       .replace(
@@ -250,11 +250,13 @@ export function sanitizeNoteHtml(html: string): string {
         const src = srcMatch?.[1] ?? "";
         return src && isSafeNoteImageSrc(src) ? tag : "";
       });
+    return linkifyPlainUrlsInHtmlString(sanitized);
   }
   const doc = new DOMParser().parseFromString(trimmed, "text/html");
   convertFontTagsToSpans(doc.body);
   promoteBoldStyleSpansToSemanticTags(doc.body);
   sanitizeNoteHtmlNode(doc.body);
+  linkifyPlainUrlsInElement(doc.body);
   normalizeNoteLists(doc.body);
   for (const img of [...doc.body.querySelectorAll("img")]) {
     const src = img.getAttribute("src")?.trim() ?? "";

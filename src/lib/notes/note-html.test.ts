@@ -68,4 +68,15 @@ describe("note-html", () => {
     const out = sanitizeNoteHtml('<span style="color:expression(alert(1))">X</span>');
     expect(out).not.toContain("expression");
   });
+
+  it("transforme une URL en texte brut en lien cliquable", () => {
+    const out = sanitizeNoteHtml("<p>Doc : https://example.com/guide</p>");
+    expect(out).toContain('<a href="https://example.com/guide">');
+    expect(out).toContain("https://example.com/guide</a>");
+  });
+
+  it("normalise les href www. sur les balises existantes", () => {
+    const out = sanitizeNoteHtml('<a href="www.example.com">Site</a>');
+    expect(out).toContain('href="https://www.example.com"');
+  });
 });

@@ -28,6 +28,8 @@ import {
 } from "@/components/emails/rich-text-email-editor-utils";
 import { buildNoteImageHtml, pickNoteImageDataUrl } from "@/lib/notes/note-image-import";
 import { handleNoteLinkClick } from "@/lib/notes/note-external-link";
+import { normalizeNoteHref } from "@/lib/notes/note-linkify";
+import { sanitizeNoteHtml } from "@/lib/notes/note-html";
 import {
   NOTE_HIGHLIGHT_CLEAR,
   NOTE_HIGHLIGHT_COLORS,
@@ -198,7 +200,23 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
   const insertLink = () => {
     const url = window.prompt("URL du lien (https://…)", "https://");
     if (!url?.trim()) return;
-    exec("createLink", url.trim());
+    const normalized = normalizeNoteHref(url.trim());
+    if (!normalized) {
+      toast.error("URL invalide. Utilisez https://… ou www.…");
+      return;
+    }
+    exec("createLink", normalized);
+  };
+
+  const applyNoteLinkifyToEditor = () => {
+    if (!isNote) return;
+    const el = editorRef.current;
+    if (!el) return;
+    const linked = sanitizeNoteHtml(el.innerHTML);
+    if (linked === el.innerHTML) return;
+    el.innerHTML = linked;
+    lastEmitted.current = linked;
+    onChange(linked, { edited: true });
   };
 
   const applyFontSize = (sizePx: number) => {
@@ -471,8 +489,13 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
             emitChange(false, true);
           }
         }}
+        onPaste={() => {
+          if (!isNote) return;
+          requestAnimationFrame(() => applyNoteLinkifyToEditor());
+        }}
         onBlur={() => {
           captureSelection();
+          if (isNote) applyNoteLinkifyToEditor();
           emitChange(false, false);
         }}
       />
