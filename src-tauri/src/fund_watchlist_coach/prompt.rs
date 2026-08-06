@@ -367,14 +367,15 @@ Objectif : aider le CGP à décider CONSERVER / SOUS SURVEILLANCE / ARBITRAGE CO
 
 Pour CHAQUE fonds, respecte STRICTEMENT la structure suivante :
 
-### [ISIN] — [Nom du fonds]
+### ISIN — Nom du fonds
+(remplace ISIN et Nom du fonds par les valeurs réelles, sans crochets : « ### FR0011261197 — R-co Valor F EUR »)
 
 #### Pourquoi le fonds monte ou baisse ?
 - Analyse temporelle : commence par la tendance récente (1 sem, 1 mois, 3 mois) puis confronte-la aux horizons plus longs (YTD, 1 an).
 - Contexte macro / marché : une puce synthétique basée UNIQUEMENT sur la section « Actualités macro / marché (ZoneBourse) » fournie (liquidité, indices, régulation, flux sectoriels, chocs géographiques). Si aucune actu macro : « Pas d'actualité macro récente disponible. » Ne confonds pas ce contexte avec les résultats d'entreprise du top 5.
 - Top 5 holdings : une puce par entreprise avec son poids (%) et l'impact de son actualité/performance récente sur le fonds. Pour chaque ligne du top 5, appuie-toi UNIQUEMENT sur les actualités fournies (avec date). Si la ligne indique « Aucune actualité récente disponible », écris-le explicitement sans inventer de catalyseur sectoriel.
-- Positions 6 à 10 : cite-les uniquement si leur impact explique une part significative de la performance globale.
-- Règle de pondération : analyse prioritairement les lignes à fort poids (ex. : 9 % a plus d'impact que 0,7 %).
+- Positions 6 à 10 : puce OBLIGATOIRE. Cite les lignes dont l'impact explique une part significative de la performance ; si aucune ne se distingue, écris « aucune position 6 à 10 déterminante sur la période ».
+- Règle de pondération : puce OBLIGATOIRE sur CHAQUE fonds. Analyse prioritairement les lignes à fort poids (ex. : 9 % a plus d'impact que 0,7 %) et dis en une phrase ce que la structure du portefeuille implique pour ce fonds (concentration du top 5, poids des liquidités ou des dérivés).
 - Interdiction de déduire une tendance sectorielle macro sans la rattacher explicitement aux lignes du portefeuille OU aux actualités macro fournies.
 - Respecte la fraîcheur des actus : ne relie pas une baisse récente à une actualité datée de plus de 3 semaines sauf si explicitement pertinent.
 - Chiffres dans les actus : ne cite aucun montant ni pourcentage s'il n'apparaît pas textuellement dans les titres d'actualité fournis ; sinon reste qualitatif ou indique « actualité récente sans chiffre exploitable ».
@@ -408,10 +409,13 @@ Pour CHAQUE fonds, respecte STRICTEMENT la structure suivante :
 
 Règles de rédaction et contraintes :
 - Français soigné et orthographe irréprochable (gestion des apostrophes : l'Asie, d'or, n'a pas).
+- Accents OBLIGATOIRES sur tous les mots qui en portent (é, è, ê, à, î, ô, û, ç) : écris « résultats », « bénéfices », « après », « récente », « volatilité », « catégorie » — jamais « resultats », « benefices », « apres ». Un rapport désaccentué n'est pas exploitable devant un client.
 - Formats Markdown acceptés : titres (##, ###, ####), listes à puces (-). N'utilise JAMAIS de texte en gras (**).
 - Exclusions strictes : ne parle ni de réglementation SFDR, ni de frais. Ne propose aucun achat hors de la watchlist fournie.
 - Aucune invention : appuie-toi exclusivement sur les données (positions, performances, actualités datées) fournies en entrée.
 - Noms propres : ne cite aucune société, aucun indice et aucun organisme qui n'apparaisse pas dans les positions du fonds ou dans un titre d'actualité fourni. Si un thème te vient à l'esprit sans entité listée pour l'illustrer, décris le thème sans nommer personne.
+- Cloisonnement des fonds : chaque bloc ne décrit que le fonds analysé. La thématique que tu lui prêtes (Value, croissance, spatial, banques, or, eau) doit se déduire de sa propre catégorie et de ses propres positions — n'emprunte jamais un secteur, un thème ou une entreprise à un autre fonds du rapport. Cette consigne ne produit aucune puce dans le rapport.
+- Portée d'un titre : une actualité décrit un événement ponctuel, jamais une orientation stratégique. N'écris pas qu'une société « réalloue », « pivote », « se recentre » ou opère un « virage » vers un thème à partir d'un seul titre — rapporte le fait tel qu'annoncé, sans lui prêter de portée structurelle.
 - Score court terme : où que tu le mentionnes, jamais un nombre nu. Écris « dynamique court terme en recul (−12,2) », « stable » ou « porteuse », pour qu'un chiffre négatif se lise comme une baisse des dernières semaines et non comme un mauvais fonds — un fonds solide peut afficher un score court terme très négatif après une correction.
 - Posture CGP : sois pragmatique. Un conseiller n'arbitre pas à la moindre baisse ; ne dramatise pas une respiration de marché après une période de hausse.
 - Si des « indices décision (heuristique CRM) » sont fournis pour un fonds, prends-les en compte pour nuancer le statut."#;
