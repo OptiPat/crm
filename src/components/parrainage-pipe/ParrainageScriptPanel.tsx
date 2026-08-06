@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Copy, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -24,6 +24,7 @@ import {
 } from "@/lib/parrainage-coach/appel-prise-contact-script";
 import {
   availableSmsAnticipationVariants,
+  formatSmsAnticipationSentNote,
   renderSmsAnticipationTemplate,
   SMS_ANTICIPATION_INSISTE_SMS_DEF,
   SMS_ANTICIPATION_PROFILE_DEFS,
@@ -31,6 +32,7 @@ import {
   SMS_ANTICIPATION_REPLY_DEFS,
   SMS_ANTICIPATION_REPLY_OPTIONS,
   SMS_ANTICIPATION_REPLY_SCENARIOS,
+  smsAnticipationProfileWaitingReplies,
   type SmsAnticipationProfile,
   type SmsAnticipationReplyOption,
   type SmsAnticipationReplyScenario,
@@ -44,10 +46,12 @@ function SmsAnticipationPicker({
   pipe,
   text,
   onTextChange,
+  onSelectionChange,
 }: {
   pipe: ParrainagePipeRecord;
   text: string;
   onTextChange: (text: string) => void;
+  onSelectionChange?: (profile: SmsAnticipationProfile, variant: SmsAnticipationVariant) => void;
 }) {
   const [profile, setProfile] = useState<SmsAnticipationProfile>("PASSE_PARTOUT");
   const [variant, setVariant] = useState<SmsAnticipationVariant>("A");
@@ -58,6 +62,7 @@ function SmsAnticipationPicker({
     setProfile(nextProfile);
     setVariant(resolvedVariant);
     onTextChange(renderSmsAnticipationTemplate(nextProfile, resolvedVariant, pipe.contact_prenom ?? ""));
+    onSelectionChange?.(nextProfile, resolvedVariant);
   };
 
   const copy = async () => {
@@ -131,6 +136,72 @@ function SmsAnticipationPicker({
   );
 }
 
+function SmsAnticipationProfileReplyPicker({
+  profile,
+  text,
+  onTextChange,
+}: {
+  profile: SmsAnticipationProfile;
+  text: string;
+  onTextChange: (text: string) => void;
+}) {
+  const options = smsAnticipationProfileWaitingReplies(profile) ?? [];
+  const [selectedId, setSelectedId] = useState(options[0]?.id ?? "");
+
+  const applyOption = (optionId: string) => {
+    const option = options.find((o) => o.id === optionId);
+    if (!option) return;
+    setSelectedId(optionId);
+    onTextChange(option.template);
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copié");
+    } catch {
+      toast.error("Copie impossible");
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <Label className="text-xs">Sa réponse au SMS</Label>
+        <div className="flex flex-wrap gap-1.5">
+          {options.map((option) => (
+            <Button
+              key={option.id}
+              type="button"
+              size="sm"
+              variant={selectedId === option.id ? "default" : "outline"}
+              className="h-7 text-[11px]"
+              onClick={() => applyOption(option.id)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <Label className="text-xs text-muted-foreground">Réponse à envoyer</Label>
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => void copy()}>
+            <Copy className="size-3.5" />
+          </Button>
+        </div>
+        <Textarea
+          value={text}
+          onChange={(e) => onTextChange(e.target.value)}
+          rows={3}
+          className="text-sm"
+        />
+      </div>
+    </div>
+  );
+}
+
 function SmsAnticipationReplyPicker({
   text,
   onTextChange,
@@ -159,11 +230,7 @@ function SmsAnticipationReplyPicker({
   const def = SMS_ANTICIPATION_REPLY_DEFS[scenario];
 
   return (
-    <div className="space-y-3 border-t border-border/50 pt-3">
-      <div className="text-xs font-medium text-muted-foreground">
-        Attente de réponse...
-      </div>
-
+    <div className="space-y-3">
       <div className="space-y-1.5">
         <Label className="text-xs">Sa réponse au SMS</Label>
         <Select
@@ -273,7 +340,7 @@ function SmsAnticipationObjectionPicker({
   );
 }
 
-function SmsAnticipationSection({
+function SmsAnticipationComposeSection({
   pipe,
   onNoteSaved,
   onAdvanceStage,
@@ -285,29 +352,25 @@ function SmsAnticipationSection({
   const [teaserText, setTeaserText] = useState(() =>
     renderSmsAnticipationTemplate("PASSE_PARTOUT", "A", pipe.contact_prenom ?? "")
   );
-  const [replyText, setReplyText] = useState(
-    () => SMS_ANTICIPATION_REPLY_DEFS.FRUSTRATION.options.A.template
-  );
-  const [objectionText, setObjectionText] = useState(
-    () => SMS_ANTICIPATION_INSISTE_SMS_DEF.options.A.template
-  );
+  const [profile, setProfile] = useState<SmsAnticipationProfile>("PASSE_PARTOUT");
+  const [variant, setVariant] = useState<SmsAnticipationVariant>("A");
   const [advancing, setAdvancing] = useState(false);
 
-  const markSent = async (event: React.MouseEvent<HTMLButtonElement>) => {
+  const markSmsSent = async (event: React.MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     setAdvancing(true);
     try {
-      // On avance d'abord l'étape : si ça échoue (erreur déjà affichée par le parent), on
-      // n'enregistre ni la note ni le compteur, pour éviter un état incohérent / une note dupliquée.
       const advanced = await onAdvanceStage?.();
       if (advanced === false) {
         return;
       }
-      const combined = `SMS d'anticipation :\n${teaserText}\n\nRelance (selon sa réponse) :\n${replyText}\n\nSi insiste pour du SMS :\n${objectionText}`;
-      await createParrainagePipeSmsSentNote(pipe.id, combined);
+      await createParrainagePipeSmsSentNote(
+        pipe.id,
+        formatSmsAnticipationSentNote(profile, variant, teaserText)
+      );
       onNoteSaved?.();
       fireConfettiBurst({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
-      toast.success("SMS envoyé — étape « Prise de contact »");
+      toast.success("SMS envoyé — en attente de réponse");
     } catch (error) {
       toast.error(String(error));
     } finally {
@@ -317,11 +380,92 @@ function SmsAnticipationSection({
 
   return (
     <div className="space-y-3">
-      <SmsAnticipationPicker pipe={pipe} text={teaserText} onTextChange={setTeaserText} />
-      <SmsAnticipationReplyPicker text={replyText} onTextChange={setReplyText} />
+      <SmsAnticipationPicker
+        pipe={pipe}
+        text={teaserText}
+        onTextChange={setTeaserText}
+        onSelectionChange={(nextProfile, nextVariant) => {
+          setProfile(nextProfile);
+          setVariant(nextVariant);
+        }}
+      />
+      <Button type="button" size="sm" onClick={(e) => void markSmsSent(e)} disabled={advancing}>
+        SMS envoyé
+      </Button>
+    </div>
+  );
+}
+
+function SmsAnticipationWaitingSection({
+  pipe,
+  profile,
+  profileLabel,
+  onNoteSaved,
+  onAdvanceStage,
+}: {
+  pipe: ParrainagePipeRecord;
+  profile?: SmsAnticipationProfile | null;
+  profileLabel?: string | null;
+  onNoteSaved?: () => void;
+  onAdvanceStage?: () => Promise<boolean> | boolean;
+}) {
+  const profileReplies = smsAnticipationProfileWaitingReplies(profile);
+  const defaultReplyText =
+    profileReplies?.[0]?.template ?? SMS_ANTICIPATION_REPLY_DEFS.FRUSTRATION.options.A.template;
+
+  const [replyText, setReplyText] = useState(defaultReplyText);
+  const [objectionText, setObjectionText] = useState(
+    () => SMS_ANTICIPATION_INSISTE_SMS_DEF.options.A.template
+  );
+  const [advancing, setAdvancing] = useState(false);
+
+  useEffect(() => {
+    setReplyText(defaultReplyText);
+  }, [pipe.id, profile, defaultReplyText]);
+
+  const markRelanceSent = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setAdvancing(true);
+    try {
+      const advanced = await onAdvanceStage?.();
+      if (advanced === false) {
+        return;
+      }
+      const combined = `Relance (selon sa réponse) :\n${replyText}\n\nSi insiste pour du SMS :\n${objectionText}`;
+      await createParrainagePipeTimelineNote(pipe.id, combined);
+      onNoteSaved?.();
+      fireConfettiBurst({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+      toast.success("Relance envoyée — étape « Prise de contact »");
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setAdvancing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-sm font-medium">Attente de réponse</span>
+        {profileLabel && (
+          <span className="text-sm text-muted-foreground">{profileLabel}</span>
+        )}
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Préparez la relance selon sa réponse — le script d&apos;appel arrive à l&apos;étape suivante.
+      </p>
+      {profile && profileReplies ? (
+        <SmsAnticipationProfileReplyPicker
+          profile={profile}
+          text={replyText}
+          onTextChange={setReplyText}
+        />
+      ) : (
+        <SmsAnticipationReplyPicker text={replyText} onTextChange={setReplyText} />
+      )}
       <SmsAnticipationObjectionPicker text={objectionText} onTextChange={setObjectionText} />
-      <Button type="button" size="sm" onClick={(e) => void markSent(e)} disabled={advancing}>
-        J&apos;ai envoyé le SMS → étape suivante
+      <Button type="button" size="sm" onClick={(e) => void markRelanceSent(e)} disabled={advancing}>
+        Relance envoyée → Prise de contact
       </Button>
     </div>
   );
@@ -481,14 +625,23 @@ function AppelPriseContactSection({
 
 interface ParrainageScriptPanelProps {
   pipe: ParrainagePipeRecord;
+  smsAnticipationProfile?: SmsAnticipationProfile | null;
+  smsAnticipationProfileLabel?: string | null;
   onNoteSaved?: () => void;
   onAdvanceStage?: () => Promise<boolean> | boolean;
 }
 
-export function ParrainageScriptPanel({ pipe, onNoteSaved, onAdvanceStage }: ParrainageScriptPanelProps) {
+export function ParrainageScriptPanel({
+  pipe,
+  smsAnticipationProfile = null,
+  smsAnticipationProfileLabel = null,
+  onNoteSaved,
+  onAdvanceStage,
+}: ParrainageScriptPanelProps) {
   const stage = pipe.stage as ParrainagePipeStage;
   const isInscrit = stage === "INSCRIT";
   const isAContacter = stage === "A_CONTACTER";
+  const isAttenteReponse = stage === "ATTENTE_REPONSE";
   const isPriseDeContact = stage === "PRISE_DE_CONTACT";
 
   return (
@@ -501,6 +654,8 @@ export function ParrainageScriptPanel({ pipe, onNoteSaved, onAdvanceStage }: Par
         <CardDescription className="text-xs">
           {isAContacter
             ? "SMS d'anticipation — textes prêts à l'emploi selon le profil relationnel du contact."
+            : isAttenteReponse
+              ? "Attente de réponse au SMS d'anticipation — préparez la relance selon sa teneur."
             : isPriseDeContact
               ? "Script d'appel — prospect au téléphone."
               : `Étape « ${PARRAINAGE_PIPE_STAGE_LABELS[stage]} ».`}
@@ -512,7 +667,19 @@ export function ParrainageScriptPanel({ pipe, onNoteSaved, onAdvanceStage }: Par
             Contact déjà inscrit — pas de script de prospection à générer.
           </p>
         ) : isAContacter ? (
-          <SmsAnticipationSection pipe={pipe} onNoteSaved={onNoteSaved} onAdvanceStage={onAdvanceStage} />
+          <SmsAnticipationComposeSection
+            pipe={pipe}
+            onNoteSaved={onNoteSaved}
+            onAdvanceStage={onAdvanceStage}
+          />
+        ) : isAttenteReponse ? (
+          <SmsAnticipationWaitingSection
+            pipe={pipe}
+            profile={smsAnticipationProfile}
+            profileLabel={smsAnticipationProfileLabel}
+            onNoteSaved={onNoteSaved}
+            onAdvanceStage={onAdvanceStage}
+          />
         ) : isPriseDeContact ? (
           <AppelPriseContactSection pipe={pipe} onNoteSaved={onNoteSaved} onAdvanceStage={onAdvanceStage} />
         ) : (

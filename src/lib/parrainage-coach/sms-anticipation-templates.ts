@@ -37,19 +37,14 @@ export const SMS_ANTICIPATION_PROFILE_DEFS: Record<SmsAnticipationProfile, SmsAn
       "Un ami, un bon copain, quelqu'un avec qui le tutoiement et la complicité sont naturels.",
     variants: {
       A: {
-        label: "Variante A (Humour)",
-        template:
-          "Salut {{prenom}} ! Je venais voir si tu survivais toujours à ton boulot ou si tu avais déjà posé ta démission ? 😂 Comment va la famille sinon ?",
-      },
-      B: {
-        label: "Variante B (Empathie)",
+        label: "Variante A (Empathique)",
         template:
           "Coucou {{prenom}} ! Petit message pour prendre des nouvelles. Comment va la famille ? Et de ton côté, pas trop dur le boulot en ce moment ?",
       },
-      C: {
-        label: "Variante C (Cash)",
+      B: {
+        label: "Variante B (Décontractée)",
         template:
-          "Salut {{prenom}} ! J'espère que tout va bien chez vous. Dis-moi franchement, niveau boulot c'est toujours la passion ou tu comptes les jours jusqu'aux prochaines vacances ? 😂",
+          "Salut {{prenom}} ! Ça fait un bail. Tu tiens le coup au taf ou c'est la folie en ce moment ?",
       },
     },
   },
@@ -59,19 +54,14 @@ export const SMS_ANTICIPATION_PROFILE_DEFS: Record<SmsAnticipationProfile, SmsAn
       "Un ancien collègue, une connaissance du cercle élargi qu'on n'a pas contactée depuis plusieurs mois/années.",
     variants: {
       A: {
-        label: "Variante A (Souvenir)",
+        label: "Variante A (Souvenir simple)",
         template:
-          "Salut {{prenom}} ! Je repensais à toi l'autre jour, ça fait un bail ! J'espère que tout va bien pour toi et la famille. Tu es toujours dans la même boîte ou tu as bougé depuis ?",
+          "Salut {{prenom}} ! Je repensais à toi l'autre jour, ça fait un bail ! J'espère que tout va bien. Tu es toujours dans la même boîte ?",
       },
       B: {
-        label: "Variante B (Curiosité)",
+        label: "Variante B (Nouvelles globales)",
         template:
-          "Salut {{prenom}} ! Je pensais à toi l'autre jour et je me demandais ce que tu devenais ! La forme ? Tu es toujours sur les mêmes projets au boulot ou ça a un peu évolué ?",
-      },
-      C: {
-        label: "Variante C (Actualité)",
-        template:
-          "Salut {{prenom}} ! J'espère que toute la famille va bien. Ça fait un moment ! Tu es toujours dans le même coin et dans le même boulot ?",
+          "Salut {{prenom}} ! J'espère que toute la famille va bien. Ça fait un moment ! C'est quoi les nouvelles de ton côté ?",
       },
     },
   },
@@ -81,19 +71,14 @@ export const SMS_ANTICIPATION_PROFILE_DEFS: Record<SmsAnticipationProfile, SmsAn
       "Quelqu'un dont on sait déjà qu'il a des grosses journées, des enfants, ou une vie à 100 à l'heure.",
     variants: {
       A: {
-        label: "Variante A (Temps libre)",
+        label: "Variante A (Rythme de vie)",
         template:
-          "Coucou {{prenom}} ! J'espère que tout le monde va bien à la maison. De ton côté, tu arrives à te garder un peu de temps perso avec le boulot, ou c'est le rush permanent ?",
+          "Coucou {{prenom}} ! J'espère que tout va bien à la maison. De ton côté, tu arrives à souffler un peu ou c'est toujours la course avec le boulot ?",
       },
       B: {
-        label: "Variante B (Surcharge)",
+        label: "Variante B (Rush)",
         template:
-          "Coucou {{prenom}} ! J'espère que tout va bien pour toi et la petite famille. Tu tiens le coup au boulot en ce moment ou c'est la grosse surcharge ?",
-      },
-      C: {
-        label: "Variante C (Charge mentale)",
-        template:
-          "Coucou {{prenom}} ! J'espère que la forme va chez toi. Je me demandais si ça s'était un peu calmé au boulot ou si tu cours toujours autant après le temps ?",
+          "Coucou {{prenom}} ! Petit message rapide pour prendre des nouvelles. Tu tiens le rythme en ce moment ou c'est le rush total au boulot ?",
       },
     },
   },
@@ -103,19 +88,14 @@ export const SMS_ANTICIPATION_PROFILE_DEFS: Record<SmsAnticipationProfile, SmsAn
       "Un contact dynamique, un profil business, ou quelqu'un dont on sait qu'il cherche du changement.",
     variants: {
       A: {
-        label: "Variante A (Avenir)",
+        label: "Variante A (Évolution)",
         template:
-          "Salut {{prenom}} ! Ça fait un bail, j'espère que tu vas bien ! Toujours autant à fond dans ton taf ou ça a changé de ton côté ?",
+          "Salut {{prenom}} ! J'espère que tout va bien. Toujours autant à fond dans ton taf ou tu as de nouveaux projets en vue ?",
       },
       B: {
-        label: "Variante B (Secteur/Boîte)",
+        label: "Variante B (Mouvement)",
         template:
-          "Salut {{prenom}} ! Petit message pour prendre des nouvelles de la tribu ! Toujours dans le même secteur ? Toujours autant la passion ou ça commence à te lasser ?",
-      },
-      C: {
-        label: "Variante C (Perspective)",
-        template:
-          "Salut {{prenom}} ! J'espère que tu vas bien. Côté pro, ça bouge un peu de ton côté ou c'est la routine en ce moment ?",
+          "Salut {{prenom}} ! Ça fait un moment. Toujours au même endroit niveau boulot ou ça a un peu bougé de ton côté ?",
       },
     },
   },
@@ -124,14 +104,14 @@ export const SMS_ANTICIPATION_PROFILE_DEFS: Record<SmsAnticipationProfile, SmsAn
     pourQui: "Quand on ne sait pas trop dans quelle case ranger son prospect.",
     variants: {
       A: {
-        label: "Variante A",
+        label: "Variante A (Épanouissement)",
         template:
-          "Coucou {{prenom}} ! J'espère que tu vas bien et toute la famille aussi. Je me demandais où tu en étais dans ton boulot ? Tu t'éclates toujours autant ou c'est la routine ?",
+          "Coucou {{prenom}} ! J'espère que tu vas bien et toute la famille aussi. Tu t'éclates toujours autant dans ton boulot ou c'est la routine en ce moment ?",
       },
       B: {
-        label: "Variante B",
+        label: "Variante B (Ambiance générale)",
         template:
-          "Coucou {{prenom}} ! Ça fait un moment. J'espère que tout roule pour toi. Toujours au même endroit niveau boulot ou ça a changé récemment ?",
+          "Coucou {{prenom}} ! J'espère que tout roule de ton côté. La forme au boulot ou les journées sont longues ?",
       },
     },
   },
@@ -141,19 +121,14 @@ export const SMS_ANTICIPATION_PROFILE_DEFS: Record<SmsAnticipationProfile, SmsAn
       "Quelqu'un qui a déjà une bonne situation, une carrière établie, du leadership ou une grosse expérience pro. On ne lui parle pas de « galères », mais de plafonnement ou de reconversion.",
     variants: {
       A: {
-        label: "Variante A (Perspective)",
+        label: "Variante A (Pression)",
         template:
-          "Salut {{prenom}} ! Comment vas-tu ainsi que tes proches ? Côté pro, toujours aussi épanoui dans ce que tu fais ou tu commences à avoir envie d'autre chose ?",
+          "Salut {{prenom}} ! J'espère que tout va bien pour toi et les proches. Côté boulot, pas trop de pression en ce moment ?",
       },
       B: {
-        label: "Variante B (Challenge)",
+        label: "Variante B (Temps perso)",
         template:
-          "Coucou {{prenom}} ! J'espère que tout va bien pour toi. Côté boulot, toujours à fond sur tes projets ou tu commences à avoir envie de nouveaux challenges ?",
-      },
-      C: {
-        label: "Variante C (Liberté)",
-        template:
-          "Salut {{prenom}} ! Petit coucou pour prendre des nouvelles. Ton poste te laisse toujours autant de flexibilité qu'avant ou la pression a augmenté ?",
+          "Salut {{prenom}} ! Comment vas-tu ? Toujours autant sous l'eau au boulot ou tu arrives à garder du temps pour toi ?",
       },
     },
   },
@@ -163,19 +138,9 @@ export const SMS_ANTICIPATION_PROFILE_DEFS: Record<SmsAnticipationProfile, SmsAn
       "Un contact en pause professionnelle, en reconversion ou qui s'occupe de ses enfants et qui envisage un retour à la vie active.",
     variants: {
       A: {
-        label: "Variante A (Transition pro)",
+        label: "Variante A",
         template:
-          "Coucou {{prenom}} ! Comment va la petite famille ? De ton côté, tu en es où dans tes projets pro en ce moment ? Tu envisages de bouger ou tu prends ton temps ?",
-      },
-      B: {
-        label: "Variante B (Équilibre)",
-        template:
-          "Salut {{prenom}} ! J'espère que tout le monde va bien à la maison. Tu arrives à trouver un bon rythme au quotidien ou c'est les journées à 1000 à l'heure ?",
-      },
-      C: {
-        label: "Variante C (Projet perso)",
-        template:
-          "Coucou {{prenom}} ! Un petit message pour prendre des nouvelles ! Tu as pu avancer sur ce que tu voulais lancer/reprendre, ou c'est un peu en stand-by pour l'instant ?",
+          "Coucou {{prenom}} ! J'espère que tout le monde va bien. Tu en es où de ton côté, tu réattaques bientôt un projet pro ou tu profites encore ?",
       },
     },
   },
@@ -216,6 +181,112 @@ export function renderSmsAnticipationTemplate(
   const def = SMS_ANTICIPATION_PROFILE_DEFS[profile].variants[variant];
   const template = def?.template ?? SMS_ANTICIPATION_PROFILE_DEFS[profile].variants.A?.template ?? "";
   return template.split("{{prenom}}").join(formatDisplayName(prenom || "toi"));
+}
+
+const SMS_ANTICIPATION_SENT_META_RE =
+  /^sms-anticipation-meta:([A-Z_]+):([ABC])\n\n([\s\S]*)$/;
+
+function isSmsAnticipationProfile(value: string): value is SmsAnticipationProfile {
+  return (SMS_ANTICIPATION_PROFILES as readonly string[]).includes(value);
+}
+
+/** Contenu persisté dans la timeline (SMS_ENVOYE) : métadonnées profil + texte envoyé. */
+export function formatSmsAnticipationSentNote(
+  profile: SmsAnticipationProfile,
+  variant: SmsAnticipationVariant,
+  text: string
+): string {
+  return `sms-anticipation-meta:${profile}:${variant}\n\n${text.trim()}`;
+}
+
+export function parseSmsAnticipationSentNote(contenu: string): {
+  profile: SmsAnticipationProfile | null;
+  variant: SmsAnticipationVariant | null;
+  text: string;
+} {
+  const trimmed = contenu.trim();
+  const match = trimmed.match(SMS_ANTICIPATION_SENT_META_RE);
+  if (!match) {
+    return { profile: null, variant: null, text: trimmed };
+  }
+  const profile = match[1];
+  const variant = match[2];
+  if (
+    isSmsAnticipationProfile(profile) &&
+    (SMS_ANTICIPATION_VARIANTS as readonly string[]).includes(variant)
+  ) {
+    return {
+      profile,
+      variant: variant as SmsAnticipationVariant,
+      text: match[3].trim(),
+    };
+  }
+  return { profile: null, variant: null, text: trimmed };
+}
+
+/** Libellé profil (avec émoticône) extrait d'une note SMS_ENVOYE, si disponible. */
+export function smsAnticipationProfileLabelFromSentNote(contenu: string | null | undefined): string | null {
+  if (!contenu?.trim()) return null;
+  const { profile } = parseSmsAnticipationSentNote(contenu);
+  return profile ? SMS_ANTICIPATION_PROFILE_DEFS[profile].label : null;
+}
+
+/** Texte SMS seul pour affichage historique (sans ligne meta). */
+export function displaySmsAnticipationSentNote(contenu: string): string {
+  return parseSmsAnticipationSentNote(contenu).text;
+}
+
+/** Profil extrait d'une note SMS_ENVOYE, si disponible. */
+export function smsAnticipationProfileFromSentNote(
+  contenu: string | null | undefined
+): SmsAnticipationProfile | null {
+  if (!contenu?.trim()) return null;
+  return parseSmsAnticipationSentNote(contenu).profile;
+}
+
+export interface SmsAnticipationProfileReplyOption {
+  id: string;
+  label: string;
+  template: string;
+}
+
+/** Relances « attente de réponse » spécifiques à un profil (un texte par type de réponse). */
+export const SMS_ANTICIPATION_PROFILE_WAITING_REPLIES: Partial<
+  Record<SmsAnticipationProfile, SmsAnticipationProfileReplyOption[]>
+> = {
+  PROCHE_AMI: [
+    {
+      id: "FRUSTRATION",
+      label: "Frustration",
+      template:
+        "Ah mince... Je te comprends. Faut qu'on s'appelle 5 min, que tu me racontes. Tu as un moment ce soir ou demain vers 18h ?",
+    },
+    {
+      id: "TIEDE",
+      label: "Tiède",
+      template:
+        "Haha le fameux 'on fait avec' ! 😉 Faut qu'on s'appelle 5 min pour se donner de vraies nouvelles. Tu as un moment ce soir ou demain vers 18h ?",
+    },
+    {
+      id: "ESQUIVE",
+      label: "Esquive",
+      template:
+        "Tout va bien chez nous aussi merci ! Et le boulot alors, c'est si terrible que tu n'en parles pas ? 😂 Faut qu'on s'appelle 5 min, tu as un moment ce soir ou demain vers 18h ?",
+    },
+    {
+      id: "POSITIF",
+      label: "Positif",
+      template:
+        "Trop bien, ça fait plaisir à lire ! Faut qu'on se passe un coup de tél rapide pour se capter. Tu as 5 min ce soir ou demain vers 18h ?",
+    },
+  ],
+};
+
+export function smsAnticipationProfileWaitingReplies(
+  profile: SmsAnticipationProfile | null | undefined
+): SmsAnticipationProfileReplyOption[] | null {
+  if (!profile) return null;
+  return SMS_ANTICIPATION_PROFILE_WAITING_REPLIES[profile] ?? null;
 }
 
 /**

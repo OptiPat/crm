@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -18,6 +18,11 @@ import {
   type ParrainagePipeRecord,
   type ParrainagePipeTimelineEntry,
 } from "@/lib/api/tauri-parrainage-pipe";
+import {
+  displaySmsAnticipationSentNote,
+  smsAnticipationProfileFromSentNote,
+  smsAnticipationProfileLabelFromSentNote,
+} from "@/lib/parrainage-coach/sms-anticipation-templates";
 import {
   formatParrainageContactLabel,
   PARRAINAGE_INVITATION_LABELS,
@@ -49,6 +54,19 @@ export function ParrainagePipeDetailPanel({
   const [timeline, setTimeline] = useState<ParrainagePipeTimelineEntry[]>([]);
   const [saving, setSaving] = useState(false);
   const savedMetaRef = useRef({ notes: pipe.notes ?? "", invitationType: pipe.invitation_type ?? "" });
+
+  const smsAnticipationSentEntry = useMemo(
+    () => timeline.find((entry) => entry.entry_type === "SMS_ENVOYE"),
+    [timeline]
+  );
+  const smsAnticipationProfile = useMemo(
+    () => smsAnticipationProfileFromSentNote(smsAnticipationSentEntry?.contenu),
+    [smsAnticipationSentEntry]
+  );
+  const smsAnticipationProfileLabel = useMemo(
+    () => smsAnticipationProfileLabelFromSentNote(smsAnticipationSentEntry?.contenu),
+    [smsAnticipationSentEntry]
+  );
 
   // Resynchro uniquement au changement de fiche : ne pas écraser une saisie en cours
   // avec l'écho serveur d'une sauvegarde (autosave notes, changement d'étape, etc.).
@@ -192,7 +210,13 @@ export function ParrainagePipeDetailPanel({
                   {timeline.map((entry) => (
                     <li key={entry.id} className="rounded-md border border-border/50 bg-muted/20 px-3 py-2">
                       <p className="text-xs font-medium">{entry.titre ?? entry.entry_type}</p>
-                      {entry.contenu && <p className="text-sm mt-1 whitespace-pre-wrap">{entry.contenu}</p>}
+                      {entry.contenu && (
+                        <p className="text-sm mt-1 whitespace-pre-wrap">
+                          {entry.entry_type === "SMS_ENVOYE"
+                            ? displaySmsAnticipationSentNote(entry.contenu)
+                            : entry.contenu}
+                        </p>
+                      )}
                       <p className="text-[10px] text-muted-foreground mt-1">
                         {new Date(entry.occurred_at * 1000).toLocaleString("fr-FR")}
                       </p>
@@ -206,6 +230,8 @@ export function ParrainagePipeDetailPanel({
           <div>
             <ParrainageScriptPanel
               pipe={pipe}
+              smsAnticipationProfile={smsAnticipationProfile}
+              smsAnticipationProfileLabel={smsAnticipationProfileLabel}
               onNoteSaved={() => {
                 void listParrainagePipeTimelineEntries(pipe.id)
                   .then(setTimeline)
@@ -214,10 +240,12 @@ export function ParrainagePipeDetailPanel({
               onAdvanceStage={() => {
                 const nextStage =
                   pipe.stage === "A_CONTACTER"
-                    ? "PRISE_DE_CONTACT"
-                    : pipe.stage === "PRISE_DE_CONTACT"
-                      ? "CONFIRME"
-                      : null;
+                    ? "ATTENTE_REPONSE"
+                    : pipe.stage === "ATTENTE_REPONSE"
+                      ? "PRISE_DE_CONTACT"
+                      : pipe.stage === "PRISE_DE_CONTACT"
+                        ? "CONFIRME"
+                        : null;
                 return nextStage ? changeStage(nextStage, { silent: true }) : true;
               }}
             />

@@ -54,7 +54,7 @@ export function PipeParrainage() {
       ]);
       setPipes(pipeRows);
       setCounts(funnelCounts);
-      setSelected((prev) => pipeRows.find((p) => p.id === prev?.id) ?? pipeRows[0] ?? null);
+      setSelected((prev) => (prev ? pipeRows.find((p) => p.id === prev.id) ?? null : null));
     } catch (error) {
       toast.error(String(error));
     } finally {

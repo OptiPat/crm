@@ -1,5 +1,6 @@
 export const PARRAINAGE_PIPE_STAGES = [
   "A_CONTACTER",
+  "ATTENTE_REPONSE",
   "PRISE_DE_CONTACT",
   "CONFIRME",
   "PRESENT",
@@ -11,6 +12,7 @@ export type ParrainagePipeStage = (typeof PARRAINAGE_PIPE_STAGES)[number];
 
 export const PARRAINAGE_PIPE_STAGE_LABELS: Record<ParrainagePipeStage, string> = {
   A_CONTACTER: "À contacter",
+  ATTENTE_REPONSE: "En attente de réponse",
   PRISE_DE_CONTACT: "Prise de contact",
   CONFIRME: "Oui, je viens",
   PRESENT: "Présent JD/PO",
@@ -20,6 +22,7 @@ export const PARRAINAGE_PIPE_STAGE_LABELS: Record<ParrainagePipeStage, string> =
 
 export const PARRAINAGE_PIPE_BOARD_STAGES = [
   "A_CONTACTER",
+  "ATTENTE_REPONSE",
   "PRISE_DE_CONTACT",
   "CONFIRME",
   "PRESENT",

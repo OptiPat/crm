@@ -18,6 +18,7 @@ const DRAG_THRESHOLD_PX = 6;
 /** Libellés compacts pour tenir en 6 colonnes sans scroll horizontal. */
 const PARRAINAGE_PIPE_BOARD_LABELS: Record<ParrainagePipeStage, string> = {
   A_CONTACTER: "À contact.",
+  ATTENTE_REPONSE: "Attente",
   PRISE_DE_CONTACT: "Contact",
   CONFIRME: "Confirmé",
   PRESENT: "Présent",
@@ -131,7 +132,7 @@ export function ParrainagePipeBoard({
   }
 
   return (
-    <div className="grid h-full min-h-0 flex-1 grid-cols-3 gap-1.5 p-2 sm:grid-cols-6 sm:gap-2 sm:p-3">
+    <div className="grid h-full min-h-0 flex-1 grid-cols-2 gap-1.5 p-2 min-[900px]:grid-cols-4 sm:gap-2 sm:p-3 lg:grid-cols-7">
       {PARRAINAGE_PIPE_BOARD_STAGES.map((stage) => {
         const list = byStage[stage];
         const colors = PARRAINAGE_PIPE_STAGE_BOARD_COLORS[stage];

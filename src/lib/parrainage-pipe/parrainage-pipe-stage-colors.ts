@@ -22,6 +22,15 @@ export const PARRAINAGE_PIPE_STAGE_BOARD_COLORS: Record<
     badge:
       "bg-slate-100 text-slate-700 border border-slate-200/80 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600",
   },
+  ATTENTE_REPONSE: {
+    column:
+      "border-indigo-200/70 bg-indigo-50/40 dark:border-indigo-900 dark:bg-indigo-950/25",
+    accent: "border-t-indigo-400 dark:border-t-indigo-500",
+    header: "border-indigo-200/50 dark:border-indigo-900",
+    title: "text-indigo-800 dark:text-indigo-300",
+    badge:
+      "bg-indigo-100 text-indigo-800 border border-indigo-200/80 dark:bg-indigo-950 dark:text-indigo-200 dark:border-indigo-800",
+  },
   PRISE_DE_CONTACT: {
     column: "border-sky-200/70 bg-sky-50/40 dark:border-sky-900 dark:bg-sky-950/25",
     accent: "border-t-sky-400 dark:border-t-sky-500",

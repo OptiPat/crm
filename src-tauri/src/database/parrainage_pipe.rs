@@ -4,6 +4,7 @@ use chrono::{TimeZone, Utc};
 use rusqlite::{params, Result, Row};
 
 pub const STAGE_A_CONTACTER: &str = "A_CONTACTER";
+pub const STAGE_ATTENTE_REPONSE: &str = "ATTENTE_REPONSE";
 pub const STAGE_PRISE_DE_CONTACT: &str = "PRISE_DE_CONTACT";
 pub const STAGE_CONFIRME: &str = "CONFIRME";
 pub const STAGE_PRESENT: &str = "PRESENT";
@@ -12,6 +13,7 @@ pub const STAGE_REFUSE: &str = "REFUSE";
 
 const VALID_STAGES: &[&str] = &[
     STAGE_A_CONTACTER,
+    STAGE_ATTENTE_REPONSE,
     STAGE_PRISE_DE_CONTACT,
     STAGE_CONFIRME,
     STAGE_PRESENT,
@@ -43,6 +45,7 @@ pub(crate) fn is_valid_parrainage_stage(value: &str) -> bool {
 pub(crate) fn parrainage_stage_label(stage: &str) -> String {
     match stage {
         STAGE_A_CONTACTER => "À contacter".into(),
+        STAGE_ATTENTE_REPONSE => "En attente de réponse".into(),
         STAGE_PRISE_DE_CONTACT => "Prise de contact".into(),
         STAGE_CONFIRME => "Oui, je viens".into(),
         STAGE_PRESENT => "Présent JD/PO".into(),
@@ -110,6 +113,30 @@ impl super::Database {
             CREATE INDEX IF NOT EXISTS idx_parrainage_pipe_timeline_pipe ON parrainage_pipe_timeline_entries(parrainage_pipe_id);
             ",
         )?;
+        self.migrate_parrainage_attente_reponse_from_sms_v1()?;
+        Ok(())
+    }
+
+    /// Rattrapage one-shot : pipes déjà marqués SMS envoyé mais encore à « À contacter ».
+    fn migrate_parrainage_attente_reponse_from_sms_v1(&self) -> Result<()> {
+        if self
+            .get_setting("migration_parrainage_attente_reponse_v1")?
+            .is_some()
+        {
+            return Ok(());
+        }
+        self.conn.execute(
+            "UPDATE parrainage_pipes
+             SET stage = ?1
+             WHERE stage = ?2
+               AND id IN (
+                 SELECT DISTINCT parrainage_pipe_id
+                 FROM parrainage_pipe_timeline_entries
+                 WHERE entry_type = ?3
+               )",
+            params![STAGE_ATTENTE_REPONSE, STAGE_A_CONTACTER, TIMELINE_SMS_ENVOYE],
+        )?;
+        self.set_setting("migration_parrainage_attente_reponse_v1", "1")?;
         Ok(())
     }
 
@@ -464,7 +491,7 @@ impl super::Database {
         let parrain_id = self.resolve_organisation_self_contact_id()?;
 
         match stage {
-            STAGE_A_CONTACTER => {
+            STAGE_A_CONTACTER | STAGE_ATTENTE_REPONSE => {
                 self.conn.execute(
                     "UPDATE contacts SET
                         filleul_categorie = CASE
@@ -599,5 +626,38 @@ mod tests {
         assert_eq!(counts.confirmations, 1);
         assert_eq!(counts.presences, 1);
         assert_eq!(counts.parrainages, 1);
+    }
+
+    #[test]
+    fn migrate_attente_reponse_from_sms_runs_once() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        let pipe = db
+            .create_parrainage_pipe(NewParrainagePipe {
+                contact_id,
+                exercice_label: "2025-2026".into(),
+                stage: Some(STAGE_A_CONTACTER.into()),
+                invitation_type: None,
+                notes: None,
+            })
+            .unwrap();
+        db.create_parrainage_pipe_sms_sent_note(pipe.id, "Coucou").unwrap();
+
+        db.conn
+            .execute(
+                "DELETE FROM settings WHERE key = 'migration_parrainage_attente_reponse_v1'",
+                [],
+            )
+            .unwrap();
+
+        db.migrate_parrainage_attente_reponse_from_sms_v1().unwrap();
+        let migrated = db.get_parrainage_pipe_by_id(pipe.id).unwrap();
+        assert_eq!(migrated.stage, STAGE_ATTENTE_REPONSE);
+
+        db.set_parrainage_pipe_stage(pipe.id, STAGE_A_CONTACTER, None, None)
+            .unwrap();
+        db.migrate_parrainage_attente_reponse_from_sms_v1().unwrap();
+        let manual_reset = db.get_parrainage_pipe_by_id(pipe.id).unwrap();
+        assert_eq!(manual_reset.stage, STAGE_A_CONTACTER);
     }
 }
