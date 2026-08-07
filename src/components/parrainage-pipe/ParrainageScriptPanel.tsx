@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Copy, Sparkles } from "lucide-react";
+import { SmsBrandIcon, WhatsAppBrandIcon } from "@/components/icons/MessagingBrandIcons";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,12 @@ import {
   createParrainagePipeTimelineNote,
 } from "@/lib/api/tauri-parrainage-pipe";
 import { createTache } from "@/lib/api/tauri-taches";
+import { openExternalUrl } from "@/lib/api/tauri-system";
+import {
+  buildSmsUrl,
+  buildWhatsAppUrl,
+  hasMessagingPhone,
+} from "@/lib/contacts/birthday-outreach";
 import {
   APPEL_PRISE_CONTACT_OBJECTIONS,
   APPEL_PRISE_CONTACT_STEPS,
@@ -230,6 +237,72 @@ function profileReplyShowsInsisteSmsPicker(
   return smsAnticipationProfileReplyShowsInsisteSms(profile, replyId);
 }
 
+const MESSAGING_PHONE_DISABLED_TITLE =
+  "Numéro absent ou incompatible (fixe FR, format invalide)";
+
+function CoachMessagingChannelButtons({
+  telephone,
+  message,
+}: {
+  telephone?: string | null;
+  message: string;
+}) {
+  const canMessage = hasMessagingPhone(telephone);
+
+  const openChannel = async (channel: "sms" | "whatsapp") => {
+    if (!hasMessagingPhone(telephone)) {
+      toast.error("Aucun numéro compatible SMS/WhatsApp sur cette fiche.");
+      return;
+    }
+    const url =
+      channel === "sms"
+        ? buildSmsUrl(telephone!, message)
+        : buildWhatsAppUrl(telephone!, message);
+    if (!url) {
+      toast.error("Numéro incompatible avec SMS/WhatsApp.");
+      return;
+    }
+    try {
+      await openExternalUrl(url);
+    } catch (error) {
+      toast.error(
+        channel === "sms"
+          ? `Impossible d'ouvrir le SMS : ${String(error)}`
+          : `Impossible d'ouvrir WhatsApp : ${String(error)}`
+      );
+    }
+  };
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 w-7 px-0"
+        disabled={!canMessage}
+        title={canMessage ? "Préparer un SMS" : MESSAGING_PHONE_DISABLED_TITLE}
+        aria-label={canMessage ? "Préparer un SMS" : MESSAGING_PHONE_DISABLED_TITLE}
+        onClick={() => void openChannel("sms")}
+      >
+        <SmsBrandIcon className="size-3.5" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 w-7 px-0"
+        disabled={!canMessage}
+        title={canMessage ? "Préparer WhatsApp" : MESSAGING_PHONE_DISABLED_TITLE}
+        aria-label={canMessage ? "Préparer WhatsApp" : MESSAGING_PHONE_DISABLED_TITLE}
+        onClick={() => void openChannel("whatsapp")}
+      >
+        <WhatsAppBrandIcon className="size-3.5" />
+      </Button>
+    </>
+  );
+}
+
 function SmsAnticipationPicker({
   pipe,
   text,
@@ -304,9 +377,15 @@ function SmsAnticipationPicker({
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-2">
           <Label className="text-xs text-muted-foreground">SMS d&apos;anticipation</Label>
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => void copy()}>
-            <Copy className="size-3.5" />
-          </Button>
+          <div className="flex items-center gap-0.5">
+            <CoachMessagingChannelButtons
+              telephone={pipe.contact_telephone}
+              message={text}
+            />
+            <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => void copy()}>
+              <Copy className="size-3.5" />
+            </Button>
+          </div>
         </div>
         <Textarea
           value={text}

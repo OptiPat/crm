@@ -15,6 +15,7 @@ export interface ParrainagePipeRecord {
   archived_at?: number | null;
   contact_nom?: string | null;
   contact_prenom?: string | null;
+  contact_telephone?: string | null;
 }
 
 export interface ParrainagePipeTimelineEntry {

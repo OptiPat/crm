@@ -1670,6 +1670,8 @@ pub struct ParrainagePipe {
     pub contact_nom: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub contact_prenom: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contact_telephone: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

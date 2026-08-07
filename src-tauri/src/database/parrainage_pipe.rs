@@ -76,12 +76,13 @@ fn map_parrainage_pipe_row(row: &Row<'_>) -> Result<super::models::ParrainagePip
         archived_at: row.get(8)?,
         contact_nom: row.get(9)?,
         contact_prenom: row.get(10)?,
+        contact_telephone: row.get(11)?,
     })
 }
 
 const PARRAINAGE_PIPE_SELECT: &str = "pp.id, pp.contact_id, pp.stage, pp.invitation_type, pp.exercice_label, pp.notes,
                     pp.created_at, pp.updated_at, pp.archived_at,
-                    c.nom, c.prenom";
+                    c.nom, c.prenom, c.telephone";
 
 impl super::Database {
     pub fn migrate_parrainage_pipes_table(&self) -> Result<()> {
