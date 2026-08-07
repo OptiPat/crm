@@ -50,7 +50,7 @@ export function AgendaWeekView({
 }: AgendaWeekViewProps) {
   const hours = hourLabels();
   const gridHeight = agendaGridHeightPx();
-  const hourLines = Array.from({ length: AGENDA_GRID_HOUR_COUNT + 1 }, (_, i) => i);
+  const hourSlots = Array.from({ length: AGENDA_GRID_HOUR_COUNT }, (_, i) => i);
   const days = weekdayLabels().map((_, dayIndex) => dayIndex);
 
   const timedEvents = events.filter((ev) => !ev.all_day);
@@ -121,8 +121,8 @@ export function AgendaWeekView({
               {hours.map((label, index) => (
                 <div
                   key={label}
-                  className="absolute left-0 right-0 text-[10px] text-muted-foreground px-1 -translate-y-1/2 pointer-events-none"
-                  style={{ top: agendaHourLineTopPx(index) + AGENDA_HOUR_HEIGHT_PX / 2 }}
+                  className="absolute left-0 right-0 text-[10px] text-muted-foreground px-1 -translate-y-1/2 text-right pointer-events-none tabular-nums"
+                  style={{ top: agendaHourLineTopPx(index) }}
                 >
                   {label}
                 </div>
@@ -155,12 +155,20 @@ export function AgendaWeekView({
                     : undefined
                 }
               >
-                {hourLines.map((lineIndex) => (
+                {hourSlots.map((slotIndex) => (
                   <div
-                    key={lineIndex}
-                    className="absolute left-0 right-0 border-t border-border/50 pointer-events-none"
-                    style={{ top: agendaHourLineTopPx(lineIndex) }}
-                  />
+                    key={slotIndex}
+                    className={cn(
+                      "absolute left-0 right-0 border-b border-border/50 pointer-events-none",
+                      slotIndex % 2 === 0 && "bg-muted/[0.04]"
+                    )}
+                    style={{
+                      top: agendaHourLineTopPx(slotIndex),
+                      height: AGENDA_HOUR_HEIGHT_PX,
+                    }}
+                  >
+                    <div className="absolute left-0 right-0 top-1/2 border-t border-dashed border-border/30" />
+                  </div>
                 ))}
 
                 {highlightDayIndex === dayIndex &&
@@ -187,7 +195,7 @@ export function AgendaWeekView({
                         key={ev.google_event_id}
                         type="button"
                         className={cn(
-                          "absolute left-1 right-1 z-20 m-0 overflow-hidden rounded border px-1.5 py-0.5 text-left text-[10px] leading-tight box-border",
+                          "absolute left-0.5 right-0.5 z-20 m-0 overflow-hidden rounded-sm border px-1 py-0.5 text-left text-[10px] leading-tight box-border",
                           isPipeLinkedEvent(ev)
                             ? "border-emerald-400/80 bg-emerald-100/90 hover:bg-emerald-200/90"
                             : "border-blue-200/80 bg-blue-100/90 hover:bg-blue-200/90"
