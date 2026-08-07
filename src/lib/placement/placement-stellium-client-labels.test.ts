@@ -39,6 +39,14 @@ describe("formatPlacementStelliumClientLabel", () => {
     );
   });
 
+  it("mappe le décès (concernant)", () => {
+    expect(formatPlacementStelliumClientLabel("Décès")).toBe("les démarches suite au décès");
+  });
+
+  it("mappe le retrait de parts SCPI (concernant)", () => {
+    expect(formatPlacementStelliumClientLabel("Retrait de parts")).toBe("le retrait de parts");
+  });
+
   it("retombe sur le libellé brut si inconnu", () => {
     expect(formatPlacementStelliumClientLabel("Acte inconnu")).toBe("Acte inconnu");
     expect(formatPlacementStelliumClientLabel(null)).toBe("");

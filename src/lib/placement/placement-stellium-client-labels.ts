@@ -6,7 +6,10 @@ import {
 } from "@/lib/placement/stellium-box-placement-labels";
 import { VERSEMENT_COMPLEMENTAIRE_ACT_LABEL } from "@/lib/pipe/pipe-suivi";
 
-/** Libellé client pour mails Box Placement (modèle unique, phrase naturelle). */
+/**
+ * Libellé client pour mails Box Placement.
+ * Formulations après « concernant » (contrat AV/PER/capi ou SCPI).
+ */
 export const PLACEMENT_STELLIUM_CLIENT_LABELS: Record<string, string> = {
   "Arbitrage libre": "l'arbitrage",
   "Arbitrages programmés : Mise en place": "la mise en place d'arbitrages programmés",
@@ -40,7 +43,7 @@ export const PLACEMENT_STELLIUM_CLIENT_LABELS: Record<string, string> = {
   "Dénouement partiel": "le dénouement partiel",
   "Dénouement total": "le dénouement total",
   Renonciation: "la renonciation",
-  Décès: "les démarches suite à décès",
+  Décès: "les démarches suite au décès",
 
   "Ordre de remplacement": "l'ordre de remplacement",
   "Transfert entrant": "le transfert",
