@@ -14,10 +14,13 @@ import { toast } from "sonner";
 
 interface PipeProspectionContactSectionProps {
   contactId: number;
+  /** `stack` : prescripteur puis source (dialogues étroits). */
+  layout?: "inline" | "stack";
 }
 
 export function PipeProspectionContactSection({
   contactId,
+  layout = "inline",
 }: PipeProspectionContactSectionProps) {
   const [contact, setContact] = useState<Contact | null>(null);
   const [allContacts, setAllContacts] = useState<Contact[]>([]);
@@ -128,7 +131,13 @@ export function PipeProspectionContactSection({
 
   return (
     <div className="rounded-md border bg-muted/10 px-3 py-2.5">
-      <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+      <div
+        className={
+          layout === "stack"
+            ? "grid grid-cols-1 gap-3"
+            : "grid gap-2 sm:grid-cols-2 sm:gap-3"
+        }
+      >
         <div className="space-y-1 min-w-0">
           <p className="text-[11px] font-medium text-muted-foreground">Prescripteur</p>
           <ContactPersonSearch

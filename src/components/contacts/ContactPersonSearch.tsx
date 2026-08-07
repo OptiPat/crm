@@ -90,7 +90,7 @@ export function ContactPersonSearch({
               className="flex-1 justify-between font-normal"
             >
               {selected ? (
-                <span className="truncate">
+                <span className="truncate text-left">
                   {selected.prenom} {selected.nom}
                 </span>
               ) : (

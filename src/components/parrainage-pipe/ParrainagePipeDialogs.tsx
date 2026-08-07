@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ParrainageContactSelect } from "@/components/parrainage-pipe/ParrainageContactSelect";
+import { PipeProspectionContactSection } from "@/components/pipe/PipeProspectionContactSection";
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { createParrainagePipe } from "@/lib/api/tauri-parrainage-pipe";
 import {
@@ -75,7 +76,7 @@ export function ParrainagePipeCreateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Ajouter au pipe parrainage</DialogTitle>
         </DialogHeader>
@@ -89,6 +90,9 @@ export function ParrainagePipeCreateDialog({
               setContactId(contact.id ?? 0);
             }}
           />
+          {contactId > 0 && (
+            <PipeProspectionContactSection contactId={contactId} layout="stack" />
+          )}
           <div className="space-y-2">
             <Label>Type d&apos;invitation (optionnel)</Label>
             <Select value={invitationType || "none"} onValueChange={(v) => setInvitationType(v === "none" ? "" : v)}>

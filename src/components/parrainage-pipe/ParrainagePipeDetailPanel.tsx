@@ -33,6 +33,7 @@ import {
   type ParrainagePipeStage,
 } from "@/lib/parrainage-pipe/parrainage-pipe-types";
 import { ParrainageScriptPanel } from "@/components/parrainage-pipe/ParrainageScriptPanel";
+import { PipeProspectionContactSection } from "@/components/pipe/PipeProspectionContactSection";
 import { toast } from "sonner";
 
 interface ParrainagePipeDetailPanelProps {
@@ -197,6 +198,8 @@ export function ParrainagePipeDetailPanel({
                 </SelectContent>
               </Select>
             </div>
+
+            <PipeProspectionContactSection contactId={pipe.contact_id} layout="stack" />
 
             <div className="space-y-2">
               <Label>Notes</Label>
