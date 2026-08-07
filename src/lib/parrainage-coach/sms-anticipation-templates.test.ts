@@ -9,6 +9,7 @@ import {
   smsAnticipationProfileInitialReplies,
   smsAnticipationProfileReplyShowsInsisteSms,
   SMS_ANTICIPATION_PERDU_DE_VUE_INITIAL_REPLIES,
+  SMS_ANTICIPATION_COACH_PROFILES,
   SMS_ANTICIPATION_PROFILE_DEFS,
   SMS_ANTICIPATION_PROFILES,
   SMS_ANTICIPATION_REPLY_DEFS,
@@ -61,6 +62,12 @@ describe("renderSmsAnticipationTemplate", () => {
   it("retombe sur la variante A si C n'existe pas pour le profil", () => {
     const text = renderSmsAnticipationTemplate("PASSE_PARTOUT", "C", "Julie");
     expect(text).toEqual(renderSmsAnticipationTemplate("PASSE_PARTOUT", "A", "Julie"));
+  });
+});
+
+describe("SMS_ANTICIPATION_COACH_PROFILES", () => {
+  it("n'affiche que proche / ami et perdu de vue dans le coach", () => {
+    expect(SMS_ANTICIPATION_COACH_PROFILES).toEqual(["PROCHE_AMI", "PERDU_DE_VUE"]);
   });
 });
 

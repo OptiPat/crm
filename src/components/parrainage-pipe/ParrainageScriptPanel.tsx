@@ -30,8 +30,8 @@ import {
   formatSmsAnticipationSentNote,
   renderSmsAnticipationTemplate,
   SMS_ANTICIPATION_INSISTE_SMS_DEF,
+  SMS_ANTICIPATION_COACH_PROFILES,
   SMS_ANTICIPATION_PROFILE_DEFS,
-  SMS_ANTICIPATION_PROFILES,
   SMS_ANTICIPATION_REPLY_DEFS,
   SMS_ANTICIPATION_REPLY_OPTIONS,
   SMS_ANTICIPATION_REPLY_SCENARIOS,
@@ -112,7 +112,7 @@ function SmsAnticipationPicker({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {SMS_ANTICIPATION_PROFILES.map((key) => (
+            {SMS_ANTICIPATION_COACH_PROFILES.map((key) => (
               <SelectItem key={key} value={key}>
                 {SMS_ANTICIPATION_PROFILE_DEFS[key].label}
               </SelectItem>

@@ -16,6 +16,12 @@ export const SMS_ANTICIPATION_PROFILES = [
 
 export type SmsAnticipationProfile = (typeof SMS_ANTICIPATION_PROFILES)[number];
 
+/** Profils affichés dans le coach pipe (les autres restent en données pour l'historique). */
+export const SMS_ANTICIPATION_COACH_PROFILES: readonly SmsAnticipationProfile[] = [
+  "PROCHE_AMI",
+  "PERDU_DE_VUE",
+];
+
 export const SMS_ANTICIPATION_VARIANTS = ["A", "B", "C"] as const;
 export type SmsAnticipationVariant = (typeof SMS_ANTICIPATION_VARIANTS)[number];
 
@@ -42,9 +48,9 @@ export const SMS_ANTICIPATION_PROFILE_DEFS: Record<SmsAnticipationProfile, SmsAn
           "Coucou {{prenom}} ! Petit message pour prendre des nouvelles. Comment va la famille ? Et de ton côté, pas trop dur le boulot en ce moment ?",
       },
       B: {
-        label: "Variante B (Décontractée)",
+        label: "Variante B (Épanouissement)",
         template:
-          "Salut {{prenom}} ! Ça fait un bail. Tu tiens le coup au taf ou c'est la folie en ce moment ?",
+          "Coucou {{prenom}} ! J'espère que tu vas bien et toute la famille aussi. Tu t'éclates toujours autant dans ton boulot ou c'est la routine en ce moment ?",
       },
     },
   },
@@ -61,7 +67,7 @@ export const SMS_ANTICIPATION_PROFILE_DEFS: Record<SmsAnticipationProfile, SmsAn
       B: {
         label: "Variante B (Nouvelles globales)",
         template:
-          "Salut {{prenom}} ! J'espère que toute la famille va bien. Ça fait un bail ! Tu deviens quoi, toujours dans le [Secteur/Métier] ?",
+          "Salut {{prenom}} ! J'espère que toute la famille va bien. Ça fait un bail ! Qu'est ce que tu deviens, toujours dans le [Secteur/Métier] ?",
       },
     },
   },
