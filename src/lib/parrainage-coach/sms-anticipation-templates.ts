@@ -61,7 +61,7 @@ export const SMS_ANTICIPATION_PROFILE_DEFS: Record<SmsAnticipationProfile, SmsAn
       B: {
         label: "Variante B (Nouvelles globales)",
         template:
-          "Salut {{prenom}} ! J'espère que toute la famille va bien. Ça fait un moment ! Quelles sont les nouvelles de ton côté ?",
+          "Salut {{prenom}} ! J'espère que toute la famille va bien. Ça fait un bail ! Tu deviens quoi, toujours dans le [Secteur/Métier] ?",
       },
     },
   },
@@ -256,52 +256,137 @@ export interface SmsAnticipationProfileReplyOption {
 }
 
 /** Relances « attente de réponse » spécifiques à un profil (un texte par type de réponse). */
-export const SMS_ANTICIPATION_PROFILE_WAITING_REPLIES: Partial<
-  Record<SmsAnticipationProfile, SmsAnticipationProfileReplyOption[]>
-> = {
-  PROCHE_AMI: [
-    {
-      id: "FRUSTRATION",
-      label: "Frustration",
+const SMS_ANTICIPATION_PROCHE_AMI_WAITING_REPLIES: SmsAnticipationProfileReplyOption[] = [
+  {
+    id: "FRUSTRATION",
+    label: "Frustration",
+    template:
+      "Ah mince... Je te comprends. Faut qu'on s'appelle 5 min que tu me racontes ça. Tu as un moment ce soir vers 18h ou demain midi ?",
+  },
+  {
+    id: "TIEDE",
+    label: "Tiède",
+    template:
+      "Haha le fameux 'on fait avec' ! 😉 C'est quoi qui te pèse le plus en ce moment ? Le rythme, la routine ?",
+    followUp: {
+      label: "Attente de réponse",
       template:
         "Ah mince... Je te comprends. Faut qu'on s'appelle 5 min que tu me racontes ça. Tu as un moment ce soir vers 18h ou demain midi ?",
     },
-    {
-      id: "TIEDE",
-      label: "Tiède",
+  },
+  {
+    id: "ESQUIVE",
+    label: "Esquive",
+    template:
+      "Tout va bien chez nous aussi merci ! Et le boulot, t'as esquivé la question, c'est si terrible que ça ? 😂",
+    followUp: {
+      label: "Attente de réponse",
       template:
-        "Haha le fameux 'on fait avec' ! 😉 C'est quoi qui te pèse le plus en ce moment ? Le rythme, la routine ?",
-      followUp: {
-        label: "Attente de réponse",
-        template:
-          "Ah mince... Je te comprends. Faut qu'on s'appelle 5 min que tu me racontes ça. Tu as un moment ce soir vers 18h ou demain midi ?",
-      },
+        "Ah mince... Je te comprends. Faut qu'on s'appelle 5 min que tu me racontes ça. Tu as un moment ce soir vers 18h ou demain midi ?",
     },
-    {
-      id: "ESQUIVE",
-      label: "Esquive",
-      template:
-        "Tout va bien chez nous aussi merci ! Et le boulot, t'as esquivé la question, c'est si terrible que ça ? 😂",
-      followUp: {
-        label: "Attente de réponse",
-        template:
-          "Ah mince... Je te comprends. Faut qu'on s'appelle 5 min que tu me racontes ça. Tu as un moment ce soir vers 18h ou demain midi ?",
-      },
-    },
-    {
-      id: "POSITIF",
-      label: "Positif",
-      template:
-        "Trop bien, ça fait plaisir à lire ! Écoute ça va nickel ! Plein de nouveautés et de super projets de mon côté, je te raconterai ça de vive voix ! Tu as un moment ce soir vers 18h ou demain midi ?",
-    },
-  ],
+  },
+  {
+    id: "POSITIF",
+    label: "Positif",
+    template:
+      "Trop bien, ça fait plaisir à lire ! Écoute ça va nickel ! Plein de nouveautés et de super projets de mon côté, je te raconterai ça de vive voix ! Tu as un moment ce soir vers 18h ou demain midi ?",
+  },
+];
+
+const SMS_ANTICIPATION_PERDU_DE_VUE_WAITING_REPLIES: SmsAnticipationProfileReplyOption[] = [
+  {
+    id: "FRUSTRATION",
+    label: "Frustration",
+    template:
+      "Ah mince... Je te comprends, c'est pas évident. Faut qu'on se cale 5 min au tél pour se donner de vraies nouvelles et que tu me racontes ça ! Tu es dispo ce soir vers 18h ou demain midi ?",
+  },
+  {
+    id: "CURIEUX",
+    label: "Curieux",
+    template:
+      "Haha je te raconte pas tout par écrit, ce serait trop long ! On se passe un petit coup de tél rapide pour se donner de vraies nouvelles au passage, tu as 5 min ce soir vers 18h ou demain midi ?",
+  },
+  {
+    id: "TIEDE",
+    label: "Tiède",
+    template:
+      "Haha d'accord ! 😉 Mais du coup, t'y trouves toujours ton compte ou tu sens que t'as fait le tour ?",
+  },
+  {
+    id: "POSITIF",
+    label: "Positif",
+    template:
+      "Ah trop bien, ça fait plaisir à lire ! Raison de plus pour se capter 5 min au tél et se donner des nouvelles de vive voix. Tu as un moment ce soir vers 18h ou demain midi ?",
+  },
+];
+
+export const SMS_ANTICIPATION_PROFILE_WAITING_REPLIES: Partial<
+  Record<SmsAnticipationProfile, SmsAnticipationProfileReplyOption[]>
+> = {
+  PROCHE_AMI: SMS_ANTICIPATION_PROCHE_AMI_WAITING_REPLIES,
+  PERDU_DE_VUE: SMS_ANTICIPATION_PERDU_DE_VUE_WAITING_REPLIES,
 };
+
+/** Bloc « insiste SMS » : uniquement sur Positif (proche/ami) ou relances sans recadrage direct. */
+export function smsAnticipationProfileReplyShowsInsisteSms(
+  profile: SmsAnticipationProfile | null | undefined,
+  replyId: string
+): boolean {
+  if (!profile || !replyId) return true;
+  if (profile === "PERDU_DE_VUE") {
+    return replyId === "POSITIF";
+  }
+  return !["FRUSTRATION", "TIEDE", "ESQUIVE"].includes(replyId);
+}
 
 export function smsAnticipationProfileWaitingReplies(
   profile: SmsAnticipationProfile | null | undefined
 ): SmsAnticipationProfileReplyOption[] | null {
   if (!profile) return null;
   return SMS_ANTICIPATION_PROFILE_WAITING_REPLIES[profile] ?? null;
+}
+
+/** 1ʳᵉ relance perdu de vue : réponse selon sa situation pro (avant frustration / tiède / etc.). */
+export interface SmsAnticipationInitialReplyOption {
+  id: string;
+  /** Libellé court du bouton. */
+  label: string;
+  /** Ce que le prospect a écrit (affiché sous le sélecteur). */
+  says: string;
+  template: string;
+}
+
+export const SMS_ANTICIPATION_PERDU_DE_VUE_INITIAL_REPLIES: SmsAnticipationInitialReplyOption[] = [
+  {
+    id: "MEME_BOITE",
+    label: "Même boîte",
+    says: "Toujours dans la même boîte ! Et toi ?",
+    template:
+      "Ah super ! De mon côté, plein de nouveauté et de super projets, je te raconterai de vive voix ! Et toi du coup, tu te plais toujours autant ou tu commences à faire le tour ?",
+  },
+  {
+    id: "A_CHANGE",
+    label: "A changé",
+    says: "Non j'ai changé ! Et toi ?",
+    template:
+      "Ah super ! De mon côté, plein de nouveauté et de super projets, je te raconterai de vive voix ! Et dans ton nouveau taf, tu t'y retrouves niveau rythme et rémunération, ou c'est la course ?",
+  },
+  {
+    id: "RECHERCHE_EMPLOI",
+    label: "En recherche",
+    says: "Je suis en recherche d'emploi... Et toi ?",
+    template:
+      "Ah mince... De mon côté, plein de nouveauté et de super projets, je te raconterai de vive voix ! Et pour toi, ça avance comme tu veux tes recherches ou c'est la galère en ce moment ?",
+  },
+];
+
+export function smsAnticipationProfileInitialReplies(
+  profile: SmsAnticipationProfile | null | undefined
+): SmsAnticipationInitialReplyOption[] | null {
+  if (profile === "PERDU_DE_VUE") {
+    return SMS_ANTICIPATION_PERDU_DE_VUE_INITIAL_REPLIES;
+  }
+  return null;
 }
 
 /**

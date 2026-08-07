@@ -6,6 +6,9 @@ import {
   renderSmsAnticipationTemplate,
   smsAnticipationProfileLabelFromSentNote,
   smsAnticipationProfileWaitingReplies,
+  smsAnticipationProfileInitialReplies,
+  smsAnticipationProfileReplyShowsInsisteSms,
+  SMS_ANTICIPATION_PERDU_DE_VUE_INITIAL_REPLIES,
   SMS_ANTICIPATION_PROFILE_DEFS,
   SMS_ANTICIPATION_PROFILES,
   SMS_ANTICIPATION_REPLY_DEFS,
@@ -85,6 +88,41 @@ describe("SMS_ANTICIPATION_PROFILE_WAITING_REPLIES", () => {
     expect(replies?.[0]?.template).toContain("Ah mince...");
     expect(replies?.find((r) => r.id === "TIEDE")?.followUp?.template).toContain(
       "Faut qu'on s'appelle 5 min que tu me racontes ça"
+    );
+  });
+
+  it("perdu de vue a 4 relances propres (frustration, positif, curieux, tiède)", () => {
+    const replies = smsAnticipationProfileWaitingReplies("PERDU_DE_VUE");
+    expect(replies?.map((r) => r.label)).toEqual([
+      "Frustration",
+      "Curieux",
+      "Tiède",
+      "Positif",
+    ]);
+    expect(replies?.[0]?.template).toContain("c'est pas évident");
+    expect(replies?.find((r) => r.id === "CURIEUX")?.template).toContain(
+      "je te raconte pas tout par écrit"
+    );
+    expect(smsAnticipationProfileReplyShowsInsisteSms("PERDU_DE_VUE", "POSITIF")).toBe(true);
+    expect(smsAnticipationProfileReplyShowsInsisteSms("PERDU_DE_VUE", "FRUSTRATION")).toBe(false);
+    expect(smsAnticipationProfileReplyShowsInsisteSms("PROCHE_AMI", "POSITIF")).toBe(true);
+    expect(smsAnticipationProfileReplyShowsInsisteSms("PROCHE_AMI", "TIEDE")).toBe(false);
+  });
+});
+
+describe("SMS_ANTICIPATION_PERDU_DE_VUE_INITIAL_REPLIES", () => {
+  it("expose 3 relances selon la situation pro", () => {
+    expect(SMS_ANTICIPATION_PERDU_DE_VUE_INITIAL_REPLIES.map((r) => r.label)).toEqual([
+      "Même boîte",
+      "A changé",
+      "En recherche",
+    ]);
+    expect(smsAnticipationProfileInitialReplies("PERDU_DE_VUE")).toBe(
+      SMS_ANTICIPATION_PERDU_DE_VUE_INITIAL_REPLIES
+    );
+    expect(smsAnticipationProfileInitialReplies("PROCHE_AMI")).toBeNull();
+    expect(SMS_ANTICIPATION_PERDU_DE_VUE_INITIAL_REPLIES[0].template).toContain(
+      "tu te plais toujours autant"
     );
   });
 });

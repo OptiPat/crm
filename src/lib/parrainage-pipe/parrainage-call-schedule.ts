@@ -33,3 +33,16 @@ export function localDateTimeInputToUnix(
   if (Number.isNaN(ms)) return null;
   return Math.floor(ms / 1000);
 }
+
+/** Libellé FR pour l'historique pipe (ex. « 8 août 2026 à 18:00 »). */
+export function formatParrainageCallScheduleLabel(
+  dateInput: string,
+  timeInput: string
+): string | null {
+  const unix = localDateTimeInputToUnix(dateInput, timeInput);
+  if (unix == null) return null;
+  return new Date(unix * 1000).toLocaleString("fr-FR", {
+    dateStyle: "long",
+    timeStyle: "short",
+  });
+}

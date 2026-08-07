@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   defaultParrainageCallSchedule,
+  formatParrainageCallScheduleLabel,
   localDateTimeInputToUnix,
 } from "./parrainage-call-schedule";
 
@@ -22,5 +23,11 @@ describe("parrainage-call-schedule", () => {
     expect(d.getDate()).toBe(8);
     expect(d.getHours()).toBe(18);
     expect(d.getMinutes()).toBe(0);
+  });
+
+  it("formatParrainageCallScheduleLabel formate en français", () => {
+    const label = formatParrainageCallScheduleLabel("2026-08-08", "18:00");
+    expect(label).toMatch(/8 août 2026/);
+    expect(label).toMatch(/18:00/);
   });
 });

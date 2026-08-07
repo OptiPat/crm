@@ -36,6 +36,9 @@ import {
   SMS_ANTICIPATION_REPLY_OPTIONS,
   SMS_ANTICIPATION_REPLY_SCENARIOS,
   smsAnticipationProfileWaitingReplies,
+  smsAnticipationProfileInitialReplies,
+  smsAnticipationProfileReplyShowsInsisteSms,
+  type SmsAnticipationInitialReplyOption,
   type SmsAnticipationProfile,
   type SmsAnticipationReplyOption,
   type SmsAnticipationReplyScenario,
@@ -48,12 +51,20 @@ import {
 } from "@/lib/parrainage-pipe/parrainage-pipe-types";
 import {
   defaultParrainageCallSchedule,
+  formatParrainageCallScheduleLabel,
   localDateTimeInputToUnix,
 } from "@/lib/parrainage-pipe/parrainage-call-schedule";
 import { fireConfettiBurst } from "@/lib/ui/confetti-burst";
 import { toast } from "sonner";
 
-const PROFILE_REPLY_IDS_WITHOUT_INSISTE_SMS = new Set(["FRUSTRATION", "TIEDE", "ESQUIVE"]);
+function profileReplyShowsInsisteSmsPicker(
+  profile: SmsAnticipationProfile | null | undefined,
+  replyId: string,
+  hasProfileReplies: boolean
+): boolean {
+  if (!hasProfileReplies) return true;
+  return smsAnticipationProfileReplyShowsInsisteSms(profile, replyId);
+}
 
 function SmsAnticipationPicker({
   pipe,
@@ -149,6 +160,72 @@ function SmsAnticipationPicker({
   );
 }
 
+function SmsAnticipationInitialReplyPicker({
+  options,
+  text,
+  onTextChange,
+}: {
+  options: SmsAnticipationInitialReplyOption[];
+  text: string;
+  onTextChange: (text: string) => void;
+}) {
+  const [selectedId, setSelectedId] = useState(options[0]?.id ?? "");
+  const selectedOption = options.find((o) => o.id === selectedId);
+
+  const applyOption = (optionId: string) => {
+    const option = options.find((o) => o.id === optionId);
+    if (!option) return;
+    setSelectedId(optionId);
+    onTextChange(option.template);
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copié");
+    } catch {
+      toast.error("Copie impossible");
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <Label className="text-xs">Sa réponse au SMS</Label>
+        <div className="flex flex-wrap gap-1.5">
+          {options.map((option) => (
+            <Button
+              key={option.id}
+              type="button"
+              size="sm"
+              variant={selectedId === option.id ? "default" : "outline"}
+              className="h-7 text-[11px]"
+              onClick={() => applyOption(option.id)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+        {selectedOption && (
+          <p className="text-[11px] text-muted-foreground">
+            S&apos;il dit : « {selectedOption.says} »
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <Label className="text-xs text-muted-foreground">Réponse à envoyer</Label>
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => void copy()}>
+            <Copy className="size-3.5" />
+          </Button>
+        </div>
+        <Textarea value={text} onChange={(e) => onTextChange(e.target.value)} rows={3} className="text-sm" />
+      </div>
+    </div>
+  );
+}
+
 function SmsAnticipationProfileReplyPicker({
   profile,
   text,
@@ -156,6 +233,7 @@ function SmsAnticipationProfileReplyPicker({
   onTextChange,
   onFollowUpTextChange,
   onSelectedOptionChange,
+  sectionLabel = "Sa réponse au SMS",
 }: {
   profile: SmsAnticipationProfile;
   text: string;
@@ -163,6 +241,7 @@ function SmsAnticipationProfileReplyPicker({
   onTextChange: (text: string) => void;
   onFollowUpTextChange: (text: string) => void;
   onSelectedOptionChange?: (optionId: string) => void;
+  sectionLabel?: string;
 }) {
   const options = smsAnticipationProfileWaitingReplies(profile) ?? [];
   const [selectedId, setSelectedId] = useState(options[0]?.id ?? "");
@@ -190,7 +269,7 @@ function SmsAnticipationProfileReplyPicker({
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
-        <Label className="text-xs">Sa réponse au SMS</Label>
+        <Label className="text-xs">{sectionLabel}</Label>
         <div className="flex flex-wrap gap-1.5">
           {options.map((option) => (
             <Button
@@ -360,9 +439,15 @@ function SmsAnticipationObjectionPicker({
   };
 
   return (
-    <div className="space-y-3 rounded-md border border-dashed border-border/60 p-3">
-      <div className="text-xs font-medium text-muted-foreground">{SMS_ANTICIPATION_INSISTE_SMS_DEF.label}</div>
-      <p className="text-[11px] text-muted-foreground">{SMS_ANTICIPATION_INSISTE_SMS_DEF.pourQui}</p>
+    <div
+      className="space-y-3 rounded-md border border-dashed border-amber-300/80 bg-amber-50/60 p-3 dark:border-amber-500/45 dark:bg-amber-950/25"
+    >
+      <div className="text-xs font-medium text-amber-900 dark:text-amber-100">
+        {SMS_ANTICIPATION_INSISTE_SMS_DEF.label}
+      </div>
+      <p className="text-[11px] text-amber-800/80 dark:text-amber-200/80">
+        {SMS_ANTICIPATION_INSISTE_SMS_DEF.pourQui}
+      </p>
 
       <div className="flex flex-wrap gap-1.5">
         {SMS_ANTICIPATION_REPLY_OPTIONS.map((o) => (
@@ -462,18 +547,25 @@ function SmsAnticipationWaitingSection({
   onAdvanceStage?: () => Promise<boolean> | boolean;
 }) {
   const profileReplies = smsAnticipationProfileWaitingReplies(profile);
+  const initialReplies = smsAnticipationProfileInitialReplies(profile);
+  const defaultInitialReplyText =
+    initialReplies?.[0]?.template ?? SMS_ANTICIPATION_REPLY_DEFS.FRUSTRATION.options.A.template;
   const defaultReplyText =
     profileReplies?.[0]?.template ?? SMS_ANTICIPATION_REPLY_DEFS.FRUSTRATION.options.A.template;
 
   const defaultFollowUpText = profileReplies?.[0]?.followUp?.template ?? "";
 
+  const [initialReplyText, setInitialReplyText] = useState(defaultInitialReplyText);
   const [replyText, setReplyText] = useState(defaultReplyText);
   const [followUpText, setFollowUpText] = useState(defaultFollowUpText);
   const [selectedProfileReplyId, setSelectedProfileReplyId] = useState(
     () => profileReplies?.[0]?.id ?? ""
   );
-  const showInsisteSmsPicker =
-    !profileReplies || !PROFILE_REPLY_IDS_WITHOUT_INSISTE_SMS.has(selectedProfileReplyId);
+  const showInsisteSmsPicker = profileReplyShowsInsisteSmsPicker(
+    profile,
+    selectedProfileReplyId,
+    Boolean(profileReplies)
+  );
   const [objectionText, setObjectionText] = useState(
     () => SMS_ANTICIPATION_INSISTE_SMS_DEF.options.A.template
   );
@@ -484,6 +576,7 @@ function SmsAnticipationWaitingSection({
   const [advancing, setAdvancing] = useState(false);
 
   useEffect(() => {
+    setInitialReplyText(defaultInitialReplyText);
     setReplyText(defaultReplyText);
     setFollowUpText(defaultFollowUpText);
     setSelectedProfileReplyId(profileReplies?.[0]?.id ?? "");
@@ -491,12 +584,27 @@ function SmsAnticipationWaitingSection({
     setPlanCall(false);
     setCallDateInput(schedule.dateInput);
     setCallTimeInput(schedule.timeInput);
-  }, [pipe.id, profile, defaultReplyText, defaultFollowUpText, profileReplies]);
+  }, [
+    pipe.id,
+    profile,
+    defaultInitialReplyText,
+    defaultReplyText,
+    defaultFollowUpText,
+    profileReplies,
+  ]);
 
   const markRelanceSent = async (event: React.MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     setAdvancing(true);
     try {
+      const plannedCallEcheance = planCall
+        ? localDateTimeInputToUnix(callDateInput, callTimeInput)
+        : null;
+      if (planCall && plannedCallEcheance == null) {
+        toast.error("Date ou heure d'appel invalide — rebond non enregistré.");
+        return;
+      }
+
       const advanced = await onAdvanceStage?.();
       if (advanced === false) {
         return;
@@ -504,24 +612,29 @@ function SmsAnticipationWaitingSection({
       const relanceNote = followUpText.trim()
         ? `Relance (selon sa réponse) :\n${replyText}\n\n${followUpText}`
         : `Relance (selon sa réponse) :\n${replyText}`;
-      const combined = showInsisteSmsPicker
-        ? `${relanceNote}\n\nSi insiste pour du SMS :\n${objectionText}`
+      const callScheduleLabel =
+        planCall && plannedCallEcheance != null
+          ? formatParrainageCallScheduleLabel(callDateInput, callTimeInput)
+          : null;
+      let combined = initialReplies
+        ? `Réponse (sa situation) :\n${initialReplyText}\n\n${relanceNote}`
         : relanceNote;
+      if (showInsisteSmsPicker) {
+        combined = `${combined}\n\nSi insiste pour du SMS :\n${objectionText}`;
+      }
+      if (callScheduleLabel) {
+        combined = `${combined}\n\nAppel planifié : ${callScheduleLabel}`;
+      }
       await createParrainagePipeTimelineNote(pipe.id, combined);
-      if (planCall) {
-        const dateEcheance = localDateTimeInputToUnix(callDateInput, callTimeInput);
-        if (dateEcheance == null) {
-          toast.error("Date ou heure d'appel invalide — tâche non créée.");
-        } else {
-          await createTache({
-            contact_ids: [pipe.contact_id],
-            titre: `Appel parrainage — ${formatParrainageContactLabel(pipe)}`,
-            description: `Exercice ${pipe.exercice_label} — pipe parrainage, étape Prise de contact.`,
-            date_echeance: dateEcheance,
-            priorite: "NORMALE",
-            statut: "A_FAIRE",
-          });
-        }
+      if (planCall && plannedCallEcheance != null) {
+        await createTache({
+          contact_ids: [pipe.contact_id],
+          titre: `Appel parrainage — ${formatParrainageContactLabel(pipe)}`,
+          description: `Exercice ${pipe.exercice_label} — pipe parrainage, étape Prise de contact.`,
+          date_echeance: plannedCallEcheance,
+          priorite: "NORMALE",
+          statut: "A_FAIRE",
+        });
       }
       onNoteSaved?.();
       fireConfettiBurst({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
@@ -548,6 +661,14 @@ function SmsAnticipationWaitingSection({
       <p className="text-[11px] text-muted-foreground">
         Préparez la relance selon sa réponse — le script d&apos;appel arrive à l&apos;étape suivante.
       </p>
+      {profile && initialReplies && (
+        <SmsAnticipationInitialReplyPicker
+          key={`${pipe.id}-initial`}
+          options={initialReplies}
+          text={initialReplyText}
+          onTextChange={setInitialReplyText}
+        />
+      )}
       {profile && profileReplies ? (
         <SmsAnticipationProfileReplyPicker
           key={`${pipe.id}-${profile}`}
@@ -557,6 +678,7 @@ function SmsAnticipationWaitingSection({
           onTextChange={setReplyText}
           onFollowUpTextChange={setFollowUpText}
           onSelectedOptionChange={setSelectedProfileReplyId}
+          sectionLabel={initialReplies ? "Relance selon sa réponse" : "Sa réponse au SMS"}
         />
       ) : (
         <SmsAnticipationReplyPicker text={replyText} onTextChange={setReplyText} />
