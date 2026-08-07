@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Copy, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -16,6 +18,7 @@ import {
   createParrainagePipeSmsSentNote,
   createParrainagePipeTimelineNote,
 } from "@/lib/api/tauri-parrainage-pipe";
+import { createTache } from "@/lib/api/tauri-taches";
 import {
   APPEL_PRISE_CONTACT_OBJECTIONS,
   APPEL_PRISE_CONTACT_STEPS,
@@ -38,7 +41,15 @@ import {
   type SmsAnticipationReplyScenario,
   type SmsAnticipationVariant,
 } from "@/lib/parrainage-coach/sms-anticipation-templates";
-import { PARRAINAGE_PIPE_STAGE_LABELS, type ParrainagePipeStage } from "@/lib/parrainage-pipe/parrainage-pipe-types";
+import {
+  formatParrainageContactLabel,
+  PARRAINAGE_PIPE_STAGE_LABELS,
+  type ParrainagePipeStage,
+} from "@/lib/parrainage-pipe/parrainage-pipe-types";
+import {
+  defaultParrainageCallSchedule,
+  localDateTimeInputToUnix,
+} from "@/lib/parrainage-pipe/parrainage-call-schedule";
 import { fireConfettiBurst } from "@/lib/ui/confetti-burst";
 import { toast } from "sonner";
 
@@ -55,7 +66,7 @@ function SmsAnticipationPicker({
   onTextChange: (text: string) => void;
   onSelectionChange?: (profile: SmsAnticipationProfile, variant: SmsAnticipationVariant) => void;
 }) {
-  const [profile, setProfile] = useState<SmsAnticipationProfile>("PASSE_PARTOUT");
+  const [profile, setProfile] = useState<SmsAnticipationProfile>("PROCHE_AMI");
   const [variant, setVariant] = useState<SmsAnticipationVariant>("A");
 
   const applyTemplate = (nextProfile: SmsAnticipationProfile, nextVariant: SmsAnticipationVariant) => {
@@ -391,9 +402,9 @@ function SmsAnticipationComposeSection({
   onAdvanceStage?: () => Promise<boolean> | boolean;
 }) {
   const [teaserText, setTeaserText] = useState(() =>
-    renderSmsAnticipationTemplate("PASSE_PARTOUT", "A", pipe.contact_prenom ?? "")
+    renderSmsAnticipationTemplate("PROCHE_AMI", "A", pipe.contact_prenom ?? "")
   );
-  const [profile, setProfile] = useState<SmsAnticipationProfile>("PASSE_PARTOUT");
+  const [profile, setProfile] = useState<SmsAnticipationProfile>("PROCHE_AMI");
   const [variant, setVariant] = useState<SmsAnticipationVariant>("A");
   const [advancing, setAdvancing] = useState(false);
 
@@ -466,12 +477,20 @@ function SmsAnticipationWaitingSection({
   const [objectionText, setObjectionText] = useState(
     () => SMS_ANTICIPATION_INSISTE_SMS_DEF.options.A.template
   );
+  const defaultCallSchedule = defaultParrainageCallSchedule();
+  const [planCall, setPlanCall] = useState(false);
+  const [callDateInput, setCallDateInput] = useState(defaultCallSchedule.dateInput);
+  const [callTimeInput, setCallTimeInput] = useState(defaultCallSchedule.timeInput);
   const [advancing, setAdvancing] = useState(false);
 
   useEffect(() => {
     setReplyText(defaultReplyText);
     setFollowUpText(defaultFollowUpText);
     setSelectedProfileReplyId(profileReplies?.[0]?.id ?? "");
+    const schedule = defaultParrainageCallSchedule();
+    setPlanCall(false);
+    setCallDateInput(schedule.dateInput);
+    setCallTimeInput(schedule.timeInput);
   }, [pipe.id, profile, defaultReplyText, defaultFollowUpText, profileReplies]);
 
   const markRelanceSent = async (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -489,9 +508,28 @@ function SmsAnticipationWaitingSection({
         ? `${relanceNote}\n\nSi insiste pour du SMS :\n${objectionText}`
         : relanceNote;
       await createParrainagePipeTimelineNote(pipe.id, combined);
+      if (planCall) {
+        const dateEcheance = localDateTimeInputToUnix(callDateInput, callTimeInput);
+        if (dateEcheance == null) {
+          toast.error("Date ou heure d'appel invalide — tâche non créée.");
+        } else {
+          await createTache({
+            contact_ids: [pipe.contact_id],
+            titre: `Appel parrainage — ${formatParrainageContactLabel(pipe)}`,
+            description: `Exercice ${pipe.exercice_label} — pipe parrainage, étape Prise de contact.`,
+            date_echeance: dateEcheance,
+            priorite: "NORMALE",
+            statut: "A_FAIRE",
+          });
+        }
+      }
       onNoteSaved?.();
       fireConfettiBurst({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
-      toast.success("Rebond envoyé — étape « Prise de contact »");
+      toast.success(
+        planCall
+          ? "Rebond envoyé — appel planifié dans les tâches"
+          : "Rebond envoyé — étape « Prise de contact »"
+      );
     } catch (error) {
       toast.error(String(error));
     } finally {
@@ -526,6 +564,40 @@ function SmsAnticipationWaitingSection({
       {showInsisteSmsPicker && (
         <SmsAnticipationObjectionPicker text={objectionText} onTextChange={setObjectionText} />
       )}
+      <div className="space-y-2">
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <Checkbox
+            checked={planCall}
+            onCheckedChange={(checked) => setPlanCall(checked === true)}
+            disabled={advancing}
+          />
+          Planifier l&apos;appel
+        </label>
+        {planCall && (
+          <div className="flex flex-wrap items-end gap-2 pl-6">
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">Date</Label>
+              <Input
+                type="date"
+                value={callDateInput}
+                onChange={(e) => setCallDateInput(e.target.value)}
+                disabled={advancing}
+                className="h-9 w-[9.5rem]"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] text-muted-foreground">Heure</Label>
+              <Input
+                type="time"
+                value={callTimeInput}
+                onChange={(e) => setCallTimeInput(e.target.value)}
+                disabled={advancing}
+                className="h-9 w-[7.5rem]"
+              />
+            </div>
+          </div>
+        )}
+      </div>
       <Button type="button" size="sm" onClick={(e) => void markRelanceSent(e)} disabled={advancing}>
         Rebond envoyé → Prise de contact
       </Button>
