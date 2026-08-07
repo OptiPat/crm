@@ -34,6 +34,24 @@ export function localDateTimeInputToUnix(
   return Math.floor(ms / 1000);
 }
 
+import type { ParrainagePipeTimelineEntry } from "@/lib/api/tauri-parrainage-pipe";
+
+const PLANNED_CALL_LINE_RE = /Appel planifié\s*:\s*(.+)/i;
+
+/** Extrait le libellé d'appel planifié depuis les notes de rebond SMS. */
+export function extractPlannedCallLabelFromTimeline(
+  timeline: ParrainagePipeTimelineEntry[]
+): string | null {
+  for (const entry of timeline) {
+    const content = entry.contenu ?? "";
+    const match = content.match(PLANNED_CALL_LINE_RE);
+    if (match?.[1]?.trim()) {
+      return match[1].trim();
+    }
+  }
+  return null;
+}
+
 /** Libellé FR pour l'historique pipe (ex. « 8 août 2026 à 18:00 »). */
 export function formatParrainageCallScheduleLabel(
   dateInput: string,

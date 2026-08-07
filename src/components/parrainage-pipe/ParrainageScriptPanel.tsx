@@ -46,9 +46,13 @@ import {
 } from "@/lib/parrainage-coach/sms-anticipation-templates";
 import {
   formatParrainageContactLabel,
+  PARRAINAGE_INVITATION_LABELS,
+  PARRAINAGE_INVITATION_TYPES,
   PARRAINAGE_PIPE_STAGE_LABELS,
+  type ParrainageInvitationType,
   type ParrainagePipeStage,
 } from "@/lib/parrainage-pipe/parrainage-pipe-types";
+import { parrainageInvitationRequiredMessage, formatParrainagePipeError } from "@/lib/parrainage-pipe/parrainage-pipe-errors";
 import {
   defaultParrainageCallSchedule,
   formatParrainageCallScheduleLabel,
@@ -56,6 +60,166 @@ import {
 } from "@/lib/parrainage-pipe/parrainage-call-schedule";
 import { fireConfettiBurst } from "@/lib/ui/confetti-burst";
 import { toast } from "sonner";
+
+const APPEL_PRISE_CONTACT_ALL_STEPS = [
+  ...APPEL_PRISE_CONTACT_STEPS,
+  ...APPEL_PRISE_CONTACT_OBJECTIONS,
+];
+
+function buildAppelPriseContactFollowUpTexts(steps: AppelPriseContactStepDef[]): Record<string, string> {
+  return Object.fromEntries(
+    steps.filter((step) => step.followUp).map((step) => [step.id, step.followUp!.template])
+  );
+}
+
+function CoachScriptReplyFields({
+  primaryText,
+  onPrimaryChange,
+  followUp,
+  followUpText,
+  onFollowUpChange,
+  onCopy,
+  autoResize,
+  primaryLabel = "Réponse à envoyer",
+  primaryRows = 3,
+  hidePrimary = false,
+}: {
+  primaryText: string;
+  onPrimaryChange: (text: string) => void;
+  followUp?: AppelPriseContactStepDef["followUp"];
+  followUpText?: string;
+  onFollowUpChange?: (text: string) => void;
+  onCopy: (text: string) => Promise<void>;
+  autoResize?: (el: HTMLTextAreaElement | null) => void;
+  primaryLabel?: string;
+  primaryRows?: number;
+  hidePrimary?: boolean;
+}) {
+  const textareaClass = autoResize
+    ? "text-sm resize-none overflow-hidden"
+    : "text-sm";
+
+  return (
+    <>
+      {!hidePrimary && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs text-muted-foreground">{primaryLabel}</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => void onCopy(primaryText)}
+            >
+              <Copy className="size-3.5" />
+            </Button>
+          </div>
+          <Textarea
+            ref={autoResize}
+            value={primaryText}
+            onChange={(e) => {
+              onPrimaryChange(e.target.value);
+              autoResize?.(e.target);
+            }}
+            rows={primaryRows}
+            className={textareaClass}
+          />
+        </div>
+      )}
+      {followUp && onFollowUpChange && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs text-muted-foreground">{followUp.label}</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => void onCopy(followUpText ?? "")}
+            >
+              <Copy className="size-3.5" />
+            </Button>
+          </div>
+          <Textarea
+            ref={autoResize}
+            value={followUpText ?? ""}
+            onChange={(e) => {
+              onFollowUpChange(e.target.value);
+              autoResize?.(e.target);
+            }}
+            rows={3}
+            className={textareaClass}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+function AppelPriseContactObjectionsPicker({
+  texts,
+  followUpTexts,
+  onTextChange,
+  onFollowUpTextChange,
+  onCopy,
+  autoResize,
+}: {
+  texts: Record<string, string>;
+  followUpTexts: Record<string, string>;
+  onTextChange: (stepId: string, text: string) => void;
+  onFollowUpTextChange: (stepId: string, text: string) => void;
+  onCopy: (text: string) => Promise<void>;
+  autoResize: (el: HTMLTextAreaElement | null) => void;
+}) {
+  const [selectedId, setSelectedId] = useState(APPEL_PRISE_CONTACT_OBJECTIONS[0]?.id ?? "");
+  const selected = APPEL_PRISE_CONTACT_OBJECTIONS.find((objection) => objection.id === selectedId);
+
+  return (
+    <div
+      className="space-y-3 rounded-md border border-dashed border-amber-300/80 bg-amber-50/60 p-3 dark:border-amber-500/45 dark:bg-amber-950/25"
+    >
+      <div className="text-xs font-medium text-amber-900 dark:text-amber-100">
+        Objections possibles
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {APPEL_PRISE_CONTACT_OBJECTIONS.map((objection) => (
+          <Button
+            key={objection.id}
+            type="button"
+            size="sm"
+            variant={selectedId === objection.id ? "default" : "outline"}
+            className="h-7 text-[11px]"
+            onClick={() => setSelectedId(objection.id)}
+          >
+            {objection.pickerLabel ?? objection.title}
+          </Button>
+        ))}
+      </div>
+      {selected && (
+        <p className="text-[11px] text-amber-800/80 dark:text-amber-200/80">
+          S&apos;il dit : {selected.title}
+        </p>
+      )}
+      {selected?.note && (
+        <p className="text-[11px] text-amber-800/80 dark:text-amber-200/80">{selected.note}</p>
+      )}
+      {selected && (
+        <CoachScriptReplyFields
+          primaryText={texts[selected.id]}
+          onPrimaryChange={(text) => onTextChange(selected.id, text)}
+          followUp={selected.followUp}
+          followUpText={followUpTexts[selected.id]}
+          onFollowUpChange={(text) => onFollowUpTextChange(selected.id, text)}
+          onCopy={onCopy}
+          autoResize={autoResize}
+          primaryRows={2}
+          hidePrimary={selected.skipPrimary}
+        />
+      )}
+    </div>
+  );
+}
 
 function profileReplyShowsInsisteSmsPicker(
   profile: SmsAnticipationProfile | null | undefined,
@@ -483,7 +647,7 @@ function SmsAnticipationComposeSection({
   onAdvanceStage,
 }: {
   pipe: ParrainagePipeRecord;
-  onNoteSaved?: () => void;
+  onNoteSaved?: () => void | Promise<void>;
   onAdvanceStage?: () => Promise<boolean> | boolean;
 }) {
   const [teaserText, setTeaserText] = useState(() =>
@@ -509,7 +673,7 @@ function SmsAnticipationComposeSection({
       fireConfettiBurst({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
       toast.success("SMS envoyé — en attente de réponse");
     } catch (error) {
-      toast.error(String(error));
+      toast.error(formatParrainagePipeError(error));
     } finally {
       setAdvancing(false);
     }
@@ -543,7 +707,7 @@ function SmsAnticipationWaitingSection({
   pipe: ParrainagePipeRecord;
   profile?: SmsAnticipationProfile | null;
   profileLabel?: string | null;
-  onNoteSaved?: () => void;
+  onNoteSaved?: () => void | Promise<void>;
   onAdvanceStage?: () => Promise<boolean> | boolean;
 }) {
   const profileReplies = smsAnticipationProfileWaitingReplies(profile);
@@ -605,10 +769,6 @@ function SmsAnticipationWaitingSection({
         return;
       }
 
-      const advanced = await onAdvanceStage?.();
-      if (advanced === false) {
-        return;
-      }
       const relanceNote = followUpText.trim()
         ? `Relance (selon sa réponse) :\n${replyText}\n\n${followUpText}`
         : `Relance (selon sa réponse) :\n${replyText}`;
@@ -625,6 +785,7 @@ function SmsAnticipationWaitingSection({
       if (callScheduleLabel) {
         combined = `${combined}\n\nAppel planifié : ${callScheduleLabel}`;
       }
+
       await createParrainagePipeTimelineNote(pipe.id, combined);
       if (planCall && plannedCallEcheance != null) {
         await createTache({
@@ -636,7 +797,12 @@ function SmsAnticipationWaitingSection({
           statut: "A_FAIRE",
         });
       }
-      onNoteSaved?.();
+      await onNoteSaved?.();
+
+      const advanced = await onAdvanceStage?.();
+      if (advanced === false) {
+        return;
+      }
       fireConfettiBurst({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
       toast.success(
         planCall
@@ -644,7 +810,7 @@ function SmsAnticipationWaitingSection({
           : "Rebond envoyé — étape « Prise de contact »"
       );
     } catch (error) {
-      toast.error(String(error));
+      toast.error(formatParrainagePipeError(error));
     } finally {
       setAdvancing(false);
     }
@@ -729,29 +895,57 @@ function SmsAnticipationWaitingSection({
 
 function AppelPriseContactSection({
   pipe,
+  invitationType,
+  onInvitationTypeChange,
+  plannedCallLabel,
   onNoteSaved,
   onAdvanceStage,
 }: {
   pipe: ParrainagePipeRecord;
-  onNoteSaved?: () => void;
+  invitationType: string;
+  onInvitationTypeChange: (value: string) => void;
+  plannedCallLabel?: string | null;
+  onNoteSaved?: () => void | Promise<void>;
   onAdvanceStage?: () => Promise<boolean> | boolean;
 }) {
-  const allAppelSteps = [...APPEL_PRISE_CONTACT_STEPS, ...APPEL_PRISE_CONTACT_OBJECTIONS];
-
   const [texts, setTexts] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      allAppelSteps.map((step) => [
+      APPEL_PRISE_CONTACT_ALL_STEPS.map((step) => [
         step.id,
         renderAppelPriseContactStep(step.template, pipe.contact_prenom ?? ""),
       ])
     )
   );
+  const [followUpTexts, setFollowUpTexts] = useState<Record<string, string>>(() =>
+    buildAppelPriseContactFollowUpTexts(APPEL_PRISE_CONTACT_ALL_STEPS)
+  );
   const [variantByStep, setVariantByStep] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      allAppelSteps.filter((step) => step.variants).map((step) => [step.id, step.variants![0].id])
+      APPEL_PRISE_CONTACT_ALL_STEPS
+        .filter((step) => step.variants)
+        .map((step) => [step.id, step.variants![0].id])
     )
   );
   const [advancing, setAdvancing] = useState(false);
+
+  useEffect(() => {
+    setTexts(
+      Object.fromEntries(
+        APPEL_PRISE_CONTACT_ALL_STEPS.map((step) => [
+          step.id,
+          renderAppelPriseContactStep(step.template, pipe.contact_prenom ?? ""),
+        ])
+      )
+    );
+    setFollowUpTexts(buildAppelPriseContactFollowUpTexts(APPEL_PRISE_CONTACT_ALL_STEPS));
+    setVariantByStep(
+      Object.fromEntries(
+        APPEL_PRISE_CONTACT_ALL_STEPS
+          .filter((step) => step.variants)
+          .map((step) => [step.id, step.variants![0].id])
+      )
+    );
+  }, [pipe.id, pipe.contact_prenom]);
 
   const applyVariant = (step: AppelPriseContactStepDef, variantId: string) => {
     const variant = step.variants?.find((v) => v.id === variantId);
@@ -773,6 +967,11 @@ function AppelPriseContactSection({
   };
 
   const markDone = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!invitationType) {
+      toast.error(parrainageInvitationRequiredMessage("CONFIRME"));
+      return;
+    }
+
     const rect = event.currentTarget.getBoundingClientRect();
     setAdvancing(true);
     try {
@@ -780,21 +979,29 @@ function AppelPriseContactSection({
       if (advanced === false) {
         return;
       }
-      const combinedSteps = APPEL_PRISE_CONTACT_STEPS.map(
-        (step) => `${step.title} :\n${texts[step.id]}`
-      ).join("\n\n");
-      const combinedObjections = APPEL_PRISE_CONTACT_OBJECTIONS.map(
-        (step) => `${step.title} :\n${texts[step.id]}`
-      ).join("\n\n");
+      const formatStepNote = (step: AppelPriseContactStepDef) => {
+        const primary = texts[step.id]?.trim();
+        const followUp = followUpTexts[step.id]?.trim();
+        const content =
+          primary && followUp ? `${primary}\n\n${followUp}` : followUp || primary || "";
+        return `${step.title} :\n${content}`;
+      };
+      const combinedSteps = APPEL_PRISE_CONTACT_STEPS.map(formatStepNote).join("\n\n");
+      const combinedObjections = APPEL_PRISE_CONTACT_OBJECTIONS.map(formatStepNote).join("\n\n");
+      const invitationLabel =
+        PARRAINAGE_INVITATION_LABELS[invitationType as ParrainageInvitationType];
+      const invitationLine = `Type d'invitation : ${invitationLabel} (${invitationType})`;
+      const scheduleLine = plannedCallLabel ? `Appel planifié : ${plannedCallLabel}` : null;
+      const header = [invitationLine, scheduleLine].filter(Boolean).join("\n");
       await createParrainagePipeTimelineNote(
         pipe.id,
-        `Script d'appel :\n\n${combinedSteps}\n\nObjections possibles :\n\n${combinedObjections}`
+        `${header}\n\nScript d'appel :\n\n${combinedSteps}\n\nObjections possibles :\n\n${combinedObjections}`
       );
       onNoteSaved?.();
       fireConfettiBurst({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
       toast.success("Appel effectué — étape suivante");
     } catch (error) {
-      toast.error(String(error));
+      toast.error(formatParrainagePipeError(error));
     } finally {
       setAdvancing(false);
     }
@@ -806,22 +1013,11 @@ function AppelPriseContactSection({
     el.style.height = `${el.scrollHeight}px`;
   };
 
-  const renderStepCard = (step: AppelPriseContactStepDef) => (
-    <div key={step.id} className="space-y-1 rounded-md border border-border/60 p-2">
-      <div className="flex items-center justify-between gap-2">
-        <Label className="text-[11px] font-medium leading-tight">
-          {step.title}
-          {step.note && <span className="ml-1 italic text-muted-foreground">— {step.note}</span>}
-        </Label>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-6 px-1.5 shrink-0"
-          onClick={() => void copy(texts[step.id])}
-        >
-          <Copy className="size-3.5" />
-        </Button>
+  const renderStepBlock = (step: AppelPriseContactStepDef) => (
+    <div key={step.id} className="space-y-3">
+      <div className="space-y-1">
+        <Label className="text-xs">{step.title}</Label>
+        {step.note && <p className="text-[11px] text-muted-foreground">{step.note}</p>}
       </div>
       {step.variants && (
         <div className="flex flex-wrap gap-1.5">
@@ -831,7 +1027,7 @@ function AppelPriseContactSection({
               type="button"
               size="sm"
               variant={variantByStep[step.id] === v.id ? "default" : "outline"}
-              className="h-6 text-[11px] px-2"
+              className="h-7 text-[11px]"
               onClick={() => applyVariant(step, v.id)}
             >
               {v.label}
@@ -839,16 +1035,46 @@ function AppelPriseContactSection({
           ))}
         </div>
       )}
-      <Textarea
-        ref={autoResize}
-        value={texts[step.id]}
-        onChange={(e) => {
-          setTexts((prev) => ({ ...prev, [step.id]: e.target.value }));
-          autoResize(e.target);
-        }}
-        rows={2}
-        className="text-sm resize-none overflow-hidden"
-      />
+      {step.followUp ? (
+        <CoachScriptReplyFields
+          primaryText={texts[step.id]}
+          onPrimaryChange={(text) => setTexts((prev) => ({ ...prev, [step.id]: text }))}
+          followUp={step.followUp}
+          followUpText={followUpTexts[step.id]}
+          onFollowUpChange={(text) =>
+            setFollowUpTexts((prev) => ({ ...prev, [step.id]: text }))
+          }
+          onCopy={copy}
+          autoResize={autoResize}
+          primaryLabel="Réponse à envoyer"
+          primaryRows={2}
+        />
+      ) : (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs text-muted-foreground">Script</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => void copy(texts[step.id])}
+            >
+              <Copy className="size-3.5" />
+            </Button>
+          </div>
+          <Textarea
+            ref={autoResize}
+            value={texts[step.id]}
+            onChange={(e) => {
+              setTexts((prev) => ({ ...prev, [step.id]: e.target.value }));
+              autoResize(e.target);
+            }}
+            rows={2}
+            className="text-sm resize-none overflow-hidden"
+          />
+        </div>
+      )}
       {step.expectedReply && (
         <p className="text-[11px] italic text-muted-foreground">
           (Réponse attendue : {step.expectedReply})
@@ -864,13 +1090,48 @@ function AppelPriseContactSection({
   );
 
   return (
-    <div className="space-y-2">
-      {APPEL_PRISE_CONTACT_STEPS.map(renderStepCard)}
-
-      <div className="space-y-2 rounded-md border border-dashed border-border/60 p-2">
-        <div className="text-[11px] font-medium text-muted-foreground">Objections possibles</div>
-        {APPEL_PRISE_CONTACT_OBJECTIONS.map(renderStepCard)}
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Type d&apos;invitation</Label>
+          <Select
+            value={invitationType || "none"}
+            onValueChange={(v) => onInvitationTypeChange(v === "none" ? "" : v)}
+            disabled={advancing}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="JD ou PO" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Non renseigné</SelectItem>
+              {PARRAINAGE_INVITATION_TYPES.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {PARRAINAGE_INVITATION_LABELS[type]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {plannedCallLabel && (
+          <div className="space-y-1.5">
+            <Label className="text-xs">Appel planifié</Label>
+            <p className="text-sm text-muted-foreground">{plannedCallLabel}</p>
+          </div>
+        )}
       </div>
+
+      {APPEL_PRISE_CONTACT_STEPS.map(renderStepBlock)}
+
+      <AppelPriseContactObjectionsPicker
+        texts={texts}
+        followUpTexts={followUpTexts}
+        onTextChange={(stepId, text) => setTexts((prev) => ({ ...prev, [stepId]: text }))}
+        onFollowUpTextChange={(stepId, text) =>
+          setFollowUpTexts((prev) => ({ ...prev, [stepId]: text }))
+        }
+        onCopy={copy}
+        autoResize={autoResize}
+      />
 
       <Button type="button" size="sm" onClick={(e) => void markDone(e)} disabled={advancing}>
         Appel effectué → étape suivante
@@ -883,7 +1144,10 @@ interface ParrainageScriptPanelProps {
   pipe: ParrainagePipeRecord;
   smsAnticipationProfile?: SmsAnticipationProfile | null;
   smsAnticipationProfileLabel?: string | null;
-  onNoteSaved?: () => void;
+  invitationType?: string;
+  onInvitationTypeChange?: (value: string) => void;
+  plannedCallLabel?: string | null;
+  onNoteSaved?: () => void | Promise<void>;
   onAdvanceStage?: () => Promise<boolean> | boolean;
 }
 
@@ -891,6 +1155,9 @@ export function ParrainageScriptPanel({
   pipe,
   smsAnticipationProfile = null,
   smsAnticipationProfileLabel = null,
+  invitationType = "",
+  onInvitationTypeChange,
+  plannedCallLabel = null,
   onNoteSaved,
   onAdvanceStage,
 }: ParrainageScriptPanelProps) {
@@ -937,7 +1204,14 @@ export function ParrainageScriptPanel({
             onAdvanceStage={onAdvanceStage}
           />
         ) : isPriseDeContact ? (
-          <AppelPriseContactSection pipe={pipe} onNoteSaved={onNoteSaved} onAdvanceStage={onAdvanceStage} />
+          <AppelPriseContactSection
+            pipe={pipe}
+            invitationType={invitationType}
+            onInvitationTypeChange={onInvitationTypeChange ?? (() => undefined)}
+            plannedCallLabel={plannedCallLabel}
+            onNoteSaved={onNoteSaved}
+            onAdvanceStage={onAdvanceStage}
+          />
         ) : (
           <p className="text-sm text-muted-foreground">
             Pas encore de script pour cette étape.

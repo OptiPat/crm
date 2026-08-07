@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   defaultParrainageCallSchedule,
+  extractPlannedCallLabelFromTimeline,
   formatParrainageCallScheduleLabel,
   localDateTimeInputToUnix,
 } from "./parrainage-call-schedule";
@@ -29,5 +30,19 @@ describe("parrainage-call-schedule", () => {
     const label = formatParrainageCallScheduleLabel("2026-08-08", "18:00");
     expect(label).toMatch(/8 août 2026/);
     expect(label).toMatch(/18:00/);
+  });
+
+  it("extractPlannedCallLabelFromTimeline lit la ligne Appel planifié", () => {
+    const label = extractPlannedCallLabelFromTimeline([
+      {
+        id: 1,
+        parrainage_pipe_id: 1,
+        entry_type: "NOTE",
+        contenu: "Relance...\n\nAppel planifié : 8 août 2026 à 18:00",
+        occurred_at: 1,
+        created_at: 1,
+      },
+    ]);
+    expect(label).toBe("8 août 2026 à 18:00");
   });
 });

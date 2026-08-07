@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DictationTextarea } from "@/components/ui/dictation-textarea";
@@ -32,9 +32,68 @@ import {
   type ParrainageInvitationType,
   type ParrainagePipeStage,
 } from "@/lib/parrainage-pipe/parrainage-pipe-types";
+import { formatParrainagePipeError } from "@/lib/parrainage-pipe/parrainage-pipe-errors";
+import { extractPlannedCallLabelFromTimeline } from "@/lib/parrainage-pipe/parrainage-call-schedule";
 import { ParrainageScriptPanel } from "@/components/parrainage-pipe/ParrainageScriptPanel";
 import { PipeProspectionContactSection } from "@/components/pipe/PipeProspectionContactSection";
 import { toast } from "sonner";
+
+function isPinnedTimelineEntry(entry: ParrainagePipeTimelineEntry): boolean {
+  return entry.entry_type === "SMS_ENVOYE" || entry.entry_type === "NOTE";
+}
+
+function ParrainagePipeTimelineEntryItem({ entry }: { entry: ParrainagePipeTimelineEntry }) {
+  return (
+    <li className="rounded-md border border-border/50 bg-muted/20 px-3 py-2">
+      <p className="text-xs font-medium">{entry.titre ?? entry.entry_type}</p>
+      {entry.contenu && (
+        <p className="text-sm mt-1 whitespace-pre-wrap">
+          {entry.entry_type === "SMS_ENVOYE"
+            ? displaySmsAnticipationSentNote(entry.contenu)
+            : entry.contenu}
+        </p>
+      )}
+      <p className="text-[10px] text-muted-foreground mt-1">
+        {new Date(entry.occurred_at * 1000).toLocaleString("fr-FR")}
+      </p>
+    </li>
+  );
+}
+
+function ParrainagePipeTimelineSection({ timeline }: { timeline: ParrainagePipeTimelineEntry[] }) {
+  const pinned = timeline.filter(isPinnedTimelineEntry);
+  const rest = timeline.filter((entry) => !isPinnedTimelineEntry(entry));
+
+  if (timeline.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2">
+      {pinned.length > 0 && (
+        <ul className="space-y-2 text-sm">
+          {pinned.map((entry) => (
+            <ParrainagePipeTimelineEntryItem key={entry.id} entry={entry} />
+          ))}
+        </ul>
+      )}
+
+      {rest.length > 0 && (
+        <details className="group rounded-md border border-border/50 bg-muted/10 open:bg-muted/20">
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
+            <span>Historique complet ({rest.length})</span>
+            <ChevronDown className="ml-auto size-3.5 shrink-0 transition-transform group-open:rotate-180" />
+          </summary>
+          <ul className="space-y-2 px-3 pb-3 text-sm">
+            {rest.map((entry) => (
+              <ParrainagePipeTimelineEntryItem key={entry.id} entry={entry} />
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
 
 interface ParrainagePipeDetailPanelProps {
   pipe: ParrainagePipeRecord;
@@ -98,7 +157,7 @@ export function ParrainagePipeDetailPanel({
           savedMetaRef.current = { notes, invitationType };
           onUpdated(updated);
         } catch (error) {
-          toast.error(String(error));
+          toast.error(formatParrainagePipeError(error));
         }
       })();
     }, 700);
@@ -121,7 +180,7 @@ export function ParrainagePipeDetailPanel({
       }
       return true;
     } catch (error) {
-      toast.error(String(error));
+      toast.error(formatParrainagePipeError(error));
       return false;
     } finally {
       setSaving(false);
@@ -136,11 +195,135 @@ export function ParrainagePipeDetailPanel({
       onDeleted();
       toast.success("Contact retiré du pipe");
     } catch (error) {
-      toast.error(String(error));
+      toast.error(formatParrainagePipeError(error));
     } finally {
       setSaving(false);
     }
   };
+
+  const stage = pipe.stage as ParrainagePipeStage;
+  const isPriseDeContact = stage === "PRISE_DE_CONTACT";
+
+  const plannedCallLabel = useMemo(
+    () => extractPlannedCallLabelFromTimeline(timeline),
+    [timeline]
+  );
+
+  const scriptPanel = (
+    <ParrainageScriptPanel
+      pipe={pipe}
+      smsAnticipationProfile={smsAnticipationProfile}
+      smsAnticipationProfileLabel={smsAnticipationProfileLabel}
+      invitationType={invitationType}
+      onInvitationTypeChange={setInvitationType}
+      plannedCallLabel={plannedCallLabel}
+      onNoteSaved={() =>
+        listParrainagePipeTimelineEntries(pipe.id)
+          .then(setTimeline)
+          .catch(() => setTimeline([]))
+      }
+      onAdvanceStage={() => {
+        const nextStage =
+          pipe.stage === "A_CONTACTER"
+            ? "ATTENTE_REPONSE"
+            : pipe.stage === "ATTENTE_REPONSE"
+              ? "PRISE_DE_CONTACT"
+              : pipe.stage === "PRISE_DE_CONTACT"
+                ? "CONFIRME"
+                : null;
+        return nextStage ? changeStage(nextStage, { silent: true }) : true;
+      }}
+    />
+  );
+
+  const stageSelect = (
+    <div className="space-y-2">
+      <Label>Étape</Label>
+      <Select
+        value={pipe.stage}
+        onValueChange={(v) => void changeStage(v as ParrainagePipeStage)}
+        disabled={saving}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {PARRAINAGE_PIPE_STAGES.map((s) => (
+            <SelectItem key={s} value={s}>
+              {PARRAINAGE_PIPE_STAGE_LABELS[s]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  const invitationSelect = (
+    <div className="space-y-2">
+      <Label>Type d&apos;invitation</Label>
+      <Select
+        value={invitationType || "none"}
+        onValueChange={(v) => setInvitationType(v === "none" ? "" : v)}
+        disabled={saving}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder="JD ou PO" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">Non renseigné</SelectItem>
+          {PARRAINAGE_INVITATION_TYPES.map((type) => (
+            <SelectItem key={type} value={type}>
+              {PARRAINAGE_INVITATION_LABELS[type]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  const notesField = (
+    <div className="space-y-2">
+      <Label>Notes</Label>
+      <DictationTextarea value={notes} onChange={setNotes} rows={4} disabled={saving} />
+    </div>
+  );
+
+  const fullTimeline = timeline.length > 0 && (
+    <div className="space-y-2">
+      <Label>Historique</Label>
+      <ul className="space-y-2 text-sm">
+        {timeline.map((entry) => (
+          <ParrainagePipeTimelineEntryItem key={entry.id} entry={entry} />
+        ))}
+      </ul>
+    </div>
+  );
+
+  const metaFieldsDefault = (
+    <div className="space-y-4">
+      {stageSelect}
+      {invitationSelect}
+      <PipeProspectionContactSection contactId={pipe.contact_id} layout="stack" />
+      {notesField}
+      {fullTimeline}
+    </div>
+  );
+
+  const metaPanelPriseDeContact = (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-4">
+          {stageSelect}
+          <PipeProspectionContactSection contactId={pipe.contact_id} layout="stack" />
+        </div>
+        <div className="space-y-4">
+          {invitationSelect}
+          {notesField}
+        </div>
+      </div>
+      <ParrainagePipeTimelineSection timeline={timeline} />
+    </div>
+  );
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col bg-card">
@@ -164,96 +347,20 @@ export function ParrainagePipeDetailPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Étape</Label>
-              <Select value={pipe.stage} onValueChange={(v) => void changeStage(v as ParrainagePipeStage)} disabled={saving}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PARRAINAGE_PIPE_STAGES.map((stage) => (
-                    <SelectItem key={stage} value={stage}>
-                      {PARRAINAGE_PIPE_STAGE_LABELS[stage]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        {isPriseDeContact ? (
+          <div className="space-y-6">
+            <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+              <p className="mb-4 text-xs font-medium text-muted-foreground">Fiche contact</p>
+              {metaPanelPriseDeContact}
             </div>
-
-            <div className="space-y-2">
-              <Label>Type d&apos;invitation</Label>
-              <Select value={invitationType || "none"} onValueChange={(v) => setInvitationType(v === "none" ? "" : v)} disabled={saving}>
-                <SelectTrigger>
-                  <SelectValue placeholder="JD ou PO" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Non renseigné</SelectItem>
-                  {PARRAINAGE_INVITATION_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {PARRAINAGE_INVITATION_LABELS[type]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <PipeProspectionContactSection contactId={pipe.contact_id} layout="stack" />
-
-            <div className="space-y-2">
-              <Label>Notes</Label>
-              <DictationTextarea value={notes} onChange={setNotes} rows={4} disabled={saving} />
-            </div>
-
-            {timeline.length > 0 && (
-              <div className="space-y-2">
-                <Label>Historique</Label>
-                <ul className="space-y-2 text-sm">
-                  {timeline.map((entry) => (
-                    <li key={entry.id} className="rounded-md border border-border/50 bg-muted/20 px-3 py-2">
-                      <p className="text-xs font-medium">{entry.titre ?? entry.entry_type}</p>
-                      {entry.contenu && (
-                        <p className="text-sm mt-1 whitespace-pre-wrap">
-                          {entry.entry_type === "SMS_ENVOYE"
-                            ? displaySmsAnticipationSentNote(entry.contenu)
-                            : entry.contenu}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-muted-foreground mt-1">
-                        {new Date(entry.occurred_at * 1000).toLocaleString("fr-FR")}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {scriptPanel}
           </div>
-
-          <div>
-            <ParrainageScriptPanel
-              pipe={pipe}
-              smsAnticipationProfile={smsAnticipationProfile}
-              smsAnticipationProfileLabel={smsAnticipationProfileLabel}
-              onNoteSaved={() => {
-                void listParrainagePipeTimelineEntries(pipe.id)
-                  .then(setTimeline)
-                  .catch(() => setTimeline([]));
-              }}
-              onAdvanceStage={() => {
-                const nextStage =
-                  pipe.stage === "A_CONTACTER"
-                    ? "ATTENTE_REPONSE"
-                    : pipe.stage === "ATTENTE_REPONSE"
-                      ? "PRISE_DE_CONTACT"
-                      : pipe.stage === "PRISE_DE_CONTACT"
-                        ? "CONFIRME"
-                        : null;
-                return nextStage ? changeStage(nextStage, { silent: true }) : true;
-              }}
-            />
+        ) : (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div>{metaFieldsDefault}</div>
+            <div>{scriptPanel}</div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="border-t border-border/60 p-3">

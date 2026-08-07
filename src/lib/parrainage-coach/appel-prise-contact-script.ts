@@ -13,11 +13,22 @@ export interface AppelPriseContactStepVariantDef {
   template: string;
 }
 
+export interface AppelPriseContactFollowUpDef {
+  label: string;
+  template: string;
+}
+
 export interface AppelPriseContactStepDef {
   id: string;
   title: string;
+  /** Libellé court pour le sélecteur (objections). */
+  pickerLabel?: string;
+  /** Masque le 1er textarea — tout le script est dans `followUp`. */
+  skipPrimary?: boolean;
   /** Texte par défaut (= 1ère variante si `variants` est renseigné). */
   template: string;
+  /** Suite du script si le prospect répond positivement (objections). */
+  followUp?: AppelPriseContactFollowUpDef;
   /** Consigne terrain affichée à côté du titre (ex. « identifie 2-3 frustrations »). */
   note?: string;
   /** Réponse attendue du prospect (« Oui »/« Non »), affichée sous le script. */
@@ -98,8 +109,13 @@ export const APPEL_PRISE_CONTACT_STEPS: AppelPriseContactStepDef[] = [
     id: "demande_recommandation",
     title: "Demande de recommandation",
     template:
-      "Tant que j'y pense, tu as sûrement un pote ou un collègue qui est dans la même situation que toi non ?\n\nTop ! Propose-lui de t'accompagner et s'il est OK, préviens-moi d'ici 2-3 jours que je puisse bloquer sa place !",
+      "Tant que j'y pense, tu as sûrement un pote ou un collègue qui est dans la même situation que toi non ?",
     note: "Le 2ᵉ paragraphe s'utilise uniquement si le prospect répond positivement.",
+    followUp: {
+      label: "Si réponse positive",
+      template:
+        "Top ! Propose-lui de t'accompagner et s'il est OK, préviens-moi d'ici 2-3 jours que je puisse bloquer sa place !",
+    },
   },
   {
     id: "cloture",
@@ -115,16 +131,17 @@ export const APPEL_PRISE_CONTACT_STEPS: AppelPriseContactStepDef[] = [
 export const APPEL_PRISE_CONTACT_OBJECTIONS: AppelPriseContactStepDef[] = [
   {
     id: "obj_dis_en_plus",
+    pickerLabel: "En quoi ça consiste ?",
     title: "« Tu peux m'en dire plus ? En quoi ça consiste ? »",
     template:
       "Je comprends tout à fait que tu veuilles en savoir plus ! Mais ce n'est pas un projet que je veux te partager sur le coin d'une table. C'est un métier qu'on détaille sur une journée complète, donc tu te doutes bien que je ne peux pas te l'expliquer en 2 minutes au téléphone. Tout ce que je peux te dire, c'est que ça offre de belles perspectives de carrière. Après, je ne te garantis pas que ça te convienne, le mieux est de t'en rendre compte par toi-même.",
   },
   {
     id: "obj_pas_le_temps",
+    pickerLabel: "Pas le temps / samedi",
     title: "« Je n'ai pas le temps / je travaille le samedi »",
     template:
-      "Je comprends tout à fait.\n\nSi je te propose qu'on se prenne une petite heure en visio avec la personne qui me forme pour t'expliquer les grandes lignes, est-ce que ça t'irait mieux ?\n\nTop ! Ça te permettra de comprendre les bases, et si tu vois que ça peut te plaire, on avisera ensuite. Tu serais plutôt dispo mardi ou jeudi 18h30 ?",
-    note: "Le dernier paragraphe s'utilise uniquement si le prospect répond positivement.",
+      "Je comprends tout à fait. Si je te propose qu'on se prenne une petite heure en visio avec la personne qui me forme pour t'expliquer les grandes lignes, est-ce que ça t'irait mieux ?\n\nTop ! Ça te permettra de comprendre les bases, et si tu vois que ça peut te plaire, on avisera ensuite. Tu serais plutôt dispo mardi ou jeudi 18h30 ?",
   },
 ];
 
