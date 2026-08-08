@@ -67,6 +67,27 @@ describe("parseContratSupportsCsv", () => {
     expect(rows).toEqual([]);
   });
 
+  it("lit la plus ou moins-value en pourcentage même quand l'export ajoute une colonne en euros", () => {
+    const rows = parseContratSupportsCsv(
+      [
+        "Prestation;Numéro contrat;Identifiant;Civilité;Nom;Prénom;Support;Code ISIN;" +
+          "Société de gestion;Type;SRRI;SRI;Nombre de parts;Valeur unitaire en €;" +
+          "Prix Moyen d'Achat (en €);Encours en €;+/- value (en €);+/- value (en %));" +
+          "Date valeur;Date d'import;Consultant;Email titulaire(s)",
+        "PLATEFORME VIE;1234567;Non disponible;M.;DUPONT;Jean;Fonds Test Or RC;FR0007390174;" +
+          "Gestion Test;Actions;Non disponible;5;36,88909912;89,76;Non disponible;3311,17;" +
+          "Non disponible;-2,96;06/08/2026;07/08/2026;Conseiller Test;j@example.com",
+      ].join("\r\n")
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.plus_moins_value_pct).toBe(-2.96);
+    expect(rows[0]!.encours).toBe(3311.17);
+    expect(rows[0]!.valeur_unitaire).toBe(89.76);
+    // « SRRI » précède « SRI » dans cet export : le SRI lu doit rester celui de la bonne colonne.
+    expect(rows[0]!.sri).toBe(5);
+  });
+
   it("retourne une liste vide si l'en-tête ne correspond pas", () => {
     expect(parseContratSupportsCsv("colonne A;colonne B\n1;2")).toEqual([]);
   });

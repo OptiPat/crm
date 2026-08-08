@@ -28,9 +28,17 @@ Trois règles complètent le calcul du badge, côté `fund-watchlist-diagnostic.
   aucun badge : une médiane de deux fonds n'a pas le poids statistique que l'écart suggère, et
   l'ajout d'un seul fonds dans la famille pouvait faire disparaître l'alerte.
 
-95 libellés Cristalliance : 94 répartis dans **40 familles**, plus le FCPR exclu du diagnostic.
-Les 40 familles comptent 29 familles principales et 11 familles sectorielles, dont 10 d'un seul
-libellé et une qui réunit les ressources naturelles et les métaux précieux.
+95 libellés Cristalliance : 94 répartis dans **32 familles**, plus le FCPR exclu du diagnostic.
+
+Le regroupement suit un principe : la watchlist est l'**univers investissable des contrats**, pas
+un échantillon de marché. Sur 438 fonds importés, 339 ne sont détenus par aucun client : la
+médiane d'une famille répond donc à « ai-je mieux à proposer sur ce contrat ? », la seule question
+qui débouche sur un arbitrage faisable. Une famille trop étroite ne produit aucun badge, faute des
+4 pairs exigés — c'est ce qui a motivé la fusion de la Chine avec l'Asie, de la biotechnologie
+avec la santé, de l'eau et des énergies alternatives avec l'écologie, du market neutral avec le
+long/short, des emprunts d'État et des indexées inflation avec le crédit euro, et de l'allocation
+« Autres » avec la flexible. Après ces fusions, un seul fonds favori reste sans pair : Axiom
+European Banks, seul fonds de banques de l'offre.
 
 ---
 
@@ -78,19 +86,19 @@ dont les Flex Cap, rejoignent les grandes.
 ### actions_asie_pacifique
 
 Décision : séparer le Japon, l'Asie hors Japon et l'Asie-Pacifique serait trop fin. Une seule
-famille.
+famille, la Chine incluse : elle pèse près d'un tiers des indices Asie hors Japon, et les deux
+fonds chinois de l'offre n'auraient jamais eu de pair. Contrepartie assumée : un fonds japonais
+se juge contre une médiane où le Japon est minoritaire, cycle et devise distincts — le comparateur
+signale cette divergence géographique dans sa note de synthèse.
 
 - Actions Asie hors Japon
 - Actions Asie hors Japon Petites & Moy. Cap.
 - Actions Asie-Pacifique avec Japon
 - Actions Asie-Pacifique hors Japon
-- Japan Large-Cap Blend Equity
-- Japan Large-Cap Growth Equity
-
-### actions_chine
-
 - Actions Chine
 - Actions Chine - A Shares
+- Japan Large-Cap Blend Equity
+- Japan Large-Cap Growth Equity
 
 ### actions_emergents
 
@@ -114,20 +122,29 @@ famille.
 
 ## Actions — sectorielles
 
-Décision : **une famille par libellé**, sauf les ressources naturelles et les métaux précieux.
-La biotechnologie n'est pas comparable à la santé, les énergies alternatives ne sont pas
-comparables à l'écologie.
+Décision révisée : **une famille par libellé**, sauf trois regroupements thématiques. La santé
+absorbe la biotechnologie, qui en est un sous-segment. L'écologie absorbe l'eau et les énergies
+alternatives, qui partagent le thème de la transition. Les ressources naturelles et les métaux
+précieux restent réunis. Sans ces fusions, cinq secteurs de l'offre comptaient un ou deux fonds
+et n'obtenaient jamais de badge, dont deux favoris — BNP Aqua et Pictet Clean Energy.
 
 - Actions Secteur Technologies
-- Actions Secteur Santé
-- Actions Secteur Biotechnologie
-- Actions Secteur Finance
-- Actions Secteur Eau
-- Actions Secteur Ecologie
-- Actions Secteur Energies Alternatives
+- Actions Secteur Finance — *seul fonds de banques de l'offre, aucun pair : pas de badge, c'est le
+  seul cas où la référence de catégorie Boursorama garde une utilité.*
 - Actions Secteur Matériaux & Industrie
 - Actions Secteur Biens Conso. & Services
 - Actions Secteur Autres
+
+### actions_secteur_sante
+
+- Actions Secteur Santé
+- Actions Secteur Biotechnologie
+
+### actions_secteur_ecologie
+
+- Actions Secteur Ecologie
+- Actions Secteur Eau
+- Actions Secteur Energies Alternatives
 
 ### actions_secteur_ressources_metaux
 
@@ -166,11 +183,11 @@ ne cherchent pas le même résultat, les comparer n'apprend rien.
 
 ### allocation_flexible
 
+La catégorie fourre-tout « Autres » rejoint la flexible, faute de mandat identifiable et d'un
+second fonds pour lui faire une famille.
+
 - Allocation EUR Flexible
 - Allocation EUR Flexible - International
-
-### allocation_autres
-
 - Allocation Autres
 
 ---
@@ -178,17 +195,16 @@ ne cherchent pas le même résultat, les comparer n'apprend rien.
 ## Obligations
 
 Décision : scission par segment de risque. Le haut rendement se comporte à mi-chemin des
-actions, l'emprunt d'État non.
-
-### oblig_etat_euro
-
-- Obligations EUR Emprunts d'Etat
+actions, l'emprunt d'État non — mais l'État et les indexées inflation rejoignent le crédit euro,
+seuls fonds de leur libellé dans l'offre et dominés par le même facteur, la duration.
 
 ### oblig_credit_euro
 
 - Obligations EUR Emprunts Privés
 - Obligations EUR Diversifiées
 - Obligations EUR Flexibles
+- Obligations EUR Emprunts d'Etat
+- Obligations Internationales Indexées sur l'Inflation Couvertes en EUR
 
 ### oblig_court_terme_euro
 
@@ -213,10 +229,6 @@ actions, l'emprunt d'État non.
 - Obligations Internationales Flexibles Couvertes en USD
 - Global Diversified Bond
 - Global Diversified Bond - EUR Hedged
-
-### oblig_inflation
-
-- Obligations Internationales Indexées sur l'Inflation Couvertes en EUR
 
 ### oblig_echeance
 
@@ -244,18 +256,20 @@ actions, l'emprunt d'État non.
 
 ## Alternatifs
 
-### alt_market_neutral
-
-- Alt - Market Neutral - Actions
-
 ### alt_event_driven
 
 - Alt - Event Driven
 
 ### alt_long_short
 
+Le market neutral rejoint le long/short actions : même moteur (sélection de titres avec couverture
+du marché), même usage en portefeuille, et deux fonds seuls ne faisaient pas de médiane. Les
+seuils du diagnostic ne s'en trouvent pas modifiés : ils viennent de la volatilité 3 ans **mesurée**
+du fonds, la classe de la famille ne servant de repli qu'à défaut de mesure.
+
 - Alt - Long/Short Actions - Europe
 - Alt - Long/Short Actions - International
+- Alt - Market Neutral - Actions
 
 ---
 

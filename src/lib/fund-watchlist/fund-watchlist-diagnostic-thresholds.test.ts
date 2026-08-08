@@ -55,9 +55,15 @@ describe("fund-watchlist-diagnostic-thresholds", () => {
     expect(resolveFundDiagnosticVolatilityClassFromMeasure(null, "Convertibles Europe")).toBe(
       "diversified"
     );
+    // Le market neutral partage désormais la famille du long/short : sans volatilité mesurée,
+    // c'est le profil moyen de cette famille (1,8 à 9,4 % observés) qui sert de repli. En
+    // pratique l'import fournit la volatilité du fonds, qui l'emporte sur ce proxy.
     expect(
       resolveFundDiagnosticVolatilityClassFromMeasure(null, "Alt - Market Neutral - Actions")
-    ).toBe("rates");
+    ).toBe("diversified");
+    expect(resolveFundDiagnosticVolatilityClassFromMeasure(4.8, "Alt - Market Neutral - Actions")).toBe(
+      "rates"
+    );
   });
 
   it("classe par paliers de volatilité 3 ans", () => {
@@ -126,9 +132,31 @@ describe("fund-watchlist-diagnostic-thresholds", () => {
         "Actions Europe Petites Cap."
       )
     ).toBe(false);
-    // Aucun regroupement entre secteurs.
+    // Les secteurs proches sont regroupés quand l'offre du contrat est trop étroite pour qu'une
+    // médiane existe : sans cela, un fonds seul de sa famille n'obtient jamais de badge.
     expect(
       isSameFundWatchlistPeerCategory("Actions Secteur Santé", "Actions Secteur Biotechnologie")
+    ).toBe(true);
+    expect(
+      isSameFundWatchlistPeerCategory("Actions Secteur Eau", "Actions Secteur Ecologie")
+    ).toBe(true);
+    expect(isSameFundWatchlistPeerCategory("Actions Chine", "Actions Asie hors Japon")).toBe(true);
+    expect(
+      isSameFundWatchlistPeerCategory(
+        "Alt - Market Neutral - Actions",
+        "Alt - Long/Short Actions - Europe"
+      )
+    ).toBe(true);
+    expect(
+      isSameFundWatchlistPeerCategory(
+        "Obligations EUR Emprunts d'Etat",
+        "Obligations EUR Emprunts Privés"
+      )
+    ).toBe(true);
+    // Les secteurs sans voisin défendable restent séparés : un fonds de banques ne se juge pas
+    // contre les technologies.
+    expect(
+      isSameFundWatchlistPeerCategory("Actions Secteur Finance", "Actions Secteur Technologies")
     ).toBe(false);
   });
 

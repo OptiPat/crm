@@ -304,10 +304,8 @@ fn parse_performance_row_in_table(
     table_fragment: &str,
     row_label: &str,
 ) -> Option<BoursoramaPerformancesSnapshot> {
-    let needle = format!(">{row_label}<");
-    let row_start = table_fragment.find(&needle)?;
-    let row_fragment = &table_fragment[row_start..];
     let headers = parse_performance_table_headers(table_fragment)?;
+    let row_fragment = find_performance_row(table_fragment, row_label)?;
     let values = parse_performance_row_cells(row_fragment)?;
     Some(BoursoramaPerformancesSnapshot {
         perf_ytd: value_at_header(&headers, &values, &["1ER JANV", "1ER JANV."]),
@@ -316,6 +314,22 @@ fn parse_performance_row_in_table(
         perf_3ans: value_at_header(&headers, &values, &["3 ANS"]),
         perf_5ans: value_at_header(&headers, &values, &["5 ANS"]),
     })
+}
+
+/// Boursorama indente ses libellés de ligne (`>\n        FONDS        </th>`) : la ligne se
+/// reconnaît au texte de sa cellule d'en-tête, jamais à une aiguille collée du type `>FONDS<`,
+/// qui ne correspond à aucune page réelle.
+fn find_performance_row<'a>(table_fragment: &'a str, row_label: &str) -> Option<&'a str> {
+    let tbody_start = table_fragment.find("<tbody")?;
+    table_fragment[tbody_start..]
+        .split("<tr")
+        .skip(1)
+        .find(|row| {
+            row.split("<th")
+                .nth(1)
+                .map(cell_text)
+                .is_some_and(|header| header.eq_ignore_ascii_case(row_label))
+        })
 }
 
 fn parse_performance_table_headers(table_fragment: &str) -> Option<Vec<String>> {
@@ -822,6 +836,22 @@ mod tests {
         assert_eq!(parsed.category.perf_1an, Some(2.73));
         assert_eq!(parsed.fund.perf_3ans, Some(122.56));
         assert_eq!(parsed.category.perf_5ans, Some(31.47));
+    }
+
+    /// Fragment capturé sur la page réelle : Boursorama indente les libellés de ligne sur
+    /// plusieurs dizaines d'espaces. Le fixture compacté ci-dessus ne le reproduisait pas, et
+    /// la référence catégorie échouait donc sur 100 % des fonds en production.
+    #[test]
+    fn parse_cours_performances_reads_indented_row_labels() {
+        let html = include_str!("fixtures/boursorama_cours_performances_live.html");
+        let parsed = parse_cours_performances_html(html).expect("performances");
+        assert_eq!(parsed.fund.perf_ytd, Some(-7.65));
+        assert_eq!(parsed.fund.perf_1mois, Some(-1.94));
+        assert_eq!(parsed.fund.perf_1an, Some(50.89));
+        assert_eq!(parsed.fund.perf_3ans, Some(146.69));
+        assert_eq!(parsed.fund.perf_5ans, Some(138.55));
+        assert_eq!(parsed.category.perf_1an, Some(131.54));
+        assert_eq!(parsed.category.perf_3ans, Some(181.72));
     }
 
     fn category_history_fixture() -> BoursoramaCategoryHistory {

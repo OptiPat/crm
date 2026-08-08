@@ -217,7 +217,8 @@ impl super::Database {
                 .get::<_, String>(27)
                 .unwrap_or_else(|_| "ACTIF".to_string()),
             date_cloture: row.get(28)?,
-            // Colonnes 29–30 : dates arbitrage (non exposées dans InvestissementWithDetails).
+            date_dernier_arbitrage: row.get(29)?,
+            date_prochain_arbitrage: row.get(30)?,
             created_at: row.get(31)?,
             updated_at: row.get(32)?,
             url_contrat: row.get(33)?,
@@ -1367,6 +1368,8 @@ mod tests {
             )
             .unwrap();
 
+        let dernier = "2026-01-15T00:00:00Z";
+        let prochain = "2026-07-15T00:00:00Z";
         let created = db
             .create_investissement(NewInvestissement {
                 contact_id: Some(1),
@@ -1379,8 +1382,8 @@ mod tests {
                 date_souscription: None,
                 date_fin_demembrement: None,
                 date_fin_pret: None,
-                date_dernier_arbitrage: None,
-                date_prochain_arbitrage: None,
+                date_dernier_arbitrage: Some(dernier.into()),
+                date_prochain_arbitrage: Some(prochain.into()),
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
@@ -1402,6 +1405,10 @@ mod tests {
         assert_eq!(row.id, created.id);
         assert_eq!(row.type_produit, "ASSURANCE_VIE");
         assert_eq!(row.origine, "MON_CONSEIL");
+        assert_eq!(row.date_dernier_arbitrage, created.date_dernier_arbitrage);
+        assert_eq!(row.date_prochain_arbitrage, created.date_prochain_arbitrage);
+        assert!(row.date_dernier_arbitrage.is_some());
+        assert!(row.date_prochain_arbitrage.is_some());
         assert_eq!(row.created_at, created.created_at);
         assert_eq!(row.updated_at, created.updated_at);
     }

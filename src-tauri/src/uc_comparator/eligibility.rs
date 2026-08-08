@@ -378,7 +378,10 @@ mod tests {
         assert!(eval.compatible);
         assert!(!eval.exact_match);
         assert_eq!(eval.meta_key.as_deref(), Some("actions_asie_pacifique"));
-        assert_eq!(eval.display_label.as_deref(), Some("Actions Asie / Japon"));
+        assert_eq!(
+            eval.display_label.as_deref(),
+            Some("Actions Asie / Chine / Japon")
+        );
     }
 
     #[test]
@@ -396,7 +399,10 @@ mod tests {
             fund(Some("Actions Marchés Emergents Asie")),
         ]);
         assert!(eval.compatible);
-        assert_eq!(eval.display_label.as_deref(), Some("Actions Asie / Japon"));
+        assert_eq!(
+            eval.display_label.as_deref(),
+            Some("Actions Asie / Chine / Japon")
+        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,10 +65,7 @@ import {
 } from "@/lib/fund-watchlist/fund-watchlist-coach-store";
 import { computeFundWatchlistShortTermScore } from "@/lib/fund-watchlist/fund-watchlist-short-term-score";
 import { buildFundCoachDiagnosticPayload } from "@/lib/fund-watchlist/fund-watchlist-coach-diagnostic-payload";
-import {
-  buildFundWatchlistDiagnostics,
-  FUND_DIAGNOSTIC_MIN_PEERS,
-} from "@/lib/fund-watchlist/fund-watchlist-diagnostic";
+import { buildFundWatchlistDiagnostics } from "@/lib/fund-watchlist/fund-watchlist-diagnostic";
 import type { FundBenchmarkReference } from "@/lib/fund-watchlist/fund-watchlist-diagnostic";
 import { saveCoachDiagnosticSnapshot } from "@/lib/fund-watchlist/fund-watchlist-coach-diagnostic-narrative";
 import { waitForFundWatchlistBenchmarkSync } from "@/lib/fund-watchlist/wait-for-benchmark-sync";
@@ -108,8 +105,6 @@ import { cn } from "@/lib/utils";
 import { runUcComparison, type CompareResponse } from "@/lib/api/tauri-uc-comparator";
 
 const MAX_UC_COMPARE = 4;
-
-const FUND_WATCHLIST_BENCHMARK_TOAST_ID = "fund-watchlist-benchmark-sync";
 
 function benchmarksToMap(
   rows: { isin: string; categoryPerf1an?: number | null; label: string }[]
@@ -164,7 +159,6 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   const [boursoramaBenchmarks, setBoursoramaBenchmarks] = useState<
     Map<string, FundBenchmarkReference>
   >(() => new Map());
-  const benchmarkSyncingRef = useRef(false);
   const { printBundle: comparePrintBundle, printComparison, isPrinting: comparePrinting } =
     useUcComparatorPrintExport();
 
@@ -233,6 +227,14 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     () => entries.map((e) => e.isin).sort().join(","),
     [entries]
   );
+  /** Un réimport laisse la liste d'ISIN identique tout en annulant en base les références dont la
+   *  perf 1 an a bougé. Sans cette borne de fraîcheur, l'état React gardait l'ancienne perf
+   *  catégorie et l'écart mêlait une perf de fonds fraîche à une référence périmée, au lieu de
+   *  retomber sur la médiane watchlist. */
+  const watchlistFreshness = useMemo(
+    () => entries.reduce((max, e) => Math.max(max, e.updated_at), 0),
+    [entries]
+  );
 
   useEffect(() => {
     if (!watchlistIsinsKey) {
@@ -253,45 +255,15 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     return () => {
       cancelled = true;
     };
-  }, [watchlistIsinsKey]);
+  }, [watchlistIsinsKey, watchlistFreshness]);
 
-  /** L'import périme les références dont la perf 1 an a bougé : on les recharge en arrière-plan
-   *  pour que chaque badge compare deux chiffres de la même date. */
-  const syncAllBenchmarks = async (isins: string[]) => {
-    if (isins.length === 0 || benchmarkSyncingRef.current) return;
-    benchmarkSyncingRef.current = true;
-    toast.loading("Mise à jour des références catégorie…", {
-      id: FUND_WATCHLIST_BENCHMARK_TOAST_ID,
-    });
-    try {
-      const rows = await waitForFundWatchlistBenchmarkSync(
-        isins,
-        (current, total) => {
-          if (total <= 0) return;
-          toast.loading(`Références catégorie ${current}/${total}…`, {
-            id: FUND_WATCHLIST_BENCHMARK_TOAST_ID,
-          });
-        }
-      );
-      setBoursoramaBenchmarks(benchmarksToMap(rows));
-      toast.success("Références catégorie à jour.", {
-        id: FUND_WATCHLIST_BENCHMARK_TOAST_ID,
-      });
-    } catch (error) {
-      const detail =
-        error instanceof Error ? error.message : "réseau ou Boursorama indisponible";
-      toast.error(
-        `Références non mises à jour (${detail}). Les badges se replient sur la médiane de la watchlist, et seulement à partir de ${FUND_DIAGNOSTIC_MIN_PEERS} fonds de la même famille — sinon aucun badge.`,
-        { id: FUND_WATCHLIST_BENCHMARK_TOAST_ID, duration: 8000 }
-      );
-    } finally {
-      benchmarkSyncingRef.current = false;
-    }
-  };
-
+  /** L'import périme les références dont la perf 1 an a bougé, sans les recharger : interroger
+   *  Boursorama pour toute la watchlist coûterait plusieurs centaines de requêtes à chaque import.
+   *  Les favoris sont rafraîchis au lancement du coach, les fonds comparés à la comparaison, et
+   *  les autres badges se lisent sur la médiane de la watchlist, fraîche du même import — la
+   *  relecture du cache local suit la fraîcheur des lignes (cf. `watchlistFreshness`). */
   const handleImportApplied = async () => {
-    const rows = await load();
-    await syncAllBenchmarks(rows.map((e) => e.isin));
+    await load();
   };
 
   const startCoachReport = async () => {

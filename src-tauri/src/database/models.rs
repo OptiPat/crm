@@ -597,6 +597,8 @@ pub struct InvestissementWithDetails {
     pub origine: String, // "MON_CONSEIL" ou "EXISTANT_CLIENT"
     pub statut: String,
     pub date_cloture: Option<i64>,
+    pub date_dernier_arbitrage: Option<i64>,
+    pub date_prochain_arbitrage: Option<i64>,
     pub encours_actuel: Option<i64>,
     pub encours_date: Option<i64>,
     pub montant_investi_total: Option<i64>,

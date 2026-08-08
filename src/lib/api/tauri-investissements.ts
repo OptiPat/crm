@@ -110,6 +110,8 @@ export interface InvestissementWithDetails {
   origine: OrigineInvestissement; // "MON_CONSEIL" ou "EXISTANT_CLIENT"
   statut?: InvestissementStatut;
   date_cloture?: number;
+  date_dernier_arbitrage?: number;
+  date_prochain_arbitrage?: number;
   encours_actuel?: number;
   encours_date?: number;
   montant_investi_total?: number;

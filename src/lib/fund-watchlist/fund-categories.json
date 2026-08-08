@@ -47,22 +47,18 @@
     },
     {
       "key": "actions_asie_pacifique",
-      "label": "Actions Asie / Japon",
+      "label": "Actions Asie / Chine / Japon",
       "volatility": "actions",
       "categories": [
         "Actions Asie hors Japon",
         "Actions Asie hors Japon Petites & Moy. Cap.",
         "Actions Asie-Pacifique avec Japon",
         "Actions Asie-Pacifique hors Japon",
+        "Actions Chine",
+        "Actions Chine - A Shares",
         "Japan Large-Cap Blend Equity",
         "Japan Large-Cap Growth Equity"
       ]
-    },
-    {
-      "key": "actions_chine",
-      "label": "Actions Chine",
-      "volatility": "actions",
-      "categories": ["Actions Chine", "Actions Chine - A Shares"]
     },
     {
       "key": "actions_emergents",
@@ -96,15 +92,9 @@
     },
     {
       "key": "actions_secteur_sante",
-      "label": "Actions Secteur Santé",
+      "label": "Actions Secteur Santé & Biotechnologie",
       "volatility": "actions",
-      "categories": ["Actions Secteur Santé"]
-    },
-    {
-      "key": "actions_secteur_biotechnologie",
-      "label": "Actions Secteur Biotechnologie",
-      "volatility": "actions",
-      "categories": ["Actions Secteur Biotechnologie"]
+      "categories": ["Actions Secteur Santé", "Actions Secteur Biotechnologie"]
     },
     {
       "key": "actions_secteur_finance",
@@ -113,22 +103,14 @@
       "categories": ["Actions Secteur Finance"]
     },
     {
-      "key": "actions_secteur_eau",
-      "label": "Actions Secteur Eau",
-      "volatility": "actions",
-      "categories": ["Actions Secteur Eau"]
-    },
-    {
       "key": "actions_secteur_ecologie",
-      "label": "Actions Secteur Ecologie",
+      "label": "Actions Secteur Écologie, Eau & Énergies Alternatives",
       "volatility": "actions",
-      "categories": ["Actions Secteur Ecologie"]
-    },
-    {
-      "key": "actions_secteur_energies_alternatives",
-      "label": "Actions Secteur Energies Alternatives",
-      "volatility": "actions",
-      "categories": ["Actions Secteur Energies Alternatives"]
+      "categories": [
+        "Actions Secteur Ecologie",
+        "Actions Secteur Eau",
+        "Actions Secteur Energies Alternatives"
+      ]
     },
     {
       "key": "actions_secteur_materiaux_industrie",
@@ -187,28 +169,22 @@
       "key": "allocation_flexible",
       "label": "Allocation flexible",
       "volatility": "diversified",
-      "categories": ["Allocation EUR Flexible", "Allocation EUR Flexible - International"]
-    },
-    {
-      "key": "allocation_autres",
-      "label": "Allocation Autres",
-      "volatility": "diversified",
-      "categories": ["Allocation Autres"]
-    },
-    {
-      "key": "oblig_etat_euro",
-      "label": "Obligations emprunts d'État euro",
-      "volatility": "rates",
-      "categories": ["Obligations EUR Emprunts d'Etat"]
+      "categories": [
+        "Allocation EUR Flexible",
+        "Allocation EUR Flexible - International",
+        "Allocation Autres"
+      ]
     },
     {
       "key": "oblig_credit_euro",
-      "label": "Obligations crédit euro",
+      "label": "Obligations euro (crédit, État, indexées inflation)",
       "volatility": "rates",
       "categories": [
         "Obligations EUR Emprunts Privés",
         "Obligations EUR Diversifiées",
-        "Obligations EUR Flexibles"
+        "Obligations EUR Flexibles",
+        "Obligations EUR Emprunts d'Etat",
+        "Obligations Internationales Indexées sur l'Inflation Couvertes en EUR"
       ]
     },
     {
@@ -252,12 +228,6 @@
       ]
     },
     {
-      "key": "oblig_inflation",
-      "label": "Obligations indexées inflation",
-      "volatility": "rates",
-      "categories": ["Obligations Internationales Indexées sur l'Inflation Couvertes en EUR"]
-    },
-    {
       "key": "oblig_echeance",
       "label": "Obligations à échéance",
       "volatility": "rates",
@@ -282,12 +252,6 @@
       "categories": ["Convertibles Europe", "Convertibles International"]
     },
     {
-      "key": "alt_market_neutral",
-      "label": "Alternatif market neutral",
-      "volatility": "rates",
-      "categories": ["Alt - Market Neutral - Actions"]
-    },
-    {
       "key": "alt_event_driven",
       "label": "Alternatif event driven",
       "volatility": "rates",
@@ -295,11 +259,12 @@
     },
     {
       "key": "alt_long_short",
-      "label": "Alternatif long/short actions",
+      "label": "Alternatif long/short & market neutral actions",
       "volatility": "diversified",
       "categories": [
         "Alt - Long/Short Actions - Europe",
-        "Alt - Long/Short Actions - International"
+        "Alt - Long/Short Actions - International",
+        "Alt - Market Neutral - Actions"
       ]
     },
     {

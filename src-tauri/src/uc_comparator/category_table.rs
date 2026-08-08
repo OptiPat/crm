@@ -123,6 +123,31 @@ mod tests {
         assert_ne!(immo, equity);
     }
 
+    /// Les familles fusionnées font office de portillon du comparateur : sans elles, deux fonds
+    /// substituables de l'offre ressortaient en « Catégories différentes », sans aucun score.
+    #[test]
+    fn groups_the_merged_families() {
+        for (a, b) in [
+            (
+                "Alt - Market Neutral - Actions",
+                "Alt - Long/Short Actions - Europe",
+            ),
+            ("Actions Chine", "Actions Asie hors Japon"),
+            ("Actions Secteur Biotechnologie", "Actions Secteur Santé"),
+            ("Actions Secteur Eau", "Actions Secteur Energies Alternatives"),
+            (
+                "Obligations EUR Emprunts d'Etat",
+                "Obligations EUR Emprunts Privés",
+            ),
+            ("Allocation Autres", "Allocation EUR Flexible"),
+        ] {
+            let family_a = family_for_normalized(&normalize_category(a));
+            let family_b = family_for_normalized(&normalize_category(b));
+            assert!(family_a.is_some(), "famille absente pour {a}");
+            assert_eq!(family_a, family_b, "{a} et {b} devraient partager la famille");
+        }
+    }
+
     #[test]
     fn exposes_family_labels_and_exclusions() {
         assert_eq!(

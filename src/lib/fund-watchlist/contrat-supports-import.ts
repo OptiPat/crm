@@ -64,7 +64,10 @@ function detectLayout(headerLine: string): ColumnLayout | null {
     nbParts: findColumn(headers, (h) => h.includes("nombre de parts")),
     valeurUnitaire: findColumn(headers, (h) => h.includes("valeur unitaire")),
     encours: findColumn(headers, (h) => h.includes("encours")),
-    plusMoinsValue: findColumn(headers, (h) => h.includes("value")),
+    // L'export livre deux colonnes « +/- value » : celle en euros, souvent « Non disponible »,
+    // précède celle en pourcentage. Cibler le pourcentage explicitement, sinon la première
+    // correspondance emporte la colonne euros et la plus/moins-value reste vide.
+    plusMoinsValue: findColumn(headers, (h) => h.includes("value") && h.includes("%")),
     dateValeur: findColumn(headers, (h) => h.includes("date valeur")),
   };
   if (layout.numeroContrat < 0 || layout.isin < 0 || layout.support < 0) return null;
