@@ -86,8 +86,10 @@ function isMinorChildMember(
 ): boolean {
   if (owner.role_foyer !== "ENFANT") return false;
   if (owner.date_naissance == null || owner.date_naissance <= 0) {
-    // Rôle ENFANT sans date de naissance : visible des parents (sinon tout disparaît en base incomplète).
-    return true;
+    // Sans date de naissance, rien ne distingue un enfant de 10 ans d'un enfant
+    // majeur de 25 ans : exposer ses avoirs aux parents serait le même incident
+    // que le cas conjoint. Le conseiller renseigne la date pour rendre visible.
+    return false;
   }
   return isContactMinorAt(owner.date_naissance, refUnix);
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { Partenaire } from "@/lib/api/tauri-partenaires";
@@ -16,6 +16,12 @@ import {
 import { buildPerimetrePatrimoine } from "@/lib/patrimoine/perimetre";
 import { buildPatrimoineTimeline } from "@/lib/patrimoine/timeline";
 import { getLatestValorisationLabel } from "@/components/contacts/client-preview/client-preview-format";
+import { ContactEspaceAccesPanel } from "@/components/espace-client/ContactEspaceAccesPanel";
+import {
+  getEspaceSyncSummary,
+} from "@/lib/api/tauri-espace-client";
+import { ESPACE_CLIENT_CHANGED_EVENT } from "@/lib/espace-client/espace-client-events";
+import { formatEspaceSyncLabel } from "@/lib/espace-client/espace-client-format";
 import {
   ClientPreviewAdvisorPanel,
   type ClientPreviewViewport,
@@ -29,7 +35,6 @@ export interface ContactDetailApercuClientTabProps {
   foyerMembers: FoyerMemberRef[];
   partenaires: Partenaire[];
   onOpenPatrimoine?: () => void;
-  lastSyncLabel?: string | null;
 }
 
 export function ContactDetailApercuClientTab({
@@ -38,7 +43,6 @@ export function ContactDetailApercuClientTab({
   foyerMembers,
   partenaires,
   onOpenPatrimoine,
-  lastSyncLabel,
 }: ContactDetailApercuClientTabProps) {
   const [alertes, setAlertes] = useState<Alerte[]>([]);
   const [taches, setTaches] = useState<
@@ -46,6 +50,26 @@ export function ContactDetailApercuClientTab({
   >([]);
   const [timelineLoading, setTimelineLoading] = useState(true);
   const [viewport, setViewport] = useState<ClientPreviewViewport>("mobile");
+  const [lastSyncLabel, setLastSyncLabel] = useState<string | null>(null);
+
+  const loadSyncSummary = useCallback(async () => {
+    try {
+      const summary = await getEspaceSyncSummary();
+      setLastSyncLabel(formatEspaceSyncLabel(summary.derniere_synchro_at));
+    } catch {
+      setLastSyncLabel(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSyncSummary();
+  }, [loadSyncSummary]);
+
+  useEffect(() => {
+    const handler = () => void loadSyncSummary();
+    window.addEventListener(ESPACE_CLIENT_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(ESPACE_CLIENT_CHANGED_EVENT, handler);
+  }, [loadSyncSummary]);
 
   const viewer = useMemo(
     () => ({
@@ -141,6 +165,10 @@ export function ContactDetailApercuClientTab({
 
   return (
     <div className="flex flex-col items-center gap-4">
+      <ContactEspaceAccesPanel
+        contact={contact}
+        onChanged={() => void loadSyncSummary()}
+      />
       <ClientPreviewAdvisorPanel
         visibleCount={visible.length}
         hiddenCount={hiddenCount}

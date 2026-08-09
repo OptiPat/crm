@@ -220,7 +220,7 @@ export function ClientPreviewInventory({
   >(() => new Set(sections.slice(0, 1)));
 
   useEffect(() => {
-    const first = sections[0];
+    const first = sectionKey.split("|")[0] as PatrimoineCategorie | undefined;
     setOpenCategories(first ? new Set([first]) : new Set());
   }, [sectionKey]);
 

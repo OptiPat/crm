@@ -18,6 +18,7 @@ mod database;
 mod documents_storage;
 mod contrat_supports_commands;
 mod email;
+mod espace_client;
 mod export_archive;
 mod fund_watchlist_benchmark_sync;
 mod fund_watchlist_commands;
@@ -77,6 +78,11 @@ use compta::commands::{
 use database::Database;
 use email::commands::*;
 use email::oauth_commands::*;
+use espace_client::commands::{
+    activate_espace_acces_cmd, build_espace_client_snapshot_cmd, get_espace_acces_cmd,
+    get_espace_client_sync_config_cmd, get_espace_sync_summary_cmd, push_espace_client_contact_cmd,
+    revoke_espace_acces_cmd, save_espace_client_sync_config_cmd,
+};
 use licensing::{
     activate_license_cmd, get_license_status_cmd, needs_license_activation_cmd,
     start_license_trial_cmd,
@@ -635,6 +641,14 @@ fn main() {
             fiche_conseil_redaction_commands::create_fiche_conseil_redaction_preset,
             fiche_conseil_redaction_commands::update_fiche_conseil_redaction_preset,
             fiche_conseil_redaction_commands::delete_fiche_conseil_redaction_preset,
+            get_espace_acces_cmd,
+            activate_espace_acces_cmd,
+            revoke_espace_acces_cmd,
+            get_espace_sync_summary_cmd,
+            get_espace_client_sync_config_cmd,
+            save_espace_client_sync_config_cmd,
+            build_espace_client_snapshot_cmd,
+            push_espace_client_contact_cmd,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

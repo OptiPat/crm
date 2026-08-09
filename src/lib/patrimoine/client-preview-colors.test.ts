@@ -5,11 +5,6 @@ import {
   CRM_PLACEMENT_COLOR,
   CRM_SCPI_COLOR,
   getClientPreviewInvestissementColor,
-} from "./patrimoine-palette";
-
-import {
-  CRM_IMMOBILIER_COLOR,
-  CRM_SCPI_COLOR,
   getPatrimoineTimelineEventColor,
 } from "./patrimoine-palette";
 

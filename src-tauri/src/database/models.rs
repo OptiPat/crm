@@ -268,6 +268,26 @@ pub struct Partenaire {
     pub updated_at: i64,
 }
 
+/// Accès espace client pour un contact (une ligne par personne).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EspaceAcces {
+    pub contact_id: i64,
+    pub statut: String,
+    pub email_utilise: Option<String>,
+    pub active_at: Option<i64>,
+    pub revoked_at: Option<i64>,
+    pub derniere_connexion: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// Résumé de synchronisation CRM → portail (affichage conseiller).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EspaceSyncSummary {
+    pub derniere_synchro_at: Option<i64>,
+    pub dernier_statut: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewPartenaire {
     pub type_partenaire: String,

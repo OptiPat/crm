@@ -131,7 +131,7 @@ describe("isInvestissementVisibleToViewer — R2", () => {
     ).toBe(true);
   });
 
-  it("enfant mineur sans date de naissance : visible des parents", () => {
+  it("enfant sans date de naissance : invisible des parents (doute sur la majorité)", () => {
     const members = [
       { id: 1, role_foyer: "DECLARANT_1" as const },
       { id: 2, role_foyer: "DECLARANT_2" as const },
@@ -142,7 +142,7 @@ describe("isInvestissementVisibleToViewer — R2", () => {
       isInvestissementVisibleToViewer(persoEnfant, jean, members, {
         nowUnix: NOW,
       })
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("enfant majeur : patrimoine non visible des parents", () => {

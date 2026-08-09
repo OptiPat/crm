@@ -3488,6 +3488,7 @@ fn is_protected_generic_setting_key(key: &str) -> bool {
         crate::database::workspace::WORKSPACE_CONFIG_SETTING_KEY
             | crate::licensing::LICENSE_STATE_KEY
             | crate::licensing::LICENSE_LEGACY_MIGRATED_KEY
+            | crate::espace_client::SYNC_SECRET_SETTING_KEY
     )
 }
 
