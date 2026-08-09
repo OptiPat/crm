@@ -27,7 +27,9 @@
     "test:all": "npm run test && npm run test:rust",
     "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File ./verify.ps1",
     "verify:quick": "powershell -NoProfile -ExecutionPolicy Bypass -File ./verify.ps1 -Quick",
-    "verify:full": "powershell -NoProfile -ExecutionPolicy Bypass -File ./verify.ps1 -Build"
+    "verify:full": "powershell -NoProfile -ExecutionPolicy Bypass -File ./verify.ps1 -Build",
+    "build:espace-portail": "vite build --config espace-portail/web/vite.config.ts",
+    "dev:espace-portail": "vite --config espace-portail/web/vite.config.ts"
   },
   "dependencies": {
     "@fontsource-variable/comfortaa": "^5.3.0",

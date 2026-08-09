@@ -35,6 +35,8 @@ dist-ssr
 
 # Portail espace client (crate séparée)
 /espace-portail/target
+/espace-portail/web/dist
+/espace-portail/espace-portail.db
 
 # --- Données sensibles (ne jamais committer) ---
 # Notes stratégiques personnelles (réseau/organisation) — jamais publiques

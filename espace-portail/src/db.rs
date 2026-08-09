@@ -1,6 +1,15 @@
 use std::sync::{Mutex, MutexGuard};
 
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Connection, OptionalExtension, Result};
+use serde_json::Value;
+
+/// Snapshot patrimoine reçu du CRM.
+pub struct ContactSnapshotRow {
+    pub contact_id: i64,
+    pub sequence: i64,
+    pub payload: Value,
+    pub synced_at: i64,
+}
 
 /// `Connection` est `Send` mais pas `Sync` : le `Mutex` rend `PortalDb`
 /// partageable dans l'état Axum, qui doit être `Send + Sync`.
@@ -54,6 +63,28 @@ impl PortalDb {
         )?;
         Ok(updated > 0)
     }
+
+    pub fn get_contact_snapshot(&self, contact_id: i64) -> Result<Option<ContactSnapshotRow>> {
+        let row = self
+            .conn()
+            .query_row(
+                "SELECT contact_id, sequence, payload_json, synced_at
+                 FROM contact_snapshot
+                 WHERE contact_id = ?1",
+                params![contact_id],
+                |row| {
+                    let payload_json: String = row.get(2)?;
+                    Ok(ContactSnapshotRow {
+                        contact_id: row.get(0)?,
+                        sequence: row.get(1)?,
+                        payload: serde_json::from_str(&payload_json).unwrap_or(Value::Null),
+                        synced_at: row.get(3)?,
+                    })
+                },
+            )
+            .optional()?;
+        Ok(row)
+    }
 }
 
 #[cfg(test)]
@@ -72,5 +103,16 @@ mod tests {
         assert!(db
             .upsert_contact_snapshot(1, 11, r#"{"v":3}"#)
             .unwrap());
+    }
+
+    #[test]
+    fn get_contact_snapshot_returns_latest_payload() {
+        let db = PortalDb::open(":memory:").unwrap();
+        db.upsert_contact_snapshot(42, 1, r#"{"contact":{"contactId":42}}"#)
+            .unwrap();
+        let row = db.get_contact_snapshot(42).unwrap().expect("snapshot");
+        assert_eq!(row.contact_id, 42);
+        assert_eq!(row.sequence, 1);
+        assert_eq!(row.payload["contact"]["contactId"], 42);
     }
 }
