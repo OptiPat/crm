@@ -58,6 +58,9 @@ export interface ClientPreviewViewProps {
 
   lastSyncLabel?: string | null;
 
+  /** Cadre simulateur conseiller — désactivé sur le portail client. */
+  showDeviceFrame?: boolean;
+
 }
 
 
@@ -85,6 +88,8 @@ export function ClientPreviewView({
   timelineLoading = false,
 
   lastSyncLabel,
+
+  showDeviceFrame = true,
 
 }: ClientPreviewViewProps) {
 
@@ -123,7 +128,7 @@ export function ClientPreviewView({
       data-cp-viewport={viewport}
     >
 
-      <ClientPreviewDeviceFrame viewport={viewport}>
+      <ClientPreviewDeviceFrame viewport={viewport} framed={showDeviceFrame}>
 
         <ClientPreviewHero
           contact={contact}

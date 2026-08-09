@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPatrimoineTimeline } from "./timeline";
+import { buildPatrimoineTimeline, filterPatrimoineTimelineForClient } from "./timeline";
 
 describe("buildPatrimoineTimeline", () => {
   it("trie les événements par date croissante", () => {
@@ -49,6 +49,25 @@ describe("buildPatrimoineTimeline", () => {
     expect(events[1].kind).toBe("fin_demembrement");
     expect(events[1].type_produit).toBe("SCPI");
     expect(events.some((e) => e.kind === "prochain_arbitrage")).toBe(false);
+  });
+
+  it("filterPatrimoineTimelineForClient retire les arbitrages", () => {
+    const filtered = filterPatrimoineTimelineForClient([
+      {
+        id: "a",
+        kind: "prochain_arbitrage",
+        date: 1,
+        label: "Prochain arbitrage — PER",
+      },
+      {
+        id: "b",
+        kind: "fin_pret",
+        date: 2,
+        label: "Fin de prêt",
+      },
+    ]);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].kind).toBe("fin_pret");
   });
 
   it("écarte les échéances passées par défaut", () => {

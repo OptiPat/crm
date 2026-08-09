@@ -11,7 +11,16 @@ pub struct EspaceClientSyncPayload {
     pub contact: EspaceClientContactSnapshot,
     pub acces: EspaceClientAccesSnapshot,
     pub investissements: Vec<EspaceClientInvestissementLine>,
+    pub partenaires: Vec<EspaceClientPartenaireLine>,
     pub timeline: Vec<EspaceClientTimelineEvent>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EspaceClientPartenaireLine {
+    pub id: i64,
+    pub raison_sociale: String,
+    pub url_extranet: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

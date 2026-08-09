@@ -1,15 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClientPreviewView } from "@/components/contacts/client-preview/ClientPreviewView";
+import { ClientPreviewViewportToggle } from "@/components/contacts/client-preview/ClientPreviewViewportToggle";
+import { CP } from "@/components/contacts/client-preview/client-preview-theme";
+import { useClientPreviewViewport } from "@/components/contacts/client-preview/use-client-preview-viewport";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Investissement } from "@/lib/api/tauri-investissements";
+import type { Partenaire } from "@/lib/api/tauri-partenaires";
 import {
   aggregateByCategorie,
   aggregateByDisponibilite,
 } from "@/lib/patrimoine/patrimoine-charts";
 import { buildPerimetrePatrimoine } from "@/lib/patrimoine/perimetre";
-import type { PatrimoineTimelineEvent } from "@/lib/patrimoine/timeline";
+import {
+  filterPatrimoineTimelineForClient,
+  type PatrimoineTimelineEvent,
+} from "@/lib/patrimoine/timeline";
+import { PortalDevGate } from "./PortalDevGate";
 import type {
   EspaceClientInvestissementLine,
+  EspaceClientPartenaireLine,
   EspaceClientSyncPayload,
   PatrimoineApiResponse,
 } from "./types";
@@ -40,18 +49,31 @@ function toInvestissement(line: EspaceClientInvestissementLine): Investissement 
   } as Investissement;
 }
 
+function toPartenaire(line: EspaceClientPartenaireLine): Partenaire {
+  return {
+    id: line.id,
+    type_partenaire: "ASSUREUR",
+    raison_sociale: line.raisonSociale,
+    url_extranet: line.urlExtranet ?? undefined,
+    created_at: 0,
+    updated_at: 0,
+  };
+}
+
 function toTimeline(
   events: EspaceClientSyncPayload["timeline"]
 ): PatrimoineTimelineEvent[] {
-  return events.map((event) => ({
-    id: event.id,
-    kind: event.kind as PatrimoineTimelineEvent["kind"],
-    date: event.date,
-    label: event.label,
-    detail: event.detail ?? undefined,
-    type_produit: event.typeProduit ?? undefined,
-    origine: event.origine ?? undefined,
-  }));
+  return filterPatrimoineTimelineForClient(
+    events.map((event) => ({
+      id: event.id,
+      kind: event.kind as PatrimoineTimelineEvent["kind"],
+      date: event.date,
+      label: event.label,
+      detail: event.detail ?? undefined,
+      type_produit: event.typeProduit ?? undefined,
+      origine: event.origine ?? undefined,
+    }))
+  );
 }
 
 function formatSyncLabel(unix?: number): string | null {
@@ -63,6 +85,7 @@ function formatSyncLabel(unix?: number): string | null {
 }
 
 export function PortalApp() {
+  const { viewport, setViewport } = useClientPreviewViewport();
   const [contactId, setContactId] = useState<number | null>(readContactIdFromUrl);
   const [inputId, setInputId] = useState(contactId?.toString() ?? "");
   const [payload, setPayload] = useState<EspaceClientSyncPayload | null>(null);
@@ -116,6 +139,14 @@ export function PortalApp() {
     [payload]
   );
 
+  const partenaireById = useMemo(() => {
+    const map = new Map<number, Partenaire>();
+    for (const line of payload?.partenaires ?? []) {
+      map.set(line.id, toPartenaire(line));
+    }
+    return map;
+  }, [payload]);
+
   const perimetre = useMemo(
     () => buildPerimetrePatrimoine(visible),
     [visible]
@@ -135,49 +166,33 @@ export function PortalApp() {
 
   if (!contact || !payload) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-4 px-6 py-10">
-        <div>
-          <p className="text-sm font-medium text-zinc-100">Espace client</p>
-          <p className="mt-1 text-xs text-zinc-400">
-            Mode développement — saisissez l&apos;identifiant contact synchronisé
-            depuis le CRM.
-          </p>
-        </div>
-        <label className="space-y-1.5 text-xs">
-          <span className="text-zinc-400">ID contact</span>
-          <input
-            type="number"
-            min={1}
-            value={inputId}
-            onChange={(e) => setInputId(e.target.value)}
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white"
-            placeholder="ex. 42"
-          />
-        </label>
-        <button
-          type="button"
-          disabled={loading || !inputId.trim()}
-          onClick={() => setContactId(Number(inputId))}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {loading ? "Chargement…" : "Afficher mon patrimoine"}
-        </button>
-        {error ? <p className="text-sm text-amber-400">{error}</p> : null}
-      </main>
+      <PortalDevGate
+        inputId={inputId}
+        loading={loading}
+        error={error}
+        onInputChange={setInputId}
+        onSubmit={() => setContactId(Number(inputId))}
+      />
     );
   }
 
   return (
-    <main className="flex min-h-screen justify-center bg-black py-6">
+    <main className={`${CP.root} flex min-h-[100dvh] w-full flex-col items-center`}>
+      <ClientPreviewViewportToggle
+        viewport={viewport}
+        onChange={setViewport}
+        className="w-full max-w-3xl shrink-0 pt-4 pb-1"
+      />
       <ClientPreviewView
         contact={contact}
         visible={visible}
-        partenaireById={new Map()}
+        partenaireById={partenaireById}
         perimetre={perimetre}
         categorieData={categorieData}
         disponibiliteData={disponibiliteData}
         timeline={timeline}
-        viewport="mobile"
+        viewport={viewport}
+        showDeviceFrame={false}
         emptyState={visible.length === 0 ? "empty" : null}
         timelineLoading={loading}
         lastSyncLabel={formatSyncLabel(syncedAt ?? undefined)}

@@ -28,13 +28,29 @@ function MobileStatusBar() {
 export interface ClientPreviewDeviceFrameProps {
   children: ReactNode;
   viewport: ClientPreviewViewport;
+  /** Cadre simulateur (conseiller). Désactivé sur le portail client réel. */
+  framed?: boolean;
 }
 
 export function ClientPreviewDeviceFrame({
   children,
   viewport,
+  framed = true,
 }: ClientPreviewDeviceFrameProps) {
   const isMobile = viewport === "mobile";
+
+  if (!framed) {
+    return (
+      <div
+        className={cn(
+          "relative w-full overflow-x-hidden",
+          isMobile ? "max-w-[430px]" : "max-w-3xl"
+        )}
+      >
+        <div className="min-h-[100dvh] bg-[var(--cp-bg)]">{children}</div>
+      </div>
+    );
+  }
 
   return (
     <div

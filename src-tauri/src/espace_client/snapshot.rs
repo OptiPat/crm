@@ -6,7 +6,8 @@ use crate::database::espace_client::ESPACE_STATUT_ACTIF;
 
 use super::sync_payload::{
     EspaceClientAccesSnapshot, EspaceClientContactSnapshot, EspaceClientInvestissementLine,
-    EspaceClientSyncPayload, EspaceClientTimelineEvent, ESPACE_SYNC_SCHEMA_VERSION,
+    EspaceClientPartenaireLine, EspaceClientSyncPayload, EspaceClientTimelineEvent,
+    ESPACE_SYNC_SCHEMA_VERSION,
 };
 use super::visibilite::{
     FoyerMemberRef, PatrimoineInvestissement, PatrimoineViewer, is_investissement_visible_to_viewer,
@@ -80,6 +81,8 @@ fn build_espace_client_snapshot_with_sequence(
         .map(map_investissement_line)
         .collect::<Vec<_>>();
 
+    let partenaires = load_partenaires_for_investissements(db, &visible)?;
+
     let alertes = db
         .get_alertes_non_traitees()
         .map_err(|e| e.to_string())?
@@ -106,8 +109,35 @@ fn build_espace_client_snapshot_with_sequence(
             email_utilise: acces.email_utilise,
         },
         investissements,
+        partenaires,
         timeline,
     })
+}
+
+fn load_partenaires_for_investissements(
+    db: &Database,
+    investissements: &[Investissement],
+) -> Result<Vec<EspaceClientPartenaireLine>, String> {
+    let mut ids: Vec<i64> = investissements
+        .iter()
+        .filter_map(|inv| inv.partenaire_id)
+        .collect();
+    ids.sort_unstable();
+    ids.dedup();
+
+    let mut partenaires = Vec::with_capacity(ids.len());
+    for id in ids {
+        let Ok(partner) = db.get_partenaire_by_id(id) else {
+            // Partenaire supprimé ou id orphelin : la sync patrimoine continue sans lien extranet.
+            continue;
+        };
+        partenaires.push(EspaceClientPartenaireLine {
+            id: partner.id,
+            raison_sociale: partner.raison_sociale,
+            url_extranet: partner.url_extranet,
+        });
+    }
+    Ok(partenaires)
 }
 
 fn load_foyer_members(db: &Database, contact: &Contact) -> Result<Vec<FoyerMemberRef>, String> {
@@ -207,13 +237,6 @@ fn build_timeline(
             "Fin de démembrement",
         );
         push_inv_date(&mut events, inv, inv.date_fin_pret, "fin_pret", "Fin de prêt");
-        push_inv_date(
-            &mut events,
-            inv,
-            inv.date_prochain_arbitrage,
-            "prochain_arbitrage",
-            "Prochain arbitrage",
-        );
     }
 
     for alerte in alertes {
@@ -308,5 +331,98 @@ mod tests {
             .unwrap();
         let payload = build_espace_client_snapshot(&db, contact_id).unwrap();
         assert_eq!(payload.acces.statut, ESPACE_STATUT_ACTIF);
+    }
+
+    #[test]
+    fn timeline_excludes_prochain_arbitrage_from_client_sync() {
+        use crate::database::models::Investissement;
+
+        let inv = Investissement {
+            id: 1,
+            contact_id: Some(1),
+            foyer_id: None,
+            type_produit: "PER".into(),
+            partenaire_id: None,
+            nom_produit: "PER".into(),
+            numero_contrat: None,
+            url_contrat: None,
+            montant_initial: None,
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            prevoyance_perso: false,
+            prevoyance_pro: false,
+            prevoyance_versement_mensuel: None,
+            versement_programme: false,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: false,
+            notes: None,
+            origine: "MON_CONSEIL".into(),
+            statut: "ACTIF".into(),
+            date_cloture: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: Some(1_700_000_000),
+            encours_actuel: None,
+            encours_date: None,
+            derniere_maj_client: None,
+            montant_investi_total: None,
+            stellium_versements_nets_centimes: None,
+            stellium_perf_euro_centimes: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        let events = build_timeline(&[inv], &[], &[]);
+        assert!(!events.iter().any(|e| e.kind == "prochain_arbitrage"));
+    }
+
+    #[test]
+    fn load_partenaires_skips_orphan_partenaire_ids() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let inv = Investissement {
+            id: 1,
+            contact_id: Some(1),
+            foyer_id: None,
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: Some(99_999),
+            nom_produit: "Contrat".into(),
+            numero_contrat: None,
+            url_contrat: None,
+            montant_initial: None,
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            prevoyance_perso: false,
+            prevoyance_pro: false,
+            prevoyance_versement_mensuel: None,
+            versement_programme: false,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: false,
+            notes: None,
+            origine: "MON_CONSEIL".into(),
+            statut: "ACTIF".into(),
+            date_cloture: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
+            encours_actuel: None,
+            encours_date: None,
+            derniere_maj_client: None,
+            montant_investi_total: None,
+            stellium_versements_nets_centimes: None,
+            stellium_perf_euro_centimes: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        let partenaires = load_partenaires_for_investissements(&db, &[inv]).unwrap();
+        assert!(partenaires.is_empty());
     }
 }

@@ -116,7 +116,6 @@ pub fn build_espace_client_snapshot_cmd(
 }
 
 #[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct PushEspaceClientContactResult {
     pub sequence: i64,
     pub investissement_count: usize,

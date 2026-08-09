@@ -110,3 +110,14 @@ export function buildPatrimoineTimeline(
 
   return retained.sort((a, b) => a.date - b.date);
 }
+
+/** Échéances réservées au conseiller — jamais affichées côté client. */
+const CLIENT_HIDDEN_TIMELINE_KINDS = new Set<PatrimoineTimelineKind>([
+  "prochain_arbitrage",
+]);
+
+export function filterPatrimoineTimelineForClient(
+  events: PatrimoineTimelineEvent[]
+): PatrimoineTimelineEvent[] {
+  return events.filter((event) => !CLIENT_HIDDEN_TIMELINE_KINDS.has(event.kind));
+}

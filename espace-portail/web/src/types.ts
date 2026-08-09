@@ -1,3 +1,9 @@
+export interface EspaceClientPartenaireLine {
+  id: number;
+  raisonSociale: string;
+  urlExtranet?: string | null;
+}
+
 export interface EspaceClientSyncPayload {
   schemaVersion: number;
   sequence: number;
@@ -12,6 +18,7 @@ export interface EspaceClientSyncPayload {
     emailUtilise?: string | null;
   };
   investissements: EspaceClientInvestissementLine[];
+  partenaires?: EspaceClientPartenaireLine[];
   timeline: EspaceClientTimelineEvent[];
 }
 

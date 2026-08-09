@@ -11,7 +11,6 @@ pub const PORTAL_URL_SETTING_KEY: &str = "espace_client_portal_url";
 pub const SYNC_SECRET_SETTING_KEY: &str = "espace_client_sync_secret_enc";
 
 #[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct EspaceClientSyncConfig {
     pub portal_url: Option<String>,
     pub has_sync_secret: bool,

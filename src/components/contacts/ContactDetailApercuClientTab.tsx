@@ -14,7 +14,10 @@ import {
   aggregateByDisponibilite,
 } from "@/lib/patrimoine/patrimoine-charts";
 import { buildPerimetrePatrimoine } from "@/lib/patrimoine/perimetre";
-import { buildPatrimoineTimeline } from "@/lib/patrimoine/timeline";
+import {
+  buildPatrimoineTimeline,
+  filterPatrimoineTimelineForClient,
+} from "@/lib/patrimoine/timeline";
 import { getLatestValorisationLabel } from "@/components/contacts/client-preview/client-preview-format";
 import { ContactEspaceAccesPanel } from "@/components/espace-client/ContactEspaceAccesPanel";
 import {
@@ -154,7 +157,10 @@ export function ContactDetailApercuClientTab({
   );
 
   const timeline = useMemo(
-    () => buildPatrimoineTimeline(visible, alertes, taches),
+    () =>
+      filterPatrimoineTimelineForClient(
+        buildPatrimoineTimeline(visible, alertes, taches)
+      ),
     [visible, alertes, taches]
   );
 

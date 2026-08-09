@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, ShieldCheck, ShieldOff, Upload } from "lucide-react";
+import { Loader2, ExternalLink, ShieldCheck, ShieldOff, Upload } from "lucide-react";
 import { toast } from "sonner";
 import type { Contact } from "@/lib/api/tauri-contacts";
+import { openExternalUrl } from "@/lib/api/tauri-system";
 import {
   activateEspaceAcces,
   getEspaceAcces,
@@ -172,6 +173,20 @@ export function ContactEspaceAccesPanel({
     }
   };
 
+  const handleOpenPortal = async () => {
+    const base = portalUrl.trim().replace(/\/$/, "");
+    if (!base) {
+      toast.error("Enregistrez d'abord l'URL du portail");
+      return;
+    }
+    if (!contact.id) return;
+    try {
+      await openExternalUrl(`${base}/?contact=${contact.id}`);
+    } catch {
+      toast.error("Impossible d'ouvrir le navigateur");
+    }
+  };
+
   return (
     <div className="w-full max-w-3xl rounded-lg border border-border bg-card px-4 py-3 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -189,6 +204,16 @@ export function ContactEspaceAccesPanel({
             Chaque personne a son propre accès. La première connexion se fera en
             rendez-vous (code oral), pas par email automatique.
           </p>
+          {contact.id != null ? (
+            <p className="text-xs text-muted-foreground">
+              Identifiant technique :{" "}
+              <span className="font-mono text-foreground">{contact.id}</span>
+              <span className="text-muted-foreground/80">
+                {" "}
+                (tests portail en développement)
+              </span>
+            </p>
+          ) : null}
           {acces?.active_at ? (
             <p className="text-xs text-muted-foreground">
               Activé le{" "}
@@ -324,6 +349,19 @@ export function ContactEspaceAccesPanel({
                 <Upload className="mr-1.5 h-3.5 w-3.5" />
               )}
               Synchroniser vers le portail
+            </Button>
+          ) : null}
+          {isActif && portalUrl.trim() ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              disabled={loading || saving || syncing || !contact.id}
+              onClick={() => void handleOpenPortal()}
+            >
+              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+              Ouvrir le portail
             </Button>
           ) : null}
         </div>

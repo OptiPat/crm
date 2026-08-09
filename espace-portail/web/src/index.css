@@ -1,2 +1,23 @@
+@import "@fontsource-variable/plus-jakarta-sans";
 @import "tailwindcss";
+
+/* Classes utilitaires des composants réutilisés depuis src/ (hors scan par défaut). */
+@source "../../../src/components/contacts/client-preview";
+@source "./";
+
 @import "../../../src/components/contacts/client-preview/client-preview.css";
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", ui-sans-serif,
+    system-ui, sans-serif;
+  background: var(--cp-bg, #141414);
+  color: var(--cp-ink, #ececec);
+  -webkit-font-smoothing: antialiased;
+}
