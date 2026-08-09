@@ -36,6 +36,8 @@ pub struct EspaceClientContactSnapshot {
 pub struct EspaceClientAccesSnapshot {
     pub statut: String,
     pub email_utilise: Option<String>,
+    pub activation_code_hash: Option<String>,
+    pub premiere_connexion_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]

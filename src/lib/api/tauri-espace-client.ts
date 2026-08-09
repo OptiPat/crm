@@ -8,8 +8,19 @@ export interface EspaceAcces {
   active_at?: number | null;
   revoked_at?: number | null;
   derniere_connexion?: number | null;
+  premiere_connexion_at?: number | null;
   created_at: number;
   updated_at: number;
+}
+
+export interface EspaceConnexionLogEntry {
+  id: number;
+  contact_id: number;
+  event: string;
+  detail?: string | null;
+  ip?: string | null;
+  user_agent?: string | null;
+  created_at: number;
 }
 
 export interface EspaceSyncSummary {
@@ -34,16 +45,22 @@ export async function getEspaceAcces(
   return invoke<EspaceAcces | null>("get_espace_acces_cmd", { contactId });
 }
 
+export interface EspaceActivationResult {
+  acces: EspaceAcces;
+  /** Code a dicter au client : affiche une seule fois, jamais reconsultable. */
+  activationCode: string;
+}
+
 export async function activateEspaceAcces(
   contactId: number,
   email: string
-): Promise<EspaceAcces> {
-  const acces = await invoke<EspaceAcces>("activate_espace_acces_cmd", {
-    contactId,
-    email,
-  });
+): Promise<EspaceActivationResult> {
+  const result = await invoke<EspaceActivationResult>(
+    "activate_espace_acces_cmd",
+    { contactId, email }
+  );
   notifyEspaceClientChanged();
-  return acces;
+  return result;
 }
 
 export async function revokeEspaceAcces(
@@ -54,6 +71,14 @@ export async function revokeEspaceAcces(
   });
   notifyEspaceClientChanged();
   return acces;
+}
+
+export async function getEspaceConnexionLog(
+  contactId: number
+): Promise<EspaceConnexionLogEntry[]> {
+  return invoke<EspaceConnexionLogEntry[]>("get_espace_connexion_log_cmd", {
+    contactId,
+  });
 }
 
 export async function getEspaceSyncSummary(): Promise<EspaceSyncSummary> {

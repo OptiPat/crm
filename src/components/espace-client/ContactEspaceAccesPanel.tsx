@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, ExternalLink, ShieldCheck, ShieldOff, Upload } from "lucide-react";
+import {
+  Loader2,
+  ExternalLink,
+  RefreshCw,
+  ShieldCheck,
+  ShieldOff,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import { openExternalUrl } from "@/lib/api/tauri-system";
@@ -7,15 +14,18 @@ import {
   activateEspaceAcces,
   getEspaceAcces,
   getEspaceClientSyncConfig,
+  getEspaceConnexionLog,
   pushEspaceClientContact,
   revokeEspaceAcces,
   saveEspaceClientSyncConfig,
   type EspaceAcces,
+  type EspaceConnexionLogEntry,
 } from "@/lib/api/tauri-espace-client";
 import { ESPACE_CLIENT_CHANGED_EVENT } from "@/lib/espace-client/espace-client-events";
 import {
   ESPACE_ACCES_STATUT,
   formatEspaceAccesStatut,
+  formatEspaceConnexionEvent,
   formatEspaceTimestamp,
 } from "@/lib/espace-client/espace-client-format";
 import {
@@ -59,11 +69,29 @@ export function ContactEspaceAccesPanel({
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState(contact.email?.trim() ?? "");
   const [saving, setSaving] = useState(false);
+  /** Code d'activation a dicter au client, affiche une seule fois. */
+  const [activationCode, setActivationCode] = useState<string | null>(null);
   const [revokeOpen, setRevokeOpen] = useState(false);
   const [portalUrl, setPortalUrl] = useState("");
   const [syncSecret, setSyncSecret] = useState("");
   const [hasSyncSecret, setHasSyncSecret] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [connexionLog, setConnexionLog] = useState<EspaceConnexionLogEntry[]>(
+    []
+  );
+  const [logLoading, setLogLoading] = useState(false);
+
+  const loadConnexionLog = useCallback(async (contactId: number) => {
+    setLogLoading(true);
+    try {
+      const rows = await getEspaceConnexionLog(contactId);
+      setConnexionLog(rows);
+    } catch {
+      setConnexionLog([]);
+    } finally {
+      setLogLoading(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     if (!contact.id) return;
@@ -81,13 +109,18 @@ export function ContactEspaceAccesPanel({
       } else if (contact.email?.trim()) {
         setEmail(contact.email.trim());
       }
+      if (row?.statut === ESPACE_ACCES_STATUT.ACTIF) {
+        void loadConnexionLog(contact.id);
+      } else {
+        setConnexionLog([]);
+      }
     } catch {
       setAcces(null);
       toast.error("Impossible de charger l'accès espace client");
     } finally {
       setLoading(false);
     }
-  }, [contact.email, contact.id]);
+  }, [contact.email, contact.id, loadConnexionLog]);
 
   useEffect(() => {
     void load();
@@ -113,9 +146,12 @@ export function ContactEspaceAccesPanel({
     if (!contact.id) return;
     setSaving(true);
     try {
-      const next = await activateEspaceAcces(contact.id, email);
+      const { acces: next, activationCode } = await activateEspaceAcces(
+        contact.id,
+        email
+      );
       setAcces(next);
-      toast.success("Accès espace client activé");
+      setActivationCode(activationCode);
       onChanged?.();
     } catch (error) {
       toast.error(invokeErrorMessage(error) || "Activation impossible");
@@ -131,6 +167,7 @@ export function ContactEspaceAccesPanel({
       const next = await revokeEspaceAcces(contact.id);
       setAcces(next);
       setRevokeOpen(false);
+      setConnexionLog([]);
       toast.success("Accès espace client révoqué");
       onChanged?.();
     } catch (error) {
@@ -166,6 +203,7 @@ export function ContactEspaceAccesPanel({
         `Synchronisé (séq. ${result.sequence}) — ${result.investissement_count} placement(s), ${result.timeline_count} événement(s)`
       );
       onChanged?.();
+      void loadConnexionLog(contact.id);
     } catch (error) {
       toast.error(invokeErrorMessage(error) || "Synchronisation impossible");
     } finally {
@@ -179,9 +217,8 @@ export function ContactEspaceAccesPanel({
       toast.error("Enregistrez d'abord l'URL du portail");
       return;
     }
-    if (!contact.id) return;
     try {
-      await openExternalUrl(`${base}/?contact=${contact.id}`);
+      await openExternalUrl(base);
     } catch {
       toast.error("Impossible d'ouvrir le navigateur");
     }
@@ -201,19 +238,9 @@ export function ContactEspaceAccesPanel({
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground">
-            Chaque personne a son propre accès. La première connexion se fera en
-            rendez-vous (code oral), pas par email automatique.
+            La première connexion se fait avec un code que vous lui dictez.
+            Ensuite, le portail lui envoie un code par email à chaque connexion.
           </p>
-          {contact.id != null ? (
-            <p className="text-xs text-muted-foreground">
-              Identifiant technique :{" "}
-              <span className="font-mono text-foreground">{contact.id}</span>
-              <span className="text-muted-foreground/80">
-                {" "}
-                (tests portail en développement)
-              </span>
-            </p>
-          ) : null}
           {acces?.active_at ? (
             <p className="text-xs text-muted-foreground">
               Activé le{" "}
@@ -221,6 +248,32 @@ export function ContactEspaceAccesPanel({
                 {formatEspaceTimestamp(acces.active_at)}
               </span>
             </p>
+          ) : null}
+          {acces?.premiere_connexion_at ? (
+            <p className="text-xs text-muted-foreground">
+              Première connexion :{" "}
+              <span className="text-foreground">
+                {formatEspaceTimestamp(acces.premiere_connexion_at)}
+              </span>
+            </p>
+          ) : isActif ? (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              En attente de la première connexion client
+            </p>
+          ) : null}
+          {activationCode ? (
+            <div className="mt-2 rounded-lg border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/40">
+              <p className="text-xs text-emerald-900 dark:text-emerald-100">
+                Code de première connexion à dicter au client :
+              </p>
+              <p className="mt-1 font-mono text-2xl tracking-[0.4em] text-emerald-950 dark:text-emerald-50">
+                {activationCode}
+              </p>
+              <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-200">
+                Notez-le maintenant : il ne sera plus affiché. Sans lui, le client
+                ne peut pas ouvrir son espace, même avec son email.
+              </p>
+            </div>
           ) : null}
           {acces?.derniere_connexion ? (
             <p className="text-xs text-muted-foreground">
@@ -357,7 +410,6 @@ export function ContactEspaceAccesPanel({
               variant="outline"
               size="sm"
               className="h-9"
-              disabled={loading || saving || syncing || !contact.id}
               onClick={() => void handleOpenPortal()}
             >
               <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
@@ -367,8 +419,55 @@ export function ContactEspaceAccesPanel({
         </div>
       </div>
 
+      {isActif ? (
+        <div className="mt-4 space-y-2 border-t border-border/60 pt-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium text-foreground">
+              Journal des connexions
+            </p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              disabled={logLoading || !contact.id}
+              onClick={() => contact.id && void loadConnexionLog(contact.id)}
+            >
+              {logLoading ? (
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1 h-3 w-3" />
+              )}
+              Actualiser
+            </Button>
+          </div>
+          {connexionLog.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Aucune connexion enregistrée pour l'instant.
+            </p>
+          ) : (
+            <ul className="max-h-40 space-y-1 overflow-y-auto text-xs">
+              {connexionLog.map((entry) => (
+                <li
+                  key={`${entry.id}-${entry.created_at}`}
+                  className="flex flex-wrap items-baseline gap-x-2 text-muted-foreground"
+                >
+                  <span className="text-foreground">
+                    {formatEspaceConnexionEvent(entry.event)}
+                  </span>
+                  <span>{formatEspaceTimestamp(entry.created_at)}</span>
+                  {entry.ip ? (
+                    <span className="font-mono text-[10px]">{entry.ip}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+
       <AlertDialog open={revokeOpen} onOpenChange={setRevokeOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent stacked>
           <AlertDialogHeader>
             <AlertDialogTitle>Révoquer l'accès espace client ?</AlertDialogTitle>
             <AlertDialogDescription>

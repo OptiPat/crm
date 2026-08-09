@@ -16,6 +16,7 @@ import {
   type PatrimoineTimelineEvent,
 } from "@/lib/patrimoine/timeline";
 import { PortalDevGate } from "./PortalDevGate";
+import { PortalLogin } from "./PortalLogin";
 import type {
   EspaceClientInvestissementLine,
   EspaceClientPartenaireLine,
@@ -23,11 +24,31 @@ import type {
   PatrimoineApiResponse,
 } from "./types";
 
+interface AuthMeResponse {
+  contactId: number;
+  email: string;
+  prenom: string;
+  nom: string;
+}
+
+interface PortalConfigResponse {
+  devMode: boolean;
+}
+
+type PortalScreen = "loading" | "login" | "dev" | "no-sync" | "app";
+
 function readContactIdFromUrl(): number | null {
   const raw = new URLSearchParams(window.location.search).get("contact");
   if (!raw) return null;
   const id = Number(raw);
   return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function clearContactIdFromUrl(): void {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("contact")) return;
+  url.searchParams.delete("contact");
+  window.history.replaceState({}, "", url);
 }
 
 function toInvestissement(line: EspaceClientInvestissementLine): Investissement {
@@ -86,43 +107,203 @@ function formatSyncLabel(unix?: number): string | null {
 
 export function PortalApp() {
   const { viewport, setViewport } = useClientPreviewViewport();
-  const [contactId, setContactId] = useState<number | null>(readContactIdFromUrl);
-  const [inputId, setInputId] = useState(contactId?.toString() ?? "");
+  const [screen, setScreen] = useState<PortalScreen>("loading");
+  const [devMode, setDevMode] = useState(false);
+  const [devInputId, setDevInputId] = useState(
+    readContactIdFromUrl()?.toString() ?? ""
+  );
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginCode, setLoginCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [loginInfo, setLoginInfo] = useState<string | null>(null);
   const [payload, setPayload] = useState<EspaceClientSyncPayload | null>(null);
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (id: number) => {
+  const applyPatrimoineResponse = useCallback((body: PatrimoineApiResponse) => {
+    setPayload(body.payload);
+    setSyncedAt(body.syncedAt);
+    setScreen("app");
+    setError(null);
+  }, []);
+
+  const loadPatrimoineMe = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/v1/patrimoine/${id}`);
+      const response = await fetch("/api/v1/patrimoine/me", {
+        credentials: "include",
+      });
       const body = (await response.json()) as PatrimoineApiResponse & {
         error?: string;
       };
+      if (response.status === 404) {
+        setPayload(null);
+        setSyncedAt(null);
+        setScreen("no-sync");
+        setError(
+          body.error ??
+            "Votre espace est prêt mais le patrimoine n'a pas encore été synchronisé par votre conseiller."
+        );
+        return;
+      }
       if (!response.ok) {
         throw new Error(body.error ?? "Patrimoine indisponible");
       }
-      setPayload(body.payload);
-      setSyncedAt(body.syncedAt);
-      const url = new URL(window.location.href);
-      url.searchParams.set("contact", String(id));
-      window.history.replaceState({}, "", url);
+      applyPatrimoineResponse(body);
     } catch (err) {
       setPayload(null);
       setSyncedAt(null);
       setError(err instanceof Error ? err.message : "Erreur de chargement");
+      setScreen("no-sync");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyPatrimoineResponse]);
+
+  const loadPatrimoineDev = useCallback(
+    async (id: number) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/v1/patrimoine/${id}`);
+        const body = (await response.json()) as PatrimoineApiResponse & {
+          error?: string;
+        };
+        if (!response.ok) {
+          throw new Error(body.error ?? "Patrimoine indisponible");
+        }
+        applyPatrimoineResponse(body);
+        const url = new URL(window.location.href);
+        url.searchParams.set("contact", String(id));
+        window.history.replaceState({}, "", url);
+      } catch (err) {
+        setPayload(null);
+        setSyncedAt(null);
+        setError(err instanceof Error ? err.message : "Erreur de chargement");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [applyPatrimoineResponse]
+  );
+
+  const bootstrap = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const configResponse = await fetch("/api/v1/portal-config");
+      const config = (await configResponse.json()) as PortalConfigResponse;
+      setDevMode(Boolean(config.devMode));
+
+      const meResponse = await fetch("/api/v1/auth/me", {
+        credentials: "include",
+      });
+      if (meResponse.ok) {
+        const me = (await meResponse.json()) as AuthMeResponse;
+        setLoginEmail(me.email);
+        await loadPatrimoineMe();
+        return;
+      }
+
+      const devContactId = readContactIdFromUrl();
+      if (devContactId != null) {
+        if (!config.devMode) {
+          clearContactIdFromUrl();
+          setScreen("login");
+          return;
+        }
+        const devResponse = await fetch(`/api/v1/patrimoine/${devContactId}`);
+        if (devResponse.ok) {
+          const body = (await devResponse.json()) as PatrimoineApiResponse;
+          applyPatrimoineResponse(body);
+          return;
+        }
+        if (devResponse.status === 404) {
+          setScreen("dev");
+          return;
+        }
+      }
+
+      setScreen("login");
+    } catch {
+      setScreen("login");
+    } finally {
+      setLoading(false);
+    }
+  }, [applyPatrimoineResponse, loadPatrimoineMe]);
 
   useEffect(() => {
-    if (contactId != null) {
-      void load(contactId);
+    void bootstrap();
+  }, [bootstrap]);
+
+  const handleRequestCode = async () => {
+    setLoading(true);
+    setError(null);
+    setLoginInfo(null);
+    try {
+      const response = await fetch("/api/v1/auth/request-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginEmail.trim() }),
+      });
+      const body = (await response.json()) as { error?: string; message?: string };
+      if (!response.ok) {
+        throw new Error(body.error ?? "Envoi impossible");
+      }
+      setCodeSent(true);
+      setLoginCode("");
+      setLoginInfo(
+        body.message ??
+          "Consultez votre boîte mail (vérifiez les spams). Le code arrive en quelques instants."
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Envoi impossible");
+    } finally {
+      setLoading(false);
     }
-  }, [contactId, load]);
+  };
+
+  const handleLogin = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/v1/auth/login", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: loginEmail.trim(),
+          code: loginCode.trim(),
+        }),
+      });
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(body.error ?? "Connexion impossible");
+      }
+      setLoginCode("");
+      await loadPatrimoineMe();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Connexion impossible");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await fetch("/api/v1/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+    setPayload(null);
+    setSyncedAt(null);
+    setLoginCode("");
+    setCodeSent(false);
+    setLoginInfo(null);
+    setScreen("login");
+    setError(null);
+  };
 
   const contact = useMemo((): Contact | null => {
     if (!payload) return null;
@@ -164,20 +345,109 @@ export function PortalApp() {
     [payload]
   );
 
-  if (!contact || !payload) {
+  if (screen === "loading") {
     return (
-      <PortalDevGate
-        inputId={inputId}
+      <main
+        className={`${CP.root} flex min-h-[100dvh] items-center justify-center text-sm text-[var(--cp-ink-muted)]`}
+      >
+        Chargement…
+      </main>
+    );
+  }
+
+  if (screen === "login") {
+    return (
+      <PortalLogin
+        email={loginEmail}
+        code={loginCode}
+        codeSent={codeSent}
         loading={loading}
         error={error}
-        onInputChange={setInputId}
-        onSubmit={() => setContactId(Number(inputId))}
+        info={loginInfo}
+        onEmailChange={setLoginEmail}
+        onCodeChange={setLoginCode}
+        onRequestCode={() => void handleRequestCode()}
+        onSubmit={() => void handleLogin()}
+      />
+    );
+  }
+
+  if (screen === "dev" && devMode) {
+    return (
+      <PortalDevGate
+        inputId={devInputId}
+        loading={loading}
+        error={error}
+        onInputChange={setDevInputId}
+        onSubmit={() => void loadPatrimoineDev(Number(devInputId))}
+      />
+    );
+  }
+
+  if (screen === "no-sync") {
+    return (
+      <main
+        className={`${CP.root} flex min-h-[100dvh] flex-col items-center justify-center px-6 py-10`}
+      >
+        <div className="w-full max-w-sm space-y-4 text-center">
+          <p className="cp-kicker">Patrimoine CRM</p>
+          <h1 className="text-xl font-medium tracking-tight text-[var(--cp-ink)]">
+            Espace client
+          </h1>
+          <p className="cp-caption text-[var(--cp-ink-muted)]">
+            {error ??
+              "Votre conseiller n'a pas encore synchronisé votre patrimoine."}
+          </p>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              className="rounded-xl bg-[var(--cp-ink)] px-4 py-2.5 text-sm font-medium text-[var(--cp-bg)]"
+              disabled={loading}
+              onClick={() => void loadPatrimoineMe()}
+            >
+              {loading ? "Vérification…" : "Réessayer"}
+            </button>
+            <button
+              type="button"
+              className="rounded-xl border border-[var(--cp-line)] px-4 py-2.5 text-sm text-[var(--cp-ink-muted)]"
+              onClick={() => void handleLogout()}
+            >
+              Se déconnecter
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (!contact || !payload) {
+    return (
+      <PortalLogin
+        email={loginEmail}
+        code={loginCode}
+        codeSent={codeSent}
+        loading={loading}
+        error={error ?? "Session expirée"}
+        info={loginInfo}
+        onEmailChange={setLoginEmail}
+        onCodeChange={setLoginCode}
+        onRequestCode={() => void handleRequestCode()}
+        onSubmit={() => void handleLogin()}
       />
     );
   }
 
   return (
     <main className={`${CP.root} flex min-h-[100dvh] w-full flex-col items-center`}>
+      <div className="flex w-full max-w-3xl items-center justify-end px-4 pt-4">
+        <button
+          type="button"
+          onClick={() => void handleLogout()}
+          className="text-xs text-[var(--cp-ink-muted)] underline-offset-2 hover:text-[var(--cp-ink)] hover:underline"
+        >
+          Déconnexion
+        </button>
+      </div>
       <ClientPreviewViewportToggle
         viewport={viewport}
         onChange={setViewport}

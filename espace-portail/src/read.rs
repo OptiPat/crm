@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Json,
 };
@@ -26,7 +26,18 @@ pub struct PatrimoineResponse {
     pub payload: serde_json::Value,
 }
 
-pub async fn get_patrimoine(
+pub async fn get_patrimoine_me(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let contact_id = match crate::client_auth::resolve_session(&state, &headers) {
+        Ok(id) => id,
+        Err(response) => return response,
+    };
+    get_patrimoine_for_contact(state, contact_id).await
+}
+
+pub async fn get_patrimoine_dev(
     State(state): State<AppState>,
     Path(contact_id): Path<i64>,
 ) -> impl IntoResponse {
@@ -37,21 +48,24 @@ pub async fn get_patrimoine(
         )
             .into_response();
     }
+    get_patrimoine_for_contact(state, contact_id).await
+}
 
+async fn get_patrimoine_for_contact(state: AppState, contact_id: i64) -> axum::response::Response {
     match state.db.get_contact_snapshot(contact_id) {
         Ok(Some(row)) => {
             let mut payload = row.payload;
             strip_client_hidden_timeline_events(&mut payload);
             (
-            StatusCode::OK,
-            Json(PatrimoineResponse {
-                contact_id: row.contact_id,
-                sequence: row.sequence,
-                synced_at: row.synced_at,
-                payload,
-            }),
-        )
-            .into_response()
+                StatusCode::OK,
+                Json(PatrimoineResponse {
+                    contact_id: row.contact_id,
+                    sequence: row.sequence,
+                    synced_at: row.synced_at,
+                    payload,
+                }),
+            )
+                .into_response()
         }
         Ok(None) => (
             StatusCode::NOT_FOUND,

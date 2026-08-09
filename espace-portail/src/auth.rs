@@ -5,6 +5,10 @@ type HmacSha256 = Hmac<Sha256>;
 
 pub const REPLAY_WINDOW_SECS: i64 = 300;
 
+pub fn hash_espace_otp(secret: &str, code: &str) -> String {
+    sign_espace_sync_body(secret, 0, code.trim().as_bytes())
+}
+
 pub fn verify_espace_sync_signature(
     secret: &str,
     timestamp: i64,

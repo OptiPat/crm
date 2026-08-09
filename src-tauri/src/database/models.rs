@@ -277,6 +277,7 @@ pub struct EspaceAcces {
     pub active_at: Option<i64>,
     pub revoked_at: Option<i64>,
     pub derniere_connexion: Option<i64>,
+    pub premiere_connexion_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -286,6 +287,18 @@ pub struct EspaceAcces {
 pub struct EspaceSyncSummary {
     pub derniere_synchro_at: Option<i64>,
     pub dernier_statut: Option<String>,
+}
+
+/// Entrée du journal de connexion espace client (côté CRM).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EspaceConnexionLogEntry {
+    pub id: i64,
+    pub contact_id: i64,
+    pub event: String,
+    pub detail: Option<String>,
+    pub ip: Option<String>,
+    pub user_agent: Option<String>,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

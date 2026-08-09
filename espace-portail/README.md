@@ -18,19 +18,35 @@ npm ci   # ou dépendances déjà installées
 npm run build:espace-portail
 ```
 
-## Build + lancer
+## Lancer
+
+Première fois seulement : créer la configuration locale.
+
+```powershell
+cd D:\crm
+Copy-Item espace-portail\.env.example espace-portail\.env
+.\espace-portail\config-brevo.ps1   # optionnel : envoi réel des codes par email
+```
+
+Ensuite, à chaque test :
+
+```powershell
+cd D:\crm\espace-portail
+.\dev.ps1
+```
+
+`dev.ps1` lit `.env` et lance le binaire — aucune variable à poser à la main.
+Écoute sur `http://127.0.0.1:8787`.
+
+Sans clé Brevo, les codes de connexion s'affichent dans les logs du portail au
+lieu d'être envoyés par email : suffisant pour tester le parcours complet.
+
+Après modification de l'UI React :
 
 ```powershell
 cd D:\crm
 npm run build:espace-portail
-
-cd espace-portail
-$env:ESPACE_SYNC_SECRET = "dev-sync-secret-change-me"
-$env:ESPACE_PORTAL_DEV = "1"   # lecture patrimoine SANS authentification : dev local uniquement
-cargo run
 ```
-
-Écoute par défaut sur `http://127.0.0.1:8787`. Ouvrir `http://127.0.0.1:8787/?contact=ID` après une sync CRM.
 
 UI en dev live (proxy vers le portail) :
 
@@ -59,6 +75,36 @@ Puis **Synchroniser vers le portail** sur un contact avec accès **actif**.
 | `ESPACE_PORTAL_DB` | `espace-portail.db` (dans le répertoire courant) |
 | `ESPACE_PORTAL_STATIC` | `web/dist` |
 | `ESPACE_PORTAL_DEV` | `false` — mettre `1` expose `GET /api/v1/patrimoine/{id}` **sans auth client** |
+| `ESPACE_BREVO_API_KEY` | *(obligatoire hors dev)* — clé Brevo dédiée à l'envoi transactionnel |
+| `ESPACE_MAIL_FROM` | *(obligatoire hors dev)* — adresse d'expédition |
+| `ESPACE_MAIL_FROM_NAME` | `Votre conseiller` — nom affiché du cabinet |
+
+## Envoi des codes de connexion
+
+Le portail envoie **lui-même** les codes, au moment où le client les demande. Le CRM
+n'intervient pas : c'est une application de bureau, éteinte la nuit, et un client doit
+pouvoir se connecter un dimanche soir.
+
+Sans `ESPACE_BREVO_API_KEY` ni `ESPACE_MAIL_FROM`, le binaire **refuse de démarrer** hors
+mode dev — un portail incapable d'envoyer un code est un portail où personne ne peut entrer.
+En mode dev, le code s'affiche dans les logs à la place.
+
+Le code à six chiffres est valable 15 minutes, à usage unique, et n'est **jamais** stocké en
+clair : seule son empreinte va en base. L'email ne contient aucun lien : les antivirus de
+messagerie pré-ouvrent les URL et consommeraient un jeton à usage unique.
+
+La réponse à une demande de code est identique que l'adresse existe ou non, faute de quoi
+le portail révélerait quelles adresses possèdent un espace.
+
+## Durée des sessions
+
+| Réglage | Valeur | Ce que ça protège |
+|---------|--------|-------------------|
+| Inactivité | 30 min | Le téléphone laissé déverrouillé sur une table |
+| Appareil reconnu | 30 jours | Un téléphone perdu ou revendu cesse d'être autorisé |
+
+Au-delà, un nouveau code est demandé. Le conseiller peut couper toutes les sessions d'un
+client depuis le CRM en révoquant son accès.
 
 ## Mise en ligne — à ne pas rater
 
@@ -68,6 +114,8 @@ un reverse proxy (Caddy) termine le HTTPS et lui parle en local.
 - Garder `ESPACE_PORTAL_BIND` sur `127.0.0.1` — jamais `0.0.0.0` sans proxy devant.
 - Le CRM refuse une URL de portail en `http://` hors boucle locale : en production, l'URL est `https://`.
 - `ESPACE_SYNC_SECRET` doit être un secret long et aléatoire, différent de celui de développement.
+- `ESPACE_BREVO_API_KEY` : créer une clé **dédiée au portail**, distincte de celle du CRM, pour
+  pouvoir la révoquer sans couper la newsletter.
 - `ESPACE_PORTAL_DEV` est **désactivé par défaut**. Le binaire refuse de démarrer si ce mode est
   actif sur une adresse d'écoute non locale : la lecture patrimoine sans authentification ne peut
   pas se retrouver joignable par accident.

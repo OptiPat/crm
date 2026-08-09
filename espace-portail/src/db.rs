@@ -29,7 +29,7 @@ impl PortalDb {
 
     /// Un verrou empoisonné signale un panic passé, pas une base corrompue :
     /// la connexion reste exploitable.
-    fn conn(&self) -> MutexGuard<'_, Connection> {
+    pub(crate) fn conn(&self) -> MutexGuard<'_, Connection> {
         self.conn.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -40,9 +40,72 @@ impl PortalDb {
                 sequence INTEGER NOT NULL,
                 payload_json TEXT NOT NULL,
                 synced_at INTEGER NOT NULL DEFAULT (unixepoch())
-            );",
+            );
+            CREATE TABLE IF NOT EXISTS espace_acces (
+                contact_id INTEGER PRIMARY KEY,
+                statut TEXT NOT NULL,
+                email TEXT NOT NULL DEFAULT '',
+                activation_code_hash TEXT,
+                premiere_connexion_at INTEGER,
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+            );
+            CREATE TABLE IF NOT EXISTS espace_session (
+                token_hash TEXT PRIMARY KEY,
+                contact_id INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                last_seen_at INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch())
+            );
+            CREATE TABLE IF NOT EXISTS espace_login_code (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL,
+                code_hash TEXT NOT NULL,
+                expires_at INTEGER NOT NULL,
+                used_at INTEGER,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch())
+            );
+            CREATE TABLE IF NOT EXISTS espace_connexion_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL,
+                event TEXT NOT NULL,
+                detail TEXT,
+                ip TEXT,
+                user_agent TEXT,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch())
+            );
+            CREATE TABLE IF NOT EXISTS espace_login_guard (
+                email TEXT PRIMARY KEY,
+                failures INTEGER NOT NULL DEFAULT 0,
+                blocked_until INTEGER,
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+            );
+            ",
         )?;
+
+        // Le portail envoie lui-même les codes : plus de file d'attente, et
+        // surtout plus de code de connexion stocké en clair sur le serveur.
+        self.conn()
+            .execute_batch("DROP TABLE IF EXISTS espace_email_outbox;")?;
+
+        // Bases créées avant l'expiration d'inactivité.
+        if !self.has_column("espace_session", "last_seen_at")? {
+            self.conn().execute_batch(
+                "ALTER TABLE espace_session ADD COLUMN last_seen_at INTEGER NOT NULL DEFAULT 0;",
+            )?;
+        }
         Ok(())
+    }
+
+    fn has_column(&self, table: &str, column: &str) -> Result<bool> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(&format!("PRAGMA table_info(\"{table}\")"))?;
+        let mut rows = stmt.query([])?;
+        while let Some(row) = rows.next()? {
+            if row.get::<_, String>(1)? == column {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     pub fn upsert_contact_snapshot(
@@ -61,6 +124,28 @@ impl PortalDb {
              WHERE excluded.sequence >= contact_snapshot.sequence",
             params![contact_id, sequence, payload_json],
         )?;
+        if updated > 0 {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(payload_json) {
+                if let Some(acces) = value.get("acces") {
+                    let statut = acces
+                        .get("statut")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("inactif");
+                    let email = acces.get("emailUtilise").and_then(|v| v.as_str());
+                    let activation_code_hash =
+                        acces.get("activationCodeHash").and_then(|v| v.as_str());
+                    let premiere_connexion_at =
+                        acces.get("premiereConnexionAt").and_then(|v| v.as_i64());
+                    self.upsert_acces_from_sync(
+                        contact_id,
+                        statut,
+                        email,
+                        activation_code_hash,
+                        premiere_connexion_at,
+                    )?;
+                }
+            }
+        }
         Ok(updated > 0)
     }
 

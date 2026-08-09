@@ -62,6 +62,12 @@ Invoke-VerifyStep 'TypeScript (tsc --noEmit)' {
     if ($LASTEXITCODE -ne 0) { throw "tsc a detecte des erreurs TypeScript." }
 }
 
+Invoke-VerifyStep 'TypeScript portail (espace-portail/web)' {
+    # tsconfig separe : sans cette etape, l'UI du portail n'est jamais typee.
+    npx tsc --noEmit -p espace-portail/web/tsconfig.json
+    if ($LASTEXITCODE -ne 0) { throw "tsc a detecte des erreurs dans l'UI du portail." }
+}
+
 Invoke-VerifyStep 'ESLint (regles hooks)' {
     # --quiet : echoue seulement sur les erreurs (ex. rules-of-hooks),
     # les avertissements exhaustive-deps restent visibles via `npm run lint`.

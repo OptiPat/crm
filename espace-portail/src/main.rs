@@ -1,20 +1,28 @@
 mod auth;
+mod auth_store;
+mod client_auth;
 mod db;
+mod login_code;
+mod mailer;
 mod read;
 mod sync;
+mod sync_auth;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{
+    extract::State,
+    response::IntoResponse,
     routing::{get, post},
-    Router,
+    Json, Router,
 };
 use tower_http::services::{ServeDir, ServeFile};
 use tracing_subscriber::EnvFilter;
 
 use crate::db::PortalDb;
+use crate::mailer::{Mailer, MailerConfig};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -22,6 +30,10 @@ pub struct AppState {
     pub sync_secret: String,
     /// Mode développement : expose GET /api/v1/patrimoine/{id} sans auth client.
     pub dev_mode: bool,
+    pub cookie_secure: bool,
+    /// Envoi des codes de connexion. `None` = non configuré : acceptable en
+    /// développement, bloquant en production (voir `reject_unusable_mailer`).
+    pub mailer: Option<Mailer>,
 }
 
 fn static_dir() -> PathBuf {
@@ -30,8 +42,6 @@ fn static_dir() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("web/dist"))
 }
 
-/// Le mode développement expose la lecture patrimoine sans authentification
-/// client : il doit être demandé explicitement, jamais actif par défaut.
 fn parse_dev_mode(raw: Option<&str>) -> bool {
     matches!(
         raw.map(|v| v.trim().to_lowercase()).as_deref(),
@@ -39,8 +49,27 @@ fn parse_dev_mode(raw: Option<&str>) -> bool {
     )
 }
 
-/// Rend impossible la combinaison catastrophique « lecture sans auth » +
-/// « écoute sur une adresse joignable ». Un avertissement ne suffit pas.
+fn parse_cookie_secure(raw: Option<&str>, addr: &SocketAddr) -> bool {
+    if let Some(value) = raw {
+        return matches!(
+            value.trim().to_lowercase().as_str(),
+            "1" | "true" | "oui" | "yes"
+        );
+    }
+    !addr.ip().is_loopback()
+}
+
+/// Sans envoi configuré, aucun client ne peut jamais se connecter : autant le
+/// découvrir au démarrage plutôt qu'au premier appel d'un client bloqué.
+fn reject_unusable_mailer(mailer: &Option<Mailer>, dev_mode: bool) -> Result<(), String> {
+    if mailer.is_none() && !dev_mode {
+        return Err("ESPACE_BREVO_API_KEY et ESPACE_MAIL_FROM sont requis : sans eux, \
+                    aucun code de connexion ne peut partir et l'espace est inutilisable."
+            .into());
+    }
+    Ok(())
+}
+
 fn reject_unsafe_dev_exposure(dev_mode: bool, addr: &SocketAddr) -> Result<(), String> {
     if dev_mode && !addr.ip().is_loopback() {
         return Err(format!(
@@ -70,12 +99,23 @@ async fn main() {
     if let Err(message) = reject_unsafe_dev_exposure(dev_mode, &addr) {
         panic!("{message}");
     }
+    let cookie_secure = parse_cookie_secure(
+        std::env::var("ESPACE_PORTAL_COOKIE_SECURE").ok().as_deref(),
+        &addr,
+    );
+
+    let mailer = Mailer::from_config(MailerConfig::from_env());
+    if let Err(message) = reject_unusable_mailer(&mailer, dev_mode) {
+        panic!("{message}");
+    }
 
     let db = Arc::new(PortalDb::open(&db_path).expect("ouverture base portail"));
     let state = AppState {
         db,
         sync_secret,
         dev_mode,
+        cookie_secure,
+        mailer,
     };
 
     let static_root = static_dir();
@@ -86,13 +126,27 @@ async fn main() {
 
     let api = Router::new()
         .route("/health", get(health))
+        .route("/api/v1/auth/request-code", post(client_auth::post_request_code))
+        .route("/api/v1/auth/login", post(client_auth::post_login))
+        .route("/api/v1/auth/logout", post(client_auth::post_logout))
+        .route("/api/v1/auth/me", get(client_auth::get_me))
+        .route("/api/v1/portal-config", get(portal_config))
         .route(
             "/api/v1/sync/contact/{contact_id}",
             post(sync::receive_contact_snapshot),
         )
         .route(
+            "/api/v1/sync/contact/{contact_id}/revoke-acces",
+            post(sync_auth::revoke_acces),
+        )
+        .route(
+            "/api/v1/sync/contact/{contact_id}/connexions",
+            get(sync_auth::get_connexions),
+        )
+        .route("/api/v1/patrimoine/me", get(read::get_patrimoine_me))
+        .route(
             "/api/v1/patrimoine/{contact_id}",
-            get(read::get_patrimoine),
+            get(read::get_patrimoine_dev),
         )
         .with_state(state);
 
@@ -105,11 +159,20 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("bind");
-    axum::serve(listener, app).await.expect("serveur");
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .expect("serveur");
 }
 
 async fn health() -> &'static str {
     "ok"
+}
+
+async fn portal_config(State(state): State<AppState>) -> impl IntoResponse {
+    Json(serde_json::json!({ "devMode": state.dev_mode }))
 }
 
 #[cfg(test)]
@@ -124,6 +187,12 @@ mod tests {
         assert!(!parse_dev_mode(Some("non")));
         assert!(parse_dev_mode(Some("1")));
         assert!(parse_dev_mode(Some(" TRUE ")));
+    }
+
+    #[test]
+    fn production_refuses_to_start_without_a_mailer() {
+        assert!(reject_unusable_mailer(&None, true).is_ok());
+        assert!(reject_unusable_mailer(&None, false).is_err());
     }
 
     #[test]

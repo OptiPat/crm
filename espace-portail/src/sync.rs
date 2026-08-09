@@ -83,7 +83,7 @@ fn handle_sync(
     })
 }
 
-fn parse_header(headers: &HeaderMap, name: &str) -> Result<String, String> {
+pub fn parse_header(headers: &HeaderMap, name: &str) -> Result<String, String> {
     headers
         .get(name)
         .and_then(|v| v.to_str().ok())

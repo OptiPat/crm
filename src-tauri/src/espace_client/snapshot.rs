@@ -106,7 +106,13 @@ fn build_espace_client_snapshot_with_sequence(
         },
         acces: EspaceClientAccesSnapshot {
             statut: acces.statut,
-            email_utilise: acces.email_utilise,
+            email_utilise: acces.email_utilise.clone(),
+            // Empreinte seule : c'est elle qui autorise la toute première
+            // connexion, avec le code dicté de vive voix au client.
+            activation_code_hash: db
+                .get_espace_activation_code_hash(contact_id)
+                .map_err(|e| e.to_string())?,
+            premiere_connexion_at: acces.premiere_connexion_at,
         },
         investissements,
         partenaires,
@@ -327,7 +333,7 @@ mod tests {
         let err = build_espace_client_snapshot(&db, contact_id).unwrap_err();
         assert!(err.contains("accès"));
 
-        db.activate_espace_acces(contact_id, "jean@example.com")
+        db.activate_espace_acces(contact_id, "jean@example.com", "hash-activation-test")
             .unwrap();
         let payload = build_espace_client_snapshot(&db, contact_id).unwrap();
         assert_eq!(payload.acces.statut, ESPACE_STATUT_ACTIF);

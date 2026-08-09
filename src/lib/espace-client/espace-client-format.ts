@@ -35,3 +35,13 @@ export function formatEspaceTimestamp(ts?: number | null): string | null {
     timeStyle: "short",
   });
 }
+
+const CONNEXION_EVENT_LABELS: Record<string, string> = {
+  first_login: "Première connexion",
+  login_success: "Connexion",
+  login_failed: "Échec de connexion",
+};
+
+export function formatEspaceConnexionEvent(event: string): string {
+  return CONNEXION_EVENT_LABELS[event] ?? event;
+}

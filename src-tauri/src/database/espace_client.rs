@@ -3,7 +3,7 @@
 
 use rusqlite::{params, OptionalExtension, Result};
 
-use super::models::{EspaceAcces, EspaceSyncSummary};
+use super::models::{EspaceAcces, EspaceConnexionLogEntry, EspaceSyncSummary};
 
 pub const ESPACE_STATUT_INACTIF: &str = "inactif";
 pub const ESPACE_STATUT_ACTIF: &str = "actif";
@@ -18,8 +18,9 @@ fn map_espace_acces(row: &rusqlite::Row<'_>) -> Result<EspaceAcces> {
         active_at: row.get(3)?,
         revoked_at: row.get(4)?,
         derniere_connexion: row.get(5)?,
-        created_at: row.get(6)?,
-        updated_at: row.get(7)?,
+        premiere_connexion_at: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
     })
 }
 
@@ -57,8 +58,39 @@ impl super::Database {
                 active_at INTEGER,
                 revoked_at INTEGER,
                 derniere_connexion INTEGER,
+                premiere_connexion_at INTEGER,
+                code_activation_hash TEXT,
                 created_at INTEGER NOT NULL DEFAULT (unixepoch()),
                 updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
+        if !self.table_has_column("espace_acces", "code_activation_hash")? {
+            self.conn.execute(
+                "ALTER TABLE espace_acces ADD COLUMN code_activation_hash TEXT",
+                [],
+            )?;
+            println!("✅ Migration: colonne code_activation_hash sur espace_acces");
+        }
+        if !self.table_has_column("espace_acces", "premiere_connexion_at")? {
+            self.conn.execute(
+                "ALTER TABLE espace_acces ADD COLUMN premiere_connexion_at INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: colonne premiere_connexion_at sur espace_acces");
+        }
+
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS espace_connexion_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL,
+                event TEXT NOT NULL,
+                detail TEXT,
+                ip TEXT,
+                user_agent TEXT,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
                 FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
             )",
             [],
@@ -116,7 +148,7 @@ impl super::Database {
         self.conn
             .query_row(
                 "SELECT contact_id, statut, email_utilise, active_at, revoked_at,
-                        derniere_connexion, created_at, updated_at
+                        derniere_connexion, premiere_connexion_at, created_at, updated_at
                  FROM espace_acces
                  WHERE contact_id = ?1",
                 params![contact_id],
@@ -125,10 +157,101 @@ impl super::Database {
             .optional()
     }
 
+    pub fn get_espace_activation_code_hash(&self, contact_id: i64) -> Result<Option<String>> {
+        self.conn
+            .query_row(
+                "SELECT code_activation_hash FROM espace_acces WHERE contact_id = ?1",
+                params![contact_id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .map(|hash| hash.flatten())
+    }
+
+    pub fn insert_espace_connexion_log_if_new(
+        &self,
+        contact_id: i64,
+        event: &str,
+        detail: Option<&str>,
+        ip: Option<&str>,
+        user_agent: Option<&str>,
+        created_at: i64,
+    ) -> Result<()> {
+        let exists: bool = self.conn.query_row(
+            "SELECT 1 FROM espace_connexion_log
+             WHERE contact_id = ?1 AND event = ?2 AND created_at = ?3
+             LIMIT 1",
+            params![contact_id, event, created_at],
+            |_| Ok(()),
+        ).optional()?.is_some();
+        if exists {
+            return Ok(());
+        }
+        self.conn.execute(
+            "INSERT INTO espace_connexion_log (contact_id, event, detail, ip, user_agent, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![contact_id, event, detail, ip, user_agent, created_at],
+        )?;
+        if event == "login_success" || event == "first_login" {
+            self.conn.execute(
+                "UPDATE espace_acces
+                 SET derniere_connexion = ?1,
+                     premiere_connexion_at = CASE
+                         WHEN ?2 = 'first_login' THEN COALESCE(premiere_connexion_at, ?1)
+                         ELSE premiere_connexion_at
+                     END,
+                     code_activation_hash = CASE
+                         WHEN ?2 = 'first_login' THEN NULL
+                         ELSE code_activation_hash
+                     END,
+                     updated_at = unixepoch()
+                 WHERE contact_id = ?3",
+                params![created_at, event, contact_id],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn list_espace_connexion_log(
+        &self,
+        contact_id: i64,
+        limit: i64,
+    ) -> Result<Vec<EspaceConnexionLogEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, contact_id, event, detail, ip, user_agent, created_at
+             FROM espace_connexion_log
+             WHERE contact_id = ?1
+             ORDER BY created_at DESC
+             LIMIT ?2",
+        )?;
+        let rows = stmt
+            .query_map(params![contact_id, limit], |row| {
+                Ok(EspaceConnexionLogEntry {
+                    id: row.get(0)?,
+                    contact_id: row.get(1)?,
+                    event: row.get(2)?,
+                    detail: row.get(3)?,
+                    ip: row.get(4)?,
+                    user_agent: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// Active l'accès et scelle un code d'activation dont seul l'empreinte est
+    /// conservée. Le code en clair n'est retourné qu'ici, une fois : le
+    /// conseiller le donne de vive voix au client.
+    ///
+    /// Sans ce détour hors ligne, la première connexion reposerait entièrement
+    /// sur l'adresse email enregistrée — une adresse périmée ouvrirait la vue
+    /// patrimoniale à qui la contrôle.
     pub fn activate_espace_acces(
         &self,
         contact_id: i64,
         email: &str,
+        code_activation_hash: &str,
     ) -> std::result::Result<EspaceAcces, String> {
         let email_norm = normalize_espace_email(email)?;
 
@@ -138,15 +261,23 @@ impl super::Database {
         self.conn
             .execute(
                 "INSERT INTO espace_acces (
-                    contact_id, statut, email_utilise, active_at, revoked_at, updated_at
-                 ) VALUES (?1, ?2, ?3, unixepoch(), NULL, unixepoch())
+                    contact_id, statut, email_utilise, active_at, revoked_at,
+                    premiere_connexion_at, code_activation_hash, updated_at
+                 ) VALUES (?1, ?2, ?3, unixepoch(), NULL, NULL, ?4, unixepoch())
                  ON CONFLICT(contact_id) DO UPDATE SET
                     statut = excluded.statut,
                     email_utilise = excluded.email_utilise,
                     active_at = unixepoch(),
                     revoked_at = NULL,
+                    premiere_connexion_at = NULL,
+                    code_activation_hash = excluded.code_activation_hash,
                     updated_at = unixepoch()",
-                params![contact_id, ESPACE_STATUT_ACTIF, email_norm],
+                params![
+                    contact_id,
+                    ESPACE_STATUT_ACTIF,
+                    email_norm,
+                    code_activation_hash
+                ],
             )
             .map_err(|e| e.to_string())?;
 
@@ -172,7 +303,8 @@ impl super::Database {
         self.conn
             .execute(
                 "UPDATE espace_acces
-                 SET statut = ?1, revoked_at = unixepoch(), updated_at = unixepoch()
+                 SET statut = ?1, revoked_at = unixepoch(),
+                     code_activation_hash = NULL, updated_at = unixepoch()
                  WHERE contact_id = ?2",
                 params![ESPACE_STATUT_REVOQUE, contact_id],
             )
@@ -284,7 +416,7 @@ mod tests {
         assert!(db.get_espace_acces_by_contact(contact_id).unwrap().is_none());
 
         let activated = db
-            .activate_espace_acces(contact_id, "Client@Example.com")
+            .activate_espace_acces(contact_id, "Client@Example.com", "hash-activation-test")
             .unwrap();
         assert_eq!(activated.statut, ESPACE_STATUT_ACTIF);
         assert_eq!(activated.email_utilise.as_deref(), Some("client@example.com"));
@@ -296,7 +428,7 @@ mod tests {
         assert!(revoked.revoked_at.is_some());
 
         let reactivated = db
-            .activate_espace_acces(contact_id, "autre@example.com")
+            .activate_espace_acces(contact_id, "autre@example.com", "hash-activation-test")
             .unwrap();
         assert_eq!(reactivated.statut, ESPACE_STATUT_ACTIF);
         assert_eq!(
@@ -326,6 +458,22 @@ mod tests {
     fn activate_rejects_invalid_email() {
         let db = super::super::Database::open_in_memory_for_tests().unwrap();
         let contact_id = sample_contact(&db);
-        assert!(db.activate_espace_acces(contact_id, "pas-un-email").is_err());
+        assert!(db
+    .activate_espace_acces(contact_id, "pas-un-email", "hash-activation-test")
+    .is_err());
+    }
+
+    #[test]
+    fn activation_code_hash_null_after_revoke_does_not_error() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        let contact_id = sample_contact(&db);
+        db.activate_espace_acces(contact_id, "client@example.com", "hash-activation-test")
+            .unwrap();
+        db.revoke_espace_acces(contact_id).unwrap();
+
+        assert_eq!(
+            db.get_espace_activation_code_hash(contact_id).unwrap(),
+            None
+        );
     }
 }
