@@ -262,6 +262,8 @@ pub struct Partenaire {
     pub zone_geo: Option<String>,
     pub niveau_collaboration: Option<String>,
     pub notes: Option<String>,
+    /// URL de l'espace client / extranet du partenaire (partagée entre clients).
+    pub url_extranet: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -281,6 +283,7 @@ pub struct NewPartenaire {
     pub zone_geo: Option<String>,
     pub niveau_collaboration: Option<String>,
     pub notes: Option<String>,
+    pub url_extranet: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -506,7 +509,7 @@ pub struct Investissement {
     pub frequence_versement: Option<String>,
     pub reinvestissement_dividendes: bool,
     pub notes: Option<String>,
-    pub origine: String, // "MON_CONSEIL" ou "EXISTANT_CLIENT"
+    pub origine: String, // MON_CONSEIL | EXISTANT_CLIENT | DECLARE_CLIENT
     /// ACTIF = dans l'encours ; CLOTURE = sorti de l'encours, conservé en stats.
     pub statut: String,
     pub date_cloture: Option<i64>,
@@ -518,6 +521,8 @@ pub struct Investissement {
     pub encours_actuel: Option<i64>,
     /// Date de la dernière valorisation (timestamp Unix).
     pub encours_date: Option<i64>,
+    /// Dernière mise à jour saisie par le client (espace client, timestamp Unix).
+    pub derniere_maj_client: Option<i64>,
     /// Souscription initiale + versements complémentaires (centimes).
     pub montant_investi_total: Option<i64>,
     /// Dernier relevé Stellium — versements nets (≠ versements bruts CRM).
@@ -594,13 +599,14 @@ pub struct InvestissementWithDetails {
     pub frequence_versement: Option<String>,
     pub reinvestissement_dividendes: bool,
     pub notes: Option<String>,
-    pub origine: String, // "MON_CONSEIL" ou "EXISTANT_CLIENT"
+    pub origine: String, // MON_CONSEIL | EXISTANT_CLIENT | DECLARE_CLIENT
     pub statut: String,
     pub date_cloture: Option<i64>,
     pub date_dernier_arbitrage: Option<i64>,
     pub date_prochain_arbitrage: Option<i64>,
     pub encours_actuel: Option<i64>,
     pub encours_date: Option<i64>,
+    pub derniere_maj_client: Option<i64>,
     pub montant_investi_total: Option<i64>,
     pub stellium_versements_nets_centimes: Option<i64>,
     pub stellium_perf_euro_centimes: Option<i64>,

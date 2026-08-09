@@ -1,0 +1,189 @@
+/* Espace client — charcoal (sombre, pas noir pur ni blanc) */
+.cp-root {
+  --cp-bg: #141414;
+  --cp-surface: #1c1c1c;
+  --cp-surface-raised: #242424;
+  --cp-ink: #ececec;
+  --cp-ink-muted: #9a9a9a;
+  --cp-ink-faint: #6b6b6b;
+  --cp-line: rgba(255, 255, 255, 0.09);
+  --cp-line-soft: rgba(255, 255, 255, 0.05);
+  --cp-accent: #ececec;
+
+  font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", ui-sans-serif,
+    system-ui, sans-serif;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--cp-ink);
+  background: var(--cp-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Annule font-serif global (Playfair) sur les titres CRM */
+.cp-root :is(h1, h2, h3, h4, h5, h6) {
+  font-family: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+}
+
+.cp-kicker {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cp-ink-faint);
+}
+
+.cp-caption {
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--cp-ink-faint);
+}
+
+.cp-meta {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--cp-ink-muted);
+}
+
+.cp-body {
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--cp-ink);
+}
+
+.cp-amount {
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  color: var(--cp-ink);
+}
+
+.cp-section-title {
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--cp-ink);
+}
+
+.cp-category-title {
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--cp-ink-muted);
+}
+
+.cp-hero-name {
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--cp-ink);
+}
+
+.cp-hero-greeting {
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--cp-ink);
+}
+
+.cp-hero-label {
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--cp-ink);
+}
+
+.cp-hero-total {
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--cp-ink);
+}
+
+.cp-hero-total--mobile {
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.cp-hero-total--desktop {
+  font-size: 3.25rem;
+}
+
+.cp-root[data-cp-viewport="mobile"] .cp-hero-greeting--mobile,
+.cp-root[data-cp-viewport="mobile"] .cp-hero-label--mobile {
+  font-size: 1rem;
+}
+
+@media (min-width: 768px) {
+  .cp-hero-greeting,
+  .cp-hero-label {
+    font-size: 1.25rem;
+  }
+
+  .cp-root[data-cp-viewport="desktop"] .cp-hero-total--desktop {
+    font-size: 3.25rem;
+  }
+}
+
+.cp-chart-total {
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--cp-ink);
+}
+
+.cp-card {
+  border-radius: 0.75rem;
+  border: 1px solid var(--cp-line);
+  background: var(--cp-surface);
+}
+
+.cp-hairline {
+  height: 1px;
+  background: var(--cp-line);
+}
+
+.cp-tab {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cp-tab-active {
+  color: var(--cp-ink);
+}
+
+.cp-tab-idle {
+  color: var(--cp-ink-faint);
+}
+
+.cp-tab-idle:hover {
+  color: var(--cp-ink-muted);
+}
+
+.cp-badge {
+  font-size: 0.625rem;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cp-ink-muted);
+}

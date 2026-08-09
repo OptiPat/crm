@@ -16,6 +16,8 @@ export interface Partenaire {
   zone_geo?: string;
   niveau_collaboration?: string;
   notes?: string;
+  /** URL de l'espace client / extranet du partenaire. */
+  url_extranet?: string;
   created_at: number;
   updated_at: number;
 }
@@ -34,6 +36,8 @@ export interface NewPartenaire {
   zone_geo?: string;
   niveau_collaboration?: string;
   notes?: string;
+  /** URL de l'espace client / extranet du partenaire. */
+  url_extranet?: string;
 }
 
 export async function getAllPartenaires(): Promise<Partenaire[]> {

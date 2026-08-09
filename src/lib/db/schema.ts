@@ -204,6 +204,7 @@ export const partenaires = sqliteTable("partenaires", {
   email: text("email"),
   telephone: text("telephone"),
   notes: text("notes"),
+  urlExtranet: text("url_extranet"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .default(sql`(unixepoch())`)
     .notNull(),
@@ -308,7 +309,7 @@ export const investissements = sqliteTable("investissements", {
   
   // Origine de l'investissement (pour distinguer mes conseils vs patrimoine existant)
   origine: text("origine", {
-    enum: ["MON_CONSEIL", "EXISTANT_CLIENT"],
+    enum: ["MON_CONSEIL", "EXISTANT_CLIENT", "DECLARE_CLIENT"],
   }).default("MON_CONSEIL").notNull(),
 
   /** ACTIF = dans l'encours ; CLOTURE = sorti de l'encours, conservé en stats. */
@@ -318,6 +319,7 @@ export const investissements = sqliteTable("investissements", {
   dateCloture: integer("date_cloture", { mode: "timestamp" }),
   dateDernierArbitrage: integer("date_dernier_arbitrage", { mode: "timestamp" }),
   dateProchainArbitrage: integer("date_prochain_arbitrage", { mode: "timestamp" }),
+  derniereMajClient: integer("derniere_maj_client", { mode: "timestamp" }),
   
   // Timestamps
   createdAt: integer("created_at", { mode: "timestamp" })

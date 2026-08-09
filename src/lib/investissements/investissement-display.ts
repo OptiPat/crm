@@ -1,3 +1,5 @@
+import { isPatrimoineACoteOrigine } from "./investissement-origine";
+
 /** Types avec n° contrat assureur (AV, PER, contrat de capi). */
 export const NUMERO_CONTRAT_TYPES = [
   "ASSURANCE_VIE",
@@ -159,7 +161,7 @@ export function formatNomProduit(nom: string): string {
 
 /** Texte badge type produit (palette historique CRM). */
 export function getTypeProduitTextClass(_type: string, origine?: string): string {
-  if (origine === "EXISTANT_CLIENT") {
+  if (isPatrimoineACoteOrigine(origine)) {
     return "text-gray-700";
   }
   return "text-white";
@@ -167,7 +169,7 @@ export function getTypeProduitTextClass(_type: string, origine?: string): string
 
 /** Fond badge type produit — vert immobilier, rose placements financiers. */
 export function getTypeProduitBgColor(type: string, origine?: string): string {
-  if (origine === "EXISTANT_CLIENT") {
+  if (isPatrimoineACoteOrigine(origine)) {
     return "#9ca3af";
   }
   if (IMMOBILIER_TYPES.includes(type as (typeof IMMOBILIER_TYPES)[number])) {

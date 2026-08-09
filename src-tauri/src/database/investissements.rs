@@ -11,7 +11,7 @@ const INVESTISSEMENT_SELECT_COLS: &str = "id, contact_id, foyer_id, type_produit
     versement_programme, montant_versement_programme, frequence_versement,
     reinvestissement_dividendes, notes, origine, statut, date_cloture,
     date_dernier_arbitrage, date_prochain_arbitrage, created_at, updated_at,
-    url_contrat";
+    url_contrat, derniere_maj_client";
 
 fn normalize_numero_contrat(value: Option<String>) -> Option<String> {
     value.and_then(|s| {
@@ -75,11 +75,12 @@ impl super::Database {
             created_at: row.get(27)?,
             updated_at: row.get(28)?,
             url_contrat: row.get(29)?,
-            encours_actuel: row.get(30)?,
-            encours_date: row.get(31)?,
-            montant_investi_total: row.get(32)?,
-            stellium_versements_nets_centimes: row.get(33)?,
-            stellium_perf_euro_centimes: row.get(34)?,
+            derniere_maj_client: row.get(30)?,
+            encours_actuel: row.get(31)?,
+            encours_date: row.get(32)?,
+            montant_investi_total: row.get(33)?,
+            stellium_versements_nets_centimes: row.get(34)?,
+            stellium_perf_euro_centimes: row.get(35)?,
         })
     }
 
@@ -222,11 +223,12 @@ impl super::Database {
             created_at: row.get(31)?,
             updated_at: row.get(32)?,
             url_contrat: row.get(33)?,
-            encours_actuel: row.get(34)?,
-            encours_date: row.get(35)?,
-            montant_investi_total: row.get(36)?,
-            stellium_versements_nets_centimes: row.get(37)?,
-            stellium_perf_euro_centimes: row.get(38)?,
+            derniere_maj_client: row.get(34)?,
+            encours_actuel: row.get(35)?,
+            encours_date: row.get(36)?,
+            montant_investi_total: row.get(37)?,
+            stellium_versements_nets_centimes: row.get(38)?,
+            stellium_perf_euro_centimes: row.get(39)?,
         })
     }
 
@@ -246,7 +248,7 @@ impl super::Database {
                     i.versement_programme, i.montant_versement_programme, i.frequence_versement,
                     i.reinvestissement_dividendes, i.notes, i.origine, i.statut, i.date_cloture,
                     i.date_dernier_arbitrage, i.date_prochain_arbitrage, i.created_at, i.updated_at,
-                    i.url_contrat,
+                    i.url_contrat, i.derniere_maj_client,
                     {}
              FROM investissements i
              LEFT JOIN contacts c ON i.contact_id = c.id

@@ -72,6 +72,7 @@ export function PartenaireForm({
           defaultTypePartenaire ||
           "SOCIETE_GESTION_SCPI",
         raison_sociale: partenaire?.raison_sociale || "",
+        url_extranet: partenaire?.url_extranet || "",
       });
     }
   }, [open, partenaire, defaultTypePartenaire]);
@@ -154,6 +155,22 @@ export function PartenaireForm({
                 <SelectItem value="PROMOTEUR">Promoteur</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="url_extranet">URL extranet client</Label>
+            <Input
+              id="url_extranet"
+              type="url"
+              value={formData.url_extranet || ""}
+              onChange={(e) =>
+                setFormData({ ...formData, url_extranet: e.target.value })
+              }
+              placeholder="https://espace.partenaire.fr"
+            />
+            <p className="text-xs text-muted-foreground">
+              Lien vers l&apos;espace en ligne du partenaire (sans identifiants).
+            </p>
           </div>
 
           <DialogFooter className="pt-4">

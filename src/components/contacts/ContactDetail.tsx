@@ -28,6 +28,7 @@ import {
   LayoutGrid,
   History,
   FileUp,
+  Smartphone,
 } from "lucide-react";
 import { type Contact, getContactById, getFilleulsByParrain, getAllContacts, getContactsByFoyer } from "@/lib/api/tauri-contacts";
 import {
@@ -86,6 +87,8 @@ import { ContactInteractionsPanel } from "@/components/interactions/ContactInter
 import { ContactTachesPanel } from "@/components/taches/ContactTachesPanel";
 import { ContactCustomFieldsPanel } from "@/components/contacts/ContactCustomFieldsPanel";
 import { ContactPatrimoinePanel } from "@/components/contacts/ContactPatrimoinePanel";
+import { ContactDetailApercuClientTab } from "@/components/contacts/ContactDetailApercuClientTab";
+import { useEspaceClientActive } from "@/components/espace-client/EspaceClientProvider";
 import { DocumentUpload } from "@/components/documents/DocumentUpload";
 import {
   getClientRoleBadgeClass,
@@ -134,7 +137,7 @@ interface ContactDetailProps {
   nestedInvestissementSheet?: boolean;
 }
 
-type DetailTab = "synthese" | "relation" | "patrimoine" | "foyer";
+type DetailTab = "synthese" | "relation" | "patrimoine" | "foyer" | "apercu_client";
 
 const CONTACT_DETAIL_TAB_TRIGGER =
   "min-w-0 gap-1 px-1.5 sm:px-2 py-2 text-[11px] sm:text-xs md:text-sm sm:flex-1 sm:basis-0 overflow-hidden data-[state=active]:shadow-none data-[state=active]:ring-1 data-[state=active]:ring-border/80";
@@ -194,6 +197,7 @@ export function ContactDetail({
   const contactRef = useRef(contact);
   contactRef.current = contact;
   const { teamConfigured, config: teamConfig } = useTeamWorkspace();
+  const espaceClientActive = useEspaceClientActive();
   const teamCollaborationEnabled =
     teamConfigured && Boolean(teamConfig.siteId?.trim());
   const teamPresence = useTeamPresence({
@@ -1002,6 +1006,12 @@ export function ContactDetail({
                   <span className="hidden md:inline">Couple / </span>Foyer
                 </span>
               </TabsTrigger>
+              {espaceClientActive ? (
+                <TabsTrigger value="apercu_client" className={CONTACT_DETAIL_TAB_TRIGGER}>
+                  <Smartphone className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate min-w-0">Aperçu client</span>
+                </TabsTrigger>
+              ) : null}
             </TabsList>
 
             <TabsContent value="synthese" className="space-y-4 mt-3 focus-visible:outline-none">
@@ -1102,6 +1112,27 @@ export function ContactDetail({
                 }
               />
             </TabsContent>
+
+            {espaceClientActive && contact?.id ? (
+              <TabsContent
+                value="apercu_client"
+                className="mt-3 focus-visible:outline-none rounded-xl border border-border bg-muted/30 p-3 sm:p-4"
+              >
+                <ContactDetailApercuClientTab
+                  contact={contact}
+                  investissements={investissements}
+                  foyerMembers={[contact, ...foyerMembers]
+                    .filter((m) => m.id != null)
+                    .map((m) => ({
+                      id: m.id!,
+                      role_foyer: m.role_foyer,
+                      date_naissance: m.date_naissance,
+                    }))}
+                  partenaires={partenaires}
+                  onOpenPatrimoine={() => setDetailTab("patrimoine")}
+                />
+              </TabsContent>
+            ) : null}
 
             <TabsContent value="foyer" className="space-y-4 mt-3 focus-visible:outline-none">
               <ContactDetailFoyerTab

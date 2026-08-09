@@ -42,7 +42,7 @@ export const DASHBOARD_PRODUCT_FAMILY_META: Record<
   DashboardProductFamilyId,
   { name: string; color: string }
 > = {
-  SCPI: { name: "SCPI", color: "#C9A227" },
+  SCPI: { name: "SCPI", color: "#7B9FD4" },
   PER: { name: "PER", color: "#8B5CF6" },
   CAPITAL_INVEST: { name: "Capital invest", color: "#3B82F6" },
   G3F: { name: "G3F", color: "#F59E0B" },

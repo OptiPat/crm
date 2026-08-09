@@ -24,6 +24,7 @@ pub mod etiquette_pipeline;
 pub mod etiquette_rule_ast;
 pub mod etiquettes;
 pub mod etiquettes_auto_engine;
+pub mod espace_client;
 pub mod exchange_history;
 pub mod familles;
 pub mod fiche_conseil_redaction_presets;
@@ -695,6 +696,7 @@ impl Database {
         self.migrate_uc_comparatifs_table()?;
         self.migrate_contrat_supports_tables()?;
         self.migrate_fiche_conseil_redaction_presets_table()?;
+        self.migrate_espace_client()?;
 
         Ok(())
     }

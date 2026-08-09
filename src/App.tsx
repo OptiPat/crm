@@ -32,6 +32,7 @@ import { PipeParrainage } from "@/pages/PipeParrainage";
 import { Agenda } from "@/pages/Agenda";
 import { Newsletter } from "@/pages/Newsletter";
 import { AppBrandingProvider } from "@/components/app-branding/AppBrandingProvider";
+import { EspaceClientProvider } from "@/components/espace-client/EspaceClientProvider";
 import { TeamWorkspaceProvider } from "@/components/team/TeamWorkspaceProvider";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
 import { AppUpdateProvider } from "@/components/system/app-update-context";
@@ -373,19 +374,21 @@ function AppInner() {
   // Afficher l'application avec le layout
   try {
     return (
-      <TeamWorkspaceProvider enabled={isEngineAvailable}>
-        <AppUpdateProvider>
-          <Layout
-            currentPage={currentPage}
-            onPageChange={setCurrentPage}
-            onLogout={handleLogout}
-          >
-            <TeamWorkspaceStatusBanner onOpenSettings={() => setCurrentPage("parametres")} />
-            {renderPage()}
-          </Layout>
-        </AppUpdateProvider>
-        <Toaster richColors position="top-right" visibleToasts={4} expand />
-      </TeamWorkspaceProvider>
+      <EspaceClientProvider enabled={isEngineAvailable}>
+        <TeamWorkspaceProvider enabled={isEngineAvailable}>
+          <AppUpdateProvider>
+            <Layout
+              currentPage={currentPage}
+              onPageChange={setCurrentPage}
+              onLogout={handleLogout}
+            >
+              <TeamWorkspaceStatusBanner onOpenSettings={() => setCurrentPage("parametres")} />
+              {renderPage()}
+            </Layout>
+          </AppUpdateProvider>
+          <Toaster richColors position="top-right" visibleToasts={4} expand />
+        </TeamWorkspaceProvider>
+      </EspaceClientProvider>
     );
   } catch (error) {
     console.error("Error rendering app:", error);

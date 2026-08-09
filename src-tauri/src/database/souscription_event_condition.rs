@@ -110,6 +110,7 @@ mod tests {
             date_cloture: None,
             encours_actuel: None,
             encours_date: None,
+            derniere_maj_client: None,
             montant_investi_total: None,
             stellium_versements_nets_centimes: None,
             stellium_perf_euro_centimes: None,

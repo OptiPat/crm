@@ -7,7 +7,7 @@ impl super::Database {
         let mut stmt = self.conn.prepare(
             "SELECT id, type_partenaire, raison_sociale, nom_contact, prenom_contact,
                     email, telephone, adresse, code_postal, ville, specialite, zone_geo,
-                    niveau_collaboration, notes, created_at, updated_at
+                    niveau_collaboration, notes, url_extranet, created_at, updated_at
              FROM partenaires 
              ORDER BY raison_sociale",
         )?;
@@ -28,8 +28,9 @@ impl super::Database {
                 zone_geo: row.get(11)?,
                 niveau_collaboration: row.get(12)?,
                 notes: row.get(13)?,
-                created_at: row.get(14)?,
-                updated_at: row.get(15)?,
+                url_extranet: row.get(14)?,
+                created_at: row.get(15)?,
+                updated_at: row.get(16)?,
             })
         })?;
 
@@ -47,8 +48,8 @@ impl super::Database {
         self.conn.execute(
             "INSERT INTO partenaires (type_partenaire, raison_sociale, nom_contact, prenom_contact,
                                      email, telephone, adresse, code_postal, ville, specialite,
-                                     zone_geo, niveau_collaboration, notes) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                                     zone_geo, niveau_collaboration, notes, url_extranet) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 &partenaire.type_partenaire,
                 &partenaire.raison_sociale,
@@ -63,6 +64,7 @@ impl super::Database {
                 &partenaire.zone_geo,
                 &partenaire.niveau_collaboration,
                 &partenaire.notes,
+                &partenaire.url_extranet,
             ],
         )?;
 
@@ -74,7 +76,7 @@ impl super::Database {
         self.conn.query_row(
             "SELECT id, type_partenaire, raison_sociale, nom_contact, prenom_contact,
                     email, telephone, adresse, code_postal, ville, specialite, zone_geo,
-                    niveau_collaboration, notes, created_at, updated_at
+                    niveau_collaboration, notes, url_extranet, created_at, updated_at
              FROM partenaires 
              WHERE id = ?1",
             params![id],
@@ -94,13 +96,13 @@ impl super::Database {
                     zone_geo: row.get(11)?,
                     niveau_collaboration: row.get(12)?,
                     notes: row.get(13)?,
-                    created_at: row.get(14)?,
-                    updated_at: row.get(15)?,
+                    url_extranet: row.get(14)?,
+                    created_at: row.get(15)?,
+                    updated_at: row.get(16)?,
                 })
             },
         )
     }
-
     pub fn update_partenaire(
         &self,
         id: i64,
@@ -121,8 +123,9 @@ impl super::Database {
                 zone_geo = ?11,
                 niveau_collaboration = ?12,
                 notes = ?13,
+                url_extranet = ?14,
                 updated_at = unixepoch()
-            WHERE id = ?14",
+            WHERE id = ?15",
             params![
                 &partenaire.type_partenaire,
                 &partenaire.raison_sociale,
@@ -137,6 +140,7 @@ impl super::Database {
                 &partenaire.zone_geo,
                 &partenaire.niveau_collaboration,
                 &partenaire.notes,
+                &partenaire.url_extranet,
                 id
             ],
         )?;

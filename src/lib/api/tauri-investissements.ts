@@ -2,7 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { notifyContactsChanged } from "@/lib/contacts/contact-events";
 import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
 
-export type OrigineInvestissement = "MON_CONSEIL" | "EXISTANT_CLIENT";
+export type OrigineInvestissement =
+  | "MON_CONSEIL"
+  | "EXISTANT_CLIENT"
+  | "DECLARE_CLIENT";
 export type InvestissementStatut = "ACTIF" | "CLOTURE";
 
 export interface Investissement {
@@ -34,7 +37,7 @@ export interface Investissement {
   frequence_versement?: string;
   reinvestissement_dividendes: boolean;
   notes?: string;
-  origine: OrigineInvestissement; // "MON_CONSEIL" ou "EXISTANT_CLIENT"
+  origine: OrigineInvestissement;
   statut?: InvestissementStatut;
   date_cloture?: number;
   encours_actuel?: number;
@@ -45,6 +48,8 @@ export interface Investissement {
   stellium_versements_nets_centimes?: number;
   /** Dernier relevé Stellium — performance financière en €. */
   stellium_perf_euro_centimes?: number;
+  /** Dernière mise à jour par le client (espace client). */
+  derniere_maj_client?: number;
   created_at: number;
   updated_at: number;
 }
@@ -107,7 +112,7 @@ export interface InvestissementWithDetails {
   frequence_versement?: string;
   reinvestissement_dividendes: boolean;
   notes?: string;
-  origine: OrigineInvestissement; // "MON_CONSEIL" ou "EXISTANT_CLIENT"
+  origine: OrigineInvestissement;
   statut?: InvestissementStatut;
   date_cloture?: number;
   date_dernier_arbitrage?: number;

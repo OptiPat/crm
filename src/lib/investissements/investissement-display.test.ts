@@ -37,12 +37,14 @@ describe("getTypeProduitBgColor", () => {
     expect(getTypeProduitBgColor("IMMOBILIER")).toBe("#85ad39");
     expect(getTypeProduitBgColor("SCPI")).toBe("#dc216e");
     expect(getTypeProduitBgColor("SCPI", "EXISTANT_CLIENT")).toBe("#9ca3af");
+    expect(getTypeProduitBgColor("SCPI", "DECLARE_CLIENT")).toBe("#9ca3af");
   });
 });
 
 describe("getTypeProduitTextClass", () => {
-  it("texte gris si existant client", () => {
+  it("texte gris si patrimoine à côté", () => {
     expect(getTypeProduitTextClass("SCPI", "EXISTANT_CLIENT")).toContain("gray");
+    expect(getTypeProduitTextClass("SCPI", "DECLARE_CLIENT")).toContain("gray");
     expect(getTypeProduitTextClass("SCPI")).toBe("text-white");
   });
 });

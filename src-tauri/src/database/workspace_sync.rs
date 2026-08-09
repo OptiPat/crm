@@ -99,6 +99,13 @@ const TABLE_POLICIES: &[(&str, WorkspaceTablePolicy)] = &[
     ("support_vl_history", WorkspaceTablePolicy::LocalOnly),
     ("comparatifs_uc", WorkspaceTablePolicy::LocalOnly),
     ("fiche_conseil_redaction_presets", WorkspaceTablePolicy::Shared),
+    // Espace client : fonctionnalité mono-instance, activée manuellement sur un seul poste.
+    // Rien ne part vers SharePoint tant que les implications du mode équipe n'ont pas été
+    // tranchées ; promouvoir en Shared est réversible, l'inverse ne l'est pas.
+    ("espace_acces", WorkspaceTablePolicy::LocalOnly),
+    ("espace_demande", WorkspaceTablePolicy::LocalOnly),
+    ("espace_publication", WorkspaceTablePolicy::LocalOnly),
+    ("espace_sync_state", WorkspaceTablePolicy::LocalOnly),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
