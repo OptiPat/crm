@@ -81,6 +81,13 @@ if (-not $Quick) {
         cargo test --manifest-path src-tauri/Cargo.toml
         if ($LASTEXITCODE -ne 0) { throw "cargo test a echoue." }
     }
+
+    Invoke-VerifyStep 'Tests portail espace client (Cargo)' {
+        # Composant expose sur Internet : jamais publie sans tests verts.
+        $env:CARGO_TARGET_DIR = Join-Path $PSScriptRoot 'target-cargo-verify'
+        cargo test --manifest-path espace-portail/Cargo.toml
+        if ($LASTEXITCODE -ne 0) { throw "cargo test espace-portail a echoue." }
+    }
 }
 
 if ($Build) {

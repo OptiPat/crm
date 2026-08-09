@@ -33,6 +33,9 @@ dist-ssr
 /target-cargo-verify
 /target-*-result.txt
 
+# Portail espace client (crate séparée)
+/espace-portail/target
+
 # --- Données sensibles (ne jamais committer) ---
 # Notes stratégiques personnelles (réseau/organisation) — jamais publiques
 docs/DIAGNOSTIC_ORGANISATION.md

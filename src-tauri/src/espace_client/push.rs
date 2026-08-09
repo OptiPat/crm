@@ -8,11 +8,15 @@ use crate::database::Database;
 
 type HmacSha256 = Hmac<Sha256>;
 
+/// Signe les octets bruts du corps. Passer par `from_utf8_lossy` ferait
+/// collisionner deux corps distincts sur une même signature (octets invalides
+/// remplacés par U+FFFD).
 pub fn sign_espace_sync_body(secret: &str, timestamp: i64, body: &[u8]) -> String {
-    let message = format!("{timestamp}.{}", String::from_utf8_lossy(body));
     let mut mac =
         HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepte toute taille de cle");
-    mac.update(message.as_bytes());
+    mac.update(timestamp.to_string().as_bytes());
+    mac.update(b".");
+    mac.update(body);
     mac.finalize()
         .into_bytes()
         .iter()
