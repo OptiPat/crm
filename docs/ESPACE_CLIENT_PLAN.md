@@ -1,8 +1,29 @@
 # Espace client — plan d'implémentation
 
-> **Statut** : spécification de conception. Aucun code écrit à ce jour.
-> Issue d'une session de cadrage du 8 août 2026.
+> **Statut au 10 août 2026** : phases 0 et 1 construites et testées, en local uniquement.
+> Cadrage initial du 8 août. Voir §0 pour l'état d'avancement réel.
 > **Public** : agent ou développeur qui reprend le sujet. Lire les sections 2 et 3 avant toute proposition alternative.
+
+---
+
+## 0. Où on en est
+
+**Construit, testé, non déployé.** Le portail tourne en local, un client peut recevoir
+son code par email et consulter son patrimoine. Aucune donnée réelle ne doit y transiter
+tant que les points bloquants du §14 ne sont pas levés.
+
+| Phase | État |
+|---|---|
+| 0 — Fondations CRM (logique pure, aperçu conseiller) | **Fait** |
+| 1 — Portail en lecture, authentification client | **Fait** |
+| 2 — Dépôt de documents | Non commencé (module antivirus prêt, non câblé) |
+| 3 — Documents mis à disposition | Non commencé |
+| 4 — Déclaration des avoirs extérieurs | Non commencé |
+| 5 — Notifications et cycle de vie | Partiel (révocation faite) |
+| Déploiement serveur | Non fait — `espace-portail/deploy/Caddyfile` prêt |
+
+Documents liés : `docs/ESPACE_CLIENT_RGPD.md` (registre, bases légales, sous-traitants),
+`espace-portail/README.md` (lancement, variables d'environnement, mise en ligne).
 
 ---
 
@@ -42,6 +63,11 @@ Ces points ont été tranchés après discussion. Un agent qui reprend le sujet 
 | **Chacun son espace** dans un couple | Permet de couper un accès sans toucher à l'autre (séparation) |
 | **Stack : Rust/Axum + SQLite + React statique + Caddy, un VPS européen** | Surface opérationnelle minimale, réutilise les compétences et les patterns du CRM |
 | **RIO et QPI restent côté CGP** | Ce sont des documents professionnels importés depuis Stellium, pas des pièces que le client dépose |
+| **Le portail envoie lui-même les codes, via Brevo** | Le CRM est une application de bureau éteinte la nuit : le laisser dans la boucle rendait la connexion impossible hors heures de bureau |
+| **Première connexion par code dicté de vive voix** | Une adresse email périmée suffirait sinon à ouvrir une vue patrimoniale complète à un tiers |
+| **Session : 30 jours d'appareil, 30 minutes d'inactivité** | Assez long pour ne pas décourager la consultation, assez court pour qu'un téléphone perdu cesse d'être autorisé |
+| **Aucun lien de connexion dans les emails** | Les antivirus de messagerie pré-ouvrent les URL et consommeraient un jeton à usage unique |
+| **Le portail vit dans le dépôt du CRM** | Une seule vérification, un seul historique ; le dépôt est public mais ne contient aucun secret |
 
 ### Options explicitement écartées
 
@@ -80,6 +106,16 @@ Ces règles sont le résultat de la conception. Toute implémentation qui les en
 **R10 — Pas de multi-tenant, pas de documentation d'installation pour des tiers.** Une seule instance.
 
 **R11 — Fonctionnalité invisible pour les autres utilisateurs du CRM.** Le CRM est distribué en release à d'autres cabinets. Aucun élément d'interface lié à l'espace client — onglet, section de paramètres, entrée de menu, bouton, notification — ne doit apparaître chez un utilisateur qui n'a pas activé la fonctionnalité. Le comportement par défaut est **invisible**, pas « visible mais désactivé ».
+
+**R12 — Une adresse email, un seul accès actif.** Deux contacts partageant une adresse — un couple, cas fréquent — font **refuser** la connexion. Choisir arbitrairement rattacherait la session au mauvais conjoint et lui servirait le patrimoine de l'autre, contournant R2 par la porte de service.
+
+**R13 — Réponse identique quelle que soit la cause du refus.** Demande de code comme connexion : adresse inconnue, accès révoqué, adresse partagée ou code faux renvoient le même message et le même code HTTP. La raison réelle ne part que dans les logs serveur. Sans cela, comparer les réponses dresse la liste des clients du cabinet.
+
+**R14 — Le code de connexion n'existe jamais en clair au repos.** Seule son empreinte va en base. Le clair ne vit qu'entre sa génération et l'appel au service d'envoi.
+
+**R15 — Les en-têtes de proxy ne sont lus que d'un pair de confiance.** `X-Forwarded-For` et `X-Real-IP` ne sont pris en compte que si la requête vient réellement du reverse proxy (adresse locale ou privée). Autrement, n'importe qui joignant le binaire en direct change d'identité à chaque requête et annule la limitation par IP.
+
+**R16 — Un défaut dangereux est toujours opt-in.** Le mode qui expose le patrimoine sans authentification, comme tout garde-fou désactivable, est inactif par défaut et le binaire refuse de démarrer dans les combinaisons qui le rendraient joignable. Un avertissement dans les logs ne suffit pas.
 
 ---
 
@@ -206,7 +242,7 @@ Modules TypeScript sans React, dans `src/lib/patrimoine/`, chacun avec son `.tes
 | Fichier | Entrée | Sortie |
 |---|---|---|
 | `categories.ts` | `type_produit` (≈30 valeurs) | Catégorie affichable : Immobilier, SCPI, Placements financiers, Retraite, Prévoyance, Autre |
-| `disponibilite.ts` | `type_produit` + `date_fin_demembrement`, `date_fin_pret`, âge | Horizon : Immédiat, Moyen terme, Bloqué jusqu'au JJ/MM/AAAA, Retraite, Illiquide |
+| `disponibilite.ts` | `type_produit` + âge | Horizon : Immédiat, Moyen terme, Retraite, Illiquide. **Pas de « bloqué jusqu'au … »** : une fin de prêt ou de démembrement ne rend pas un actif indisponible, elle date un événement — c'est la timeline qui la porte |
 | `visibilite.ts` | investissement + personne + composition du foyer | Booléen de visibilité — **implémente R2** |
 | `timeline.ts` | investissements + alertes + tâches | Liste d'événements datés, triés, avec libellé client |
 | `perimetre.ts` | ensemble des lignes visibles | Indicateur de complétude + décomposition du total par source (**R1**) |
@@ -219,7 +255,7 @@ Modules TypeScript sans React, dans `src/lib/patrimoine/`, chacun avec son `.tes
 
 L'ordre est choisi pour que le risque le plus élevé soit engagé le plus tard possible.
 
-### Phase 0 — Fondations CRM, aucun serveur
+### Phase 0 — Fondations CRM, aucun serveur — **faite**
 
 **Livrables**
 
@@ -233,17 +269,32 @@ L'ordre est choisi pour que le risque le plus élevé soit engagé le plus tard 
 
 **Critère de sortie** : montrer cet écran à quelques clients en rendez-vous et décider si on engage la suite.
 
-### Phase 1 — Portail en lecture seule
+### Phase 1 — Portail en lecture seule — **faite**
 
-Activation et authentification (§11), inventaire, camemberts, timeline. **Aucun document à ce stade.**
-
+Activation et authentification (§11), inventaire, camemberts, timeline. Aucun document.
 Synchronisation CRM → portail uniquement.
 
-### Phase 2 — Dépôt de documents
+Modules livrés : `espace-portail/src/` — `auth.rs` (signature HMAC), `auth_store.rs`
+(accès, codes, sessions), `client_auth.rs` (endpoints de connexion), `mailer.rs` (envoi
+Brevo), `sync.rs` / `sync_auth.rs` (réception CRM), `read.rs`, `security.rs`
+(limitation par IP, en-têtes), `db.rs`. UI dans `espace-portail/web/src/`.
+
+Côté CRM : `src-tauri/src/espace_client/` — `activation.rs`, `commands.rs`, `config.rs`,
+`portal_api.rs`, `push.rs`, `snapshot.rs`, `sync_payload.rs`, `visibilite.rs`.
+
+### Phase 2 — Dépôt de documents — **non commencée**
 
 Demandes créées depuis le CRM, dépôt par le client, accusé de réception émis par le portail (**pas** par le CRM), rapatriement en GED, purge (**R3**), ré-authentification (**R7**), liens signés (**R8**).
 
-C'est la phase qui porte l'essentiel du poids de sécurité.
+C'est la phase qui porte l'essentiel du poids de sécurité. À ajouter à la liste ci-dessus :
+
+- **Analyse antivirus obligatoire** de tout fichier déposé. `espace-portail/src/document_scan.rs`
+  parle déjà à clamd et refuse le dépôt si l'analyse est indisponible en production ; il est
+  écrit mais **non câblé**. L'appel devra passer par `tokio::task::spawn_blocking` : le module
+  est synchrone et bloquerait un thread du serveur jusqu'à trente secondes.
+- **Validation du fichier** : type réel, taille maximale, nombre par demande.
+- **Chiffrement au repos** des fichiers en attente de rapatriement — utile contre le vol de
+  disque, sans illusion : la clé vit sur la même machine. C'est la rétention courte qui protège.
 
 ### Phase 3 — Documents mis à disposition
 
@@ -368,11 +419,55 @@ Vocabulaire : « votre patrimoine au 31 mars », **pas** « reporting » — le 
 
 | Sujet | État |
 |---|---|
-| Modalité exacte de l'activation hors ligne | À définir (code oral en rendez-vous ? par téléphone ?) |
-| Révocation d'accès : périmètre exact de la purge | Bouton à prévoir dès la phase 1, comportement à préciser |
 | Enfant qui atteint 18 ans | Les parents cessent d'administrer ; les dates de naissance sont en base, l'événement est détectable. Non urgent |
 | Volumétrie du besoin | Jamais chiffrée. Décision assumée de construire sur conviction plutôt que sur mesure préalable |
 | CRM durablement fermé | Le portail sert des données figées ; prévoir un message au-delà d'un certain délai |
+| Adresse partagée par un couple | La connexion est refusée (**R12**). Reste à donner au conseiller un message clair dans le CRM plutôt qu'une ligne de log |
+
+Tranché depuis : l'activation hors ligne se fait par **code dicté** affiché une seule fois
+au conseiller ; la révocation coupe les sessions du portail **avant** de valider côté CRM.
+
+---
+
+## 14. Sécurité — reste à faire
+
+Ce qui est en place est décrit au §10 et couvert par les tests de `espace-portail/src/`.
+Ce qui suit ne l'est pas.
+
+### Bloquant avant tout usage réel
+
+| Sujet | Pourquoi |
+|---|---|
+| **Déploiement HTTPS** | `deploy/Caddyfile` est prêt, rien n'est déployé. Tant que le service n'est pas derrière TLS, aucune donnée réelle ne doit y transiter |
+| **Antivirus câblé** | Le module existe, l'appel n'existe pas — sans lui, le dépôt de documents ouvre un canal d'entrée vers le poste du conseiller |
+| **Formalités RGPD** | `docs/ESPACE_CLIENT_RGPD.md` est rédigé mais doit être complété (coordonnées, hébergeur) et le contrat de sous-traitance Brevo activé sur le compte |
+
+### Important
+
+| Sujet | Pourquoi |
+|---|---|
+| **Séparation des clés** | Un seul secret signe la synchronisation, hache les codes et hache les jetons de session. Trois clés dérivées d'une racine coûtent une heure et évitent qu'une fuite emporte tout |
+| **Expéditeur sur domaine authentifié** | L'expéditeur Gmail actuel finira en spam chez une partie des clients ; un code de connexion en spam est un client bloqué. `optipatpro.fr` est déjà authentifié dans Brevo |
+| **Alerte sur nouvel appareil** | Rien ne prévient le client d'une connexion depuis un appareil inconnu : c'est pourtant lui qui détecte une compromission en premier |
+| **Ré-authentification pour les documents** (**R7**) | Conçue, pas encore écrite. À faire avec la phase 2 |
+| **Veille des dépendances** | `cargo audit` et `npm audit` dans `verify.ps1` : une ligne chacun, et les failles connues remontent sans y penser |
+| **Plan de réponse à incident** | Que couper, quels secrets tourner, comment notifier sous 72 heures. Se décide à froid |
+
+### À prévoir
+
+Sauvegarde du portail **et test de restauration** ; rétention et purge des documents (phase 2) ;
+revue de sécurité extérieure avant d'ouvrir à l'ensemble des clients.
+
+### Limites assumées
+
+- **Pas de chiffrement de bout en bout.** Il supposerait une clé détenue par le client :
+  perdue, tout est irrécupérable. Inapplicable à la clientèle visée. La rétention courte
+  (**R3**) est la parade retenue.
+- **La clé de chiffrement au repos vit sur le serveur.** Elle protège du vol de disque,
+  pas d'une prise de contrôle de la machine.
+- **Le maillon faible n'est pas le portail.** La base du CRM est en clair sur le poste du
+  conseiller, protégée par le seul chiffrement disque de l'OS, et contient tout — quand le
+  portail n'en détient qu'une copie partielle et purgée.
 
 ---
 
@@ -385,7 +480,7 @@ Vocabulaire : « votre patrimoine au 31 mars », **pas** « reporting » — le 
 - Messages d'interface en français, identifiants de code en anglais
 - Seuils de taille : composant `.tsx` < 300 lignes, module `.ts` < 400, module `.rs` < 600
 - Tests de caractérisation **avant** tout refactor structurel
-- Vérification : `npm run verify:quick` si seul `src/**` est touché, `npm run verify` dès que `src-tauri/**` l'est
+- Vérification : `npm run verify:quick` si seul `src/**` est touché, `npm run verify` dès que `src-tauri/**` ou `espace-portail/**` l'est — `verify.ps1` couvre les deux crates Rust et les deux projets TypeScript
 - Aucune donnée nominative réelle dans les fixtures ou les tests (voir `donnees-sensibles.mdc`)
 - Pas de `git commit` ni `git push` sans demande explicite
 
@@ -393,14 +488,16 @@ Vocabulaire : « votre patrimoine au 31 mars », **pas** « reporting » — le 
 
 ## 13. Par où commencer
 
-Phase 0, dans cet ordre :
+Les phases 0 et 1 sont faites. La suite, dans cet ordre :
 
-1. Migration `DECLARE_CLIENT` sur `investissements.origine` + audit des agrégats qui filtrent sur `origine`
-2. Migration `partenaires.url_extranet` + saisie dans la fiche partenaire
-3. `src/lib/patrimoine/categories.ts` + tests
-4. `src/lib/patrimoine/disponibilite.ts` + tests
-5. `src/lib/patrimoine/visibilite.ts` + tests exhaustifs (R2)
-6. `src/lib/patrimoine/timeline.ts` + tests
-7. Onglet « Aperçu client » dans `ContactDetail`
+1. **Déployer** le portail derrière Caddy sur un VPS français, avec `ESPACE_PRODUCTION=1`
+   et un `ESPACE_SYNC_SECRET` long et aléatoire. `deploy/README.md` décrit la procédure.
+2. **Basculer l'expéditeur** sur `optipatpro.fr`, déjà authentifié dans Brevo.
+3. **Séparer les clés** et ajouter `cargo audit` / `npm audit` à la vérification.
+4. **Compléter le RGPD** : coordonnées du cabinet, hébergeur, sous-traitance Brevo activée.
+5. Alors seulement, **phase 2** : dépôt de documents, en câblant l'antivirus dès le premier
+   endpoint d'upload plutôt qu'après.
 
-Aucun serveur, aucune décision irréversible, et un écran montrable en rendez-vous à la fin.
+Les trois premiers points transforment une maquette locale en service exposable. Le
+quatrième conditionne le droit d'accueillir un vrai client. Le cinquième est le vrai
+produit — et le moment où la sécurité cesse d'être théorique.

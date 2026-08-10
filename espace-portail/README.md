@@ -108,10 +108,15 @@ client depuis le CRM en révoquant son accès.
 
 ## Mise en ligne — à ne pas rater
 
-Ce binaire ne fait **pas** de TLS. Il n'est jamais exposé directement sur Internet :
-un reverse proxy (Caddy) termine le HTTPS et lui parle en local.
+Ce binaire ne fait **pas** de TLS. Déploiement complet : **`deploy/README.md`** + **`deploy/Caddyfile`**.
 
-- Garder `ESPACE_PORTAL_BIND` sur `127.0.0.1` — jamais `0.0.0.0` sans proxy devant.
+Résumé :
+
+- Garder `ESPACE_PORTAL_BIND` sur `127.0.0.1` — jamais exposé sans Caddy devant.
+- `ESPACE_PRODUCTION=1` et `ESPACE_TRUST_PROXY=1` derrière le reverse proxy.
+- En-têtes de sécurité (CSP, HSTS) et rate-limit IP intégrés au binaire.
+- ClamAV (`ESPACE_CLAMD_ADDR`) requis avant d'ouvrir le dépôt de documents.
+- Conformité RGPD : `docs/ESPACE_CLIENT_RGPD.md` + page `/confidentialite` sur le portail.
 - Le CRM refuse une URL de portail en `http://` hors boucle locale : en production, l'URL est `https://`.
 - `ESPACE_SYNC_SECRET` doit être un secret long et aléatoire, différent de celui de développement.
 - `ESPACE_BREVO_API_KEY` : créer une clé **dédiée au portail**, distincte de celle du CRM, pour

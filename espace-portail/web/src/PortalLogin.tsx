@@ -111,6 +111,15 @@ export function PortalLogin({
               {error}
             </p>
           ) : null}
+
+          <p className="mt-4 text-center text-xs text-[var(--cp-ink-muted)]">
+            <a
+              href="/confidentialite"
+              className="underline-offset-2 hover:text-[var(--cp-ink)] hover:underline"
+            >
+              Protection des données personnelles
+            </a>
+          </p>
         </form>
       </div>
     </main>

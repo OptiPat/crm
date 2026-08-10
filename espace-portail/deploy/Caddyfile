@@ -1,0 +1,35 @@
+# Remplacez par votre domaine réel.
+espace.votre-cabinet.fr {
+	encode gzip zstd
+
+	# TLS automatique (Let's Encrypt). Ne pas exposer le binaire sans ce proxy.
+	reverse_proxy 127.0.0.1:8787 {
+		transport http {
+			versions 1.1
+		}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	# Défense en profondeur — le binaire pose aussi CSP/HSTS en production.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/espace-portail.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+}
+
+# Redirection HTTP → HTTPS
+http://espace.votre-cabinet.fr {
+	redir https://espace.votre-cabinet.fr{uri} permanent
+}

@@ -17,6 +17,7 @@ import {
 } from "@/lib/patrimoine/timeline";
 import { PortalDevGate } from "./PortalDevGate";
 import { PortalLogin } from "./PortalLogin";
+import { PortalPrivacy } from "./PortalPrivacy";
 import type {
   EspaceClientInvestissementLine,
   EspaceClientPartenaireLine,
@@ -105,7 +106,12 @@ function formatSyncLabel(unix?: number): string | null {
   });
 }
 
+function isPrivacyPath(): boolean {
+  return window.location.pathname === "/confidentialite";
+}
+
 export function PortalApp() {
+  const [showPrivacy, setShowPrivacy] = useState(() => isPrivacyPath());
   const { viewport, setViewport } = useClientPreviewViewport();
   const [screen, setScreen] = useState<PortalScreen>("loading");
   const [devMode, setDevMode] = useState(false);
@@ -237,6 +243,23 @@ export function PortalApp() {
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+
+  useEffect(() => {
+    const onNavigate = () => setShowPrivacy(isPrivacyPath());
+    window.addEventListener("popstate", onNavigate);
+    return () => window.removeEventListener("popstate", onNavigate);
+  }, []);
+
+  if (showPrivacy) {
+    return (
+      <PortalPrivacy
+        onBack={() => {
+          window.history.pushState({}, "", "/");
+          setShowPrivacy(false);
+        }}
+      />
+    );
+  }
 
   const handleRequestCode = async () => {
     setLoading(true);

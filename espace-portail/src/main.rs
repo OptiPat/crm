@@ -2,9 +2,11 @@ mod auth;
 mod auth_store;
 mod client_auth;
 mod db;
+mod document_scan; // Phase 2 — dépôt documents (ClamAV)
 mod login_code;
 mod mailer;
 mod read;
+mod security;
 mod sync;
 mod sync_auth;
 
@@ -14,6 +16,7 @@ use std::sync::Arc;
 
 use axum::{
     extract::State,
+    middleware,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -23,6 +26,7 @@ use tracing_subscriber::EnvFilter;
 
 use crate::db::PortalDb;
 use crate::mailer::{Mailer, MailerConfig};
+use crate::security::{parse_bool_env, IpRateLimiter, SecurityConfig};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -95,14 +99,28 @@ async fn main() {
         .expect("ESPACE_SYNC_SECRET requis (même valeur que dans le CRM)");
     let dev_mode = parse_dev_mode(std::env::var("ESPACE_PORTAL_DEV").ok().as_deref());
 
+    let production = parse_bool_env(std::env::var("ESPACE_PRODUCTION").ok().as_deref());
+    let trust_proxy = parse_bool_env(std::env::var("ESPACE_TRUST_PROXY").ok().as_deref())
+        || production;
+
     let addr: SocketAddr = bind.parse().expect("ESPACE_PORTAL_BIND invalide");
+    if production && !addr.ip().is_loopback() && !trust_proxy {
+        panic!(
+            "ESPACE_PRODUCTION exige ESPACE_TRUST_PROXY=1 lorsque le portail \
+             écoute sur une adresse non locale (reverse proxy attendu)."
+        );
+    }
     if let Err(message) = reject_unsafe_dev_exposure(dev_mode, &addr) {
         panic!("{message}");
     }
-    let cookie_secure = parse_cookie_secure(
-        std::env::var("ESPACE_PORTAL_COOKIE_SECURE").ok().as_deref(),
-        &addr,
-    );
+    let cookie_secure = if production {
+        true
+    } else {
+        parse_cookie_secure(
+            std::env::var("ESPACE_PORTAL_COOKIE_SECURE").ok().as_deref(),
+            &addr,
+        )
+    };
 
     let mailer = Mailer::from_config(MailerConfig::from_env());
     if let Err(message) = reject_unusable_mailer(&mailer, dev_mode) {
@@ -150,7 +168,23 @@ async fn main() {
         )
         .with_state(state);
 
-    let app = Router::new().merge(api).fallback_service(serve_ui);
+    let security_config = SecurityConfig {
+        production,
+        trust_proxy,
+    };
+    let rate_limiter = Arc::new(IpRateLimiter::default());
+
+    let app = Router::new()
+        .merge(api)
+        .fallback_service(serve_ui)
+        .layer(middleware::from_fn_with_state(
+            security_config,
+            security::security_headers_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            (rate_limiter, security_config),
+            security::rate_limit_middleware,
+        ));
 
     if dev_mode {
         tracing::warn!("ESPACE_PORTAL_DEV actif — lecture patrimoine sans auth client");
