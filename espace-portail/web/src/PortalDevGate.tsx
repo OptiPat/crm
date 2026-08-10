@@ -19,9 +19,8 @@ export function PortalDevGate({
     <main className={`${CP.root} flex min-h-[100dvh] flex-col items-center justify-center px-6 py-10`}>
       <div className="w-full max-w-sm space-y-6">
         <div className="space-y-2 text-center">
-          <p className="cp-kicker">Patrimoine CRM</p>
           <h1 className="text-xl font-medium tracking-tight text-[var(--cp-ink)]">
-            Espace client
+            Espace investisseur
           </h1>
           <p className="cp-caption text-[var(--cp-ink-muted)]">
             Mode développement — accès temporaire par identifiant contact

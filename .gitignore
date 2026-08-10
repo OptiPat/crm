@@ -39,6 +39,9 @@ dist-ssr
 /dist-espace-portail-vps.zip
 /.pack-espace-portail-staging
 /espace-portail/espace-portail.db
+# Logo du cabinet : propre à chaque déploiement, jamais dans le dépôt public.
+/espace-portail/web/public/branding/*
+!/espace-portail/web/public/branding/.gitkeep
 
 # --- Données sensibles (ne jamais committer) ---
 # Notes stratégiques personnelles (réseau/organisation) — jamais publiques

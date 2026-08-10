@@ -1,0 +1,84 @@
+---
+description: Déployer ou mettre à jour l'espace client (portail VPS, logo, branding, .env, ClamAV)
+alwaysApply: false
+---
+
+# Déploiement de l'espace client (portail VPS)
+
+Procédure complète et pièges : **`espace-portail/deploy/README.md`** (source canonique).
+Cette règle ne retient que ce qu'un agent doit savoir avant d'agir.
+
+## Accès au serveur
+
+- Alias SSH **`espace-vps`** défini dans `~/.ssh/config` du poste éditeur, clé dédiée
+  sans phrase de passe → l'agent déploie sans solliciter l'utilisateur.
+- Authentification **par clé uniquement** : le mot de passe SSH est désactivé côté
+  serveur (`/etc/ssh/sshd_config.d/00-durcissement.conf`). Ne jamais le réactiver.
+- `sudo` est configuré sans mot de passe sur le serveur.
+- Toujours passer `-o BatchMode=yes` à `ssh` et `scp` : sans ça, un échec
+  d'authentification attend une saisie que personne ne verra jamais.
+- Ne jamais écrire l'IP, le domaine réel ou un secret dans le dépôt (il est public).
+
+`ssh`, `scp` et `unzip` écrivent des avertissements sur stderr, que PowerShell
+transforme en `NativeCommandError` et interprète comme un échec. Préfixer les appels
+par `$ErrorActionPreference='Continue'`, sinon une commande réussie remonte en erreur
+et masque sa sortie.
+
+## Mise à jour
+
+```powershell
+cd D:\crm
+.\espace-portail\deploy\pack-for-vps.ps1
+scp -o BatchMode=yes D:\crm\dist-espace-portail-vps.zip espace-vps:/tmp/
+ssh espace-vps "sudo rm -rf /tmp/espace-build; mkdir -p /tmp/espace-build; unzip -q -o /tmp/dist-espace-portail-vps.zip -d /tmp/espace-build 2>/dev/null"
+ssh espace-vps "sudo bash /tmp/espace-build/deploy/install-vps.sh espace.DOMAINE.FR /tmp/espace-build"
+```
+
+L'installeur est **idempotent** et ne réécrit jamais `/opt/espace-portail/.env` :
+secrets et personnalisation survivent. Compter ~3 min de compilation Rust.
+
+## Ce qui exige un redéploiement, ce qui n'en exige pas
+
+| Changement | Action |
+|---|---|
+| Code Rust ou UI du portail | Repackager **et** réinstaller |
+| Valeur d'une variable existante | `sed` sur le `.env` + `systemctl restart` |
+| Nouvelle variable ajoutée au code | Redéployer, sinon elle est ignorée sans erreur |
+| Logo ou asset de `web/public/` | Repackager (Vite le copie dans `dist`) |
+
+Le symptôme d'un oubli est trompeur : le `.env` paraît correct, mais le binaire
+déployé ignore une clé qu'il ne connaît pas.
+
+## Contrôles après déploiement
+
+```powershell
+Invoke-WebRequest https://espace.DOMAINE.FR/api/v1/portal-config -UseBasicParsing
+Invoke-WebRequest https://espace.DOMAINE.FR/health -UseBasicParsing
+```
+
+`portal-config` expose `branding` et `privacy` : c'est le moyen le plus rapide de
+vérifier qu'une variable est bien prise en compte. Pour le rendu visuel, utiliser
+le navigateur — un logo peut être servi en HTTP 200 et rester invisible à l'écran.
+
+## Vérification locale
+
+`verify:quick` type-checke déjà l'UI du portail (étape dédiée dans `verify.ps1`),
+mais **saute la crate Rust** : les tests Cargo sont derrière la garde `-not $Quick`.
+Après modification de `espace-portail/src/**`, lancer explicitement :
+
+```powershell
+$env:CARGO_TARGET_DIR = "D:\crm\target-cargo-verify"
+cargo test --manifest-path espace-portail/Cargo.toml
+```
+
+Même cible que `verify.ps1`, pour réutiliser le cache et rester compatible avec un
+`dev.ps1` en cours. `npm run verify` (non quick) couvre tout.
+
+## Interdits
+
+- **Ne pas** committer `espace-portail/web/public/branding/*` : le logo appartient au
+  cabinet, pas au produit distribué (déjà dans `.gitignore`).
+- **Ne pas** déployer un travail en cours : vérifier `git status` et l'horodatage des
+  sources avant de packager, une autre session peut être en train d'écrire.
+- **Ne pas** rendre ClamAV facultatif : le binaire panique au démarrage en production
+  s'il est injoignable, et c'est voulu.

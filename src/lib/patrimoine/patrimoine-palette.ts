@@ -37,16 +37,19 @@ export const PATRIMOINE_CATEGORIE_COLORS: Record<PatrimoineCategorie, string> = 
   Autre: CRM_A_COTE_COLOR,
 };
 
+/** Horizons — teintes distinctes (lisibles sur fond sombre du portail). */
 export const HORIZON_CHART_COLORS: Record<string, string> = {
-  "Court terme": "#525252",
-  "Moyen terme": "#858585",
-  "Long terme": "#bfbfbf",
-  "Résidence principale": "#f2f2f2",
+  "Court terme": "#6B9EC4",
+  "Moyen terme": "#C4A06B",
+  "Long terme": "#9A8FCC",
+  "Résidence principale": "#D9C9A8",
 };
 
-/** Décomposition par source (hero). */
+/** Décomposition par source (hero) — teinte dédiée, distincte du rose placements. */
+export const CRM_CONSEIL_SOURCE_COLOR = "#5B9EA6";
+
 export const PATRIMOINE_SOURCE_COLORS: Record<string, string> = {
-  MON_CONSEIL: CRM_PLACEMENT_COLOR,
+  MON_CONSEIL: CRM_CONSEIL_SOURCE_COLOR,
   EXISTANT_CLIENT: CRM_A_COTE_COLOR,
   DECLARE_CLIENT: CRM_A_COTE_COLOR,
 };

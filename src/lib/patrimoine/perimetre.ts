@@ -27,8 +27,8 @@ export interface PerimetrePatrimoine {
 
 const SOURCE_LABELS: Record<string, string> = {
   MON_CONSEIL: "Suivi par votre conseiller",
-  EXISTANT_CLIENT: "Patrimoine existant (vérifié par le conseiller)",
-  DECLARE_CLIENT: "Déclaré par vous (non vérifié)",
+  EXISTANT_CLIENT: "Patrimoine déjà connu",
+  DECLARE_CLIENT: "Déclaré par vous",
 };
 
 export interface BuildPerimetrePatrimoineOptions {
@@ -98,14 +98,16 @@ export function buildPerimetrePatrimoine(
   const partDeclaree =
     totalCentimes > 0 ? declareCentimes / totalCentimes : 0;
 
-  let completenessLabel = "Vue complète selon les informations connues";
+  let completenessLabel =
+    "Synthèse à partir des informations connues à ce jour";
   if (partDeclaree > 0 && partDeclaree < 0.25) {
-    completenessLabel = "Vue en cours de complétion — quelques avoirs déclarés par vous";
+    completenessLabel =
+      "Quelques avoirs complémentaires déclarés par vous — vue en cours de mise à jour";
   } else if (partDeclaree >= 0.25) {
     completenessLabel =
-      "Vue mixte — une part significative provient de vos déclarations";
+      "Une part significative de cette vue provient de vos déclarations";
   } else if (!buckets.has("MON_CONSEIL") && buckets.has("EXISTANT_CLIENT")) {
-    completenessLabel = "Patrimoine existant — hors conseil";
+    completenessLabel = "Montants validés avec votre conseiller";
   }
 
   return {

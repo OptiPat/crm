@@ -36,8 +36,17 @@ export async function importPipeChecklistDocument(
 
 /** Type document suggéré selon l'id de pièce checklist (optionnel à l'import). */
 export function suggestedDocumentTypeForChecklistItem(itemId: string): string | undefined {
-  if (itemId === "cni") return "IDENTITE";
-  if (itemId === "qpi_a_signer") return "QPI";
+  // Correspondance par fragment : les checklists déclinent la pièce d'identité
+  // sous plusieurs identifiants (`cni`, `cni_emprunteurs`, `piece_identite`…),
+  // et une égalité stricte les classait toutes en « Autre ».
+  if (
+    itemId.includes("cni") ||
+    itemId.includes("identite") ||
+    itemId.includes("passeport")
+  ) {
+    return "IDENTITE";
+  }
+  if (itemId.includes("qpi")) return "QPI";
   if (itemId === "rio" || itemId === "der") return "PATRIMOINE";
   if (itemId.includes("avis") || itemId.includes("impot")) return "FISCAL";
   if (itemId.includes("releve") || itemId.includes("situation")) return "PATRIMOINE";

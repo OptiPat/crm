@@ -16,7 +16,7 @@ function inv(
 }
 
 describe("aggregateByDisponibilite", () => {
-  it("utilise des couleurs neutres pour les horizons (pas les couleurs CRM)", () => {
+  it("utilise des couleurs distinctes pour les horizons", () => {
     const slices = aggregateByDisponibilite([
       inv({ type_produit: "ASSURANCE_VIE", origine: "MON_CONSEIL" }),
       inv({ type_produit: "SCPI", origine: "MON_CONSEIL" }),

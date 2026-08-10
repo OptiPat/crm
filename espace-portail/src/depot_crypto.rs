@@ -79,6 +79,7 @@ pub fn seal(plaintext: &[u8], recipient_public: &[u8; 32]) -> Result<Vec<u8>, St
 
 /// Déchiffre — réservé au détenteur de la clé privée (le CRM). Présent ici pour
 /// que le format soit vérifié par les tests des deux côtés.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn unseal(sealed: &[u8], recipient_secret: &[u8; 32]) -> Result<Vec<u8>, String> {
     let header = MAGIC.len() + PUBLIC_KEY_LEN + NONCE_LEN;
     if sealed.len() < header || !sealed.starts_with(MAGIC) {
@@ -110,6 +111,8 @@ pub fn unseal(sealed: &[u8], recipient_secret: &[u8; 32]) -> Result<Vec<u8>, Str
         .map_err(|_| "Dépôt scellé altéré ou clé incorrecte".into())
 }
 
+/// Sert au CRM pour publier sa clé ; côté portail, seuls les tests l'emploient.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }

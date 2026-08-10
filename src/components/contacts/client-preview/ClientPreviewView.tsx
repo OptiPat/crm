@@ -61,6 +61,8 @@ export interface ClientPreviewViewProps {
   /** Cadre simulateur conseiller — désactivé sur le portail client. */
   showDeviceFrame?: boolean;
 
+  /** Masque la ligne de synchro en bas de timeline (ex. déjà dans l'en-tête portail). */
+  hideTimelineSync?: boolean;
 }
 
 
@@ -90,6 +92,8 @@ export function ClientPreviewView({
   lastSyncLabel,
 
   showDeviceFrame = true,
+
+  hideTimelineSync = false,
 
 }: ClientPreviewViewProps) {
 
@@ -164,7 +168,7 @@ export function ClientPreviewView({
 
           loading={timelineLoading}
 
-          lastSyncLabel={lastSyncLabel}
+          lastSyncLabel={hideTimelineSync ? null : lastSyncLabel}
 
         />
 

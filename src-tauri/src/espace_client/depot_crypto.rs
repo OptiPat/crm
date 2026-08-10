@@ -42,6 +42,9 @@ fn derive_key(shared: &[u8; 32], ephemeral: &[u8; 32], recipient: &[u8; 32]) -> 
     key
 }
 
+/// Utilisée côté portail pour sceller ; ici seuls les tests s'en servent, le
+/// CRM ne faisant que desceller.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn parse_public_key(encoded: &str) -> Result<[u8; 32], String> {
     let raw = hex_decode(encoded.trim())?;
     <[u8; 32]>::try_from(raw.as_slice())

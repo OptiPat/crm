@@ -9,6 +9,8 @@ mod documents;
 mod file_sniff;
 mod login_code;
 mod mailer;
+mod portal_branding;
+mod privacy_config;
 mod read;
 mod security;
 mod sync;
@@ -29,6 +31,8 @@ use tower_http::services::{ServeDir, ServeFile};
 use tracing_subscriber::EnvFilter;
 
 use crate::db::PortalDb;
+use crate::portal_branding::PortalBrandingConfig;
+use crate::privacy_config::PortalPrivacyConfig;
 use crate::document_scan::require_clamd_available;
 use crate::mailer::{Mailer, MailerConfig};
 use crate::security::{parse_bool_env, IpRateLimiter, SecurityConfig};
@@ -48,6 +52,8 @@ pub struct AppState {
     /// Envoi des codes de connexion. `None` = non configuré : acceptable en
     /// développement, bloquant en production (voir `reject_unusable_mailer`).
     pub mailer: Option<Mailer>,
+    pub privacy: PortalPrivacyConfig,
+    pub branding: PortalBrandingConfig,
 }
 
 fn static_dir() -> PathBuf {
@@ -175,6 +181,9 @@ async fn main() {
     let advisor_email = std::env::var("ESPACE_ADVISOR_EMAIL").unwrap_or_default();
 
     let db = Arc::new(PortalDb::open(&db_path).expect("ouverture base portail"));
+    let privacy = PortalPrivacyConfig::from_env();
+    let branding = PortalBrandingConfig::from_env();
+
     let state = AppState {
         db,
         sync_secret,
@@ -184,6 +193,8 @@ async fn main() {
         data_dir,
         advisor_email,
         mailer,
+        privacy,
+        branding,
     };
 
     let static_root = static_dir();
@@ -274,7 +285,11 @@ async fn health() -> &'static str {
 }
 
 async fn portal_config(State(state): State<AppState>) -> impl IntoResponse {
-    Json(serde_json::json!({ "devMode": state.dev_mode }))
+    Json(serde_json::json!({
+        "devMode": state.dev_mode,
+        "privacy": state.privacy,
+        "branding": state.branding,
+    }))
 }
 
 #[cfg(test)]

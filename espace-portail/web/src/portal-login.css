@@ -1,0 +1,174 @@
+/* Écran de connexion portail — thème clair optionnel, OTP */
+
+.cp-login-shell {
+  min-height: 100dvh;
+  background: var(--cp-bg);
+}
+
+.cp-login-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem 1rem;
+}
+
+.cp-login-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.cp-login-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem 1.25rem;
+  max-width: 100%;
+}
+
+.cp-login-tagline {
+  margin: 0;
+  text-wrap: balance;
+}
+
+.cp-login-code-hint {
+  margin: 0;
+  font-size: 0.625rem;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.cp-login-logo {
+  height: 5.5rem;
+  width: auto;
+  max-width: 5.5rem;
+  flex-shrink: 0;
+  object-fit: contain;
+  object-position: center;
+}
+
+.cp-login-card {
+  border-radius: 1.25rem;
+  border: 1px solid var(--cp-line);
+  background: color-mix(in srgb, var(--cp-surface) 92%, transparent);
+  padding: 1.5rem;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 24px 48px -24px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+}
+
+.cp-login-field {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid var(--cp-line);
+  background: var(--cp-surface-raised);
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--cp-ink);
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.cp-login-field:focus {
+  border-color: color-mix(in srgb, var(--cp-accent) 55%, var(--cp-line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cp-accent) 18%, transparent);
+}
+
+.cp-login-otp {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.cp-login-otp-digit {
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 4 / 5;
+  border-radius: 0.75rem;
+  border: 1px solid var(--cp-line);
+  background: var(--cp-surface-raised);
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: var(--cp-ink);
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.cp-login-otp-digit:focus {
+  border-color: color-mix(in srgb, var(--cp-accent) 55%, var(--cp-line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cp-accent) 18%, transparent);
+}
+
+.cp-login-trust {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 1rem;
+  font-size: 0.75rem;
+  color: var(--cp-ink-muted);
+}
+
+.cp-login-trust-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* Thème clair (forcé ou prefers-color-scheme en mode system) */
+@media (prefers-color-scheme: light) {
+  [data-portal-theme="system"] .cp-login-shell {
+    background: var(--cp-bg);
+  }
+
+  [data-portal-theme="system"] .cp-root {
+    --cp-bg: #f7f8fa;
+    --cp-surface: #ffffff;
+    --cp-surface-raised: #f3f5f8;
+    --cp-ink: #1a1a1a;
+    --cp-ink-muted: #5c6570;
+    --cp-ink-faint: #8a939e;
+    --cp-line: rgba(0, 0, 0, 0.1);
+    --cp-line-soft: rgba(0, 0, 0, 0.05);
+    --cp-accent: #2c5282;
+  }
+
+  [data-portal-theme="system"] .cp-login-card {
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.8) inset,
+      0 20px 40px -24px rgba(30, 50, 80, 0.18);
+  }
+}
+
+[data-portal-theme="light"] .cp-login-shell {
+  background: var(--cp-bg);
+}
+
+[data-portal-theme="light"] .cp-root {
+  --cp-bg: #f7f8fa;
+  --cp-surface: #ffffff;
+  --cp-surface-raised: #f3f5f8;
+  --cp-ink: #1a1a1a;
+  --cp-ink-muted: #5c6570;
+  --cp-ink-faint: #8a939e;
+  --cp-line: rgba(0, 0, 0, 0.1);
+  --cp-line-soft: rgba(0, 0, 0, 0.05);
+  --cp-accent: #2c5282;
+}
+
+[data-portal-theme="light"] .cp-login-card {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.8) inset,
+    0 20px 40px -24px rgba(30, 50, 80, 0.18);
+}

@@ -1,32 +1,31 @@
 import type { Investissement } from "@/lib/api/tauri-investissements";
-import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
+
+/** Montant espace client — arrondi à l'euro, sans centimes. */
+export function formatClientPreviewEuro(centimes: number): string {
+  if (centimes <= 0) return "-";
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(centimes / 100));
+}
 
 /** Total hero — compact au-delà du million. */
 export function formatClientPreviewTotal(centimes: number): string {
   if (centimes >= 1_000_000_00) {
-    const millions = centimes / 100_000_000;
+    const millions = Math.round(centimes / 100) / 1_000_000;
     const formatted = millions.toLocaleString("fr-FR", {
       maximumFractionDigits: millions >= 10 ? 0 : 1,
     });
     return `${formatted} M€`;
   }
-  return formatEuroCentimes(centimes);
+  return formatClientPreviewEuro(centimes);
 }
 
-/** Total centre donut — plus court pour éviter le débordement. */
+/** Total centre donut — aligné sur le hero. */
 export function formatChartCenterTotal(centimes: number): string {
-  if (centimes >= 1_000_000_00) {
-    return formatClientPreviewTotal(centimes);
-  }
-  if (centimes >= 100_000_00) {
-    return new Intl.NumberFormat("fr-FR", {
-      style: "currency",
-      currency: "EUR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(centimes / 100);
-  }
-  return formatEuroCentimes(centimes);
+  return formatClientPreviewTotal(centimes);
 }
 
 export function getLatestValorisationLabel(
@@ -47,5 +46,5 @@ export function getLatestValorisationLabel(
 }
 
 export function formatShortEuro(centimes: number): string {
-  return formatEuroCentimes(centimes);
+  return formatClientPreviewEuro(centimes);
 }

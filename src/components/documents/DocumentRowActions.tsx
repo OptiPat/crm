@@ -9,13 +9,21 @@ import {
   canReimportStelliumDocument,
   getStelliumReimportActionLabel,
 } from "@/lib/documents/document-display";
-import { ExternalLink, MoreHorizontal, RefreshCw, Trash2, UserRound } from "lucide-react";
+import {
+  ExternalLink,
+  MoreHorizontal,
+  Pencil,
+  RefreshCw,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 
 type DocumentRowActionsProps = {
   doc: Document;
   onOpenFile: () => void;
   onOpenClient?: () => void;
   onReimportStellium?: () => void;
+  onEdit?: () => void;
   onDelete: () => void;
 };
 
@@ -24,6 +32,7 @@ export function DocumentRowActions({
   onOpenFile,
   onOpenClient,
   onReimportStellium,
+  onEdit,
   onDelete,
 }: DocumentRowActionsProps) {
   const showReimport = canReimportStelliumDocument(doc) && onReimportStellium;
@@ -79,6 +88,18 @@ export function DocumentRowActions({
           >
             <RefreshCw className="h-4 w-4" />
             {getStelliumReimportActionLabel(doc.type_document)}
+          </Button>
+        )}
+        {onEdit && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2 h-9"
+            onClick={onEdit}
+          >
+            <Pencil className="h-4 w-4" />
+            Modifier type et date
           </Button>
         )}
         <Button

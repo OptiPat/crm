@@ -19,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { DocumentEditDialog } from "@/components/documents/DocumentEditDialog";
 import { DocumentListRow } from "@/components/documents/DocumentListRow";
 import { DocumentPreviewSheet } from "@/components/documents/DocumentPreviewSheet";
 import { DocumentsClientFolderList } from "@/components/documents/DocumentsClientFolderList";
@@ -132,6 +133,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
   const [dropBusy, setDropBusy] = useState(false);
   const [openedFolderKey, setOpenedFolderKey] = useState<DocumentFolderKey | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
+  const [editTarget, setEditTarget] = useState<Document | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [sortKey, setSortKey] = useState<DocumentsPortfolioSort>("date_desc");
   const [groupMode, setGroupMode] = useState<DocumentsPortfolioGroup>("folders");
@@ -539,6 +541,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
         onDelete={setDeleteTarget}
         onOpenClient={openClient}
         onReimportStellium={handleReimportStellium}
+        onEdit={setEditTarget}
       />
     );
   };
@@ -941,6 +944,15 @@ export function Documents({ onNavigate }: DocumentsProps) {
         }
         initialExtractedData={stelliumDropImport?.extractedData}
         existingDocumentId={rioReimportDoc?.id}
+      />
+
+      <DocumentEditDialog
+        doc={editTarget}
+        open={editTarget != null}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+        onSaved={() => void loadDocuments()}
       />
 
       <AlertDialog

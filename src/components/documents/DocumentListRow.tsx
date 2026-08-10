@@ -15,6 +15,7 @@ type DocumentListRowProps = {
   onDelete: (doc: Document) => void;
   onOpenClient?: (contactId: number) => void;
   onReimportStellium?: (doc: Document) => void;
+  onEdit?: (doc: Document) => void;
 };
 
 function getMimeIcon(mimeType: string) {
@@ -63,6 +64,7 @@ export function DocumentListRow({
   onDelete,
   onOpenClient,
   onReimportStellium,
+  onEdit,
 }: DocumentListRowProps) {
   return (
     <div
@@ -130,6 +132,7 @@ export function DocumentListRow({
             onReimportStellium={
               onReimportStellium ? () => onReimportStellium(doc) : undefined
             }
+            onEdit={onEdit ? () => onEdit(doc) : undefined}
             onDelete={() => onDelete(doc)}
           />
         </div>

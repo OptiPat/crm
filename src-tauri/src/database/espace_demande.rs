@@ -328,26 +328,6 @@ impl super::Database {
         Ok(())
     }
 
-    pub fn mark_espace_demande_valide(
-        &self,
-        demande_id: i64,
-    ) -> std::result::Result<EspaceDemande, String> {
-        self.conn
-            .execute(
-                "UPDATE espace_demande
-                 SET statut = ?1,
-                     recu_at = COALESCE(recu_at, unixepoch()),
-                     valide_at = unixepoch(),
-                     updated_at = unixepoch()
-                 WHERE id = ?2",
-                params![ESPACE_DEMANDE_VALIDE, demande_id],
-            )
-            .map_err(|e| e.to_string())?;
-
-        self.get_espace_demande_by_id(demande_id)
-            .map_err(|e| e.to_string())?
-            .ok_or_else(|| "Demande introuvable".to_string())
-    }
 }
 
 #[cfg(test)]
@@ -403,7 +383,16 @@ mod tests {
             .create_espace_demande(contact_id, "AUTRE", None, "Autre")
             .unwrap();
         db.cancel_espace_demande(d2.id).unwrap();
-        db.mark_espace_demande_valide(d1.id).unwrap();
+        // Statut posé directement : en production c'est l'import en GED qui le
+        // pose, avec l'identifiant du document.
+        db.conn
+            .execute(
+                "UPDATE espace_demande
+                 SET statut = ?1, valide_at = unixepoch()
+                 WHERE id = ?2",
+                params![ESPACE_DEMANDE_VALIDE, d1.id],
+            )
+            .unwrap();
 
         let sync_rows = db.list_espace_demandes_for_sync(contact_id).unwrap();
         assert_eq!(sync_rows.len(), 1);

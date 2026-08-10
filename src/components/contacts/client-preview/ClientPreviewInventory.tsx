@@ -233,7 +233,7 @@ export function ClientPreviewInventory({
 
   return (
     <section className={`${CP.sectionGap} ${CP.padX} pb-2`}>
-      <h3 className={CP.sectionTitle}>Détail par placement</h3>
+      <h3 className={CP.sectionTitle}>Détail par investissement</h3>
 
       {sortedInventory.length === 0 ? (
         <p className={`${CP.meta} mt-3`}>{emptyMessage}</p>

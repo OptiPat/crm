@@ -16,7 +16,7 @@ if (-not (Test-Path $envFile)) {
     exit 1
 }
 
-foreach ($line in Get-Content $envFile) {
+foreach ($line in Get-Content -LiteralPath $envFile -Encoding utf8) {
     $trimmed = $line.Trim()
     if ($trimmed -eq '' -or $trimmed.StartsWith('#')) { continue }
     $pair = $trimmed -split '=', 2

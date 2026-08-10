@@ -17,7 +17,9 @@ import {
 import { PortalDevGate } from "./PortalDevGate";
 import { PortalLogin } from "./PortalLogin";
 import { PortalDocumentsSection } from "./PortalDocumentsSection";
+import { PortalPatrimoineHeader } from "./PortalPatrimoineHeader";
 import { PortalPrivacy } from "./PortalPrivacy";
+import { applyPortalColorScheme, type PortalColorScheme } from "./portal-theme";
 import type {
   EspaceClientInvestissementLine,
   EspaceClientPartenaireLine,
@@ -32,9 +34,25 @@ interface AuthMeResponse {
   nom: string;
 }
 
+interface PortalBrandingResponse {
+  brandName?: string;
+  logoUrl?: string;
+  loginTagline: string;
+  colorScheme: PortalColorScheme;
+}
+
 interface PortalConfigResponse {
   devMode: boolean;
+  branding?: PortalBrandingResponse;
 }
+
+const DEFAULT_LOGIN_TAGLINE =
+  "Consultez votre patrimoine en toute confidentialité";
+
+const DEFAULT_BRANDING: PortalBrandingResponse = {
+  loginTagline: DEFAULT_LOGIN_TAGLINE,
+  colorScheme: "system",
+};
 
 type PortalScreen = "loading" | "login" | "dev" | "no-sync" | "app";
 
@@ -128,6 +146,7 @@ export function PortalApp() {
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [branding, setBranding] = useState<PortalBrandingResponse>(DEFAULT_BRANDING);
 
   const applyPatrimoineResponse = useCallback((body: PatrimoineApiResponse) => {
     setPayload(body.payload);
@@ -204,6 +223,12 @@ export function PortalApp() {
       const configResponse = await fetch("/api/v1/portal-config");
       const config = (await configResponse.json()) as PortalConfigResponse;
       setDevMode(Boolean(config.devMode));
+      if (config.branding) {
+        setBranding(config.branding);
+        applyPortalColorScheme(config.branding.colorScheme);
+      } else {
+        applyPortalColorScheme("system");
+      }
 
       const meResponse = await fetch("/api/v1/auth/me", {
         credentials: "include",
@@ -252,16 +277,19 @@ export function PortalApp() {
     return () => window.removeEventListener("popstate", onNavigate);
   }, []);
 
-  if (showPrivacy) {
-    return (
-      <PortalPrivacy
-        onBack={() => {
-          window.history.pushState({}, "", "/");
-          setShowPrivacy(false);
-        }}
-      />
-    );
-  }
+  const openPrivacy = useCallback(() => {
+    if (!isPrivacyPath()) {
+      window.history.pushState({ privacy: true }, "", "/confidentialite");
+    }
+    setShowPrivacy(true);
+  }, []);
+
+  const closePrivacy = useCallback(() => {
+    if (isPrivacyPath()) {
+      window.history.replaceState({}, "", "/");
+    }
+    setShowPrivacy(false);
+  }, []);
 
   const handleRequestCode = async () => {
     setLoading(true);
@@ -370,6 +398,10 @@ export function PortalApp() {
     [payload]
   );
 
+  if (showPrivacy) {
+    return <PortalPrivacy onBack={closePrivacy} />;
+  }
+
   if (screen === "loading") {
     return (
       <main
@@ -389,10 +421,15 @@ export function PortalApp() {
         loading={loading}
         error={error}
         info={loginInfo}
+        branding={{
+          logoUrl: branding.logoUrl,
+          loginTagline: branding.loginTagline,
+        }}
         onEmailChange={setLoginEmail}
         onCodeChange={setLoginCode}
         onRequestCode={() => void handleRequestCode()}
         onSubmit={() => void handleLogin()}
+        onOpenPrivacy={openPrivacy}
       />
     );
   }
@@ -415,9 +452,8 @@ export function PortalApp() {
         className={`${CP.root} flex min-h-[100dvh] flex-col items-center justify-center px-6 py-10`}
       >
         <div className="w-full max-w-sm space-y-4 text-center">
-          <p className="cp-kicker">Patrimoine CRM</p>
           <h1 className="text-xl font-medium tracking-tight text-[var(--cp-ink)]">
-            Espace client
+            Espace investisseur
           </h1>
           <p className="cp-caption text-[var(--cp-ink-muted)]">
             {error ??
@@ -454,25 +490,28 @@ export function PortalApp() {
         loading={loading}
         error={error ?? "Session expirée"}
         info={loginInfo}
+        branding={{
+          logoUrl: branding.logoUrl,
+          loginTagline: branding.loginTagline,
+        }}
         onEmailChange={setLoginEmail}
         onCodeChange={setLoginCode}
         onRequestCode={() => void handleRequestCode()}
         onSubmit={() => void handleLogin()}
+        onOpenPrivacy={openPrivacy}
       />
     );
   }
 
   return (
     <main className={`${CP.root} flex min-h-[100dvh] w-full flex-col items-center`}>
-      <div className="flex w-full max-w-5xl items-center justify-end px-4 pt-4">
-        <button
-          type="button"
-          onClick={() => void handleLogout()}
-          className="text-xs text-[var(--cp-ink-muted)] underline-offset-2 hover:text-[var(--cp-ink)] hover:underline"
-        >
-          Déconnexion
-        </button>
-      </div>
+      <PortalPatrimoineHeader
+        prenom={contact.prenom}
+        nom={contact.nom}
+        logoUrl={branding.logoUrl}
+        lastSyncLabel={formatSyncLabel(syncedAt ?? undefined)}
+        onLogout={() => void handleLogout()}
+      />
       <PortalDocumentsSection />
       <ClientPreviewView
         contact={contact}
@@ -484,6 +523,7 @@ export function PortalApp() {
         timeline={timeline}
         viewport={viewport}
         showDeviceFrame={false}
+        hideTimelineSync
         emptyState={visible.length === 0 ? "empty" : null}
         timelineLoading={loading}
         lastSyncLabel={formatSyncLabel(syncedAt ?? undefined)}

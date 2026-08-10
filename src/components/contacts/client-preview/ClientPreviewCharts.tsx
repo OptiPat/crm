@@ -4,6 +4,8 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 
 import type { PatrimoineChartSlice } from "@/lib/patrimoine/patrimoine-charts";
 
+import { distributeIntegerPercents } from "@/lib/patrimoine/chart-percents";
+
 import { cn } from "@/lib/utils";
 
 import type { ClientPreviewViewport } from "./ClientPreviewAdvisorPanel";
@@ -211,65 +213,32 @@ function DonutChart({
 
 
 function ChartLegend({ data }: { data: PatrimoineChartSlice[] }) {
-
-  const total = data.reduce((s, d) => s + d.value, 0);
-
-
+  const percents = distributeIntegerPercents(data.map((row) => row.value));
 
   return (
-
     <ul className="space-y-2.5">
-
-      {data.map((row) => {
-
-        const pct = total > 0 ? Math.round((row.value / total) * 100) : 0;
-
-        return (
-
-          <li
-
-            key={row.name}
-
-            className={`flex items-center justify-between gap-3 ${CP.body}`}
-
-          >
-
-            <div className="flex min-w-0 items-center gap-2">
-
-              <span
-
-                className="h-1.5 w-1.5 shrink-0 rounded-full"
-
-                style={{ backgroundColor: row.color }}
-
-              />
-
-              <span className={`${CP.meta} truncate`}>{row.name}</span>
-
-            </div>
-
-            <div className={`${CP.caption} shrink-0 text-right`}>
-
-              <span className={`${CP.amount} text-[var(--cp-ink-muted)]`}>
-
-                {formatShortEuro(row.value)}
-
-              </span>
-
-              <span className="ml-2 tabular-nums">{pct} %</span>
-
-            </div>
-
-          </li>
-
-        );
-
-      })}
-
+      {data.map((row, index) => (
+        <li
+          key={row.name}
+          className={`flex items-center justify-between gap-3 ${CP.body}`}
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: row.color }}
+            />
+            <span className={`${CP.meta} truncate`}>{row.name}</span>
+          </div>
+          <div className={`${CP.caption} flex shrink-0 items-baseline gap-2 tabular-nums`}>
+            <span className="text-[var(--cp-ink-muted)]">{percents[index]} %</span>
+            <span className={`${CP.amount} text-[var(--cp-ink-muted)]`}>
+              {formatShortEuro(row.value)}
+            </span>
+          </div>
+        </li>
+      ))}
     </ul>
-
   );
-
 }
 
 
@@ -439,9 +408,7 @@ export function ClientPreviewCharts({
           <SegmentedControl value={chartTab} onChange={setChartTab} />
 
           <div className="mt-5">
-
             <DonutChart data={activeChart} total={activeTotal} />
-
           </div>
 
           <div className="mt-4 border-t border-[var(--cp-line-soft)] pt-3">

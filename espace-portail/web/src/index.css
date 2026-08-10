@@ -6,6 +6,7 @@
 @source "./";
 
 @import "../../../src/components/contacts/client-preview/client-preview.css";
+@import "./portal-login.css";
 
 html,
 body,
