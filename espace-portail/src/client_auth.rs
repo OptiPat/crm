@@ -58,6 +58,10 @@ struct RequestCodeResponse {
 const REQUEST_CODE_MESSAGE: &str =
     "Si un espace existe pour cette adresse, un code vient d'être envoyé.";
 
+/// Message unique renvoyé au client en cas d'échec de connexion, quelle qu'en
+/// soit la cause — code faux, accès révoqué, ou panne interne.
+pub const LOGIN_REFUSED: &str = "Email ou code incorrect.";
+
 pub async fn post_request_code(
     State(state): State<AppState>,
     Json(body): Json<RequestCodeRequest>,
@@ -155,11 +159,19 @@ pub async fn post_login(
                 .insert(SET_COOKIE, cookie.parse().unwrap());
             response
         }
-        Err(message) => (
-            StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({ "error": message })),
-        )
-            .into_response(),
+        Err(message) => {
+            // Le detail interne reste dans les logs : une erreur technique
+            // affichee au client fuite la structure de la base, et distinguer
+            // les causes revient a confirmer l'existence d'un espace (R13).
+            if message != LOGIN_REFUSED {
+                tracing::error!("Connexion refusée ({message})");
+            }
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({ "error": LOGIN_REFUSED })),
+            )
+                .into_response()
+        }
     }
 }
 

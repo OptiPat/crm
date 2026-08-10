@@ -7,6 +7,11 @@ espace.votre-cabinet.fr {
 		transport http {
 			versions 1.1
 		}
+		# Caddy signale ces deux lignes comme « inutiles » : ne les retirez pas.
+		# Par defaut il *ajoute* l'adresse reelle a la chaine deja presente, si
+		# bien qu'un client envoyant lui-meme un X-Forwarded-For placerait sa
+		# valeur en tete. Le portail lit le premier element : il prendrait la
+		# valeur forgee. Ici on ecrase avec le pair reel.
 		header_up X-Real-IP {remote_host}
 		header_up X-Forwarded-For {remote_host}
 		header_up X-Forwarded-Proto {scheme}

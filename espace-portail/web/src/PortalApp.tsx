@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClientPreviewView } from "@/components/contacts/client-preview/ClientPreviewView";
-import { ClientPreviewViewportToggle } from "@/components/contacts/client-preview/ClientPreviewViewportToggle";
 import { CP } from "@/components/contacts/client-preview/client-preview-theme";
 import { useClientPreviewViewport } from "@/components/contacts/client-preview/use-client-preview-viewport";
 import type { Contact } from "@/lib/api/tauri-contacts";
@@ -112,7 +111,9 @@ function isPrivacyPath(): boolean {
 
 export function PortalApp() {
   const [showPrivacy, setShowPrivacy] = useState(() => isPrivacyPath());
-  const { viewport, setViewport } = useClientPreviewViewport();
+  // Le navigateur du client sait deja sur quel appareil il tourne : la mise en
+  // page suit l'ecran, sans bascule a proposer.
+  const { viewport } = useClientPreviewViewport();
   const [screen, setScreen] = useState<PortalScreen>("loading");
   const [devMode, setDevMode] = useState(false);
   const [devInputId, setDevInputId] = useState(
@@ -462,7 +463,7 @@ export function PortalApp() {
 
   return (
     <main className={`${CP.root} flex min-h-[100dvh] w-full flex-col items-center`}>
-      <div className="flex w-full max-w-3xl items-center justify-end px-4 pt-4">
+      <div className="flex w-full max-w-5xl items-center justify-end px-4 pt-4">
         <button
           type="button"
           onClick={() => void handleLogout()}
@@ -471,11 +472,6 @@ export function PortalApp() {
           Déconnexion
         </button>
       </div>
-      <ClientPreviewViewportToggle
-        viewport={viewport}
-        onChange={setViewport}
-        className="w-full max-w-3xl shrink-0 pt-4 pb-1"
-      />
       <ClientPreviewView
         contact={contact}
         visible={visible}

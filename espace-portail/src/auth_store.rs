@@ -46,12 +46,21 @@ impl PortalDb {
              ON CONFLICT(contact_id) DO UPDATE SET
                 statut = excluded.statut,
                 email = CASE WHEN excluded.email != '' THEN excluded.email ELSE espace_acces.email END,
+                -- Un nouveau code d'activation signifie une reactivation
+                -- deliberee par le conseiller : la premiere connexion est a
+                -- refaire, sinon le portail attendrait un code par email que
+                -- le client ne peut pas obtenir.
                 activation_code_hash = CASE
-                    WHEN espace_acces.premiere_connexion_at IS NOT NULL THEN NULL
                     WHEN excluded.activation_code_hash IS NOT NULL THEN excluded.activation_code_hash
+                    WHEN espace_acces.premiere_connexion_at IS NOT NULL THEN NULL
                     ELSE espace_acces.activation_code_hash
                 END,
-                premiere_connexion_at = COALESCE(espace_acces.premiere_connexion_at, excluded.premiere_connexion_at),
+                premiere_connexion_at = CASE
+                    WHEN excluded.activation_code_hash IS NOT NULL
+                         AND excluded.activation_code_hash IS NOT espace_acces.activation_code_hash
+                    THEN NULL
+                    ELSE COALESCE(espace_acces.premiere_connexion_at, excluded.premiere_connexion_at)
+                END,
                 updated_at = unixepoch()",
             params![
                 contact_id,
@@ -462,14 +471,17 @@ impl PortalDb {
     }
 
     fn is_login_blocked(&self, email: &str) -> Result<bool> {
+        // `blocked_until` est NULL tant que le seuil d'echecs n'est pas atteint :
+        // lire la colonne en `i64` echouait des la premiere tentative ratee.
         let blocked_until: Option<i64> = self
             .conn()
             .query_row(
                 "SELECT blocked_until FROM espace_login_guard WHERE email = ?1",
                 params![email],
-                |row| row.get(0),
+                |row| row.get::<_, Option<i64>>(0),
             )
-            .optional()?;
+            .optional()?
+            .flatten();
         Ok(blocked_until.is_some_and(|t| t > chrono::Utc::now().timestamp()))
     }
 

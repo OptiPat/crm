@@ -1,82 +1,107 @@
 # Espace client — déploiement HTTPS (Caddy)
 
-Le binaire `espace-portail` **ne termine pas le TLS**. En production, Caddy (ou équivalent)
-reçoit le trafic Internet et relaie en HTTP local vers `127.0.0.1:8787`.
+Le binaire `espace-portail` **ne termine pas le TLS**. Caddy reçoit le trafic Internet
+et relaie en HTTP local vers `127.0.0.1:8787`.
 
-## Prérequis serveur
+## Ce qu'il vous faut avant de commencer
 
-- VPS en Union européenne (données patrimoniales)
-- Nom de domaine pointant vers le VPS (`espace.votre-cabinet.fr`)
-- Ports 80 et 443 ouverts
-- ClamAV installé (`clamd` actif sur `127.0.0.1:3310`) — requis dès la phase dépôt de documents
+| Élément | Exemple |
+|---------|---------|
+| **VPS** | Debian/Ubuntu, UE, ports 80 + 443 ouverts |
+| **Domaine du portail** | `espace.mondomaine.fr` → enregistrement DNS **A** vers l'IP du VPS |
+| **Brevo** | Clé API + expéditeur validé (votre Gmail si c'est déjà le cas) |
+| **Secret sync** | Généré une fois, identique CRM + portail |
 
-## Installation
+L'URL du portail et l'adresse d'envoi des emails sont **indépendantes** (Gmail OK).
 
-```bash
-sudo apt update
-sudo apt install -y caddy clamav clamav-daemon
-sudo systemctl enable --now clamav-daemon
+---
+
+## Étape 1 — Depuis votre PC (Windows)
+
+```powershell
+cd D:\crm
+.\espace-portail\deploy\generate-sync-secret.ps1   # copie dans le presse-papier
+.\espace-portail\deploy\pack-for-vps.ps1             # crée dist-espace-portail-vps.zip
 ```
 
-Copier le binaire et les fichiers statiques :
+Conservez le secret : vous le collerez dans le CRM **et** dans le `.env` du VPS.
+
+## Étape 2 — Envoyer sur le VPS
 
 ```bash
-sudo useradd --system --home /opt/espace-portail espace
-sudo mkdir -p /opt/espace-portail
-# espace-portail (release), web/dist/, .env production
+scp D:\crm\dist-espace-portail-vps.zip user@IP_DU_VPS:/tmp/
+ssh user@IP_DU_VPS
 ```
 
-## Caddyfile
-
-Adapter `espace.votre-cabinet.fr`, puis :
+## Étape 3 — Installer sur le VPS
 
 ```bash
-sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl reload caddy
+sudo rm -rf /tmp/espace-build
+mkdir /tmp/espace-build
+unzip -o /tmp/dist-espace-portail-vps.zip -d /tmp/espace-build
+sudo bash /tmp/espace-build/deploy/install-vps.sh espace.VOTRE-DOMAINE.FR /tmp/espace-build
 ```
 
-## Variables d'environnement (production)
+Le script installe Caddy, Rust (si besoin), compile le binaire, configure systemd.
+
+## Étape 4 — Configurer le `.env` production
+
+```bash
+sudo nano /opt/espace-portail/.env
+```
 
 | Variable | Valeur |
 |----------|--------|
 | `ESPACE_PRODUCTION` | `1` |
 | `ESPACE_TRUST_PROXY` | `1` |
-| `ESPACE_PORTAL_BIND` | `127.0.0.1:8787` |
-| `ESPACE_SYNC_SECRET` | secret long, unique |
-| `ESPACE_BREVO_API_KEY` | clé dédiée portail |
-| `ESPACE_MAIL_FROM` | `noreply@espace.votre-cabinet.fr` (domaine authentifié SPF/DKIM) |
-| `ESPACE_CLAMD_ADDR` | `127.0.0.1:3310` |
+| `ESPACE_SYNC_SECRET` | secret généré à l'étape 1 |
+| `ESPACE_BREVO_API_KEY` | clé Brevo portail |
+| `ESPACE_MAIL_FROM` | votre Gmail validé dans Brevo |
+| `ESPACE_MAIL_FROM_NAME` | nom affiché |
 
-Dans le CRM : URL portail = `https://espace.votre-cabinet.fr` (le CRM refuse `http://` hors localhost).
+Puis :
 
-## Service systemd (exemple)
-
-```ini
-[Unit]
-Description=Portail espace client Patrimoine CRM
-After=network.target clamav-daemon.service
-
-[Service]
-User=espace
-WorkingDirectory=/opt/espace-portail
-EnvironmentFile=/opt/espace-portail/.env
-ExecStart=/opt/espace-portail/espace-portail
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
+```bash
+sudo systemctl start espace-portail
+sudo systemctl status espace-portail
 ```
 
-## Contrôles après mise en ligne
+## Étape 5 — CRM
 
-1. `curl -I https://espace.votre-cabinet.fr/health` — statut 200, en-têtes `Strict-Transport-Security`, `Content-Security-Policy`
-2. Tentatives répétées sur `/api/v1/auth/request-code` → `429` après le seuil IP
-3. Cookie de session avec attribut `Secure`
-4. `ESPACE_PORTAL_DEV` absent ou `0`
+Onglet **Aperçu client** → **Connexion portail** :
+
+| Champ | Valeur |
+|-------|--------|
+| URL | `https://espace.VOTRE-DOMAINE.FR` |
+| Clé | même `ESPACE_SYNC_SECRET` |
+
+**Synchroniser vers le portail** sur un contact test, puis tester la connexion client.
+
+## Contrôles
+
+```bash
+curl -I https://espace.VOTRE-DOMAINE.FR/health
+```
+
+Attendu : `200`, en-têtes `strict-transport-security`, `content-security-policy`.
+
+## Fichiers de ce dossier
+
+| Fichier | Rôle |
+|---------|------|
+| `Caddyfile` | Modèle HTTPS (domaine substitué par `install-vps.sh`) |
+| `espace-portail.service` | Unit systemd |
+| `env.production.example` | Modèle `.env` |
+| `install-vps.sh` | Installation automatisée sur le VPS |
+| `pack-for-vps.ps1` | Archive à envoyer depuis Windows |
+| `generate-sync-secret.ps1` | Génère le secret HMAC |
 
 ## Sauvegarde
 
-La base `espace-portail.db` est reconstructible depuis le CRM, sauf la fenêtre entre une
-action client et la prochaine synchronisation. Sauvegarder quotidiennement et tester une
-restauration au moins une fois.
+`/opt/espace-portail/data/espace-portail.db` — reconstructible depuis le CRM, mais
+sauvegarder quand même (cron + test de restauration).
+
+## ClamAV
+
+Optionnel tant que le dépôt de documents (phase 2) n'est pas ouvert. Le module
+`document_scan.rs` est prêt pour plus tard.

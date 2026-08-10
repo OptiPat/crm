@@ -40,11 +40,13 @@ export function ClientPreviewDeviceFrame({
   const isMobile = viewport === "mobile";
 
   if (!framed) {
+    // Portail réel : la largeur suit l'écran du client. Plus large que la
+    // maquette du CRM, qui simule un appareil et reste volontairement étroite.
     return (
       <div
         className={cn(
           "relative w-full overflow-x-hidden",
-          isMobile ? "max-w-[430px]" : "max-w-3xl"
+          isMobile ? "max-w-[430px]" : "max-w-5xl"
         )}
       >
         <div className="min-h-[100dvh] bg-[var(--cp-bg)]">{children}</div>

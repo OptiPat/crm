@@ -447,7 +447,7 @@ Ce qui suit ne l'est pas.
 | Sujet | Pourquoi |
 |---|---|
 | **Séparation des clés** | Un seul secret signe la synchronisation, hache les codes et hache les jetons de session. Trois clés dérivées d'une racine coûtent une heure et évitent qu'une fuite emporte tout |
-| **Expéditeur sur domaine authentifié** | L'expéditeur Gmail actuel finira en spam chez une partie des clients ; un code de connexion en spam est un client bloqué. `optipatpro.fr` est déjà authentifié dans Brevo |
+| **Délivrabilité des codes par email** | Un expéditeur Gmail via Brevo fonctionne ; certains clients (Orange, Free…) classent parfois en spam. À surveiller sur les premiers envois ; un domaine dédié du cabinet reste une amélioration optionnelle, pas un prérequis |
 | **Alerte sur nouvel appareil** | Rien ne prévient le client d'une connexion depuis un appareil inconnu : c'est pourtant lui qui détecte une compromission en premier |
 | **Ré-authentification pour les documents** (**R7**) | Conçue, pas encore écrite. À faire avec la phase 2 |
 | **Veille des dépendances** | `cargo audit` et `npm audit` dans `verify.ps1` : une ligne chacun, et les failles connues remontent sans y penser |
@@ -492,7 +492,7 @@ Les phases 0 et 1 sont faites. La suite, dans cet ordre :
 
 1. **Déployer** le portail derrière Caddy sur un VPS français, avec `ESPACE_PRODUCTION=1`
    et un `ESPACE_SYNC_SECRET` long et aléatoire. `deploy/README.md` décrit la procédure.
-2. **Basculer l'expéditeur** sur `optipatpro.fr`, déjà authentifié dans Brevo.
+2. **Tester l'envoi des codes** avec l'expéditeur Brevo actuel (Gmail) : vérifier boîte de réception et spams chez Orange, Gmail, Outlook.
 3. **Séparer les clés** et ajouter `cargo audit` / `npm audit` à la vérification.
 4. **Compléter le RGPD** : coordonnées du cabinet, hébergeur, sous-traitance Brevo activée.
 5. Alors seulement, **phase 2** : dépôt de documents, en câblant l'antivirus dès le premier

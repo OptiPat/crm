@@ -36,7 +36,7 @@ export function PortalLogin({
             Espace client
           </h1>
           <p className="cp-caption text-[var(--cp-ink-muted)]">
-            Saisissez votre email pour recevoir un code de connexion.
+            Saisissez votre email et votre code à 6 chiffres.
           </p>
         </div>
 
@@ -61,44 +61,50 @@ export function PortalLogin({
               />
             </label>
 
-            <button
-              type="button"
-              disabled={loading || !email.trim()}
-              onClick={onRequestCode}
-              className="w-full rounded-xl border border-[var(--cp-line)] bg-[var(--cp-surface-raised)] px-4 py-2.5 text-sm font-medium text-[var(--cp-ink)] transition-opacity disabled:opacity-40"
-            >
-              {loading ? "Envoi…" : "Recevoir mon code par email"}
-            </button>
+            {/* Toujours visible : a la premiere connexion, le client possede
+                deja le code que son conseiller lui a dicte et n'a aucun code a
+                demander — le portail refuse d'ailleurs d'en envoyer avant. */}
+            <label className="block space-y-2" htmlFor="portal-login-code">
+              <span className="cp-kicker">Code à 6 chiffres</span>
+              <input
+                id="portal-login-code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={code}
+                onChange={(e) =>
+                  onCodeChange(e.target.value.replace(/\D/g, "").slice(0, 6))
+                }
+                className="w-full rounded-xl border border-[var(--cp-line)] bg-[var(--cp-surface-raised)] px-3 py-2.5 text-center font-mono text-lg tracking-[0.3em] text-[var(--cp-ink)] outline-none ring-[var(--cp-ink-faint)] focus:ring-2"
+                placeholder="000000"
+              />
+            </label>
 
-            {codeSent ? (
-              <label className="block space-y-2" htmlFor="portal-login-code">
-                <span className="cp-kicker">Code reçu par email</span>
-                <input
-                  id="portal-login-code"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  value={code}
-                  onChange={(e) =>
-                    onCodeChange(e.target.value.replace(/\D/g, "").slice(0, 6))
-                  }
-                  className="w-full rounded-xl border border-[var(--cp-line)] bg-[var(--cp-surface-raised)] px-3 py-2.5 text-center font-mono text-lg tracking-[0.3em] text-[var(--cp-ink)] outline-none ring-[var(--cp-ink-faint)] focus:ring-2"
-                  placeholder="000000"
-                />
-              </label>
-            ) : null}
-          </div>
-
-          {codeSent ? (
             <button
               type="submit"
               disabled={loading || !email.trim() || code.length !== 6}
-              className="mt-4 w-full rounded-xl bg-[var(--cp-ink)] px-4 py-2.5 text-sm font-medium text-[var(--cp-bg)] transition-opacity disabled:opacity-40"
+              className="w-full rounded-xl bg-[var(--cp-ink)] px-4 py-2.5 text-sm font-medium text-[var(--cp-bg)] transition-opacity disabled:opacity-40"
             >
               {loading ? "Connexion…" : "Se connecter"}
             </button>
-          ) : null}
+
+            <div className="space-y-2 border-t border-[var(--cp-line)] pt-4">
+              <p className="cp-caption text-[var(--cp-ink-muted)]">
+                {codeSent
+                  ? "Vous n'avez rien reçu ? Vérifiez vos indésirables."
+                  : "Première connexion : utilisez le code communiqué par votre conseiller."}
+              </p>
+              <button
+                type="button"
+                disabled={loading || !email.trim()}
+                onClick={onRequestCode}
+                className="w-full rounded-xl border border-[var(--cp-line)] bg-[var(--cp-surface-raised)] px-4 py-2.5 text-sm font-medium text-[var(--cp-ink)] transition-opacity disabled:opacity-40"
+              >
+                {loading ? "Envoi…" : "Recevoir un code par email"}
+              </button>
+            </div>
+          </div>
 
           {info ? (
             <p className="mt-3 text-sm text-[var(--cp-ink-muted)]" role="status">

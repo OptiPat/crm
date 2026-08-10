@@ -1,0 +1,24 @@
+[Unit]
+Description=Portail espace client Patrimoine CRM
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=espace
+Group=espace
+WorkingDirectory=/opt/espace-portail
+EnvironmentFile=/opt/espace-portail/.env
+ExecStart=/opt/espace-portail/bin/espace-portail
+Restart=on-failure
+RestartSec=5
+
+# Hardening minimal
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/espace-portail/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
