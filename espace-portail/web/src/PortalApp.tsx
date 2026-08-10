@@ -16,6 +16,7 @@ import {
 } from "@/lib/patrimoine/timeline";
 import { PortalDevGate } from "./PortalDevGate";
 import { PortalLogin } from "./PortalLogin";
+import { PortalDocumentsSection } from "./PortalDocumentsSection";
 import { PortalPrivacy } from "./PortalPrivacy";
 import type {
   EspaceClientInvestissementLine,
@@ -472,6 +473,7 @@ export function PortalApp() {
           Déconnexion
         </button>
       </div>
+      <PortalDocumentsSection />
       <ClientPreviewView
         contact={contact}
         visible={visible}

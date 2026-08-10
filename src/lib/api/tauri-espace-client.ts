@@ -39,6 +39,69 @@ export interface PushEspaceClientContactResult {
   timeline_count: number;
 }
 
+export interface EspaceDemande {
+  id: number;
+  contact_id: number;
+  type_document: string;
+  template_key?: string | null;
+  libelle: string;
+  statut: string;
+  demande_at: number;
+  recu_at?: number | null;
+  valide_at?: number | null;
+  annule_at?: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ImportEspaceDepotsResult {
+  imported: number;
+  documentIds: number[];
+  errors: string[];
+}
+
+export async function listEspaceDemandes(
+  contactId: number
+): Promise<EspaceDemande[]> {
+  return invoke<EspaceDemande[]>("list_espace_demandes_cmd", { contactId });
+}
+
+export async function createEspaceDemande(
+  contactId: number,
+  typeDocument: string,
+  templateKey: string | null,
+  libelle: string
+): Promise<EspaceDemande> {
+  const demande = await invoke<EspaceDemande>("create_espace_demande_cmd", {
+    contactId,
+    typeDocument,
+    templateKey,
+    libelle,
+  });
+  notifyEspaceClientChanged();
+  return demande;
+}
+
+export async function cancelEspaceDemande(
+  demandeId: number
+): Promise<EspaceDemande> {
+  const demande = await invoke<EspaceDemande>("cancel_espace_demande_cmd", {
+    demandeId,
+  });
+  notifyEspaceClientChanged();
+  return demande;
+}
+
+export async function importEspaceDepots(
+  contactId: number
+): Promise<ImportEspaceDepotsResult> {
+  const result = await invoke<ImportEspaceDepotsResult>("import_espace_depots_cmd", {
+    contactId,
+  });
+  notifyEspaceClientChanged();
+  return result;
+}
+
 export async function getEspaceAcces(
   contactId: number
 ): Promise<EspaceAcces | null> {

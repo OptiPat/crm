@@ -7,6 +7,31 @@ export const ESPACE_ACCES_STATUT = {
 export type EspaceAccesStatut =
   (typeof ESPACE_ACCES_STATUT)[keyof typeof ESPACE_ACCES_STATUT];
 
+export const ESPACE_DEMANDE_STATUT = {
+  EN_ATTENTE: "en_attente",
+  RECU: "recu",
+  IMPORT_EN_COURS: "import_en_cours",
+  VALIDE: "valide",
+  ANNULE: "annule",
+} as const;
+
+export function formatEspaceDemandeStatut(statut: string): string {
+  switch (statut) {
+    case ESPACE_DEMANDE_STATUT.EN_ATTENTE:
+      return "En attente";
+    case ESPACE_DEMANDE_STATUT.RECU:
+      return "Reçu (portail)";
+    case ESPACE_DEMANDE_STATUT.IMPORT_EN_COURS:
+      return "Import en cours";
+    case ESPACE_DEMANDE_STATUT.VALIDE:
+      return "Importé";
+    case ESPACE_DEMANDE_STATUT.ANNULE:
+      return "Annulée";
+    default:
+      return statut;
+  }
+}
+
 export function formatEspaceAccesStatut(statut: string): string {
   switch (statut) {
     case ESPACE_ACCES_STATUT.ACTIF:

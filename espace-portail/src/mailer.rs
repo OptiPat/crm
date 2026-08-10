@@ -68,12 +68,87 @@ impl Mailer {
     }
 
     pub async fn send_login_code(&self, to: &str, code: &str) -> Result<(), String> {
+        self.send_email(
+            to,
+            "Votre code de connexion",
+            &login_code_text(&self.from_name, code),
+            &login_code_html(&self.from_name, code),
+        )
+        .await
+    }
+
+    pub async fn send_document_request(
+        &self,
+        to: &str,
+        prenom: &str,
+        libelle: &str,
+    ) -> Result<(), String> {
+        let greeting = if prenom.trim().is_empty() {
+            "Bonjour".to_string()
+        } else {
+            format!("Bonjour {}", prenom.trim())
+        };
+        let text = format!(
+            "{greeting},\n\n\
+             Votre conseiller vous demande de déposer le document suivant \
+             sur votre espace client : {libelle}.\n\n\
+             Connectez-vous à votre espace pour effectuer le dépôt \
+             (PDF, JPEG ou PNG — 10 Mo maximum).\n\n\
+             {cabinet}",
+            cabinet = self.from_name
+        );
+        let html = format!(
+            "<p>{greeting},</p>\
+             <p>Votre conseiller vous demande de déposer le document suivant \
+             sur votre espace client : <strong>{libelle}</strong>.</p>\
+             <p>Connectez-vous à votre espace pour effectuer le dépôt \
+             (PDF, JPEG ou PNG — 10 Mo maximum).</p>\
+             <p>{cabinet}</p>",
+            cabinet = self.from_name
+        );
+        self.send_email(to, "Document à déposer sur votre espace", &text, &html)
+            .await
+    }
+
+    pub async fn send_depot_received(
+        &self,
+        advisor_email: &str,
+        client_label: &str,
+        libelle: &str,
+    ) -> Result<(), String> {
+        let text = format!(
+            "Bonjour,\n\n\
+             {client_label} a déposé le document demandé : {libelle}.\n\
+             Importez-le depuis le CRM (panneau Espace client).\n"
+        );
+        let html = format!(
+            "<p>Bonjour,</p>\
+             <p><strong>{client_label}</strong> a déposé le document demandé : \
+             <strong>{libelle}</strong>.</p>\
+             <p>Importez-le depuis le CRM (panneau Espace client).</p>"
+        );
+        self.send_email(
+            advisor_email,
+            "Dépôt reçu sur l'espace client",
+            &text,
+            &html,
+        )
+        .await
+    }
+
+    async fn send_email(
+        &self,
+        to: &str,
+        subject: &str,
+        text: &str,
+        html: &str,
+    ) -> Result<(), String> {
         let body = serde_json::json!({
             "sender": { "name": self.from_name, "email": self.from_email },
             "to": [{ "email": to }],
-            "subject": "Votre code de connexion",
-            "textContent": login_code_text(&self.from_name, code),
-            "htmlContent": login_code_html(&self.from_name, code),
+            "subject": subject,
+            "textContent": text,
+            "htmlContent": html,
         });
 
         let response = self

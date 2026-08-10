@@ -5,9 +5,9 @@ use crate::database::Database;
 use crate::database::espace_client::ESPACE_STATUT_ACTIF;
 
 use super::sync_payload::{
-    EspaceClientAccesSnapshot, EspaceClientContactSnapshot, EspaceClientInvestissementLine,
-    EspaceClientPartenaireLine, EspaceClientSyncPayload, EspaceClientTimelineEvent,
-    ESPACE_SYNC_SCHEMA_VERSION,
+    EspaceClientAccesSnapshot, EspaceClientContactSnapshot, EspaceClientDemandeLine,
+    EspaceClientInvestissementLine, EspaceClientPartenaireLine, EspaceClientSyncPayload,
+    EspaceClientTimelineEvent, ESPACE_SYNC_SCHEMA_VERSION,
 };
 use super::visibilite::{
     FoyerMemberRef, PatrimoineInvestissement, PatrimoineViewer, is_investissement_visible_to_viewer,
@@ -95,6 +95,20 @@ fn build_espace_client_snapshot_with_sequence(
 
     let timeline = build_timeline(&visible, &alertes, &taches);
 
+    let demandes = db
+        .list_espace_demandes_for_sync(contact_id)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|d| EspaceClientDemandeLine {
+            id: d.id,
+            type_document: d.type_document,
+            template_key: d.template_key,
+            libelle: d.libelle,
+            statut: d.statut,
+            demande_at: d.demande_at,
+        })
+        .collect();
+
     Ok(EspaceClientSyncPayload {
         schema_version: ESPACE_SYNC_SCHEMA_VERSION,
         sequence,
@@ -117,6 +131,14 @@ fn build_espace_client_snapshot_with_sequence(
         investissements,
         partenaires,
         timeline,
+        demandes,
+        // Simple lecture : la paire est créée par la commande de push, qui
+        // dispose du handle nécessaire au chiffrement de la clé privée.
+        depot_public_key: db
+            .get_setting(crate::espace_client::config::DEPOT_PUBLIC_KEY_SETTING)
+            .map_err(|e| e.to_string())?
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty()),
     })
 }
 

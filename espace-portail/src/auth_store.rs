@@ -353,6 +353,20 @@ impl PortalDb {
         Ok(contact_id)
     }
 
+    /// Date de la preuve d'identité qui a ouvert la session — c'est-à-dire du
+    /// code saisi. Sert à exiger une authentification récente sur les actions
+    /// sensibles (**R7**), une session de trente jours ne prouvant plus rien.
+    pub fn session_authenticated_at(&self, token: &str, secret: &str) -> Result<Option<i64>> {
+        let token_hash = crate::auth::hash_espace_otp(secret, &format!("session:{token}"));
+        self.conn()
+            .query_row(
+                "SELECT created_at FROM espace_session WHERE token_hash = ?1",
+                params![token_hash],
+                |row| row.get(0),
+            )
+            .optional()
+    }
+
     /// Coupe toutes les sessions d'un contact (déconnexion à distance).
     pub fn revoke_all_sessions(&self, contact_id: i64) -> Result<usize> {
         self.conn().execute(

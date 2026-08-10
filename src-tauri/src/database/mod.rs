@@ -25,6 +25,7 @@ pub mod etiquette_rule_ast;
 pub mod etiquettes;
 pub mod etiquettes_auto_engine;
 pub mod espace_client;
+pub mod espace_demande;
 pub mod exchange_history;
 pub mod familles;
 pub mod fiche_conseil_redaction_presets;

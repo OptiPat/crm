@@ -32,6 +32,53 @@ fn validate_portal_url(url: &str) -> Result<(), String> {
     Err("L'URL du portail doit commencer par https://".into())
 }
 
+/// Clé privée de descellement des dépôts, chiffrée au repos comme les autres
+/// secrets. Elle ne quitte jamais ce poste : le portail n'a que la publique.
+pub const DEPOT_SECRET_KEY_SETTING: &str = "espace_client_depot_secret_enc";
+pub const DEPOT_PUBLIC_KEY_SETTING: &str = "espace_client_depot_public";
+
+/// Retourne la clé publique à transmettre au portail, en la créant au besoin.
+pub fn ensure_depot_public_key(app: &AppHandle, db: &Database) -> Result<String, String> {
+    if let Some(public) = db
+        .get_setting(DEPOT_PUBLIC_KEY_SETTING)
+        .map_err(|e| e.to_string())?
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+    {
+        return Ok(public);
+    }
+
+    let (secret, public) = crate::espace_client::depot_crypto::generate_keypair();
+    let key =
+        load_storage_key(app)?.ok_or("Clé de chiffrement locale indisponible.".to_string())?;
+    let secret_enc = encrypt_secret(
+        &crate::espace_client::depot_crypto::hex_encode(&secret),
+        &key,
+    )?;
+    let public_hex = crate::espace_client::depot_crypto::hex_encode(&public);
+
+    db.set_setting(DEPOT_SECRET_KEY_SETTING, &secret_enc)
+        .map_err(|e| e.to_string())?;
+    db.set_setting(DEPOT_PUBLIC_KEY_SETTING, &public_hex)
+        .map_err(|e| e.to_string())?;
+
+    Ok(public_hex)
+}
+
+pub fn load_depot_secret_key(app: &AppHandle, db: &Database) -> Result<[u8; 32], String> {
+    let encrypted = db
+        .get_setting(DEPOT_SECRET_KEY_SETTING)
+        .map_err(|e| e.to_string())?
+        .filter(|v| !v.trim().is_empty())
+        .ok_or_else(|| {
+            "Clé de descellement absente : aucun dépôt ne peut être ouvert.".to_string()
+        })?;
+    let key =
+        load_storage_key(app)?.ok_or("Clé de chiffrement locale indisponible.".to_string())?;
+    let hex = decrypt_secret(&encrypted, &key)?;
+    crate::espace_client::depot_crypto::parse_secret_key(&hex)
+}
+
 pub fn parse_active_flag(value: Option<&str>) -> bool {
     matches!(
         value.map(|v| v.trim().to_lowercase()).as_deref(),

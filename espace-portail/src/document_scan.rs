@@ -1,9 +1,4 @@
 //! Analyse antivirus des fichiers déposés (ClamAV / clamd).
-//!
-//! Phase 2 — dépôt de documents : tout upload doit passer par `scan_bytes` avant
-//! d'être accepté. En production, un clamd indisponible bloque le dépôt.
-
-#![allow(dead_code)]
 
 use std::io::Write;
 use std::net::TcpStream;
@@ -17,12 +12,6 @@ pub enum ScanVerdict {
     Clean,
     Infected(String),
     Unavailable(String),
-}
-
-impl ScanVerdict {
-    pub fn is_clean(&self) -> bool {
-        matches!(self, Self::Clean)
-    }
 }
 
 pub fn clamd_addr() -> String {
@@ -88,6 +77,18 @@ fn parse_clamd_response(response: &str) -> ScanVerdict {
         ScanVerdict::Infected(line.to_string())
     } else {
         ScanVerdict::Unavailable(format!("réponse clamd inattendue : {line}"))
+    }
+}
+
+pub fn require_clamd_available(production: bool) -> Result<(), String> {
+    if !production {
+        return Ok(());
+    }
+    match scan_bytes(b"%PDF-1.0\n") {
+        ScanVerdict::Unavailable(detail) => Err(format!(
+            "clamd requis en production mais injoignable ({detail})"
+        )),
+        _ => Ok(()),
     }
 }
 

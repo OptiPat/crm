@@ -289,6 +289,24 @@ pub struct EspaceSyncSummary {
     pub dernier_statut: Option<String>,
 }
 
+/// Demande de document espace client (conseiller → client → GED).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EspaceDemande {
+    pub id: i64,
+    pub contact_id: i64,
+    pub type_document: String,
+    pub template_key: Option<String>,
+    pub libelle: String,
+    pub statut: String,
+    pub demande_at: i64,
+    pub recu_at: Option<i64>,
+    pub valide_at: Option<i64>,
+    pub annule_at: Option<i64>,
+    pub ged_document_id: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 /// Entrée du journal de connexion espace client (côté CRM).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EspaceConnexionLogEntry {

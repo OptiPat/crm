@@ -1,11 +1,12 @@
 use crate::auth::session::{require_ui_session, UiSessionState};
 use crate::commands::DbState;
-use crate::database::models::{EspaceAcces, EspaceConnexionLogEntry, EspaceSyncSummary};
+use crate::database::models::{EspaceAcces, EspaceConnexionLogEntry, EspaceDemande, EspaceSyncSummary};
 use crate::espace_client::activation::{generate_six_digit_code, hash_espace_otp};
 use crate::espace_client::config::{
-    get_sync_config, is_espace_client_active, load_sync_secret, save_sync_config,
-    EspaceClientSyncConfig,
+    ensure_depot_public_key, get_sync_config, is_espace_client_active, load_sync_secret,
+    save_sync_config, EspaceClientSyncConfig, PORTAL_URL_SETTING_KEY,
 };
+use crate::espace_client::depot_import::{import_espace_depots, ImportEspaceDepotsResult};
 use crate::espace_client::portal_api::{pull_espace_connexion_log, push_espace_acces_revoke};
 use crate::espace_client::push::push_espace_client_snapshot;
 use crate::espace_client::snapshot::{
@@ -170,6 +171,9 @@ pub fn push_espace_client_contact_cmd(
     let guard = db.lock().map_err(|e| e.to_string())?;
     let database = guard.as_ref().ok_or("Base non ouverte")?;
     require_espace_client_active(database)?;
+    // Crée la paire de clés au premier envoi : sans clé publique côté portail,
+    // aucun dépôt ne pourrait être scellé.
+    ensure_depot_public_key(&app, database)?;
     let payload = build_espace_client_snapshot_for_push(database, contact_id)?;
     push_espace_client_snapshot(&app, database, &payload)?;
     Ok(PushEspaceClientContactResult {
@@ -222,6 +226,119 @@ pub fn get_espace_connexion_log_cmd(
             .list_espace_connexion_log(contact_id, 50)
             .map_err(|e| e.to_string()),
     }
+}
+
+fn portal_configured(database: &Database) -> bool {
+    database
+        .get_setting(PORTAL_URL_SETTING_KEY)
+        .ok()
+        .flatten()
+        .is_some_and(|url| !url.trim().is_empty())
+}
+
+fn try_push_contact_snapshot(
+    app: &tauri::AppHandle,
+    database: &Database,
+    contact_id: i64,
+) -> Result<(), String> {
+    if !portal_configured(database) {
+        return Ok(());
+    }
+    let payload = build_espace_client_snapshot_for_push(database, contact_id)?;
+    push_espace_client_snapshot(app, database, &payload)
+}
+
+#[tauri::command]
+pub fn list_espace_demandes_cmd(
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+    contact_id: i64,
+) -> Result<Vec<EspaceDemande>, String> {
+    require_ui_session(&session)?;
+    let guard = db.lock().map_err(|e| e.to_string())?;
+    let database = guard.as_ref().ok_or("Base non ouverte")?;
+    require_espace_client_active(database)?;
+    database
+        .list_espace_demandes_by_contact(contact_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_espace_demande_cmd(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+    contact_id: i64,
+    type_document: String,
+    template_key: Option<String>,
+    libelle: String,
+) -> Result<EspaceDemande, String> {
+    require_ui_session(&session)?;
+    let guard = db.lock().map_err(|e| e.to_string())?;
+    let database = guard.as_ref().ok_or("Base non ouverte")?;
+    require_espace_client_active(database)?;
+
+    let demande = database.create_espace_demande(
+        contact_id,
+        &type_document,
+        template_key.as_deref(),
+        &libelle,
+    )?;
+
+    if portal_configured(database) {
+        if let Err(error) = try_push_contact_snapshot(&app, database, contact_id) {
+            return Err(format!(
+                "Demande créée mais synchronisation portail échouée : {error}"
+            ));
+        }
+    }
+
+    Ok(demande)
+}
+
+#[tauri::command]
+pub fn cancel_espace_demande_cmd(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+    demande_id: i64,
+) -> Result<EspaceDemande, String> {
+    require_ui_session(&session)?;
+    let guard = db.lock().map_err(|e| e.to_string())?;
+    let database = guard.as_ref().ok_or("Base non ouverte")?;
+    require_espace_client_active(database)?;
+
+    let existing = database
+        .get_espace_demande_by_id(demande_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Demande introuvable".to_string())?;
+    let contact_id = existing.contact_id;
+
+    let demande = database.cancel_espace_demande(demande_id)?;
+
+    if portal_configured(database) {
+        if let Err(error) = try_push_contact_snapshot(&app, database, contact_id) {
+            return Err(format!(
+                "Demande annulée mais synchronisation portail échouée : {error}"
+            ));
+        }
+    }
+
+    Ok(demande)
+}
+
+#[tauri::command]
+pub fn import_espace_depots_cmd(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+    contact_id: i64,
+) -> Result<ImportEspaceDepotsResult, String> {
+    require_ui_session(&session)?;
+    let guard = db.lock().map_err(|e| e.to_string())?;
+    let database = guard.as_ref().ok_or("Base non ouverte")?;
+    require_espace_client_active(database)?;
+    import_espace_depots(&app, database, contact_id)
 }
 
 #[cfg(test)]

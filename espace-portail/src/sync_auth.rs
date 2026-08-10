@@ -1,7 +1,8 @@
 use axum::{
+    body::{Body, Bytes},
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     Json,
 };
 use serde::Deserialize;
@@ -93,5 +94,159 @@ fn verify_sync_request(state: &AppState, headers: &HeaderMap, body: &[u8]) -> Re
         .map_err(|_| "Horodatage invalide".to_string())?;
     let signature = parse_header(headers, "x-espace-signature")?;
     verify_espace_sync_signature(&state.sync_secret, timestamp, body, &signature)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DepotsResponse {
+    depots: Vec<DepotLine>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DepotLine {
+    demande_id: i64,
+    filename: String,
+    mime_type: String,
+    size_bytes: i64,
+    uploaded_at: i64,
+}
+
+pub async fn get_depots(
+    State(state): State<AppState>,
+    Path(contact_id): Path<i64>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let canonical = format!("/api/v1/sync/contact/{contact_id}/depots");
+    match handle_get_depots(&state, contact_id, &headers, canonical.as_bytes()) {
+        Ok(depots) => (StatusCode::OK, Json(DepotsResponse { depots })).into_response(),
+        Err(message) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": message })),
+        )
+            .into_response(),
+    }
+}
+
+fn handle_get_depots(
+    state: &AppState,
+    contact_id: i64,
+    headers: &HeaderMap,
+    sign_body: &[u8],
+) -> Result<Vec<DepotLine>, String> {
+    verify_sync_request(state, headers, sign_body)?;
+    let rows = state
+        .db
+        .list_depots_for_sync(contact_id)
+        .map_err(|e| e.to_string())?;
+    Ok(rows
+        .into_iter()
+        .map(|row| DepotLine {
+            demande_id: row.demande_id,
+            filename: row.filename,
+            mime_type: row.mime_type,
+            size_bytes: row.size_bytes,
+            uploaded_at: row.uploaded_at,
+        })
+        .collect())
+}
+
+pub async fn get_depot_file(
+    State(state): State<AppState>,
+    Path((contact_id, demande_id)): Path<(i64, i64)>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let canonical = format!("/api/v1/sync/contact/{contact_id}/depots/{demande_id}/file");
+    match handle_get_depot_file(&state, contact_id, demande_id, &headers, canonical.as_bytes()) {
+        Ok((bytes, mime, filename)) => {
+            let mut response = Response::new(Body::from(bytes));
+            *response.status_mut() = StatusCode::OK;
+            let headers = response.headers_mut();
+            if let Ok(value) = mime.parse() {
+                headers.insert(axum::http::header::CONTENT_TYPE, value);
+            }
+            if let Ok(value) =
+                format!("attachment; filename=\"{filename}\"").parse()
+            {
+                headers.insert(axum::http::header::CONTENT_DISPOSITION, value);
+            }
+            response.into_response()
+        }
+        Err(message) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": message })),
+        )
+            .into_response(),
+    }
+}
+
+fn handle_get_depot_file(
+    state: &AppState,
+    contact_id: i64,
+    demande_id: i64,
+    headers: &HeaderMap,
+    sign_body: &[u8],
+) -> Result<(Vec<u8>, String, String), String> {
+    verify_sync_request(state, headers, sign_body)?;
+    let depot = state
+        .db
+        .get_depot(contact_id, demande_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Dépôt introuvable".to_string())?;
+    let bytes = std::fs::read(&depot.stored_path).map_err(|e| e.to_string())?;
+    Ok((bytes, depot.mime_type, depot.filename))
+}
+
+pub async fn post_depot_ack(
+    State(state): State<AppState>,
+    Path((contact_id, demande_id)): Path<(i64, i64)>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> impl IntoResponse {
+    match handle_post_depot_ack(&state, contact_id, demande_id, &headers, &body) {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "accepted": true }))).into_response(),
+        Err(message) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": message })),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DepotAckBody {
+    sha256: String,
+}
+
+fn handle_post_depot_ack(
+    state: &AppState,
+    contact_id: i64,
+    demande_id: i64,
+    headers: &HeaderMap,
+    body: &[u8],
+) -> Result<(), String> {
+    verify_sync_request(state, headers, body)?;
+    let parsed: DepotAckBody =
+        serde_json::from_slice(body).map_err(|_| "Corps JSON invalide".to_string())?;
+    if parsed.sha256.trim().is_empty() {
+        return Err("Empreinte SHA-256 requise".into());
+    }
+    match state
+        .db
+        .ack_depot(contact_id, demande_id, parsed.sha256.trim())
+        .map_err(|e| e.to_string())?
+    {
+        Some(path) => {
+            tracing::info!(
+                "Accusé réception dépôt contact={contact_id} demande={demande_id}"
+            );
+            let _ = std::fs::remove_file(path);
+        }
+        None => tracing::info!(
+            "Accusé réception idempotent contact={contact_id} demande={demande_id}"
+        ),
+    }
+    Ok(())
 }
 

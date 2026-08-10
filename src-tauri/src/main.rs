@@ -79,9 +79,11 @@ use database::Database;
 use email::commands::*;
 use email::oauth_commands::*;
 use espace_client::commands::{
-    activate_espace_acces_cmd, build_espace_client_snapshot_cmd, get_espace_acces_cmd,
-    get_espace_client_sync_config_cmd, get_espace_connexion_log_cmd, get_espace_sync_summary_cmd,
-    push_espace_client_contact_cmd, revoke_espace_acces_cmd, save_espace_client_sync_config_cmd,
+    activate_espace_acces_cmd, build_espace_client_snapshot_cmd, cancel_espace_demande_cmd,
+    create_espace_demande_cmd, get_espace_acces_cmd, get_espace_client_sync_config_cmd,
+    get_espace_connexion_log_cmd, get_espace_sync_summary_cmd, import_espace_depots_cmd,
+    list_espace_demandes_cmd, push_espace_client_contact_cmd, revoke_espace_acces_cmd,
+    save_espace_client_sync_config_cmd,
 };
 use licensing::{
     activate_license_cmd, get_license_status_cmd, needs_license_activation_cmd,
@@ -650,6 +652,10 @@ fn main() {
             build_espace_client_snapshot_cmd,
             push_espace_client_contact_cmd,
             get_espace_connexion_log_cmd,
+            list_espace_demandes_cmd,
+            create_espace_demande_cmd,
+            cancel_espace_demande_cmd,
+            import_espace_depots_cmd,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

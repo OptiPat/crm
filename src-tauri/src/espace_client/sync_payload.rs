@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-pub const ESPACE_SYNC_SCHEMA_VERSION: u32 = 1;
+pub const ESPACE_SYNC_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -13,6 +13,20 @@ pub struct EspaceClientSyncPayload {
     pub investissements: Vec<EspaceClientInvestissementLine>,
     pub partenaires: Vec<EspaceClientPartenaireLine>,
     pub timeline: Vec<EspaceClientTimelineEvent>,
+    pub demandes: Vec<EspaceClientDemandeLine>,
+    /// Clé publique de scellement des dépôts. La privée reste sur ce poste.
+    pub depot_public_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EspaceClientDemandeLine {
+    pub id: i64,
+    pub type_document: String,
+    pub template_key: Option<String>,
+    pub libelle: String,
+    pub statut: String,
+    pub demande_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]

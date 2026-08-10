@@ -75,6 +75,8 @@ Puis **Synchroniser vers le portail** sur un contact avec accès **actif**.
 | `ESPACE_PORTAL_DB` | `espace-portail.db` (dans le répertoire courant) |
 | `ESPACE_PORTAL_STATIC` | `web/dist` |
 | `ESPACE_PORTAL_DEV` | `false` — mettre `1` expose `GET /api/v1/patrimoine/{id}` **sans auth client** |
+| `ESPACE_PORTAL_DATA` | *(obligatoire et **absolu** en production)* — emplacement des dépôts scellés |
+| `ESPACE_ADVISOR_EMAIL` | Adresse notifiée à chaque dépôt client |
 | `ESPACE_BREVO_API_KEY` | *(obligatoire hors dev)* — clé Brevo dédiée à l'envoi transactionnel |
 | `ESPACE_MAIL_FROM` | *(obligatoire hors dev)* — adresse d'expédition |
 | `ESPACE_MAIL_FROM_NAME` | `Votre conseiller` — nom affiché du cabinet |
@@ -105,6 +107,23 @@ le portail révélerait quelles adresses possèdent un espace.
 
 Au-delà, un nouveau code est demandé. Le conseiller peut couper toutes les sessions d'un
 client depuis le CRM en révoquant son accès.
+
+## Dépôts de documents
+
+Les pièces déposées par les clients sont **scellées avec la clé publique du CRM**
+avant d'être écrites sur le disque. Le portail ne peut pas les relire : la clé privée
+reste sur le poste du conseiller. Concrètement, un serveur compromis ne livre que du
+chiffré, et l'arborescence ne révèle même pas les noms de fichiers d'origine.
+
+La clé publique arrive avec la synchronisation. **Tant qu'aucune synchronisation n'a eu
+lieu, le dépôt est refusé** — sans clé, rien ne peut être scellé.
+
+Deux autres garde-fous au dépôt : analyse antivirus obligatoire en production et contrôle
+du type réel par les octets d'en-tête.
+
+Le dépôt ne demande **pas** de code supplémentaire : il envoie un fichier vers le
+conseiller, rien ne sort du serveur. La preuve d'identité récente sera exigée pour la
+**consultation** d'un document, quand elle sera ouverte.
 
 ## Mise en ligne — à ne pas rater
 

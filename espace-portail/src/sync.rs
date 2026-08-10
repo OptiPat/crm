@@ -9,6 +9,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::auth::verify_espace_sync_signature;
+use crate::demande_store::DemandeEmailNotification;
 use crate::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -39,7 +40,10 @@ pub async fn receive_contact_snapshot(
     body: Bytes,
 ) -> impl IntoResponse {
     match handle_sync(&state, contact_id, &headers, &body) {
-        Ok(response) => (StatusCode::OK, Json(response)).into_response(),
+        Ok((response, notifications)) => {
+            spawn_demande_emails(state.clone(), notifications);
+            (StatusCode::OK, Json(response)).into_response()
+        }
         Err(message) => (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({ "error": message })),
@@ -48,12 +52,47 @@ pub async fn receive_contact_snapshot(
     }
 }
 
+fn spawn_demande_emails(state: AppState, notifications: Vec<DemandeEmailNotification>) {
+    if notifications.is_empty() {
+        return;
+    }
+    tokio::spawn(async move {
+        let Some(mailer) = state.mailer.clone() else {
+            for note in &notifications {
+                tracing::warn!(
+                    "Pas d'envoi configuré — demande {} pour {}",
+                    note.demande_id,
+                    note.email
+                );
+            }
+            return;
+        };
+        for note in notifications {
+            match mailer
+                .send_document_request(&note.email, &note.prenom, &note.libelle)
+                .await
+            {
+                Ok(()) => {
+                    let _ = state.db.mark_demande_client_notified(note.demande_id);
+                    tracing::info!("Demande document notifiée (demande {})", note.demande_id);
+                }
+                Err(error) => {
+                    tracing::error!(
+                        "Envoi demande document impossible (demande {}) : {error}",
+                        note.demande_id
+                    );
+                }
+            }
+        }
+    });
+}
+
 fn handle_sync(
     state: &AppState,
     contact_id: i64,
     headers: &HeaderMap,
     body: &[u8],
-) -> Result<SyncResponse, String> {
+) -> Result<(SyncResponse, Vec<DemandeEmailNotification>), String> {
     let timestamp = parse_header(headers, "x-espace-timestamp")?
         .parse::<i64>()
         .map_err(|_| "Horodatage invalide".to_string())?;
@@ -70,17 +109,46 @@ fn handle_sync(
         return Err("contact_id incohérent".into());
     }
 
+    // Clé publique de scellement des dépôts : le CRM la transmet à chaque
+    // synchronisation, sa privée ne quitte jamais son poste.
+    if let Some(key) = payload
+        .get("depotPublicKey")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        match crate::depot_crypto::parse_public_key(key) {
+            Ok(_) => state
+                .db
+                .set_depot_public_key(key)
+                .map_err(|e| e.to_string())?,
+            Err(error) => tracing::error!("Clé publique de dépôt refusée : {error}"),
+        }
+    }
+
     let json = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
     let accepted = state
         .db
         .upsert_contact_snapshot(contact_id, header.sequence, &json)
         .map_err(|e| e.to_string())?;
 
-    Ok(SyncResponse {
-        accepted,
-        contact_id,
-        sequence: header.sequence,
-    })
+    let notifications = if accepted {
+        state
+            .db
+            .sync_demandes_from_payload(contact_id, &payload)
+            .map_err(|e| e.to_string())?
+    } else {
+        vec![]
+    };
+
+    Ok((
+        SyncResponse {
+            accepted,
+            contact_id,
+            sequence: header.sequence,
+        },
+        notifications,
+    ))
 }
 
 pub fn parse_header(headers: &HeaderMap, name: &str) -> Result<String, String> {

@@ -2,7 +2,11 @@ mod auth;
 mod auth_store;
 mod client_auth;
 mod db;
-mod document_scan; // Phase 2 — dépôt documents (ClamAV)
+mod demande_store;
+mod depot_crypto;
+mod document_scan;
+mod documents;
+mod file_sniff;
 mod login_code;
 mod mailer;
 mod read;
@@ -15,7 +19,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     middleware,
     response::IntoResponse,
     routing::{get, post},
@@ -25,8 +29,11 @@ use tower_http::services::{ServeDir, ServeFile};
 use tracing_subscriber::EnvFilter;
 
 use crate::db::PortalDb;
+use crate::document_scan::require_clamd_available;
 use crate::mailer::{Mailer, MailerConfig};
 use crate::security::{parse_bool_env, IpRateLimiter, SecurityConfig};
+
+const MAX_UPLOAD_BYTES: usize = 10 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -35,6 +42,9 @@ pub struct AppState {
     /// Mode développement : expose GET /api/v1/patrimoine/{id} sans auth client.
     pub dev_mode: bool,
     pub cookie_secure: bool,
+    pub production: bool,
+    pub data_dir: PathBuf,
+    pub advisor_email: String,
     /// Envoi des codes de connexion. `None` = non configuré : acceptable en
     /// développement, bloquant en production (voir `reject_unusable_mailer`).
     pub mailer: Option<Mailer>,
@@ -72,6 +82,35 @@ fn reject_unusable_mailer(mailer: &Option<Mailer>, dev_mode: bool) -> Result<(),
             .into());
     }
     Ok(())
+}
+
+/// Les pièces déposées par les clients ne doivent pas atterrir « quelque part »
+/// : un chemin relatif dépend du répertoire de travail du service, que personne
+/// ne vérifie. En production, l'emplacement est explicite et absolu.
+fn resolve_data_dir(raw: Option<&str>, production: bool) -> Result<PathBuf, String> {
+    let configured = raw.map(str::trim).filter(|value| !value.is_empty());
+
+    match configured {
+        Some(value) => {
+            let path = PathBuf::from(value);
+            // `is_absolute` dépend de la plateforme : un chemin Unix n'est pas
+            // absolu pour Windows, où tournent les tests. La cible étant Linux,
+            // on reconnaît explicitement la racine `/`.
+            let absolute = path.is_absolute() || value.starts_with('/');
+            if production && !absolute {
+                return Err(format!(
+                    "ESPACE_PORTAL_DATA doit être un chemin absolu en production (reçu « {value} »)."
+                ));
+            }
+            Ok(path)
+        }
+        None if production => Err(
+            "ESPACE_PORTAL_DATA est requis en production : sans lui, les pièces déposées \
+             se retrouveraient dans le répertoire de travail du service."
+                .into(),
+        ),
+        None => Ok(PathBuf::from("data")),
+    }
 }
 
 fn reject_unsafe_dev_exposure(dev_mode: bool, addr: &SocketAddr) -> Result<(), String> {
@@ -126,6 +165,14 @@ async fn main() {
     if let Err(message) = reject_unusable_mailer(&mailer, dev_mode) {
         panic!("{message}");
     }
+    if let Err(message) = require_clamd_available(production) {
+        panic!("{message}");
+    }
+
+    let data_dir = resolve_data_dir(std::env::var("ESPACE_PORTAL_DATA").ok().as_deref(), production)
+        .unwrap_or_else(|message| panic!("{message}"));
+    std::fs::create_dir_all(&data_dir).expect("création répertoire données portail");
+    let advisor_email = std::env::var("ESPACE_ADVISOR_EMAIL").unwrap_or_default();
 
     let db = Arc::new(PortalDb::open(&db_path).expect("ouverture base portail"));
     let state = AppState {
@@ -133,6 +180,9 @@ async fn main() {
         sync_secret,
         dev_mode,
         cookie_secure,
+        production,
+        data_dir,
+        advisor_email,
         mailer,
     };
 
@@ -161,6 +211,24 @@ async fn main() {
             "/api/v1/sync/contact/{contact_id}/connexions",
             get(sync_auth::get_connexions),
         )
+        .route(
+            "/api/v1/sync/contact/{contact_id}/depots",
+            get(sync_auth::get_depots),
+        )
+        .route(
+            "/api/v1/sync/contact/{contact_id}/depots/{demande_id}/file",
+            get(sync_auth::get_depot_file),
+        )
+        .route(
+            "/api/v1/sync/contact/{contact_id}/depots/{demande_id}/ack",
+            post(sync_auth::post_depot_ack),
+        )
+        .route("/api/v1/demandes/me", get(documents::get_demandes_me))
+        .route(
+            "/api/v1/demandes/{demande_id}/upload",
+            post(documents::post_demande_upload),
+        )
+        .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES))
         .route("/api/v1/patrimoine/me", get(read::get_patrimoine_me))
         .route(
             "/api/v1/patrimoine/{contact_id}",
@@ -221,6 +289,17 @@ mod tests {
         assert!(!parse_dev_mode(Some("non")));
         assert!(parse_dev_mode(Some("1")));
         assert!(parse_dev_mode(Some(" TRUE ")));
+    }
+
+    #[test]
+    fn production_requires_an_absolute_data_dir() {
+        assert!(resolve_data_dir(None, false).is_ok());
+        assert!(resolve_data_dir(Some("data"), false).is_ok());
+
+        assert!(resolve_data_dir(None, true).is_err());
+        assert!(resolve_data_dir(Some("  "), true).is_err());
+        assert!(resolve_data_dir(Some("data"), true).is_err());
+        assert!(resolve_data_dir(Some("/opt/espace-portail/data"), true).is_ok());
     }
 
     #[test]

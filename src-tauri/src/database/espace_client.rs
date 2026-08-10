@@ -101,6 +101,7 @@ impl super::Database {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 contact_id INTEGER NOT NULL,
                 type_document TEXT NOT NULL,
+                template_key TEXT,
                 libelle TEXT NOT NULL,
                 statut TEXT NOT NULL DEFAULT 'en_attente',
                 demande_at INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -113,6 +114,21 @@ impl super::Database {
             )",
             [],
         )?;
+
+        if !self.table_has_column("espace_demande", "template_key")? {
+            self.conn.execute(
+                "ALTER TABLE espace_demande ADD COLUMN template_key TEXT",
+                [],
+            )?;
+            println!("✅ Migration: colonne template_key sur espace_demande");
+        }
+        if !self.table_has_column("espace_demande", "ged_document_id")? {
+            self.conn.execute(
+                "ALTER TABLE espace_demande ADD COLUMN ged_document_id INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: colonne ged_document_id sur espace_demande");
+        }
 
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS espace_publication (

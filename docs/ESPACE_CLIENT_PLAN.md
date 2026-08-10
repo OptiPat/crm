@@ -97,7 +97,9 @@ Ces règles sont le résultat de la conception. Toute implémentation qui les en
 
 **R6 — Le portail ne joint jamais le CRM.** Le CRM est une application de bureau sans adresse publique, éteinte la nuit. C'est toujours le CRM qui initie (push et pull).
 
-**R7 — Ré-authentification pour toute action sensible.** Déposer ou consulter un document exige une authentification fraîche, même si la session de consultation est valide.
+**R7 — Ré-authentification pour **consulter** un document.** Lire une pièce déjà déposée exige une authentification fraîche, même si la session est valide : c'est le seul moment où une pièce d'identité ressort du serveur.
+
+Le **dépôt en est exclu**, délibérément. Il envoie un fichier vers le conseiller ; rien ne sort. Exiger un code n'y protégerait rien et ferait renoncer un client venu déposer son avis d'imposition. Les risques du dépôt sont couverts ailleurs : antivirus, type réel du fichier, taille.
 
 **R8 — Aucune URL de document permanente ou devinable.** Liens signés, valables quelques minutes.
 
@@ -114,6 +116,8 @@ Ces règles sont le résultat de la conception. Toute implémentation qui les en
 **R14 — Le code de connexion n'existe jamais en clair au repos.** Seule son empreinte va en base. Le clair ne vit qu'entre sa génération et l'appel au service d'envoi.
 
 **R15 — Les en-têtes de proxy ne sont lus que d'un pair de confiance.** `X-Forwarded-For` et `X-Real-IP` ne sont pris en compte que si la requête vient réellement du reverse proxy (adresse locale ou privée). Autrement, n'importe qui joignant le binaire en direct change d'identité à chaque requête et annule la limitation par IP.
+
+**R17 — Le portail ne peut pas lire les pièces déposées.** Chaque dépôt est scellé avec la **clé publique** du CRM avant d'être écrit sur le disque ; la clé privée ne quitte jamais le poste du conseiller, où elle est chiffrée au repos. Un serveur entièrement compromis ne livre que du chiffré. Le nom d'origine du fichier n'apparaît pas non plus dans l'arborescence : `CNI_DUPONT_Jean.pdf` se lirait sans même ouvrir le fichier.
 
 **R16 — Un défaut dangereux est toujours opt-in.** Le mode qui expose le patrimoine sans authentification, comme tout garde-fou désactivable, est inactif par défaut et le binaire refuse de démarrer dans les combinaisons qui le rendraient joignable. Un avertissement dans les logs ne suffit pas.
 
@@ -288,13 +292,16 @@ Demandes créées depuis le CRM, dépôt par le client, accusé de réception é
 
 C'est la phase qui porte l'essentiel du poids de sécurité. À ajouter à la liste ci-dessus :
 
-- **Analyse antivirus obligatoire** de tout fichier déposé. `espace-portail/src/document_scan.rs`
-  parle déjà à clamd et refuse le dépôt si l'analyse est indisponible en production ; il est
-  écrit mais **non câblé**. L'appel devra passer par `tokio::task::spawn_blocking` : le module
-  est synchrone et bloquerait un thread du serveur jusqu'à trente secondes.
-- **Validation du fichier** : type réel, taille maximale, nombre par demande.
-- **Chiffrement au repos** des fichiers en attente de rapatriement — utile contre le vol de
-  disque, sans illusion : la clé vit sur la même machine. C'est la rétention courte qui protège.
+Faits : analyse antivirus obligatoire (`document_scan.rs`, appelée via
+`spawn_blocking`, le portail refusant de démarrer en production sans clamd), validation du
+type réel par les octets d'en-tête, taille plafonnée, authentification fraîche exigée
+(**R7**), et scellement asymétrique des dépôts (**R17**).
+
+Le scellement remplace avantageusement le « chiffrement au repos » initialement prévu :
+une clé posée sur le serveur n'aurait protégé que du vol de disque, puisqu'un attaquant
+ayant la main sur la machine l'aurait trouvée à côté des fichiers. Ici la clé privée est
+sur le poste du conseiller — voir `espace_client/depot_crypto.rs`, dupliqué à l'identique
+des deux côtés.
 
 ### Phase 3 — Documents mis à disposition
 

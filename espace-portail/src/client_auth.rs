@@ -202,6 +202,47 @@ pub async fn get_me(State(state): State<AppState>, headers: HeaderMap) -> impl I
     }
 }
 
+/// R7 — au-delà de ce délai depuis la saisie du code, **consulter** un document
+/// exige une nouvelle preuve d'identité.
+///
+/// Le dépôt en est volontairement exclu : il envoie un fichier vers le
+/// conseiller, rien ne sort du serveur. C'est la lecture d'une pièce d'identité
+/// ou d'un avis d'imposition qui doit être protégée d'un téléphone égaré.
+pub const DOCUMENT_STEP_UP_SECS: i64 = 15 * 60;
+
+/// Session valide **et** authentification récente.
+///
+/// Employée par la consultation de documents (phase 3). Conservée ici parce que
+/// la règle est décidée et testée : la réécrire au moment d'ouvrir la lecture
+/// serait l'occasion de l'oublier.
+#[allow(dead_code)]
+pub fn resolve_fresh_session(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<i64, axum::response::Response> {
+    let contact_id = resolve_session(state, headers)?;
+    let token = parse_session_cookie(headers).ok_or_else(unauthorized)?;
+
+    let authenticated_at = state
+        .db
+        .session_authenticated_at(&token, &state.sync_secret)
+        .map_err(|_| unauthorized_response())?
+        .ok_or_else(unauthorized_response)?;
+
+    if chrono::Utc::now().timestamp() - authenticated_at > DOCUMENT_STEP_UP_SECS {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({
+                "error": "Pour déposer un document, reconnectez-vous avec un nouveau code.",
+                "reauth": true
+            })),
+        )
+            .into_response());
+    }
+
+    Ok(contact_id)
+}
+
 pub fn resolve_session(state: &AppState, headers: &HeaderMap) -> Result<i64, axum::response::Response> {
     let token = parse_session_cookie(headers).ok_or_else(unauthorized)?;
     state

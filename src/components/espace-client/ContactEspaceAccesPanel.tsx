@@ -42,6 +42,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ContactEspaceDemandesPanel } from "@/components/espace-client/ContactEspaceDemandesPanel";
 import { cn } from "@/lib/utils";
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
 
@@ -464,6 +465,10 @@ export function ContactEspaceAccesPanel({
             </ul>
           )}
         </div>
+      ) : null}
+
+      {isActif && contact.id != null ? (
+        <ContactEspaceDemandesPanel contactId={contact.id} accesActif={isActif} />
       ) : null}
 
       <AlertDialog open={revokeOpen} onOpenChange={setRevokeOpen}>

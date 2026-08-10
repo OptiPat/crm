@@ -87,6 +87,14 @@ impl PortalDb {
         self.conn()
             .execute_batch("DROP TABLE IF EXISTS espace_email_outbox;")?;
 
+        self.conn().execute_batch(
+            "CREATE TABLE IF NOT EXISTS espace_portal_config (
+                cle TEXT PRIMARY KEY,
+                valeur TEXT NOT NULL,
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+            );",
+        )?;
+
         // Bases créées avant l'expiration d'inactivité.
         if !self.has_column("espace_session", "last_seen_at")? {
             self.conn().execute_batch(
@@ -96,7 +104,31 @@ impl PortalDb {
         Ok(())
     }
 
-    fn has_column(&self, table: &str, column: &str) -> Result<bool> {
+    /// Clé publique du CRM, transmise par la synchronisation. Le portail s'en
+    /// sert pour sceller les dépôts et ne détient jamais la clé privée.
+    pub fn set_depot_public_key(&self, hex_key: &str) -> Result<()> {
+        self.conn().execute(
+            "INSERT INTO espace_portal_config (cle, valeur, updated_at)
+             VALUES ('depot_public_key', ?1, unixepoch())
+             ON CONFLICT(cle) DO UPDATE SET valeur = excluded.valeur, updated_at = unixepoch()",
+            params![hex_key],
+        )?;
+        Ok(())
+    }
+
+    pub fn depot_public_key(&self) -> Result<Option<String>> {
+        let value: Option<String> = self
+            .conn()
+            .query_row(
+                "SELECT valeur FROM espace_portal_config WHERE cle = 'depot_public_key'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(value.filter(|v| !v.trim().is_empty()))
+    }
+
+    pub(crate) fn has_column(&self, table: &str, column: &str) -> Result<bool> {
         let conn = self.conn();
         let mut stmt = conn.prepare(&format!("PRAGMA table_info(\"{table}\")"))?;
         let mut rows = stmt.query([])?;

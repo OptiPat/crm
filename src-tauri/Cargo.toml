@@ -37,6 +37,8 @@ tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-biometry = "0.2.8"
 chacha20poly1305 = "0.11.0"
+hkdf = "0.12"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
 atomic-write-file = "0.3.0"
 open = { version = "5.4.0", features = ["shellexecute-on-windows"] }
 
@@ -50,6 +52,24 @@ codegen-units = 16
 incremental = true
 debug = 0
 codegen-units = 16
+
+# Argon2 est volontairement couteux ; non optimise il l'est de facon absurde et
+# chaque test qui hache un mot de passe paie plus d'une seconde. Les
+# dependances de calcul sont compilees optimisees une fois, puis mises en cache.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.chacha20poly1305]
+opt-level = 3
+
+[profile.dev.package.sha2]
+opt-level = 3
+
+[profile.dev.package.x25519-dalek]
+opt-level = 3
+
+[profile.dev.package.curve25519-dalek]
+opt-level = 3
 
 [profile.release]
 panic = "abort"
