@@ -1,10 +1,12 @@
 //! Analyse antivirus des fichiers déposés (ClamAV / clamd).
 
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
 
-const DEFAULT_CLAMD_ADDR: &str = "127.0.0.1:3310";
+/// Debian démarre clamd sur un socket local, pas sur un port TCP : c'est le
+/// réglage par défaut de la distribution, et il évite d'ouvrir un port de plus.
+const DEFAULT_CLAMD_ADDR: &str = "/run/clamav/clamd.ctl";
 const CHUNK_SIZE: usize = 64 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,6 +20,11 @@ pub fn clamd_addr() -> String {
     std::env::var("ESPACE_CLAMD_ADDR").unwrap_or_else(|_| DEFAULT_CLAMD_ADDR.into())
 }
 
+/// Une adresse commençant par `/` désigne un socket local, sinon un port TCP.
+fn is_unix_socket(addr: &str) -> bool {
+    addr.starts_with('/')
+}
+
 /// Analyse un fichier en mémoire via le protocole INSTREAM de clamd.
 pub fn scan_bytes(data: &[u8]) -> ScanVerdict {
     if data.is_empty() {
@@ -25,6 +32,34 @@ pub fn scan_bytes(data: &[u8]) -> ScanVerdict {
     }
 
     let addr = clamd_addr();
+
+    if is_unix_socket(&addr) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::net::UnixStream;
+            let mut stream = match UnixStream::connect(&addr) {
+                Ok(stream) => stream,
+                Err(error) => {
+                    return ScanVerdict::Unavailable(format!(
+                        "clamd injoignable ({addr}) : {error}"
+                    ));
+                }
+            };
+            if stream.set_read_timeout(Some(Duration::from_secs(30))).is_err()
+                || stream.set_write_timeout(Some(Duration::from_secs(30))).is_err()
+            {
+                return ScanVerdict::Unavailable("timeout clamd".into());
+            }
+            return stream_instream(&mut stream, data);
+        }
+        #[cfg(not(unix))]
+        {
+            return ScanVerdict::Unavailable(format!(
+                "socket local clamd indisponible sur cette plateforme ({addr})"
+            ));
+        }
+    }
+
     let socket_addr = match addr.parse() {
         Ok(parsed) => parsed,
         Err(_) => return ScanVerdict::Unavailable(format!("ESPACE_CLAMD_ADDR invalide : {addr}")),
@@ -35,13 +70,17 @@ pub fn scan_bytes(data: &[u8]) -> ScanVerdict {
             return ScanVerdict::Unavailable(format!("clamd injoignable ({addr}) : {error}"));
         }
     };
-
     if stream.set_read_timeout(Some(Duration::from_secs(30))).is_err()
         || stream.set_write_timeout(Some(Duration::from_secs(30))).is_err()
     {
         return ScanVerdict::Unavailable("timeout réseau clamd".into());
     }
 
+    stream_instream(&mut stream, data)
+}
+
+/// Protocole INSTREAM, indépendant du transport.
+fn stream_instream<S: Read + Write>(stream: &mut S, data: &[u8]) -> ScanVerdict {
     if stream.write_all(b"zINSTREAM\0").is_err() {
         return ScanVerdict::Unavailable("échec handshake clamd".into());
     }
@@ -62,7 +101,7 @@ pub fn scan_bytes(data: &[u8]) -> ScanVerdict {
     }
 
     let mut response = String::new();
-    if std::io::Read::read_to_string(&mut stream, &mut response).is_err() {
+    if stream.read_to_string(&mut response).is_err() {
         return ScanVerdict::Unavailable("réponse clamd illisible".into());
     }
 
@@ -70,7 +109,13 @@ pub fn scan_bytes(data: &[u8]) -> ScanVerdict {
 }
 
 fn parse_clamd_response(response: &str) -> ScanVerdict {
-    let line = response.lines().next().unwrap_or("").trim();
+    // Le protocole `zINSTREAM` termine ses réponses par un octet nul, que
+    // `trim` ne retire pas : sans ça, « stream: OK\0 » n'est pas reconnu.
+    let line = response
+        .lines()
+        .next()
+        .unwrap_or("")
+        .trim_matches(|c: char| c.is_whitespace() || c == '\0');
     if line.ends_with("OK") {
         ScanVerdict::Clean
     } else if line.contains("FOUND") {
@@ -120,11 +165,28 @@ mod tests {
     }
 
     #[test]
+    fn parse_nul_terminated_response() {
+        // Réponse réelle de clamd en mode `z` : terminée par un octet nul.
+        assert_eq!(parse_clamd_response("stream: OK\0"), ScanVerdict::Clean);
+        assert_eq!(
+            parse_clamd_response("stream: Eicar-Test-Signature FOUND\0"),
+            ScanVerdict::Infected("stream: Eicar-Test-Signature FOUND".into())
+        );
+    }
+
+    #[test]
     fn parse_found_response() {
         assert_eq!(
             parse_clamd_response("stream: Eicar-Signature FOUND\n"),
             ScanVerdict::Infected("stream: Eicar-Signature FOUND".into())
         );
+    }
+
+    #[test]
+    fn a_path_designates_a_local_socket() {
+        assert!(is_unix_socket("/run/clamav/clamd.ctl"));
+        assert!(!is_unix_socket("127.0.0.1:3310"));
+        assert!(!is_unix_socket("localhost:3310"));
     }
 
     #[test]

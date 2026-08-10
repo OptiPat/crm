@@ -77,6 +77,7 @@ Puis **Synchroniser vers le portail** sur un contact avec accès **actif**.
 | `ESPACE_PORTAL_DEV` | `false` — mettre `1` expose `GET /api/v1/patrimoine/{id}` **sans auth client** |
 | `ESPACE_PORTAL_DATA` | *(obligatoire et **absolu** en production)* — emplacement des dépôts scellés |
 | `ESPACE_ADVISOR_EMAIL` | Adresse notifiée à chaque dépôt client |
+| `ESPACE_CLAMD_ADDR` | `/run/clamav/clamd.ctl` — socket local Debian. Une valeur `hôte:port` bascule en TCP |
 | `ESPACE_BREVO_API_KEY` | *(obligatoire hors dev)* — clé Brevo dédiée à l'envoi transactionnel |
 | `ESPACE_MAIL_FROM` | *(obligatoire hors dev)* — adresse d'expédition |
 | `ESPACE_MAIL_FROM_NAME` | `Votre conseiller` — nom affiché du cabinet |

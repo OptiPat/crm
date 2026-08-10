@@ -2736,16 +2736,48 @@ impl Database {
         Ok(())
     }
 
+    /// Schéma de référence, construit **une seule fois** par exécution de tests.
+    ///
+    /// Rejouer toutes les migrations pour chaque test — une soixantaine de
+    /// tables, leurs index et les déclencheurs de synchronisation sur chaque
+    /// table partagée — coûtait l'essentiel de la durée de la suite.
+    #[cfg(test)]
+    fn test_schema_template() -> &'static std::sync::Mutex<Connection> {
+        static TEMPLATE: std::sync::OnceLock<std::sync::Mutex<Connection>> =
+            std::sync::OnceLock::new();
+        TEMPLATE.get_or_init(|| {
+            let conn = Connection::open_in_memory().expect("base modèle de test");
+            conn.execute("PRAGMA foreign_keys = ON", [])
+                .expect("foreign_keys sur la base modèle");
+            crate::licensing::install_authorizer(&conn);
+            let db = Database { conn };
+            db.init_tables().expect("migrations de la base modèle");
+            crate::licensing::seed_in_memory_test_license(&db);
+            std::sync::Mutex::new(db.conn)
+        })
+    }
+
     /// Base SQLite en mémoire pour les tests (`cargo test`).
+    ///
+    /// Copie page à page du schéma de référence : quelques millisecondes, contre
+    /// plus d'une seconde pour rejouer les migrations. Chaque test conserve sa
+    /// base isolée.
     #[cfg(test)]
     pub fn open_in_memory_for_tests() -> Result<Self> {
-        let conn = Connection::open_in_memory()?;
+        let mut conn = Connection::open_in_memory()?;
+
+        {
+            let template = Self::test_schema_template()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let backup = rusqlite::backup::Backup::new(&template, &mut conn)?;
+            backup.run_to_completion(256, std::time::Duration::from_millis(0), None)?;
+        }
+
+        // Réglages portés par la connexion, pas par le fichier : à reposer.
         conn.execute("PRAGMA foreign_keys = ON", [])?;
         crate::licensing::install_authorizer(&conn);
-        let db = Database { conn };
-        db.init_tables()?;
-        crate::licensing::seed_in_memory_test_license(&db);
-        Ok(db)
+        Ok(Database { conn })
     }
 
     #[cfg(test)]
