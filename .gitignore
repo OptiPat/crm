@@ -69,6 +69,10 @@ auth.json
 *.pem
 .env
 .env.*
+# Tout fichier d'environnement, quel que soit son prefixe : un fragment nomme
+# privacy-cabinet.env echappait aux deux motifs ci-dessus et serait parti dans
+# ce depot public avec des donnees reelles.
+*.env
 !.env.example
 license-build.local.ps1
 
