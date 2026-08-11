@@ -10,10 +10,17 @@ pub const PORTAL_URL_SETTING_KEY: &str = "espace_client_portal_url";
 /// autres secrets applicatifs (cf. `docs/CHIFFREMENT.md`).
 pub const SYNC_SECRET_SETTING_KEY: &str = "espace_client_sync_secret_enc";
 
+/// Identifiant du lien d'agenda proposé par le bouton permanent de l'espace.
+/// Un seul, choisi par le conseiller : faire trancher le client entre « bilan
+/// annuel » et « point rapide » lui demanderait une décision qui n'est pas la
+/// sienne. Les échéances, elles, désignent chacune leur propre lien.
+pub const RDV_LIEN_SETTING_KEY: &str = "espace_client_rdv_lien_id";
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct EspaceClientSyncConfig {
     pub portal_url: Option<String>,
     pub has_sync_secret: bool,
+    pub rdv_lien_id: Option<String>,
 }
 
 /// Le portail transporte des données patrimoniales nominatives : HTTPS exigé,
@@ -104,9 +111,15 @@ pub fn get_sync_config(db: &Database) -> Result<EspaceClientSyncConfig, String> 
         .map_err(|e| e.to_string())?
         .map(|v| !v.trim().is_empty())
         .unwrap_or(false);
+    let rdv_lien_id = db
+        .get_setting(RDV_LIEN_SETTING_KEY)
+        .map_err(|e| e.to_string())?
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
     Ok(EspaceClientSyncConfig {
         portal_url,
         has_sync_secret,
+        rdv_lien_id,
     })
 }
 
@@ -115,7 +128,14 @@ pub fn save_sync_config(
     db: &Database,
     portal_url: &str,
     sync_secret: Option<&str>,
+    rdv_lien_id: Option<&str>,
 ) -> Result<EspaceClientSyncConfig, String> {
+    // Chaîne vide = aucun bouton, cas volontaire et distinct de « inchangé ».
+    if let Some(lien) = rdv_lien_id {
+        db.set_setting(RDV_LIEN_SETTING_KEY, lien.trim())
+            .map_err(|e| e.to_string())?;
+    }
+
     let url = portal_url.trim();
     if url.is_empty() {
         return Err("URL du portail requise".into());

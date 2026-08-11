@@ -132,12 +132,19 @@ pub fn save_espace_client_sync_config_cmd(
     session: State<'_, UiSessionState>,
     portal_url: String,
     sync_secret: Option<String>,
+    rdv_lien_id: Option<String>,
 ) -> Result<EspaceClientSyncConfig, String> {
     require_ui_session(&session)?;
     let guard = db.lock().map_err(|e| e.to_string())?;
     let database = guard.as_ref().ok_or("Base non ouverte")?;
     require_espace_client_active(database)?;
-    save_sync_config(&app, database, &portal_url, sync_secret.as_deref())
+    save_sync_config(
+        &app,
+        database,
+        &portal_url,
+        sync_secret.as_deref(),
+        rdv_lien_id.as_deref(),
+    )
 }
 
 #[tauri::command]

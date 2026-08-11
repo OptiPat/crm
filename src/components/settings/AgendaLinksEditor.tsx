@@ -88,7 +88,12 @@ export function AgendaLinksEditor({ links, onChange, embedded }: AgendaLinksEdit
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Identifiant</Label>
+                  <Label className="text-xs">
+                    Identifiant
+                    <span className="ml-1 font-normal text-muted-foreground">
+                      — à ne plus changer
+                    </span>
+                  </Label>
                   <Input
                     value={link.id}
                     onChange={(e) => update(index, { id: e.target.value })}
@@ -102,6 +107,10 @@ export function AgendaLinksEditor({ links, onChange, embedded }: AgendaLinksEdit
                     placeholder="suivi"
                     className="font-mono text-sm"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Le modifier casse les modèles d&apos;email et les boutons de
+                    l&apos;espace client qui le désignent.
+                  </p>
                 </div>
                 <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
                   <Label className="text-xs">URL Google Agenda</Label>

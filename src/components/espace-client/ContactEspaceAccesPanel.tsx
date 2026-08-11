@@ -182,6 +182,8 @@ export function ContactEspaceAccesPanel({
   const handleSavePortalConfig = async () => {
     setSaving(true);
     try {
+      // Pas de lien de rendez-vous ici : il se règle dans Paramètres, à côté
+      // des liens d'agenda, puisqu'il vaut pour tous les clients.
       const config = await saveEspaceClientSyncConfig(
         portalUrl,
         syncSecret.trim() || undefined

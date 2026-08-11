@@ -86,6 +86,7 @@ fn build_espace_client_snapshot_with_sequence(
     // Les liens de prise de rendez-vous sont ceux du profil CGP, déjà utilisés
     // par les modèles d'emails : une seule liste à tenir à jour.
     let rdv_liens = collect_rdv_liens(db);
+    let rdv_url = resolve_rdv_general(db, &rdv_liens);
 
     let echeances = db
         .list_espace_echeances(contact_id)
@@ -129,7 +130,7 @@ fn build_espace_client_snapshot_with_sequence(
         partenaires,
         timeline,
         demandes,
-        rdv_liens,
+        rdv_url,
         // Simple lecture : la paire est créée par la commande de push, qui
         // dispose du handle nécessaire au chiffrement de la clé privée.
         depot_public_key: db
@@ -281,9 +282,9 @@ fn parse_reinvestissement_pourcent(notes: Option<&str>) -> Option<i64> {
     Some(100)
 }
 
-/// Liens d'agenda proposés au client. Un profil sans lien donne une liste vide
-/// et le bouton n'apparaît pas. Les adresses non sécurisées sont écartées :
-/// elles restent utilisables dans un email, pas depuis un espace patrimonial.
+/// Liens d'agenda du profil CGP, utilisés pour résoudre les adresses. Les
+/// adresses non sécurisées sont écartées : elles restent acceptables dans un
+/// email, pas depuis un espace qui affiche du patrimoine.
 fn collect_rdv_liens(db: &Database) -> Vec<EspaceClientRdvLien> {
     let Ok(cgp) = db.get_cgp_config() else {
         return Vec::new();
@@ -291,19 +292,26 @@ fn collect_rdv_liens(db: &Database) -> Vec<EspaceClientRdvLien> {
     cgp.agenda_links
         .into_iter()
         .filter(|lien| lien.url.trim().starts_with("https://"))
-        .map(|lien| {
-            let libelle = lien.label.trim();
-            EspaceClientRdvLien {
-                id: lien.id.trim().to_string(),
-                libelle: if libelle.is_empty() {
-                    "Prendre rendez-vous".to_string()
-                } else {
-                    libelle.to_string()
-                },
-                url: lien.url.trim().to_string(),
-            }
+        .map(|lien| EspaceClientRdvLien {
+            id: lien.id.trim().to_string(),
+            url: lien.url.trim().to_string(),
         })
         .collect()
+}
+
+/// Adresse du bouton permanent : le lien désigné dans les réglages, à
+/// condition qu'il existe encore et soit sécurisé.
+fn resolve_rdv_general(db: &Database, liens: &[EspaceClientRdvLien]) -> Option<String> {
+    let choisi = db
+        .get_setting(super::config::RDV_LIEN_SETTING_KEY)
+        .ok()
+        .flatten()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())?;
+    liens
+        .iter()
+        .find(|lien| lien.id == choisi)
+        .map(|lien| lien.url.clone())
 }
 
 /// Échéances du client : celles que portent ses placements, et celles que le
@@ -491,7 +499,6 @@ mod tests {
     fn lien_test(id: &str, url: &str) -> EspaceClientRdvLien {
         EspaceClientRdvLien {
             id: id.into(),
-            libelle: "Bilan".into(),
             url: url.into(),
         }
     }
@@ -557,7 +564,6 @@ mod tests {
         let liens = collect_rdv_liens(&db);
         assert_eq!(liens.len(), 1);
         assert_eq!(liens[0].id, "bilan");
-        assert_eq!(liens[0].libelle, "Bilan annuel");
     }
 
     /// Profil sans lien : liste vide, et le bouton disparaît côté client.
@@ -565,6 +571,36 @@ mod tests {
     fn no_agenda_link_gives_no_button() {
         let db = crate::database::Database::open_in_memory_for_tests().unwrap();
         assert!(collect_rdv_liens(&db).is_empty());
+        assert!(resolve_rdv_general(&db, &[]).is_none());
+    }
+
+    /// Le bouton permanent suit le lien désigné dans les réglages, pas le
+    /// premier venu : c'est le conseiller qui choisit, pas l'ordre de la liste.
+    #[test]
+    fn general_button_follows_the_chosen_link() {
+        let db = crate::database::Database::open_in_memory_for_tests().unwrap();
+        let liens = vec![
+            lien_test("bilan", "https://calendar.example.com/bilan"),
+            lien_test("point", "https://calendar.example.com/point"),
+        ];
+
+        assert!(
+            resolve_rdv_general(&db, &liens).is_none(),
+            "aucun lien designe : pas de bouton"
+        );
+
+        db.set_setting(crate::espace_client::config::RDV_LIEN_SETTING_KEY, "point")
+            .unwrap();
+        assert_eq!(
+            resolve_rdv_general(&db, &liens).as_deref(),
+            Some("https://calendar.example.com/point")
+        );
+
+        // Lien retiré des réglages : le bouton disparaît plutôt que de pointer
+        // vers une adresse qui n'existe plus.
+        db.set_setting(crate::espace_client::config::RDV_LIEN_SETTING_KEY, "disparu")
+            .unwrap();
+        assert!(resolve_rdv_general(&db, &liens).is_none());
     }
 
     /// La section s'intitule « échéances à venir » : une échéance datée de

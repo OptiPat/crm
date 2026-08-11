@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import type { Contact } from "@/lib/api/tauri-contacts";
 
@@ -27,10 +27,8 @@ import { ClientPreviewInventory } from "./ClientPreviewInventory";
 import { ClientPreviewEvolution } from "./ClientPreviewEvolution";
 import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
 
-import {
-  ClientPreviewRdvButton,
-  type ClientPreviewRdvLien,
-} from "./ClientPreviewRdvButton";
+import { ClientPreviewRdvButton } from "./ClientPreviewRdvButton";
+import { ClientPreviewHeader } from "./ClientPreviewHeader";
 
 import { ClientPreviewTimeline } from "./ClientPreviewTimeline";
 
@@ -75,8 +73,23 @@ export interface ClientPreviewViewProps {
   /** Historiques de valorisation (CRM) pour affiner la courbe d'évolution. */
   evolutionHistoriesByInvestissementId?: EvolutionHistoryById;
 
-  /** Prises de rendez-vous proposées. Liste vide : aucun bouton affiché. */
-  rdvLiens?: ClientPreviewRdvLien[];
+  /** Adresse du bouton permanent de rendez-vous. Absente : aucun bouton. */
+  rdvUrl?: string;
+
+  /** En-tête client : logo, titre, déconnexion. Masqué si absent. */
+  showHeader?: boolean;
+
+  /** Logo affiché dans l'en-tête. */
+  logoUrl?: string;
+
+  /** Déconnexion réelle côté portail ; inerte dans l'aperçu conseiller. */
+  onLogout?: () => void;
+
+  /**
+   * Bloc inséré entre l'en-tête et le patrimoine — le portail y place les
+   * documents demandés. L'aperçu conserve ainsi le même ordre d'écran.
+   */
+  headerSlot?: ReactNode;
 }
 
 
@@ -111,7 +124,15 @@ export function ClientPreviewView({
 
   evolutionHistoriesByInvestissementId,
 
-  rdvLiens = [],
+  rdvUrl,
+
+  showHeader = false,
+
+  logoUrl,
+
+  onLogout,
+
+  headerSlot,
 
 }: ClientPreviewViewProps) {
 
@@ -152,6 +173,18 @@ export function ClientPreviewView({
 
       <ClientPreviewDeviceFrame viewport={viewport} framed={showDeviceFrame}>
 
+        {showHeader ? (
+          <ClientPreviewHeader
+            prenom={contact.prenom}
+            nom={contact.nom}
+            logoUrl={logoUrl}
+            lastSyncLabel={lastSyncLabel}
+            onLogout={onLogout}
+          />
+        ) : null}
+
+        {headerSlot}
+
         <ClientPreviewHero
           contact={contact}
           perimetre={perimetre}
@@ -160,9 +193,9 @@ export function ClientPreviewView({
           emptyState={emptyState}
         />
 
-        {rdvLiens.length > 0 ? (
+        {rdvUrl ? (
           <div className={`${CP.padX} mt-4`}>
-            <ClientPreviewRdvButton liens={rdvLiens} />
+            <ClientPreviewRdvButton url={rdvUrl} />
           </div>
         ) : null}
 

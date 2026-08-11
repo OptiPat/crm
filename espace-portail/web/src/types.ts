@@ -21,13 +21,7 @@ export interface EspaceClientSyncPayload {
   partenaires?: EspaceClientPartenaireLine[];
   timeline: EspaceClientTimelineEvent[];
   /** Absent des anciens snapshots : le bouton disparaît alors, sans erreur. */
-  rdvLiens?: EspaceClientRdvLien[];
-}
-
-export interface EspaceClientRdvLien {
-  id: string;
-  libelle: string;
-  url: string;
+  rdvUrl?: string | null;
 }
 
 export interface EspaceClientInvestissementLine {

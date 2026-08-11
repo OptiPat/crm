@@ -41,13 +41,16 @@ export function ClientPreviewTimeline({
 }: ClientPreviewTimelineProps) {
   return (
     <section className={`${CP.sectionGap} ${CP.padX} pb-8`}>
-      <h3 className={CP.sectionTitle}>Échéances à venir</h3>
+      {/* Titre et liste disparaissent ensemble quand il n'y a rien : annoncer
+          des échéances pour dire qu'il n'y en a pas n'apprend rien au client.
+          La mention légale, elle, reste en toutes circonstances. */}
+      {loading || timeline.length > 0 ? (
+        <h3 className={CP.sectionTitle}>Échéances à venir</h3>
+      ) : null}
 
       {loading ? (
         <TimelineSkeleton />
-      ) : timeline.length === 0 ? (
-        <p className={`${CP.meta} mt-3`}>Rien de prévu pour le moment</p>
-      ) : (
+      ) : timeline.length === 0 ? null : (
         <div className={`${CP.card} mt-4 divide-y divide-[var(--cp-line-soft)]`}>
           {timeline.map((ev) => {
             const daysLabel = formatDaysUntil(ev.date);

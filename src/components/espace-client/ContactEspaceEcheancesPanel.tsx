@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { CalendarPlus, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,7 @@ function dateToUnix(valeur: string): number | null {
   return Math.floor(new Date(annee, mois - 1, jour, 12, 0, 0).getTime() / 1000);
 }
 
-function unixToLabel(unix: number): string {
+function formatJour(unix: number): string {
   return new Date(unix * 1000).toLocaleDateString("fr-FR", {
     day: "2-digit",
     month: "long",
@@ -37,15 +37,16 @@ function unixToLabel(unix: number): string {
 /**
  * Échéances que le conseiller adresse à un client précis.
  *
- * À la différence des alertes et des tâches, qui restent internes, celles-ci
- * s'affichent dans l'espace client. Chacune peut renvoyer vers un des liens
- * d'agenda des réglages, et son bouton mène alors droit au bon rendez-vous.
+ * À la différence des alertes et des tâches, qui restent internes au CRM,
+ * celles-ci s'affichent dans l'espace du client. Chacune peut renvoyer vers un
+ * des liens d'agenda des réglages, et son bouton mène alors au bon rendez-vous.
  */
 export function ContactEspaceEcheancesPanel({
   contactId,
 }: ContactEspaceEcheancesPanelProps) {
   const [echeances, setEcheances] = useState<EspaceEcheance[]>([]);
   const [liens, setLiens] = useState<AgendaLink[]>([]);
+  const [formOuvert, setFormOuvert] = useState(false);
   const [date, setDate] = useState("");
   const [titre, setTitre] = useState("");
   const [message, setMessage] = useState("");
@@ -80,6 +81,14 @@ export function ContactEspaceEcheancesPanel({
 
   const maintenant = useMemo(() => Math.floor(Date.now() / 1000), []);
 
+  const fermerFormulaire = () => {
+    setFormOuvert(false);
+    setDate("");
+    setTitre("");
+    setMessage("");
+    setRdvLienId("");
+  };
+
   const ajouter = async () => {
     const unix = dateToUnix(date);
     if (unix == null) {
@@ -95,12 +104,9 @@ export function ContactEspaceEcheancesPanel({
         message.trim() || null,
         rdvLienId || null
       );
-      setDate("");
-      setTitre("");
-      setMessage("");
-      setRdvLienId("");
+      fermerFormulaire();
       await recharger();
-      toast.success("Échéance ajoutée — resynchronisez pour la publier");
+      toast.success("Échéance ajoutée — synchronisez pour la publier");
     } catch (error) {
       toast.error(invokeErrorMessage(error) || "Ajout impossible");
     } finally {
@@ -118,135 +124,164 @@ export function ContactEspaceEcheancesPanel({
   };
 
   return (
-    <div className="mt-4 space-y-3 border-t border-border/60 pt-3">
-      <div>
-        <p className="text-xs font-medium text-foreground">
-          Échéances affichées au client
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Vos alertes et vos tâches restent internes. Ces échéances-ci sont
-          écrites pour le client et apparaissent dans son espace.
-        </p>
+    <div className="mt-6 border-t border-border/60 pt-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h4 className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+            <CalendarPlus className="h-4 w-4 text-muted-foreground" />
+            Échéances affichées au client
+          </h4>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Vos alertes et vos tâches restent internes. Celles-ci sont écrites
+            pour le client et apparaissent dans son espace.
+          </p>
+        </div>
+        {!formOuvert ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 shrink-0"
+            onClick={() => setFormOuvert(true)}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            Ajouter
+          </Button>
+        ) : null}
       </div>
 
-      {echeances.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Aucune échéance.</p>
-      ) : (
-        <ul className="space-y-1.5">
+      {echeances.length > 0 ? (
+        <ul className="mt-4 space-y-2">
           {echeances.map((echeance) => {
             const passee = echeance.date_echeance < maintenant;
             const lien = liens.find((l) => l.id === echeance.rdv_lien_id);
             return (
               <li
                 key={echeance.id}
-                className="flex items-start gap-2 rounded-md border border-border/60 px-2 py-1.5"
+                className="flex items-start gap-3 rounded-lg border border-border/80 bg-background p-3 shadow-sm"
               >
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-foreground">
-                    {unixToLabel(echeance.date_echeance)} — {echeance.titre}
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-sm font-medium text-foreground">
+                    {echeance.titre}
                   </p>
                   {echeance.message ? (
-                    <p className="mt-0.5 text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       {echeance.message}
                     </p>
                   ) : null}
-                  <p className="mt-0.5 text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
+                    {formatJour(echeance.date_echeance)}
                     {passee
-                      ? "Date passée — invisible côté client"
+                      ? " · date passée, invisible côté client"
                       : lien
-                        ? `Bouton : ${lien.label}`
-                        : "Sans bouton de rendez-vous"}
+                        ? ` · bouton « ${lien.label} »`
+                        : " · sans bouton"}
                   </p>
                 </div>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 text-destructive"
-                  aria-label="Supprimer"
+                  className="h-8 w-8 shrink-0 text-destructive hover:bg-destructive/10"
+                  aria-label="Supprimer l'échéance"
                   onClick={() => void supprimer(echeance.id)}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </li>
             );
           })}
         </ul>
-      )}
-
-      <div className="grid gap-2 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="echeance-date" className="text-xs">
-            Date
-          </Label>
-          <Input
-            id="echeance-date"
-            type="date"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-            className="h-8 text-xs"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="echeance-titre" className="text-xs">
-            Intitulé
-          </Label>
-          <Input
-            id="echeance-titre"
-            value={titre}
-            onChange={(event) => setTitre(event.target.value)}
-            placeholder="Aide à la déclaration de revenus"
-            className="h-8 text-xs"
-          />
-        </div>
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="echeance-message" className="text-xs">
-            Précision affichée au client (facultatif)
-          </Label>
-          <Input
-            id="echeance-message"
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-            placeholder="Préparez vos justificatifs de revenus fonciers"
-            className="h-8 text-xs"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="echeance-rdv" className="text-xs">
-            Bouton de rendez-vous
-          </Label>
-          <select
-            id="echeance-rdv"
-            value={rdvLienId}
-            onChange={(event) => setRdvLienId(event.target.value)}
-            className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
-          >
-            <option value="">Aucun</option>
-            {liens.map((lien) => (
-              <option key={lien.id} value={lien.id}>
-                {lien.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-end">
-          <Button
-            type="button"
-            size="sm"
-            className="h-8 text-xs"
-            disabled={enCours || !date || !titre.trim()}
-            onClick={() => void ajouter()}
-          >
-            Ajouter l'échéance
-          </Button>
-        </div>
-      </div>
-
-      {liens.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Aucun lien d'agenda dans vos réglages : ajoutez-en un pour proposer
-          un bouton de prise de rendez-vous.
+      ) : !formOuvert ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          Aucune échéance pour ce client.
         </p>
+      ) : null}
+
+      {formOuvert ? (
+        <div className="mt-4 space-y-4 rounded-lg border border-border/80 bg-muted/20 p-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="echeance-titre">Intitulé</Label>
+              <Input
+                id="echeance-titre"
+                value={titre}
+                onChange={(event) => setTitre(event.target.value)}
+                placeholder="Aide à la déclaration de revenus"
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="echeance-date">Date</Label>
+              <Input
+                id="echeance-date"
+                type="date"
+                value={date}
+                onChange={(event) => setDate(event.target.value)}
+                className="h-9"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="echeance-message">
+              Précision affichée au client
+              <span className="ml-1 font-normal text-muted-foreground">
+                (facultatif)
+              </span>
+            </Label>
+            <Input
+              id="echeance-message"
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              placeholder="Préparez vos justificatifs de revenus fonciers"
+              className="h-9"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="echeance-rdv">Bouton de prise de rendez-vous</Label>
+            <select
+              id="echeance-rdv"
+              value={rdvLienId}
+              onChange={(event) => setRdvLienId(event.target.value)}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="">Aucun</option>
+              {liens.map((lien) => (
+                <option key={lien.id} value={lien.id}>
+                  {lien.label || lien.id}
+                </option>
+              ))}
+            </select>
+            <p className="text-sm text-muted-foreground">
+              {liens.length === 0
+                ? "Aucun lien d'agenda dans Paramètres → Agenda & RDV."
+                : "Le client arrive directement sur cet agenda."}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="h-9"
+              disabled={enCours || !date || !titre.trim()}
+              onClick={() => void ajouter()}
+            >
+              Ajouter l&apos;échéance
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-9"
+              onClick={fermerFormulaire}
+            >
+              Annuler
+            </Button>
+          </div>
+        </div>
       ) : null}
     </div>
   );

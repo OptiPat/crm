@@ -21,10 +21,13 @@ import {
 } from "@/lib/patrimoine/timeline";
 import { getLatestValorisationLabel } from "@/components/contacts/client-preview/client-preview-format";
 import { ContactEspaceAccesPanel } from "@/components/espace-client/ContactEspaceAccesPanel";
-import { getEspaceSyncSummary } from "@/lib/api/tauri-espace-client";
+import {
+  getEspaceClientSyncConfig,
+  getEspaceSyncSummary,
+} from "@/lib/api/tauri-espace-client";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
+import { useAppBranding } from "@/components/app-branding/AppBrandingProvider";
 import { normalizeAgendaLinks } from "@/lib/emails/agenda-links";
-import type { ClientPreviewRdvLien } from "@/components/contacts/client-preview/ClientPreviewRdvButton";
 import { ESPACE_CLIENT_CHANGED_EVENT } from "@/lib/espace-client/espace-client-events";
 import { formatEspaceSyncLabel } from "@/lib/espace-client/espace-client-format";
 import {
@@ -181,26 +184,29 @@ export function ContactDetailApercuClientTab({
     [investissements, viewer, foyerMembers]
   );
 
-  // L'aperçu doit montrer ce que le client verra, boutons compris — sinon il
-  // cesse d'être un aperçu. Mêmes liens que les emails : ceux du profil CGP.
-  const [rdvLiens, setRdvLiens] = useState<ClientPreviewRdvLien[]>([]);
+  // Le portail affiche le logo configuré sur son serveur ; le CRM ne le
+  // connaît pas. Celui du cabinet en est l'équivalent le plus proche, et il
+  // rend l'aperçu fidèle sur la mise en page, qui est ce qui se juge ici.
+  const { logoSrc } = useAppBranding();
+
+  // L'aperçu doit montrer ce que le client verra, bouton compris — sinon il
+  // cesse d'être un aperçu. Même résolution que la synchronisation : le lien
+  // désigné dans les réglages, cherché parmi les agendas du profil CGP.
+  const [rdvUrl, setRdvUrl] = useState<string | undefined>(undefined);
   useEffect(() => {
     let annule = false;
-    getCgpConfig()
-      .then((cgp) => {
+    Promise.all([getCgpConfig(), getEspaceClientSyncConfig()])
+      .then(([cgp, sync]) => {
         if (annule) return;
-        setRdvLiens(
-          normalizeAgendaLinks(cgp)
-            .filter((lien) => lien.url.trim().startsWith("https://"))
-            .map((lien) => ({
-              id: lien.id,
-              libelle: lien.label.trim() || "Prendre rendez-vous",
-              url: lien.url.trim(),
-            }))
-        );
+        const choisi = sync.rdv_lien_id?.trim();
+        const lien = choisi
+          ? normalizeAgendaLinks(cgp).find((l) => l.id === choisi)
+          : undefined;
+        const url = lien?.url.trim();
+        setRdvUrl(url?.startsWith("https://") ? url : undefined);
       })
       .catch(() => {
-        if (!annule) setRdvLiens([]);
+        if (!annule) setRdvUrl(undefined);
       });
     return () => {
       annule = true;
@@ -278,7 +284,9 @@ export function ContactDetailApercuClientTab({
         timelineLoading={timelineLoading}
         lastSyncLabel={lastSyncLabel}
         evolutionHistoriesByInvestissementId={evolutionHistories}
-        rdvLiens={rdvLiens}
+        rdvUrl={rdvUrl}
+        showHeader
+        logoUrl={logoSrc}
       />
     </div>
   );

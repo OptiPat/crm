@@ -16,20 +16,19 @@ pub struct EspaceClientSyncPayload {
     pub partenaires: Vec<EspaceClientPartenaireLine>,
     pub timeline: Vec<EspaceClientTimelineEvent>,
     pub demandes: Vec<EspaceClientDemandeLine>,
-    /// Prises de rendez-vous proposées au client. Vide = pas de bouton.
-    pub rdv_liens: Vec<EspaceClientRdvLien>,
+    /// Adresse du bouton permanent de prise de rendez-vous, choisie par le
+    /// conseiller dans ses réglages. Absente = pas de bouton.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rdv_url: Option<String>,
     /// Clé publique de scellement des dépôts. La privée reste sur ce poste.
     pub depot_public_key: Option<String>,
 }
 
-/// Lien de rendez-vous tel que le client le voit : un libellé, une adresse.
-/// Reprend les liens Google Agenda du profil CGP — ceux-là mêmes qui servent
-/// aux emails. L'identifiant suit pour qu'une échéance puisse en désigner un.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+/// Lien d'agenda du profil CGP, tel que le CRM le manipule en interne pour
+/// résoudre les adresses. Seules les URL résolues partent au portail.
+#[derive(Debug, Clone)]
 pub struct EspaceClientRdvLien {
     pub id: String,
-    pub libelle: String,
     pub url: String,
 }
 

@@ -17,7 +17,6 @@ import {
 import { PortalDevGate } from "./PortalDevGate";
 import { PortalLogin } from "./PortalLogin";
 import { PortalDocumentsSection } from "./PortalDocumentsSection";
-import { PortalPatrimoineHeader } from "./PortalPatrimoineHeader";
 import { PortalPrivacy } from "./PortalPrivacy";
 import {
   applyPortalColorScheme,
@@ -525,15 +524,11 @@ export function PortalApp() {
 
   return (
     <main className={`${CP.root} flex min-h-[100dvh] w-full flex-col items-center`}>
-      <PortalPatrimoineHeader
-        prenom={contact.prenom}
-        nom={contact.nom}
-        logoUrl={branding.logoUrl}
-        lastSyncLabel={formatSyncLabel(syncedAt ?? undefined)}
-        onLogout={() => void handleLogout()}
-      />
-      <PortalDocumentsSection />
       <ClientPreviewView
+        showHeader
+        logoUrl={branding.logoUrl}
+        onLogout={() => void handleLogout()}
+        headerSlot={<PortalDocumentsSection />}
         contact={contact}
         visible={visible}
         partenaireById={partenaireById}
@@ -541,7 +536,7 @@ export function PortalApp() {
         categorieData={categorieData}
         disponibiliteData={disponibiliteData}
         timeline={timeline}
-        rdvLiens={payload?.rdvLiens ?? []}
+        rdvUrl={payload?.rdvUrl ?? undefined}
         viewport={viewport}
         showDeviceFrame={false}
         hideTimelineSync

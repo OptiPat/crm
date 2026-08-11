@@ -31,6 +31,8 @@ export interface EspaceSyncSummary {
 export interface EspaceClientSyncConfig {
   portal_url?: string | null;
   has_sync_secret: boolean;
+  /** Lien d'agenda du bouton permanent, choisi parmi ceux des réglages. */
+  rdv_lien_id?: string | null;
 }
 
 export interface PushEspaceClientContactResult {
@@ -195,13 +197,16 @@ export async function getEspaceClientSyncConfig(): Promise<EspaceClientSyncConfi
 
 export async function saveEspaceClientSyncConfig(
   portalUrl: string,
-  syncSecret?: string
+  syncSecret?: string,
+  rdvLienId?: string | null
 ): Promise<EspaceClientSyncConfig> {
   const config = await invoke<EspaceClientSyncConfig>(
     "save_espace_client_sync_config_cmd",
     {
       portalUrl,
       syncSecret: syncSecret?.trim() || null,
+      // Chaîne vide volontaire : « aucun bouton », distinct de « inchangé ».
+      rdvLienId: rdvLienId ?? null,
     }
   );
   notifyEspaceClientChanged();

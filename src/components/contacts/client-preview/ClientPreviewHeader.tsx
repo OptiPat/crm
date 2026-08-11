@@ -1,25 +1,36 @@
 import { LogOut } from "lucide-react";
-import { CP } from "@/components/contacts/client-preview/client-preview-theme";
+import { CP } from "./client-preview-theme";
 
-export interface PortalPatrimoineHeaderProps {
+export interface ClientPreviewHeaderProps {
   /** Client connecté (affiché sous le titre, pas en concurrence avec le logo). */
   prenom: string;
   nom: string;
   logoUrl?: string;
-  /** Titre portail à côté du logo — aligné sur l'écran de connexion. */
+  /** Titre affiché à côté du logo — aligné sur l'écran de connexion. */
   portalTitle?: string;
   lastSyncLabel?: string | null;
-  onLogout: () => void;
+  /**
+   * Absent dans l'aperçu conseiller : le bouton reste dessiné pour que
+   * l'aperçu montre l'écran réel, mais il ne déconnecte personne.
+   */
+  onLogout?: () => void;
 }
 
-export function PortalPatrimoineHeader({
+/**
+ * En-tête de l'espace client, partagé entre le portail et l'aperçu du CRM.
+ *
+ * Il vit ici plutôt que dans le projet du portail parce que le CRM ne peut pas
+ * importer depuis celui-ci — et qu'un aperçu sans logo ni déconnexion donne
+ * une fausse idée de ce que le client a sous les yeux.
+ */
+export function ClientPreviewHeader({
   prenom,
   nom,
   logoUrl,
   portalTitle = "Espace investisseur",
   lastSyncLabel,
   onLogout,
-}: PortalPatrimoineHeaderProps) {
+}: ClientPreviewHeaderProps) {
   const clientLabel = `${prenom} ${nom}`.trim();
 
   return (
@@ -34,9 +45,7 @@ export function PortalPatrimoineHeader({
             />
           ) : null}
           <div className="min-w-0">
-            <p
-              className={`${CP.body} truncate font-medium text-[var(--cp-ink)]`}
-            >
+            <p className={`${CP.body} truncate font-medium text-[var(--cp-ink)]`}>
               {portalTitle}
             </p>
             {clientLabel ? (
