@@ -71,6 +71,7 @@ const TIMELINE_KIND_FALLBACK_COLOR: Record<PatrimoineTimelineKind, string> = {
   cloture: CRM_A_COTE_COLOR,
   alerte: CRM_A_COTE_COLOR,
   tache: CRM_A_COTE_COLOR,
+  conseiller: CRM_A_COTE_COLOR,
 };
 
 /** Couleur timeline — même logique que les pastilles de l'inventaire. */

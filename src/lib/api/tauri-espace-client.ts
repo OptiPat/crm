@@ -60,6 +60,47 @@ export interface ImportEspaceDepotsResult {
   errors: string[];
 }
 
+/** Échéance rédigée par le conseiller à destination d'un client. */
+export interface EspaceEcheance {
+  id: number;
+  contact_id: number;
+  date_echeance: number;
+  titre: string;
+  message: string | null;
+  rdv_lien_id: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export async function listEspaceEcheances(
+  contactId: number
+): Promise<EspaceEcheance[]> {
+  return invoke<EspaceEcheance[]>("list_espace_echeances_cmd", { contactId });
+}
+
+export async function createEspaceEcheance(
+  contactId: number,
+  dateEcheance: number,
+  titre: string,
+  message: string | null,
+  rdvLienId: string | null
+): Promise<EspaceEcheance> {
+  const echeance = await invoke<EspaceEcheance>("create_espace_echeance_cmd", {
+    contactId,
+    dateEcheance,
+    titre,
+    message,
+    rdvLienId,
+  });
+  notifyEspaceClientChanged();
+  return echeance;
+}
+
+export async function deleteEspaceEcheance(id: number): Promise<void> {
+  await invoke<void>("delete_espace_echeance_cmd", { id });
+  notifyEspaceClientChanged();
+}
+
 export async function listEspaceDemandes(
   contactId: number
 ): Promise<EspaceDemande[]> {

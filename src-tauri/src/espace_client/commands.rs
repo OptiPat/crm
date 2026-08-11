@@ -18,7 +18,7 @@ use tauri::State;
 
 /// R11 — la fonctionnalité est mono-instance et invisible par défaut : aucune
 /// commande ne répond tant que `espace_client_active` n'est pas posée.
-fn require_espace_client_active(database: &Database) -> Result<(), String> {
+pub(super) fn require_espace_client_active(database: &Database) -> Result<(), String> {
     if is_espace_client_active(database)? {
         return Ok(());
     }

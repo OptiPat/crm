@@ -9,7 +9,9 @@ export type PatrimoineTimelineKind =
   | "prochain_arbitrage"
   | "cloture"
   | "alerte"
-  | "tache";
+  | "tache"
+  /** Échéance rédigée par le conseiller à destination du client. */
+  | "conseiller";
 
 export interface PatrimoineTimelineEvent {
   id: string;
@@ -20,6 +22,8 @@ export interface PatrimoineTimelineEvent {
   /** Placement lié — couleur alignée sur l'inventaire client. */
   type_produit?: string;
   origine?: string;
+  /** Adresse de prise de rendez-vous portée par une échéance du conseiller. */
+  rdvUrl?: string;
 }
 
 const ALERTE_CLIENT_LABELS: Record<string, string> = {

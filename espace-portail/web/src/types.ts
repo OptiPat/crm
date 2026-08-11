@@ -20,6 +20,14 @@ export interface EspaceClientSyncPayload {
   investissements: EspaceClientInvestissementLine[];
   partenaires?: EspaceClientPartenaireLine[];
   timeline: EspaceClientTimelineEvent[];
+  /** Absent des anciens snapshots : le bouton disparaît alors, sans erreur. */
+  rdvLiens?: EspaceClientRdvLien[];
+}
+
+export interface EspaceClientRdvLien {
+  id: string;
+  libelle: string;
+  url: string;
 }
 
 export interface EspaceClientInvestissementLine {
@@ -56,6 +64,8 @@ export interface EspaceClientTimelineEvent {
   detail?: string | null;
   typeProduit?: string | null;
   origine?: string | null;
+  /** Échéance du conseiller proposant une prise de rendez-vous. */
+  rdvUrl?: string | null;
 }
 
 export interface PatrimoineApiResponse {

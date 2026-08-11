@@ -43,6 +43,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ContactEspaceDemandesPanel } from "@/components/espace-client/ContactEspaceDemandesPanel";
+import { ContactEspaceEcheancesPanel } from "@/components/espace-client/ContactEspaceEcheancesPanel";
 import { cn } from "@/lib/utils";
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
 
@@ -465,6 +466,10 @@ export function ContactEspaceAccesPanel({
             </ul>
           )}
         </div>
+      ) : null}
+
+      {isActif && contact.id != null ? (
+        <ContactEspaceEcheancesPanel contactId={contact.id} />
       ) : null}
 
       {isActif && contact.id != null ? (

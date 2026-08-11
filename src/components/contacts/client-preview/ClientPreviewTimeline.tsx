@@ -94,6 +94,16 @@ export function ClientPreviewTimeline({
                         {ev.detail}
                       </p>
                     ) : null}
+                    {ev.rdvUrl ? (
+                      <a
+                        href={ev.rdvUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className={`${CP.rdvButton} mt-2`}
+                      >
+                        Prendre rendez-vous
+                      </a>
+                    ) : null}
                   </div>
                 </div>
               </div>

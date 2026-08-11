@@ -85,6 +85,9 @@ use espace_client::commands::{
     list_espace_demandes_cmd, push_espace_client_contact_cmd, revoke_espace_acces_cmd,
     save_espace_client_sync_config_cmd,
 };
+use espace_client::echeance_commands::{
+    create_espace_echeance_cmd, delete_espace_echeance_cmd, list_espace_echeances_cmd,
+};
 use licensing::{
     activate_license_cmd, get_license_status_cmd, needs_license_activation_cmd,
     start_license_trial_cmd,
@@ -656,6 +659,9 @@ fn main() {
             create_espace_demande_cmd,
             cancel_espace_demande_cmd,
             import_espace_depots_cmd,
+            list_espace_echeances_cmd,
+            create_espace_echeance_cmd,
+            delete_espace_echeance_cmd,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

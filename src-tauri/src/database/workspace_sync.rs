@@ -107,6 +107,7 @@ const TABLE_POLICIES: &[(&str, WorkspaceTablePolicy)] = &[
     ("espace_publication", WorkspaceTablePolicy::LocalOnly),
     ("espace_sync_state", WorkspaceTablePolicy::LocalOnly),
     ("espace_connexion_log", WorkspaceTablePolicy::LocalOnly),
+    ("espace_echeance", WorkspaceTablePolicy::LocalOnly),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

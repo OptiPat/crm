@@ -3,6 +3,7 @@ pub mod commands;
 pub mod config;
 pub mod depot_crypto;
 pub mod depot_import;
+pub mod echeance_commands;
 pub mod portal_api;
 pub mod push;
 pub mod snapshot;

@@ -27,6 +27,11 @@ import { ClientPreviewInventory } from "./ClientPreviewInventory";
 import { ClientPreviewEvolution } from "./ClientPreviewEvolution";
 import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
 
+import {
+  ClientPreviewRdvButton,
+  type ClientPreviewRdvLien,
+} from "./ClientPreviewRdvButton";
+
 import { ClientPreviewTimeline } from "./ClientPreviewTimeline";
 
 import { getLatestValorisationLabel } from "./client-preview-format";
@@ -69,6 +74,9 @@ export interface ClientPreviewViewProps {
 
   /** Historiques de valorisation (CRM) pour affiner la courbe d'évolution. */
   evolutionHistoriesByInvestissementId?: EvolutionHistoryById;
+
+  /** Prises de rendez-vous proposées. Liste vide : aucun bouton affiché. */
+  rdvLiens?: ClientPreviewRdvLien[];
 }
 
 
@@ -102,6 +110,8 @@ export function ClientPreviewView({
   hideTimelineSync = false,
 
   evolutionHistoriesByInvestissementId,
+
+  rdvLiens = [],
 
 }: ClientPreviewViewProps) {
 
@@ -149,6 +159,12 @@ export function ClientPreviewView({
           viewport={viewport}
           emptyState={emptyState}
         />
+
+        {rdvLiens.length > 0 ? (
+          <div className={`${CP.padX} mt-4`}>
+            <ClientPreviewRdvButton liens={rdvLiens} />
+          </div>
+        ) : null}
 
         <ClientPreviewCharts
 

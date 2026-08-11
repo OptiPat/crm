@@ -1,6 +1,8 @@
 use serde::Serialize;
 
-pub const ESPACE_SYNC_SCHEMA_VERSION: u32 = 4;
+/// 5 : ajout des liens de prise de rendez-vous. Le portail ne compare pas
+/// cette valeur, elle sert de repère de lecture pour les payloads archivés.
+pub const ESPACE_SYNC_SCHEMA_VERSION: u32 = 5;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -14,8 +16,21 @@ pub struct EspaceClientSyncPayload {
     pub partenaires: Vec<EspaceClientPartenaireLine>,
     pub timeline: Vec<EspaceClientTimelineEvent>,
     pub demandes: Vec<EspaceClientDemandeLine>,
+    /// Prises de rendez-vous proposées au client. Vide = pas de bouton.
+    pub rdv_liens: Vec<EspaceClientRdvLien>,
     /// Clé publique de scellement des dépôts. La privée reste sur ce poste.
     pub depot_public_key: Option<String>,
+}
+
+/// Lien de rendez-vous tel que le client le voit : un libellé, une adresse.
+/// Reprend les liens Google Agenda du profil CGP — ceux-là mêmes qui servent
+/// aux emails. L'identifiant suit pour qu'une échéance puisse en désigner un.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EspaceClientRdvLien {
+    pub id: String,
+    pub libelle: String,
+    pub url: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -93,4 +108,8 @@ pub struct EspaceClientTimelineEvent {
     pub detail: Option<String>,
     pub type_produit: Option<String>,
     pub origine: Option<String>,
+    /// Adresse déjà résolue plutôt qu'un identifiant de lien : le portail n'a
+    /// pas à connaître la liste des agendas pour afficher le bouton.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rdv_url: Option<String>,
 }

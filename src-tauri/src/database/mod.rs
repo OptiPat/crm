@@ -26,6 +26,7 @@ pub mod etiquettes;
 pub mod etiquettes_auto_engine;
 pub mod espace_client;
 pub mod espace_demande;
+pub mod espace_echeance;
 pub mod exchange_history;
 pub mod familles;
 pub mod fiche_conseil_redaction_presets;
@@ -698,6 +699,7 @@ impl Database {
         self.migrate_contrat_supports_tables()?;
         self.migrate_fiche_conseil_redaction_presets_table()?;
         self.migrate_espace_client()?;
+        self.migrate_espace_echeance()?;
 
         Ok(())
     }

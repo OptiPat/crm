@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use crate::database::models::{Alerte, Contact, Investissement};
+use crate::database::models::{Contact, EspaceEcheance, Investissement};
 use crate::database::Database;
 use crate::database::espace_client::ESPACE_STATUT_ACTIF;
 
 use super::sync_payload::{
     EspaceClientAccesSnapshot, EspaceClientContactSnapshot, EspaceClientDemandeLine,
-    EspaceClientInvestissementLine, EspaceClientPartenaireLine, EspaceClientSyncPayload,
-    EspaceClientTimelineEvent, ESPACE_SYNC_SCHEMA_VERSION,
+    EspaceClientInvestissementLine, EspaceClientPartenaireLine, EspaceClientRdvLien,
+    EspaceClientSyncPayload, EspaceClientTimelineEvent, ESPACE_SYNC_SCHEMA_VERSION,
 };
 use super::visibilite::{
     FoyerMemberRef, PatrimoineInvestissement, PatrimoineViewer, is_investissement_visible_to_viewer,
@@ -83,13 +83,14 @@ fn build_espace_client_snapshot_with_sequence(
 
     let partenaires = load_partenaires_for_investissements(db, &visible)?;
 
-    let alertes = db
-        .get_alertes_non_traitees()
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .filter(|a| a.contact_id == contact_id)
-        .collect::<Vec<_>>();
-    let timeline = build_timeline(&visible, &alertes);
+    // Les liens de prise de rendez-vous sont ceux du profil CGP, déjà utilisés
+    // par les modèles d'emails : une seule liste à tenir à jour.
+    let rdv_liens = collect_rdv_liens(db);
+
+    let echeances = db
+        .list_espace_echeances(contact_id)
+        .map_err(|e| e.to_string())?;
+    let timeline = build_timeline(&visible, &echeances, &rdv_liens);
 
     let demandes = db
         .list_espace_demandes_for_sync(contact_id)
@@ -128,6 +129,7 @@ fn build_espace_client_snapshot_with_sequence(
         partenaires,
         timeline,
         demandes,
+        rdv_liens,
         // Simple lecture : la paire est créée par la commande de push, qui
         // dispose du handle nécessaire au chiffrement de la clé privée.
         depot_public_key: db
@@ -279,9 +281,42 @@ fn parse_reinvestissement_pourcent(notes: Option<&str>) -> Option<i64> {
     Some(100)
 }
 
+/// Liens d'agenda proposés au client. Un profil sans lien donne une liste vide
+/// et le bouton n'apparaît pas. Les adresses non sécurisées sont écartées :
+/// elles restent utilisables dans un email, pas depuis un espace patrimonial.
+fn collect_rdv_liens(db: &Database) -> Vec<EspaceClientRdvLien> {
+    let Ok(cgp) = db.get_cgp_config() else {
+        return Vec::new();
+    };
+    cgp.agenda_links
+        .into_iter()
+        .filter(|lien| lien.url.trim().starts_with("https://"))
+        .map(|lien| {
+            let libelle = lien.label.trim();
+            EspaceClientRdvLien {
+                id: lien.id.trim().to_string(),
+                libelle: if libelle.is_empty() {
+                    "Prendre rendez-vous".to_string()
+                } else {
+                    libelle.to_string()
+                },
+                url: lien.url.trim().to_string(),
+            }
+        })
+        .collect()
+}
+
+/// Échéances du client : celles que portent ses placements, et celles que le
+/// conseiller a rédigées pour lui.
+///
+/// Ni les alertes ni les tâches n'y figurent, et elles ne sont même pas
+/// transmises : ce sont ses pense-bêtes de travail, rédigés pour lui. Plusieurs
+/// types d'alerte diraient au client qu'il n'a pas été suivi, voire qu'il est
+/// fiché comme prospect.
 fn build_timeline(
     investissements: &[Investissement],
-    alertes: &[Alerte],
+    echeances: &[EspaceEcheance],
+    rdv_liens: &[EspaceClientRdvLien],
 ) -> Vec<EspaceClientTimelineEvent> {
     let mut events = Vec::new();
 
@@ -299,37 +334,29 @@ fn build_timeline(
         push_inv_date(&mut events, inv, inv.date_fin_pret, "fin_pret", "Fin de prêt");
     }
 
-    for alerte in alertes {
-        if alerte.traitee {
-            continue;
-        }
-        let label = match alerte.type_alerte.as_str() {
-            "FIN_DEMEMBREMENT" => "Fin de démembrement",
-            "SUIVI_CLIENT_ANNUEL" => "Déclaration fiscale",
-            "SUIVI_CLIENT_1AN" => "Suivi annuel",
-            "ANNIVERSAIRE" => "Anniversaire",
-            "ARBITRAGE_AV_PER" => "Arbitrage à prévoir",
-            _ => "Échéance à prévoir",
-        };
+    for echeance in echeances {
+        // L'adresse est résolue ici : un lien supprimé des réglages laisse
+        // simplement l'échéance sans bouton, plutôt qu'un bouton mort.
+        let rdv_url = echeance.rdv_lien_id.as_deref().and_then(|id| {
+            rdv_liens
+                .iter()
+                .find(|lien| lien.id == id)
+                .map(|lien| lien.url.clone())
+        });
         events.push(EspaceClientTimelineEvent {
-            id: format!("alerte-{}", alerte.id),
-            kind: "alerte".into(),
-            date: alerte.date_alerte,
-            label: label.into(),
-            // Le message de l'alerte est une note de travail du conseiller
-            // — « relancer, ne repond pas ». Seul le libelle generique part.
-            detail: None,
+            id: format!("echeance-{}", echeance.id),
+            kind: "conseiller".into(),
+            date: echeance.date_echeance,
+            label: echeance.titre.clone(),
+            detail: echeance.message.clone(),
             type_produit: None,
             origine: None,
+            rdv_url,
         });
     }
 
-    // Les taches du conseiller ne sont pas transmises du tout : leur intitule
-    // est redige pour lui, et sans intitule la ligne n'apprendrait rien au
-    // client.
-
-    // La vue client annonce des echeances « a venir » : une alerte ancienne
-    // une alerte ancienne non traitee arriverait sinon en tete de liste.
+    // La vue client annonce des échéances « à venir » : un démembrement clos
+    // en 2019 arriverait sinon en tête de liste, le tri étant croissant.
     let maintenant = chrono::Utc::now().timestamp();
     events.retain(|event| event.date >= maintenant);
 
@@ -364,6 +391,7 @@ fn push_inv_date(
         detail: None,
         type_produit: Some(inv.type_produit.clone()),
         origine: Some(inv.origine.clone()),
+        rdv_url: None,
     });
 }
 
@@ -438,54 +466,124 @@ mod tests {
             updated_at: 0,
         };
 
-        let events = build_timeline(&[inv], &[]);
+        let events = build_timeline(&[inv], &[], &[]);
         assert!(!events.iter().any(|e| e.kind == "prochain_arbitrage"));
     }
 
-    fn alerte_test(id: i64, date_alerte: i64, message: &str) -> Alerte {
-        Alerte {
+    fn echeance_test(
+        id: i64,
+        date_echeance: i64,
+        titre: &str,
+        rdv_lien_id: Option<&str>,
+    ) -> EspaceEcheance {
+        EspaceEcheance {
             id,
             contact_id: 1,
-            type_alerte: "SUIVI_CLIENT_ANNUEL".into(),
-            message: message.into(),
-            date_alerte,
-            lue: false,
-            traitee: false,
+            date_echeance,
+            titre: titre.into(),
+            message: None,
+            rdv_lien_id: rdv_lien_id.map(str::to_string),
             created_at: 0,
+            updated_at: 0,
         }
     }
 
-    /// Le message d'une alerte est une note de travail du conseiller. Il ne
-    /// doit jamais quitter le poste, même vers le portail du cabinet.
+    fn lien_test(id: &str, url: &str) -> EspaceClientRdvLien {
+        EspaceClientRdvLien {
+            id: id.into(),
+            libelle: "Bilan".into(),
+            url: url.into(),
+        }
+    }
+
+    /// L'échéance désigne un lien par identifiant ; c'est l'adresse résolue
+    /// qui part au portail, pour qu'il n'ait pas à connaître les agendas.
     #[test]
-    fn alert_message_never_reaches_the_client() {
+    fn advisor_deadline_carries_its_booking_url() {
         let futur = chrono::Utc::now().timestamp() + 86_400;
         let events = build_timeline(
             &[],
-            &[alerte_test(1, futur, "Relancer, ne repond jamais")],
+            &[echeance_test(1, futur, "Aide déclaration", Some("bilan"))],
+            &[lien_test("bilan", "https://calendar.example.com/bilan")],
         );
 
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].label, "Déclaration fiscale");
-        assert!(
-            events[0].detail.is_none(),
-            "la note interne du conseiller est partie au client"
+        assert_eq!(events[0].kind, "conseiller");
+        assert_eq!(events[0].label, "Aide déclaration");
+        assert_eq!(
+            events[0].rdv_url.as_deref(),
+            Some("https://calendar.example.com/bilan")
         );
     }
 
-    /// La section s'intitule « échéances à venir » : une alerte non traitée
-    /// datée de l'an dernier arriverait en tête, le tri étant croissant.
+    /// Lien retiré des réglages : l'échéance reste, sans bouton mort.
+    #[test]
+    fn deadline_pointing_at_a_removed_link_loses_its_button() {
+        let futur = chrono::Utc::now().timestamp() + 86_400;
+        let events = build_timeline(
+            &[],
+            &[echeance_test(1, futur, "Aide déclaration", Some("disparu"))],
+            &[lien_test("bilan", "https://calendar.example.com/bilan")],
+        );
+
+        assert_eq!(events.len(), 1);
+        assert!(events[0].rdv_url.is_none());
+    }
+
+    /// Une adresse en clair reste acceptable dans un email ; sur un espace qui
+    /// affiche du patrimoine, elle ne doit pas être proposée.
+    #[test]
+    fn only_secure_agenda_links_reach_the_client() {
+        use crate::database::models::{AgendaLink, CgpConfig};
+
+        let db = crate::database::Database::open_in_memory_for_tests().unwrap();
+        db.save_cgp_config(&CgpConfig {
+            agenda_links: vec![
+                AgendaLink {
+                    id: "bilan".into(),
+                    label: "Bilan annuel".into(),
+                    url: "https://calendar.example.com/bilan".into(),
+                },
+                AgendaLink {
+                    id: "clair".into(),
+                    label: "Non securise".into(),
+                    url: "http://calendar.example.com/point".into(),
+                },
+            ],
+            ..Default::default()
+        })
+        .unwrap();
+
+        let liens = collect_rdv_liens(&db);
+        assert_eq!(liens.len(), 1);
+        assert_eq!(liens[0].id, "bilan");
+        assert_eq!(liens[0].libelle, "Bilan annuel");
+    }
+
+    /// Profil sans lien : liste vide, et le bouton disparaît côté client.
+    #[test]
+    fn no_agenda_link_gives_no_button() {
+        let db = crate::database::Database::open_in_memory_for_tests().unwrap();
+        assert!(collect_rdv_liens(&db).is_empty());
+    }
+
+    /// La section s'intitule « échéances à venir » : une échéance datée de
+    /// l'an dernier arriverait en tête, le tri étant croissant.
     #[test]
     fn past_deadlines_are_left_out() {
         let passe = chrono::Utc::now().timestamp() - 86_400;
         let futur = chrono::Utc::now().timestamp() + 86_400;
         let events = build_timeline(
             &[],
-            &[alerte_test(1, passe, "vieux"), alerte_test(2, futur, "a venir")],
+            &[
+                echeance_test(1, passe, "Déjà passée", None),
+                echeance_test(2, futur, "À venir", None),
+            ],
+            &[],
         );
 
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].id, "alerte-2");
+        assert_eq!(events[0].id, "echeance-2");
     }
 
     #[test]

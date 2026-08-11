@@ -21,9 +21,10 @@ import {
 } from "@/lib/patrimoine/timeline";
 import { getLatestValorisationLabel } from "@/components/contacts/client-preview/client-preview-format";
 import { ContactEspaceAccesPanel } from "@/components/espace-client/ContactEspaceAccesPanel";
-import {
-  getEspaceSyncSummary,
-} from "@/lib/api/tauri-espace-client";
+import { getEspaceSyncSummary } from "@/lib/api/tauri-espace-client";
+import { getCgpConfig } from "@/lib/api/tauri-settings";
+import { normalizeAgendaLinks } from "@/lib/emails/agenda-links";
+import type { ClientPreviewRdvLien } from "@/components/contacts/client-preview/ClientPreviewRdvButton";
 import { ESPACE_CLIENT_CHANGED_EVENT } from "@/lib/espace-client/espace-client-events";
 import { formatEspaceSyncLabel } from "@/lib/espace-client/espace-client-format";
 import {
@@ -180,6 +181,32 @@ export function ContactDetailApercuClientTab({
     [investissements, viewer, foyerMembers]
   );
 
+  // L'aperçu doit montrer ce que le client verra, boutons compris — sinon il
+  // cesse d'être un aperçu. Mêmes liens que les emails : ceux du profil CGP.
+  const [rdvLiens, setRdvLiens] = useState<ClientPreviewRdvLien[]>([]);
+  useEffect(() => {
+    let annule = false;
+    getCgpConfig()
+      .then((cgp) => {
+        if (annule) return;
+        setRdvLiens(
+          normalizeAgendaLinks(cgp)
+            .filter((lien) => lien.url.trim().startsWith("https://"))
+            .map((lien) => ({
+              id: lien.id,
+              libelle: lien.label.trim() || "Prendre rendez-vous",
+              url: lien.url.trim(),
+            }))
+        );
+      })
+      .catch(() => {
+        if (!annule) setRdvLiens([]);
+      });
+    return () => {
+      annule = true;
+    };
+  }, []);
+
   const emptyState = useMemo((): ClientPreviewEmptyState => {
     if (investissements.length === 0) return "empty";
     if (visible.length === 0) return "all_hidden";
@@ -251,6 +278,7 @@ export function ContactDetailApercuClientTab({
         timelineLoading={timelineLoading}
         lastSyncLabel={lastSyncLabel}
         evolutionHistoriesByInvestissementId={evolutionHistories}
+        rdvLiens={rdvLiens}
       />
     </div>
   );

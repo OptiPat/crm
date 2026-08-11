@@ -4,6 +4,7 @@ import {
   ArrowLeftRight,
   Bell,
   CalendarClock,
+  CalendarPlus,
   CheckSquare,
   KeyRound,
   Landmark,
@@ -33,6 +34,9 @@ export const CP = {
   tabActive: "cp-tab-active",
   tabIdle: "cp-tab-idle",
   badge: "cp-badge",
+  rdvButton: "cp-rdv-button",
+  rdvMenu: "cp-rdv-menu",
+  rdvMenuItem: "cp-rdv-menu-item",
   sectionGap: "mt-8",
   padX: "px-5 md:px-6",
 } as const;
@@ -49,6 +53,7 @@ export const TIMELINE_KIND_STYLE: Record<
   cloture: { Icon: CalendarClock },
   alerte: { Icon: Bell },
   tache: { Icon: CheckSquare },
+  conseiller: { Icon: CalendarPlus },
 };
 
 export function getGreetingHour(): string {

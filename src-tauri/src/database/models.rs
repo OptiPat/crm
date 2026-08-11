@@ -282,6 +282,21 @@ pub struct EspaceAcces {
     pub updated_at: i64,
 }
 
+/// Échéance rédigée par le conseiller à destination d'un client précis.
+/// `rdv_lien_id` renvoie à un lien d'agenda du profil CGP : le bouton de
+/// l'échéance mène droit au bon type de rendez-vous.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EspaceEcheance {
+    pub id: i64,
+    pub contact_id: i64,
+    pub date_echeance: i64,
+    pub titre: String,
+    pub message: Option<String>,
+    pub rdv_lien_id: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 /// Résumé de synchronisation CRM → portail (affichage conseiller).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EspaceSyncSummary {

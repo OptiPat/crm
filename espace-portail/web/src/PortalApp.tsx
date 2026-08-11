@@ -128,6 +128,7 @@ function toTimeline(
       date: event.date,
       label: event.label,
       detail: event.detail ?? undefined,
+      rdvUrl: event.rdvUrl ?? undefined,
       type_produit: event.typeProduit ?? undefined,
       origine: event.origine ?? undefined,
     }))
@@ -540,6 +541,7 @@ export function PortalApp() {
         categorieData={categorieData}
         disponibiliteData={disponibiliteData}
         timeline={timeline}
+        rdvLiens={payload?.rdvLiens ?? []}
         viewport={viewport}
         showDeviceFrame={false}
         hideTimelineSync
