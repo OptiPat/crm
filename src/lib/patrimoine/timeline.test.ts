@@ -97,6 +97,28 @@ describe("buildPatrimoineTimeline", () => {
     expect(filtered[0].kind).toBe("fin_pret");
   });
 
+  it("ne montre au client ni les alertes ni les tâches du conseiller", () => {
+    const filtered = filterPatrimoineTimelineForClient([
+      {
+        id: "alerte-1",
+        kind: "alerte",
+        date: 1,
+        label: "Suivi annuel",
+        detail: "Relancer, ne répond jamais",
+      },
+      {
+        id: "tache-1",
+        kind: "tache",
+        date: 2,
+        label: "Rendez-vous / tâche",
+        detail: "Arbitrage Exceltis Rendement",
+      },
+      { id: "inv-1", kind: "fin_pret", date: 3, label: "Fin de prêt — Corum" },
+    ]);
+
+    expect(filtered.map((event) => event.kind)).toEqual(["fin_pret"]);
+  });
+
   it("écarte les échéances passées par défaut", () => {
     const events = buildPatrimoineTimeline(
       [

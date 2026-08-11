@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::database::models::{Alerte, Contact, Investissement, Tache};
+use crate::database::models::{Alerte, Contact, Investissement};
 use crate::database::Database;
 use crate::database::espace_client::ESPACE_STATUT_ACTIF;
 
@@ -89,11 +89,7 @@ fn build_espace_client_snapshot_with_sequence(
         .into_iter()
         .filter(|a| a.contact_id == contact_id)
         .collect::<Vec<_>>();
-    let taches = db
-        .get_taches_by_contact(contact_id)
-        .map_err(|e| e.to_string())?;
-
-    let timeline = build_timeline(&visible, &alertes, &taches);
+    let timeline = build_timeline(&visible, &alertes);
 
     let demandes = db
         .list_espace_demandes_for_sync(contact_id)
@@ -286,7 +282,6 @@ fn parse_reinvestissement_pourcent(notes: Option<&str>) -> Option<i64> {
 fn build_timeline(
     investissements: &[Investissement],
     alertes: &[Alerte],
-    taches: &[Tache],
 ) -> Vec<EspaceClientTimelineEvent> {
     let mut events = Vec::new();
 
@@ -321,29 +316,22 @@ fn build_timeline(
             kind: "alerte".into(),
             date: alerte.date_alerte,
             label: label.into(),
-            detail: Some(alerte.message.clone()),
+            // Le message de l'alerte est une note de travail du conseiller
+            // — « relancer, ne repond pas ». Seul le libelle generique part.
+            detail: None,
             type_produit: None,
             origine: None,
         });
     }
 
-    for tache in taches {
-        if tache.statut == "FAIT" {
-            continue;
-        }
-        let Some(date) = tache.date_echeance else {
-            continue;
-        };
-        events.push(EspaceClientTimelineEvent {
-            id: format!("tache-{}", tache.id),
-            kind: "tache".into(),
-            date,
-            label: "Rendez-vous / tâche".into(),
-            detail: Some(tache.titre.clone()),
-            type_produit: None,
-            origine: None,
-        });
-    }
+    // Les taches du conseiller ne sont pas transmises du tout : leur intitule
+    // est redige pour lui, et sans intitule la ligne n'apprendrait rien au
+    // client.
+
+    // La vue client annonce des echeances « a venir » : une alerte ancienne
+    // une alerte ancienne non traitee arriverait sinon en tete de liste.
+    let maintenant = chrono::Utc::now().timestamp();
+    events.retain(|event| event.date >= maintenant);
 
     events.sort_by(|a, b| a.date.cmp(&b.date));
     events
@@ -450,8 +438,54 @@ mod tests {
             updated_at: 0,
         };
 
-        let events = build_timeline(&[inv], &[], &[]);
+        let events = build_timeline(&[inv], &[]);
         assert!(!events.iter().any(|e| e.kind == "prochain_arbitrage"));
+    }
+
+    fn alerte_test(id: i64, date_alerte: i64, message: &str) -> Alerte {
+        Alerte {
+            id,
+            contact_id: 1,
+            type_alerte: "SUIVI_CLIENT_ANNUEL".into(),
+            message: message.into(),
+            date_alerte,
+            lue: false,
+            traitee: false,
+            created_at: 0,
+        }
+    }
+
+    /// Le message d'une alerte est une note de travail du conseiller. Il ne
+    /// doit jamais quitter le poste, même vers le portail du cabinet.
+    #[test]
+    fn alert_message_never_reaches_the_client() {
+        let futur = chrono::Utc::now().timestamp() + 86_400;
+        let events = build_timeline(
+            &[],
+            &[alerte_test(1, futur, "Relancer, ne repond jamais")],
+        );
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].label, "Déclaration fiscale");
+        assert!(
+            events[0].detail.is_none(),
+            "la note interne du conseiller est partie au client"
+        );
+    }
+
+    /// La section s'intitule « échéances à venir » : une alerte non traitée
+    /// datée de l'an dernier arriverait en tête, le tri étant croissant.
+    #[test]
+    fn past_deadlines_are_left_out() {
+        let passe = chrono::Utc::now().timestamp() - 86_400;
+        let futur = chrono::Utc::now().timestamp() + 86_400;
+        let events = build_timeline(
+            &[],
+            &[alerte_test(1, passe, "vieux"), alerte_test(2, futur, "a venir")],
+        );
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].id, "alerte-2");
     }
 
     #[test]

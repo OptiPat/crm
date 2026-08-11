@@ -117,9 +117,18 @@ export function buildPatrimoineTimeline(
   return retained.sort((a, b) => a.date - b.date);
 }
 
-/** Échéances réservées au conseiller — jamais affichées côté client. */
+/**
+ * Échéances réservées au conseiller — jamais affichées côté client.
+ *
+ * Alertes et tâches sont ses rappels de travail : leur intitulé est rédigé
+ * pour lui (« relancer, ne répond pas »), et plusieurs types diraient au
+ * client qu'il n'a pas été suivi, voire qu'il est fiché comme prospect. Les
+ * seules échéances qui le concernent viennent de ses placements.
+ */
 const CLIENT_HIDDEN_TIMELINE_KINDS = new Set<PatrimoineTimelineKind>([
   "prochain_arbitrage",
+  "alerte",
+  "tache",
 ]);
 
 export function filterPatrimoineTimelineForClient(
