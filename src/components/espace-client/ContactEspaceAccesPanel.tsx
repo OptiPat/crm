@@ -17,7 +17,6 @@ import {
   getEspaceConnexionLog,
   pushEspaceClientContact,
   revokeEspaceAcces,
-  saveEspaceClientSyncConfig,
   type EspaceAcces,
   type EspaceConnexionLogEntry,
 } from "@/lib/api/tauri-espace-client";
@@ -47,6 +46,9 @@ import { ContactEspaceEcheancesPanel } from "@/components/espace-client/ContactE
 import { cn } from "@/lib/utils";
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
 
+/** Entrées de journal visibles tant qu'on ne déplie pas. */
+const JOURNAL_APERCU = 3;
+
 export interface ContactEspaceAccesPanelProps {
   contact: Contact;
   onChanged?: () => void;
@@ -75,13 +77,16 @@ export function ContactEspaceAccesPanel({
   const [activationCode, setActivationCode] = useState<string | null>(null);
   const [revokeOpen, setRevokeOpen] = useState(false);
   const [portalUrl, setPortalUrl] = useState("");
-  const [syncSecret, setSyncSecret] = useState("");
-  const [hasSyncSecret, setHasSyncSecret] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [connexionLog, setConnexionLog] = useState<EspaceConnexionLogEntry[]>(
     []
   );
   const [logLoading, setLogLoading] = useState(false);
+  /** Le journal grossit sans fin : replié, il ne mange plus le panneau. */
+  const [journalDeplie, setJournalDeplie] = useState(false);
+  const journalVisible = journalDeplie
+    ? connexionLog
+    : connexionLog.slice(0, JOURNAL_APERCU);
 
   const loadConnexionLog = useCallback(async (contactId: number) => {
     setLogLoading(true);
@@ -104,8 +109,9 @@ export function ContactEspaceAccesPanel({
         getEspaceClientSyncConfig(),
       ]);
       setAcces(row);
+      // Sert uniquement à prévenir qu'aucun portail n'est configuré : le
+      // réglage lui-même vit dans Paramètres → Intégrations.
       setPortalUrl(config.portal_url?.trim() ?? "");
-      setHasSyncSecret(config.has_sync_secret);
       if (row?.email_utilise) {
         setEmail(row.email_utilise);
       } else if (contact.email?.trim()) {
@@ -174,25 +180,6 @@ export function ContactEspaceAccesPanel({
       onChanged?.();
     } catch (error) {
       toast.error(invokeErrorMessage(error) || "Révocation impossible");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSavePortalConfig = async () => {
-    setSaving(true);
-    try {
-      // Pas de lien de rendez-vous ici : il se règle dans Paramètres, à côté
-      // des liens d'agenda, puisqu'il vaut pour tous les clients.
-      const config = await saveEspaceClientSyncConfig(
-        portalUrl,
-        syncSecret.trim() || undefined
-      );
-      setHasSyncSecret(config.has_sync_secret);
-      setSyncSecret("");
-      toast.success("Connexion portail enregistrée");
-    } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Enregistrement impossible");
     } finally {
       setSaving(false);
     }
@@ -344,54 +331,13 @@ export function ContactEspaceAccesPanel({
       </div>
 
       <div className="mt-4 space-y-3 border-t border-border/60 pt-3">
-        <p className="text-xs font-medium text-foreground">Connexion portail</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="espace-portal-url" className="text-xs">
-              URL du portail
-            </Label>
-            <Input
-              id="espace-portal-url"
-              type="url"
-              value={portalUrl}
-              onChange={(e) => setPortalUrl(e.target.value)}
-              placeholder="https://espace.example.com"
-              disabled={loading || saving || syncing}
-              className="h-9"
-            />
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="espace-sync-secret" className="text-xs">
-              Clé de synchronisation
-              {hasSyncSecret ? (
-                <span className="ml-1 font-normal text-muted-foreground">
-                  (déjà configurée — laissez vide pour conserver)
-                </span>
-              ) : null}
-            </Label>
-            <Input
-              id="espace-sync-secret"
-              type="password"
-              autoComplete="new-password"
-              value={syncSecret}
-              onChange={(e) => setSyncSecret(e.target.value)}
-              placeholder="Clé partagée CRM ↔ portail"
-              disabled={loading || saving || syncing}
-              className="h-9"
-            />
-          </div>
-        </div>
+        {!portalUrl.trim() ? (
+          <p className="text-sm text-muted-foreground">
+            Portail non configuré — renseignez son adresse dans Paramètres →
+            Intégrations avant de synchroniser.
+          </p>
+        ) : null}
         <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9"
-            disabled={loading || saving || syncing || !portalUrl.trim()}
-            onClick={() => void handleSavePortalConfig()}
-          >
-            Enregistrer la connexion
-          </Button>
           {isActif ? (
             <Button
               type="button"
@@ -424,34 +370,53 @@ export function ContactEspaceAccesPanel({
       </div>
 
       {isActif ? (
-        <div className="mt-4 space-y-2 border-t border-border/60 pt-3">
+        <div className="mt-6 space-y-2 border-t border-border/60 pt-5">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-foreground">
+            <h4 className="text-sm font-medium text-foreground">
               Journal des connexions
-            </p>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              disabled={logLoading || !contact.id}
-              onClick={() => contact.id && void loadConnexionLog(contact.id)}
-            >
-              {logLoading ? (
-                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-1 h-3 w-3" />
-              )}
-              Actualiser
-            </Button>
+              {connexionLog.length > 0 ? (
+                <span className="ml-1 font-normal text-muted-foreground">
+                  — {connexionLog.length} entrée
+                  {connexionLog.length > 1 ? "s" : ""}
+                </span>
+              ) : null}
+            </h4>
+            <div className="flex items-center gap-1">
+              {connexionLog.length > JOURNAL_APERCU ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-xs"
+                  onClick={() => setJournalDeplie((ouvert) => !ouvert)}
+                >
+                  {journalDeplie ? "Réduire" : "Tout afficher"}
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs"
+                disabled={logLoading || !contact.id}
+                onClick={() => contact.id && void loadConnexionLog(contact.id)}
+              >
+                {logLoading ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-1 h-3 w-3" />
+                )}
+                Actualiser
+              </Button>
+            </div>
           </div>
           {connexionLog.length === 0 ? (
             <p className="text-xs text-muted-foreground">
               Aucune connexion enregistrée pour l'instant.
             </p>
           ) : (
-            <ul className="max-h-40 space-y-1 overflow-y-auto text-xs">
-              {connexionLog.map((entry) => (
+            <ul className="space-y-1 text-xs">
+              {journalVisible.map((entry) => (
                 <li
                   key={`${entry.id}-${entry.created_at}`}
                   className="flex flex-wrap items-baseline gap-x-2 text-muted-foreground"
