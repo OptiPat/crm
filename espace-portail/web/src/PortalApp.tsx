@@ -19,7 +19,11 @@ import { PortalLogin } from "./PortalLogin";
 import { PortalDocumentsSection } from "./PortalDocumentsSection";
 import { PortalPatrimoineHeader } from "./PortalPatrimoineHeader";
 import { PortalPrivacy } from "./PortalPrivacy";
-import { applyPortalColorScheme, type PortalColorScheme } from "./portal-theme";
+import {
+  applyPortalColorScheme,
+  applyPortalFavicon,
+  type PortalColorScheme,
+} from "./portal-theme";
 import type {
   EspaceClientInvestissementLine,
   EspaceClientPartenaireLine,
@@ -240,6 +244,7 @@ export function PortalApp() {
       if (config.branding) {
         setBranding(config.branding);
         applyPortalColorScheme(config.branding.colorScheme);
+        applyPortalFavicon(config.branding.logoUrl);
       } else {
         applyPortalColorScheme("system");
       }
