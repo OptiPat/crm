@@ -18,6 +18,7 @@ import { buildPerimetrePatrimoine } from "@/lib/patrimoine/perimetre";
 import {
   buildPatrimoineTimeline,
   filterPatrimoineTimelineForClient,
+  type PatrimoineTimelineEvent,
 } from "@/lib/patrimoine/timeline";
 import { getLatestValorisationLabel } from "@/components/contacts/client-preview/client-preview-format";
 import { ContactEspaceAccesPanel } from "@/components/espace-client/ContactEspaceAccesPanel";
@@ -27,7 +28,11 @@ import {
 } from "@/lib/api/tauri-espace-client";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
 import { useAppBranding } from "@/components/app-branding/AppBrandingProvider";
-import { normalizeAgendaLinks } from "@/lib/emails/agenda-links";
+import {
+  listEspaceEcheances,
+  type EspaceEcheance,
+} from "@/lib/api/tauri-espace-client";
+import { normalizeAgendaLinks, type AgendaLink } from "@/lib/emails/agenda-links";
 import { ESPACE_CLIENT_CHANGED_EVENT } from "@/lib/espace-client/espace-client-events";
 import { formatEspaceSyncLabel } from "@/lib/espace-client/espace-client-format";
 import {
@@ -45,6 +50,21 @@ export interface ContactDetailApercuClientTabProps {
   foyerMembers: FoyerMemberRef[];
   partenaires: Partenaire[];
   onOpenPatrimoine?: () => void;
+}
+
+/**
+ * Même règle que la synchronisation : le lien doit exister et être sécurisé,
+ * sinon aucun bouton. Sans ce partage, l'aperçu promettrait un bouton que le
+ * client ne verrait jamais.
+ */
+function resoudreRdvUrl(
+  lienId: string | null | undefined,
+  liens: AgendaLink[]
+): string | undefined {
+  const choisi = lienId?.trim();
+  if (!choisi) return undefined;
+  const url = liens.find((lien) => lien.id === choisi)?.url.trim();
+  return url?.startsWith("https://") ? url : undefined;
 }
 
 export function ContactDetailApercuClientTab({
@@ -189,6 +209,30 @@ export function ContactDetailApercuClientTab({
   // rend l'aperçu fidèle sur la mise en page, qui est ce qui se juge ici.
   const { logoSrc } = useAppBranding();
 
+  const [echeances, setEcheances] = useState<EspaceEcheance[]>([]);
+  const [agendaLinks, setAgendaLinks] = useState<AgendaLink[]>([]);
+
+  const chargerEcheances = useCallback(async () => {
+    if (contact.id == null) return;
+    try {
+      setEcheances(await listEspaceEcheances(contact.id));
+    } catch {
+      setEcheances([]);
+    }
+  }, [contact.id]);
+
+  useEffect(() => {
+    void chargerEcheances();
+  }, [chargerEcheances]);
+
+  // Une échéance ajoutée dans le panneau voisin doit apparaître aussitôt dans
+  // l'aperçu, sans changer d'onglet.
+  useEffect(() => {
+    const handler = () => void chargerEcheances();
+    window.addEventListener(ESPACE_CLIENT_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(ESPACE_CLIENT_CHANGED_EVENT, handler);
+  }, [chargerEcheances]);
+
   // L'aperçu doit montrer ce que le client verra, bouton compris — sinon il
   // cesse d'être un aperçu. Même résolution que la synchronisation : le lien
   // désigné dans les réglages, cherché parmi les agendas du profil CGP.
@@ -198,12 +242,9 @@ export function ContactDetailApercuClientTab({
     Promise.all([getCgpConfig(), getEspaceClientSyncConfig()])
       .then(([cgp, sync]) => {
         if (annule) return;
-        const choisi = sync.rdv_lien_id?.trim();
-        const lien = choisi
-          ? normalizeAgendaLinks(cgp).find((l) => l.id === choisi)
-          : undefined;
-        const url = lien?.url.trim();
-        setRdvUrl(url?.startsWith("https://") ? url : undefined);
+        const liens = normalizeAgendaLinks(cgp);
+        setAgendaLinks(liens);
+        setRdvUrl(resoudreRdvUrl(sync.rdv_lien_id, liens));
       })
       .catch(() => {
         if (!annule) setRdvUrl(undefined);
@@ -243,13 +284,27 @@ export function ContactDetailApercuClientTab({
     [visible]
   );
 
-  const timeline = useMemo(
-    () =>
-      filterPatrimoineTimelineForClient(
-        buildPatrimoineTimeline(visible, alertes, taches)
-      ),
-    [visible, alertes, taches]
-  );
+  // Les échéances rédigées à la main vivent en base, pas dans les alertes ni
+  // les tâches : sans ce rappel, l'aperçu ignorerait ce que le conseiller
+  // vient d'écrire pour son client, et cesserait d'être un aperçu.
+  const timeline = useMemo(() => {
+    const maintenant = Math.floor(Date.now() / 1000);
+    const placements = filterPatrimoineTimelineForClient(
+      buildPatrimoineTimeline(visible, alertes, taches)
+    );
+    const conseiller: PatrimoineTimelineEvent[] = echeances
+      .filter((echeance) => echeance.date_echeance >= maintenant)
+      .map((echeance) => ({
+        id: `echeance-${echeance.id}`,
+        kind: "conseiller" as const,
+        date: echeance.date_echeance,
+        label: echeance.titre,
+        detail: echeance.message ?? undefined,
+        rdvUrl: resoudreRdvUrl(echeance.rdv_lien_id, agendaLinks),
+      }));
+
+    return [...placements, ...conseiller].sort((a, b) => a.date - b.date);
+  }, [visible, alertes, taches, echeances, agendaLinks]);
 
   const valorisationLabel = useMemo(
     () => getLatestValorisationLabel(visible),

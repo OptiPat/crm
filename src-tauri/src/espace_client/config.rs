@@ -130,17 +130,20 @@ pub fn save_sync_config(
     sync_secret: Option<&str>,
     rdv_lien_id: Option<&str>,
 ) -> Result<EspaceClientSyncConfig, String> {
+    let url = portal_url.trim();
+    if url.is_empty() {
+        return Err("URL du portail requise".into());
+    }
+    validate_portal_url(url)?;
+
+    // Après validation seulement : un échec sur l'URL ne doit pas laisser le
+    // lien de rendez-vous enregistré alors que l'appel a renvoyé une erreur.
     // Chaîne vide = aucun bouton, cas volontaire et distinct de « inchangé ».
     if let Some(lien) = rdv_lien_id {
         db.set_setting(RDV_LIEN_SETTING_KEY, lien.trim())
             .map_err(|e| e.to_string())?;
     }
 
-    let url = portal_url.trim();
-    if url.is_empty() {
-        return Err("URL du portail requise".into());
-    }
-    validate_portal_url(url)?;
     db.set_setting(PORTAL_URL_SETTING_KEY, url)
         .map_err(|e| e.to_string())?;
     if let Some(secret) = sync_secret {

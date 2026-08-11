@@ -119,10 +119,20 @@ fn spawn_evenement_emails(state: AppState, notifications: Vec<EvenementEmailNoti
                 .await
             {
                 Ok(()) => {
-                    let _ = state
+                    // Sans cette trace, la synchronisation suivante renverrait
+                    // le même email : l'échec doit se voir dans le journal.
+                    match state
                         .db
-                        .mark_evenement_notifie(&note.evenement_id, note.contact_id);
-                    tracing::info!("Événement notifié ({})", note.evenement_id);
+                        .mark_evenement_notifie(&note.evenement_id, note.contact_id)
+                    {
+                        Ok(()) => {
+                            tracing::info!("Événement notifié ({})", note.evenement_id)
+                        }
+                        Err(error) => tracing::error!(
+                            "Événement {} envoyé mais non marqué — risque de doublon : {error}",
+                            note.evenement_id
+                        ),
+                    }
                 }
                 Err(error) => tracing::error!(
                     "Envoi événement impossible ({}) : {error}",

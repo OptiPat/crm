@@ -156,7 +156,13 @@ export function ContactEspaceEcheancesPanel({
         <ul className="mt-4 space-y-2">
           {echeances.map((echeance) => {
             const passee = echeance.date_echeance < maintenant;
-            const lien = liens.find((l) => l.id === echeance.rdv_lien_id);
+            // Même filtre que la synchronisation : une adresse non sécurisée
+            // ne produit aucun bouton chez le client, ne l'annonçons pas ici.
+            const lien = liens.find(
+              (l) =>
+                l.id === echeance.rdv_lien_id &&
+                l.url.trim().startsWith("https://")
+            );
             return (
               <li
                 key={echeance.id}
