@@ -71,7 +71,7 @@ Personnalisation, toutes facultatives — le portail reste générique sans elle
 | `ESPACE_PORTAL_LOGIN_TAGLINE` | Accroche de l'écran de connexion |
 | `ESPACE_PORTAL_COLOR_SCHEME` | `system` (défaut), `light` ou `dark` |
 | `ESPACE_PRIVACY_CONTROLLER` | Responsable de traitement affiché |
-| `ESPACE_PRIVACY_CONTROLLER_DETAILS` | Mentions légales, `\n` sépare les lignes |
+| `ESPACE_PRIVACY_CONTROLLER_DETAILS` | Mentions légales, `\\n` sépare les lignes (double antislash : systemd en retire un) |
 | `ESPACE_PRIVACY_CONTACT_EMAIL` | Contact exercice des droits RGPD |
 | `ESPACE_PRIVACY_UPDATED` | Libellé de mise à jour de la page |
 
@@ -158,12 +158,53 @@ Attendu : `200`, en-têtes `strict-transport-security`, `content-security-policy
 | `env.production.example` | Modèle `.env` |
 | `install-vps.sh` | Installation automatisée sur le VPS |
 | `pack-for-vps.ps1` | Archive à envoyer depuis Windows |
-| `generate-sync-secret.ps1` | Génère le secret HMAC |
+| `generate-sync-secret.ps1` | Génère les secrets sync + auth |
+| `backup-portail.sh` | Sauvegarde quotidienne DB + uploads |
+| `restore-portail-test.sh` | Test de restauration (mensuel) |
 
 ## Sauvegarde
 
-`/opt/espace-portail/data/espace-portail.db` — reconstructible depuis le CRM, mais
-sauvegarder quand même (cron + test de restauration).
+Le portail est **reconstructible depuis le CRM** (snapshots, accès, demandes), mais pas
+instantanément : fenêtre entre saisie client et prochaine sync, dépôts non rapatriés,
+journal des connexions et sessions actives.
+
+### Quoi sauvegarder
+
+| Élément | Chemin | Priorité |
+|---------|--------|----------|
+| Base SQLite | `/opt/espace-portail/data/espace-portail.db` | Haute |
+| Dépôts en attente | `/opt/espace-portail/data/uploads/` | Haute |
+| `.env` | `/opt/espace-portail/.env` | Haute (hors dépôt git) |
+| UI statique | `/opt/espace-portail/web/dist/` | Basse (rebuild) |
+
+### Script quotidien
+
+```bash
+sudo bash /opt/espace-portail/deploy/backup-portail.sh
+```
+
+Le lancement quotidien n'est pas à configurer à la main : `install-vps.sh` copie
+les deux scripts dans `/opt/espace-portail/deploy/`, installe `sqlite3` dont ils
+dépendent, et écrit la tâche planifiée `/etc/cron.d/espace-portail-backup`
+(03:00 UTC, `umask 077`, journal dans `/var/log/espace-backup.log`).
+
+Vérifier qu'elle tourne :
+
+```bash
+sudo tail -3 /var/log/espace-backup.log
+ls -l /opt/espace-portail/backups
+```
+
+Rétention par défaut : 30 jours (`ESPACE_BACKUP_RETENTION_DAYS`).
+
+### Test de restauration (mensuel)
+
+```bash
+sudo bash /opt/espace-portail/deploy/restore-portail-test.sh
+```
+
+Une sauvegarde jamais restaurée n'est pas une sauvegarde. Voir aussi
+`docs/ESPACE_CLIENT_INCIDENT.md` en cas d'incident.
 
 ## ClamAV
 

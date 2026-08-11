@@ -243,7 +243,44 @@ fn map_investissement_line(inv: &Investissement) -> EspaceClientInvestissementLi
         date_fin_pret: inv.date_fin_pret,
         date_prochain_arbitrage: inv.date_prochain_arbitrage,
         derniere_maj_client: inv.derniere_maj_client,
+        mensualite_credit: inv.mensualite_credit,
+        credit_crd: inv.credit_crd,
+        loyer_mensuel: inv.loyer_mensuel,
+        url_contrat: inv.url_contrat.clone(),
+        versement_programme: inv.versement_programme,
+        montant_versement_programme: inv.montant_versement_programme,
+        frequence_versement: inv.frequence_versement.clone(),
+        reinvestissement_dividendes: inv.reinvestissement_dividendes,
+        reinvestissement_pourcent: if inv.reinvestissement_dividendes {
+            parse_reinvestissement_pourcent(inv.notes.as_deref())
+        } else {
+            None
+        },
     }
+}
+
+/// Extrait le premier « N% » des notes (saisie formulaire réinvestissement).
+fn parse_reinvestissement_pourcent(notes: Option<&str>) -> Option<i64> {
+    let notes = notes?;
+    let bytes = notes.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i].is_ascii_digit() {
+            let start = i;
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
+            if i < bytes.len() && bytes[i] == b'%' {
+                let n: i64 = notes[start..i].parse().ok()?;
+                if (1..=100).contains(&n) {
+                    return Some(n);
+                }
+            }
+        } else {
+            i += 1;
+        }
+    }
+    Some(100)
 }
 
 fn build_timeline(
@@ -322,12 +359,21 @@ fn push_inv_date(
     let Some(date) = date.filter(|d| *d > 0) else {
         return;
     };
+    let display = {
+        let nom = inv.nom_produit.trim();
+        if nom.is_empty() {
+            inv.type_produit.clone()
+        } else {
+            nom.to_string()
+        }
+    };
     events.push(EspaceClientTimelineEvent {
-        id: format!("inv-{}-{}", inv.id, kind),
+        id: format!("inv-{}-{kind}", inv.id),
         kind: kind.into(),
         date,
-        label: format!("{prefix} — {}", inv.nom_produit),
-        detail: Some(inv.nom_produit.clone()),
+        label: format!("{prefix} — {display}"),
+        // Pas de détail : le nom est déjà dans le titre.
+        detail: None,
         type_produit: Some(inv.type_produit.clone()),
         origine: Some(inv.origine.clone()),
     });

@@ -37,6 +37,15 @@ export interface EspaceClientInvestissementLine {
   dateFinPret?: number | null;
   dateProchainArbitrage?: number | null;
   derniereMajClient?: number | null;
+  mensualiteCredit?: number | null;
+  creditCrd?: number | null;
+  loyerMensuel?: number | null;
+  urlContrat?: string | null;
+  versementProgramme?: boolean;
+  montantVersementProgramme?: number | null;
+  frequenceVersement?: string | null;
+  reinvestissementDividendes?: boolean;
+  reinvestissementPourcent?: number | null;
 }
 
 export interface EspaceClientTimelineEvent {

@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-pub const ESPACE_SYNC_SCHEMA_VERSION: u32 = 2;
+pub const ESPACE_SYNC_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,6 +71,16 @@ pub struct EspaceClientInvestissementLine {
     pub date_fin_pret: Option<i64>,
     pub date_prochain_arbitrage: Option<i64>,
     pub derniere_maj_client: Option<i64>,
+    pub mensualite_credit: Option<i64>,
+    pub credit_crd: Option<i64>,
+    pub loyer_mensuel: Option<i64>,
+    pub url_contrat: Option<String>,
+    pub versement_programme: bool,
+    pub montant_versement_programme: Option<i64>,
+    pub frequence_versement: Option<String>,
+    pub reinvestissement_dividendes: bool,
+    /// Pourcentage extrait des notes CRM (ex. « 100% »), si réinvestissement actif.
+    pub reinvestissement_pourcent: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]

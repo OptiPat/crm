@@ -86,6 +86,20 @@ function toInvestissement(line: EspaceClientInvestissementLine): Investissement 
     date_fin_pret: line.dateFinPret ?? undefined,
     date_prochain_arbitrage: line.dateProchainArbitrage ?? undefined,
     derniere_maj_client: line.derniereMajClient ?? undefined,
+    mensualite_credit: line.mensualiteCredit ?? undefined,
+    credit_crd: line.creditCrd ?? undefined,
+    loyer_mensuel: line.loyerMensuel ?? undefined,
+    url_contrat: line.urlContrat ?? undefined,
+    versement_programme: Boolean(line.versementProgramme),
+    montant_versement_programme: line.montantVersementProgramme ?? undefined,
+    frequence_versement: line.frequenceVersement ?? undefined,
+    reinvestissement_dividendes: Boolean(line.reinvestissementDividendes),
+    notes:
+      line.reinvestissementPourcent != null
+        ? `${line.reinvestissementPourcent}%`
+        : line.reinvestissementDividendes
+          ? "100%"
+          : undefined,
   } as Investissement;
 }
 

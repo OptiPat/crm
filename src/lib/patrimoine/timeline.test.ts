@@ -48,7 +48,34 @@ describe("buildPatrimoineTimeline", () => {
     expect(events[0].kind).toBe("alerte");
     expect(events[1].kind).toBe("fin_demembrement");
     expect(events[1].type_produit).toBe("SCPI");
+    expect(events[1].label).toBe("Fin de démembrement — Corum");
+    expect(events[1].detail).toBe("SCPI");
     expect(events.some((e) => e.kind === "prochain_arbitrage")).toBe(false);
+  });
+
+  it("ne répète pas le nom produit en détail s'il est déjà dans le titre", () => {
+    const events = buildPatrimoineTimeline(
+      [
+        {
+          id: 1,
+          type_produit: "RESIDENCE_PRINCIPALE",
+          nom_produit: "Résidence Principale",
+          date_fin_pret: 1_800_000_000,
+          versement_programme: false,
+          reinvestissement_dividendes: false,
+          origine: "MON_CONSEIL",
+          created_at: 0,
+          updated_at: 0,
+        },
+      ],
+      [],
+      [],
+      { includePast: true }
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0].label).toBe("Fin de prêt — Résidence Principale");
+    expect(events[0].detail).toBeUndefined();
   });
 
   it("filterPatrimoineTimelineForClient retire les arbitrages", () => {

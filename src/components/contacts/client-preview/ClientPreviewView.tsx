@@ -24,6 +24,9 @@ import { ClientPreviewCharts } from "./ClientPreviewCharts";
 
 import { ClientPreviewInventory } from "./ClientPreviewInventory";
 
+import { ClientPreviewEvolution } from "./ClientPreviewEvolution";
+import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
+
 import { ClientPreviewTimeline } from "./ClientPreviewTimeline";
 
 import { getLatestValorisationLabel } from "./client-preview-format";
@@ -63,6 +66,9 @@ export interface ClientPreviewViewProps {
 
   /** Masque la ligne de synchro en bas de timeline (ex. déjà dans l'en-tête portail). */
   hideTimelineSync?: boolean;
+
+  /** Historiques de valorisation (CRM) pour affiner la courbe d'évolution. */
+  evolutionHistoriesByInvestissementId?: EvolutionHistoryById;
 }
 
 
@@ -94,6 +100,8 @@ export function ClientPreviewView({
   showDeviceFrame = true,
 
   hideTimelineSync = false,
+
+  evolutionHistoriesByInvestissementId,
 
 }: ClientPreviewViewProps) {
 
@@ -160,6 +168,11 @@ export function ClientPreviewView({
 
           emptyState={emptyState}
 
+        />
+
+        <ClientPreviewEvolution
+          investissements={sortedInventory}
+          historiesByInvestissementId={evolutionHistoriesByInvestissementId}
         />
 
         <ClientPreviewTimeline

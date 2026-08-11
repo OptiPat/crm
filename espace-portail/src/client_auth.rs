@@ -115,6 +115,34 @@ async fn deliver_login_code(state: &AppState, email: &str, contact_id: i64, code
     }
 }
 
+fn deliver_new_device_alert(
+    mailer: Option<crate::mailer::Mailer>,
+    contact_id: i64,
+    email: String,
+    ip: Option<String>,
+    user_agent: Option<String>,
+) {
+    let Some(mailer) = mailer else {
+        tracing::warn!(
+            "Alerte nouvel appareil non envoyée (contact {contact_id}) : mailer absent"
+        );
+        return;
+    };
+    tokio::spawn(async move {
+        match mailer
+            .send_new_device_alert(&email, ip.as_deref(), user_agent.as_deref())
+            .await
+        {
+            Ok(()) => tracing::info!("Alerte nouvel appareil envoyée (contact {contact_id})"),
+            Err(error) => {
+                tracing::error!(
+                    "Alerte nouvel appareil impossible (contact {contact_id}) : {error}"
+                );
+            }
+        }
+    });
+}
+
 pub async fn post_login(
     State(state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -139,12 +167,22 @@ pub async fn post_login(
 
     match state.db.try_login(
         &state.auth_secret,
+        &state.sync_secret,
         &email,
         code,
         ip.as_deref(),
         user_agent.as_deref(),
     ) {
         Ok(result) => {
+            if result.alert_new_device {
+                deliver_new_device_alert(
+                    state.mailer.clone(),
+                    result.contact_id,
+                    result.email.clone(),
+                    ip,
+                    user_agent,
+                );
+            }
             let cookie = session_cookie(&result.token, state.cookie_secure);
             let mut response = (
                 StatusCode::OK,

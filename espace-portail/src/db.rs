@@ -79,6 +79,13 @@ impl PortalDb {
                 blocked_until INTEGER,
                 updated_at INTEGER NOT NULL DEFAULT (unixepoch())
             );
+            CREATE TABLE IF NOT EXISTS espace_trusted_device (
+                contact_id INTEGER NOT NULL,
+                device_hash TEXT NOT NULL,
+                first_seen_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                last_seen_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                PRIMARY KEY (contact_id, device_hash)
+            );
             ",
         )?;
 

@@ -70,8 +70,10 @@ Mesures en place sur la phase consultation :
 2. **Évaluation** : gravité, données exposées, nombre de personnes
 3. **CNIL** : notification sous 72 h si risque pour les droits et libertés (art. 33)
 4. **Personnes concernées** : information sans délai indu si risque élevé (art. 34)
-5. **Rotation secrets** : `ESPACE_SYNC_SECRET`, clé Brevo, certificats TLS
+5. **Rotation secrets** : `ESPACE_SYNC_SECRET`, `ESPACE_AUTH_SECRET`, clé Brevo, certificats TLS
 6. **Trace** : journal des actions dans `espace_connexion_log` + logs Caddy
+
+Runbook détaillé : **`docs/ESPACE_CLIENT_INCIDENT.md`**
 
 ## 8. Checklist avant premier client réel
 
@@ -80,5 +82,6 @@ Mesures en place sur la phase consultation :
 - [ ] Page `/confidentialite` relue et personnalisée
 - [ ] Registre des traitements mis à jour dans le cabinet
 - [ ] DPA Brevo signé
-- [ ] Test de restauration sauvegarde `espace-portail.db`
+- [ ] Cron sauvegarde `backup-portail.sh` + test mensuel `restore-portail-test.sh`
+- [ ] Plan d'incident relu (`docs/ESPACE_CLIENT_INCIDENT.md`)
 - [ ] ClamAV actif (`clamd`) avant ouverture du dépôt de documents

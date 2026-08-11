@@ -78,6 +78,9 @@ license-build.local.ps1
 *BACKUP*
 !src-tauri/src/backup.rs
 !src-tauri/src/backup_sidecar.rs
+# Script de deploiement, pas une sauvegarde : sans cette exception l'installeur
+# reference un fichier absent du depot et echoue sur un clone neuf.
+!espace-portail/deploy/backup-portail.sh
 *OLD_*
 
 # Releases générées localement

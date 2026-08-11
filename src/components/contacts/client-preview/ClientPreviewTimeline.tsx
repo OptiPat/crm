@@ -8,14 +8,14 @@ function TimelineSkeleton() {
       {[0, 1, 2].map((i) => (
         <div
           key={i}
-          className="grid grid-cols-[4.5rem_1fr] gap-4 px-4 py-3.5"
+          className="grid grid-cols-[4.5rem_1fr] items-start gap-4 px-4 py-3.5"
           aria-hidden
         >
           <div className="space-y-2">
             <div className="h-3 w-12 animate-pulse rounded bg-[var(--cp-surface-raised)]" />
             <div className="h-3 w-10 animate-pulse rounded bg-[var(--cp-surface-raised)]" />
           </div>
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
             <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-[var(--cp-surface-raised)]" />
             <div className="min-w-0 flex-1 space-y-2">
               <div className="h-3.5 w-3/4 animate-pulse rounded bg-[var(--cp-surface-raised)]" />
@@ -57,7 +57,7 @@ export function ClientPreviewTimeline({
             return (
               <div
                 key={ev.id}
-                className="grid grid-cols-[4.5rem_1fr] gap-4 px-4 py-3.5"
+                className="grid grid-cols-[4.5rem_1fr] items-start gap-4 px-4 py-3.5"
               >
                 <div>
                   <time className={`${CP.caption} block`}>
@@ -76,7 +76,7 @@ export function ClientPreviewTimeline({
                   ) : null}
                 </div>
 
-                <div className="flex min-w-0 gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <div
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
                     style={{ backgroundColor: `${color}22` }}

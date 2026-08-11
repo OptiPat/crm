@@ -9,6 +9,8 @@ pub struct LoginSuccess {
     pub contact_id: i64,
     pub email: String,
     pub token: String,
+    /// Connexion depuis un navigateur jamais vu pour ce contact (hors première connexion).
+    pub alert_new_device: bool,
 }
 
 const MAX_LOGIN_FAILURES: i64 = 5;
@@ -77,6 +79,10 @@ impl PortalDb {
             )?;
             self.conn().execute(
                 "DELETE FROM espace_login_code WHERE contact_id = ?1",
+                params![contact_id],
+            )?;
+            self.conn().execute(
+                "DELETE FROM espace_trusted_device WHERE contact_id = ?1",
                 params![contact_id],
             )?;
         }
@@ -235,7 +241,8 @@ impl PortalDb {
 
     pub fn try_login(
         &self,
-        secret: &str,
+        auth_secret: &str,
+        sync_secret: &str,
         email: &str,
         code: &str,
         ip: Option<&str>,
@@ -267,17 +274,24 @@ impl PortalDb {
             .map_err(|e| e.to_string())?
             .flatten();
 
-        let code_hash = crate::auth::hash_espace_otp(secret, code);
         let first_login = premiere_connexion_at.is_none();
 
         // Toute première connexion : seul le code d'activation, remis de vive
         // voix par le conseiller, est accepté. Les codes envoyés par email ne
         // prennent le relais qu'ensuite — sinon une adresse périmée suffirait
         // à ouvrir la vue patrimoniale d'un client.
+        //
+        // Deux secrets, deux origines : l'empreinte d'activation est calculée
+        // par le CRM avec le secret de synchronisation puis transportée telle
+        // quelle, alors que les codes email naissent et meurent dans le
+        // portail. Les vérifier avec la même clé rendrait toute première
+        // connexion impossible.
         let accepted = if first_login {
-            self.consume_activation_code(contact_id, &code_hash)
+            let activation_hash = crate::auth::hash_espace_otp(sync_secret, code);
+            self.consume_activation_code(contact_id, &activation_hash)
                 .map_err(|e| e.to_string())?
         } else {
+            let code_hash = crate::auth::hash_espace_otp(auth_secret, code);
             self.consume_login_code(contact_id, &code_hash)
                 .map_err(|e| e.to_string())?
         };
@@ -308,7 +322,7 @@ impl PortalDb {
         }
 
         self.clear_login_failures(email).map_err(|e| e.to_string())?;
-        let token = self.create_session(contact_id, secret)?;
+        let token = self.create_session(contact_id, auth_secret)?;
         let event = if first_login {
             "first_login"
         } else {
@@ -317,10 +331,29 @@ impl PortalDb {
         self.log_connexion(contact_id, event, None, ip, user_agent)
             .map_err(|e| e.to_string())?;
 
+        let device_hash = Self::device_hash(auth_secret, user_agent);
+        let alert_new_device = if first_login {
+            self.touch_trusted_device(contact_id, &device_hash)
+                .map_err(|e| e.to_string())?;
+            false
+        } else {
+            let is_new = self
+                .is_new_device(contact_id, &device_hash)
+                .map_err(|e| e.to_string())?;
+            self.touch_trusted_device(contact_id, &device_hash)
+                .map_err(|e| e.to_string())?;
+            if is_new {
+                self.log_connexion(contact_id, "new_device", None, ip, user_agent)
+                    .ok();
+            }
+            is_new
+        };
+
         Ok(LoginSuccess {
             contact_id,
             email: email.to_string(),
             token,
+            alert_new_device,
         })
     }
 
@@ -369,6 +402,10 @@ impl PortalDb {
 
     /// Coupe toutes les sessions d'un contact (déconnexion à distance).
     pub fn revoke_all_sessions(&self, contact_id: i64) -> Result<usize> {
+        self.conn().execute(
+            "DELETE FROM espace_trusted_device WHERE contact_id = ?1",
+            params![contact_id],
+        )?;
         self.conn().execute(
             "DELETE FROM espace_session WHERE contact_id = ?1",
             params![contact_id],
@@ -532,6 +569,35 @@ impl PortalDb {
             .execute("DELETE FROM espace_login_guard WHERE email = ?1", params![email])?;
         Ok(())
     }
+
+    pub(crate) fn device_hash(secret: &str, user_agent: Option<&str>) -> String {
+        let ua = user_agent.unwrap_or("").trim();
+        crate::auth::hash_espace_otp(secret, &format!("device:{ua}"))
+    }
+
+    pub(crate) fn is_new_device(&self, contact_id: i64, device_hash: &str) -> Result<bool> {
+        let exists: Option<i64> = self
+            .conn()
+            .query_row(
+                "SELECT 1 FROM espace_trusted_device
+                 WHERE contact_id = ?1 AND device_hash = ?2",
+                params![contact_id, device_hash],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(exists.is_none())
+    }
+
+    pub(crate) fn touch_trusted_device(&self, contact_id: i64, device_hash: &str) -> Result<()> {
+        self.conn().execute(
+            "INSERT INTO espace_trusted_device (contact_id, device_hash, first_seen_at, last_seen_at)
+             VALUES (?1, ?2, unixepoch(), unixepoch())
+             ON CONFLICT(contact_id, device_hash) DO UPDATE SET
+                last_seen_at = unixepoch()",
+            params![contact_id, device_hash],
+        )?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -544,5 +610,105 @@ pub struct ConnexionLogRow {
     pub ip: Option<String>,
     pub user_agent: Option<String>,
     pub created_at: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::PortalDb;
+
+    fn seed_active_contact(db: &PortalDb, contact_id: i64, email: &str) {
+        db.conn()
+            .execute(
+                "INSERT INTO espace_acces (contact_id, statut, email, premiere_connexion_at)
+                 VALUES (?1, 'actif', ?2, unixepoch())",
+                params![contact_id, email],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn first_device_is_not_alerted_as_new() {
+        let db = PortalDb::open(":memory:").unwrap();
+        seed_active_contact(&db, 1, "client@example.com");
+        let hash = PortalDb::device_hash("secret", Some("Mozilla/5.0"));
+        assert!(db.is_new_device(1, &hash).unwrap());
+        db.touch_trusted_device(1, &hash).unwrap();
+        assert!(!db.is_new_device(1, &hash).unwrap());
+    }
+
+    /// Régression : l'empreinte du code d'activation est calculée par le CRM
+    /// avec le secret de synchronisation, puis transportée telle quelle. La
+    /// vérifier avec le secret propre au portail rendait toute première
+    /// connexion impossible, sans message explicite côté client.
+    #[test]
+    fn first_login_accepts_activation_code_hashed_with_sync_secret() {
+        let db = PortalDb::open(":memory:").unwrap();
+        let auth_secret = "secret-du-portail";
+        let sync_secret = "secret-de-synchronisation";
+        let code = "123456";
+
+        let activation_hash = crate::auth::hash_espace_otp(sync_secret, code);
+        db.upsert_acces_from_sync(
+            7,
+            "actif",
+            Some("client@example.com"),
+            Some(&activation_hash),
+            None,
+        )
+        .unwrap();
+
+        let success = db
+            .try_login(
+                auth_secret,
+                sync_secret,
+                "client@example.com",
+                code,
+                None,
+                None,
+            )
+            .expect("code d'activation valide refuse");
+        assert_eq!(success.contact_id, 7);
+    }
+
+    /// Les codes envoyés par email naissent et meurent dans le portail : eux
+    /// restent liés au secret d'authentification.
+    #[test]
+    fn email_code_uses_the_portal_secret() {
+        let db = PortalDb::open(":memory:").unwrap();
+        let auth_secret = "secret-du-portail";
+        let sync_secret = "secret-de-synchronisation";
+        seed_active_contact(&db, 8, "revenant@example.com");
+
+        let LoginCodeOutcome::Send { code, .. } = db
+            .prepare_login_code(auth_secret, "revenant@example.com")
+            .unwrap()
+        else {
+            panic!("aucun code produit pour un contact actif");
+        };
+
+        let success = db
+            .try_login(
+                auth_secret,
+                sync_secret,
+                "revenant@example.com",
+                &code,
+                None,
+                None,
+            )
+            .expect("code email valide refuse");
+        assert_eq!(success.contact_id, 8);
+    }
+
+    #[test]
+    fn revoke_clears_trusted_devices() {
+        let db = PortalDb::open(":memory:").unwrap();
+        seed_active_contact(&db, 2, "autre@example.com");
+        let hash = PortalDb::device_hash("secret", Some("Chrome"));
+        db.touch_trusted_device(2, &hash).unwrap();
+        db.upsert_acces_from_sync(2, "revoque", None, None, None)
+            .unwrap();
+        assert!(db.is_new_device(2, &hash).unwrap());
+    }
 }
 

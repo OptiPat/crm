@@ -20,7 +20,9 @@ fi
 echo "==> Paquets systeme"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl ca-certificates build-essential pkg-config libssl-dev unzip
+# sqlite3 : requis par backup-portail.sh et restore-portail-test.sh, qui
+# echoueraient silencieusement dans cron sans lui.
+apt-get install -y -qq curl ca-certificates build-essential pkg-config libssl-dev unzip sqlite3
 
 echo "==> Mises a jour de securite automatiques"
 # Une machine exposee non patchee est le mode d'echec le plus banal.
@@ -102,6 +104,26 @@ if [[ ! -f "${INSTALL_ROOT}/.env" ]]; then
   chmod 600 "${INSTALL_ROOT}/.env"
   echo "Editez ${INSTALL_ROOT}/.env (secret sync, Brevo, Gmail) avant de demarrer."
 fi
+
+echo "==> Sauvegarde"
+# Les scripts de maintenance vivent a cote de l'installation : le cron et la
+# documentation y font reference par un chemin absolu.
+mkdir -p "${INSTALL_ROOT}/deploy"
+install -m 750 "${BUILD_SRC}/deploy/backup-portail.sh" "${INSTALL_ROOT}/deploy/backup-portail.sh"
+install -m 750 "${BUILD_SRC}/deploy/restore-portail-test.sh" "${INSTALL_ROOT}/deploy/restore-portail-test.sh"
+
+# Un script de sauvegarde non planifie ne sauvegarde rien : c'est la panne la
+# plus banale, et elle ne se voit que le jour ou l'on cherche une copie.
+cat > /etc/cron.d/espace-portail-backup <<CRON
+# Sauvegarde quotidienne du portail espace client (03:00 UTC).
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+# umask 077 : les copies contiennent le journal des connexions et les depots
+# scelles. Sans cela elles naitraient lisibles par n'importe quel compte local.
+0 3 * * * root umask 077; ${INSTALL_ROOT}/deploy/backup-portail.sh >> /var/log/espace-backup.log 2>&1
+CRON
+chmod 644 /etc/cron.d/espace-portail-backup
+echo "Sauvegarde planifiee : /etc/cron.d/espace-portail-backup, journal /var/log/espace-backup.log"
 
 echo "==> Caddy"
 sed "s/espace.votre-cabinet.fr/${DOMAIN}/g" "${BUILD_SRC}/deploy/Caddyfile" > /etc/caddy/Caddyfile

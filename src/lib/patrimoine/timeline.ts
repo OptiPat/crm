@@ -45,13 +45,19 @@ function pushInvestissementDate(
 ) {
   const date = inv[field];
   if (date == null || date <= 0) return;
-  const produit = formatNomProduit(inv.type_produit) || inv.nom_produit;
+  const display =
+    inv.nom_produit?.trim() || formatNomProduit(inv.type_produit) || "Placement";
+  const typeLabel = formatNomProduit(inv.type_produit).trim();
   events.push({
     id: `inv-${inv.id}-${String(field)}`,
     kind,
     date,
-    label: `${labelPrefix} — ${produit}`,
-    detail: inv.nom_produit,
+    label: `${labelPrefix} — ${display}`,
+    // Évite de répéter le même libellé sous le titre.
+    detail:
+      typeLabel && typeLabel.toLowerCase() !== display.toLowerCase()
+        ? typeLabel
+        : undefined,
     type_produit: inv.type_produit,
     origine: inv.origine,
   });

@@ -136,6 +136,58 @@ impl Mailer {
         .await
     }
 
+    pub async fn send_new_device_alert(
+        &self,
+        to: &str,
+        ip: Option<&str>,
+        user_agent: Option<&str>,
+    ) -> Result<(), String> {
+        let when = chrono::Local::now().format("%d/%m/%Y à %H:%M").to_string();
+        let ip_line = ip
+            .filter(|value| !value.is_empty())
+            .map(|value| format!("Adresse réseau : {value}\n"))
+            .unwrap_or_default();
+        let ua_line = user_agent
+            .filter(|value| !value.is_empty())
+            .map(|value| format!("Navigateur : {value}\n"))
+            .unwrap_or_default();
+        let text = format!(
+            "Bonjour,\n\n\
+             Une connexion à votre espace investisseur vient d'être effectuée \
+             depuis un appareil ou un navigateur que nous n'avions pas encore vu.\n\n\
+             Date : {when}\n\
+             {ip_line}\
+             {ua_line}\
+             Si vous êtes à l'origine de cette connexion, vous pouvez ignorer ce message.\n\
+             Sinon, contactez immédiatement votre conseiller pour faire révoquer l'accès.\n\n\
+             {cabinet}",
+            cabinet = self.from_name
+        );
+        let html = format!(
+            "<p>Bonjour,</p>\
+             <p>Une connexion à votre espace investisseur vient d'être effectuée \
+             depuis un appareil ou un navigateur que nous n'avions pas encore vu.</p>\
+             <p><strong>Date :</strong> {when}<br/>\
+             {ip_html}\
+             {ua_html}\
+             </p>\
+             <p>Si vous êtes à l'origine de cette connexion, vous pouvez ignorer ce message.</p>\
+             <p>Sinon, contactez immédiatement votre conseiller pour faire révoquer l'accès.</p>\
+             <p>{cabinet}</p>",
+            ip_html = ip
+                .filter(|value| !value.is_empty())
+                .map(|value| format!("<strong>Adresse réseau :</strong> {value}<br/>"))
+                .unwrap_or_default(),
+            ua_html = user_agent
+                .filter(|value| !value.is_empty())
+                .map(|value| format!("<strong>Navigateur :</strong> {value}<br/>"))
+                .unwrap_or_default(),
+            cabinet = self.from_name
+        );
+        self.send_email(to, "Nouvelle connexion à votre espace", &text, &html)
+            .await
+    }
+
     async fn send_email(
         &self,
         to: &str,

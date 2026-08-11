@@ -4,6 +4,7 @@ import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { Partenaire } from "@/lib/api/tauri-partenaires";
 import { getAlertesNonTraitees, type Alerte } from "@/lib/api/tauri-alertes";
 import { getTachesByContact } from "@/lib/api/tauri-taches";
+import { getValorisationsByInvestissement } from "@/lib/api/tauri-investissement-valorisations";
 import {
   filterInvestissementsVisibleToViewer,
   isInvestissementVisibleToViewer,
@@ -31,6 +32,8 @@ import {
 } from "@/components/contacts/client-preview/ClientPreviewAdvisorPanel";
 import { ClientPreviewView } from "@/components/contacts/client-preview/ClientPreviewView";
 import type { ClientPreviewEmptyState } from "@/components/contacts/client-preview/ClientPreviewHero";
+import type { EvolutionHistoryById } from "@/components/contacts/client-preview/ClientPreviewEvolution";
+import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 
 export interface ContactDetailApercuClientTabProps {
   contact: Contact;
@@ -54,6 +57,8 @@ export function ContactDetailApercuClientTab({
   const [timelineLoading, setTimelineLoading] = useState(true);
   const [viewport, setViewport] = useState<ClientPreviewViewport>("mobile");
   const [lastSyncLabel, setLastSyncLabel] = useState<string | null>(null);
+  const [evolutionHistories, setEvolutionHistories] =
+    useState<EvolutionHistoryById>(new Map());
 
   const loadSyncSummary = useCallback(async () => {
     try {
@@ -117,6 +122,55 @@ export function ContactDetailApercuClientTab({
       ),
     [investissements, viewer, foyerMembers]
   );
+
+  const visibleIdsKey = useMemo(
+    () =>
+      visible
+        .map((inv) => inv.id)
+        .sort((a, b) => a - b)
+        .join(","),
+    [visible]
+  );
+
+  useEffect(() => {
+    if (!visibleIdsKey) {
+      setEvolutionHistories(new Map());
+      return;
+    }
+    let cancelled = false;
+    const ids = visibleIdsKey.split(",").map(Number);
+
+    const load = () => {
+      void Promise.all(
+        ids.map(async (id) => {
+          try {
+            const rows = await getValorisationsByInvestissement(id);
+            return [
+              id,
+              rows.map((r) => ({
+                dateTs: r.date_valorisation,
+                montantCentimes: r.montant,
+              })),
+            ] as const;
+          } catch {
+            return [id, [] as Array<{ dateTs: number; montantCentimes: number }>] as const;
+          }
+        })
+      ).then((entries) => {
+        if (cancelled) return;
+        setEvolutionHistories(new Map(entries));
+      });
+    };
+
+    load();
+    const unsubscribe = subscribeInvestissementsChanged(() => {
+      if (!cancelled) load();
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [visibleIdsKey]);
 
   const hiddenCount = useMemo(
     () =>
@@ -196,6 +250,7 @@ export function ContactDetailApercuClientTab({
         emptyState={emptyState}
         timelineLoading={timelineLoading}
         lastSyncLabel={lastSyncLabel}
+        evolutionHistoriesByInvestissementId={evolutionHistories}
       />
     </div>
   );

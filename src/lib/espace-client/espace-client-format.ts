@@ -65,6 +65,7 @@ const CONNEXION_EVENT_LABELS: Record<string, string> = {
   first_login: "Première connexion",
   login_success: "Connexion",
   login_failed: "Échec de connexion",
+  new_device: "Nouvel appareil",
 };
 
 export function formatEspaceConnexionEvent(event: string): string {

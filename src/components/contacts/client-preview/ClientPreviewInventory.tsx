@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ExternalLink } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { Partenaire } from "@/lib/api/tauri-partenaires";
 import { formatNomProduit } from "@/lib/investissements/investissement-display";
@@ -14,6 +14,7 @@ import {
 import { getClientPreviewInvestissementColor } from "@/lib/patrimoine/patrimoine-palette";
 import { cn } from "@/lib/utils";
 import type { ClientPreviewEmptyState } from "./ClientPreviewHero";
+import { ClientPreviewPlacementDetail } from "./ClientPreviewPlacementDetail";
 import { formatShortEuro } from "./client-preview-format";
 import { CP } from "./client-preview-theme";
 
@@ -39,36 +40,6 @@ function groupByCategory(
   return map;
 }
 
-function resolveExtranetUrl(
-  inv: Investissement,
-  partenaire?: Partenaire
-): string | undefined {
-  const contract = inv.url_contrat?.trim();
-  if (contract && /^https?:\/\//i.test(contract)) return contract;
-  const partner = partenaire?.url_extranet?.trim();
-  if (partner && /^https?:\/\//i.test(partner)) return partner;
-  return undefined;
-}
-
-function ExtranetHint({ url }: { url: string }) {
-  let host = url;
-  try {
-    host = new URL(url).hostname;
-  } catch {
-    /* garde l'URL brute */
-  }
-
-  return (
-    <span
-      className={`${CP.caption} inline-flex max-w-full items-center gap-1 truncate`}
-      title={url}
-    >
-      <ExternalLink className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
-      <span className="truncate">{host}</span>
-    </span>
-  );
-}
-
 /** Date courte côté client (ex. « 24 janv. 2019 »). */
 function formatInventoryDate(unix: number): string {
   return new Date(unix * 1000).toLocaleDateString("fr-FR", {
@@ -81,9 +52,11 @@ function formatInventoryDate(unix: number): string {
 function PlacementRow({
   inv,
   partenaireById,
+  onSelect,
 }: {
   inv: Investissement;
   partenaireById: Map<number, Partenaire>;
+  onSelect: (inv: Investissement) => void;
 }) {
   const partenaire =
     inv.partenaire_id != null
@@ -96,46 +69,56 @@ function PlacementRow({
     inv.type_produit,
     inv.origine
   );
-  const extranetUrl = resolveExtranetUrl(inv, partenaire);
 
   return (
-    <li className="flex items-start justify-between gap-4 py-3">
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <span
-            className="h-1.5 w-1.5 shrink-0 rounded-full"
-            style={{ backgroundColor: rowColor }}
+    <li>
+      <button
+        type="button"
+        onClick={() => onSelect(inv)}
+        className="flex w-full items-start justify-between gap-4 py-3 text-left transition-colors hover:bg-[var(--cp-surface-raised)]/40"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: rowColor }}
+              aria-hidden
+            />
+            <p className={`${CP.body} truncate`}>{label}</p>
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            {partenaire ? (
+              <span className={`${CP.caption} truncate`}>
+                {partenaire.raison_sociale}
+              </span>
+            ) : null}
+            {declared ? (
+              <span className={CP.badge} title={DECLARE_BADGE_TITLE}>
+                Déclaré
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-start gap-2">
+          <div className="text-right">
+            <p className={CP.amount}>{formatShortEuro(amount)}</p>
+            {inv.encours_date ? (
+              <p className={`${CP.caption} mt-0.5`}>
+                Au {formatInventoryDate(inv.encours_date)}
+              </p>
+            ) : null}
+            {inv.date_souscription ? (
+              <p className={`${CP.caption} mt-0.5`}>
+                Souscrit le {formatInventoryDate(inv.date_souscription)}
+              </p>
+            ) : null}
+          </div>
+          <ChevronRight
+            className="mt-1 h-4 w-4 shrink-0 text-[var(--cp-ink-faint)]"
             aria-hidden
           />
-          <p className={`${CP.body} truncate`}>{label}</p>
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          {partenaire ? (
-            <span className={`${CP.caption} truncate`}>
-              {partenaire.raison_sociale}
-            </span>
-          ) : null}
-          {declared ? (
-            <span className={CP.badge} title={DECLARE_BADGE_TITLE}>
-              Déclaré
-            </span>
-          ) : null}
-          {extranetUrl ? <ExtranetHint url={extranetUrl} /> : null}
-        </div>
-      </div>
-      <div className="shrink-0 text-right">
-        <p className={CP.amount}>{formatShortEuro(amount)}</p>
-        {inv.encours_date ? (
-          <p className={`${CP.caption} mt-0.5`}>
-            Au {formatInventoryDate(inv.encours_date)}
-          </p>
-        ) : null}
-        {inv.date_souscription ? (
-          <p className={`${CP.caption} mt-0.5`}>
-            Souscrit le {formatInventoryDate(inv.date_souscription)}
-          </p>
-        ) : null}
-      </div>
+      </button>
     </li>
   );
 }
@@ -146,12 +129,14 @@ function CategorySection({
   partenaireById,
   open,
   onToggle,
+  onSelect,
 }: {
   category: PatrimoineCategorie;
   items: Investissement[];
   partenaireById: Map<number, Partenaire>;
   open: boolean;
   onToggle: () => void;
+  onSelect: (inv: Investissement) => void;
 }) {
   const color = PATRIMOINE_CATEGORIE_COLORS[category];
   const subtotal = items.reduce(
@@ -194,6 +179,7 @@ function CategorySection({
               key={inv.id}
               inv={inv}
               partenaireById={partenaireById}
+              onSelect={onSelect}
             />
           ))}
         </ul>
@@ -228,6 +214,7 @@ export function ClientPreviewInventory({
   const [openCategories, setOpenCategories] = useState<
     Set<PatrimoineCategorie>
   >(() => new Set(sections.slice(0, 1)));
+  const [selected, setSelected] = useState<Investissement | null>(null);
 
   useEffect(() => {
     const first = sectionKey.split("|")[0] as PatrimoineCategorie | undefined;
@@ -240,6 +227,11 @@ export function ClientPreviewInventory({
       : emptyState === "empty"
         ? "Aucun placement enregistré — le client verra un patrimoine vide."
         : "Aucun placement à afficher";
+
+  const selectedPartenaire =
+    selected?.partenaire_id != null
+      ? partenaireById.get(selected.partenaire_id)
+      : undefined;
 
   return (
     <section className={`${CP.sectionGap} ${CP.padX} pb-2`}>
@@ -264,10 +256,19 @@ export function ClientPreviewInventory({
                   return next;
                 });
               }}
+              onSelect={setSelected}
             />
           ))}
         </div>
       )}
+
+      {selected ? (
+        <ClientPreviewPlacementDetail
+          inv={selected}
+          partenaire={selectedPartenaire}
+          onClose={() => setSelected(null)}
+        />
+      ) : null}
     </section>
   );
 }

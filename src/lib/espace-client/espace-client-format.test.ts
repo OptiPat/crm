@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatEspaceAccesStatut,
+  formatEspaceConnexionEvent,
   formatEspaceSyncLabel,
   ESPACE_ACCES_STATUT,
 } from "./espace-client-format";
@@ -10,6 +11,12 @@ describe("formatEspaceAccesStatut", () => {
     expect(formatEspaceAccesStatut(ESPACE_ACCES_STATUT.ACTIF)).toBe("Actif");
     expect(formatEspaceAccesStatut(ESPACE_ACCES_STATUT.REVOQUE)).toBe("Révoqué");
     expect(formatEspaceAccesStatut(ESPACE_ACCES_STATUT.INACTIF)).toBe("Inactif");
+  });
+});
+
+describe("formatEspaceConnexionEvent", () => {
+  it("libellé nouvel appareil", () => {
+    expect(formatEspaceConnexionEvent("new_device")).toBe("Nouvel appareil");
   });
 });
 
