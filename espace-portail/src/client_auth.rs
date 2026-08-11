@@ -75,7 +75,7 @@ pub async fn post_request_code(
             .into_response();
     }
 
-    match state.db.prepare_login_code(&state.sync_secret, &email) {
+    match state.db.prepare_login_code(&state.auth_secret, &email) {
         Ok(LoginCodeOutcome::Send { contact_id, code }) => {
             deliver_login_code(&state, &email, contact_id, &code).await;
         }
@@ -138,7 +138,7 @@ pub async fn post_login(
     let ip = Some(addr.ip().to_string());
 
     match state.db.try_login(
-        &state.sync_secret,
+        &state.auth_secret,
         &email,
         code,
         ip.as_deref(),
@@ -177,7 +177,7 @@ pub async fn post_login(
 
 pub async fn post_logout(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     if let Some(token) = parse_session_cookie(&headers) {
-        let _ = state.db.revoke_session(&token, &state.sync_secret);
+        let _ = state.db.revoke_session(&token, &state.auth_secret);
     }
     let mut response = StatusCode::NO_CONTENT.into_response();
     response.headers_mut().insert(
@@ -225,7 +225,7 @@ pub fn resolve_fresh_session(
 
     let authenticated_at = state
         .db
-        .session_authenticated_at(&token, &state.sync_secret)
+        .session_authenticated_at(&token, &state.auth_secret)
         .map_err(|_| unauthorized_response())?
         .ok_or_else(unauthorized_response)?;
 
@@ -247,7 +247,7 @@ pub fn resolve_session(state: &AppState, headers: &HeaderMap) -> Result<i64, axu
     let token = parse_session_cookie(headers).ok_or_else(unauthorized)?;
     state
         .db
-        .contact_id_for_session(&token, &state.sync_secret)
+        .contact_id_for_session(&token, &state.auth_secret)
         .map_err(|_| unauthorized_response())?
         .ok_or_else(unauthorized_response)
 }

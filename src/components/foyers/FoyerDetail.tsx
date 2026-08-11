@@ -51,7 +51,10 @@ import { InvestissementEncoursDialog } from "@/components/investissements/Invest
 import { InvestissementCard } from "@/components/investissements/InvestissementCard";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
-import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
+import {
+  getPlacementValorisationUiMode,
+  isPlacementValorisationUpdateEligible,
+} from "@/lib/investissements/investissement-encours";
 import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 
@@ -402,14 +405,24 @@ export function FoyerDetail({
                         }
                         actions={
                           isInvestissementActifEncours(inv) &&
-                          isPlacementEncoursEligible(inv.type_produit) ? (
+                          isPlacementValorisationUpdateEligible(inv.type_produit) ? (
                             <Button
                               variant="outline"
                               size="sm"
                               className="text-amber-700 hover:text-amber-800"
                               onClick={() => setEncoursInvestissement(inv)}
-                              title="Mettre à jour l'encours"
-                              aria-label="Encours"
+                              title={
+                                getPlacementValorisationUiMode(inv.type_produit) ===
+                                "valorisation"
+                                  ? "Mettre à jour la valorisation"
+                                  : "Mettre à jour l'encours"
+                              }
+                              aria-label={
+                                getPlacementValorisationUiMode(inv.type_produit) ===
+                                "valorisation"
+                                  ? "Valoriser"
+                                  : "Encours"
+                              }
                             >
                               <TrendingUp className="h-4 w-4" />
                             </Button>

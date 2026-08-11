@@ -47,9 +47,22 @@ npx eslint "src/**/*.{ts,tsx}" --quiet
 echo ">> Tests frontend (Vitest)"
 npm run test
 
+echo ">> Audit npm (CVE advisory, high+)"
+# Pas de npm audit fix automatique (risque supply chain).
+npm audit --audit-level=high
+
 if [[ "$QUICK" -eq 0 ]]; then
   echo ">> Tests backend (Cargo)"
   cargo test --manifest-path src-tauri/Cargo.toml
+
+  echo ">> Tests portail espace client (Cargo)"
+  cargo test --manifest-path espace-portail/Cargo.toml
+
+  echo ">> Audit Rust portail (cargo audit)"
+  (cd espace-portail && cargo audit)
+
+  echo ">> Audit Rust CRM (cargo audit)"
+  (cd src-tauri && cargo audit)
 fi
 
 if [[ "$BUILD" -eq 1 ]]; then

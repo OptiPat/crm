@@ -69,6 +69,15 @@ function ExtranetHint({ url }: { url: string }) {
   );
 }
 
+/** Date courte côté client (ex. « 24 janv. 2019 »). */
+function formatInventoryDate(unix: number): string {
+  return new Date(unix * 1000).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function PlacementRow({
   inv,
   partenaireById,
@@ -116,13 +125,14 @@ function PlacementRow({
       </div>
       <div className="shrink-0 text-right">
         <p className={CP.amount}>{formatShortEuro(amount)}</p>
+        {inv.encours_date ? (
+          <p className={`${CP.caption} mt-0.5`}>
+            Au {formatInventoryDate(inv.encours_date)}
+          </p>
+        ) : null}
         {inv.date_souscription ? (
           <p className={`${CP.caption} mt-0.5`}>
-            {new Date(inv.date_souscription * 1000).toLocaleDateString("fr-FR", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
+            Souscrit le {formatInventoryDate(inv.date_souscription)}
           </p>
         ) : null}
       </div>

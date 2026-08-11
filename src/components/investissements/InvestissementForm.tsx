@@ -103,7 +103,10 @@ import { notifyAlertesChanged } from "@/lib/alertes/alert-events";
 import { InvestissementEncoursPanel } from "@/components/investissements/InvestissementEncoursPanel";
 import { InvestissementVersementsPanel } from "@/components/investissements/InvestissementVersementsPanel";
 import { InvestissementCloturePanel } from "@/components/investissements/InvestissementCloturePanel";
-import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
+import {
+  getPlacementValorisationUiMode,
+  isPlacementValorisationUpdateEligible,
+} from "@/lib/investissements/investissement-encours";
 import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
 import {
   formatNomProduit,
@@ -338,10 +341,11 @@ export function InvestissementForm({
 
   useLockAppMainScroll(open && nestedSheet);
 
+  const valorisationUiMode = getPlacementValorisationUiMode(typeProduit);
   const showEncoursSection =
     !!editingInvestissement &&
     isActifEncours &&
-    isPlacementEncoursEligible(typeProduit);
+    isPlacementValorisationUpdateEligible(typeProduit);
 
   const showNumeroContratField = isNumeroContratEligible(typeProduit);
 
@@ -1656,13 +1660,14 @@ export function InvestissementForm({
             />
           )}
 
-          {showEncoursSection && editingInvestissement && (
+          {showEncoursSection && editingInvestissement && valorisationUiMode && (
             <InvestissementEncoursPanel
               investissementId={editingInvestissement.id}
               montantInitial={editingInvestissement.montant_initial}
               dateSouscription={editingInvestissement.date_souscription}
               encoursActuel={liveEncours.actuel ?? editingInvestissement.encours_actuel}
               encoursDate={liveEncours.date ?? editingInvestissement.encours_date}
+              uiMode={valorisationUiMode}
               onUpdated={async () => {
                 try {
                   const refreshed = await getInvestissementById(editingInvestissement.id);

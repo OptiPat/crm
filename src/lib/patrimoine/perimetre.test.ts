@@ -45,9 +45,9 @@ describe("buildPerimetrePatrimoine", () => {
       origine: "MON_CONSEIL",
       centimes: 520_000_00,
       referenceDate: 1_710_000_000,
-      label: "Suivi par votre conseiller",
+      label: "Investis avec votre conseiller",
     });
     expect(line).toMatch(/520[\s\u202f]?000 €/);
-    expect(line).toContain("suivi par votre conseiller");
+    expect(line).toContain("investis avec votre conseiller");
   });
 });

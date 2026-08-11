@@ -55,7 +55,7 @@ import {
 import {
   computeEncoursPlacementsStats,
   filterEncoursPlacementsAvecMoi,
-  isPlacementEncoursEligible,
+  isPlacementValorisationUpdateEligible,
 } from "@/lib/investissements/investissement-encours";
 import {
   computeAvPerVersementProgrammeCoverageStats,
@@ -677,7 +677,7 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
             }}
             onDelete={(item) => handleDelete(item as InvestissementWithDetails)}
             onEncours={
-              isPlacementEncoursEligible(inv.type_produit)
+              isPlacementValorisationUpdateEligible(inv.type_produit)
                 ? (item) => setEncoursInvestissement(item as InvestissementWithDetails)
                 : undefined
             }

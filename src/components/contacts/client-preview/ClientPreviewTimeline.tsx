@@ -107,7 +107,7 @@ export function ClientPreviewTimeline({
         {lastSyncLabel ? (
           <>
             <br />
-            Dernière synchro : {lastSyncLabel}
+            Mis à jour le {lastSyncLabel}
           </>
         ) : null}
       </p>

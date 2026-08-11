@@ -8,6 +8,7 @@ import {
 import { InvestissementEncoursPanel } from "@/components/investissements/InvestissementEncoursPanel";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { formatNomProduit } from "@/lib/investissements/investissement-display";
+import { getPlacementValorisationUiMode } from "@/lib/investissements/investissement-encours";
 import {
   nestedStackedDialogClass,
   nestedStackedOutsideHandlers,
@@ -36,6 +37,10 @@ export function InvestissementEncoursDialog({
 
   if (!investissement) return null;
 
+  const uiMode =
+    getPlacementValorisationUiMode(investissement.type_produit) ?? "encours";
+  const isValorisation = uiMode === "valorisation";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
       <DialogContent
@@ -51,12 +56,15 @@ export function InvestissementEncoursDialog({
         <PortalLayerProvider layer={nestedStackedPortalLayer(nestedSheet, nestedDepth)}>
           <DialogHeader className="shrink-0">
             <DialogTitle>
-              Encours — {formatNomProduit(investissement.type_produit)}
+              {isValorisation ? "Valorisation" : "Encours"} —{" "}
+              {formatNomProduit(investissement.type_produit)}
             </DialogTitle>
             <DialogDescription>
               {investissement.nom_produit?.trim()
                 ? investissement.nom_produit
-                : "Historique et mise à jour de l'encours constaté"}
+                : isValorisation
+                  ? "Historique et mise à jour de la valorisation"
+                  : "Historique et mise à jour de l'encours constaté"}
             </DialogDescription>
           </DialogHeader>
           <div
@@ -70,6 +78,7 @@ export function InvestissementEncoursDialog({
               encoursActuel={investissement.encours_actuel}
               encoursDate={investissement.encours_date}
               onUpdated={onUpdated}
+              uiMode={uiMode}
             />
           </div>
         </PortalLayerProvider>

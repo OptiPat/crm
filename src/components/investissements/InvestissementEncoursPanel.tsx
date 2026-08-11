@@ -107,10 +107,13 @@ function StelliumReleveCard({ releve }: { releve: InvestissementValorisation }) 
   );
 }
 
-function kindLabel(kind: EncoursChartPoint["kind"]): string {
+function kindLabel(
+  kind: EncoursChartPoint["kind"],
+  mode: "encours" | "valorisation"
+): string {
   if (kind === "souscription") return "Souscription";
   if (kind === "complement") return "Versement complémentaire";
-  return "Relevé d'encours";
+  return mode === "valorisation" ? "Valorisation" : "Relevé d'encours";
 }
 
 export function InvestissementEncoursPanel({
@@ -120,6 +123,7 @@ export function InvestissementEncoursPanel({
   encoursActuel,
   encoursDate,
   onUpdated,
+  uiMode = "encours",
 }: {
   investissementId: number;
   montantInitial?: number;
@@ -127,7 +131,10 @@ export function InvestissementEncoursPanel({
   encoursActuel?: number;
   encoursDate?: number;
   onUpdated?: () => void;
+  /** Copy : encours (AV…) ou valorisation (immo / SCPI). */
+  uiMode?: "encours" | "valorisation";
 }) {
+  const isValorisation = uiMode === "valorisation";
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [valorisations, setValorisations] = useState<InvestissementValorisation[]>([]);
@@ -146,11 +153,15 @@ export function InvestissementEncoursPanel({
       setVersements(vcs);
     } catch (error) {
       console.error(error);
-      toast.error("Impossible de charger l'historique d'encours");
+      toast.error(
+        isValorisation
+          ? "Impossible de charger l'historique de valorisation"
+          : "Impossible de charger l'historique d'encours"
+      );
     } finally {
       setLoading(false);
     }
-  }, [investissementId]);
+  }, [investissementId, isValorisation]);
 
   useEffect(() => {
     void loadHistory();
@@ -204,7 +215,11 @@ export function InvestissementEncoursPanel({
   const handleSaveEncours = async () => {
     const parsed = parseFloat(montant.replace(",", "."));
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      toast.error("Saisissez un montant d'encours valide");
+      toast.error(
+        isValorisation
+          ? "Saisissez un montant de valorisation valide"
+          : "Saisissez un montant d'encours valide"
+      );
       return;
     }
     setSaving(true);
@@ -214,7 +229,9 @@ export function InvestissementEncoursPanel({
         montant: Math.round(parsed * 100),
         date_valorisation: dateFieldToIso(dateValorisation),
       });
-      toast.success("Encours enregistré");
+      toast.success(
+        isValorisation ? "Valorisation enregistrée" : "Encours enregistré"
+      );
       await loadHistory();
       onUpdated?.();
     } catch (error) {
@@ -226,7 +243,14 @@ export function InvestissementEncoursPanel({
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Supprimer ce relevé d'encours ?")) return;
+    if (
+      !confirm(
+        isValorisation
+          ? "Supprimer cette valorisation ?"
+          : "Supprimer ce relevé d'encours ?"
+      )
+    )
+      return;
     try {
       await deleteInvestissementValorisation(id);
       toast.success("Relevé supprimé");
@@ -243,9 +267,13 @@ export function InvestissementEncoursPanel({
       <div className="flex items-start gap-2">
         <TrendingUp className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" aria-hidden />
         <div>
-          <p className="text-sm font-medium text-foreground">Encours à date</p>
+          <p className="text-sm font-medium text-foreground">
+            {isValorisation ? "Valorisation à date" : "Encours à date"}
+          </p>
           <p className="text-xs text-muted-foreground">
-            Courbe d&apos;encours, relevés de marché et versements complémentaires (barres bleues).
+            {isValorisation
+              ? "Le montant initial reste le prix d'acquisition. Enregistrez ici la valeur actuelle et sa date."
+              : "Courbe d'encours, relevés de marché et versements complémentaires (barres bleues)."}
           </p>
         </div>
       </div>
@@ -256,7 +284,11 @@ export function InvestissementEncoursPanel({
         <ChartEmpty
           height={160}
           title="Aucun historique"
-          subtitle="Enregistrez une souscription, un complément ou un relevé d'encours."
+          subtitle={
+            isValorisation
+              ? "Enregistrez une souscription ou une valorisation."
+              : "Enregistrez une souscription, un complément ou un relevé d'encours."
+          }
         />
       ) : (
         <div className="space-y-1">
@@ -268,7 +300,7 @@ export function InvestissementEncoursPanel({
                   style={{ backgroundColor: ENCOURS_COLOR }}
                   aria-hidden
                 />
-                Encours
+                {isValorisation ? "Valorisation" : "Encours"}
               </span>
               <span className="inline-flex items-center gap-1">
                 <span
@@ -308,7 +340,9 @@ export function InvestissementEncoursPanel({
                     <ChartTooltipBox>
                       <p className="font-medium">{p.label}</p>
                       <p>{formatDashboardCurrency(p.encours)}</p>
-                      <p className="text-xs text-muted-foreground">{kindLabel(p.kind)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {kindLabel(p.kind, uiMode)}
+                      </p>
                       {p.complementBar > 0 && (
                         <p className="text-xs text-blue-600 font-medium">
                           +{formatDashboardCurrency(p.complementBar)}
@@ -367,7 +401,9 @@ export function InvestissementEncoursPanel({
 
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <div className="space-y-1.5">
-          <Label htmlFor={`encours-montant-${investissementId}`}>Encours (€)</Label>
+          <Label htmlFor={`encours-montant-${investissementId}`}>
+            {isValorisation ? "Valorisation (€)" : "Encours (€)"}
+          </Label>
           <Input
             id={`encours-montant-${investissementId}`}
             type="number"
@@ -405,11 +441,17 @@ export function InvestissementEncoursPanel({
           className="sm:mb-0"
           onClick={() => void handleSaveEncours()}
         >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enregistrer l'encours"}
+          {saving ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : isValorisation ? (
+            "Enregistrer la valorisation"
+          ) : (
+            "Enregistrer l'encours"
+          )}
         </Button>
       </div>
 
-      {stelliumHistorique.length > 0 && (
+      {!isValorisation && stelliumHistorique.length > 0 && (
         <details className="group rounded-lg border border-amber-200/70 bg-amber-50/40 text-sm shadow-sm">
           <summary className="flex cursor-pointer list-none items-start gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
             <div className="min-w-0 flex-1 space-y-1">
@@ -462,7 +504,11 @@ export function InvestissementEncoursPanel({
                 size="icon"
                 className="h-7 w-7 text-destructive hover:text-destructive"
                 onClick={() => void handleDelete(v.id)}
-                aria-label="Supprimer ce relevé"
+                aria-label={
+                  isValorisation
+                    ? "Supprimer cette valorisation"
+                    : "Supprimer ce relevé"
+                }
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>

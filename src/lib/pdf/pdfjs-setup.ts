@@ -75,6 +75,9 @@ function normalizePdfBytes(data: Uint8Array | ArrayBuffer): Uint8Array {
 
 export function loadPdfDocument(data: Uint8Array | ArrayBuffer) {
   const bytes = normalizePdfBytes(data);
+  if (bytes.length === 0) {
+    return { promise: Promise.reject(new Error("PDF vide")) };
+  }
   const promise = (async () => {
     const pdfjs = await getPdfJsLib();
     configurePdfJsOnce(pdfjs);

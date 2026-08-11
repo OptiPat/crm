@@ -42,7 +42,7 @@ export const HORIZON_CHART_COLORS: Record<string, string> = {
   "Court terme": "#6B9EC4",
   "Moyen terme": "#C4A06B",
   "Long terme": "#9A8FCC",
-  "Résidence principale": "#D9C9A8",
+  "Résidence principale": "#C17B5A",
 };
 
 /** Décomposition par source (hero) — teinte dédiée, distincte du rose placements. */

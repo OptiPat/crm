@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   computeEncoursPlacementsStats,
   getEffectiveEncoursCentimes,
+  getPlacementValorisationUiMode,
   isPlacementEncoursEligible,
+  isPlacementImmoScpiValorisationEligible,
+  isPlacementValorisationUpdateEligible,
   listEncoursPlacementsAvecMoi,
 } from "@/lib/investissements/investissement-encours";
 import type { Investissement } from "@/lib/api/tauri-investissements";
@@ -28,6 +31,13 @@ describe("investissement-encours", () => {
   it("identifie les produits éligibles", () => {
     expect(isPlacementEncoursEligible("ASSURANCE_VIE")).toBe(true);
     expect(isPlacementEncoursEligible("SCPI")).toBe(false);
+    expect(isPlacementImmoScpiValorisationEligible("SCPI")).toBe(true);
+    expect(isPlacementImmoScpiValorisationEligible("LMNP")).toBe(true);
+    expect(isPlacementImmoScpiValorisationEligible("ASSURANCE_VIE")).toBe(false);
+    expect(isPlacementValorisationUpdateEligible("SCPI")).toBe(true);
+    expect(isPlacementValorisationUpdateEligible("PER")).toBe(true);
+    expect(getPlacementValorisationUiMode("SCPI")).toBe("valorisation");
+    expect(getPlacementValorisationUiMode("ASSURANCE_VIE")).toBe("encours");
   });
 
   it("utilise encours_actuel sinon montant_initial", () => {

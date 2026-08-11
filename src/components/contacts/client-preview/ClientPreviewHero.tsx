@@ -167,7 +167,7 @@ export function ClientPreviewHero({
           <HeroTotal centimes={perimetre.totalCentimes} viewport={viewport} />
           {valorisationLabel && emptyState == null ? (
             <span className="cp-hero-date-badge mb-1 shrink-0 rounded-full border border-[var(--cp-line)] bg-[var(--cp-surface-raised)] px-2.5 py-0.5 text-xs leading-none text-[var(--cp-ink-muted)]">
-              Au {valorisationLabel}
+              Valorisation au {valorisationLabel}
             </span>
           ) : null}
         </div>

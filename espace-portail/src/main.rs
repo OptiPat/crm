@@ -1,6 +1,7 @@
 mod auth;
 mod auth_store;
 mod client_auth;
+mod secrets;
 mod db;
 mod demande_store;
 mod depot_crypto;
@@ -43,6 +44,8 @@ const MAX_UPLOAD_BYTES: usize = 10 * 1024 * 1024;
 pub struct AppState {
     pub db: Arc<PortalDb>,
     pub sync_secret: String,
+    /// Empreintes OTP et sessions — distinct de `sync_secret` en production.
+    pub auth_secret: String,
     /// Mode développement : expose GET /api/v1/patrimoine/{id} sans auth client.
     pub dev_mode: bool,
     pub cookie_secure: bool,
@@ -145,6 +148,7 @@ async fn main() {
     let dev_mode = parse_dev_mode(std::env::var("ESPACE_PORTAL_DEV").ok().as_deref());
 
     let production = parse_bool_env(std::env::var("ESPACE_PRODUCTION").ok().as_deref());
+    let auth_secret = secrets::load_auth_secret(&sync_secret, production);
     let trust_proxy = parse_bool_env(std::env::var("ESPACE_TRUST_PROXY").ok().as_deref())
         || production;
 
@@ -187,6 +191,7 @@ async fn main() {
     let state = AppState {
         db,
         sync_secret,
+        auth_secret,
         dev_mode,
         cookie_secure,
         production,

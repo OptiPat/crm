@@ -1,4 +1,5 @@
 import type { Investissement } from "@/lib/api/tauri-investissements";
+import { IMMOBILIER_TYPES } from "@/lib/investissements/investissement-display";
 import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
 
 /** Produits financiers dont l'encours peut évoluer (aligné dashboard). */
@@ -13,9 +14,47 @@ export const PLACEMENT_ENCOURS_TYPES = [
 
 export type PlacementEncoursType = (typeof PLACEMENT_ENCOURS_TYPES)[number];
 
+const IMMOBILIER_SET = new Set<string>(IMMOBILIER_TYPES);
+
+const SCPI_VALORISATION_TYPES = new Set([
+  "SCPI",
+  "SCPI_DEMEMBREMENT",
+  "SCPI_FISCALE",
+]);
+
+export type PlacementValorisationUiMode = "encours" | "valorisation";
+
 export function isPlacementEncoursEligible(typeProduit: string | undefined): boolean {
   if (!typeProduit) return false;
   return (PLACEMENT_ENCOURS_TYPES as readonly string[]).includes(typeProduit);
+}
+
+/** Immobilier / SCPI : même mécanique de relevés, copy « valorisation ». */
+export function isPlacementImmoScpiValorisationEligible(
+  typeProduit: string | undefined
+): boolean {
+  if (!typeProduit) return false;
+  return (
+    IMMOBILIER_SET.has(typeProduit) || SCPI_VALORISATION_TYPES.has(typeProduit)
+  );
+}
+
+/** Bouton / panneau de mise à jour de valeur (AV-style ou immo/SCPI). */
+export function isPlacementValorisationUpdateEligible(
+  typeProduit: string | undefined
+): boolean {
+  return (
+    isPlacementEncoursEligible(typeProduit) ||
+    isPlacementImmoScpiValorisationEligible(typeProduit)
+  );
+}
+
+export function getPlacementValorisationUiMode(
+  typeProduit: string | undefined
+): PlacementValorisationUiMode | null {
+  if (isPlacementEncoursEligible(typeProduit)) return "encours";
+  if (isPlacementImmoScpiValorisationEligible(typeProduit)) return "valorisation";
+  return null;
 }
 
 /** Encours effectif : valorisation (ou initial) + versements complémentaires postérieurs (calcul backend). */

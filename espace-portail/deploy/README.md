@@ -11,6 +11,7 @@ et relaie en HTTP local vers `127.0.0.1:8787`.
 | **Domaine du portail** | `espace.mondomaine.fr` → enregistrement DNS **A** vers l'IP du VPS |
 | **Brevo** | Clé API + expéditeur validé (votre Gmail si c'est déjà le cas) |
 | **Secret sync** | Généré une fois, identique CRM + portail |
+| **Secret auth** | Généré en même temps, **portail uniquement** (OTP + sessions) |
 
 L'URL du portail et l'adresse d'envoi des emails sont **indépendantes** (Gmail OK).
 
@@ -24,7 +25,8 @@ cd D:\crm
 .\espace-portail\deploy\pack-for-vps.ps1             # crée dist-espace-portail-vps.zip
 ```
 
-Conservez le secret : vous le collerez dans le CRM **et** dans le `.env` du VPS.
+Conservez les deux secrets : `ESPACE_SYNC_SECRET` dans le CRM **et** le `.env` VPS ;
+`ESPACE_AUTH_SECRET` dans le `.env` VPS seulement.
 
 ## Étape 2 — Envoyer sur le VPS
 
@@ -54,7 +56,8 @@ sudo nano /opt/espace-portail/.env
 |----------|--------|
 | `ESPACE_PRODUCTION` | `1` |
 | `ESPACE_TRUST_PROXY` | `1` |
-| `ESPACE_SYNC_SECRET` | secret généré à l'étape 1 |
+| `ESPACE_SYNC_SECRET` | secret sync généré à l'étape 1 (CRM + portail) |
+| `ESPACE_AUTH_SECRET` | secret auth généré à l'étape 1 (portail seulement) |
 | `ESPACE_BREVO_API_KEY` | clé Brevo portail |
 | `ESPACE_MAIL_FROM` | votre Gmail validé dans Brevo |
 | `ESPACE_MAIL_FROM_NAME` | nom affiché |

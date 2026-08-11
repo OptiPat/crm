@@ -80,6 +80,13 @@ Invoke-VerifyStep 'Tests frontend (Vitest)' {
     if ($LASTEXITCODE -ne 0) { throw "Vitest a echoue." }
 }
 
+# Lecture seule : ne jamais lancer `npm audit fix` ici (risque supply chain — ChainDrop aout 2026).
+# Les versions installees viennent du package-lock.json verrouille (sha512).
+Invoke-VerifyStep 'Audit npm (CVE advisory, high+)' {
+    npm audit --audit-level=high
+    if ($LASTEXITCODE -ne 0) { throw "npm audit : vulnerabilites high/critical dans la base advisory." }
+}
+
 if (-not $Quick) {
     Invoke-VerifyStep 'Tests backend (Cargo)' {
         # Hors src-tauri/ pour ne pas déclencher le watcher `tauri dev`.
@@ -93,6 +100,26 @@ if (-not $Quick) {
         $env:CARGO_TARGET_DIR = Join-Path $PSScriptRoot 'target-cargo-verify'
         cargo test --manifest-path espace-portail/Cargo.toml
         if ($LASTEXITCODE -ne 0) { throw "cargo test espace-portail a echoue." }
+    }
+
+    Invoke-VerifyStep 'Audit Rust portail (cargo audit)' {
+        Push-Location (Join-Path $PSScriptRoot 'espace-portail')
+        try {
+            cargo audit
+            if ($LASTEXITCODE -ne 0) { throw "cargo audit espace-portail a echoue." }
+        } finally {
+            Pop-Location
+        }
+    }
+
+    Invoke-VerifyStep 'Audit Rust CRM (cargo audit)' {
+        Push-Location (Join-Path $PSScriptRoot 'src-tauri')
+        try {
+            cargo audit
+            if ($LASTEXITCODE -ne 0) { throw "cargo audit src-tauri a echoue." }
+        } finally {
+            Pop-Location
+        }
     }
 }
 

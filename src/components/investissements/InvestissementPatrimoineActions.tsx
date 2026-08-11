@@ -1,6 +1,9 @@
 import { Button } from "@/components/ui/button";
 import type { Investissement } from "@/lib/api/tauri-investissements";
-import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
+import {
+  getPlacementValorisationUiMode,
+  isPlacementValorisationUpdateEligible,
+} from "@/lib/investissements/investissement-encours";
 import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
 import { Pencil, Trash2, TrendingUp } from "lucide-react";
 
@@ -19,6 +22,12 @@ export function InvestissementPatrimoineActions({
   compact?: boolean;
 }) {
   const isActif = isInvestissementActifEncours(inv);
+  const uiMode = getPlacementValorisationUiMode(inv.type_produit);
+  const isValorisation = uiMode === "valorisation";
+  const actionLabel = isValorisation ? "Valoriser" : "Encours";
+  const actionTitle = isValorisation
+    ? "Mettre à jour la valorisation"
+    : "Mettre à jour l'encours";
 
   return (
     <div
@@ -28,7 +37,7 @@ export function InvestissementPatrimoineActions({
     >
       {onEncours &&
         isActif &&
-        isPlacementEncoursEligible(inv.type_produit) && (
+        isPlacementValorisationUpdateEligible(inv.type_produit) && (
           <Button
             variant={compact ? "ghost" : "outline"}
             size={compact ? "icon" : "sm"}
@@ -38,11 +47,13 @@ export function InvestissementPatrimoineActions({
                 : "gap-1 text-amber-700 hover:text-amber-800"
             }
             onClick={() => onEncours(inv)}
-            aria-label="Encours"
-            title="Mettre à jour l'encours"
+            aria-label={actionLabel}
+            title={actionTitle}
           >
             <TrendingUp className="h-4 w-4" />
-            {!compact && <span className="hidden sm:inline">Encours</span>}
+            {!compact && (
+              <span className="hidden sm:inline">{actionLabel}</span>
+            )}
           </Button>
         )}
       <Button

@@ -12,7 +12,7 @@ import {
 import { InvestissementSupportsSection } from "@/components/investissements/InvestissementSupportsSection";
 import {
   getEffectiveEncoursCentimes,
-  isPlacementEncoursEligible,
+  getPlacementValorisationUiMode,
 } from "@/lib/investissements/investissement-encours";
 import {
   getMontantInvestiCentimes,
@@ -94,7 +94,9 @@ export function InvestissementCard({
   actions,
 }: InvestissementCardProps) {
   const interactive = Boolean(onOpenContactClick);
-  const encoursEligible = isPlacementEncoursEligible(inv.type_produit);
+  const valorisationUiMode = getPlacementValorisationUiMode(inv.type_produit);
+  const encoursEligible = valorisationUiMode === "encours";
+  const immoScpiValorisation = valorisationUiMode === "valorisation";
   const hasEncoursReleve =
     inv.encours_actuel != null && inv.encours_actuel > 0;
   const effectiveEncours = getEffectiveEncoursCentimes(inv);
@@ -225,6 +227,20 @@ export function InvestissementCard({
                   )}
                 </InvestissementMetaRow>
                 {(montantInvesti > 0) && (
+                  <InvestissementMetaRow tone="amount">
+                    Investi : {formatEuroCentimes(montantInvesti)}
+                  </InvestissementMetaRow>
+                )}
+              </>
+            ) : immoScpiValorisation && hasEncoursReleve ? (
+              <>
+                <InvestissementMetaRow icon={TrendingUp} tone="growth">
+                  Valorisation : {formatEuroCentimes(effectiveEncours)}
+                  {inv.encours_date && (
+                    <> · {formatCalendarDateFr(inv.encours_date)}</>
+                  )}
+                </InvestissementMetaRow>
+                {montantInvesti > 0 && (
                   <InvestissementMetaRow tone="amount">
                     Investi : {formatEuroCentimes(montantInvesti)}
                   </InvestissementMetaRow>

@@ -39,7 +39,7 @@ export function PortalPatrimoineHeader({
             </p>
             {lastSyncLabel ? (
               <p className={`${CP.caption} mt-0.5 text-[var(--cp-ink-muted)]`}>
-                Dernière synchro conseiller : {lastSyncLabel}
+                Mis à jour le {lastSyncLabel}
               </p>
             ) : null}
           </div>
