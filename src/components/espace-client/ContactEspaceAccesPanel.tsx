@@ -372,7 +372,9 @@ export function ContactEspaceAccesPanel({
       {isActif ? (
         <div className="mt-6 space-y-2 border-t border-border/60 pt-5">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="text-sm font-medium text-foreground">
+            {/* Un <p> et non un titre : la feuille de style applique Playfair
+                aux h1-h6, qui jurerait avec les autres blocs du panneau. */}
+            <p className="text-sm font-medium text-foreground">
               Journal des connexions
               {connexionLog.length > 0 ? (
                 <span className="ml-1 font-normal text-muted-foreground">
@@ -380,7 +382,7 @@ export function ContactEspaceAccesPanel({
                   {connexionLog.length > 1 ? "s" : ""}
                 </span>
               ) : null}
-            </h4>
+            </p>
             <div className="flex items-center gap-1">
               {connexionLog.length > JOURNAL_APERCU ? (
                 <Button

@@ -173,7 +173,7 @@ export function ContactEspaceDemandesPanel({
   return (
     <div className="mt-4 space-y-3 border-t border-border/60 pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-medium text-foreground">Demandes de documents</p>
+        <p className="text-sm font-medium text-foreground">Demandes de documents</p>
         {pendingImportCount > 0 ? (
           <Badge variant="outline" className="font-normal">
             {pendingImportCount} dépôt(s) à importer

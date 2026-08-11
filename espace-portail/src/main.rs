@@ -6,6 +6,7 @@ mod db;
 mod demande_store;
 mod depot_crypto;
 mod document_scan;
+mod evenement_store;
 mod documents;
 mod file_sniff;
 mod login_code;

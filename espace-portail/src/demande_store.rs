@@ -420,7 +420,7 @@ impl super::PortalDb {
         Ok(Some(PathBuf::from(depot.stored_path)))
     }
 
-    fn client_email(&self, contact_id: i64) -> Result<Option<String>> {
+    pub(crate) fn client_email(&self, contact_id: i64) -> Result<Option<String>> {
         let email: Option<String> = self
             .conn()
             .query_row(

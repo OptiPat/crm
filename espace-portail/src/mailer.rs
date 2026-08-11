@@ -110,6 +110,56 @@ impl Mailer {
             .await
     }
 
+    /// Événement ajouté par le conseiller à l'espace du client.
+    ///
+    /// Le mot « échéance » reste au CRM : côté client, une échéance évoque une
+    /// obligation ou une dette, là où il s'agit d'un rendez-vous à préparer.
+    pub async fn send_evenement(
+        &self,
+        to: &str,
+        prenom: &str,
+        titre: &str,
+        message: Option<&str>,
+        date_label: &str,
+    ) -> Result<(), String> {
+        let greeting = if prenom.trim().is_empty() {
+            "Bonjour".to_string()
+        } else {
+            format!("Bonjour {}", prenom.trim())
+        };
+        let precision_text = message
+            .map(str::trim)
+            .filter(|m| !m.is_empty())
+            .map(|m| format!("{m}\n\n"))
+            .unwrap_or_default();
+        let precision_html = message
+            .map(str::trim)
+            .filter(|m| !m.is_empty())
+            .map(|m| format!("<p>{m}</p>"))
+            .unwrap_or_default();
+
+        let text = format!(
+            "{greeting},\n\n\
+             Votre conseiller a ajouté un événement à votre espace client :\n\
+             {titre} — {date_label}.\n\n\
+             {precision_text}\
+             Connectez-vous à votre espace pour le consulter.\n\n\
+             {cabinet}",
+            cabinet = self.from_name
+        );
+        let html = format!(
+            "<p>{greeting},</p>\
+             <p>Votre conseiller a ajouté un événement à votre espace client :<br/>\
+             <strong>{titre}</strong> — {date_label}.</p>\
+             {precision_html}\
+             <p>Connectez-vous à votre espace pour le consulter.</p>\
+             <p>{cabinet}</p>",
+            cabinet = self.from_name
+        );
+        self.send_email(to, "Nouvel événement sur votre espace", &text, &html)
+            .await
+    }
+
     pub async fn send_depot_received(
         &self,
         advisor_email: &str,

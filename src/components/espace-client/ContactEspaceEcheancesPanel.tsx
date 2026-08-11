@@ -127,10 +127,12 @@ export function ContactEspaceEcheancesPanel({
     <div className="mt-6 border-t border-border/60 pt-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h4 className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+          {/* Un <p> et non un titre : la feuille de style applique Playfair
+              aux h1-h6, qui jurerait avec les autres blocs du panneau. */}
+          <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
             <CalendarPlus className="h-4 w-4 text-muted-foreground" />
             Échéances affichées au client
-          </h4>
+          </p>
           <p className="mt-1 text-sm text-muted-foreground">
             Vos alertes et vos tâches restent internes. Celles-ci sont écrites
             pour le client et apparaissent dans son espace.

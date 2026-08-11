@@ -10,6 +10,7 @@ use serde_json::Value;
 
 use crate::auth::verify_espace_sync_signature;
 use crate::demande_store::DemandeEmailNotification;
+use crate::evenement_store::EvenementEmailNotification;
 use crate::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -40,8 +41,9 @@ pub async fn receive_contact_snapshot(
     body: Bytes,
 ) -> impl IntoResponse {
     match handle_sync(&state, contact_id, &headers, &body) {
-        Ok((response, notifications)) => {
+        Ok((response, notifications, evenements)) => {
             spawn_demande_emails(state.clone(), notifications);
+            spawn_evenement_emails(state.clone(), evenements);
             (StatusCode::OK, Json(response)).into_response()
         }
         Err(message) => (
@@ -87,12 +89,63 @@ fn spawn_demande_emails(state: AppState, notifications: Vec<DemandeEmailNotifica
     });
 }
 
+/// Événements ajoutés par le conseiller : le client est prévenu une fois, à la
+/// synchronisation qui les publie. Les échéances issues des placements, elles,
+/// ne déclenchent rien — il ne s'agit pas d'une nouvelle.
+fn spawn_evenement_emails(state: AppState, notifications: Vec<EvenementEmailNotification>) {
+    if notifications.is_empty() {
+        return;
+    }
+    tokio::spawn(async move {
+        let Some(mailer) = state.mailer.clone() else {
+            for note in &notifications {
+                tracing::warn!(
+                    "Pas d'envoi configuré — événement {} pour {}",
+                    note.evenement_id,
+                    note.email
+                );
+            }
+            return;
+        };
+        for note in notifications {
+            match mailer
+                .send_evenement(
+                    &note.email,
+                    &note.prenom,
+                    &note.titre,
+                    note.message.as_deref(),
+                    &note.date_label,
+                )
+                .await
+            {
+                Ok(()) => {
+                    let _ = state
+                        .db
+                        .mark_evenement_notifie(&note.evenement_id, note.contact_id);
+                    tracing::info!("Événement notifié ({})", note.evenement_id);
+                }
+                Err(error) => tracing::error!(
+                    "Envoi événement impossible ({}) : {error}",
+                    note.evenement_id
+                ),
+            }
+        }
+    });
+}
+
 fn handle_sync(
     state: &AppState,
     contact_id: i64,
     headers: &HeaderMap,
     body: &[u8],
-) -> Result<(SyncResponse, Vec<DemandeEmailNotification>), String> {
+) -> Result<
+    (
+        SyncResponse,
+        Vec<DemandeEmailNotification>,
+        Vec<EvenementEmailNotification>,
+    ),
+    String,
+> {
     let timestamp = parse_header(headers, "x-espace-timestamp")?
         .parse::<i64>()
         .map_err(|_| "Horodatage invalide".to_string())?;
@@ -141,6 +194,15 @@ fn handle_sync(
         vec![]
     };
 
+    let evenements = if accepted {
+        state
+            .db
+            .pending_evenement_notifications(contact_id, &payload)
+            .map_err(|e| e.to_string())?
+    } else {
+        vec![]
+    };
+
     Ok((
         SyncResponse {
             accepted,
@@ -148,6 +210,7 @@ fn handle_sync(
             sequence: header.sequence,
         },
         notifications,
+        evenements,
     ))
 }
 
