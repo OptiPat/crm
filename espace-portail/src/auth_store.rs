@@ -571,8 +571,8 @@ impl PortalDb {
     }
 
     pub(crate) fn device_hash(secret: &str, user_agent: Option<&str>) -> String {
-        let ua = user_agent.unwrap_or("").trim();
-        crate::auth::hash_espace_otp(secret, &format!("device:{ua}"))
+        let empreinte = normalize_user_agent(user_agent);
+        crate::auth::hash_espace_otp(secret, &format!("device:{empreinte}"))
     }
 
     pub(crate) fn is_new_device(&self, contact_id: i64, device_hash: &str) -> Result<bool> {
@@ -598,6 +598,50 @@ impl PortalDb {
         )?;
         Ok(())
     }
+}
+
+/// Réduit un navigateur déclaré à sa famille et à son système, sans numéro de
+/// version. Chrome se met à jour toutes les quatre semaines : sans cela, chaque
+/// mise à jour ressemblerait à un appareil inconnu et déclencherait une alerte.
+/// Une alerte qui crie tous les mois finit ignorée le jour où elle compte.
+fn normalize_user_agent(user_agent: Option<&str>) -> String {
+    let ua = user_agent.unwrap_or("").trim();
+    if ua.is_empty() {
+        return "inconnu".into();
+    }
+
+    // L'ordre est significatif : Edge et Opera se déclarent aussi « Chrome »,
+    // et Chrome se déclare aussi « Safari ».
+    let navigateur = if ua.contains("Edg/") {
+        "Edge"
+    } else if ua.contains("OPR/") || ua.contains("Opera") {
+        "Opera"
+    } else if ua.contains("Firefox/") {
+        "Firefox"
+    } else if ua.contains("Chrome/") {
+        "Chrome"
+    } else if ua.contains("Safari/") {
+        "Safari"
+    } else {
+        "autre"
+    };
+
+    // Android contient « Linux », et iOS contient « Mac OS X ».
+    let systeme = if ua.contains("Android") {
+        "Android"
+    } else if ua.contains("iPhone") || ua.contains("iPad") {
+        "iOS"
+    } else if ua.contains("Windows") {
+        "Windows"
+    } else if ua.contains("Macintosh") || ua.contains("Mac OS X") {
+        "macOS"
+    } else if ua.contains("Linux") {
+        "Linux"
+    } else {
+        "autre"
+    };
+
+    format!("{navigateur}/{systeme}")
 }
 
 #[derive(Debug, Serialize)]
@@ -698,6 +742,43 @@ mod tests {
             )
             .expect("code email valide refuse");
         assert_eq!(success.contact_id, 8);
+    }
+
+    /// Le cas qui motivait le changement : une mise à jour de navigateur ne
+    /// doit pas passer pour un appareil inconnu.
+    #[test]
+    fn browser_update_is_not_a_new_device() {
+        let avant = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+        let apres = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
+        assert_eq!(
+            PortalDb::device_hash("secret", Some(avant)),
+            PortalDb::device_hash("secret", Some(apres))
+        );
+    }
+
+    #[test]
+    fn different_browsers_and_systems_stay_distinct() {
+        let chrome_windows = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+        let chrome_android = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36";
+        let safari_ios = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+        let edge_windows = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0";
+
+        let empreintes = [
+            PortalDb::device_hash("secret", Some(chrome_windows)),
+            PortalDb::device_hash("secret", Some(chrome_android)),
+            PortalDb::device_hash("secret", Some(safari_ios)),
+            PortalDb::device_hash("secret", Some(edge_windows)),
+        ];
+        let uniques: std::collections::HashSet<&String> = empreintes.iter().collect();
+        assert_eq!(uniques.len(), 4, "des appareils distincts se confondent");
+    }
+
+    #[test]
+    fn missing_user_agent_stays_stable() {
+        assert_eq!(
+            PortalDb::device_hash("secret", None),
+            PortalDb::device_hash("secret", Some("   "))
+        );
     }
 
     #[test]
