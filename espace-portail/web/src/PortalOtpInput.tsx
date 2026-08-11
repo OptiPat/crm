@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import { distributeOtpInput } from "@/lib/portail/otp-input";
 
 export interface PortalOtpInputProps {
   value: string;
@@ -27,7 +28,10 @@ export function PortalOtpInput({
       const next = raw.replace(/\D/g, "").slice(0, 6);
       onChange(next);
       if (next.length > 0) {
-        const clamped = Math.max(0, Math.min(5, next.length === 6 ? 5 : next.length - 1));
+        const clamped = Math.max(
+          0,
+          Math.min(5, next.length === 6 ? 5 : next.length - 1)
+        );
         refs.current[clamped]?.focus();
         refs.current[clamped]?.select();
       }
@@ -36,12 +40,13 @@ export function PortalOtpInput({
   );
 
   const handleDigitChange = (index: number, raw: string) => {
-    const digit = raw.replace(/\D/g, "").slice(-1);
-    const chars = Array.from({ length: 6 }, (_, i) => value[i] ?? "");
-    chars[index] = digit;
-    const next = chars.join("").replace(/\D/g, "").slice(0, 6);
+    const next = distributeOtpInput(value, index, raw);
     onChange(next);
-    if (digit && index < 5) {
+    if (raw.replace(/\D/g, "").length > 1) {
+      focusAt(next.length >= 6 ? 5 : Math.max(0, next.length - 1));
+      return;
+    }
+    if (next[index] && index < 5) {
       focusAt(index + 1);
     }
   };
@@ -86,7 +91,8 @@ export function PortalOtpInput({
           type="text"
           inputMode="numeric"
           autoComplete={index === 0 ? "one-time-code" : "off"}
-          maxLength={1}
+          /* iOS autofill injecte les 6 chiffres dans la 1ʳᵉ case : maxLength 1 les tronque. */
+          maxLength={index === 0 ? 6 : 1}
           value={digit}
           disabled={disabled}
           aria-label={`Chiffre ${index + 1}`}

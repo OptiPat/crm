@@ -36,10 +36,10 @@
 
 .cp-login-code-hint {
   margin: 0;
-  font-size: 0.625rem;
-  line-height: 1.35;
+  font-size: 0.75rem;
+  line-height: 1.4;
   letter-spacing: -0.01em;
-  white-space: nowrap;
+  text-wrap: pretty;
 }
 
 .cp-login-logo {
