@@ -173,6 +173,15 @@ impl super::Database {
             .optional()
     }
 
+    /// Contacts dont l'accès est actif, pour une synchronisation groupée.
+    pub fn list_espace_contacts_actifs(&self) -> Result<Vec<i64>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT contact_id FROM espace_acces WHERE statut = ?1 ORDER BY contact_id ASC",
+        )?;
+        let rows = stmt.query_map(params![ESPACE_STATUT_ACTIF], |row| row.get(0))?;
+        rows.collect()
+    }
+
     pub fn get_espace_activation_code_hash(&self, contact_id: i64) -> Result<Option<String>> {
         self.conn
             .query_row(

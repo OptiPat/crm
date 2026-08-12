@@ -19,6 +19,7 @@ import { ParametresRemunerationSection } from "@/components/settings/ParametresR
 import { ParametresDatabaseSection } from "@/components/settings/ParametresDatabaseSection";
 import { ParametresApplicationSection } from "@/components/settings/ParametresApplicationSection";
 import { ParametresIntegrationsSection } from "@/components/settings/ParametresIntegrationsSection";
+import { ParametresEspaceClientSection } from "@/components/settings/ParametresEspaceClientSection";
 import { ParametresCustomFieldsSection } from "@/components/settings/ParametresCustomFieldsSection";
 import { ParametresSearchBar } from "@/components/settings/ParametresSearchBar";
 import { normalizeAgendaLinks, type AgendaLink } from "@/lib/emails/agenda-links";
@@ -375,6 +376,8 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
         return <ParametresRemunerationSection />;
       case "integrations":
         return <ParametresIntegrationsSection />;
+      case "espace-client":
+        return <ParametresEspaceClientSection />;
       case "donnees":
         return (
           <ParametresDatabaseSection

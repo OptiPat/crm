@@ -15,7 +15,6 @@ import { MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { ClientOneDriveSettingsPanel } from "@/components/client-onedrive/ClientOneDriveSettingsPanel";
 import { TeamWorkspaceSettingsPanel } from "@/components/settings/TeamWorkspaceSettingsPanel";
-import { EspaceClientConnexionPanel } from "@/components/settings/EspaceClientConnexionPanel";
 
 export function ParametresIntegrationsSection() {
   const [birthdaySettings, setBirthdaySettings] = useState<BirthdayTelegramSettings | null>(null);
@@ -116,7 +115,6 @@ export function ParametresIntegrationsSection() {
     <div className="space-y-6">
       <TeamWorkspaceSettingsPanel />
       <ClientOneDriveSettingsPanel />
-      <EspaceClientConnexionPanel />
       <SettingsPanel
         title="Anniversaires — Telegram"
         description="Rappel à l'ouverture du CRM : un message Telegram par contact anniversaire. Sans Telegram, les anniversaires restent visibles sur le Dashboard."

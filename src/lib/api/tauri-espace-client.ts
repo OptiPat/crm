@@ -213,6 +213,20 @@ export async function saveEspaceClientSyncConfig(
   return config;
 }
 
+export interface PushEspaceClientAllResult {
+  total: number;
+  reussis: number;
+  echecs: string[];
+}
+
+export async function pushAllEspaceClients(): Promise<PushEspaceClientAllResult> {
+  const result = await invoke<PushEspaceClientAllResult>(
+    "push_all_espace_clients_cmd"
+  );
+  notifyEspaceClientChanged();
+  return result;
+}
+
 export async function pushEspaceClientContact(
   contactId: number
 ): Promise<PushEspaceClientContactResult> {

@@ -190,6 +190,51 @@ pub fn push_espace_client_contact_cmd(
     })
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PushEspaceClientAllResult {
+    pub total: usize,
+    pub reussis: usize,
+    /// Un contact en échec n'interrompt pas les suivants : le conseiller voit
+    /// à la fin lesquels rejouer, plutôt qu'une synchronisation à moitié faite
+    /// sans savoir où elle s'est arrêtée.
+    pub echecs: Vec<String>,
+}
+
+#[tauri::command]
+pub fn push_all_espace_clients_cmd(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+) -> Result<PushEspaceClientAllResult, String> {
+    require_ui_session(&session)?;
+    let guard = db.lock().map_err(|e| e.to_string())?;
+    let database = guard.as_ref().ok_or("Base non ouverte")?;
+    require_espace_client_active(database)?;
+    ensure_depot_public_key(&app, database)?;
+
+    let contacts = database
+        .list_espace_contacts_actifs()
+        .map_err(|e| e.to_string())?;
+
+    let mut reussis = 0usize;
+    let mut echecs = Vec::new();
+    for contact_id in &contacts {
+        let resultat = build_espace_client_snapshot_for_push(database, *contact_id)
+            .and_then(|payload| push_espace_client_snapshot(&app, database, &payload));
+        match resultat {
+            Ok(()) => reussis += 1,
+            Err(error) => echecs.push(format!("contact {contact_id} : {error}")),
+        }
+    }
+
+    Ok(PushEspaceClientAllResult {
+        total: contacts.len(),
+        reussis,
+        echecs,
+    })
+}
+
 #[tauri::command]
 pub fn get_espace_connexion_log_cmd(
     app: tauri::AppHandle,

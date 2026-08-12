@@ -16,6 +16,7 @@ export type SettingsSectionId =
   | "remuneration"
   | "comptabilite"
   | "integrations"
+  | "espace-client"
   | "champs"
   | "donnees"
   | "application";

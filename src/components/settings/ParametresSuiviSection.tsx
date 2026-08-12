@@ -1,6 +1,5 @@
 import { SettingsPanel } from "@/components/settings/parametres-ui";
 import { AgendaLinksEditor } from "@/components/settings/AgendaLinksEditor";
-import { EspaceClientRdvSetting } from "@/components/settings/EspaceClientRdvSetting";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Video } from "lucide-react";
@@ -21,8 +20,6 @@ export function ParametresSuiviSection({ cgpConfig, onConfigChange }: Parametres
           onChange={(agenda_links) => onConfigChange({ agenda_links })}
           embedded
         />
-
-        <EspaceClientRdvSetting links={cgpConfig.agenda_links ?? []} />
 
         <div className="space-y-2 rounded-xl border border-border/80 bg-background p-4 shadow-sm">
           <Label className="text-base flex items-center gap-1.5">

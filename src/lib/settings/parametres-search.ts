@@ -112,6 +112,18 @@ export const PARAMETRES_SEARCH_INDEX: ParametresSearchItem[] = [
     section: "integrations",
   },
   {
+    id: "espace-client-portail",
+    label: "Espace client — portail et clé de synchronisation",
+    keywords: ["espace client", "portail", "clé", "synchronisation", "url"],
+    section: "espace-client",
+  },
+  {
+    id: "espace-client-rdv",
+    label: "Espace client — bouton de rendez-vous",
+    keywords: ["rendez-vous", "rdv", "agenda", "bouton", "espace client"],
+    section: "espace-client",
+  },
+  {
     id: "champs",
     label: "Champs personnalisés contact",
     keywords: ["champ", "personnalisé", "custom", "fiche"],

@@ -14,6 +14,7 @@ import {
   Workflow,
   Sparkles,
   Euro,
+  MonitorSmartphone,
 } from "lucide-react";
 import type { SettingsSectionId } from "@/lib/settings/parametres-completion";
 
@@ -131,6 +132,12 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
         label: "Intégrations",
         description: "API locale et Telegram",
         icon: Workflow,
+      },
+      {
+        id: "espace-client",
+        label: "Espace client",
+        description: "Portail, rendez-vous et synchronisation",
+        icon: MonitorSmartphone,
       },
     ],
   },
