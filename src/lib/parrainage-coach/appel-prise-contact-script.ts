@@ -64,7 +64,7 @@ export const APPEL_PRISE_CONTACT_STEPS: AppelPriseContactStepDef[] = [
     id: "mirroring_recit",
     title: "Storytelling / mirroring — ton vécu & transition",
     template:
-      "Comme tu le sais, je suis toujours chez [Nom de la boîte], mais à un moment j'en ai eu marre. Ce qui me pesait, c'était [reprendre 2-3 points]. Bref, exactement ce dont tu me parles. Et il y a deux mois, j'ai rencontré une personne qui m'a parlé de son métier, ça correspond à ce qui me manquait et j'ai décidé de démarrer.",
+      "Comme tu le sais, je suis toujours chez [Nom de la boîte], mais à un moment j'en ai eu marre. Ce qui me pesait, c'était [reprendre 2-3 points]. Bref, exactement ce dont tu me parles. Et il y a deux mois, j'ai rencontré une personne qui m'a parlé de son métier et ça correspond exactement à ce qui me manquait, j'ai donc décidé de démarrer.",
     note: "Reprendre 2-3 frustrations personnelles, si possible en écho à celles du prospect.",
     headsUp: "Le prospect va sûrement demander quel est le métier.",
   },
@@ -72,7 +72,7 @@ export const APPEL_PRISE_CONTACT_STEPS: AppelPriseContactStepDef[] = [
     id: "reponse_invitation",
     title: "Réponse à « c'est quoi ? » & invitation",
     template:
-      "Le mieux, c'est que tu viennes voir par toi-même : si c'est moi qui t'explique, je vais forcément t'en parler en bien, et ce qui me plaît à moi ne te conviendra pas forcément.\n\nEn plus, c'est un métier que tu peux tout à fait démarrer en parallèle de ce que tu fais aujourd'hui. Il n'y a rien à décider pour l'instant, l'idée c'est juste de venir voir si ça pourrait t'intéresser.\n\nEn tout cas, je te confirme que ça te permettrait de [reprendre les 3 besoins/frustrations]. Si c'est vraiment important pour toi, tu dois venir voir !\n\nSi je te réserve une place pour venir découvrir ce projet sur une journée découverte, est-ce que tu viendrais avec moi ?",
+      "Le mieux, c'est que tu viennes voir par toi-même : si c'est moi qui t'explique, je vais forcément t'en parler en bien, et ce qui me plaît à moi ne te conviendra pas forcément.\nSache aussi que c'est un métier que tu peux tout à fait démarrer en parallèle de ce que tu fais aujourd'hui. Il n'y a rien à décider pour l'instant, l'idée c'est juste de venir voir si ça pourrait t'intéresser.\n\nEn tout cas, je te confirme que ça te permettrait de [reprendre les 3 besoins/frustrations]. Si c'est vraiment important pour toi, viens voir !\n\nSi je te réserve une place pour venir découvrir ce projet sur une journée découverte, est-ce que tu viendrais avec moi ?",
     note: "Reprendre avec ses propres mots les 2-3 besoins/frustrations identifiés à l'étape 1.",
     expectedReply: "Oui",
   },
