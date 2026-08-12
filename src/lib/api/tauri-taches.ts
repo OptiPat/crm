@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifyAlertesChanged } from "@/lib/alertes/alert-events";
+import { isArbitrageAutoTask } from "@/lib/alertes/arbitrage-alerte";
 import { notifyInteractionsChanged } from "@/lib/interactions/interaction-events";
 import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { notifyTachesChanged } from "@/lib/taches/tache-events";
@@ -72,6 +73,10 @@ export async function createTache(newTache: NewTache): Promise<Tache> {
 export async function updateTache(id: number, tache: NewTache): Promise<Tache> {
   const updated = await invoke<Tache>("update_tache", { id, tache });
   notifyTachesChanged();
+  if (isArbitrageAutoTask(updated)) {
+    notifyAlertesChanged();
+    notifyInvestissementsChanged();
+  }
   return updated;
 }
 

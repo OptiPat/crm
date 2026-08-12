@@ -148,6 +148,17 @@ impl super::Database {
         if existing.statut != "FAIT" && updated.statut == "FAIT" {
             let _ = self.maybe_spawn_recurrence(&updated)?;
         }
+        if super::arbitrage_alerts::is_arbitrage_auto_task_title(&existing.titre)
+            && existing.statut == "A_FAIRE"
+            && updated.statut == "A_FAIRE"
+            && existing.date_echeance != updated.date_echeance
+        {
+            if let Some(inv_id) = super::arbitrage_alerts::parse_arbitrage_investissement_id_from_description(
+                updated.description.as_deref(),
+            ) {
+                let _ = self.sync_arbitrage_postpone_from_task_echeance(inv_id, updated.date_echeance);
+            }
+        }
         Ok(updated)
     }
 
@@ -295,13 +306,16 @@ impl super::Database {
         let tomorrow = start_of_today_unix() + 86400;
         let exclude_arbitrage =
             super::arbitrage_alerts::arbitrage_auto_task_title_sql_exclude("t");
+        let exclude_parrainage =
+            super::parrainage_pipe::parrainage_presence_confirmation_task_title_sql_exclude("t");
         let count: i64 = self.conn.query_row(
             &format!(
                 "SELECT COUNT(*) FROM taches t
                  WHERE t.statut != 'FAIT'
                    AND t.date_echeance IS NOT NULL
                    AND t.date_echeance < ?1
-                   AND {exclude_arbitrage}"
+                   AND {exclude_arbitrage}
+                   AND {exclude_parrainage}"
             ),
             params![tomorrow],
             |row| row.get(0),
@@ -316,6 +330,47 @@ impl super::Database {
                            AND t.date_echeance IS NOT NULL
                            AND t.date_echeance < ?1
                            AND {exclude_arbitrage}
+                           AND {exclude_parrainage}
+                         ORDER BY t.date_echeance ASC, t.id ASC
+                         LIMIT 1"
+                    ),
+                    params![tomorrow],
+                    |row| row.get::<_, Option<i64>>(0),
+                )
+                .optional()?
+                .flatten()
+        } else {
+            None
+        };
+        Ok((count as u32, focus_contact_id))
+    }
+
+    /// Tâches auto « confirmer la présence » JD/PO dont l'échéance est due (aujourd'hui ou retard).
+    pub fn count_parrainage_jd_po_confirmation_due(&self) -> Result<(u32, Option<i64>)> {
+        let tomorrow = start_of_today_unix() + 86400;
+        let match_parrainage =
+            super::parrainage_pipe::parrainage_presence_confirmation_task_title_sql_match("t");
+        let count: i64 = self.conn.query_row(
+            &format!(
+                "SELECT COUNT(*) FROM taches t
+                 WHERE t.statut != 'FAIT'
+                   AND t.date_echeance IS NOT NULL
+                   AND t.date_echeance < ?1
+                   AND {match_parrainage}"
+            ),
+            params![tomorrow],
+            |row| row.get(0),
+        )?;
+        let focus_contact_id = if count == 1 {
+            self.conn
+                .query_row(
+                    &format!(
+                        "SELECT tc.contact_id FROM taches t
+                         LEFT JOIN tache_contacts tc ON tc.tache_id = t.id
+                         WHERE t.statut != 'FAIT'
+                           AND t.date_echeance IS NOT NULL
+                           AND t.date_echeance < ?1
+                           AND {match_parrainage}
                          ORDER BY t.date_echeance ASC, t.id ASC
                          LIMIT 1"
                     ),
@@ -487,5 +542,30 @@ mod tests {
 
         let (count, _) = db.count_taches_urgent_echeance().unwrap();
         assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn count_parrainage_jd_po_confirmation_due_matches_presence_tasks() {
+        let db = mem_db();
+        let today = start_of_today_unix();
+        let cid = insert_contact(&db, "Filleul");
+
+        let mut parrainage = new_tache(
+            "Confirmer la présence de Jean DUPONT à la JD du samedi 16 août 2026",
+        );
+        parrainage.date_echeance = Some(today);
+        parrainage.contact_ids = vec![cid];
+        db.create_tache(parrainage).unwrap();
+
+        let mut other = new_tache("Autre tâche");
+        other.date_echeance = Some(today);
+        db.create_tache(other).unwrap();
+
+        let (jd_po_count, focus) = db.count_parrainage_jd_po_confirmation_due().unwrap();
+        assert_eq!(jd_po_count, 1);
+        assert_eq!(focus, Some(cid));
+
+        let (urgent_count, _) = db.count_taches_urgent_echeance().unwrap();
+        assert_eq!(urgent_count, 1);
     }
 }

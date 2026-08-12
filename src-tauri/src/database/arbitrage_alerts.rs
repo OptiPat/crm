@@ -29,11 +29,18 @@ fn arbitrage_task_description(investissement_id: i64) -> String {
     format!("{ARBITRAGE_TASK_INV_DESC_PREFIX}{investissement_id}")
 }
 
-fn parse_arbitrage_investissement_id_from_description(description: Option<&str>) -> Option<i64> {
-    description?
-        .strip_prefix(ARBITRAGE_TASK_INV_DESC_PREFIX)?
-        .parse()
-        .ok()
+pub(crate) fn parse_arbitrage_investissement_id_from_description(
+    description: Option<&str>,
+) -> Option<i64> {
+    let description = description?;
+    if let Some(rest) = description.strip_prefix(ARBITRAGE_TASK_INV_DESC_PREFIX) {
+        return rest.lines().next()?.parse().ok();
+    }
+    description.lines().find_map(|line| {
+        line.strip_prefix(ARBITRAGE_TASK_INV_DESC_PREFIX)?
+            .parse()
+            .ok()
+    })
 }
 
 pub(crate) fn type_produit_arbitrage_label(type_produit: &str) -> Option<&'static str> {
@@ -662,6 +669,25 @@ impl super::Database {
         Err(rusqlite::Error::QueryReturnedNoRows)
     }
 
+    /// Report d'échéance depuis la tâche auto : aligne le contrat et clôture l'alerte si repoussée.
+    pub(crate) fn sync_arbitrage_postpone_from_task_echeance(
+        &self,
+        investissement_id: i64,
+        new_echeance: Option<i64>,
+    ) -> Result<()> {
+        let Some(new_date) = new_echeance else {
+            return Ok(());
+        };
+        self.conn.execute(
+            "UPDATE investissements
+             SET date_prochain_arbitrage = ?1, updated_at = unixepoch()
+             WHERE id = ?2",
+            params![new_date, investissement_id],
+        )?;
+        self.close_obsolete_arbitrage_alerts_for_investissement(investissement_id)?;
+        Ok(())
+    }
+
     /// Reporte l'échéance arbitrage sur le contrat lié et clôture l'alerte.
     pub fn reporter_alerte_arbitrage(&self, alerte_id: i64, mois: i64) -> Result<()> {
         let Some(row) = self.get_open_arbitrage_alerte(alerte_id)? else {
@@ -1180,6 +1206,68 @@ mod tests {
             Some(today),
             "modifier la date contrat doit realigner la tâche ouverte"
         );
+    }
+
+    #[test]
+    fn postponing_arbitrage_task_echeance_syncs_contract_and_closes_alerte() {
+        let db = test_db();
+        let contact_id = sample_contact(&db, "Buisson", "Marc");
+        let today = start_of_today_unix();
+        let iso_due = chrono::DateTime::from_timestamp(today, 0)
+            .unwrap()
+            .to_rfc3339();
+        let future = add_months_to_timestamp(today, 1);
+
+        let inv = db
+            .create_investissement(new_investissement(
+                contact_id,
+                "ASSURANCE_VIE",
+                "Contrat AV",
+                "MON_CONSEIL",
+                Some(iso_due),
+                Some("AV-1".into()),
+            ))
+            .unwrap();
+
+        db.check_and_create_arbitrage_alerts().unwrap();
+        let open: Vec<_> = db
+            .get_alertes_non_traitees()
+            .unwrap()
+            .into_iter()
+            .filter(|a| a.type_alerte == TYPE_ALERTE_ARBITRAGE)
+            .collect();
+        assert_eq!(open.len(), 1);
+
+        let taches = db.get_taches_by_contact(contact_id).unwrap();
+        let tache = taches
+            .into_iter()
+            .find(|t| is_arbitrage_auto_task_title(&t.titre))
+            .expect("arbitrage task");
+
+        let payload = super::super::models::NewTache {
+            contact_ids: vec![contact_id],
+            titre: tache.titre.clone(),
+            description: tache.description.clone(),
+            date_echeance: Some(future),
+            priorite: Some(tache.priorite.clone()),
+            statut: Some("A_FAIRE".into()),
+            recurrence: None,
+        };
+        db.update_tache(tache.id, &payload).unwrap();
+
+        let stored = db.get_investissement_by_id(inv.id).unwrap();
+        assert_eq!(stored.date_prochain_arbitrage, Some(future));
+
+        let still_open = db
+            .get_alertes_non_traitees()
+            .unwrap()
+            .into_iter()
+            .filter(|a| a.type_alerte == TYPE_ALERTE_ARBITRAGE)
+            .count();
+        assert_eq!(still_open, 0);
+
+        let updated = db.get_tache_by_id(tache.id).unwrap();
+        assert_eq!(updated.date_echeance, Some(future));
     }
 
     #[test]
