@@ -131,6 +131,45 @@ impl super::Database {
         )?;
         Ok(())
     }
+
+    /// Corrige loyer / mensualité / fin de prêt après une déclaration client.
+    /// `None` sur un montant = ne pas toucher ; `clear_date_fin_pret` efface la date.
+    pub fn patch_investissement_espace_client_immo(
+        &self,
+        investissement_id: i64,
+        loyer_mensuel: Option<i64>,
+        mensualite_credit: Option<i64>,
+        date_fin_pret: Option<i64>,
+        clear_date_fin_pret: bool,
+    ) -> Result<()> {
+        if loyer_mensuel.is_none()
+            && mensualite_credit.is_none()
+            && date_fin_pret.is_none()
+            && !clear_date_fin_pret
+        {
+            return Ok(());
+        }
+        self.conn.execute(
+            "UPDATE investissements SET
+                loyer_mensuel = COALESCE(?1, loyer_mensuel),
+                mensualite_credit = COALESCE(?2, mensualite_credit),
+                date_fin_pret = CASE
+                    WHEN ?3 != 0 THEN NULL
+                    WHEN ?4 IS NOT NULL THEN ?4
+                    ELSE date_fin_pret
+                END,
+                updated_at = unixepoch()
+             WHERE id = ?5",
+            params![
+                loyer_mensuel,
+                mensualite_credit,
+                clear_date_fin_pret as i64,
+                date_fin_pret,
+                investissement_id
+            ],
+        )?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

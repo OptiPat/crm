@@ -6,6 +6,7 @@ use crate::espace_client::portal_api::{
     ack_espace_scpi_declaration, pull_espace_scpi_declarations, PortalScpiDeclarationLine,
 };
 use crate::espace_client::snapshot::load_foyer_members;
+use crate::espace_client::types_produit::{is_immobilier_type, is_scpi_type};
 use crate::espace_client::visibilite::{
     is_investissement_visible_to_viewer, PatrimoineInvestissement, PatrimoineViewer,
 };
@@ -79,6 +80,24 @@ pub fn ack_espace_scpi_declarations(
     errors
 }
 
+fn is_a_cote(origine: &str) -> bool {
+    origine == "EXISTANT_CLIENT" || origine == "DECLARE_CLIENT"
+}
+
+fn declaration_importable(inv: &Investissement) -> Result<(), String> {
+    if is_scpi_type(&inv.type_produit) {
+        return Ok(());
+    }
+    if !is_a_cote(&inv.origine) {
+        return Err("Origine non importable".into());
+    }
+    // Miroir du filtre portail / TS : pas la prévoyance ni le fourre-tout AUTRE.
+    if inv.type_produit == "PREVOYANCE" || inv.type_produit == "AUTRE" {
+        return Err("Type produit non importable".into());
+    }
+    Ok(())
+}
+
 fn import_one_declaration(
     db: &Database,
     contact_id: i64,
@@ -91,15 +110,7 @@ fn import_one_declaration(
     if !investissement_visible_to_espace_contact(db, contact_id, &inv)? {
         return Err("Investissement hors périmètre client".into());
     }
-    if inv.origine != "MON_CONSEIL" {
-        return Err("Origine non importable".into());
-    }
-    if !matches!(
-        inv.type_produit.as_str(),
-        "SCPI" | "SCPI_FISCALE" | "SCPI_DEMEMBREMENT"
-    ) {
-        return Err("Type produit non SCPI".into());
-    }
+    declaration_importable(&inv)?;
 
     let date_rfc3339 = Utc
         .timestamp_opt(decl.date_ts, 0)
@@ -117,14 +128,35 @@ fn import_one_declaration(
     })
     .map_err(|e| e.to_string())?;
 
-    if let Some(montant) = decl.revenu_percu_centimes {
-        if montant > 0 {
-            db.create_investissement_revenu_percu(NewInvestissementRevenuPercu {
-                investissement_id: decl.investissement_id,
-                montant,
-                date_perception: Some(date_rfc3339),
-                source: Some("ESPACE_CLIENT".into()),
-            })
+    if is_scpi_type(&inv.type_produit) {
+        if let Some(montant) = decl.revenu_percu_centimes {
+            if montant > 0 {
+                db.create_investissement_revenu_percu(NewInvestissementRevenuPercu {
+                    investissement_id: decl.investissement_id,
+                    montant,
+                    date_perception: Some(date_rfc3339),
+                    source: Some("ESPACE_CLIENT".into()),
+                })
+                .map_err(|e| e.to_string())?;
+            }
+        }
+    }
+
+    // Revenu : SCPI uniquement (comme avant). Loyer / crédit / fin de prêt :
+    // immobilier à côté uniquement — même discipline que le portail.
+    if is_a_cote(&inv.origine) && is_immobilier_type(&inv.type_produit) {
+        let patch_immo = decl.loyer_mensuel_centimes.is_some()
+            || decl.mensualite_credit_centimes.is_some()
+            || decl.date_fin_pret.is_some()
+            || decl.clear_date_fin_pret;
+        if patch_immo {
+            db.patch_investissement_espace_client_immo(
+                decl.investissement_id,
+                decl.loyer_mensuel_centimes,
+                decl.mensualite_credit_centimes,
+                decl.date_fin_pret,
+                decl.clear_date_fin_pret,
+            )
             .map_err(|e| e.to_string())?;
         }
     }

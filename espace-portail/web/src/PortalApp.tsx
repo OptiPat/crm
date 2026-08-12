@@ -28,7 +28,7 @@ import type {
   EspaceClientSyncPayload,
   PatrimoineApiResponse,
 } from "./types";
-import type { ScpiClientDeclarationInput } from "@/lib/espace-client/scpi-client-tracking";
+import type { ClientInvestissementUpdateInput } from "@/lib/espace-client/client-investissement-update";
 import type { EvolutionHistoryById } from "@/components/contacts/client-preview/ClientPreviewEvolution";
 
 interface AuthMeResponse {
@@ -435,7 +435,7 @@ export function PortalApp() {
   );
 
   const handleSubmitScpiDeclaration = useCallback(
-    async (input: ScpiClientDeclarationInput) => {
+    async (input: ClientInvestissementUpdateInput) => {
       setScpiSubmitting(true);
       try {
         const response = await fetch("/api/v1/scpi-declarations", {
@@ -447,6 +447,9 @@ export function PortalApp() {
             date: input.date,
             valorisationCentimes: input.valorisationCentimes,
             revenuPercuCentimes: input.revenuPercuCentimes,
+            loyerMensuelCentimes: input.loyerMensuelCentimes,
+            mensualiteCreditCentimes: input.mensualiteCreditCentimes,
+            dateFinPret: input.dateFinPret,
           }),
         });
         // Une panne de passerelle renvoie du HTML : le message d'analyse JSON

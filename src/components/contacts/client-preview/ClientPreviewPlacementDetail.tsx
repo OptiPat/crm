@@ -13,9 +13,9 @@ import { formatShortEuro } from "./client-preview-format";
 import { CP } from "./client-preview-theme";
 import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
 import {
-  isScpiClientTrackingEligible,
-  type ScpiClientDeclarationInput,
-} from "@/lib/espace-client/scpi-client-tracking";
+  isClientInvestissementUpdateEligible,
+  type ClientInvestissementUpdateInput,
+} from "@/lib/espace-client/client-investissement-update";
 import { isClientPreviewValorisationHistoryEligible } from "@/lib/investissements/investissement-encours";
 import { ClientPreviewPlacementValorisation } from "./ClientPreviewPlacementValorisation";
 import { ClientPreviewScpiDeclarationForm } from "./ClientPreviewScpiDeclarationForm";
@@ -68,7 +68,7 @@ export interface ClientPreviewPlacementDetailProps {
   enableScpiTracking?: boolean;
   scpiDeclarationSubmitting?: boolean;
   onSubmitScpiDeclaration?: (
-    input: ScpiClientDeclarationInput
+    input: ClientInvestissementUpdateInput
   ) => Promise<void>;
   onClose: () => void;
 }
@@ -89,8 +89,15 @@ export function ClientPreviewPlacementDetail({
    * au bas de l'écran, une fiche courte (immobilier, épargne bancaire) se
    * tassait dans un coin quand une fiche longue (placements financiers, SCPI)
    * paraissait centrée : la fenêtre semblait sauter d'un placement à l'autre.
+   *
+   * Dans le cadre simulateur CRM, 85dvh dépasse l'écran du téléphone (≈78vh) :
+   * haut et bas sont coupés (titre + bouton Enregistrer). On borne alors à
+   * 100 % du cadre ; sur le portail réel, on garde 85dvh du viewport.
+   * min-h-0 : sans lui le flex refuse de rétrécir sous la hauteur du contenu.
    */
-  const sheetShape = "max-h-[85dvh] rounded-2xl";
+  const sheetShape = inFrame
+    ? "max-h-full min-h-0 rounded-2xl"
+    : "max-h-[85dvh] rounded-2xl";
   const label = inv.nom_produit || formatNomProduit(inv.type_produit);
   const typeLabel = formatNomProduit(inv.type_produit);
   const declared = isDeclareClientOrigine(inv.origine);
@@ -111,12 +118,12 @@ export function ClientPreviewPlacementDetail({
   // La fusion des deux sources est faite en amont, une seule fois, par
   // buildValorisationHistories : la refaire ici les laisserait diverger.
   const mergedHistory = valorisationHistory ?? [];
-  const canTrackScpi =
-    enableScpiTracking && isScpiClientTrackingEligible(inv);
+  const canTrackClientUpdate =
+    enableScpiTracking && isClientInvestissementUpdateEligible(inv);
 
   return createPortal(
     <div
-      className={`cp-layer ${inFrame ? "absolute" : "fixed"} inset-0 z-50 flex items-center justify-center px-3`}
+      className={`cp-layer ${inFrame ? "absolute" : "fixed"} inset-0 z-50 flex items-center justify-center p-3`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="cp-placement-detail-title"
@@ -183,7 +190,7 @@ export function ClientPreviewPlacementDetail({
                 history={mergedHistory}
               />
             ) : null}
-            {canTrackScpi && onSubmitScpiDeclaration ? (
+            {canTrackClientUpdate && onSubmitScpiDeclaration ? (
               <ClientPreviewScpiDeclarationForm
                 inv={inv}
                 history={mergedHistory}

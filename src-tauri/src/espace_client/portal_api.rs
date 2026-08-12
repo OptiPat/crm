@@ -254,6 +254,14 @@ pub struct PortalScpiDeclarationLine {
     pub date_ts: i64,
     pub valorisation_centimes: i64,
     pub revenu_percu_centimes: Option<i64>,
+    #[serde(default)]
+    pub loyer_mensuel_centimes: Option<i64>,
+    #[serde(default)]
+    pub mensualite_credit_centimes: Option<i64>,
+    #[serde(default)]
+    pub date_fin_pret: Option<i64>,
+    #[serde(default)]
+    pub clear_date_fin_pret: bool,
     pub created_at: i64,
 }
 

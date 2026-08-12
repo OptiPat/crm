@@ -9,6 +9,7 @@ pub mod push;
 pub mod scpi_declaration_import;
 pub mod snapshot;
 pub mod sync_payload;
+pub mod types_produit;
 pub mod visibilite;
 
 pub use config::SYNC_SECRET_SETTING_KEY;

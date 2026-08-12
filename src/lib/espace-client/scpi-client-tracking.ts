@@ -6,11 +6,14 @@ export function isScpiClientTrackingType(typeProduit: string | undefined): boole
   return isScpiValorisationType(typeProduit);
 }
 
-/** Uniquement les placements conseillés — pas « déjà en place » ni déclarations externes. */
+/**
+ * SCPI pleine propriété, fiscale ou démembrement — « avec moi » ou à côté.
+ * Le revenu / dividendes reste proposé dans les deux cas.
+ */
 export function isScpiClientTrackingEligible(
   inv: Pick<Investissement, "type_produit" | "origine">
 ): boolean {
-  return inv.origine === "MON_CONSEIL" && isScpiClientTrackingType(inv.type_produit);
+  return isScpiClientTrackingType(inv.type_produit);
 }
 
 export interface ScpiClientDeclarationInput {
@@ -43,7 +46,7 @@ export type ScpiClientDeclarationError =
   | "revenu_invalide"
   | "date_future";
 
-/** Valide une déclaration client avant envoi au portail. */
+/** Valide une déclaration SCPI client avant envoi au portail. */
 export function validateScpiClientDeclaration(
   inv: Pick<Investissement, "id" | "type_produit" | "origine">,
   input: ScpiClientDeclarationInput,

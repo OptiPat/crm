@@ -33,9 +33,12 @@ Ajouts postérieurs au plan initial, non prévus ici mais livrés :
   utilisés par les modèles d'emails.
 - **Section Paramètres → Espace client** : connexion au portail, bouton de rendez-vous,
   synchronisation de tous les clients actifs.
-- **Mise à jour des SCPI par le client** : il déclare valorisation et revenus perçus,
-  le conseiller est prévenu par email et reprend la déclaration à l'import. Plafond de
-  10 000 000 € par ligne, jour civil en UTC comme le reste de la chaîne.
+- **Mise à jour des placements par le client** : SCPI (suivie par le cabinet ou détenue
+  à côté) avec valorisation et revenus perçus ; épargne et placements financiers **à côté**
+  avec l'encours ; immobilier **à côté** avec valorisation, loyer, mensualité et fin de
+  prêt. Aucune création de ligne — uniquement la mise à jour de ce qui est déjà
+  synchronisé. Le conseiller est prévenu par email et reprend la déclaration à l'import.
+  Plafond de 10 000 000 € par montant, jour civil en UTC comme le reste de la chaîne.
 - **Historique de valorisation étiqueté par source** : « Valorisé par votre conseiller »
   ou « Déclaré par vous », les deux sources fusionnées dans une seule liste. Applique
   **R1** là où le client ne voyait auparavant que ses propres déclarations.
@@ -155,6 +158,11 @@ conséquences pratiques.
 - **Ce qui reste différent doit être nommé et justifié** dans le composant : le cadre
   simulateur, le bouton de déconnexion inerte, le logo du cabinet à défaut de celui du
   serveur. Tout le reste est un défaut.
+
+Le corollaire vaut pour les **règles métier** : le portail ne classe pas les produits, ne
+décide pas de ce qui est immobilier ou SCPI, ne recopie aucune liste de types. Il lit ce
+que la photo annonce (§9). Une liste dupliquée d'un langage à l'autre est la même dette que
+deux écrans dupliqués, avec la même issue silencieuse.
 
 **R16 — Un défaut dangereux est toujours opt-in.** Le mode qui expose le patrimoine sans authentification, comme tout garde-fou désactivable, est inactif par défaut et le binaire refuse de démarrer dans les combinaisons qui le rendraient joignable. Un avertissement dans les logs ne suffit pas.
 
@@ -414,9 +422,18 @@ CRM ← portail    avoirs déclarés par le client
 CRM ← portail    journal d'activité (connexions, consultations)
 ```
 
-**Version de schéma** : `ESPACE_SYNC_SCHEMA_VERSION = 6` (5 = liens de rendez-vous,
-6 = historique de valorisation étiqueté). Le portail ne compare pas cette valeur : un
-champ absent d'une photo ancienne doit dégrader proprement, pas faire échouer la lecture.
+**Version de schéma** : `ESPACE_SYNC_SCHEMA_VERSION = 7` (5 = liens de rendez-vous,
+6 = historique de valorisation étiqueté, 7 = nature du placement transmise). Le portail ne
+compare pas cette valeur : un champ absent d'une photo ancienne doit dégrader proprement,
+pas faire échouer la lecture.
+
+**La classification des produits appartient au CRM.** Chaque ligne annonce `estImmobilier`
+et `estScpi` ; le portail ne tient aucune liste de types. Ces deux caractères commandent
+des champs différents — loyer et crédit d'un côté, revenu perçu de l'autre — et le second
+ouvre en plus un droit, celui de déclarer sur un placement suivi par le cabinet. D'où deux
+comportements opposés face à une photo antérieure au schéma 7 : `estImmobilier` absent
+laisse passer, l'import du CRM revérifiant avant d'écrire ; `estScpi` absent refuse, un
+refus que le client voit, plutôt que d'ouvrir le droit à n'importe quelle ligne.
 
 **Authentification de l'API** : clé propre à l'installation, signature HMAC-SHA256 du corps, horodatage avec fenêtre anti-rejeu.
 
@@ -570,6 +587,7 @@ regardée **sur le portail déployé**, pas seulement dans le CRM.
 | **Deux emails pour un même événement** | La marque « déjà annoncé » était posée après l'envoi : deux synchronisations concurrentes sélectionnaient le même événement | Réserver avant d'envoyer, rendre la réservation si l'envoi échoue |
 | **Antivirus déclaré injoignable alors qu'il répondait** | La réponse de `clamd` se termine par un octet nul, et le transport par défaut sous Debian est un socket local, pas un port TCP | Lire la réponse réelle du démon avant de conclure |
 | **La documentation affirmait l'inverse du code** | Le README présentait ClamAV comme optionnel quand le binaire refuse de démarrer sans lui | Une affirmation de doc sur un garde-fou se vérifie dans le code |
+| **Les listes de types recopiées d'un langage à l'autre** | L'ouverture de la mise à jour aux placements « à côté » a créé quatre copies de la liste immobilière — TypeScript, portail, import, et une cinquième incomplète dans un email — plus trois copies de la liste SCPI. Ces listes décident de l'enregistrement du loyer et du revenu : un type oublié d'un côté, et le montant saisi par le client disparaît sans un mot | La classification appartient au CRM et voyage dans la photo (`estImmobilier`, `estScpi`) ; le portail n'en tient aucune. Les deux listes qui restent, une par langage, sont comparées par un test qui lit les deux fichiers. À l'inverse, « placements financiers » est un **complément** et non une liste : rien ne peut y être oublié |
 
 ---
 

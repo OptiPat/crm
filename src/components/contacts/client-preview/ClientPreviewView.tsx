@@ -26,7 +26,7 @@ import { ClientPreviewInventory } from "./ClientPreviewInventory";
 
 import { ClientPreviewEvolution } from "./ClientPreviewEvolution";
 import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
-import type { ScpiClientDeclarationInput } from "@/lib/espace-client/scpi-client-tracking";
+import type { ClientInvestissementUpdateInput } from "@/lib/espace-client/client-investissement-update";
 
 import { ClientPreviewRdvButton } from "./ClientPreviewRdvButton";
 import { ClientPreviewHeader } from "./ClientPreviewHeader";
@@ -77,7 +77,7 @@ export interface ClientPreviewViewProps {
   enableScpiTracking?: boolean;
   scpiDeclarationSubmitting?: boolean;
   onSubmitScpiDeclaration?: (
-    input: ScpiClientDeclarationInput
+    input: ClientInvestissementUpdateInput
   ) => Promise<void>;
 
   /** Adresse du bouton permanent de rendez-vous. Absente : aucun bouton. */

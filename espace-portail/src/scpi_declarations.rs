@@ -11,8 +11,6 @@ use serde_json::Value;
 use crate::scpi_declaration_store::ScpiDeclarationRow;
 use crate::AppState;
 
-const SCPI_TYPES: [&str; 3] = ["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT"];
-
 /// Dix millions d'euros par ligne. Ce n'est pas une protection — ce sont les
 /// données du client — mais une faute de frappe passerait sinon sans
 /// résistance et polluerait l'historique de valorisations du CRM.
@@ -26,6 +24,10 @@ pub struct PostScpiDeclarationBody {
     pub date: String,
     pub valorisation_centimes: i64,
     pub revenu_percu_centimes: Option<i64>,
+    pub loyer_mensuel_centimes: Option<i64>,
+    pub mensualite_credit_centimes: Option<i64>,
+    /// Absent = ne pas toucher ; "" = effacer ; YYYY-MM-DD = poser.
+    pub date_fin_pret: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -36,6 +38,10 @@ pub struct ScpiDeclarationLine {
     pub date_ts: i64,
     pub valorisation_centimes: i64,
     pub revenu_percu_centimes: Option<i64>,
+    pub loyer_mensuel_centimes: Option<i64>,
+    pub mensualite_credit_centimes: Option<i64>,
+    pub date_fin_pret: Option<i64>,
+    pub clear_date_fin_pret: bool,
     pub created_at: i64,
 }
 
@@ -47,13 +53,41 @@ impl From<ScpiDeclarationRow> for ScpiDeclarationLine {
             date_ts: row.date_ts,
             valorisation_centimes: row.valorisation_centimes,
             revenu_percu_centimes: row.revenu_percu_centimes,
+            loyer_mensuel_centimes: row.loyer_mensuel_centimes,
+            mensualite_credit_centimes: row.mensualite_credit_centimes,
+            date_fin_pret: row.date_fin_pret,
+            clear_date_fin_pret: row.clear_date_fin_pret,
             created_at: row.created_at,
         }
     }
 }
 
-fn is_scpi_type(type_produit: &str) -> bool {
-    SCPI_TYPES.contains(&type_produit)
+/// Nature de la ligne, telle que la photo l'annonce — le portail ne classe plus
+/// les types lui-même.
+///
+/// Les deux défauts diffèrent volontairement sur une photo antérieure au schéma
+/// 7. Le caractère SCPI ouvre un droit — déclarer même sur un placement suivi
+/// par le cabinet, et y joindre un revenu — donc son absence **refuse**, ce que
+/// le client voit. Le caractère immobilier ne fait que porter loyer et crédit,
+/// que l'import du CRM revérifie avec sa propre liste avant d'écrire : son
+/// absence laisse donc passer, plutôt que de jeter la saisie en silence.
+fn line_est_scpi(line: &Value) -> bool {
+    line.get("estScpi").and_then(|v| v.as_bool()).unwrap_or(false)
+}
+
+/// Le caractère immobilier vient de la photo : recopier la liste des types du
+/// CRM exposerait à en oublier un, et le loyer saisi par le client serait
+/// silencieusement jeté. Une photo antérieure au schéma 7 ne porte pas
+/// l'information : on laisse alors passer, l'import du CRM tranchant de toute
+/// façon avec sa propre liste avant d'écrire quoi que ce soit.
+fn line_est_immobilier(line: &Value) -> bool {
+    line.get("estImmobilier")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true)
+}
+
+fn is_a_cote(origine: &str) -> bool {
+    origine == "EXISTANT_CLIENT" || origine == "DECLARE_CLIENT"
 }
 
 fn parse_declaration_date(value: &str) -> Result<i64, String> {
@@ -95,6 +129,7 @@ fn find_investissement_line<'a>(
         .find(|line| line.get("id").and_then(|v| v.as_i64()) == Some(investissement_id))
 }
 
+/// SCPI : toute origine. Épargne / placements / immobilier : hors « avec moi ».
 fn investissement_eligible(line: &Value) -> bool {
     let type_produit = line
         .get("typeProduit")
@@ -104,7 +139,23 @@ fn investissement_eligible(line: &Value) -> bool {
         .get("origine")
         .and_then(|v| v.as_str())
         .unwrap_or_default();
-    origine == "MON_CONSEIL" && is_scpi_type(type_produit)
+    if line_est_scpi(line) {
+        return true;
+    }
+    if !is_a_cote(origine) {
+        return false;
+    }
+    // Immobilier, épargne et placements financiers — pas la prévoyance ni le
+    // fourre-tout AUTRE (aligné sur getPatrimoineCategorie côté TS).
+    type_produit != "PREVOYANCE" && type_produit != "AUTRE" && !type_produit.is_empty()
+}
+
+fn optional_money(value: Option<i64>) -> Result<Option<i64>, String> {
+    match value {
+        None => Ok(None),
+        Some(n) if n < 0 || n > PLAFOND_CENTIMES => Err("Montant invalide".into()),
+        Some(n) => Ok(Some(n)),
+    }
 }
 
 pub fn overlay_scpi_declarations(payload: &mut Value, declarations: &[ScpiDeclarationRow]) {
@@ -148,19 +199,29 @@ pub fn overlay_scpi_declarations(payload: &mut Value, declarations: &[ScpiDeclar
             .get("encoursDate")
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
-        if latest.date_ts < existing_encours_date {
-            continue;
-        }
         if let Some(obj) = inv.as_object_mut() {
-            obj.insert(
-                "encoursActuel".to_string(),
-                serde_json::json!(latest.valorisation_centimes),
-            );
-            obj.insert("encoursDate".to_string(), serde_json::json!(latest.date_ts));
+            if latest.date_ts >= existing_encours_date {
+                obj.insert(
+                    "encoursActuel".to_string(),
+                    serde_json::json!(latest.valorisation_centimes),
+                );
+                obj.insert("encoursDate".to_string(), serde_json::json!(latest.date_ts));
+            }
             obj.insert(
                 "derniereMajClient".to_string(),
                 serde_json::json!(latest.created_at),
             );
+            if let Some(loyer) = latest.loyer_mensuel_centimes {
+                obj.insert("loyerMensuel".to_string(), serde_json::json!(loyer));
+            }
+            if let Some(mens) = latest.mensualite_credit_centimes {
+                obj.insert("mensualiteCredit".to_string(), serde_json::json!(mens));
+            }
+            if latest.clear_date_fin_pret {
+                obj.insert("dateFinPret".to_string(), Value::Null);
+            } else if let Some(fin) = latest.date_fin_pret {
+                obj.insert("dateFinPret".to_string(), serde_json::json!(fin));
+            }
         }
     }
 }
@@ -198,6 +259,8 @@ async fn handle_post_scpi_declaration(
             return Err("Revenu perçu invalide".into());
         }
     }
+    let loyer = optional_money(body.loyer_mensuel_centimes)?;
+    let mensualite = optional_money(body.mensualite_credit_centimes)?;
 
     let date_ts = parse_declaration_date(&body.date)?;
     // Un jour de battement : le client saisit le jour de son fuseau, qui peut
@@ -205,6 +268,17 @@ async fn handle_post_scpi_declaration(
     // est bien dans le futur.
     if date_ts > start_of_today_utc() + 86_400 {
         return Err("La date ne peut pas être dans le futur".into());
+    }
+
+    let mut clear_date_fin_pret = false;
+    let mut date_fin_pret: Option<i64> = None;
+    if let Some(raw) = body.date_fin_pret.as_ref() {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            clear_date_fin_pret = true;
+        } else {
+            date_fin_pret = Some(parse_declaration_date(trimmed)?);
+        }
     }
 
     let snapshot = state
@@ -219,13 +293,31 @@ async fn handle_post_scpi_declaration(
         return Err("Cet investissement n'est pas modifiable depuis l'espace client".into());
     }
 
+    // Revenu / dividendes : SCPI uniquement. Loyer / crédit : immobilier à côté.
+    let est_scpi = line_est_scpi(line);
+    let revenu = if est_scpi {
+        body.revenu_percu_centimes
+    } else {
+        None
+    };
+    let est_immobilier = line_est_immobilier(line);
+    let (loyer, mensualite, date_fin_pret, clear_date_fin_pret) = if est_immobilier
+        && is_a_cote(
+            line.get("origine")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default(),
+        ) {
+        (loyer, mensualite, date_fin_pret, clear_date_fin_pret)
+    } else {
+        (None, None, None, false)
+    };
+
     let nom = line
         .get("nomProduit")
         .and_then(|v| v.as_str())
-        .unwrap_or("SCPI")
+        .unwrap_or("Placement")
         .to_string();
 
-    // La photo est déjà chargée : inutile de la relire pour le libellé client.
     let client_label = {
         let prenom = snapshot.payload["contact"]["prenom"].as_str().unwrap_or("");
         let nom_client = snapshot.payload["contact"]["nom"].as_str().unwrap_or("");
@@ -244,7 +336,11 @@ async fn handle_post_scpi_declaration(
             body.investissement_id,
             date_ts,
             body.valorisation_centimes,
-            body.revenu_percu_centimes,
+            revenu,
+            loyer,
+            mensualite,
+            date_fin_pret,
+            clear_date_fin_pret,
         )
         .map_err(|e| e.to_string())?;
 
@@ -254,19 +350,32 @@ async fn handle_post_scpi_declaration(
         investissement_id: body.investissement_id,
         date_ts,
         valorisation_centimes: body.valorisation_centimes,
-        revenu_percu_centimes: body.revenu_percu_centimes,
+        revenu_percu_centimes: revenu,
+        loyer_mensuel_centimes: loyer,
+        mensualite_credit_centimes: mensualite,
+        date_fin_pret,
+        clear_date_fin_pret,
         created_at: chrono::Utc::now().timestamp(),
     };
 
-    notify_advisor_scpi_declaration(state, &client_label, &nom, &row).await;
+    // La nature du placement se lit dans la photo, jamais d'une liste recopiée.
+    let kind = if est_scpi {
+        "une SCPI"
+    } else if est_immobilier {
+        "un bien immobilier"
+    } else {
+        "un placement"
+    };
+    notify_advisor_declaration(state, &client_label, &nom, kind, &row).await;
 
     Ok(row.into())
 }
 
-async fn notify_advisor_scpi_declaration(
+async fn notify_advisor_declaration(
     state: &AppState,
     client_label: &str,
     nom_produit: &str,
+    kind: &str,
     row: &ScpiDeclarationRow,
 ) {
     let advisor = state.advisor_email.trim();
@@ -285,16 +394,21 @@ async fn notify_advisor_scpi_declaration(
         return;
     };
 
-    // Sans journalisation, une panne d'envoi laisserait le conseiller ignorer
-    // qu'un client a déclaré quelque chose, sans la moindre trace.
     if let Err(error) = mailer
-        .send_scpi_declaration_received(
+        .send_client_declaration_received(
             advisor,
             client_label,
             nom_produit,
+            kind,
             &date_label,
             valorisation_euros,
             row.revenu_percu_centimes.map(|c| c as f64 / 100.0),
+            row.loyer_mensuel_centimes.map(|c| c as f64 / 100.0),
+            row.mensualite_credit_centimes.map(|c| c as f64 / 100.0),
+            row.date_fin_pret.and_then(|ts| {
+                chrono::DateTime::from_timestamp(ts, 0).map(|dt| dt.format("%d/%m/%Y").to_string())
+            }),
+            row.clear_date_fin_pret,
         )
         .await
     {
@@ -310,11 +424,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// Une faute de frappe — dix millions au lieu de dix mille — ne doit pas
-    /// remonter jusqu'à l'historique de valorisations du CRM.
-    /// Le CRM classe ses valorisations par jour UTC. Une date interprétée dans
-    /// le fuseau du serveur tomberait la veille et pourrait écraser une
-    /// valorisation du cabinet.
     #[test]
     fn declaration_dates_are_utc_midnight() {
         let ts = parse_declaration_date("2026-06-15").unwrap();
@@ -333,10 +442,91 @@ mod tests {
     #[test]
     fn absurd_amounts_are_refused() {
         assert!(PLAFOND_CENTIMES == 1_000_000_000);
-        // 10 000 001 € : au-dessus du plafond.
         assert!(1_000_000_100i64 > PLAFOND_CENTIMES);
-        // 9 999 999 € : accepté.
         assert!(999_999_900i64 <= PLAFOND_CENTIMES);
+    }
+
+    /// Le portail ne classe plus les types lui-même : il lit ce que la photo
+    /// annonce. Une photo antérieure au schéma 7 laisse passer, l'import du CRM
+    /// tranchant avec sa propre liste avant d'écrire quoi que ce soit.
+    #[test]
+    fn immobilier_comes_from_the_snapshot() {
+        assert!(line_est_immobilier(&json!({ "estImmobilier": true })));
+        assert!(!line_est_immobilier(&json!({ "estImmobilier": false })));
+        assert!(
+            line_est_immobilier(&json!({ "typeProduit": "LMNP" })),
+            "ancienne photo : on s'en remet au CRM plutôt que de jeter la saisie"
+        );
+    }
+
+    /// Le caractère SCPI vient de la photo (`estScpi`) : c'est lui qui autorise
+    /// une déclaration sur un placement suivi par le cabinet.
+    #[test]
+    fn eligibility_matches_product_rules() {
+        assert!(investissement_eligible(&json!({
+            "typeProduit": "SCPI",
+            "estScpi": true,
+            "origine": "MON_CONSEIL"
+        })));
+        assert!(investissement_eligible(&json!({
+            "typeProduit": "SCPI",
+            "estScpi": true,
+            "origine": "EXISTANT_CLIENT"
+        })));
+        assert!(investissement_eligible(&json!({
+            "typeProduit": "LIVRET_A",
+            "origine": "EXISTANT_CLIENT"
+        })));
+        assert!(!investissement_eligible(&json!({
+            "typeProduit": "LIVRET_A",
+            "origine": "MON_CONSEIL"
+        })));
+        assert!(investissement_eligible(&json!({
+            "typeProduit": "LMNP",
+            "estImmobilier": true,
+            "origine": "DECLARE_CLIENT"
+        })));
+        assert!(!investissement_eligible(&json!({
+            "typeProduit": "PREVOYANCE",
+            "origine": "EXISTANT_CLIENT"
+        })));
+        assert!(!investissement_eligible(&json!({
+            "typeProduit": "AUTRE",
+            "origine": "EXISTANT_CLIENT"
+        })));
+    }
+
+    /// Photo antérieure au schéma 7 : une SCPI suivie par le cabinet est
+    /// refusée — un refus que le client voit — jusqu'à une resynchronisation.
+    /// Mieux vaut cela qu'accepter n'importe quelle ligne « avec moi ».
+    #[test]
+    fn an_old_snapshot_refuses_the_scpi_right() {
+        assert!(!line_est_scpi(&json!({ "typeProduit": "SCPI" })));
+        assert!(!investissement_eligible(&json!({
+            "typeProduit": "SCPI",
+            "origine": "MON_CONSEIL"
+        })));
+        // La même SCPI déclarée à côté reste modifiable par la voie commune.
+        assert!(investissement_eligible(&json!({
+            "typeProduit": "SCPI",
+            "origine": "EXISTANT_CLIENT"
+        })));
+    }
+
+    fn sample_row() -> ScpiDeclarationRow {
+        ScpiDeclarationRow {
+            id: 1,
+            contact_id: 1,
+            investissement_id: 5,
+            date_ts: 200,
+            valorisation_centimes: 3_000_000,
+            revenu_percu_centimes: Some(30_000),
+            loyer_mensuel_centimes: None,
+            mensualite_credit_centimes: None,
+            date_fin_pret: None,
+            clear_date_fin_pret: false,
+            created_at: 300,
+        }
     }
 
     #[test]
@@ -348,16 +538,9 @@ mod tests {
                 "encoursDate": 500
             }]
         });
-        let declarations = vec![ScpiDeclarationRow {
-            id: 1,
-            contact_id: 1,
-            investissement_id: 5,
-            date_ts: 200,
-            valorisation_centimes: 3_000_000,
-            revenu_percu_centimes: Some(30_000),
-            created_at: 300,
-        }];
-        overlay_scpi_declarations(&mut payload, &declarations);
+        let mut older = sample_row();
+        older.date_ts = 200;
+        overlay_scpi_declarations(&mut payload, &[older]);
         assert_eq!(payload["investissements"][0]["encoursActuel"], 1_000_000);
         assert_eq!(payload["scpiClientDeclarations"].as_array().unwrap().len(), 1);
     }
@@ -371,19 +554,28 @@ mod tests {
                 "encoursDate": 100
             }]
         });
-        let declarations = vec![
-            ScpiDeclarationRow {
-                id: 1,
-                contact_id: 1,
-                investissement_id: 5,
-                date_ts: 200,
-                valorisation_centimes: 3_000_000,
-                revenu_percu_centimes: Some(30_000),
-                created_at: 300,
-            },
-        ];
-        overlay_scpi_declarations(&mut payload, &declarations);
+        overlay_scpi_declarations(&mut payload, &[sample_row()]);
         assert_eq!(payload["investissements"][0]["encoursActuel"], 3_000_000);
         assert_eq!(payload["scpiClientDeclarations"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn overlay_applies_immo_fields() {
+        let mut payload = json!({
+            "investissements": [{
+                "id": 5,
+                "encoursActuel": 1_000_000,
+                "encoursDate": 100,
+                "loyerMensuel": 500_00
+            }]
+        });
+        let mut row = sample_row();
+        row.loyer_mensuel_centimes = Some(850_00);
+        row.mensualite_credit_centimes = Some(1_200_00);
+        row.date_fin_pret = Some(1_800_000_000);
+        overlay_scpi_declarations(&mut payload, &[row]);
+        assert_eq!(payload["investissements"][0]["loyerMensuel"], 850_00);
+        assert_eq!(payload["investissements"][0]["mensualiteCredit"], 1_200_00);
+        assert_eq!(payload["investissements"][0]["dateFinPret"], 1_800_000_000);
     }
 }

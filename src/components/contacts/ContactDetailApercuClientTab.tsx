@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { Partenaire } from "@/lib/api/tauri-partenaires";
-import type { ScpiClientDeclarationInput } from "@/lib/espace-client/scpi-client-tracking";
+import type { ClientInvestissementUpdateInput } from "@/lib/espace-client/client-investissement-update";
 import {
   buildValorisationHistories,
   type ValorisationPointDto,
@@ -271,7 +271,7 @@ export function ContactDetailApercuClientTab({
   );
 
   const handlePreviewScpiDeclaration = useCallback(
-    async (_input: ScpiClientDeclarationInput) => {
+    async (_input: ClientInvestissementUpdateInput) => {
       toast.message(
         "Aperçu conseiller — le client enregistre cette saisie sur son espace."
       );

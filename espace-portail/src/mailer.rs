@@ -206,36 +206,93 @@ impl Mailer {
         valorisation_euros: f64,
         revenu_euros: Option<f64>,
     ) -> Result<(), String> {
-        let revenu_text = revenu_euros
-            .filter(|v| *v > 0.0)
-            .map(|v| format!("\nRevenu perçu : {v:.2} €"))
-            .unwrap_or_default();
-        let revenu_html = revenu_euros
-            .filter(|v| *v > 0.0)
-            .map(|v| format!("<br/><strong>Revenu perçu :</strong> {v:.2} €"))
-            .unwrap_or_default();
+        self.send_client_declaration_received(
+            advisor_email,
+            client_label,
+            nom_produit,
+            "une SCPI",
+            date_label,
+            valorisation_euros,
+            revenu_euros,
+            None,
+            None,
+            None,
+            false,
+        )
+        .await
+    }
+
+    /// Notification générique : SCPI, encours à côté, ou immobilier.
+    ///
+    /// `kind` est la nature du placement telle qu'elle se lit dans la phrase
+    /// (« une SCPI », « un bien immobilier »). Elle est décidée par l'appelant,
+    /// qui la tient de la photo : recopier ici une liste de types reviendrait à
+    /// en oublier.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn send_client_declaration_received(
+        &self,
+        advisor_email: &str,
+        client_label: &str,
+        nom_produit: &str,
+        kind: &str,
+        date_label: &str,
+        valorisation_euros: f64,
+        revenu_euros: Option<f64>,
+        loyer_euros: Option<f64>,
+        mensualite_euros: Option<f64>,
+        date_fin_pret_label: Option<String>,
+        clear_date_fin_pret: bool,
+    ) -> Result<(), String> {
+        let mut extras_text = String::new();
+        let mut extras_html = String::new();
+        if let Some(v) = revenu_euros.filter(|v| *v > 0.0) {
+            extras_text.push_str(&format!("\nRevenu perçu : {v:.2} €"));
+            extras_html.push_str(&format!("<br/><strong>Revenu perçu :</strong> {v:.2} €"));
+        }
+        if let Some(v) = loyer_euros {
+            extras_text.push_str(&format!("\nLoyer mensuel : {v:.2} €"));
+            extras_html.push_str(&format!("<br/><strong>Loyer mensuel :</strong> {v:.2} €"));
+        }
+        if let Some(v) = mensualite_euros {
+            extras_text.push_str(&format!("\nMensualité de crédit : {v:.2} €"));
+            extras_html
+                .push_str(&format!("<br/><strong>Mensualité de crédit :</strong> {v:.2} €"));
+        }
+        if clear_date_fin_pret {
+            extras_text.push_str("\nFin de prêt : (effacée)");
+            extras_html.push_str("<br/><strong>Fin de prêt :</strong> (effacée)");
+        } else if let Some(label) = date_fin_pret_label {
+            extras_text.push_str(&format!("\nFin de prêt : {label}"));
+            extras_html.push_str(&format!(
+                "<br/><strong>Fin de prêt :</strong> {}",
+                escape_html(&label)
+            ));
+        }
+
         let text = format!(
             "Bonjour,\n\n\
-             {client_label} a mis à jour une SCPI depuis l'espace client.\n\
+             {client_label} a mis à jour {kind} depuis l'espace client.\n\
              Produit : {nom_produit}\n\
              Date : {date_label}\n\
-             Valorisation : {valorisation_euros:.2} €{revenu_text}\n\n\
+             Valorisation : {valorisation_euros:.2} €{extras_text}\n\n\
              Importez la déclaration depuis le CRM (panneau Espace client) pour mettre à jour le dossier.\n"
         );
         let html = format!(
             "<p>Bonjour,</p>\
-             <p><strong>{client_label}</strong> a mis à jour une SCPI depuis l'espace client.</p>\
+             <p><strong>{client_label}</strong> a mis à jour {kind} depuis l'espace client.</p>\
              <p><strong>Produit :</strong> {nom_produit}<br/>\
              <strong>Date :</strong> {date_label}<br/>\
-             <strong>Valorisation :</strong> {valorisation_euros:.2} €{revenu_html}</p>\
+             <strong>Valorisation :</strong> {valorisation_euros:.2} €{extras_html}</p>\
              <p>Importez la déclaration depuis le CRM (panneau Espace client) pour mettre à jour le dossier.</p>",
             client_label = escape_html(client_label),
+            kind = kind,
             nom_produit = escape_html(nom_produit),
-            date_label = escape_html(date_label)
+            date_label = escape_html(date_label),
+            extras_html = extras_html
         );
         self.send_email(
             advisor_email,
-            "Mise à jour SCPI — espace client",
+            "Mise à jour patrimoine — espace client",
             &text,
             &html,
         )

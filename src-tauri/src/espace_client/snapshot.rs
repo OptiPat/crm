@@ -10,6 +10,7 @@ use super::sync_payload::{
     EspaceClientSyncPayload, EspaceClientTimelineEvent, EspaceClientValorisationPoint,
     ESPACE_SYNC_SCHEMA_VERSION, VALORISATION_SOURCE_CABINET, VALORISATION_SOURCE_CLIENT,
 };
+use super::types_produit::{is_immobilier_type, is_scpi_type};
 use super::visibilite::{
     FoyerMemberRef, PatrimoineInvestissement, PatrimoineViewer, is_investissement_visible_to_viewer,
 };
@@ -387,6 +388,8 @@ fn map_investissement_line(inv: &Investissement) -> EspaceClientInvestissementLi
         encours_actuel: inv.encours_actuel,
         encours_date: inv.encours_date,
         origine: inv.origine.clone(),
+        est_immobilier: is_immobilier_type(&inv.type_produit),
+        est_scpi: is_scpi_type(&inv.type_produit),
         statut: inv.statut.clone(),
         date_souscription: inv.date_souscription,
         date_fin_demembrement: inv.date_fin_demembrement,

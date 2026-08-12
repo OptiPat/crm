@@ -1,9 +1,11 @@
 use serde::Serialize;
 
-/// 6 : ajout de l'historique de valorisation du cabinet, étiqueté par source.
+/// 7 : chaque ligne annonce si elle est immobilière et si elle est une SCPI,
+/// pour que le portail cesse de recopier les listes de types du CRM
+/// (6 : historique de valorisation étiqueté).
 /// Le portail ne compare pas cette valeur, elle sert de repère de lecture pour
 /// les payloads archivés.
-pub const ESPACE_SYNC_SCHEMA_VERSION: u32 = 6;
+pub const ESPACE_SYNC_SCHEMA_VERSION: u32 = 7;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -100,6 +102,11 @@ pub struct EspaceClientInvestissementLine {
     pub encours_actuel: Option<i64>,
     pub encours_date: Option<i64>,
     pub origine: String,
+    /// Le portail ne tient aucune liste de types : c'est le CRM qui dit d'une
+    /// ligne qu'elle est immobilière, donc qu'elle porte loyer et crédit.
+    pub est_immobilier: bool,
+    /// De même pour les SCPI, seules à porter un revenu perçu déclarable.
+    pub est_scpi: bool,
     pub statut: String,
     pub date_souscription: Option<i64>,
     pub date_fin_demembrement: Option<i64>,

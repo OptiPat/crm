@@ -15,7 +15,7 @@ describe("scpi-client-tracking", () => {
     montant_initial: 2_500_000,
   };
 
-  it("accepte SCPI, SCPI_FISCALE et démembrement avec moi", () => {
+  it("accepte SCPI, SCPI_FISCALE et démembrement (avec moi ou à côté)", () => {
     expect(isScpiClientTrackingEligible(inv)).toBe(true);
     expect(
       isScpiClientTrackingEligible({ ...inv, type_produit: "SCPI_FISCALE" })
@@ -25,7 +25,7 @@ describe("scpi-client-tracking", () => {
     ).toBe(true);
     expect(
       isScpiClientTrackingEligible({ ...inv, origine: "EXISTANT_CLIENT" })
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isScpiClientTrackingEligible({ ...inv, type_produit: "ASSURANCE_VIE" })
     ).toBe(false);

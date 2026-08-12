@@ -1,6 +1,7 @@
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { IMMOBILIER_TYPES } from "@/lib/investissements/investissement-display";
 import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
+import { EPARGNE_BANCAIRE_TYPES } from "@/lib/patrimoine/epargne-bancaire-types";
 
 /** Produits financiers dont l'encours peut évoluer (aligné dashboard). */
 export const PLACEMENT_ENCOURS_TYPES = [
@@ -22,6 +23,13 @@ const SCPI_VALORISATION_TYPES = new Set([
   "SCPI_FISCALE",
 ]);
 
+/** PEA / CTO : encours côté client, hors liste dashboard « placements avec moi ». */
+const PLACEMENT_CLIENT_ENCOURS_EXTRA = new Set([
+  "PEA",
+  "COMPTE_TITRE",
+  "COMPTE_TITRES",
+]);
+
 export type PlacementValorisationUiMode = "encours" | "valorisation";
 
 export function isPlacementEncoursEligible(typeProduit: string | undefined): boolean {
@@ -34,13 +42,22 @@ export function isScpiValorisationType(typeProduit: string | undefined): boolean
   return SCPI_VALORISATION_TYPES.has(typeProduit);
 }
 
+function isClientEncoursHistoryType(typeProduit: string | undefined): boolean {
+  if (!typeProduit) return false;
+  return (
+    isPlacementEncoursEligible(typeProduit) ||
+    EPARGNE_BANCAIRE_TYPES.has(typeProduit) ||
+    PLACEMENT_CLIENT_ENCOURS_EXTRA.has(typeProduit)
+  );
+}
+
 /** Espace client — historique encours / valorisation dans la fiche placement. */
 export function isClientPreviewValorisationHistoryEligible(
   typeProduit: string | undefined
 ): boolean {
   return (
-    isPlacementEncoursEligible(typeProduit) ||
-    isScpiValorisationType(typeProduit)
+    isClientEncoursHistoryType(typeProduit) ||
+    isPlacementImmoScpiValorisationEligible(typeProduit)
   );
 }
 
@@ -67,7 +84,7 @@ export function isPlacementValorisationUpdateEligible(
 export function getPlacementValorisationUiMode(
   typeProduit: string | undefined
 ): PlacementValorisationUiMode | null {
-  if (isPlacementEncoursEligible(typeProduit)) return "encours";
+  if (isClientEncoursHistoryType(typeProduit)) return "encours";
   if (isPlacementImmoScpiValorisationEligible(typeProduit)) return "valorisation";
   return null;
 }

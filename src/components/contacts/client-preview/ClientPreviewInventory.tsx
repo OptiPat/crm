@@ -15,7 +15,7 @@ import { getClientPreviewInvestissementColor } from "@/lib/patrimoine/patrimoine
 import { cn } from "@/lib/utils";
 import type { ClientPreviewEmptyState } from "./ClientPreviewHero";
 import { ClientPreviewPlacementDetail } from "./ClientPreviewPlacementDetail";
-import type { ScpiClientDeclarationInput } from "@/lib/espace-client/scpi-client-tracking";
+import type { ClientInvestissementUpdateInput } from "@/lib/espace-client/client-investissement-update";
 import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
 import { formatShortEuro } from "./client-preview-format";
 import { CP } from "./client-preview-theme";
@@ -197,7 +197,7 @@ export interface ClientPreviewInventoryProps {
   enableScpiTracking?: boolean;
   scpiDeclarationSubmitting?: boolean;
   onSubmitScpiDeclaration?: (
-    input: ScpiClientDeclarationInput
+    input: ClientInvestissementUpdateInput
   ) => Promise<void>;
   emptyState?: ClientPreviewEmptyState;
 }
@@ -276,6 +276,10 @@ export function ClientPreviewInventory({
 
       {selected ? (
         <ClientPreviewPlacementDetail
+          // Remonter la fiche à chaque placement : le formulaire pré-remplit
+          // loyer et mensualité depuis la ligne affichée, et garderait sinon
+          // les valeurs du placement précédent.
+          key={selected.id}
           inv={selected}
           partenaire={selectedPartenaire}
           valorisationHistoriesByInvestissementId={
