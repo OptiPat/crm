@@ -66,6 +66,39 @@ describe("client-investissement-update", () => {
     ).toBe(false);
   });
 
+  /**
+   * Sur le portail, c'est la photo qui classe : l'écran doit refuser d'ouvrir
+   * le formulaire là où l'API refuserait l'enregistrement. Une photo antérieure
+   * au schéma 7 n'annonce rien — le bouton disparaît, plutôt que d'accueillir
+   * une saisie perdue d'avance.
+   */
+  it("suit la nature annoncée par la photo quand elle est fournie", () => {
+    const scpiAvecMoi = {
+      type_produit: "SCPI",
+      origine: "MON_CONSEIL" as const,
+    };
+
+    expect(getClientInvestissementUpdateKind(scpiAvecMoi)).toBe("scpi");
+    expect(
+      getClientInvestissementUpdateKind(scpiAvecMoi, { estScpi: true })
+    ).toBe("scpi");
+    expect(
+      getClientInvestissementUpdateKind(scpiAvecMoi, {
+        estScpi: false,
+        estImmobilier: false,
+      })
+    ).toBeNull();
+
+    // Un type immobilier inconnu de la liste TS reste modifiable si la photo
+    // l'annonce : c'est le CRM qui fait foi, pas la liste embarquée.
+    expect(
+      getClientInvestissementUpdateKind(
+        { type_produit: "REGIME_NOUVEAU", origine: "EXISTANT_CLIENT" as const },
+        { estScpi: false, estImmobilier: true }
+      )
+    ).toBe("immobilier");
+  });
+
   it("refuse la prévoyance et AUTRE", () => {
     expect(
       getClientInvestissementUpdateKind({

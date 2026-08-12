@@ -6,6 +6,7 @@ import {
   parseEurosInput as eurosToCentimes,
   unixToDateInput,
   validateClientInvestissementUpdate,
+  type ClientInvestissementNature,
   type ClientInvestissementUpdateInput,
   type ClientInvestissementUpdateKind,
 } from "@/lib/espace-client/client-investissement-update";
@@ -24,6 +25,8 @@ function centimesToEurosInput(centimes: number): string {
 
 export interface ClientPreviewScpiDeclarationFormProps {
   inv: Investissement;
+  /** Nature annoncée par la photo ; absente dans l'aperçu conseiller. */
+  nature?: ClientInvestissementNature;
   history?: Array<{ dateTs: number; montantCentimes: number }>;
   submitting?: boolean;
   onSubmit: (input: ClientInvestissementUpdateInput) => Promise<void>;
@@ -31,13 +34,14 @@ export interface ClientPreviewScpiDeclarationFormProps {
 
 export function ClientPreviewScpiDeclarationForm({
   inv,
+  nature,
   history,
   submitting = false,
   onSubmit,
 }: ClientPreviewScpiDeclarationFormProps) {
   const kind: ClientInvestissementUpdateKind | null = useMemo(
-    () => getClientInvestissementUpdateKind(inv),
-    [inv]
+    () => getClientInvestissementUpdateKind(inv, nature),
+    [inv, nature]
   );
   const uiMode = getPlacementValorisationUiMode(inv.type_produit);
   const amountLabel =
@@ -70,16 +74,18 @@ export function ClientPreviewScpiDeclarationForm({
     const valorisationCentimes = eurosToCentimes(valorisation);
     // Seuls les champs réellement modifiés partent : voir
     // buildClientInvestissementUpdateInput.
-    const input = buildClientInvestissementUpdateInput(inv, {
-      date,
-      valorisation,
-      revenu,
-      loyer,
-      mensualite,
-      dateFinPret,
-    });
+    const input = buildClientInvestissementUpdateInput(
+      inv,
+      { date, valorisation, revenu, loyer, mensualite, dateFinPret },
+      nature
+    );
 
-    const validation = validateClientInvestissementUpdate(inv, input);
+    const validation = validateClientInvestissementUpdate(
+      inv,
+      input,
+      undefined,
+      nature
+    );
 
     if (typeof validation === "string") {
       switch (validation) {

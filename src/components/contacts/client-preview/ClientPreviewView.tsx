@@ -26,7 +26,10 @@ import { ClientPreviewInventory } from "./ClientPreviewInventory";
 
 import { ClientPreviewEvolution } from "./ClientPreviewEvolution";
 import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
-import type { ClientInvestissementUpdateInput } from "@/lib/espace-client/client-investissement-update";
+import type {
+  ClientInvestissementNatureById,
+  ClientInvestissementUpdateInput,
+} from "@/lib/espace-client/client-investissement-update";
 
 import { ClientPreviewRdvButton } from "./ClientPreviewRdvButton";
 import { ClientPreviewHeader } from "./ClientPreviewHeader";
@@ -73,6 +76,12 @@ export interface ClientPreviewViewProps {
 
   /** Historiques de valorisation (CRM) pour affiner la courbe d'évolution. */
   evolutionHistoriesByInvestissementId?: EvolutionHistoryById;
+
+  /**
+   * Nature des lignes telle que la photo l'annonce. Fournie par le portail,
+   * absente dans l'aperçu conseiller où le CRM est lui-même la source.
+   */
+  natureByInvestissementId?: ClientInvestissementNatureById;
 
   enableScpiTracking?: boolean;
   scpiDeclarationSubmitting?: boolean;
@@ -130,6 +139,8 @@ export function ClientPreviewView({
   hideTimelineSync = false,
 
   evolutionHistoriesByInvestissementId,
+
+  natureByInvestissementId,
 
   enableScpiTracking = false,
 
@@ -232,6 +243,8 @@ export function ClientPreviewView({
           valorisationHistoriesByInvestissementId={
             evolutionHistoriesByInvestissementId
           }
+
+          natureByInvestissementId={natureByInvestissementId}
 
           enableScpiTracking={enableScpiTracking}
 

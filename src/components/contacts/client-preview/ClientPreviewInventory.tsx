@@ -15,7 +15,10 @@ import { getClientPreviewInvestissementColor } from "@/lib/patrimoine/patrimoine
 import { cn } from "@/lib/utils";
 import type { ClientPreviewEmptyState } from "./ClientPreviewHero";
 import { ClientPreviewPlacementDetail } from "./ClientPreviewPlacementDetail";
-import type { ClientInvestissementUpdateInput } from "@/lib/espace-client/client-investissement-update";
+import type {
+  ClientInvestissementNatureById,
+  ClientInvestissementUpdateInput,
+} from "@/lib/espace-client/client-investissement-update";
 import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
 import { formatShortEuro } from "./client-preview-format";
 import { CP } from "./client-preview-theme";
@@ -194,6 +197,7 @@ export interface ClientPreviewInventoryProps {
   sortedInventory: Investissement[];
   partenaireById: Map<number, Partenaire>;
   valorisationHistoriesByInvestissementId?: EvolutionHistoryById;
+  natureByInvestissementId?: ClientInvestissementNatureById;
   enableScpiTracking?: boolean;
   scpiDeclarationSubmitting?: boolean;
   onSubmitScpiDeclaration?: (
@@ -206,6 +210,7 @@ export function ClientPreviewInventory({
   sortedInventory,
   partenaireById,
   valorisationHistoriesByInvestissementId,
+  natureByInvestissementId,
   enableScpiTracking = false,
   scpiDeclarationSubmitting = false,
   onSubmitScpiDeclaration,
@@ -295,6 +300,7 @@ export function ClientPreviewInventory({
           valorisationHistoriesByInvestissementId={
             valorisationHistoriesByInvestissementId
           }
+          nature={natureByInvestissementId?.get(selected.id)}
           enableScpiTracking={enableScpiTracking}
           scpiDeclarationSubmitting={scpiDeclarationSubmitting}
           onSubmitScpiDeclaration={onSubmitScpiDeclaration}

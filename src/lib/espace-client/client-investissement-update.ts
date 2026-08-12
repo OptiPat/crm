@@ -18,6 +18,25 @@ const IMMOBILIER_SET = new Set<string>(IMMOBILIER_TYPES);
 
 export type ClientInvestissementUpdateKind = "scpi" | "encours" | "immobilier";
 
+/**
+ * Nature de la ligne telle que la photo l'annonce, quand elle la connaît.
+ *
+ * Sur le portail, c'est le serveur qui tranche à l'enregistrement : classer
+ * l'écran avec les listes du CRM ferait apparaître un bouton que l'API
+ * refuserait ensuite — le client remplirait le formulaire pour rien. Dans
+ * l'aperçu du conseiller, aucune photo n'est en jeu : le CRM est la source, et
+ * ses listes font foi.
+ */
+export interface ClientInvestissementNature {
+  estScpi?: boolean;
+  estImmobilier?: boolean;
+}
+
+export type ClientInvestissementNatureById = Map<
+  number,
+  ClientInvestissementNature
+>;
+
 function isOrigineACote(origine: string | undefined): boolean {
   // Whitelist stricte — miroir portail `is_a_cote` (pas « tout sauf MON_CONSEIL »).
   return isExistantClientOrigine(origine) || isDeclareClientOrigine(origine);
@@ -29,14 +48,18 @@ function isOrigineACote(origine: string | undefined): boolean {
  * Pas de création d'avoir — mise à jour de lignes déjà synchronisées.
  */
 export function getClientInvestissementUpdateKind(
-  inv: Pick<Investissement, "type_produit" | "origine">
+  inv: Pick<Investissement, "type_produit" | "origine">,
+  nature?: ClientInvestissementNature
 ): ClientInvestissementUpdateKind | null {
-  if (isScpiValorisationType(inv.type_produit)) return "scpi";
+  const estScpi = nature?.estScpi ?? isScpiValorisationType(inv.type_produit);
+  if (estScpi) return "scpi";
   if (!isOrigineACote(inv.origine)) return null;
   // getPatrimoineCategorie("AUTRE") retombe sur « Placements financiers » :
   // on l'exclut explicitement, comme le portail et l'import CRM.
   if (!inv.type_produit || inv.type_produit === "AUTRE") return null;
-  if (IMMOBILIER_SET.has(inv.type_produit)) return "immobilier";
+  const estImmobilier =
+    nature?.estImmobilier ?? IMMOBILIER_SET.has(inv.type_produit);
+  if (estImmobilier) return "immobilier";
   const cat = getPatrimoineCategorie(inv.type_produit);
   if (cat === "Épargne bancaire" || cat === "Placements financiers") {
     return "encours";
@@ -45,9 +68,10 @@ export function getClientInvestissementUpdateKind(
 }
 
 export function isClientInvestissementUpdateEligible(
-  inv: Pick<Investissement, "type_produit" | "origine">
+  inv: Pick<Investissement, "type_produit" | "origine">,
+  nature?: ClientInvestissementNature
 ): boolean {
-  return getClientInvestissementUpdateKind(inv) != null;
+  return getClientInvestissementUpdateKind(inv, nature) != null;
 }
 
 export interface ClientInvestissementUpdateInput
@@ -146,9 +170,10 @@ export function buildClientInvestissementUpdateInput(
     | "mensualite_credit"
     | "date_fin_pret"
   >,
-  fields: ClientInvestissementFormFields
+  fields: ClientInvestissementFormFields,
+  nature?: ClientInvestissementNature
 ): ClientInvestissementUpdateInput {
-  const kind = getClientInvestissementUpdateKind(inv);
+  const kind = getClientInvestissementUpdateKind(inv, nature);
   const input: ClientInvestissementUpdateInput = {
     investissementId: inv.id,
     date: fields.date,
@@ -184,9 +209,10 @@ export function buildClientInvestissementUpdateInput(
 export function validateClientInvestissementUpdate(
   inv: Pick<Investissement, "id" | "type_produit" | "origine">,
   input: ClientInvestissementUpdateInput,
-  nowUnix = Math.floor(Date.now() / 1000)
+  nowUnix = Math.floor(Date.now() / 1000),
+  nature?: ClientInvestissementNature
 ): ClientInvestissementUpdateValidation | ClientInvestissementUpdateError {
-  const kind = getClientInvestissementUpdateKind(inv);
+  const kind = getClientInvestissementUpdateKind(inv, nature);
   if (!kind) return "investissement_ineligible";
   if (input.investissementId !== inv.id) return "investissement_ineligible";
 

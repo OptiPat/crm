@@ -14,6 +14,7 @@ import { CP } from "./client-preview-theme";
 import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
 import {
   isClientInvestissementUpdateEligible,
+  type ClientInvestissementNature,
   type ClientInvestissementUpdateInput,
 } from "@/lib/espace-client/client-investissement-update";
 import { isClientPreviewValorisationHistoryEligible } from "@/lib/investissements/investissement-encours";
@@ -65,6 +66,8 @@ export interface ClientPreviewPlacementDetailProps {
   inv: Investissement;
   partenaire?: Partenaire;
   valorisationHistoriesByInvestissementId?: EvolutionHistoryById;
+  /** Nature annoncée par la photo ; absente dans l'aperçu conseiller. */
+  nature?: ClientInvestissementNature;
   enableScpiTracking?: boolean;
   scpiDeclarationSubmitting?: boolean;
   onSubmitScpiDeclaration?: (
@@ -77,6 +80,7 @@ export function ClientPreviewPlacementDetail({
   inv,
   partenaire,
   valorisationHistoriesByInvestissementId,
+  nature,
   enableScpiTracking = false,
   scpiDeclarationSubmitting = false,
   onSubmitScpiDeclaration,
@@ -119,7 +123,7 @@ export function ClientPreviewPlacementDetail({
   // buildValorisationHistories : la refaire ici les laisserait diverger.
   const mergedHistory = valorisationHistory ?? [];
   const canTrackClientUpdate =
-    enableScpiTracking && isClientInvestissementUpdateEligible(inv);
+    enableScpiTracking && isClientInvestissementUpdateEligible(inv, nature);
 
   return createPortal(
     <div
@@ -193,6 +197,7 @@ export function ClientPreviewPlacementDetail({
             {canTrackClientUpdate && onSubmitScpiDeclaration ? (
               <ClientPreviewScpiDeclarationForm
                 inv={inv}
+                nature={nature}
                 history={mergedHistory}
                 submitting={scpiDeclarationSubmitting}
                 onSubmit={onSubmitScpiDeclaration}

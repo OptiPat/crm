@@ -15,6 +15,13 @@ export interface EspaceClientInvestissementLine {
   encoursActuel?: number | null;
   encoursDate?: number | null;
   origine: string;
+  /**
+   * Nature décidée par le CRM. Absentes des photos antérieures au schéma 7 :
+   * l'écran considère alors la ligne comme non modifiable, exactement comme
+   * l'API, plutôt que d'afficher un bouton qui serait refusé.
+   */
+  estImmobilier?: boolean;
+  estScpi?: boolean;
   statut: string;
   dateSouscription?: number | null;
   dateFinDemembrement?: number | null;

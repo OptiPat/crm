@@ -423,6 +423,26 @@ export function PortalApp() {
     return map;
   }, [payload]);
 
+  /**
+   * Nature des lignes telle que la photo l'annonce. L'écran classe donc comme
+   * l'API : sans cela, une photo antérieure au schéma 7 afficherait « Mettre à
+   * jour » sur une SCPI suivie par le cabinet, et l'enregistrement serait
+   * refusé après que le client a rempli le formulaire.
+   */
+  const natureByInvestissementId = useMemo(() => {
+    const map = new Map<
+      number,
+      { estScpi?: boolean; estImmobilier?: boolean }
+    >();
+    for (const line of payload?.investissements ?? []) {
+      map.set(line.id, {
+        estScpi: line.estScpi ?? false,
+        estImmobilier: line.estImmobilier ?? false,
+      });
+    }
+    return map;
+  }, [payload]);
+
   // Les valorisations du cabinet et les déclarations du client, fusionnées et
   // étiquetées : le client ne voyait auparavant que les siennes.
   const evolutionHistoriesByInvestissementId = useMemo(
@@ -595,6 +615,7 @@ export function PortalApp() {
         timelineLoading={loading}
         lastSyncLabel={formatSyncLabel(syncedAt ?? undefined)}
         evolutionHistoriesByInvestissementId={evolutionHistoriesByInvestissementId}
+        natureByInvestissementId={natureByInvestissementId}
         enableScpiTracking
         scpiDeclarationSubmitting={scpiSubmitting}
         onSubmitScpiDeclaration={handleSubmitScpiDeclaration}
