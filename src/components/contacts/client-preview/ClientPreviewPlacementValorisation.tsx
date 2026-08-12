@@ -209,7 +209,7 @@ export function ClientPreviewPlacementValorisation({
         </div>
       ) : null}
 
-      {historyRows.length > 0 ? (
+      {hasMultiPointHistory && historyRows.length > 0 ? (
         <ul className="divide-y divide-[var(--cp-line-soft)]">
           {historyRows.map((row) => (
             <li
