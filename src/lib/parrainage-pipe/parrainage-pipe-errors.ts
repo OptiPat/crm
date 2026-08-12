@@ -7,6 +7,10 @@ import {
 export function formatParrainagePipeError(error: unknown): string {
   const raw = String(error);
 
+  if (raw.includes("date d'invitation JD/PO requise")) {
+    return "Choisissez la date de la JD ou de la PO avant de passer à « Oui, je viens ».";
+  }
+
   if (raw.includes("type d'invitation JD ou PO requis")) {
     if (raw.includes("« Oui, je viens »")) {
       return "Pour passer à l'étape « Oui, je viens », choisissez le type d'invitation : Journée Découverte (JD) ou Présentation d'opportunité (PO).";
@@ -28,4 +32,8 @@ export function formatParrainagePipeError(error: unknown): string {
 export function parrainageInvitationRequiredMessage(targetStage: ParrainagePipeStage): string {
   const label = PARRAINAGE_PIPE_STAGE_LABELS[targetStage];
   return `Choisissez le type d'invitation (JD ou PO) avant de passer à « ${label} ».`;
+}
+
+export function parrainageInvitationDateRequiredMessage(): string {
+  return "Choisissez la date de la JD ou de la PO.";
 }

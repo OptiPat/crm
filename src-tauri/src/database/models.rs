@@ -1751,6 +1751,8 @@ pub struct ParrainagePipe {
     pub stage: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub invitation_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invitation_date: Option<i64>,
     pub exercice_label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
@@ -1799,7 +1801,9 @@ pub struct NewParrainagePipe {
 #[derive(Debug, Deserialize)]
 pub struct UpdateParrainagePipe {
     pub invitation_type: Option<String>,
-    pub notes: Option<String>,
+    pub invitation_date: Option<Option<i64>>,
+    /// `None` = ne pas modifier ; `Some(None)` = effacer ; `Some(Some(_))` = remplacer.
+    pub notes: Option<Option<String>>,
 }
 
 /// Opération partenaire Stellium Box Placement (suivi mail entrant).

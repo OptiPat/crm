@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronDown, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DictationTextarea } from "@/components/ui/dictation-textarea";
 import {
@@ -29,11 +30,17 @@ import {
   PARRAINAGE_INVITATION_TYPES,
   PARRAINAGE_PIPE_STAGE_LABELS,
   PARRAINAGE_PIPE_STAGES,
+  stageNeedsInvitationType,
   type ParrainageInvitationType,
   type ParrainagePipeStage,
 } from "@/lib/parrainage-pipe/parrainage-pipe-types";
 import { formatParrainagePipeError } from "@/lib/parrainage-pipe/parrainage-pipe-errors";
-import { extractPlannedCallLabelFromTimeline } from "@/lib/parrainage-pipe/parrainage-call-schedule";
+import {
+  extractPlannedCallLabelFromTimeline,
+  formatParrainageInvitationSummaryFromPipe,
+  localDateTimeInputToUnix,
+  parrainageInvitationDateToInput,
+} from "@/lib/parrainage-pipe/parrainage-call-schedule";
 import { ParrainageScriptPanel } from "@/components/parrainage-pipe/ParrainageScriptPanel";
 import { PipeProspectionContactSection } from "@/components/pipe/PipeProspectionContactSection";
 import { toast } from "sonner";
@@ -111,9 +118,16 @@ export function ParrainagePipeDetailPanel({
 }: ParrainagePipeDetailPanelProps) {
   const [notes, setNotes] = useState(pipe.notes ?? "");
   const [invitationType, setInvitationType] = useState(pipe.invitation_type ?? "");
+  const [invitationDateInput, setInvitationDateInput] = useState(() =>
+    parrainageInvitationDateToInput(pipe.invitation_date)
+  );
   const [timeline, setTimeline] = useState<ParrainagePipeTimelineEntry[]>([]);
   const [saving, setSaving] = useState(false);
-  const savedMetaRef = useRef({ notes: pipe.notes ?? "", invitationType: pipe.invitation_type ?? "" });
+  const savedMetaRef = useRef({
+    notes: pipe.notes ?? "",
+    invitationType: pipe.invitation_type ?? "",
+    invitationDateInput: parrainageInvitationDateToInput(pipe.invitation_date),
+  });
 
   const smsAnticipationSentEntry = useMemo(
     () => timeline.find((entry) => entry.entry_type === "SMS_ENVOYE"),
@@ -133,7 +147,13 @@ export function ParrainagePipeDetailPanel({
   useEffect(() => {
     setNotes(pipe.notes ?? "");
     setInvitationType(pipe.invitation_type ?? "");
-    savedMetaRef.current = { notes: pipe.notes ?? "", invitationType: pipe.invitation_type ?? "" };
+    const nextInvitationDateInput = parrainageInvitationDateToInput(pipe.invitation_date);
+    setInvitationDateInput(nextInvitationDateInput);
+    savedMetaRef.current = {
+      notes: pipe.notes ?? "",
+      invitationType: pipe.invitation_type ?? "",
+      invitationDateInput: nextInvitationDateInput,
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pipe.id]);
 
@@ -143,26 +163,37 @@ export function ParrainagePipeDetailPanel({
       .catch(() => setTimeline([]));
   }, [pipe.id, pipe.updated_at]);
 
+  const persistPipeMeta = useCallback(async (): Promise<ParrainagePipeRecord | null> => {
+    try {
+      const updated = await updateParrainagePipe(pipe.id, {
+        notes: notes.trim() || null,
+        invitation_type: invitationType || null,
+        invitation_date: invitationDateInput.trim()
+          ? localDateTimeInputToUnix(invitationDateInput, "09:00")
+          : null,
+      });
+      savedMetaRef.current = { notes, invitationType, invitationDateInput };
+      onUpdated(updated);
+      return updated;
+    } catch (error) {
+      toast.error(formatParrainagePipeError(error));
+      return null;
+    }
+  }, [notes, invitationType, invitationDateInput, onUpdated, pipe.id]);
+
   useEffect(() => {
-    if (notes === savedMetaRef.current.notes && invitationType === savedMetaRef.current.invitationType) {
+    if (
+      notes === savedMetaRef.current.notes &&
+      invitationType === savedMetaRef.current.invitationType &&
+      invitationDateInput === savedMetaRef.current.invitationDateInput
+    ) {
       return;
     }
     const timer = setTimeout(() => {
-      void (async () => {
-        try {
-          const updated = await updateParrainagePipe(pipe.id, {
-            notes: notes.trim() || null,
-            invitation_type: invitationType || null,
-          });
-          savedMetaRef.current = { notes, invitationType };
-          onUpdated(updated);
-        } catch (error) {
-          toast.error(formatParrainagePipeError(error));
-        }
-      })();
+      void persistPipeMeta();
     }, 700);
     return () => clearTimeout(timer);
-  }, [notes, invitationType, pipe.id, onUpdated]);
+  }, [notes, invitationType, invitationDateInput, persistPipeMeta]);
 
   /** Retourne `true` si l'étape a bien été changée (l'erreur est déjà affichée via toast sinon). */
   const changeStage = async (
@@ -171,6 +202,12 @@ export function ParrainagePipeDetailPanel({
   ): Promise<boolean> => {
     setSaving(true);
     try {
+      if (stageNeedsInvitationType(stage)) {
+        const saved = await persistPipeMeta();
+        if (saved === null) {
+          return false;
+        }
+      }
       const updated = await setParrainagePipeStage(pipe.id, stage, {
         invitationType: (invitationType as ParrainageInvitationType) || null,
       });
@@ -201,13 +238,20 @@ export function ParrainagePipeDetailPanel({
     }
   };
 
-  const stage = pipe.stage as ParrainagePipeStage;
-  const isPriseDeContact = stage === "PRISE_DE_CONTACT";
-
   const plannedCallLabel = useMemo(
     () => extractPlannedCallLabelFromTimeline(timeline),
     [timeline]
   );
+  const invitationSummary = useMemo(
+    () => formatParrainageInvitationSummaryFromPipe(pipe.invitation_type, pipe.invitation_date),
+    [pipe.invitation_type, pipe.invitation_date]
+  );
+
+  const stage = pipe.stage as ParrainagePipeStage;
+  const isPriseDeContact = stage === "PRISE_DE_CONTACT";
+  const showInvitationSummary =
+    invitationSummary && (stage === "CONFIRME" || stage === "PRESENT");
+  const showInvitationMetaInFiche = !isPriseDeContact;
 
   const scriptPanel = (
     <ParrainageScriptPanel
@@ -215,7 +259,11 @@ export function ParrainagePipeDetailPanel({
       smsAnticipationProfile={smsAnticipationProfile}
       smsAnticipationProfileLabel={smsAnticipationProfileLabel}
       invitationType={invitationType}
+      invitationDateInput={invitationDateInput}
+      invitationSummary={invitationSummary}
       onInvitationTypeChange={setInvitationType}
+      onInvitationDateChange={setInvitationDateInput}
+      onSaveInvitationMeta={persistPipeMeta}
       plannedCallLabel={plannedCallLabel}
       onNoteSaved={() =>
         listParrainagePipeTimelineEntries(pipe.id)
@@ -258,26 +306,37 @@ export function ParrainagePipeDetailPanel({
     </div>
   );
 
-  const invitationSelect = (
-    <div className="space-y-2">
-      <Label>Type d&apos;invitation</Label>
-      <Select
-        value={invitationType || "none"}
-        onValueChange={(v) => setInvitationType(v === "none" ? "" : v)}
-        disabled={saving}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder="JD ou PO" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="none">Non renseigné</SelectItem>
-          {PARRAINAGE_INVITATION_TYPES.map((type) => (
-            <SelectItem key={type} value={type}>
-              {PARRAINAGE_INVITATION_LABELS[type]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+  const invitationFields = (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label>Type d&apos;invitation</Label>
+        <Select
+          value={invitationType || "none"}
+          onValueChange={(v) => setInvitationType(v === "none" ? "" : v)}
+          disabled={saving}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="JD ou PO" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Non renseigné</SelectItem>
+            {PARRAINAGE_INVITATION_TYPES.map((type) => (
+              <SelectItem key={type} value={type}>
+                {PARRAINAGE_INVITATION_LABELS[type]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>Date de la JD ou PO</Label>
+        <Input
+          type="date"
+          value={invitationDateInput}
+          onChange={(e) => setInvitationDateInput(e.target.value)}
+          disabled={saving}
+        />
+      </div>
     </div>
   );
 
@@ -302,7 +361,7 @@ export function ParrainagePipeDetailPanel({
   const metaFieldsDefault = (
     <div className="space-y-4">
       {stageSelect}
-      {invitationSelect}
+      {showInvitationMetaInFiche && invitationFields}
       <PipeProspectionContactSection contactId={pipe.contact_id} layout="stack" />
       {notesField}
       {fullTimeline}
@@ -317,7 +376,6 @@ export function ParrainagePipeDetailPanel({
           <PipeProspectionContactSection contactId={pipe.contact_id} layout="stack" />
         </div>
         <div className="space-y-4">
-          {invitationSelect}
           {notesField}
         </div>
       </div>
@@ -343,6 +401,7 @@ export function ParrainagePipeDetailPanel({
         <h2 className="text-base font-semibold">{formatParrainageContactLabel(pipe)}</h2>
         <p className="text-xs text-muted-foreground mt-0.5">
           Exercice {pipe.exercice_label} — {PARRAINAGE_PIPE_STAGE_LABELS[pipe.stage as ParrainagePipeStage]}
+          {showInvitationSummary ? ` · ${invitationSummary}` : ""}
         </p>
       </div>
 

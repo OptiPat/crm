@@ -8,6 +8,7 @@ export interface ParrainagePipeRecord {
   contact_id: number;
   stage: ParrainagePipeStage | string;
   invitation_type?: ParrainageInvitationType | string | null;
+  invitation_date?: number | null;
   exercice_label: string;
   notes?: string | null;
   created_at: number;
@@ -45,6 +46,7 @@ export interface NewParrainagePipeInput {
 
 export interface UpdateParrainagePipeInput {
   invitation_type?: ParrainageInvitationType | string | null;
+  invitation_date?: number | null;
   notes?: string | null;
 }
 

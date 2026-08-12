@@ -26,6 +26,22 @@ const TIMELINE_AVANCEMENT: &str = "AVANCEMENT";
 const TIMELINE_NOTE: &str = "NOTE";
 const TIMELINE_SMS_ENVOYE: &str = "SMS_ENVOYE";
 
+/// Préfixe des tâches auto « confirmer la présence » (J-1 JD/PO).
+pub(crate) const PRESENCE_CONFIRMATION_TASK_TITLE_PREFIX: &str = "Confirmer la présence de ";
+
+pub(crate) fn parrainage_presence_confirmation_task_title_sql_match(t_alias: &str) -> String {
+    format!(
+        "{t_alias}.titre LIKE '{PRESENCE_CONFIRMATION_TASK_TITLE_PREFIX}%'"
+    )
+}
+
+pub(crate) fn parrainage_presence_confirmation_task_title_sql_exclude(t_alias: &str) -> String {
+    format!(
+        "NOT ({})",
+        parrainage_presence_confirmation_task_title_sql_match(t_alias)
+    )
+}
+
 fn now_unix() -> i64 {
     Utc::now().timestamp()
 }
@@ -69,18 +85,19 @@ fn map_parrainage_pipe_row(row: &Row<'_>) -> Result<super::models::ParrainagePip
         contact_id: row.get(1)?,
         stage: row.get(2)?,
         invitation_type: row.get(3)?,
-        exercice_label: row.get(4)?,
-        notes: row.get(5)?,
-        created_at: row.get(6)?,
-        updated_at: row.get(7)?,
-        archived_at: row.get(8)?,
-        contact_nom: row.get(9)?,
-        contact_prenom: row.get(10)?,
-        contact_telephone: row.get(11)?,
+        invitation_date: row.get(4)?,
+        exercice_label: row.get(5)?,
+        notes: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+        archived_at: row.get(9)?,
+        contact_nom: row.get(10)?,
+        contact_prenom: row.get(11)?,
+        contact_telephone: row.get(12)?,
     })
 }
 
-const PARRAINAGE_PIPE_SELECT: &str = "pp.id, pp.contact_id, pp.stage, pp.invitation_type, pp.exercice_label, pp.notes,
+const PARRAINAGE_PIPE_SELECT: &str = "pp.id, pp.contact_id, pp.stage, pp.invitation_type, pp.invitation_date, pp.exercice_label, pp.notes,
                     pp.created_at, pp.updated_at, pp.archived_at,
                     c.nom, c.prenom, c.telephone";
 
@@ -115,6 +132,12 @@ impl super::Database {
             ",
         )?;
         self.migrate_parrainage_attente_reponse_from_sms_v1()?;
+        if !self.table_has_column("parrainage_pipes", "invitation_date")? {
+            self.conn.execute(
+                "ALTER TABLE parrainage_pipes ADD COLUMN invitation_date INTEGER",
+                [],
+            )?;
+        }
         Ok(())
     }
 
@@ -261,15 +284,27 @@ impl super::Database {
                 .as_deref()
                 .or(current.invitation_type.as_deref()),
         );
-        let notes = update
-            .notes
-            .as_ref()
-            .map(|n| n.trim().to_string())
-            .filter(|s| !s.is_empty());
+        let notes = match update.notes {
+            Some(inner) => inner
+                .as_ref()
+                .and_then(|n| {
+                    let trimmed = n.trim().to_string();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed)
+                    }
+                }),
+            None => current.notes,
+        };
+        let invitation_date = match update.invitation_date {
+            Some(inner) => inner,
+            None => current.invitation_date,
+        };
         let now = now_unix();
         self.conn.execute(
-            "UPDATE parrainage_pipes SET invitation_type = ?1, notes = ?2, updated_at = ?3 WHERE id = ?4",
-            params![invitation_type, notes, now, id],
+            "UPDATE parrainage_pipes SET invitation_type = ?1, invitation_date = ?2, notes = ?3, updated_at = ?4 WHERE id = ?5",
+            params![invitation_type, invitation_date, notes, now, id],
         )?;
         self.get_parrainage_pipe_by_id(id)
     }
@@ -298,6 +333,11 @@ impl super::Database {
         {
             return Err(rusqlite::Error::InvalidParameterName(
                 "type d'invitation JD ou PO requis".into(),
+            ));
+        }
+        if new_stage == STAGE_CONFIRME && current.invitation_date.is_none() {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "date d'invitation JD/PO requise pour l'étape « Oui, je viens »".into(),
             ));
         }
         let now = now_unix();
@@ -489,6 +529,7 @@ impl super::Database {
         let contact_id = pipe.contact_id;
         let now = now_unix();
         let today = today_unix();
+        let invitation_event_date = pipe.invitation_date.unwrap_or(today);
         let parrain_id = self.resolve_organisation_self_contact_id()?;
 
         match stage {
@@ -527,7 +568,7 @@ impl super::Database {
                         date_invitation_filleul = COALESCE(date_invitation_filleul, ?3),
                         updated_at = ?4
                      WHERE id = ?5",
-                    params![parrain_id, inv, today, now, contact_id],
+                    params![parrain_id, inv, invitation_event_date, now, contact_id],
                 )?;
             }
             STAGE_PRESENT => {
@@ -541,7 +582,7 @@ impl super::Database {
                         presence_invitation_filleul = 1,
                         updated_at = ?4
                      WHERE id = ?5",
-                    params![parrain_id, inv, today, now, contact_id],
+                    params![parrain_id, inv, invitation_event_date, now, contact_id],
                 )?;
             }
             STAGE_INSCRIT => {
@@ -570,7 +611,7 @@ impl super::Database {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::models::{NewContact, NewParrainagePipe};
+    use crate::database::models::{NewContact, NewParrainagePipe, UpdateParrainagePipe};
 
     fn seed_contact(db: &super::super::Database) -> i64 {
         db.create_contact(NewContact {
@@ -606,6 +647,15 @@ mod tests {
         assert_eq!(contact.filleul_categorie.as_deref(), Some("SUSPECT_FILLEUL"));
         assert!(contact.date_dernier_contact_filleul.is_some());
 
+        db.update_parrainage_pipe(
+            pipe.id,
+            UpdateParrainagePipe {
+                invitation_type: Some("JD".into()),
+                invitation_date: Some(Some(today_unix())),
+                notes: None,
+            },
+        )
+        .unwrap();
         db.set_parrainage_pipe_stage(pipe.id, STAGE_CONFIRME, Some("JD"), None)
             .unwrap();
         let contact = db.get_contact_by_id(contact_id).unwrap();

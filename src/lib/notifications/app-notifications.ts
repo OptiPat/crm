@@ -14,6 +14,7 @@ export type AppNotificationKind =
   | "alertes_suivi"
   | "alertes_arbitrage"
   | "taches_urgent"
+  | "parrainage_jd_po"
   | "placement_non_conforme"
   | "exceltis_stellium"
   | "compta_month_end";
@@ -52,6 +53,7 @@ export type AppNotificationsSummaryDto = {
   alertes: NotificationQueueBucketDto;
   alertes_arbitrage: NotificationQueueBucketDto;
   taches_urgent: NotificationQueueBucketDto;
+  parrainage_jd_po: NotificationQueueBucketDto;
   placement_non_conforme: NotificationQueueBucketDto;
   stellium_signals: StelliumExceltisSignal[];
 };
@@ -132,6 +134,21 @@ export function buildAppNotificationsSummary(
       focusContactId:
         dto.taches_urgent.count === 1 && dto.taches_urgent.focus_contact_id != null
           ? dto.taches_urgent.focus_contact_id
+          : undefined,
+    });
+  }
+
+  if (dto.parrainage_jd_po.count > 0) {
+    items.push({
+      id: "parrainage_jd_po",
+      label: "JD/PO à confirmer",
+      count: dto.parrainage_jd_po.count,
+      severity: "warning",
+      targetPage: "taches",
+      tachesEcheanceFilter: "urgent",
+      focusContactId:
+        dto.parrainage_jd_po.count === 1 && dto.parrainage_jd_po.focus_contact_id != null
+          ? dto.parrainage_jd_po.focus_contact_id
           : undefined,
     });
   }

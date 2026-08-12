@@ -20,6 +20,7 @@ const emptyDto = {
   alertes: { count: 0 },
   alertes_arbitrage: { count: 0 },
   taches_urgent: { count: 0 },
+  parrainage_jd_po: { count: 0 },
   placement_non_conforme: { count: 0 },
   stellium_signals: [] as [],
 };
@@ -39,12 +40,13 @@ describe("buildAppNotificationsSummary", () => {
       alertes: { count: 1, focus_contact_id: 9 },
       alertes_arbitrage: { count: 2, focus_contact_id: 42 },
       taches_urgent: { count: 3 },
+      parrainage_jd_po: { count: 2, focus_contact_id: 77 },
       placement_non_conforme: { count: 2, focus_contact_id: null },
       stellium_signals: [],
     });
 
-    expect(summary.items).toHaveLength(6);
-    expect(summary.totalCount).toBe(11);
+    expect(summary.items).toHaveLength(7);
+    expect(summary.totalCount).toBe(13);
     expect(summary.items.find((i) => i.id === "alertes_arbitrage")).toMatchObject({
       label: "Arbitrages à traiter",
       count: 2,
@@ -63,6 +65,13 @@ describe("buildAppNotificationsSummary", () => {
       count: 3,
       targetPage: "taches",
     });
+    expect(summary.items.find((i) => i.id === "parrainage_jd_po")).toMatchObject({
+      label: "JD/PO à confirmer",
+      count: 2,
+      targetPage: "taches",
+      tachesEcheanceFilter: "urgent",
+      severity: "warning",
+    });
     expect(summary.items.find((i) => i.id === "emails_ready")?.focusContactId).toBe(1);
     expect(
       summary.items.find((i) => i.id === "emails_followup")?.focusContactId
@@ -78,6 +87,7 @@ describe("buildAppNotificationsSummary", () => {
       alertes: { count: 0 },
       alertes_arbitrage: { count: 0 },
       taches_urgent: { count: 0 },
+      parrainage_jd_po: { count: 0 },
       placement_non_conforme: { count: 0 },
       stellium_signals: [],
     });

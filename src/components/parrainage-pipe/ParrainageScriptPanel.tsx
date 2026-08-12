@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Copy, Sparkles } from "lucide-react";
 import { SmsBrandIcon, WhatsAppBrandIcon } from "@/components/icons/MessagingBrandIcons";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
   createParrainagePipeTimelineNote,
 } from "@/lib/api/tauri-parrainage-pipe";
 import { createTache } from "@/lib/api/tauri-taches";
+import { getFilleulDossier, upsertFilleulDossier } from "@/lib/api/tauri-filleul-dossier";
 import { openExternalUrl } from "@/lib/api/tauri-system";
 import {
   buildSmsUrl,
@@ -59,13 +60,26 @@ import {
   type ParrainageInvitationType,
   type ParrainagePipeStage,
 } from "@/lib/parrainage-pipe/parrainage-pipe-types";
-import { parrainageInvitationRequiredMessage, formatParrainagePipeError } from "@/lib/parrainage-pipe/parrainage-pipe-errors";
+import {
+  parrainageInvitationDateRequiredMessage,
+  parrainageInvitationRequiredMessage,
+  formatParrainagePipeError,
+} from "@/lib/parrainage-pipe/parrainage-pipe-errors";
 import {
   defaultParrainageCallSchedule,
   formatParrainageCallScheduleLabel,
+  formatParrainageInvitationDateLabel,
+  formatParrainageInvitationSummary,
+  formatParrainagePresenceConfirmationTaskTitle,
+  formatParrainageScriptInvitationDate,
   localDateTimeInputToUnix,
+  parrainagePresenceConfirmationDueUnix,
 } from "@/lib/parrainage-pipe/parrainage-call-schedule";
 import { fireConfettiBurst } from "@/lib/ui/confetti-burst";
+import {
+  buildUpsertFilleulDossierInput,
+  emptyFilleulDossier,
+} from "@/lib/organisation/organisation-filleul-dossier";
 import { toast } from "sonner";
 
 const APPEL_PRISE_CONTACT_ALL_STEPS = [
@@ -972,20 +986,43 @@ function SmsAnticipationWaitingSection({
   );
 }
 
+function ConfirmeInvitationSection({ invitationSummary }: { invitationSummary: string | null }) {
+  if (!invitationSummary) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Renseignez le type et la date de la JD ou PO dans le panneau de gauche.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border border-primary/30 bg-primary/5 p-4">
+      <p className="text-sm font-medium">Oui, je viens</p>
+      <p className="text-base text-foreground">{invitationSummary}</p>
+    </div>
+  );
+}
+
 function AppelPriseContactSection({
   pipe,
   invitationType,
+  invitationDateInput,
   onInvitationTypeChange,
+  onInvitationDateChange,
   plannedCallLabel,
   onNoteSaved,
   onAdvanceStage,
+  onSaveInvitationMeta,
 }: {
   pipe: ParrainagePipeRecord;
   invitationType: string;
+  invitationDateInput: string;
   onInvitationTypeChange: (value: string) => void;
+  onInvitationDateChange: (value: string) => void;
   plannedCallLabel?: string | null;
   onNoteSaved?: () => void | Promise<void>;
   onAdvanceStage?: () => Promise<boolean> | boolean;
+  onSaveInvitationMeta?: () => Promise<ParrainagePipeRecord | null>;
 }) {
   const [texts, setTexts] = useState<Record<string, string>>(() =>
     Object.fromEntries(
@@ -1006,6 +1043,7 @@ function AppelPriseContactSection({
     )
   );
   const [advancing, setAdvancing] = useState(false);
+  const advancingRef = useRef(false);
 
   useEffect(() => {
     setTexts(
@@ -1025,6 +1063,22 @@ function AppelPriseContactSection({
       )
     );
   }, [pipe.id, pipe.contact_prenom]);
+
+  useEffect(() => {
+    const scriptDate = invitationDateInput.trim()
+      ? formatParrainageScriptInvitationDate(invitationDateInput)
+      : "[X]";
+    setTexts((prev) => {
+      const current = prev.confirmation_date ?? "";
+      const base = renderAppelPriseContactStep(
+        APPEL_PRISE_CONTACT_STEPS.find((step) => step.id === "confirmation_date")!.template,
+        pipe.contact_prenom ?? ""
+      );
+      const next = base.replace("[X]", scriptDate);
+      if (current === next) return prev;
+      return { ...prev, confirmation_date: next };
+    });
+  }, [invitationDateInput, pipe.contact_prenom]);
 
   const applyVariant = (step: AppelPriseContactStepDef, variantId: string) => {
     const variant = step.variants?.find((v) => v.id === variantId);
@@ -1046,14 +1100,34 @@ function AppelPriseContactSection({
   };
 
   const markDone = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (advancingRef.current) {
+      return;
+    }
     if (!invitationType) {
       toast.error(parrainageInvitationRequiredMessage("CONFIRME"));
       return;
     }
+    if (!invitationDateInput.trim()) {
+      toast.error(parrainageInvitationDateRequiredMessage());
+      return;
+    }
+    const invitationDateLabel = formatParrainageInvitationDateLabel(invitationDateInput);
+    if (!invitationDateLabel) {
+      toast.error(parrainageInvitationDateRequiredMessage());
+      return;
+    }
 
     const rect = event.currentTarget.getBoundingClientRect();
+    advancingRef.current = true;
     setAdvancing(true);
     try {
+      if (onSaveInvitationMeta) {
+        const saved = await onSaveInvitationMeta();
+        if (saved === null) {
+          return;
+        }
+      }
+
       const advanced = await onAdvanceStage?.();
       if (advanced === false) {
         return;
@@ -1070,18 +1144,58 @@ function AppelPriseContactSection({
       const invitationLabel =
         PARRAINAGE_INVITATION_LABELS[invitationType as ParrainageInvitationType];
       const invitationLine = `Type d'invitation : ${invitationLabel} (${invitationType})`;
+      const invitationDateLine = `Date JD/PO : ${invitationDateLabel}`;
       const scheduleLine = plannedCallLabel ? `Appel planifié : ${plannedCallLabel}` : null;
-      const header = [invitationLine, scheduleLine].filter(Boolean).join("\n");
+      const header = [invitationLine, invitationDateLine, scheduleLine].filter(Boolean).join("\n");
       await createParrainagePipeTimelineNote(
         pipe.id,
         `${header}\n\nScript d'appel :\n\n${combinedSteps}\n\nObjections possibles :\n\n${combinedObjections}`
       );
+      try {
+        const dossier = await getFilleulDossier(pipe.contact_id).catch(() =>
+          emptyFilleulDossier(pipe.contact_id)
+        );
+        await upsertFilleulDossier(
+          buildUpsertFilleulDossierInput(dossier, { dateInvitation: invitationDateInput }),
+          { notifyContactsChanged: true }
+        );
+      } catch {
+        // Non bloquant : l'étape et l'historique restent enregistrés.
+      }
+      let confirmationTaskCreated = false;
+      try {
+        const confirmationDue = parrainagePresenceConfirmationDueUnix(invitationDateInput);
+        const confirmationTitle = formatParrainagePresenceConfirmationTaskTitle(
+          formatParrainageContactLabel(pipe),
+          invitationType,
+          invitationDateInput
+        );
+        if (confirmationDue != null && confirmationTitle) {
+          await createTache({
+            contact_ids: [pipe.contact_id],
+            titre: confirmationTitle,
+            description: `Exercice ${pipe.exercice_label} — pipe parrainage #${pipe.id}. Rappel J-1 pour confirmer la présence.`,
+            date_echeance: confirmationDue,
+            priorite: "NORMALE",
+            statut: "A_FAIRE",
+          });
+          confirmationTaskCreated = true;
+        }
+      } catch {
+        // Non bloquant.
+      }
       onNoteSaved?.();
       fireConfettiBurst({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
-      toast.success("Appel effectué — étape suivante");
+      const summary = formatParrainageInvitationSummary(invitationType, invitationDateInput);
+      const toastParts = [
+        summary ? `Appel effectué — ${summary}` : "Appel effectué — étape suivante",
+        confirmationTaskCreated ? "rappel J-1 dans les tâches" : null,
+      ].filter(Boolean);
+      toast.success(toastParts.join(" · "));
     } catch (error) {
       toast.error(formatParrainagePipeError(error));
     } finally {
+      advancingRef.current = false;
       setAdvancing(false);
     }
   };
@@ -1170,34 +1284,12 @@ function AppelPriseContactSection({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {plannedCallLabel && (
         <div className="space-y-1.5">
-          <Label className="text-xs">Type d&apos;invitation</Label>
-          <Select
-            value={invitationType || "none"}
-            onValueChange={(v) => onInvitationTypeChange(v === "none" ? "" : v)}
-            disabled={advancing}
-          >
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="JD ou PO" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Non renseigné</SelectItem>
-              {PARRAINAGE_INVITATION_TYPES.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {PARRAINAGE_INVITATION_LABELS[type]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Label className="text-xs">Appel planifié</Label>
+          <p className="text-sm text-muted-foreground">{plannedCallLabel}</p>
         </div>
-        {plannedCallLabel && (
-          <div className="space-y-1.5">
-            <Label className="text-xs">Appel planifié</Label>
-            <p className="text-sm text-muted-foreground">{plannedCallLabel}</p>
-          </div>
-        )}
-      </div>
+      )}
 
       {APPEL_PRISE_CONTACT_STEPS.map(renderStepBlock)}
 
@@ -1212,6 +1304,45 @@ function AppelPriseContactSection({
         autoResize={autoResize}
       />
 
+      <div className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-3">
+        <p className="text-xs font-medium">Invitation confirmée à l&apos;appel</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Type d&apos;invitation</Label>
+            <Select
+              value={invitationType || "none"}
+              onValueChange={(v) => onInvitationTypeChange(v === "none" ? "" : v)}
+              disabled={advancing}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="JD ou PO" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Non renseigné</SelectItem>
+                {PARRAINAGE_INVITATION_TYPES.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {PARRAINAGE_INVITATION_LABELS[type]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Date de la JD ou PO</Label>
+            <Input
+              type="date"
+              value={invitationDateInput}
+              onChange={(e) => onInvitationDateChange(e.target.value)}
+              disabled={advancing}
+              className="h-9"
+            />
+          </div>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Date confirmée avec le prospect lors de l&apos;appel.
+        </p>
+      </div>
+
       <Button type="button" size="sm" onClick={(e) => void markDone(e)} disabled={advancing}>
         Appel effectué → étape suivante
       </Button>
@@ -1224,7 +1355,11 @@ interface ParrainageScriptPanelProps {
   smsAnticipationProfile?: SmsAnticipationProfile | null;
   smsAnticipationProfileLabel?: string | null;
   invitationType?: string;
+  invitationDateInput?: string;
+  invitationSummary?: string | null;
   onInvitationTypeChange?: (value: string) => void;
+  onInvitationDateChange?: (value: string) => void;
+  onSaveInvitationMeta?: () => Promise<ParrainagePipeRecord | null>;
   plannedCallLabel?: string | null;
   onNoteSaved?: () => void | Promise<void>;
   onAdvanceStage?: () => Promise<boolean> | boolean;
@@ -1235,7 +1370,11 @@ export function ParrainageScriptPanel({
   smsAnticipationProfile = null,
   smsAnticipationProfileLabel = null,
   invitationType = "",
+  invitationDateInput = "",
+  invitationSummary = null,
   onInvitationTypeChange,
+  onInvitationDateChange,
+  onSaveInvitationMeta,
   plannedCallLabel = null,
   onNoteSaved,
   onAdvanceStage,
@@ -1245,6 +1384,7 @@ export function ParrainageScriptPanel({
   const isAContacter = stage === "A_CONTACTER";
   const isAttenteReponse = stage === "ATTENTE_REPONSE";
   const isPriseDeContact = stage === "PRISE_DE_CONTACT";
+  const isConfirme = stage === "CONFIRME";
 
   return (
     <Card className="border-border/60 shadow-none">
@@ -1260,6 +1400,8 @@ export function ParrainageScriptPanel({
               ? "Attente de réponse au SMS d'anticipation — préparez la relance selon sa teneur."
             : isPriseDeContact
               ? "Script d'appel — prospect au téléphone."
+              : isConfirme
+                ? "Confirmation obtenue — invitation JD ou PO."
               : `Étape « ${PARRAINAGE_PIPE_STAGE_LABELS[stage]} ».`}
         </CardDescription>
       </CardHeader>
@@ -1286,11 +1428,16 @@ export function ParrainageScriptPanel({
           <AppelPriseContactSection
             pipe={pipe}
             invitationType={invitationType}
+            invitationDateInput={invitationDateInput}
             onInvitationTypeChange={onInvitationTypeChange ?? (() => undefined)}
+            onInvitationDateChange={onInvitationDateChange ?? (() => undefined)}
             plannedCallLabel={plannedCallLabel}
             onNoteSaved={onNoteSaved}
             onAdvanceStage={onAdvanceStage}
+            onSaveInvitationMeta={onSaveInvitationMeta}
           />
+        ) : isConfirme ? (
+          <ConfirmeInvitationSection invitationSummary={invitationSummary} />
         ) : (
           <p className="text-sm text-muted-foreground">
             Pas encore de script pour cette étape.
