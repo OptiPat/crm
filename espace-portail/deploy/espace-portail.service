@@ -19,6 +19,10 @@ ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/opt/espace-portail/data
 PrivateTmp=true
+# La base porte emails, patrimoine et journal des connexions : elle naissait
+# en 644, lisible par tout compte local. Les fichiers annexes de SQLite
+# (-wal, -shm) suivent le meme umask.
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

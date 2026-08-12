@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
 import { useEspaceClientActive } from "@/components/espace-client/EspaceClientProvider";
@@ -64,10 +66,33 @@ export function EspaceClientConnexionPanel() {
     }
   };
 
+  // La clé n'est jamais réaffichée après enregistrement : sans ce badge, rien
+  // ne distingue « pas encore saisie » de « déjà en place ».
+  const etat = !portalUrl.trim()
+    ? { libelle: "Non configuré", classe: "" }
+    : !hasSyncSecret
+      ? {
+          libelle: "Clé manquante",
+          classe:
+            "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300",
+        }
+      : {
+          libelle: "Configuré",
+          classe:
+            "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300",
+        };
+
   return (
     <SettingsPanel
       title="Espace client — connexion au portail"
       description="Adresse du portail et clé partagée. La synchronisation d'un client se lance depuis sa fiche."
+      action={
+        chargement ? null : (
+          <Badge variant="outline" className={cn("font-normal", etat.classe)}>
+            {etat.libelle}
+          </Badge>
+        )
+      }
     >
       <div className="space-y-4">
         <div className="space-y-1.5">
