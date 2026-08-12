@@ -8,19 +8,35 @@
 
 ## 0. Où on en est
 
-**Construit, testé, non déployé.** Le portail tourne en local, un client peut recevoir
-son code par email et consulter son patrimoine. Aucune donnée réelle ne doit y transiter
-tant que les points bloquants du §14 ne sont pas levés.
+**En production, ouvert aux premiers clients.** Le portail tourne sur un VPS OVH en
+France, en HTTPS, avec ses sauvegardes quotidiennes. Le parcours complet — consultation
+du patrimoine, demande de document, dépôt, rapatriement en GED, purge — a été joué de
+bout en bout sur un contact fictif. Trois investisseurs entrent en phase bêta.
 
 | Phase | État |
 |---|---|
 | 0 — Fondations CRM (logique pure, aperçu conseiller) | **Fait** |
 | 1 — Portail en lecture, authentification client | **Fait** |
-| 2 — Dépôt de documents | Non commencé (module antivirus prêt, non câblé) |
-| 3 — Documents mis à disposition | Non commencé |
+| 2 — Dépôt de documents | **Fait**, validé en production |
+| 3 — Documents mis à disposition | Non commencé — c'est là que se branchera la ré-authentification (R7) |
 | 4 — Déclaration des avoirs extérieurs | Non commencé |
-| 5 — Notifications et cycle de vie | Partiel (révocation faite) |
-| Déploiement serveur | Non fait — `espace-portail/deploy/Caddyfile` prêt |
+| 5 — Notifications et cycle de vie | Partiel : révocation, alerte nouvel appareil, annonce des événements |
+| Déploiement serveur | **Fait** — procédure dans `espace-portail/deploy/README.md` |
+
+Ajouts postérieurs au plan initial, non prévus ici mais livrés :
+
+- **Échéances rédigées par le conseiller**, affichées au client et annoncées par email
+  une seule fois. Elles remplacent les alertes et tâches, retirées de la vue client.
+- **Prise de rendez-vous** : un bouton permanent branché sur un lien d'agenda désigné
+  dans les réglages, et un lien par échéance. Les liens sont ceux du profil CGP, déjà
+  utilisés par les modèles d'emails.
+- **Section Paramètres → Espace client** : connexion au portail, bouton de rendez-vous,
+  synchronisation de tous les clients actifs.
+
+Documents liés : `docs/ESPACE_CLIENT_RGPD.md` (registre, bases légales, sous-traitants),
+`docs/ESPACE_CLIENT_INCIDENT.md` (plan de réponse à incident),
+`espace-portail/deploy/README.md` (déploiement, sauvegarde, pièges rencontrés),
+`.cursor/rules/deploiement-espace-portail.mdc` (mise à jour du portail par un agent).
 
 Documents liés : `docs/ESPACE_CLIENT_RGPD.md` (registre, bases légales, sous-traitants),
 `espace-portail/README.md` (lancement, variables d'environnement, mise en ligne).
@@ -439,39 +455,43 @@ au conseiller ; la révocation coupe les sessions du portail **avant** de valide
 ## 14. Sécurité — reste à faire
 
 Ce qui est en place est décrit au §10 et couvert par les tests de `espace-portail/src/`.
-Ce qui suit ne l'est pas.
 
-### Bloquant avant tout usage réel
+### Levé depuis la rédaction du plan
+
+| Sujet | Où en est-on |
+|---|---|
+| **Déploiement HTTPS** | Fait. Caddy, Let's Encrypt, en-têtes de sécurité, pare-feu limité à 22/80/443, le binaire n'écoute qu'en local |
+| **Antivirus câblé** | Fait. `require_clamd_available` fait paniquer le binaire au démarrage en production : un portail qui accepte des dépôts sans analyse serait pire qu'un portail arrêté |
+| **Formalités RGPD** | Fait. Page d'information en production avec les mentions du cabinet, registre tenu en interne, annexe des conditions Brevo valant contrat de sous-traitance |
+| **Séparation des clés** | Fait. `ESPACE_AUTH_SECRET` distinct du secret de synchronisation, exigé en production. Attention : l'empreinte du code d'activation est calculée par le CRM avec le **secret de sync** — c'est avec lui qu'elle se vérifie |
+| **Alerte sur nouvel appareil** | Fait. Email au client, empreinte insensible aux mises à jour de navigateur pour ne pas crier tous les mois |
+| **Veille des dépendances** | Fait. `npm audit` et `cargo audit` dans `verify.ps1`, en lecture seule — pas de correction automatique |
+| **Plan de réponse à incident** | Fait. `docs/ESPACE_CLIENT_INCIDENT.md`, fiche contacts nominative hors dépôt |
+| **Sauvegarde et restauration** | Fait. Tâche planifiée quotidienne, contrôle d'intégrité immédiat, restauration jouée avec succès |
+| **Rétention et purge des documents** | Fait. Le fichier scellé est supprimé sur accusé de réception du CRM, après comparaison d'empreinte |
+| **Cloison conseiller / client** | Fait. Alertes et tâches ne quittent plus le CRM ; le portail écarte en outre celles des anciennes photos |
+
+### Reste à faire
 
 | Sujet | Pourquoi |
 |---|---|
-| **Déploiement HTTPS** | `deploy/Caddyfile` est prêt, rien n'est déployé. Tant que le service n'est pas derrière TLS, aucune donnée réelle ne doit y transiter |
-| **Antivirus câblé** | Le module existe, l'appel n'existe pas — sans lui, le dépôt de documents ouvre un canal d'entrée vers le poste du conseiller |
-| **Formalités RGPD** | `docs/ESPACE_CLIENT_RGPD.md` est rédigé mais doit être complété (coordonnées, hébergeur) et le contrat de sous-traitance Brevo activé sur le compte |
-
-### Important
-
-| Sujet | Pourquoi |
-|---|---|
-| **Séparation des clés** | Un seul secret signe la synchronisation, hache les codes et hache les jetons de session. Trois clés dérivées d'une racine coûtent une heure et évitent qu'une fuite emporte tout |
-| **Délivrabilité des codes par email** | Un expéditeur Gmail via Brevo fonctionne ; certains clients (Orange, Free…) classent parfois en spam. À surveiller sur les premiers envois ; un domaine dédié du cabinet reste une amélioration optionnelle, pas un prérequis |
-| **Alerte sur nouvel appareil** | Rien ne prévient le client d'une connexion depuis un appareil inconnu : c'est pourtant lui qui détecte une compromission en premier |
-| **Ré-authentification pour les documents** (**R7**) | Conçue, pas encore écrite. À faire avec la phase 2 |
-| **Veille des dépendances** | `cargo audit` et `npm audit` dans `verify.ps1` : une ligne chacun, et les failles connues remontent sans y penser |
-| **Plan de réponse à incident** | Que couper, quels secrets tourner, comment notifier sous 72 heures. Se décide à froid |
-
-### À prévoir
-
-Sauvegarde du portail **et test de restauration** ; rétention et purge des documents (phase 2) ;
-revue de sécurité extérieure avant d'ouvrir à l'ensemble des clients.
+| **Délivrabilité des codes par email** | Expéditeur Gmail via Brevo, décision assumée. C'est le seul maillon dont l'échec est silencieux : noter le fournisseur de messagerie à chaque activation, et rouvrir la question du domaine authentifié au premier échec |
+| **Ré-authentification à la consultation** (**R7**) | Écrite et testée, mais branchée sur rien tant que la mise à disposition de documents (phase 3) n'existe pas |
+| **Test de restauration mensuel** | Une sauvegarde jamais restaurée n'est pas une sauvegarde |
+| **Migration `oauth2` 4.4 → 5.0** | Seule dette technique réelle : elle fait disparaître les trois avis RUSTSEC neutralisés dans `src-tauri/.cargo/audit.toml`. Déclencheur : le jour où l'on touche à l'authentification Gmail |
+| **Revue de sécurité extérieure** | Aucun regard tiers sur un service qui héberge des données patrimoniales nominatives |
 
 ### Limites assumées
 
-- **Pas de chiffrement de bout en bout.** Il supposerait une clé détenue par le client :
-  perdue, tout est irrécupérable. Inapplicable à la clientèle visée. La rétention courte
-  (**R3**) est la parade retenue.
-- **La clé de chiffrement au repos vit sur le serveur.** Elle protège du vol de disque,
-  pas d'une prise de contrôle de la machine.
+- **Pas de chiffrement de bout en bout depuis le navigateur.** Les dépôts sont scellés
+  au repos et le portail ne détient que la clé publique — il ne peut pas les relire. Mais
+  le fichier traverse sa mémoire en clair le temps du scellement. Un chiffrement côté
+  navigateur n'y changerait rien : c'est le serveur qui livre le JavaScript, donc un
+  attaquant qui le contrôle sert un script modifié. La rétention courte (**R3**) reste la
+  vraie parade.
+- **Plusieurs sessions simultanées par client**, sans possibilité pour lui de les lister
+  ou de les fermer. C'est voulu — téléphone et ordinateur —, la révocation depuis le CRM
+  étant le seul levier, mais elle coupe tout d'un coup.
 - **Le maillon faible n'est pas le portail.** La base du CRM est en clair sur le poste du
   conseiller, protégée par le seul chiffrement disque de l'OS, et contient tout — quand le
   portail n'en détient qu'une copie partielle et purgée.
