@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ParrainagePipeBoard } from "@/components/parrainage-pipe/ParrainagePipeBoard";
@@ -15,6 +15,10 @@ import {
 } from "@/lib/api/tauri-parrainage-pipe";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeParrainagePipeChanged } from "@/lib/parrainage-pipe/parrainage-pipe-events";
+import {
+  consumeParrainagePipeFocusId,
+  PARRAINAGE_PIPE_FOCUS_EVENT,
+} from "@/lib/navigation/parrainage-pipe-navigation";
 import {
   currentFiscalYearLabel,
   listSelectableFiscalYearLabels,
@@ -44,6 +48,19 @@ export function PipeParrainage() {
     pipe: ParrainagePipeRecord;
     stage: ParrainagePipeStage;
   } | null>(null);
+  const pendingFocusRef = useRef<number | null>(consumeParrainagePipeFocusId());
+  const [scrollToPipeId, setScrollToPipeId] = useState<number | null>(pendingFocusRef.current);
+
+  useEffect(() => {
+    const onFocus = (event: Event) => {
+      const detail = (event as CustomEvent<{ pipeId: number | null }>).detail;
+      if (detail?.pipeId != null) {
+        setScrollToPipeId(detail.pipeId);
+      }
+    };
+    window.addEventListener(PARRAINAGE_PIPE_FOCUS_EVENT, onFocus);
+    return () => window.removeEventListener(PARRAINAGE_PIPE_FOCUS_EVENT, onFocus);
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -164,6 +181,7 @@ export function PipeParrainage() {
               <ParrainagePipeBoard
                 pipes={pipes}
                 selectedId={null}
+                scrollToPipeId={scrollToPipeId}
                 onSelect={setSelected}
                 onRequestStageChange={(pipe, stage) => void handleStageChange(pipe, stage)}
               />

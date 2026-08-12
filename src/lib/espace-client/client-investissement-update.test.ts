@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildClientInvestissementUpdateInput,
   getClientInvestissementUpdateKind,
   isClientInvestissementUpdateEligible,
+  unixToDateInput,
   validateClientInvestissementUpdate,
 } from "./client-investissement-update";
 import { PLAFOND_DECLARATION_CENTIMES } from "./scpi-client-tracking";
@@ -239,6 +241,110 @@ describe("client-investissement-update", () => {
       mensualiteCreditCentimes: null,
       dateFinPretTs: null,
       clearDateFinPret: false,
+    });
+  });
+
+  /**
+   * Le défaut visé : le formulaire pré-remplit la fin de prêt, et la renvoyait
+   * telle quelle. Si le conseiller la saisit pendant que le client a l'écran
+   * ouvert, cette réaffirmation d'une valeur périmée l'effaçait à l'import.
+   */
+  describe("buildClientInvestissementUpdateInput", () => {
+    const immo = {
+      id: 3,
+      type_produit: "LMNP",
+      origine: "EXISTANT_CLIENT" as const,
+      loyer_mensuel: 850_00,
+      mensualite_credit: 1_200_00,
+      date_fin_pret: undefined as number | undefined,
+    };
+    const champs = {
+      date: "2026-08-12",
+      valorisation: "250 000,00",
+      revenu: "",
+      loyer: "850,00",
+      mensualite: "1200",
+      dateFinPret: "",
+    };
+
+    it("n'envoie pas les champs immobiliers laissés tels quels", () => {
+      const input = buildClientInvestissementUpdateInput(immo, champs);
+      expect(input.valorisationCentimes).toBe(250_000_00);
+      expect("loyerMensuelCentimes" in input).toBe(false);
+      expect("mensualiteCreditCentimes" in input).toBe(false);
+      expect("dateFinPret" in input).toBe(false);
+    });
+
+    it("envoie 0 quand le client vide volontairement un montant", () => {
+      const input = buildClientInvestissementUpdateInput(immo, {
+        ...champs,
+        loyer: "",
+      });
+      expect(input.loyerMensuelCentimes).toBe(0);
+      expect("mensualiteCreditCentimes" in input).toBe(false);
+    });
+
+    it("envoie la fin de prêt seulement si elle change", () => {
+      const avecPret = { ...immo, date_fin_pret: 2_066_688_000 };
+      const dateAffichee = unixToDateInput(avecPret.date_fin_pret);
+
+      expect(
+        "dateFinPret" in
+          buildClientInvestissementUpdateInput(avecPret, {
+            ...champs,
+            dateFinPret: dateAffichee,
+          })
+      ).toBe(false);
+
+      // Champ vidé : effacement demandé, la chaîne vide part.
+      expect(
+        buildClientInvestissementUpdateInput(avecPret, {
+          ...champs,
+          dateFinPret: "",
+        }).dateFinPret
+      ).toBe("");
+
+      expect(
+        buildClientInvestissementUpdateInput(avecPret, {
+          ...champs,
+          dateFinPret: "2040-01-31",
+        }).dateFinPret
+      ).toBe("2040-01-31");
+    });
+
+    it("ignore une réécriture qui ne change pas le montant", () => {
+      const input = buildClientInvestissementUpdateInput(immo, {
+        ...champs,
+        loyer: "850",
+        mensualite: "1 200,00",
+      });
+      expect("loyerMensuelCentimes" in input).toBe(false);
+      expect("mensualiteCreditCentimes" in input).toBe(false);
+    });
+
+    it("ne propose loyer et fin de prêt que sur l'immobilier", () => {
+      const input = buildClientInvestissementUpdateInput(
+        { ...immo, type_produit: "PEA" },
+        { ...champs, loyer: "999", dateFinPret: "2040-01-31" }
+      );
+      expect("loyerMensuelCentimes" in input).toBe(false);
+      expect("dateFinPret" in input).toBe(false);
+      expect("revenuPercuCentimes" in input).toBe(false);
+    });
+
+    it("transmet le revenu SCPI, y compris vidé", () => {
+      const scpi = {
+        ...immo,
+        type_produit: "SCPI",
+        origine: "MON_CONSEIL" as const,
+      };
+      expect(
+        buildClientInvestissementUpdateInput(scpi, { ...champs, revenu: "300" })
+          .revenuPercuCentimes
+      ).toBe(300_00);
+      expect(
+        buildClientInvestissementUpdateInput(scpi, champs).revenuPercuCentimes
+      ).toBeNull();
     });
   });
 

@@ -166,7 +166,7 @@ export function ParrainagePipeDetailPanel({
   const persistPipeMeta = useCallback(async (): Promise<ParrainagePipeRecord | null> => {
     try {
       const updated = await updateParrainagePipe(pipe.id, {
-        notes: notes.trim() || null,
+        notes: notes.trim(),
         invitation_type: invitationType || null,
         invitation_date: invitationDateInput.trim()
           ? localDateTimeInputToUnix(invitationDateInput, "09:00")
@@ -253,6 +253,10 @@ export function ParrainagePipeDetailPanel({
     invitationSummary && (stage === "CONFIRME" || stage === "PRESENT");
   const showInvitationMetaInFiche = !isPriseDeContact;
 
+  const handlePipeUpdated = (updated: ParrainagePipeRecord) => {
+    onUpdated(updated);
+  };
+
   const scriptPanel = (
     <ParrainageScriptPanel
       pipe={pipe}
@@ -265,6 +269,7 @@ export function ParrainagePipeDetailPanel({
       onInvitationDateChange={setInvitationDateInput}
       onSaveInvitationMeta={persistPipeMeta}
       plannedCallLabel={plannedCallLabel}
+      onPipeUpdated={handlePipeUpdated}
       onNoteSaved={() =>
         listParrainagePipeTimelineEntries(pipe.id)
           .then(setTimeline)

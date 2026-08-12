@@ -21,6 +21,7 @@ const emptyDto = {
   alertes_arbitrage: { count: 0 },
   taches_urgent: { count: 0 },
   parrainage_jd_po: { count: 0 },
+  parrainage_jd_po_outcome: { count: 0 },
   placement_non_conforme: { count: 0 },
   stellium_signals: [] as [],
 };
@@ -41,12 +42,13 @@ describe("buildAppNotificationsSummary", () => {
       alertes_arbitrage: { count: 2, focus_contact_id: 42 },
       taches_urgent: { count: 3 },
       parrainage_jd_po: { count: 2, focus_contact_id: 77 },
+      parrainage_jd_po_outcome: { count: 1, focus_pipe_id: 12 },
       placement_non_conforme: { count: 2, focus_contact_id: null },
       stellium_signals: [],
     });
 
-    expect(summary.items).toHaveLength(7);
-    expect(summary.totalCount).toBe(13);
+    expect(summary.items).toHaveLength(8);
+    expect(summary.totalCount).toBe(14);
     expect(summary.items.find((i) => i.id === "alertes_arbitrage")).toMatchObject({
       label: "Arbitrages à traiter",
       count: 2,
@@ -72,6 +74,13 @@ describe("buildAppNotificationsSummary", () => {
       tachesEcheanceFilter: "urgent",
       severity: "warning",
     });
+    expect(summary.items.find((i) => i.id === "parrainage_jd_po_outcome")).toMatchObject({
+      label: "Mettre à jour le pipe parrainage",
+      count: 1,
+      targetPage: "pipe-parrainage",
+      focusParrainagePipeId: 12,
+      severity: "urgent",
+    });
     expect(summary.items.find((i) => i.id === "emails_ready")?.focusContactId).toBe(1);
     expect(
       summary.items.find((i) => i.id === "emails_followup")?.focusContactId
@@ -88,6 +97,7 @@ describe("buildAppNotificationsSummary", () => {
       alertes_arbitrage: { count: 0 },
       taches_urgent: { count: 0 },
       parrainage_jd_po: { count: 0 },
+      parrainage_jd_po_outcome: { count: 0 },
       placement_non_conforme: { count: 0 },
       stellium_signals: [],
     });

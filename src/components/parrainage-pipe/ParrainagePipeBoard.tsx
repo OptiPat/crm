@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import { GripVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { ParrainagePipeRecord } from "@/lib/api/tauri-parrainage-pipe";
 import { groupParrainagePipesByStage } from "@/lib/parrainage-pipe/parrainage-pipe-board-utils";
+import { parrainagePipeNeedsJdPoOutcomeUpdate } from "@/lib/parrainage-pipe/parrainage-jd-po-update";
 import { PARRAINAGE_PIPE_STAGE_BOARD_COLORS } from "@/lib/parrainage-pipe/parrainage-pipe-stage-colors";
 import {
   formatParrainageContactLabel,
@@ -21,6 +22,7 @@ const PARRAINAGE_PIPE_BOARD_LABELS: Record<ParrainagePipeStage, string> = {
   ATTENTE_REPONSE: "Attente",
   PRISE_DE_CONTACT: "Contact",
   CONFIRME: "Confirmé",
+  REPORTE: "Replanif.",
   PRESENT: "Présent",
   INSCRIT: "Inscrit",
   REFUSE: "Refusé",
@@ -42,6 +44,7 @@ function stageFromElement(el: Element | null): ParrainagePipeStage | null {
 interface ParrainagePipeBoardProps {
   pipes: ParrainagePipeRecord[];
   selectedId: number | null;
+  scrollToPipeId?: number | null;
   onSelect: (pipe: ParrainagePipeRecord) => void;
   onRequestStageChange: (pipe: ParrainagePipeRecord, stage: ParrainagePipeStage) => void;
 }
@@ -49,10 +52,18 @@ interface ParrainagePipeBoardProps {
 export function ParrainagePipeBoard({
   pipes,
   selectedId,
+  scrollToPipeId = null,
   onSelect,
   onRequestStageChange,
 }: ParrainagePipeBoardProps) {
   const byStage = useMemo(() => groupParrainagePipesByStage(pipes), [pipes]);
+  const outcomePendingIds = useMemo(
+    () =>
+      new Set(
+        pipes.filter((pipe) => parrainagePipeNeedsJdPoOutcomeUpdate(pipe)).map((pipe) => pipe.id)
+      ),
+    [pipes]
+  );
   const [dragOverStage, setDragOverStage] = useState<ParrainagePipeStage | null>(null);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const pointerDragRef = useRef<{
@@ -120,6 +131,12 @@ export function ParrainagePipeBoard({
     }
   };
 
+  useEffect(() => {
+    if (scrollToPipeId == null) return;
+    const el = document.querySelector(`[data-parrainage-pipe-id="${scrollToPipeId}"]`);
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [scrollToPipeId, pipes]);
+
   if (pipes.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
@@ -132,7 +149,7 @@ export function ParrainagePipeBoard({
   }
 
   return (
-    <div className="grid h-full min-h-0 flex-1 grid-cols-2 gap-1.5 p-2 min-[900px]:grid-cols-4 sm:gap-2 sm:p-3 lg:grid-cols-7">
+    <div className="grid h-full min-h-0 flex-1 grid-cols-2 gap-1.5 p-2 min-[900px]:grid-cols-4 sm:gap-2 sm:p-3 lg:grid-cols-8">
       {PARRAINAGE_PIPE_BOARD_STAGES.map((stage) => {
         const list = byStage[stage];
         const colors = PARRAINAGE_PIPE_STAGE_BOARD_COLORS[stage];
@@ -186,9 +203,11 @@ export function ParrainagePipeBoard({
                 list.map((pipe) => {
                   const selected = pipe.id === selectedId;
                   const dragging = pipe.id === draggingId;
+                  const outcomePending = outcomePendingIds.has(pipe.id);
                   return (
                     <article
                       key={pipe.id}
+                      data-parrainage-pipe-id={pipe.id}
                       onPointerDown={(e) => handlePointerDown(e, pipe)}
                       onPointerMove={handlePointerMove}
                       onPointerUp={finishPointerDrag}
@@ -198,7 +217,9 @@ export function ParrainagePipeBoard({
                         "cursor-grab active:cursor-grabbing",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         selected && "border-primary ring-1 ring-primary/40",
-                        dragging && "opacity-50"
+                        dragging && "opacity-50",
+                        outcomePending &&
+                          "border-red-500 bg-red-50/60 ring-2 ring-red-400/50 animate-pulse dark:bg-red-950/30 dark:border-red-600"
                       )}
                     >
                       <div className="flex items-start gap-1 select-none">
@@ -207,7 +228,12 @@ export function ParrainagePipeBoard({
                           aria-hidden
                         />
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1">
+                          <div className="flex flex-wrap items-center gap-1">
+                            {outcomePending ? (
+                              <Badge className="h-4 shrink-0 px-1 text-[9px] font-medium leading-none bg-red-600 text-white hover:bg-red-600">
+                                JD/PO
+                              </Badge>
+                            ) : null}
                             <p className="text-[11px] font-medium leading-snug line-clamp-2 sm:text-xs">
                               {formatParrainageContactLabel(pipe)}
                             </p>

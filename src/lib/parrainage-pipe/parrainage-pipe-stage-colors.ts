@@ -48,6 +48,15 @@ export const PARRAINAGE_PIPE_STAGE_BOARD_COLORS: Record<
     badge:
       "bg-violet-100 text-violet-800 border border-violet-200/80 dark:bg-violet-950 dark:text-violet-200 dark:border-violet-800",
   },
+  REPORTE: {
+    column:
+      "border-orange-200/70 bg-orange-50/40 dark:border-orange-900 dark:bg-orange-950/25",
+    accent: "border-t-orange-500 dark:border-t-orange-500",
+    header: "border-orange-200/50 dark:border-orange-900",
+    title: "text-orange-900 dark:text-orange-300",
+    badge:
+      "bg-orange-100 text-orange-900 border border-orange-200/80 dark:bg-orange-950 dark:text-orange-200 dark:border-orange-800",
+  },
   PRESENT: {
     column:
       "border-amber-200/70 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/25",

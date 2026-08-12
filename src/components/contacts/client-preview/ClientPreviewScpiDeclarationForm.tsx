@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import {
+  buildClientInvestissementUpdateInput,
   getClientInvestissementUpdateKind,
+  parseEurosInput as eurosToCentimes,
+  unixToDateInput,
   validateClientInvestissementUpdate,
   type ClientInvestissementUpdateInput,
   type ClientInvestissementUpdateKind,
@@ -14,25 +17,9 @@ import { todayLocal } from "@/lib/contacts/contact-form-utils";
 import { getPlacementValorisationUiMode } from "@/lib/investissements/investissement-encours";
 import { CP } from "./client-preview-theme";
 
-function eurosToCentimes(value: string): number {
-  const normalized = value.replace(/\s/g, "").replace(",", ".");
-  const n = Number.parseFloat(normalized);
-  if (!Number.isFinite(n)) return 0;
-  return Math.round(n * 100);
-}
-
 function centimesToEurosInput(centimes: number): string {
   if (centimes <= 0) return "";
   return (centimes / 100).toFixed(2).replace(".", ",");
-}
-
-function unixToDateInput(unix?: number | null): string {
-  if (unix == null || unix <= 0) return "";
-  const d = new Date(unix * 1000);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 export interface ClientPreviewScpiDeclarationFormProps {
@@ -81,29 +68,16 @@ export function ClientPreviewScpiDeclarationForm({
 
   const handleSubmit = async () => {
     const valorisationCentimes = eurosToCentimes(valorisation);
-    const input: ClientInvestissementUpdateInput = {
-      investissementId: inv.id,
+    // Seuls les champs réellement modifiés partent : voir
+    // buildClientInvestissementUpdateInput.
+    const input = buildClientInvestissementUpdateInput(inv, {
       date,
-      valorisationCentimes,
-    };
-
-    if (kind === "scpi") {
-      input.revenuPercuCentimes = revenu.trim()
-        ? eurosToCentimes(revenu)
-        : null;
-    }
-    if (kind === "immobilier") {
-      // Comme le revenu SCPI : une valeur saisie (y compris 0) est posée.
-      // Champ vidé = 0 € (plus de loyer / plus de crédit), pas « ne pas toucher »,
-      // sinon on ne pourrait jamais effacer un loyer déjà en base.
-      input.loyerMensuelCentimes = loyer.trim()
-        ? eurosToCentimes(loyer)
-        : 0;
-      input.mensualiteCreditCentimes = mensualite.trim()
-        ? eurosToCentimes(mensualite)
-        : 0;
-      input.dateFinPret = dateFinPret;
-    }
+      valorisation,
+      revenu,
+      loyer,
+      mensualite,
+      dateFinPret,
+    });
 
     const validation = validateClientInvestissementUpdate(inv, input);
 

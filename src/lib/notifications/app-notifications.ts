@@ -15,6 +15,7 @@ export type AppNotificationKind =
   | "alertes_arbitrage"
   | "taches_urgent"
   | "parrainage_jd_po"
+  | "parrainage_jd_po_outcome"
   | "placement_non_conforme"
   | "exceltis_stellium"
   | "compta_month_end";
@@ -31,8 +32,9 @@ export type AppNotificationItem = {
   focusEtiquetteId?: number;
   stelliumMessageId?: string;
   /** Cible page Tâches. */
-  targetPage?: "taches" | "comptabilite";
+  targetPage?: "taches" | "comptabilite" | "pipe-parrainage";
   tachesEcheanceFilter?: "urgent";
+  focusParrainagePipeId?: number;
 };
 
 export type AppNotificationsSummary = {
@@ -43,6 +45,7 @@ export type AppNotificationsSummary = {
 export type NotificationQueueBucketDto = {
   count: number;
   focus_contact_id?: number | null;
+  focus_pipe_id?: number | null;
 };
 
 export type AppNotificationsSummaryDto = {
@@ -54,6 +57,7 @@ export type AppNotificationsSummaryDto = {
   alertes_arbitrage: NotificationQueueBucketDto;
   taches_urgent: NotificationQueueBucketDto;
   parrainage_jd_po: NotificationQueueBucketDto;
+  parrainage_jd_po_outcome: NotificationQueueBucketDto;
   placement_non_conforme: NotificationQueueBucketDto;
   stellium_signals: StelliumExceltisSignal[];
 };
@@ -149,6 +153,21 @@ export function buildAppNotificationsSummary(
       focusContactId:
         dto.parrainage_jd_po.count === 1 && dto.parrainage_jd_po.focus_contact_id != null
           ? dto.parrainage_jd_po.focus_contact_id
+          : undefined,
+    });
+  }
+
+  if (dto.parrainage_jd_po_outcome.count > 0) {
+    items.push({
+      id: "parrainage_jd_po_outcome",
+      label: "Mettre à jour le pipe parrainage",
+      count: dto.parrainage_jd_po_outcome.count,
+      severity: "urgent",
+      targetPage: "pipe-parrainage",
+      focusParrainagePipeId:
+        dto.parrainage_jd_po_outcome.count === 1 &&
+        dto.parrainage_jd_po_outcome.focus_pipe_id != null
+          ? dto.parrainage_jd_po_outcome.focus_pipe_id
           : undefined,
     });
   }

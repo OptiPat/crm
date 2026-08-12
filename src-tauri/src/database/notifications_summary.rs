@@ -7,6 +7,8 @@ pub struct NotificationQueueBucket {
     pub count: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub focus_contact_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub focus_pipe_id: Option<i64>,
 }
 
 #[derive(serde::Serialize)]
@@ -19,6 +21,7 @@ pub struct AppNotificationsSummaryDto {
     pub alertes_arbitrage: NotificationQueueBucket,
     pub taches_urgent: NotificationQueueBucket,
     pub parrainage_jd_po: NotificationQueueBucket,
+    pub parrainage_jd_po_outcome: NotificationQueueBucket,
     pub placement_non_conforme: NotificationQueueBucket,
     pub stellium_signals: Vec<crate::email::stellium_exceltis::StelliumExceltisSignal>,
 }
@@ -54,6 +57,7 @@ impl super::Database {
         Ok(NotificationQueueBucket {
             count,
             focus_contact_id,
+            focus_pipe_id: None,
         })
     }
 
@@ -83,6 +87,8 @@ impl super::Database {
         let (taches_urgent_count, taches_urgent_focus) = self.count_taches_urgent_echeance()?;
         let (parrainage_jd_po_count, parrainage_jd_po_focus) =
             self.count_parrainage_jd_po_confirmation_due()?;
+        let (parrainage_outcome_count, parrainage_outcome_pipe_focus) =
+            self.count_parrainage_jd_po_outcome_pending()?;
         let (placement_nc_count, placement_nc_focus) =
             self.count_placement_non_conforme_with_focus()?;
 
@@ -94,22 +100,32 @@ impl super::Database {
             alertes: NotificationQueueBucket {
                 count: alertes_count,
                 focus_contact_id: alertes_focus,
+                focus_pipe_id: None,
             },
             alertes_arbitrage: NotificationQueueBucket {
                 count: alertes_arbitrage_count,
                 focus_contact_id: alertes_arbitrage_focus,
+                focus_pipe_id: None,
             },
             taches_urgent: NotificationQueueBucket {
                 count: taches_urgent_count,
                 focus_contact_id: taches_urgent_focus,
+                focus_pipe_id: None,
             },
             parrainage_jd_po: NotificationQueueBucket {
                 count: parrainage_jd_po_count,
                 focus_contact_id: parrainage_jd_po_focus,
+                focus_pipe_id: None,
+            },
+            parrainage_jd_po_outcome: NotificationQueueBucket {
+                count: parrainage_outcome_count,
+                focus_contact_id: None,
+                focus_pipe_id: parrainage_outcome_pipe_focus,
             },
             placement_non_conforme: NotificationQueueBucket {
                 count: placement_nc_count,
                 focus_contact_id: placement_nc_focus,
+                focus_pipe_id: None,
             },
             stellium_signals,
         })

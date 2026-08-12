@@ -17,9 +17,11 @@ import {
 } from "@/lib/compta/compta-month-reminder";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { navigateToTaches } from "@/lib/navigation/taches-navigation";
+import { navigateToParrainagePipe } from "@/lib/navigation/parrainage-pipe-navigation";
 import { STELLIUM_EXCELTIS_CHANGED_EVENT } from "@/lib/api/tauri-stellium-exceltis";
 import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
 import { subscribeTachesChanged } from "@/lib/taches/tache-events";
+import { subscribeParrainagePipeChanged } from "@/lib/parrainage-pipe/parrainage-pipe-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
   subscribeEtiquettesChangedDebounced,
@@ -132,6 +134,7 @@ export function AppNotificationsBar({
 
     const unsubAlertes = subscribeAlertesChanged(schedule);
     const unsubTaches = subscribeTachesChanged(schedule);
+    const unsubParrainagePipe = subscribeParrainagePipeChanged(schedule);
     const unsubContacts = subscribeContactsChanged(schedule);
     const unsubEtiquettes = subscribeEtiquettesChangedDebounced(schedule);
     const unsubRelation = subscribeRelationChanged(schedule);
@@ -147,6 +150,7 @@ export function AppNotificationsBar({
     return () => {
       unsubAlertes();
       unsubTaches();
+      unsubParrainagePipe();
       unsubContacts();
       unsubEtiquettes();
       unsubRelation();
@@ -229,6 +233,10 @@ export function AppNotificationsBar({
                     currentPage,
                     item.focusContactId
                   );
+                  return;
+                }
+                if (item.targetPage === "pipe-parrainage") {
+                  navigateToParrainagePipe(onPageChange, item.focusParrainagePipeId);
                   return;
                 }
                 navigateToSuivi(

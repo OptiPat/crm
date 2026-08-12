@@ -164,6 +164,9 @@ export function formatParrainageInvitationSummaryFromPipe(
 
 const PRESENCE_CONFIRMATION_HOUR = 9;
 
+/** Préfixe des tâches auto J-1 (aligné Rust `PRESENCE_CONFIRMATION_TASK_TITLE_PREFIX`). */
+export const PARRAINAGE_PRESENCE_CONFIRMATION_TASK_PREFIX = "Confirmer la présence de ";
+
 /**
  * Échéance pour la tâche « confirmer la présence » : veille de la JD/PO à 9h locale.
  * Si cette échéance est déjà passée mais l'invitation est future, retourne « maintenant » (+1 min).

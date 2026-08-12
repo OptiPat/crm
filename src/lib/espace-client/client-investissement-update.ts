@@ -92,6 +92,94 @@ function parseOptionalMoney(
   return n;
 }
 
+/** Champs du formulaire client, tels qu'ils sont saisis. */
+export interface ClientInvestissementFormFields {
+  /** Jour civil YYYY-MM-DD. */
+  date: string;
+  /** Montants en euros, saisie brute (« 1 250,50 »). */
+  valorisation: string;
+  revenu: string;
+  loyer: string;
+  mensualite: string;
+  /** Jour civil YYYY-MM-DD, ou vide. */
+  dateFinPret: string;
+}
+
+/** Euros saisis en centimes. Saisie vide ou illisible : 0. */
+export function parseEurosInput(value: string): number {
+  const normalized = value.replace(/\s/g, "").replace(",", ".");
+  const n = Number.parseFloat(normalized);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * 100);
+}
+
+/** Timestamp en valeur de champ date, vide si absent. */
+export function unixToDateInput(unix?: number | null): string {
+  if (unix == null || unix <= 0) return "";
+  const d = new Date(unix * 1000);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Traduit le formulaire en mise à jour, **en n'envoyant que ce que le client a
+ * changé**.
+ *
+ * Le formulaire pré-remplit loyer, mensualité et fin de prêt avec les valeurs
+ * du dossier : les renvoyer systématiquement reviendrait à réaffirmer une photo
+ * vieille de plusieurs minutes. Si le conseiller a saisi une fin de prêt entre
+ * l'ouverture de l'écran et l'enregistrement, cette réaffirmation l'effacerait
+ * — le client n'ayant rien touché, personne ne comprendrait la disparition.
+ *
+ * Un champ inchangé est donc absent de la requête, ce que le portail lit comme
+ * « ne pas toucher ». Vidé volontairement, il vaut 0 € ou date effacée.
+ */
+export function buildClientInvestissementUpdateInput(
+  inv: Pick<
+    Investissement,
+    | "id"
+    | "type_produit"
+    | "origine"
+    | "loyer_mensuel"
+    | "mensualite_credit"
+    | "date_fin_pret"
+  >,
+  fields: ClientInvestissementFormFields
+): ClientInvestissementUpdateInput {
+  const kind = getClientInvestissementUpdateKind(inv);
+  const input: ClientInvestissementUpdateInput = {
+    investissementId: inv.id,
+    date: fields.date,
+    valorisationCentimes: parseEurosInput(fields.valorisation),
+  };
+
+  if (kind === "scpi") {
+    input.revenuPercuCentimes = fields.revenu.trim()
+      ? parseEurosInput(fields.revenu)
+      : null;
+  }
+
+  if (kind === "immobilier") {
+    const loyer = fields.loyer.trim() ? parseEurosInput(fields.loyer) : 0;
+    if (loyer !== (inv.loyer_mensuel ?? 0)) {
+      input.loyerMensuelCentimes = loyer;
+    }
+    const mensualite = fields.mensualite.trim()
+      ? parseEurosInput(fields.mensualite)
+      : 0;
+    if (mensualite !== (inv.mensualite_credit ?? 0)) {
+      input.mensualiteCreditCentimes = mensualite;
+    }
+    if (fields.dateFinPret.trim() !== unixToDateInput(inv.date_fin_pret)) {
+      input.dateFinPret = fields.dateFinPret;
+    }
+  }
+
+  return input;
+}
+
 /** Valide une mise à jour client (SCPI, encours à côté, ou immobilier à côté). */
 export function validateClientInvestissementUpdate(
   inv: Pick<Investissement, "id" | "type_produit" | "origine">,

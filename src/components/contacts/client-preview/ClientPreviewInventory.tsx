@@ -226,7 +226,17 @@ export function ClientPreviewInventory({
   const [openCategories, setOpenCategories] = useState<
     Set<PatrimoineCategorie>
   >(() => new Set(sections.slice(0, 1)));
-  const [selected, setSelected] = useState<Investissement | null>(null);
+  /**
+   * L'identifiant, pas la ligne : après un enregistrement le portail recharge
+   * la photo, et une copie figée de l'objet aurait continué d'afficher
+   * l'ancien encours — le client aurait cru sa saisie perdue, et le formulaire
+   * aurait renvoyé des valeurs périmées.
+   */
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selected = useMemo(
+    () => sortedInventory.find((inv) => inv.id === selectedId) ?? null,
+    [sortedInventory, selectedId]
+  );
 
   useEffect(() => {
     const first = sectionKey.split("|")[0] as PatrimoineCategorie | undefined;
@@ -268,7 +278,7 @@ export function ClientPreviewInventory({
                   return next;
                 });
               }}
-              onSelect={setSelected}
+              onSelect={(inv) => setSelectedId(inv.id)}
             />
           ))}
         </div>
@@ -288,7 +298,7 @@ export function ClientPreviewInventory({
           enableScpiTracking={enableScpiTracking}
           scpiDeclarationSubmitting={scpiDeclarationSubmitting}
           onSubmitScpiDeclaration={onSubmitScpiDeclaration}
-          onClose={() => setSelected(null)}
+          onClose={() => setSelectedId(null)}
         />
       ) : null}
     </section>

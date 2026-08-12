@@ -7,6 +7,7 @@ pub const STAGE_A_CONTACTER: &str = "A_CONTACTER";
 pub const STAGE_ATTENTE_REPONSE: &str = "ATTENTE_REPONSE";
 pub const STAGE_PRISE_DE_CONTACT: &str = "PRISE_DE_CONTACT";
 pub const STAGE_CONFIRME: &str = "CONFIRME";
+pub const STAGE_REPORTE: &str = "REPORTE";
 pub const STAGE_PRESENT: &str = "PRESENT";
 pub const STAGE_INSCRIT: &str = "INSCRIT";
 pub const STAGE_REFUSE: &str = "REFUSE";
@@ -16,6 +17,7 @@ const VALID_STAGES: &[&str] = &[
     STAGE_ATTENTE_REPONSE,
     STAGE_PRISE_DE_CONTACT,
     STAGE_CONFIRME,
+    STAGE_REPORTE,
     STAGE_PRESENT,
     STAGE_INSCRIT,
     STAGE_REFUSE,
@@ -42,6 +44,39 @@ pub(crate) fn parrainage_presence_confirmation_task_title_sql_exclude(t_alias: &
     )
 }
 
+const JD_PO_OUTCOME_UPDATE_HOUR: u32 = 18;
+
+fn parrainage_jd_po_outcome_update_due_unix(invitation_date: i64) -> i64 {
+    use chrono::{Local, TimeZone};
+    let local = Local
+        .timestamp_opt(invitation_date, 0)
+        .single()
+        .unwrap_or_else(|| Local.from_utc_datetime(&chrono::Utc.timestamp_opt(invitation_date, 0).unwrap().naive_utc()));
+    let due_naive = local
+        .date_naive()
+        .and_hms_opt(JD_PO_OUTCOME_UPDATE_HOUR, 0, 0)
+        .unwrap_or_else(|| local.date_naive().and_hms_opt(0, 0, 0).unwrap());
+    Local
+        .from_local_datetime(&due_naive)
+        .single()
+        .map(|dt| dt.timestamp())
+        .unwrap_or(invitation_date)
+}
+
+pub(crate) fn parrainage_pipe_needs_jd_po_outcome_update(
+    stage: &str,
+    invitation_date: Option<i64>,
+    now_ts: i64,
+) -> bool {
+    if stage != STAGE_CONFIRME {
+        return false;
+    }
+    let Some(invitation_date) = invitation_date else {
+        return false;
+    };
+    now_ts >= parrainage_jd_po_outcome_update_due_unix(invitation_date)
+}
+
 fn now_unix() -> i64 {
     Utc::now().timestamp()
 }
@@ -64,6 +99,7 @@ pub(crate) fn parrainage_stage_label(stage: &str) -> String {
         STAGE_ATTENTE_REPONSE => "En attente de réponse".into(),
         STAGE_PRISE_DE_CONTACT => "Prise de contact".into(),
         STAGE_CONFIRME => "Oui, je viens".into(),
+        STAGE_REPORTE => "À replanifier".into(),
         STAGE_PRESENT => "Présent JD/PO".into(),
         STAGE_INSCRIT => "Inscrit".into(),
         STAGE_REFUSE => "Refusé / abandonné".into(),
@@ -342,10 +378,17 @@ impl super::Database {
         }
         let now = now_unix();
         let tx = self.conn.unchecked_transaction()?;
-        self.conn.execute(
-            "UPDATE parrainage_pipes SET stage = ?1, invitation_type = ?2, updated_at = ?3 WHERE id = ?4",
-            params![new_stage, resolved_invitation, now, id],
-        )?;
+        if new_stage == STAGE_REPORTE {
+            self.conn.execute(
+                "UPDATE parrainage_pipes SET stage = ?1, invitation_type = ?2, invitation_date = NULL, updated_at = ?3 WHERE id = ?4",
+                params![new_stage, resolved_invitation, now, id],
+            )?;
+        } else {
+            self.conn.execute(
+                "UPDATE parrainage_pipes SET stage = ?1, invitation_type = ?2, updated_at = ?3 WHERE id = ?4",
+                params![new_stage, resolved_invitation, now, id],
+            )?;
+        }
         let titre = format!("Étape : {}", parrainage_stage_label(new_stage));
         self.insert_parrainage_timeline_entry(
             id,
@@ -571,6 +614,17 @@ impl super::Database {
                     params![parrain_id, inv, invitation_event_date, now, contact_id],
                 )?;
             }
+            STAGE_REPORTE => {
+                self.conn.execute(
+                    "UPDATE contacts SET
+                        filleul_categorie = 'PROSPECT_FILLEUL',
+                        parrain_id = COALESCE(parrain_id, ?1),
+                        date_dernier_contact_filleul = ?2,
+                        updated_at = ?3
+                     WHERE id = ?4",
+                    params![parrain_id, today, now, contact_id],
+                )?;
+            }
             STAGE_PRESENT => {
                 let inv = invitation_type.unwrap_or("JD");
                 self.conn.execute(
@@ -605,6 +659,38 @@ impl super::Database {
             _ => {}
         }
         Ok(())
+    }
+
+    /// Pipes « Oui, je viens » dont la JD/PO est passée (≥ 18h le jour J) sans issue saisie.
+    pub fn count_parrainage_jd_po_outcome_pending(&self) -> Result<(u32, Option<i64>)> {
+        let now_ts = now_unix();
+        let mut stmt = self.conn.prepare(
+            "SELECT id, contact_id, stage, invitation_date FROM parrainage_pipes
+             WHERE archived_at IS NULL AND stage = ?1 AND invitation_date IS NOT NULL
+             ORDER BY invitation_date ASC, id ASC",
+        )?;
+        let rows = stmt.query_map(params![STAGE_CONFIRME], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<i64>>(3)?,
+            ))
+        })?;
+        let mut pending: Vec<(i64, i64)> = Vec::new();
+        for row in rows {
+            let (pipe_id, contact_id, stage, invitation_date) = row?;
+            if parrainage_pipe_needs_jd_po_outcome_update(&stage, invitation_date, now_ts) {
+                pending.push((pipe_id, contact_id));
+            }
+        }
+        let count = pending.len() as u32;
+        let focus_pipe_id = if count == 1 {
+            Some(pending[0].0)
+        } else {
+            None
+        };
+        Ok((count, focus_pipe_id))
     }
 }
 
@@ -677,6 +763,127 @@ mod tests {
         assert_eq!(counts.confirmations, 1);
         assert_eq!(counts.presences, 1);
         assert_eq!(counts.parrainages, 1);
+    }
+
+    #[test]
+    fn reporte_stage_clears_invitation_date() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        let pipe = db
+            .create_parrainage_pipe(NewParrainagePipe {
+                contact_id,
+                exercice_label: "2025-2026".into(),
+                stage: Some(STAGE_A_CONTACTER.into()),
+                invitation_type: None,
+                notes: None,
+            })
+            .unwrap();
+        db.update_parrainage_pipe(
+            pipe.id,
+            UpdateParrainagePipe {
+                invitation_type: Some("JD".into()),
+                invitation_date: Some(Some(today_unix())),
+                notes: None,
+            },
+        )
+        .unwrap();
+        db.set_parrainage_pipe_stage(pipe.id, STAGE_CONFIRME, Some("JD"), None)
+            .unwrap();
+        let confirmed = db.get_parrainage_pipe_by_id(pipe.id).unwrap();
+        assert!(confirmed.invitation_date.is_some());
+
+        db.set_parrainage_pipe_stage(
+            pipe.id,
+            STAGE_REPORTE,
+            Some("JD"),
+            Some("Absent sans date"),
+        )
+        .unwrap();
+        let reporte = db.get_parrainage_pipe_by_id(pipe.id).unwrap();
+        assert_eq!(reporte.stage, STAGE_REPORTE);
+        assert!(reporte.invitation_date.is_none());
+
+        let (count, focus_pipe_id) = db.count_parrainage_jd_po_outcome_pending().unwrap();
+        assert_eq!(count, 0);
+        assert!(focus_pipe_id.is_none());
+    }
+
+    #[test]
+    fn update_parrainage_pipe_clears_notes_with_empty_string() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        let pipe = db
+            .create_parrainage_pipe(NewParrainagePipe {
+                contact_id,
+                exercice_label: "2025-2026".into(),
+                stage: Some(STAGE_A_CONTACTER.into()),
+                invitation_type: None,
+                notes: Some("Note initiale".into()),
+            })
+            .unwrap();
+
+        db.update_parrainage_pipe(
+            pipe.id,
+            UpdateParrainagePipe {
+                invitation_type: None,
+                invitation_date: None,
+                notes: Some(Some("".into())),
+            },
+        )
+        .unwrap();
+        let cleared = db.get_parrainage_pipe_by_id(pipe.id).unwrap();
+        assert!(cleared.notes.is_none());
+    }
+
+    #[test]
+    fn jd_po_outcome_pending_after_event_day_at_18h() {
+        use chrono::{Local, TimeZone};
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        let pipe = db
+            .create_parrainage_pipe(NewParrainagePipe {
+                contact_id,
+                exercice_label: "2025-2026".into(),
+                stage: Some(STAGE_CONFIRME.into()),
+                invitation_type: Some("JD".into()),
+                notes: None,
+            })
+            .unwrap();
+        let day = Local::now().date_naive();
+        let invitation = Local
+            .from_local_datetime(&day.and_hms_opt(9, 0, 0).unwrap())
+            .single()
+            .unwrap()
+            .timestamp();
+        let now_evening = Local
+            .from_local_datetime(&day.and_hms_opt(19, 0, 0).unwrap())
+            .single()
+            .unwrap()
+            .timestamp();
+        db.update_parrainage_pipe(
+            pipe.id,
+            UpdateParrainagePipe {
+                invitation_type: Some("JD".into()),
+                invitation_date: Some(Some(invitation)),
+                notes: None,
+            },
+        )
+        .unwrap();
+
+        assert!(parrainage_pipe_needs_jd_po_outcome_update(
+            STAGE_CONFIRME,
+            Some(invitation),
+            now_evening
+        ));
+        assert!(!parrainage_pipe_needs_jd_po_outcome_update(
+            STAGE_CONFIRME,
+            Some(invitation),
+            Local
+                .from_local_datetime(&day.and_hms_opt(17, 0, 0).unwrap())
+                .single()
+                .unwrap()
+                .timestamp()
+        ));
     }
 
     #[test]

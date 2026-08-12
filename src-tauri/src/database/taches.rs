@@ -156,7 +156,7 @@ impl super::Database {
             if let Some(inv_id) = super::arbitrage_alerts::parse_arbitrage_investissement_id_from_description(
                 updated.description.as_deref(),
             ) {
-                let _ = self.sync_arbitrage_postpone_from_task_echeance(inv_id, updated.date_echeance);
+                self.sync_arbitrage_postpone_from_task_echeance(inv_id, updated.date_echeance)?;
             }
         }
         Ok(updated)

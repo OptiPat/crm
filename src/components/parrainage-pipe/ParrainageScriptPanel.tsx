@@ -75,6 +75,13 @@ import {
   localDateTimeInputToUnix,
   parrainagePresenceConfirmationDueUnix,
 } from "@/lib/parrainage-pipe/parrainage-call-schedule";
+import {
+  recordParrainageJdAbandon,
+  recordParrainageJdAbsentNoDate,
+  recordParrainageJdAbsentReschedule,
+  recordParrainageJdPresent,
+  replanifyParrainageWithNewDate,
+} from "@/lib/parrainage-pipe/parrainage-jd-outcome";
 import { fireConfettiBurst } from "@/lib/ui/confetti-burst";
 import {
   buildUpsertFilleulDossierInput,
@@ -986,7 +993,51 @@ function SmsAnticipationWaitingSection({
   );
 }
 
-function ConfirmeInvitationSection({ invitationSummary }: { invitationSummary: string | null }) {
+function ConfirmeInvitationSection({
+  pipe,
+  invitationSummary,
+  invitationType,
+  onPipeUpdated,
+  onNoteSaved,
+}: {
+  pipe: ParrainagePipeRecord;
+  invitationSummary: string | null;
+  invitationType: string;
+  onPipeUpdated: (pipe: ParrainagePipeRecord) => void;
+  onNoteSaved?: () => void | Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [showAbsentChoices, setShowAbsentChoices] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const busyRef = useRef(false);
+
+  const runAction = async (
+    action: () => Promise<ParrainagePipeRecord>,
+    successMessage: string,
+    options?: { confettiTarget?: HTMLElement | null }
+  ) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const updated = await action();
+      onPipeUpdated(updated);
+      await onNoteSaved?.();
+      if (options?.confettiTarget) {
+        const rect = options.confettiTarget.getBoundingClientRect();
+        fireConfettiBurst({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+      }
+      toast.success(successMessage);
+      setShowAbsentChoices(false);
+      setRescheduleDate("");
+    } catch (error) {
+      toast.error(formatParrainagePipeError(error));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
+
   if (!invitationSummary) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -996,9 +1047,196 @@ function ConfirmeInvitationSection({ invitationSummary }: { invitationSummary: s
   }
 
   return (
-    <div className="space-y-3 rounded-md border border-primary/30 bg-primary/5 p-4">
-      <p className="text-sm font-medium">Oui, je viens</p>
-      <p className="text-base text-foreground">{invitationSummary}</p>
+    <div className="space-y-4">
+      <div className="space-y-3 rounded-md border border-primary/30 bg-primary/5 p-4">
+        <p className="text-sm font-medium">Oui, je viens</p>
+        <p className="text-base text-foreground">{invitationSummary}</p>
+      </div>
+
+      {!showAbsentChoices ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            disabled={busy}
+            onClick={(e) =>
+              void runAction(
+                () => recordParrainageJdPresent(pipe, invitationSummary),
+                "Présence enregistrée",
+                { confettiTarget: e.currentTarget }
+              )
+            }
+          >
+            Présent
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => setShowAbsentChoices(true)}
+          >
+            Absent
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-3 rounded-md border border-border/70 bg-muted/20 p-4">
+          <p className="text-sm font-medium">Absent — que faire ?</p>
+          <div className="space-y-2">
+            <Label htmlFor="parrainage-reschedule-date">Nouvelle date JD/PO</Label>
+            <Input
+              id="parrainage-reschedule-date"
+              type="date"
+              value={rescheduleDate}
+              onChange={(e) => setRescheduleDate(e.target.value)}
+              disabled={busy}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="w-full sm:w-auto"
+              disabled={busy || !rescheduleDate.trim()}
+              onClick={() =>
+                void runAction(
+                  () => recordParrainageJdAbsentReschedule(pipe, rescheduleDate, invitationType),
+                  `Reporté au ${formatParrainageInvitationDateLabel(rescheduleDate) ?? rescheduleDate}`
+                )
+              }
+            >
+              Reporter avec cette date
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                void runAction(
+                  () => recordParrainageJdAbsentNoDate(pipe, invitationSummary),
+                  "Déplacé vers À replanifier"
+                )
+              }
+            >
+              Sans date pour l&apos;instant
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={busy}
+              onClick={() =>
+                void runAction(
+                  () => recordParrainageJdAbandon(pipe, invitationSummary),
+                  "Abandon enregistré"
+                )
+              }
+            >
+              Abandon
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                setShowAbsentChoices(false);
+                setRescheduleDate("");
+              }}
+            >
+              Annuler
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReporteReplanifierSection({
+  pipe,
+  invitationType,
+  onPipeUpdated,
+  onNoteSaved,
+}: {
+  pipe: ParrainagePipeRecord;
+  invitationType: string;
+  onPipeUpdated: (pipe: ParrainagePipeRecord) => void;
+  onNoteSaved?: () => void | Promise<void>;
+}) {
+  const [newDate, setNewDate] = useState("");
+  const [type, setType] = useState(invitationType || "JD");
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+
+  useEffect(() => {
+    setType(invitationType || "JD");
+  }, [pipe.id, invitationType]);
+
+  const submit = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (busyRef.current) return;
+    if (!newDate.trim()) {
+      toast.error(parrainageInvitationDateRequiredMessage());
+      return;
+    }
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const updated = await replanifyParrainageWithNewDate(pipe, newDate, type);
+      onPipeUpdated(updated);
+      await onNoteSaved?.();
+      const rect = event.currentTarget.getBoundingClientRect();
+      fireConfettiBurst({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+      toast.success(
+        `Nouvelle date — ${formatParrainageInvitationSummary(type, newDate) ?? newDate}`
+      );
+      setNewDate("");
+    } catch (error) {
+      toast.error(formatParrainagePipeError(error));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Le filleul s&apos;est absenté sans date de report. Rappelez-le pour fixer une nouvelle JD ou
+        PO.
+      </p>
+      <div className="space-y-3 rounded-md border border-orange-200/70 bg-orange-50/40 p-4 dark:border-orange-900 dark:bg-orange-950/20">
+        <div className="space-y-2">
+          <Label>Type d&apos;invitation</Label>
+          <Select value={type} onValueChange={setType} disabled={busy}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PARRAINAGE_INVITATION_TYPES.map((invType) => (
+                <SelectItem key={invType} value={invType}>
+                  {PARRAINAGE_INVITATION_LABELS[invType]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="parrainage-replanify-date">Nouvelle date</Label>
+          <Input
+            id="parrainage-replanify-date"
+            type="date"
+            value={newDate}
+            onChange={(e) => setNewDate(e.target.value)}
+            disabled={busy}
+          />
+        </div>
+        <Button type="button" size="sm" disabled={busy || !newDate.trim()} onClick={(e) => void submit(e)}>
+          Date fixée → Oui, je viens
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1363,6 +1601,7 @@ interface ParrainageScriptPanelProps {
   plannedCallLabel?: string | null;
   onNoteSaved?: () => void | Promise<void>;
   onAdvanceStage?: () => Promise<boolean> | boolean;
+  onPipeUpdated?: (pipe: ParrainagePipeRecord) => void;
 }
 
 export function ParrainageScriptPanel({
@@ -1378,6 +1617,7 @@ export function ParrainageScriptPanel({
   plannedCallLabel = null,
   onNoteSaved,
   onAdvanceStage,
+  onPipeUpdated,
 }: ParrainageScriptPanelProps) {
   const stage = pipe.stage as ParrainagePipeStage;
   const isInscrit = stage === "INSCRIT";
@@ -1385,6 +1625,11 @@ export function ParrainageScriptPanel({
   const isAttenteReponse = stage === "ATTENTE_REPONSE";
   const isPriseDeContact = stage === "PRISE_DE_CONTACT";
   const isConfirme = stage === "CONFIRME";
+  const isReporte = stage === "REPORTE";
+
+  const handlePipeUpdated = (updated: ParrainagePipeRecord) => {
+    onPipeUpdated?.(updated);
+  };
 
   return (
     <Card className="border-border/60 shadow-none">
@@ -1402,6 +1647,8 @@ export function ParrainageScriptPanel({
               ? "Script d'appel — prospect au téléphone."
               : isConfirme
                 ? "Confirmation obtenue — invitation JD ou PO."
+                : isReporte
+                  ? "Absent sans date — obtenir une nouvelle JD ou PO."
               : `Étape « ${PARRAINAGE_PIPE_STAGE_LABELS[stage]} ».`}
         </CardDescription>
       </CardHeader>
@@ -1437,7 +1684,20 @@ export function ParrainageScriptPanel({
             onSaveInvitationMeta={onSaveInvitationMeta}
           />
         ) : isConfirme ? (
-          <ConfirmeInvitationSection invitationSummary={invitationSummary} />
+          <ConfirmeInvitationSection
+            pipe={pipe}
+            invitationSummary={invitationSummary}
+            invitationType={invitationType}
+            onPipeUpdated={handlePipeUpdated}
+            onNoteSaved={onNoteSaved}
+          />
+        ) : isReporte ? (
+          <ReporteReplanifierSection
+            pipe={pipe}
+            invitationType={invitationType}
+            onPipeUpdated={handlePipeUpdated}
+            onNoteSaved={onNoteSaved}
+          />
         ) : (
           <p className="text-sm text-muted-foreground">
             Pas encore de script pour cette étape.
