@@ -1,8 +1,9 @@
 # Espace client — plan d'implémentation
 
-> **Statut au 10 août 2026** : phases 0 et 1 construites et testées, en local uniquement.
+> **Statut au 12 août 2026** : en production, phases 0 à 2 faites, premiers clients en bêta.
 > Cadrage initial du 8 août. Voir §0 pour l'état d'avancement réel.
-> **Public** : agent ou développeur qui reprend le sujet. Lire les sections 2 et 3 avant toute proposition alternative.
+> **Public** : agent ou développeur qui reprend le sujet. Lire les sections 2 et 3 avant toute
+> proposition alternative, et **§15 avant de toucher à un écran client**.
 
 ---
 
@@ -19,7 +20,7 @@ bout en bout sur un contact fictif. Trois investisseurs entrent en phase bêta.
 | 1 — Portail en lecture, authentification client | **Fait** |
 | 2 — Dépôt de documents | **Fait**, validé en production |
 | 3 — Documents mis à disposition | Non commencé — c'est là que se branchera la ré-authentification (R7) |
-| 4 — Déclaration des avoirs extérieurs | Non commencé |
+| 4 — Déclaration des avoirs extérieurs | Non commencé. Une première tranche existe : le client met à jour ses SCPI conseillées |
 | 5 — Notifications et cycle de vie | Partiel : révocation, alerte nouvel appareil, annonce des événements |
 | Déploiement serveur | **Fait** — procédure dans `espace-portail/deploy/README.md` |
 
@@ -32,14 +33,18 @@ Ajouts postérieurs au plan initial, non prévus ici mais livrés :
   utilisés par les modèles d'emails.
 - **Section Paramètres → Espace client** : connexion au portail, bouton de rendez-vous,
   synchronisation de tous les clients actifs.
+- **Mise à jour des SCPI par le client** : il déclare valorisation et revenus perçus,
+  le conseiller est prévenu par email et reprend la déclaration à l'import. Plafond de
+  10 000 000 € par ligne, jour civil en UTC comme le reste de la chaîne.
+- **Historique de valorisation étiqueté par source** : « Valorisé par votre conseiller »
+  ou « Déclaré par vous », les deux sources fusionnées dans une seule liste. Applique
+  **R1** là où le client ne voyait auparavant que ses propres déclarations.
 
 Documents liés : `docs/ESPACE_CLIENT_RGPD.md` (registre, bases légales, sous-traitants),
 `docs/ESPACE_CLIENT_INCIDENT.md` (plan de réponse à incident),
 `espace-portail/deploy/README.md` (déploiement, sauvegarde, pièges rencontrés),
+`espace-portail/README.md` (lancement, variables d'environnement),
 `.cursor/rules/deploiement-espace-portail.mdc` (mise à jour du portail par un agent).
-
-Documents liés : `docs/ESPACE_CLIENT_RGPD.md` (registre, bases légales, sous-traitants),
-`espace-portail/README.md` (lancement, variables d'environnement, mise en ligne).
 
 ---
 
@@ -134,6 +139,22 @@ Le **dépôt en est exclu**, délibérément. Il envoie un fichier vers le conse
 **R15 — Les en-têtes de proxy ne sont lus que d'un pair de confiance.** `X-Forwarded-For` et `X-Real-IP` ne sont pris en compte que si la requête vient réellement du reverse proxy (adresse locale ou privée). Autrement, n'importe qui joignant le binaire en direct change d'identité à chaque requête et annule la limitation par IP.
 
 **R17 — Le portail ne peut pas lire les pièces déposées.** Chaque dépôt est scellé avec la **clé publique** du CRM avant d'être écrit sur le disque ; la clé privée ne quitte jamais le poste du conseiller, où elle est chiffrée au repos. Un serveur entièrement compromis ne livre que du chiffré. Le nom d'origine du fichier n'apparaît pas non plus dans l'arborescence : `CNI_DUPONT_Jean.pdf` se lirait sans même ouvrir le fichier.
+
+**R18 — L'aperçu du conseiller et l'écran du client sortent du même code.** Deux écrans
+censés être identiques mais écrits séparément divergent, toujours, et rien ne le signale :
+l'aperçu affirme au conseiller ce que le client verra, il ne le montre pas. La règle a trois
+conséquences pratiques.
+
+- **Les règles d'affichage appartiennent au moteur Rust**, jamais à un composant. Timeline,
+  historique de valorisation, bouton de rendez-vous, pièces attendues : l'aperçu lit
+  `build_espace_client_preview` — la même fonction que la photo envoyée au portail — et se
+  contente de la rendre. Un test compare les deux sorties événement par événement
+  (`advisor_preview_shows_the_same_timeline_as_the_portal`).
+- **Un rendu = un composant**, partagé par les deux applications (`src/components/contacts/
+  client-preview/`). Le portail ne redessine rien pour son compte.
+- **Ce qui reste différent doit être nommé et justifié** dans le composant : le cadre
+  simulateur, le bouton de déconnexion inerte, le logo du cabinet à défaut de celui du
+  serveur. Tout le reste est un défaut.
 
 **R16 — Un défaut dangereux est toujours opt-in.** Le mode qui expose le patrimoine sans authentification, comme tout garde-fou désactivable, est inactif par défaut et le binaire refuse de démarrer dans les combinaisons qui le rendraient joignable. Un avertissement dans les logs ne suffit pas.
 
@@ -302,7 +323,7 @@ Brevo), `sync.rs` / `sync_auth.rs` (réception CRM), `read.rs`, `security.rs`
 Côté CRM : `src-tauri/src/espace_client/` — `activation.rs`, `commands.rs`, `config.rs`,
 `portal_api.rs`, `push.rs`, `snapshot.rs`, `sync_payload.rs`, `visibilite.rs`.
 
-### Phase 2 — Dépôt de documents — **non commencée**
+### Phase 2 — Dépôt de documents — **faite**, validée en production
 
 Demandes créées depuis le CRM, dépôt par le client, accusé de réception émis par le portail (**pas** par le CRM), rapatriement en GED, purge (**R3**), ré-authentification (**R7**), liens signés (**R8**).
 
@@ -383,13 +404,19 @@ Le CRM initie toujours (**R6**).
 CRM → portail    invitation / activation d'un accès
 CRM → portail    lignes de patrimoine visibles (par personne, après application de R2)
 CRM → portail    événements de timeline
+CRM → portail    historique de valorisation, chaque point étiqueté cabinet / client
 CRM → portail    demandes de documents
 CRM → portail    publications de documents
 
 CRM ← portail    documents déposés (puis purge côté portail)
+CRM ← portail    déclarations SCPI du client (valorisation, revenus)
 CRM ← portail    avoirs déclarés par le client
 CRM ← portail    journal d'activité (connexions, consultations)
 ```
+
+**Version de schéma** : `ESPACE_SYNC_SCHEMA_VERSION = 6` (5 = liens de rendez-vous,
+6 = historique de valorisation étiqueté). Le portail ne compare pas cette valeur : un
+champ absent d'une photo ancienne doit dégrader proprement, pas faire échouer la lecture.
 
 **Authentification de l'API** : clé propre à l'installation, signature HMAC-SHA256 du corps, horodatage avec fenêtre anti-rejeu.
 
@@ -470,6 +497,8 @@ Ce qui est en place est décrit au §10 et couvert par les tests de `espace-port
 | **Sauvegarde et restauration** | Fait. Tâche planifiée quotidienne, contrôle d'intégrité immédiat, restauration jouée avec succès |
 | **Rétention et purge des documents** | Fait. Le fichier scellé est supprimé sur accusé de réception du CRM, après comparaison d'empreinte |
 | **Cloison conseiller / client** | Fait. Alertes et tâches ne quittent plus le CRM ; le portail écarte en outre celles des anciennes photos |
+| **Miroir aperçu / portail** | Fait. Un seul moteur de règles, des composants partagés, un test qui compare les deux sorties (**R18**). Voir §15 : c'est la dette qui a coûté le plus cher |
+| **Textes libres dans les emails** | Fait. Titres, messages et navigateur annoncé par le visiteur sont échappés avant insertion dans le HTML |
 
 ### Reste à faire
 
@@ -498,6 +527,52 @@ Ce qui est en place est décrit au §10 et couvert par les tests de `espace-port
 
 ---
 
+## 15. Erreurs commises — à ne pas refaire
+
+Cette section n'est pas un journal de contrition : c'est la partie du plan qui a été payée
+en défauts réels, dont plusieurs n'ont été vus qu'en production. **La lire avant de toucher
+à un écran client.**
+
+### Le miroir aperçu / portail — la dette la plus coûteuse
+
+L'onglet « Aperçu client » promet au conseiller de montrer ce que verra son client. Cette
+promesse a été rompue quatre fois, de quatre manières différentes, parce que deux écrans
+identiques étaient produits par deux codes distincts. Aucun test ne pouvait le voir : chaque
+côté était correct de son point de vue.
+
+| Ce qui a divergé | Comment ça s'est manifesté |
+|---|---|
+| **La timeline, écrite deux fois** (Rust pour le portail, TypeScript pour l'aperçu) | Le Rust transmettait des alertes internes que le TypeScript masquait. Le client recevait donc dans son JSON des notes de travail — « client injoignable », « prospect à relancer » — que l'interface avait la bonté de ne pas afficher |
+| **Les échéances du conseiller** | Elles existaient côté portail et n'apparaissaient pas dans l'aperçu, qui perdait ainsi son objet : le conseiller ne pouvait pas relire ce qu'il venait d'écrire à son client |
+| **Le fond de la fenêtre de détail** | Correct dans l'aperçu, **transparent chez le client**. Les variables de couleur étaient portées par `.cp-root` ; la fenêtre, elle, est rendue par `createPortal` dans `document.body` — hors de cet élément, donc sans palette. Dans l'aperçu la fenêtre reste dans le cadre du téléphone, à l'intérieur de `.cp-root` : le défaut y était invisible par construction |
+| **La position de cette même fenêtre** | Centrée dans l'aperçu, ancrée en bas de l'écran sur le portail. Une fiche courte — immobilier, épargne bancaire — se tassait dans un coin quand une fiche longue paraissait centrée |
+
+Ce qui a été mis en place en réponse est l'invariant **R18** : un seul moteur de règles
+(Rust), un seul composant de rendu par élément, un test qui compare l'aperçu et la photo,
+et l'obligation de nommer dans le code ce qui reste volontairement différent.
+
+**Le piège de fond** : un défaut d'aperçu ne se voit pas en développant, puisque le
+développement se fait dans l'aperçu. Toute modification d'un écran client doit être
+regardée **sur le portail déployé**, pas seulement dans le CRM.
+
+### Les autres défauts, et ce qu'ils ont appris
+
+| Défaut | Ce qui l'a rendu possible | Règle retenue |
+|---|---|---|
+| **Première connexion impossible** pendant une demi-journée | La séparation des secrets : le CRM calcule l'empreinte du code d'activation avec le secret de synchronisation, le portail la vérifiait avec son nouveau secret d'authentification. Les tests des deux côtés passaient | Une empreinte se vérifie avec le secret qui l'a produite. Quand une frontière relie deux binaires, la tester d'un seul côté ne prouve rien |
+| **La sauvegarde n'existait pas** alors qu'elle était écrite | `sqlite3` n'était pas installé, les scripts n'étaient pas copiés sur le serveur, et la planification n'existait qu'en commentaire | Ne jamais déclarer une tâche d'exploitation « faite » sans l'avoir déclenchée et sans avoir restauré |
+| **Le script de sauvegarde absent du dépôt** | Un motif `.gitignore` destiné aux exports locaux l'avalait. Sur un clone neuf, l'installation échouait | Vérifier qu'un fichier référencé par l'installeur est bien suivi par Git |
+| **404 sur l'accusé de réception SCPI** | Le CRM appelait une route que le portail déployé ne connaissait pas encore. Une adresse inconnue renvoyant la page de l'application, le CRM recevait du HTML là où il attendait du JSON | Le portail se déploie **avant** le CRM quand une route nouvelle est appelée |
+| **La valeur déclarée disparaissait de l'écran du client** | L'accusé de réception partait avant la nouvelle photo : le portail cessait d'afficher la déclaration alors que la photo était encore l'ancienne | Écrire, publier, **puis** accuser. Une déclaration non accusée est réimportée sans dommage, les écritures étant idempotentes par jour |
+| **Dates décalées d'un jour** | Le portail interprétait le jour civil dans le fuseau du serveur, quand le CRM classe ses valorisations par jour UTC. Une déclaration du 15 pouvait écraser une valorisation du 14 | Un jour civil est un jour **UTC**, du navigateur jusqu'à la base |
+| **« 1 M€ » pour 1 004 299 €** | Une écriture compacte au-delà du million, alors que toutes les autres lignes de l'écran affichent le montant exact. Le total contredisait visiblement la somme de ses parties | Ne pas arrondir un chiffre que l'écran décompose juste en dessous |
+| **Échecs d'envoi d'email avalés** | `let _ = mailer.send(...)`. Une panne de Brevo aurait laissé le conseiller ignorer qu'un client avait déclaré quelque chose, sans trace | Aucun envoi silencieux : soit journalisé en erreur, soit reproposé |
+| **Deux emails pour un même événement** | La marque « déjà annoncé » était posée après l'envoi : deux synchronisations concurrentes sélectionnaient le même événement | Réserver avant d'envoyer, rendre la réservation si l'envoi échoue |
+| **Antivirus déclaré injoignable alors qu'il répondait** | La réponse de `clamd` se termine par un octet nul, et le transport par défaut sous Debian est un socket local, pas un port TCP | Lire la réponse réelle du démon avant de conclure |
+| **La documentation affirmait l'inverse du code** | Le README présentait ClamAV comme optionnel quand le binaire refuse de démarrer sans lui | Une affirmation de doc sur un garde-fou se vérifie dans le code |
+
+---
+
 ## 12. Règles du dépôt à respecter
 
 - `src-tauri/src/database/operations.rs` est **gelé** — nouveau domaine = nouveau fichier `database/espace_client.rs`
@@ -507,24 +582,34 @@ Ce qui est en place est décrit au §10 et couvert par les tests de `espace-port
 - Messages d'interface en français, identifiants de code en anglais
 - Seuils de taille : composant `.tsx` < 300 lignes, module `.ts` < 400, module `.rs` < 600
 - Tests de caractérisation **avant** tout refactor structurel
+- **Un écran client ne se juge pas dans l'aperçu** : le regarder sur le portail déployé (**R18**, §15)
 - Vérification : `npm run verify:quick` si seul `src/**` est touché, `npm run verify` dès que `src-tauri/**` ou `espace-portail/**` l'est — `verify.ps1` couvre les deux crates Rust et les deux projets TypeScript
 - Aucune donnée nominative réelle dans les fixtures ou les tests (voir `donnees-sensibles.mdc`)
 - Pas de `git commit` ni `git push` sans demande explicite
 
 ---
 
-## 13. Par où commencer
+## 13. Feuille de route
 
-Les phases 0 et 1 sont faites. La suite, dans cet ordre :
+Les cinq étapes du plan initial — déploiement HTTPS, envoi des codes, séparation des clés,
+formalités RGPD, dépôt de documents — sont faites. Ce qui suit, dans cet ordre :
 
-1. **Déployer** le portail derrière Caddy sur un VPS français, avec `ESPACE_PRODUCTION=1`
-   et un `ESPACE_SYNC_SECRET` long et aléatoire. `deploy/README.md` décrit la procédure.
-2. **Tester l'envoi des codes** avec l'expéditeur Brevo actuel (Gmail) : vérifier boîte de réception et spams chez Orange, Gmail, Outlook.
-3. **Séparer les clés** et ajouter `cargo audit` / `npm audit` à la vérification.
-4. **Compléter le RGPD** : coordonnées du cabinet, hébergeur, sous-traitance Brevo activée.
-5. Alors seulement, **phase 2** : dépôt de documents, en câblant l'antivirus dès le premier
-   endpoint d'upload plutôt qu'après.
+1. **Ouvrir l'espace à un premier vrai client, en rendez-vous.** Il n'y a plus de code à
+   écrire pour cela ; ce qui manque est de l'usage. Un client de 65 ans devant l'écran
+   apprendra en dix minutes ce que trois semaines de développement ne diraient pas.
+2. **Surveiller la réception des codes** pendant cette phase. C'est le seul maillon dont
+   l'échec est silencieux : personne ne prévient qu'un message est parti en indésirables.
+   Noter le fournisseur de messagerie à chaque activation, et rouvrir la question du
+   domaine authentifié au premier échec constaté.
+3. **Phase 3 — documents mis à disposition.** C'est là que se branche enfin la
+   ré-authentification à la consultation (**R7**), écrite et testée mais reliée à rien.
+4. **Phase 4 — déclaration des avoirs extérieurs.** La tranche SCPI en donne le patron :
+   saisie côté client, notification du conseiller, reprise à l'import, plafond de bon sens.
+   C'est ce qui rendra le camembert honnête, puisqu'il ne montre aujourd'hui que ce que le
+   cabinet connaît.
+5. **Phase 5 — notifications restantes** : rappels, messages du conseiller, purge en fin de
+   relation.
 
-Les trois premiers points transforment une maquette locale en service exposable. Le
-quatrième conditionne le droit d'accueillir un vrai client. Le cinquième est le vrai
-produit — et le moment où la sécurité cesse d'être théorique.
+Dettes à traiter en chemin, sans urgence propre : le test de restauration mensuel, la
+migration `oauth2` 4.4 → 5.0 le jour où l'on touche à l'authentification Gmail, et une revue
+de sécurité extérieure.
