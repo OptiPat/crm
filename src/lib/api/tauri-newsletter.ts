@@ -172,6 +172,10 @@ export type NewsletterSectionSpacing = "compact" | "normal" | "airy";
 
 export interface NewsletterSettings {
   apiKeyConfigured: boolean;
+  /** Clé Mistral pour OCR / résumés bulletins SCPI (indépendante du fournisseur newsletter). */
+  mistralApiKeyConfigured: boolean;
+  /** Fournisseurs IA dont une clé est déjà enregistrée. */
+  configuredLlmProviders: string[];
   llmProvider: string;
   stylePrompt: string;
   model: string;
@@ -202,6 +206,7 @@ export interface NewsletterSettings {
 
 export interface NewsletterSettingsInput {
   apiKey?: string | null;
+  mistralApiKey?: string | null;
   llmProvider?: string | null;
   stylePrompt?: string | null;
   model?: string | null;

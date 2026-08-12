@@ -100,9 +100,9 @@ export function ScpiCampaignChecklist({
       await onRefreshQueue?.();
     } catch (error) {
       console.error(error);
-      toast.error(
-        error instanceof Error ? error.message : "Impossible de préparer la campagne SCPI."
-      );
+      const message =
+        error instanceof Error ? error.message : typeof error === "string" ? error : null;
+      toast.error(message ?? "Impossible de préparer la campagne SCPI.");
     } finally {
       unlisten?.();
       setPreparing(false);

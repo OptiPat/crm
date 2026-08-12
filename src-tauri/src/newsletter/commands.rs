@@ -90,30 +90,23 @@ pub fn save_newsletter_settings(
 ) -> Result<NewsletterSettingsPublic, String> {
     require_ui_session(&session)?;
     let mut store = NewsletterStore::load(&app)?;
-    if let Some(provider) = input.llm_provider.as_deref() {
-        let trimmed = provider.trim();
-        if !trimmed.is_empty() {
-            let new_id = LlmProvider::parse(trimmed).as_id().to_string();
-            if new_id != store.llm_provider {
-                let has_new_key = input
-                    .api_key
-                    .as_ref()
-                    .is_some_and(|k| !k.trim().is_empty());
-                if !has_new_key {
-                    return Err(format!(
-                        "Changez de fournisseur IA : saisissez la clé API {}.",
-                        LlmProvider::parse(&new_id).label()
-                    ));
-                }
-            }
-        }
-    }
-    if let Some(key) = input.api_key {
-        let trimmed = key.trim();
-        if trimmed.is_empty() {
-            store.api_key = None;
-        } else {
-            store.api_key = Some(trimmed.to_string());
+    let saves_llm_settings = input.llm_provider.is_some();
+    let target_provider = input
+        .llm_provider
+        .as_deref()
+        .map(|p| LlmProvider::parse(p).as_id().to_string())
+        .unwrap_or_else(|| store.llm_provider.clone());
+    if target_provider != store.llm_provider {
+        let has_new_key = input
+            .api_key
+            .as_ref()
+            .is_some_and(|k| !k.trim().is_empty());
+        let has_existing = store.is_provider_api_key_configured(&target_provider);
+        if !has_new_key && !has_existing {
+            return Err(format!(
+                "Changez de fournisseur IA : saisissez la clé API {}.",
+                LlmProvider::parse(&target_provider).label()
+            ));
         }
     }
     if let Some(provider) = input.llm_provider {
@@ -121,6 +114,32 @@ pub fn save_newsletter_settings(
         if !trimmed.is_empty() {
             store.llm_provider = LlmProvider::parse(trimmed).as_id().to_string();
         }
+    }
+    if let Some(key) = input.api_key {
+        let trimmed = key.trim();
+        let provider_id = store.llm_provider.clone();
+        if trimmed.is_empty() {
+            store.set_provider_api_key(&provider_id, None);
+        } else {
+            store.set_provider_api_key(&provider_id, Some(trimmed.to_string()));
+        }
+    }
+    if let Some(key) = input.mistral_api_key {
+        let trimmed = key.trim();
+        if trimmed.is_empty() {
+            store.set_provider_api_key("mistral", None);
+        } else {
+            store.set_provider_api_key("mistral", Some(trimmed.to_string()));
+        }
+    }
+    if saves_llm_settings
+        && store.llm_provider != "mistral"
+        && !store.is_provider_api_key_configured("mistral")
+    {
+        return Err(
+            "Clé API Mistral absente — Newsletter → Paramètres → clé Mistral (OCR + résumés SCPI)."
+                .to_string(),
+        );
     }
     if let Some(style) = input.style_prompt {
         let trimmed = style.trim();
@@ -977,23 +996,7 @@ fn brevo_api_key(store: &NewsletterStore) -> Result<String, String> {
 }
 
 fn newsletter_api_key(store: &NewsletterStore) -> Result<String, String> {
-    let provider = LlmProvider::parse(&store.llm_provider);
-    store
-        .api_key
-        .as_ref()
-        .filter(|k| !k.trim().is_empty())
-        .cloned()
-        .ok_or_else(|| {
-            if store.encrypted_api_key_present {
-                "Clé API illisible — fermez et rouvrez le CRM avec votre mot de passe maître."
-                    .to_string()
-            } else {
-                format!(
-                    "Configurez votre clé API {} dans Newsletter → Paramètres.",
-                    provider.label()
-                )
-            }
-        })
+    store.resolved_newsletter_api_key()
 }
 
 fn parse_generated_newsletter(raw: &str) -> Result<GeneratedNewsletterContent, String> {

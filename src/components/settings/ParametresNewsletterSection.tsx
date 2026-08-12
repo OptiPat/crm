@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,6 +52,7 @@ import {
   NEWSLETTER_SECTION_SPACING_OPTIONS,
   NEWSLETTER_TITLE_FONT_OPTIONS,
 } from "@/lib/newsletter/newsletter-typography";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 function NewsletterColorField({
@@ -91,6 +93,22 @@ function NewsletterColorField({
   );
 }
 
+function LlmKeyStatusBadge({ configured }: { configured: boolean }) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "shrink-0 text-[11px] font-normal",
+        configured
+          ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+          : "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+      )}
+    >
+      {configured ? "Clé enregistrée" : "À configurer"}
+    </Badge>
+  );
+}
+
 export function ParametresNewsletterSection({
   onSettingsSync,
   switchToComposerAfterSave = false,
@@ -106,6 +124,7 @@ export function ParametresNewsletterSection({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
   const [llmProvider, setLlmProvider] = useState<NewsletterLlmProvider>("mistral");
   const llmProviderMeta = newsletterLlmProviderOption(llmProvider);
   const [brevoApiKeyInput, setBrevoApiKeyInput] = useState("");
@@ -228,6 +247,11 @@ export function ParametresNewsletterSection({
     void load();
   }, [load]);
 
+  const selectedProviderKeyConfigured =
+    llmProvider === "mistral"
+      ? (settings?.mistralApiKeyConfigured ?? false)
+      : (settings?.configuredLlmProviders?.includes(llmProvider) ?? false);
+
   const handleSave = async (options?: { requireLlmApiKey?: boolean }) => {
     const requireLlmApiKey = options?.requireLlmApiKey ?? false;
     const savedLlmProvider = settings
@@ -235,14 +259,22 @@ export function ParametresNewsletterSection({
       : null;
     const providerChanged =
       savedLlmProvider != null && llmProvider !== savedLlmProvider;
-    if (requireLlmApiKey && !settings?.apiKeyConfigured && !apiKeyInput.trim()) {
+    if (requireLlmApiKey && !selectedProviderKeyConfigured && !apiKeyInput.trim()) {
       toast.error(`Saisissez votre clé API ${llmProviderMeta.label} avant d'enregistrer`);
       return;
     }
-    if (providerChanged && !apiKeyInput.trim()) {
+    if (providerChanged && !apiKeyInput.trim() && !selectedProviderKeyConfigured) {
       toast.error(
         `Vous avez sélectionné ${llmProviderMeta.label} : saisissez la clé API correspondante avant d'enregistrer.`
       );
+      return;
+    }
+    if (
+      llmProvider !== "mistral" &&
+      !settings?.mistralApiKeyConfigured &&
+      !mistralApiKeyInput.trim()
+    ) {
+      toast.error("Saisissez la clé API Mistral (bulletins SCPI) avant d'enregistrer");
       return;
     }
     setSaving(true);
@@ -273,9 +305,13 @@ export function ParametresNewsletterSection({
       if (apiKeyInput.trim()) {
         payload.apiKey = apiKeyInput.trim();
       }
+      if (llmProvider !== "mistral" && mistralApiKeyInput.trim()) {
+        payload.mistralApiKey = mistralApiKeyInput.trim();
+      }
       const saved = await saveNewsletterSettings(payload);
       setSettings(saved);
       setApiKeyInput("");
+      setMistralApiKeyInput("");
       const etiq = await ensureNewsletterEtiquette(saved.etiquetteNom);
       setSubscriberCount(etiq.contactCount);
       onSettingsSync?.(saved);
@@ -284,6 +320,8 @@ export function ParametresNewsletterSection({
       }
       if (payload.apiKey) {
         toast.success(`Clé ${llmProviderMeta.label} enregistrée (masquée pour sécurité)`);
+      } else if (payload.mistralApiKey) {
+        toast.success("Clé Mistral (bulletins SCPI) enregistrée (masquée pour sécurité)");
       } else {
         toast.success("Paramètres newsletter enregistrés");
       }
@@ -367,85 +405,157 @@ export function ParametresNewsletterSection({
     <div className="space-y-6">
       <SettingsPanel
         id="newsletter-llm"
-        title="Fournisseur IA (newsletter)"
-        description="Un seul fournisseur actif à la fois. Clé chiffrée localement. Les bulletins SCPI restent sur Mistral (OCR)."
+        title="Intelligence artificielle"
+        description="Clés API chiffrées localement. La newsletter et les bulletins SCPI sont configurés séparément."
       >
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="param-llm-provider">Fournisseur</Label>
-            <select
-              id="param-llm-provider"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={llmProvider}
-              onChange={(e) => {
-                const next = e.target.value as NewsletterLlmProvider;
-                setLlmProvider(next);
-                const meta = newsletterLlmProviderOption(next);
-                if (
-                  model.trim() === "" ||
-                  NEWSLETTER_LLM_PROVIDERS.some((item) => item.defaultModel === model.trim())
-                ) {
-                  setModel(meta.defaultModel);
+        <div className="space-y-5">
+          <section
+            className="space-y-4 rounded-lg border bg-card/40 px-4 py-4"
+            aria-labelledby="newsletter-llm-newsletter-heading"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h3
+                  id="newsletter-llm-newsletter-heading"
+                  className="text-sm font-medium"
+                >
+                  Newsletter mensuelle
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Fournisseur actif pour la génération du contenu éditorial.
+                </p>
+              </div>
+              <LlmKeyStatusBadge configured={selectedProviderKeyConfigured} />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="param-llm-provider">Fournisseur</Label>
+              <select
+                id="param-llm-provider"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={llmProvider}
+                onChange={(e) => {
+                  const next = e.target.value as NewsletterLlmProvider;
+                  setLlmProvider(next);
+                  if (next === "mistral") {
+                    setMistralApiKeyInput("");
+                  }
+                  const meta = newsletterLlmProviderOption(next);
+                  if (
+                    model.trim() === "" ||
+                    NEWSLETTER_LLM_PROVIDERS.some((item) => item.defaultModel === model.trim())
+                  ) {
+                    setModel(meta.defaultModel);
+                  }
+                }}
+              >
+                {NEWSLETTER_LLM_PROVIDERS.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="param-llm-key">Clé API {llmProviderMeta.label}</Label>
+              <Input
+                id="param-llm-key"
+                type="password"
+                autoComplete="off"
+                placeholder={
+                  selectedProviderKeyConfigured ? "Laisser vide pour conserver" : llmProviderMeta.keyPlaceholder
                 }
-              }}
-            >
-              {NEWSLETTER_LLM_PROVIDERS.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="param-llm-key">
-              {settings?.apiKeyConfigured ?
-                `Nouvelle clé ${llmProviderMeta.label} (laisser vide pour conserver)`
-              : `Clé API ${llmProviderMeta.label}`}
-            </Label>
-            <Input
-              id="param-llm-key"
-              type="password"
-              autoComplete="off"
-              placeholder={
-                settings?.apiKeyConfigured ? "••••••••" : llmProviderMeta.keyPlaceholder
-              }
-              value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
-            />
-            {settings?.apiKeyConfigured ?
-              <p className="text-xs text-green-700 dark:text-green-400">
-                Clé {newsletterLlmProviderOption(settings.llmProvider).label} enregistrée — le
-                champ reste vide volontairement (comme un mot de passe).
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="link"
+                className="h-auto p-0 text-xs"
+                onClick={() => void openExternalUrl(llmProviderMeta.keyUrl)}
+              >
+                Obtenir une clé {llmProviderMeta.label}
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="param-llm-model">Modèle</Label>
+              <Input
+                id="param-llm-model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder={llmProviderMeta.defaultModel}
+              />
+              <p className="text-xs text-muted-foreground">
+                Suggestion : <code className="text-[11px]">{llmProviderMeta.defaultModel}</code>
               </p>
-            : null}
-            <Button
-              type="button"
-              variant="link"
-              className="h-auto p-0 text-xs"
-              onClick={() => void openExternalUrl(llmProviderMeta.keyUrl)}
-            >
-              Obtenir une clé {llmProviderMeta.label}
-            </Button>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="param-llm-model">Modèle</Label>
-            <Input
-              id="param-llm-model"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder={llmProviderMeta.defaultModel}
-            />
-            <p className="text-xs text-muted-foreground">
-              Suggestion : <code className="text-[11px]">{llmProviderMeta.defaultModel}</code>
+            </div>
+          </section>
+
+          {llmProvider === "mistral" ? (
+            <p className="text-xs text-muted-foreground px-1">
+              La clé Mistral ci-dessus sert aussi aux bulletins SCPI (Suivi → Envois → Préparer).
             </p>
-          </div>
-          <Button type="button" disabled={saving} onClick={() => void handleSave({ requireLlmApiKey: true })}>
+          ) : (
+            <section
+              className="space-y-4 rounded-lg border border-violet-200/80 bg-violet-50/40 dark:bg-violet-950/20 px-4 py-4"
+              aria-labelledby="newsletter-llm-scpi-heading"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 id="newsletter-llm-scpi-heading" className="text-sm font-medium">
+                    Bulletins SCPI
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    OCR et résumés trimestriels — indépendant de la newsletter.
+                  </p>
+                </div>
+                <LlmKeyStatusBadge configured={settings?.mistralApiKeyConfigured ?? false} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="param-mistral-scpi-key">Clé API Mistral</Label>
+                <Input
+                  id="param-mistral-scpi-key"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={
+                    settings?.mistralApiKeyConfigured
+                      ? "Laisser vide pour conserver"
+                      : "Clé console.mistral.ai"
+                  }
+                  value={mistralApiKeyInput}
+                  onChange={(e) => setMistralApiKeyInput(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="link"
+                  className="h-auto p-0 text-xs"
+                  onClick={() =>
+                    void openExternalUrl(
+                      NEWSLETTER_LLM_PROVIDERS.find((item) => item.id === "mistral")?.keyUrl ??
+                        "https://console.mistral.ai/"
+                    )
+                  }
+                >
+                  Obtenir une clé Mistral
+                </Button>
+              </div>
+            </section>
+          )}
+
+          <Button
+            type="button"
+            disabled={saving}
+            onClick={() => void handleSave({ requireLlmApiKey: true })}
+          >
             {saving ?
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Enregistrement…
               </>
-            : "Enregistrer le fournisseur IA"}
+            : "Enregistrer"}
           </Button>
         </div>
       </SettingsPanel>

@@ -232,20 +232,16 @@ fn generate_favorites_report(
 
     let store = NewsletterStore::load(app)?;
     let provider = LlmProvider::parse(&store.llm_provider);
-    let api_key = store
-        .api_key
-        .clone()
-        .filter(|k| !k.trim().is_empty())
-        .ok_or_else(|| {
-            if store.encrypted_api_key_present {
-                "Clé API illisible — rouvrez le CRM avec votre mot de passe.".into()
-            } else {
-                format!(
-                    "Configurez votre clé API {} dans Newsletter → Paramètres.",
-                    provider.label()
-                )
-            }
-        })?;
+    let api_key = store.resolved_newsletter_api_key().map_err(|error| {
+        if error.contains("illisible") {
+            error
+        } else {
+            format!(
+                "Configurez votre clé API {} dans Newsletter → Paramètres.",
+                provider.label()
+            )
+        }
+    })?;
     let model = {
         let trimmed = store.model.trim();
         if trimmed.is_empty() {

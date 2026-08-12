@@ -3,6 +3,7 @@ use crate::email::oauth_secrets::{
     decrypt_secret, encrypt_secret, is_legacy_secret, load_storage_key,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -53,6 +54,10 @@ static NEWSLETTER_STORE_IO_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 #[serde(rename_all = "camelCase")]
 pub struct NewsletterSettingsPublic {
     pub api_key_configured: bool,
+    /// Clé Mistral dédiée aux bulletins SCPI (OCR + résumés), indépendante du fournisseur newsletter.
+    pub mistral_api_key_configured: bool,
+    /// Fournisseurs IA dont une clé est enregistrée (déchiffrée ou chiffrée sur disque).
+    pub configured_llm_providers: Vec<String>,
     pub llm_provider: String,
     pub style_prompt: String,
     pub model: String,
@@ -100,6 +105,9 @@ pub struct NewsletterSettingsPublic {
 pub struct NewsletterSettingsInput {
     #[serde(default)]
     pub api_key: Option<String>,
+    /// Clé Mistral pour bulletins SCPI (quand le fournisseur newsletter n'est pas Mistral).
+    #[serde(default)]
+    pub mistral_api_key: Option<String>,
     pub llm_provider: Option<String>,
     pub style_prompt: Option<String>,
     pub model: Option<String>,
@@ -134,6 +142,8 @@ struct PersistedNewsletterStore {
     version: u32,
     #[serde(default)]
     api_key_enc: Option<String>,
+    #[serde(default)]
+    provider_api_keys_enc: HashMap<String, String>,
     #[serde(default)]
     llm_provider: Option<String>,
     #[serde(default)]
@@ -188,9 +198,9 @@ struct PersistedNewsletterStore {
 
 #[derive(Debug, Clone)]
 pub struct NewsletterStore {
-    pub api_key: Option<String>,
-    /// Clé chiffrée présente sur disque (même si déchiffrement indisponible).
-    pub encrypted_api_key_present: bool,
+    provider_api_keys: HashMap<String, String>,
+    /// Fournisseurs dont une clé chiffrée est sur disque (même si déchiffrement indisponible).
+    encrypted_provider_api_keys_present: HashSet<String>,
     pub brevo_api_key: Option<String>,
     pub encrypted_brevo_api_key_present: bool,
     pub llm_provider: String,
@@ -237,13 +247,13 @@ impl NewsletterStore {
         let storage_key = load_storage_key(app)?;
         let persisted: PersistedNewsletterStore =
             serde_json::from_str(&raw).map_err(|e| format!("Parse newsletter config: {}", e))?;
-        let needs_migration = persisted.version < 2
+        let needs_migration = persisted.version < 3
             || persisted
                 .api_key_enc
                 .as_deref()
                 .is_some_and(is_legacy_secret);
         let store = Self::from_persisted(persisted, storage_key.as_ref())?;
-        if needs_migration && store.api_key.is_some() {
+        if needs_migration {
             store.save_locked(app)?;
         }
         Ok(store)
@@ -275,11 +285,28 @@ impl NewsletterStore {
         }
         let storage_key = load_storage_key(app)?;
         let existing = Self::read_persisted(app)?;
-        let existing_mistral_enc = existing.as_ref().and_then(|p| p.api_key_enc.clone());
+        let mut existing_provider_keys_enc = existing
+            .as_ref()
+            .map(|p| p.provider_api_keys_enc.clone())
+            .unwrap_or_default();
+        if existing_provider_keys_enc.is_empty() {
+            if let Some(legacy_enc) = existing
+                .as_ref()
+                .and_then(|p| p.api_key_enc.clone())
+                .filter(|s| !s.trim().is_empty())
+            {
+                let provider = existing
+                    .as_ref()
+                    .and_then(|p| p.llm_provider.clone())
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or_else(|| DEFAULT_LLM_PROVIDER.to_string());
+                existing_provider_keys_enc.insert(provider, legacy_enc);
+            }
+        }
         let existing_brevo_enc = existing.as_ref().and_then(|p| p.brevo_api_key_enc.clone());
         let persisted = self.to_persisted(
             storage_key.as_ref(),
-            existing_mistral_enc,
+            existing_provider_keys_enc,
             existing_brevo_enc,
         )?;
         let json = serde_json::to_string_pretty(&persisted).map_err(|e| e.to_string())?;
@@ -287,13 +314,22 @@ impl NewsletterStore {
     }
 
     pub fn to_public(&self) -> NewsletterSettingsPublic {
+        let mut configured_llm_providers: Vec<String> = self
+            .encrypted_provider_api_keys_present
+            .iter()
+            .cloned()
+            .collect();
+        for provider in self.provider_api_keys.keys() {
+            if !configured_llm_providers.contains(provider) {
+                configured_llm_providers.push(provider.clone());
+            }
+        }
+        configured_llm_providers.sort();
+
         NewsletterSettingsPublic {
-            api_key_configured: self.encrypted_api_key_present
-                || self
-                    .api_key
-                    .as_ref()
-                    .map(|k| !k.trim().is_empty())
-                    .unwrap_or(false),
+            api_key_configured: self.is_provider_api_key_configured(&self.llm_provider),
+            mistral_api_key_configured: self.is_provider_api_key_configured("mistral"),
+            configured_llm_providers,
             llm_provider: self.llm_provider.clone(),
             style_prompt: self.style_prompt.clone(),
             model: self.model.clone(),
@@ -339,16 +375,41 @@ impl NewsletterStore {
         persisted: PersistedNewsletterStore,
         storage_key: Option<&[u8; 32]>,
     ) -> Result<Self, String> {
-        let encrypted_api_key_present = persisted
-            .api_key_enc
-            .as_ref()
-            .map(|s| !s.trim().is_empty())
-            .unwrap_or(false);
-        let api_key = match (&persisted.api_key_enc, storage_key) {
-            (Some(enc), Some(key)) => Some(decrypt_secret(enc, key)?),
-            (Some(_), None) => None,
-            (None, _) => None,
-        };
+        let mut provider_api_keys = HashMap::new();
+        let mut encrypted_provider_api_keys_present = HashSet::new();
+
+        for (provider, enc) in &persisted.provider_api_keys_enc {
+            if enc.trim().is_empty() {
+                continue;
+            }
+            encrypted_provider_api_keys_present.insert(provider.clone());
+            if let Some(key) = storage_key {
+                if let Ok(decrypted) = decrypt_secret(enc, key) {
+                    if !decrypted.trim().is_empty() {
+                        provider_api_keys.insert(provider.clone(), decrypted);
+                    }
+                }
+            }
+        }
+
+        if persisted.provider_api_keys_enc.is_empty() {
+            if let Some(enc) = persisted.api_key_enc.as_ref().filter(|s| !s.trim().is_empty()) {
+                let provider = persisted
+                    .llm_provider
+                    .as_deref()
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or(DEFAULT_LLM_PROVIDER);
+                encrypted_provider_api_keys_present.insert(provider.to_string());
+                if let Some(key) = storage_key {
+                    if let Ok(decrypted) = decrypt_secret(enc, key) {
+                        if !decrypted.trim().is_empty() {
+                            provider_api_keys.insert(provider.to_string(), decrypted);
+                        }
+                    }
+                }
+            }
+        }
+
         let encrypted_brevo_api_key_present = persisted
             .brevo_api_key_enc
             .as_ref()
@@ -360,8 +421,8 @@ impl NewsletterStore {
             (None, _) => None,
         };
         Ok(Self {
-            api_key,
-            encrypted_api_key_present,
+            provider_api_keys,
+            encrypted_provider_api_keys_present,
             brevo_api_key,
             encrypted_brevo_api_key_present,
             llm_provider: persisted
@@ -459,20 +520,27 @@ impl NewsletterStore {
     fn to_persisted(
         &self,
         storage_key: Option<&[u8; 32]>,
-        existing_mistral_enc: Option<String>,
+        existing_provider_keys_enc: HashMap<String, String>,
         existing_brevo_enc: Option<String>,
     ) -> Result<PersistedNewsletterStore, String> {
-        let api_key_enc = match (&self.api_key, storage_key) {
-            (Some(key), Some(storage)) if !key.trim().is_empty() => {
-                Some(encrypt_secret(key.trim(), storage)?)
+        let mut provider_api_keys_enc = existing_provider_keys_enc;
+        if storage_key.is_some() {
+            provider_api_keys_enc.retain(|provider, _| {
+                self.encrypted_provider_api_keys_present.contains(provider)
+            });
+        }
+        if let Some(storage) = storage_key {
+            for (provider, key) in &self.provider_api_keys {
+                if key.trim().is_empty() {
+                    provider_api_keys_enc.remove(provider);
+                } else {
+                    provider_api_keys_enc.insert(
+                        provider.clone(),
+                        encrypt_secret(key.trim(), storage)?,
+                    );
+                }
             }
-            (Some(_), None) => {
-                return Err("Clé API IA : clé de stockage indisponible.".into());
-            }
-            (Some(_), Some(_)) | (None, _) => {
-                existing_mistral_enc.filter(|s| !s.trim().is_empty())
-            }
-        };
+        }
         let brevo_api_key_enc = match (&self.brevo_api_key, storage_key) {
             (Some(key), Some(storage)) if !key.trim().is_empty() => {
                 Some(encrypt_secret(key.trim(), storage)?)
@@ -485,8 +553,9 @@ impl NewsletterStore {
             }
         };
         Ok(PersistedNewsletterStore {
-            version: 2,
-            api_key_enc,
+            version: 3,
+            api_key_enc: None,
+            provider_api_keys_enc,
             llm_provider: Some(self.llm_provider.clone()),
             brevo_api_key_enc,
             style_prompt: Some(self.style_prompt.clone()),
@@ -514,13 +583,83 @@ impl NewsletterStore {
             default_brevo_template_id: self.default_brevo_template_id,
         })
     }
+
+    pub fn provider_api_key(&self, provider: &str) -> Option<&str> {
+        self.provider_api_keys
+            .get(provider)
+            .map(|s| s.as_str())
+            .filter(|s| !s.trim().is_empty())
+    }
+
+    pub fn is_provider_api_key_configured(&self, provider: &str) -> bool {
+        self.provider_api_key(provider).is_some()
+            || self
+                .encrypted_provider_api_keys_present
+                .contains(provider)
+    }
+
+    pub fn set_provider_api_key(&mut self, provider: &str, key: Option<String>) {
+        let provider = provider.trim();
+        if provider.is_empty() {
+            return;
+        }
+        match key.filter(|k| !k.trim().is_empty()) {
+            Some(value) => {
+                self.provider_api_keys
+                    .insert(provider.to_string(), value.trim().to_string());
+                self.encrypted_provider_api_keys_present
+                    .insert(provider.to_string());
+            }
+            None => {
+                self.provider_api_keys.remove(provider);
+                self.encrypted_provider_api_keys_present.remove(provider);
+            }
+        }
+    }
+
+    pub fn resolved_provider_api_key(&self, provider_id: &str) -> Result<String, String> {
+        self.provider_api_key(provider_id)
+            .map(|s| s.to_string())
+            .ok_or_else(|| {
+                if self
+                    .encrypted_provider_api_keys_present
+                    .contains(provider_id)
+                {
+                    "Clé API illisible — fermez et rouvrez le CRM avec votre mot de passe maître."
+                        .to_string()
+                } else {
+                    format!(
+                        "Configurez votre clé API {} dans Newsletter → Paramètres.",
+                        super::llm::LlmProvider::parse(provider_id).label()
+                    )
+                }
+            })
+    }
+
+    pub fn resolved_newsletter_api_key(&self) -> Result<String, String> {
+        let provider = super::llm::LlmProvider::parse(&self.llm_provider);
+        self.resolved_provider_api_key(provider.as_id())
+    }
+
+    pub fn resolved_mistral_api_key(&self) -> Result<String, String> {
+        self.resolved_provider_api_key("mistral").or_else(|error| {
+            if error.contains("illisible") {
+                Err(error)
+            } else {
+                Err(
+                    "Clé API Mistral absente — Newsletter → Paramètres → clé Mistral (OCR + résumés SCPI)."
+                        .to_string(),
+                )
+            }
+        })
+    }
 }
 
 impl Default for NewsletterStore {
     fn default() -> Self {
         Self {
-            api_key: None,
-            encrypted_api_key_present: false,
+            provider_api_keys: HashMap::new(),
+            encrypted_provider_api_keys_present: HashSet::new(),
             brevo_api_key: None,
             encrypted_brevo_api_key_present: false,
             llm_provider: DEFAULT_LLM_PROVIDER.to_string(),
@@ -581,10 +720,55 @@ mod tests {
         };
 
         let runtime = NewsletterStore::from_persisted(persisted, Some(&key)).unwrap();
-        assert_eq!(runtime.api_key.as_deref(), Some("secret-test"));
+        assert_eq!(runtime.provider_api_key("mistral"), Some("secret-test"));
 
-        let migrated = runtime.to_persisted(Some(&key), None, None).unwrap();
-        assert_eq!(migrated.version, 2);
-        assert!(migrated.api_key_enc.unwrap().starts_with("v2:"));
+        let migrated = runtime
+            .to_persisted(Some(&key), HashMap::new(), None)
+            .unwrap();
+        assert_eq!(migrated.version, 3);
+        assert!(migrated
+            .provider_api_keys_enc
+            .get("mistral")
+            .unwrap()
+            .starts_with("v2:"));
+    }
+
+    #[test]
+    fn provider_api_keys_are_independent_per_provider() {
+        let key = [0x22; 32];
+        let mut store = NewsletterStore::default();
+        store.llm_provider = "google".to_string();
+        store.set_provider_api_key("google", Some("gemini-key".into()));
+        store.set_provider_api_key("mistral", Some("mistral-key".into()));
+
+        let persisted = store
+            .to_persisted(Some(&key), HashMap::new(), None)
+            .unwrap();
+        assert_eq!(persisted.provider_api_keys_enc.len(), 2);
+
+        let reloaded = NewsletterStore::from_persisted(persisted, Some(&key)).unwrap();
+        assert_eq!(reloaded.provider_api_key("google"), Some("gemini-key"));
+        assert_eq!(reloaded.provider_api_key("mistral"), Some("mistral-key"));
+        assert_eq!(reloaded.resolved_mistral_api_key().unwrap(), "mistral-key");
+    }
+
+    #[test]
+    fn clearing_provider_api_key_removes_encrypted_entry_on_save() {
+        let key = [0x33; 32];
+        let mut store = NewsletterStore::default();
+        store.set_provider_api_key("mistral", Some("mistral-key".into()));
+        let persisted = store
+            .to_persisted(Some(&key), HashMap::new(), None)
+            .unwrap();
+        assert!(persisted.provider_api_keys_enc.contains_key("mistral"));
+
+        store.set_provider_api_key("mistral", None);
+        let cleared = store
+            .to_persisted(Some(&key), persisted.provider_api_keys_enc, None)
+            .unwrap();
+        assert!(!cleared.provider_api_keys_enc.contains_key("mistral"));
+
+        let reloaded = NewsletterStore::from_persisted(cleared, Some(&key)).unwrap();
+        assert!(!reloaded.is_provider_api_key_configured("mistral"));
     }
 }

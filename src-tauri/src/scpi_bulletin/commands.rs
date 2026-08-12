@@ -25,13 +25,7 @@ pub async fn prepare_scpi_bulletins_from_pdfs_cmd(
 ) -> Result<PrepareScpiCampaignResult, String> {
     require_ui_session(&session)?;
     let store = NewsletterStore::load(&app)?;
-    let api_key = store
-        .api_key
-        .clone()
-        .filter(|k| !k.trim().is_empty())
-        .ok_or(
-            "Clé API Mistral absente — Newsletter → Paramètres → clé Mistral (OCR + résumés SCPI).",
-        )?;
+    let api_key = store.resolved_mistral_api_key()?;
     let paths: Vec<String> = pdf_paths
         .into_iter()
         .map(|p| p.trim().to_string())
