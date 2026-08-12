@@ -11,15 +11,15 @@ export function formatClientPreviewEuro(centimes: number): string {
   }).format(Math.round(centimes / 100));
 }
 
-/** Total hero — compact au-delà du million. */
+/**
+ * Total hero — montant exact, comme toutes les autres lignes de l'écran.
+ *
+ * La forme compacte affichait « 1 M€ » pour 1 004 299 € : un chiffre rond qui
+ * ne correspondait à la somme d'aucune des lignes affichées juste en dessous.
+ * Le hero et le centre du camembert réduisent leur police pour tenir, la
+ * longueur n'est donc pas un obstacle.
+ */
 export function formatClientPreviewTotal(centimes: number): string {
-  if (centimes >= 1_000_000_00) {
-    const millions = Math.round(centimes / 100) / 1_000_000;
-    const formatted = millions.toLocaleString("fr-FR", {
-      maximumFractionDigits: millions >= 10 ? 0 : 1,
-    });
-    return `${formatted} M€`;
-  }
   return formatClientPreviewEuro(centimes);
 }
 

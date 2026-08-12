@@ -133,15 +133,18 @@ export function ClientPreviewPlacementValorisation({
     return [];
   }, [history, series]);
 
+  const hasMultiPointHistory =
+    historyRows.length > 1 || chartData.length >= 2;
+  const sectionTitle = hasMultiPointHistory ? historyLabel : valueLabel;
+
   if (currentCentimes <= 0 && historyRows.length === 0) return null;
 
   return (
     <div className="border-t border-[var(--cp-line-soft)] pt-2">
-      <p className={`${CP.meta} mb-3`}>{historyLabel}</p>
+      <p className={`${CP.meta} mb-3`}>{sectionTitle}</p>
 
       {currentCentimes > 0 ? (
-        <div className="mb-4 flex items-baseline justify-between gap-4">
-          <span className={CP.meta}>{valueLabel} actuel</span>
+        <div className="mb-4 flex items-baseline justify-end gap-4">
           <div className="text-right">
             <p className={CP.amount}>{formatShortEuro(currentCentimes)}</p>
             {inv.encours_date ? (

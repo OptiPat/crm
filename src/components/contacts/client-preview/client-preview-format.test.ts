@@ -14,8 +14,13 @@ describe("formatClientPreviewEuro", () => {
 });
 
 describe("formatClientPreviewTotal", () => {
-  it("compacte au million", () => {
-    expect(formatClientPreviewTotal(1_500_000_00)).toBe("1,5 M€");
+  /**
+   * « 1 M€ » pour 1 004 299 € laissait croire à un chiffre rond que la somme
+   * des lignes affichées démentait.
+   */
+  it("donne le montant exact au-delà du million", () => {
+    expect(formatClientPreviewTotal(1_004_299_00)).toMatch(/1\s004\s299\s€/);
+    expect(formatClientPreviewTotal(1_500_000_00)).toMatch(/1\s500\s000\s€/);
   });
 });
 

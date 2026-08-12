@@ -229,8 +229,6 @@ export function ClientPreviewView({
 
           partenaireById={partenaireById}
 
-          viewport={viewport}
-
           valorisationHistoriesByInvestissementId={
             evolutionHistoriesByInvestissementId
           }

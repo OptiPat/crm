@@ -17,7 +17,6 @@ import {
   type ScpiClientDeclarationInput,
 } from "@/lib/espace-client/scpi-client-tracking";
 import { isClientPreviewValorisationHistoryEligible } from "@/lib/investissements/investissement-encours";
-import type { ClientPreviewViewport } from "./ClientPreviewAdvisorPanel";
 import { ClientPreviewPlacementValorisation } from "./ClientPreviewPlacementValorisation";
 import { ClientPreviewScpiDeclarationForm } from "./ClientPreviewScpiDeclarationForm";
 import { useClientPreviewOverlayPortal } from "./client-preview-overlay";
@@ -65,7 +64,6 @@ function formatReinvestissement(inv: Investissement): string | null {
 export interface ClientPreviewPlacementDetailProps {
   inv: Investissement;
   partenaire?: Partenaire;
-  viewport: ClientPreviewViewport;
   valorisationHistoriesByInvestissementId?: EvolutionHistoryById;
   enableScpiTracking?: boolean;
   scpiDeclarationSubmitting?: boolean;
@@ -78,23 +76,21 @@ export interface ClientPreviewPlacementDetailProps {
 export function ClientPreviewPlacementDetail({
   inv,
   partenaire,
-  viewport,
   valorisationHistoriesByInvestissementId,
   enableScpiTracking = false,
   scpiDeclarationSubmitting = false,
   onSubmitScpiDeclaration,
   onClose,
 }: ClientPreviewPlacementDetailProps) {
-  const isMobile = viewport === "mobile";
   const overlayPortal = useClientPreviewOverlayPortal();
   const inFrame = overlayPortal != null;
-  /** Simulateur CRM : modale centrée dans le cadre. Portail réel mobile : bottom sheet. */
-  const alignSheet = inFrame ? "items-center" : isMobile ? "items-end" : "items-center";
-  const sheetShape = inFrame
-    ? "max-h-[85dvh] rounded-2xl"
-    : isMobile
-      ? "max-h-[88%] rounded-t-2xl"
-      : "max-h-[85dvh] rounded-2xl";
+  /**
+   * Toujours centrée, quelle que soit la hauteur du contenu. En feuille collée
+   * au bas de l'écran, une fiche courte (immobilier, épargne bancaire) se
+   * tassait dans un coin quand une fiche longue (placements financiers, SCPI)
+   * paraissait centrée : la fenêtre semblait sauter d'un placement à l'autre.
+   */
+  const sheetShape = "max-h-[85dvh] rounded-2xl";
   const label = inv.nom_produit || formatNomProduit(inv.type_produit);
   const typeLabel = formatNomProduit(inv.type_produit);
   const declared = isDeclareClientOrigine(inv.origine);
@@ -120,7 +116,7 @@ export function ClientPreviewPlacementDetail({
 
   return createPortal(
     <div
-      className={`cp-layer ${inFrame ? "absolute" : "fixed"} inset-0 z-50 flex justify-center ${alignSheet}`}
+      className={`cp-layer ${inFrame ? "absolute" : "fixed"} inset-0 z-50 flex items-center justify-center px-3`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="cp-placement-detail-title"

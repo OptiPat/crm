@@ -15,7 +15,6 @@ import { getClientPreviewInvestissementColor } from "@/lib/patrimoine/patrimoine
 import { cn } from "@/lib/utils";
 import type { ClientPreviewEmptyState } from "./ClientPreviewHero";
 import { ClientPreviewPlacementDetail } from "./ClientPreviewPlacementDetail";
-import type { ClientPreviewViewport } from "./ClientPreviewAdvisorPanel";
 import type { ScpiClientDeclarationInput } from "@/lib/espace-client/scpi-client-tracking";
 import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
 import { formatShortEuro } from "./client-preview-format";
@@ -194,7 +193,6 @@ function CategorySection({
 export interface ClientPreviewInventoryProps {
   sortedInventory: Investissement[];
   partenaireById: Map<number, Partenaire>;
-  viewport: ClientPreviewViewport;
   valorisationHistoriesByInvestissementId?: EvolutionHistoryById;
   enableScpiTracking?: boolean;
   scpiDeclarationSubmitting?: boolean;
@@ -207,7 +205,6 @@ export interface ClientPreviewInventoryProps {
 export function ClientPreviewInventory({
   sortedInventory,
   partenaireById,
-  viewport,
   valorisationHistoriesByInvestissementId,
   enableScpiTracking = false,
   scpiDeclarationSubmitting = false,
@@ -281,7 +278,6 @@ export function ClientPreviewInventory({
         <ClientPreviewPlacementDetail
           inv={selected}
           partenaire={selectedPartenaire}
-          viewport={viewport}
           valorisationHistoriesByInvestissementId={
             valorisationHistoriesByInvestissementId
           }
