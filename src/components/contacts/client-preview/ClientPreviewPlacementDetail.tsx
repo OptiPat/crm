@@ -120,7 +120,7 @@ export function ClientPreviewPlacementDetail({
 
   return createPortal(
     <div
-      className={`${inFrame ? "absolute" : "fixed"} inset-0 z-50 flex justify-center ${alignSheet}`}
+      className={`cp-layer ${inFrame ? "absolute" : "fixed"} inset-0 z-50 flex justify-center ${alignSheet}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="cp-placement-detail-title"

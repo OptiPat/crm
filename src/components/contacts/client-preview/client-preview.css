@@ -1,5 +1,13 @@
 /* Espace client — charcoal (sombre, pas noir pur ni blanc) */
-.cp-root {
+
+/*
+  La palette vit sur :root, pas sur .cp-root : les fenêtres de détail sont
+  portées hors de l'arbre de l'aperçu (dans document.body sur le portail
+  client). Rattachées à .cp-root, elles perdaient toutes ces variables et
+  s'affichaient sans fond — le contenu de la page traversait la fenêtre.
+  Les noms sont préfixés cp- : rien du CRM ne les consomme.
+*/
+:root {
   --cp-bg: #141414;
   --cp-surface: #1c1c1c;
   --cp-surface-raised: #242424;
@@ -9,7 +17,9 @@
   --cp-line: rgba(255, 255, 255, 0.09);
   --cp-line-soft: rgba(255, 255, 255, 0.05);
   --cp-accent: #ececec;
+}
 
+.cp-root {
   font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", ui-sans-serif,
     system-ui, sans-serif;
   font-size: 0.875rem;
@@ -18,6 +28,27 @@
   color: var(--cp-ink);
   background: var(--cp-bg);
   -webkit-font-smoothing: antialiased;
+}
+
+/*
+  Couche portée hors de l'aperçu (fenêtre de détail) : elle doit reprendre la
+  typographie de l'espace client, sans le fond opaque de .cp-root qui
+  masquerait la page derrière.
+*/
+.cp-layer {
+  font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", ui-sans-serif,
+    system-ui, sans-serif;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--cp-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.cp-layer :is(h1, h2, h3, h4, h5, h6) {
+  font-family: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
 }
 
 /* Annule font-serif global (Playfair) sur les titres CRM */

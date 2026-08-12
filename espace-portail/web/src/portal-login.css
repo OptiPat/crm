@@ -132,7 +132,12 @@
     background: var(--cp-bg);
   }
 
-  [data-portal-theme="system"] .cp-root {
+  /*
+    Sur l'élément qui porte le thème, et non sur .cp-root : les fenêtres de
+    détail sont portées dans document.body, où elles reprendraient sinon la
+    palette sombre par défaut au milieu d'un écran clair.
+  */
+  html[data-portal-theme="system"] {
     --cp-bg: #f7f8fa;
     --cp-surface: #ffffff;
     --cp-surface-raised: #f3f5f8;
@@ -155,7 +160,7 @@
   background: var(--cp-bg);
 }
 
-[data-portal-theme="light"] .cp-root {
+html[data-portal-theme="light"] {
   --cp-bg: #f7f8fa;
   --cp-surface: #ffffff;
   --cp-surface-raised: #f3f5f8;
