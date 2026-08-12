@@ -1,4 +1,5 @@
 import { LogOut } from "lucide-react";
+import type { ClientPreviewViewport } from "./ClientPreviewAdvisorPanel";
 import { CP } from "./client-preview-theme";
 
 export interface ClientPreviewHeaderProps {
@@ -9,6 +10,8 @@ export interface ClientPreviewHeaderProps {
   /** Titre affiché à côté du logo — aligné sur l'écran de connexion. */
   portalTitle?: string;
   lastSyncLabel?: string | null;
+  /** Mobile : icône seule ; desktop : icône + libellé (comme le portail réel). */
+  viewport: ClientPreviewViewport;
   /**
    * Absent dans l'aperçu conseiller : le bouton reste dessiné pour que
    * l'aperçu montre l'écran réel, mais il ne déconnecte personne.
@@ -29,9 +32,11 @@ export function ClientPreviewHeader({
   logoUrl,
   portalTitle = "Espace investisseur",
   lastSyncLabel,
+  viewport,
   onLogout,
 }: ClientPreviewHeaderProps) {
   const clientLabel = `${prenom} ${nom}`.trim();
+  const isMobile = viewport === "mobile";
 
   return (
     <header className="flex w-full max-w-5xl flex-col gap-2 px-4 pt-4">
@@ -58,11 +63,11 @@ export function ClientPreviewHeader({
         <button
           type="button"
           onClick={onLogout}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--cp-line)] bg-[var(--cp-surface)] px-2.5 py-2 text-sm text-[var(--cp-ink)] transition-colors hover:bg-[var(--cp-surface-raised)] sm:px-3"
+          className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--cp-line)] bg-[var(--cp-surface)] py-2 text-sm text-[var(--cp-ink)] transition-colors hover:bg-[var(--cp-surface-raised)] ${isMobile ? "px-2.5" : "px-3"}`}
           aria-label="Déconnexion"
         >
           <LogOut className="h-4 w-4" aria-hidden />
-          <span className="hidden sm:inline">Déconnexion</span>
+          {!isMobile ? <span>Déconnexion</span> : null}
         </button>
       </div>
       {lastSyncLabel ? (

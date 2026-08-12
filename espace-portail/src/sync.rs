@@ -104,6 +104,7 @@ fn spawn_evenement_emails(state: AppState, notifications: Vec<EvenementEmailNoti
                     note.evenement_id,
                     note.email
                 );
+                release_notification(&state, &note.evenement_id);
             }
             return;
         };
@@ -118,29 +119,27 @@ fn spawn_evenement_emails(state: AppState, notifications: Vec<EvenementEmailNoti
                 )
                 .await
             {
-                Ok(()) => {
-                    // Sans cette trace, la synchronisation suivante renverrait
-                    // le même email : l'échec doit se voir dans le journal.
-                    match state
-                        .db
-                        .mark_evenement_notifie(&note.evenement_id, note.contact_id)
-                    {
-                        Ok(()) => {
-                            tracing::info!("Événement notifié ({})", note.evenement_id)
-                        }
-                        Err(error) => tracing::error!(
-                            "Événement {} envoyé mais non marqué — risque de doublon : {error}",
-                            note.evenement_id
-                        ),
-                    }
+                // La réservation a été prise avant l'envoi : rien à marquer ici.
+                Ok(()) => tracing::info!("Événement notifié ({})", note.evenement_id),
+                Err(error) => {
+                    tracing::error!(
+                        "Envoi événement impossible ({}) : {error}",
+                        note.evenement_id
+                    );
+                    release_notification(&state, &note.evenement_id);
                 }
-                Err(error) => tracing::error!(
-                    "Envoi événement impossible ({}) : {error}",
-                    note.evenement_id
-                ),
             }
         }
     });
+}
+
+/// Rend une réservation pour que la nouvelle reparte à la prochaine photo.
+fn release_notification(state: &AppState, evenement_id: &str) {
+    if let Err(error) = state.db.release_evenement_notification(evenement_id) {
+        tracing::error!(
+            "Événement {evenement_id} non renvoyé : réservation impossible à rendre ({error})"
+        );
+    }
 }
 
 fn handle_sync(
@@ -207,7 +206,7 @@ fn handle_sync(
     let evenements = if accepted {
         state
             .db
-            .pending_evenement_notifications(contact_id, &payload)
+            .claim_evenement_notifications(contact_id, &payload)
             .map_err(|e| e.to_string())?
     } else {
         vec![]

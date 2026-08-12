@@ -1,5 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifyEspaceClientChanged } from "@/lib/espace-client/espace-client-events";
+import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
+import type { EspaceClientTimelineEventDto } from "@/lib/espace-client/espace-timeline";
+import type { ValorisationPointDto } from "@/lib/espace-client/espace-valorisations";
 
 export interface EspaceAcces {
   contact_id: number;
@@ -59,7 +62,52 @@ export interface EspaceDemande {
 export interface ImportEspaceDepotsResult {
   imported: number;
   documentIds: number[];
+  scpiDeclarationsImported: number;
   errors: string[];
+}
+
+export interface EspaceScpiDeclarationPending {
+  id: number;
+  investissementId: number;
+  dateTs: number;
+  valorisationCentimes: number;
+  revenuPercuCentimes?: number | null;
+  createdAt: number;
+}
+
+export async function listEspaceScpiDeclarationsPending(
+  contactId: number
+): Promise<EspaceScpiDeclarationPending[]> {
+  return invoke<EspaceScpiDeclarationPending[]>(
+    "list_espace_scpi_declarations_pending_cmd",
+    { contactId }
+  );
+}
+
+/**
+ * Ce que le client verra : la timeline et le bouton de rendez-vous, construits
+ * par le même moteur que la synchronisation.
+ */
+export interface EspaceClientPreviewDemande {
+  id: number;
+  libelle: string;
+  typeDocument: string;
+  demandeAt: number;
+}
+
+export interface EspaceClientPreview {
+  timeline: EspaceClientTimelineEventDto[];
+  valorisations: ValorisationPointDto[];
+  demandes: EspaceClientPreviewDemande[];
+  rdvUrl: string | null;
+}
+
+export async function buildEspaceClientPreview(
+  contactId: number
+): Promise<EspaceClientPreview> {
+  return invoke<EspaceClientPreview>("build_espace_client_preview_cmd", {
+    contactId,
+  });
 }
 
 /** Échéance rédigée par le conseiller à destination d'un client. */
@@ -142,6 +190,9 @@ export async function importEspaceDepots(
     contactId,
   });
   notifyEspaceClientChanged();
+  if (result.scpiDeclarationsImported > 0) {
+    notifyInvestissementsChanged();
+  }
   return result;
 }
 

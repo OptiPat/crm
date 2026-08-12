@@ -79,10 +79,12 @@ use database::Database;
 use email::commands::*;
 use email::oauth_commands::*;
 use espace_client::commands::{
-    activate_espace_acces_cmd, build_espace_client_snapshot_cmd, cancel_espace_demande_cmd,
+    activate_espace_acces_cmd, build_espace_client_preview_cmd, build_espace_client_snapshot_cmd,
+    cancel_espace_demande_cmd,
     create_espace_demande_cmd, get_espace_acces_cmd, get_espace_client_sync_config_cmd,
     get_espace_connexion_log_cmd, get_espace_sync_summary_cmd, import_espace_depots_cmd,
-    list_espace_demandes_cmd, push_all_espace_clients_cmd, push_espace_client_contact_cmd,
+    list_espace_demandes_cmd, list_espace_scpi_declarations_pending_cmd,
+    push_all_espace_clients_cmd, push_espace_client_contact_cmd,
     revoke_espace_acces_cmd,
     save_espace_client_sync_config_cmd,
 };
@@ -306,6 +308,7 @@ fn main() {
             close_investissement,
             reopen_investissement,
             get_valorisations_by_investissement,
+            get_revenus_percus_by_investissement,
             create_investissement_valorisation,
             prepare_stellium_perf_campaign,
             get_stellium_perf_campaign_dashboard_cmd,
@@ -654,6 +657,7 @@ fn main() {
             get_espace_client_sync_config_cmd,
             save_espace_client_sync_config_cmd,
             build_espace_client_snapshot_cmd,
+            build_espace_client_preview_cmd,
             push_espace_client_contact_cmd,
             push_all_espace_clients_cmd,
             get_espace_connexion_log_cmd,
@@ -661,6 +665,7 @@ fn main() {
             create_espace_demande_cmd,
             cancel_espace_demande_cmd,
             import_espace_depots_cmd,
+            list_espace_scpi_declarations_pending_cmd,
             list_espace_echeances_cmd,
             create_espace_echeance_cmd,
             delete_espace_echeance_cmd,

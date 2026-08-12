@@ -1,8 +1,9 @@
 use serde::Serialize;
 
-/// 5 : ajout des liens de prise de rendez-vous. Le portail ne compare pas
-/// cette valeur, elle sert de repère de lecture pour les payloads archivés.
-pub const ESPACE_SYNC_SCHEMA_VERSION: u32 = 5;
+/// 6 : ajout de l'historique de valorisation du cabinet, étiqueté par source.
+/// Le portail ne compare pas cette valeur, elle sert de repère de lecture pour
+/// les payloads archivés.
+pub const ESPACE_SYNC_SCHEMA_VERSION: u32 = 6;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,6 +16,10 @@ pub struct EspaceClientSyncPayload {
     pub investissements: Vec<EspaceClientInvestissementLine>,
     pub partenaires: Vec<EspaceClientPartenaireLine>,
     pub timeline: Vec<EspaceClientTimelineEvent>,
+    /// Historique de valorisation des placements visibles, chaque point portant
+    /// sa provenance : le client doit pouvoir distinguer ce qu'il a déclaré de
+    /// ce que le cabinet a valorisé.
+    pub valorisations: Vec<EspaceClientValorisationPoint>,
     pub demandes: Vec<EspaceClientDemandeLine>,
     /// Adresse du bouton permanent de prise de rendez-vous, choisie par le
     /// conseiller dans ses réglages. Absente = pas de bouton.
@@ -30,6 +35,22 @@ pub struct EspaceClientSyncPayload {
 pub struct EspaceClientRdvLien {
     pub id: String,
     pub url: String,
+}
+
+/// Provenance d'un point d'historique, telle que l'écran client l'annonce.
+pub const VALORISATION_SOURCE_CABINET: &str = "cabinet";
+pub const VALORISATION_SOURCE_CLIENT: &str = "client";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EspaceClientValorisationPoint {
+    pub investissement_id: i64,
+    pub date_ts: i64,
+    pub montant_centimes: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revenu_percu_centimes: Option<i64>,
+    /// « cabinet » ou « client » — voir les constantes ci-dessus.
+    pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

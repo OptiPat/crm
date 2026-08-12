@@ -17,6 +17,8 @@ mod read;
 mod security;
 mod sync;
 mod sync_auth;
+mod scpi_declaration_store;
+mod scpi_declarations;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -239,6 +241,18 @@ async fn main() {
         .route(
             "/api/v1/sync/contact/{contact_id}/depots/{demande_id}/ack",
             post(sync_auth::post_depot_ack),
+        )
+        .route(
+            "/api/v1/sync/contact/{contact_id}/scpi-declarations",
+            get(sync_auth::get_scpi_declarations),
+        )
+        .route(
+            "/api/v1/sync/contact/{contact_id}/scpi-declarations/{declaration_id}/ack",
+            post(sync_auth::post_scpi_declaration_ack),
+        )
+        .route(
+            "/api/v1/scpi-declarations",
+            post(scpi_declarations::post_scpi_declaration),
         )
         .route("/api/v1/demandes/me", get(documents::get_demandes_me))
         .route(

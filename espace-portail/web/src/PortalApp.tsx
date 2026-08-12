@@ -10,10 +10,8 @@ import {
   aggregateByDisponibilite,
 } from "@/lib/patrimoine/patrimoine-charts";
 import { buildPerimetrePatrimoine } from "@/lib/patrimoine/perimetre";
-import {
-  filterPatrimoineTimelineForClient,
-  type PatrimoineTimelineEvent,
-} from "@/lib/patrimoine/timeline";
+import { toClientTimeline } from "@/lib/espace-client/espace-timeline";
+import { buildValorisationHistories } from "@/lib/espace-client/espace-valorisations";
 import { PortalDevGate } from "./PortalDevGate";
 import { PortalLogin } from "./PortalLogin";
 import { PortalDocumentsSection } from "./PortalDocumentsSection";
@@ -26,9 +24,12 @@ import {
 import type {
   EspaceClientInvestissementLine,
   EspaceClientPartenaireLine,
+  EspaceClientScpiDeclarationLine,
   EspaceClientSyncPayload,
   PatrimoineApiResponse,
 } from "./types";
+import type { ScpiClientDeclarationInput } from "@/lib/espace-client/scpi-client-tracking";
+import type { EvolutionHistoryById } from "@/components/contacts/client-preview/ClientPreviewEvolution";
 
 interface AuthMeResponse {
   contactId: number;
@@ -117,23 +118,6 @@ function toPartenaire(line: EspaceClientPartenaireLine): Partenaire {
   };
 }
 
-function toTimeline(
-  events: EspaceClientSyncPayload["timeline"]
-): PatrimoineTimelineEvent[] {
-  return filterPatrimoineTimelineForClient(
-    events.map((event) => ({
-      id: event.id,
-      kind: event.kind as PatrimoineTimelineEvent["kind"],
-      date: event.date,
-      label: event.label,
-      detail: event.detail ?? undefined,
-      rdvUrl: event.rdvUrl ?? undefined,
-      type_produit: event.typeProduit ?? undefined,
-      origine: event.origine ?? undefined,
-    }))
-  );
-}
-
 function formatSyncLabel(unix?: number): string | null {
   if (!unix) return null;
   return new Date(unix * 1000).toLocaleString("fr-FR", {
@@ -165,6 +149,7 @@ export function PortalApp() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [branding, setBranding] = useState<PortalBrandingResponse>(DEFAULT_BRANDING);
+  const [scpiSubmitting, setScpiSubmitting] = useState(false);
 
   const applyPatrimoineResponse = useCallback((body: PatrimoineApiResponse) => {
     setPayload(body.payload);
@@ -413,8 +398,71 @@ export function PortalApp() {
     [visible]
   );
   const timeline = useMemo(
-    () => toTimeline(payload?.timeline ?? []),
+    () => toClientTimeline(payload?.timeline ?? []),
     [payload]
+  );
+
+  const scpiDeclarationsByInvestissementId = useMemo(() => {
+    const map = new Map<
+      number,
+      Array<{
+        dateTs: number;
+        montantCentimes: number;
+        revenuPercuCentimes?: number | null;
+      }>
+    >();
+    for (const row of payload?.scpiClientDeclarations ?? []) {
+      const list = map.get(row.investissementId) ?? [];
+      list.push({
+        dateTs: row.dateTs,
+        montantCentimes: row.valorisationCentimes,
+        revenuPercuCentimes: row.revenuPercuCentimes,
+      });
+      map.set(row.investissementId, list);
+    }
+    return map;
+  }, [payload]);
+
+  // Les valorisations du cabinet et les déclarations du client, fusionnées et
+  // étiquetées : le client ne voyait auparavant que les siennes.
+  const evolutionHistoriesByInvestissementId = useMemo(
+    () =>
+      buildValorisationHistories(
+        payload?.valorisations ?? [],
+        scpiDeclarationsByInvestissementId
+      ),
+    [payload, scpiDeclarationsByInvestissementId]
+  );
+
+  const handleSubmitScpiDeclaration = useCallback(
+    async (input: ScpiClientDeclarationInput) => {
+      setScpiSubmitting(true);
+      try {
+        const response = await fetch("/api/v1/scpi-declarations", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            investissementId: input.investissementId,
+            date: input.date,
+            valorisationCentimes: input.valorisationCentimes,
+            revenuPercuCentimes: input.revenuPercuCentimes,
+          }),
+        });
+        // Une panne de passerelle renvoie du HTML : le message d'analyse JSON
+        // n'a rien à faire sous les yeux du client.
+        const body = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        if (!response.ok) {
+          throw new Error(body.error ?? "Enregistrement impossible");
+        }
+        await loadPatrimoineMe();
+      } finally {
+        setScpiSubmitting(false);
+      }
+    },
+    [loadPatrimoineMe]
   );
 
   if (showPrivacy) {
@@ -543,6 +591,10 @@ export function PortalApp() {
         emptyState={visible.length === 0 ? "empty" : null}
         timelineLoading={loading}
         lastSyncLabel={formatSyncLabel(syncedAt ?? undefined)}
+        evolutionHistoriesByInvestissementId={evolutionHistoriesByInvestissementId}
+        enableScpiTracking
+        scpiDeclarationSubmitting={scpiSubmitting}
+        onSubmitScpiDeclaration={handleSubmitScpiDeclaration}
       />
     </main>
   );

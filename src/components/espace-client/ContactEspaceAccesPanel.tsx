@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Loader2,
   ExternalLink,
-  RefreshCw,
   ShieldCheck,
   ShieldOff,
   Upload,
@@ -14,17 +13,14 @@ import {
   activateEspaceAcces,
   getEspaceAcces,
   getEspaceClientSyncConfig,
-  getEspaceConnexionLog,
   pushEspaceClientContact,
   revokeEspaceAcces,
   type EspaceAcces,
-  type EspaceConnexionLogEntry,
 } from "@/lib/api/tauri-espace-client";
 import { ESPACE_CLIENT_CHANGED_EVENT } from "@/lib/espace-client/espace-client-events";
 import {
   ESPACE_ACCES_STATUT,
   formatEspaceAccesStatut,
-  formatEspaceConnexionEvent,
   formatEspaceTimestamp,
 } from "@/lib/espace-client/espace-client-format";
 import {
@@ -41,13 +37,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ContactEspaceConnexionLog } from "@/components/espace-client/ContactEspaceConnexionLog";
 import { ContactEspaceDemandesPanel } from "@/components/espace-client/ContactEspaceDemandesPanel";
 import { ContactEspaceEcheancesPanel } from "@/components/espace-client/ContactEspaceEcheancesPanel";
 import { cn } from "@/lib/utils";
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
-
-/** Entrées de journal visibles tant qu'on ne déplie pas. */
-const JOURNAL_APERCU = 3;
 
 export interface ContactEspaceAccesPanelProps {
   contact: Contact;
@@ -78,27 +72,6 @@ export function ContactEspaceAccesPanel({
   const [revokeOpen, setRevokeOpen] = useState(false);
   const [portalUrl, setPortalUrl] = useState("");
   const [syncing, setSyncing] = useState(false);
-  const [connexionLog, setConnexionLog] = useState<EspaceConnexionLogEntry[]>(
-    []
-  );
-  const [logLoading, setLogLoading] = useState(false);
-  /** Le journal grossit sans fin : replié, il ne mange plus le panneau. */
-  const [journalDeplie, setJournalDeplie] = useState(false);
-  const journalVisible = journalDeplie
-    ? connexionLog
-    : connexionLog.slice(0, JOURNAL_APERCU);
-
-  const loadConnexionLog = useCallback(async (contactId: number) => {
-    setLogLoading(true);
-    try {
-      const rows = await getEspaceConnexionLog(contactId);
-      setConnexionLog(rows);
-    } catch {
-      setConnexionLog([]);
-    } finally {
-      setLogLoading(false);
-    }
-  }, []);
 
   const load = useCallback(async () => {
     if (!contact.id) return;
@@ -117,18 +90,13 @@ export function ContactEspaceAccesPanel({
       } else if (contact.email?.trim()) {
         setEmail(contact.email.trim());
       }
-      if (row?.statut === ESPACE_ACCES_STATUT.ACTIF) {
-        void loadConnexionLog(contact.id);
-      } else {
-        setConnexionLog([]);
-      }
     } catch {
       setAcces(null);
       toast.error("Impossible de charger l'accès espace client");
     } finally {
       setLoading(false);
     }
-  }, [contact.email, contact.id, loadConnexionLog]);
+  }, [contact.email, contact.id]);
 
   useEffect(() => {
     void load();
@@ -175,7 +143,6 @@ export function ContactEspaceAccesPanel({
       const next = await revokeEspaceAcces(contact.id);
       setAcces(next);
       setRevokeOpen(false);
-      setConnexionLog([]);
       toast.success("Accès espace client révoqué");
       onChanged?.();
     } catch (error) {
@@ -194,7 +161,6 @@ export function ContactEspaceAccesPanel({
         `Synchronisé (séq. ${result.sequence}) — ${result.investissement_count} placement(s), ${result.timeline_count} événement(s)`
       );
       onChanged?.();
-      void loadConnexionLog(contact.id);
     } catch (error) {
       toast.error(invokeErrorMessage(error) || "Synchronisation impossible");
     } finally {
@@ -369,72 +335,8 @@ export function ContactEspaceAccesPanel({
         </div>
       </div>
 
-      {isActif ? (
-        <div className="mt-6 space-y-2 border-t border-border/60 pt-5">
-          <div className="flex items-center justify-between gap-2">
-            {/* Un <p> et non un titre : la feuille de style applique Playfair
-                aux h1-h6, qui jurerait avec les autres blocs du panneau. */}
-            <p className="text-sm font-medium text-foreground">
-              Journal des connexions
-              {connexionLog.length > 0 ? (
-                <span className="ml-1 font-normal text-muted-foreground">
-                  — {connexionLog.length} entrée
-                  {connexionLog.length > 1 ? "s" : ""}
-                </span>
-              ) : null}
-            </p>
-            <div className="flex items-center gap-1">
-              {connexionLog.length > JOURNAL_APERCU ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2 text-xs"
-                  onClick={() => setJournalDeplie((ouvert) => !ouvert)}
-                >
-                  {journalDeplie ? "Réduire" : "Tout afficher"}
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2 text-xs"
-                disabled={logLoading || !contact.id}
-                onClick={() => contact.id && void loadConnexionLog(contact.id)}
-              >
-                {logLoading ? (
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-1 h-3 w-3" />
-                )}
-                Actualiser
-              </Button>
-            </div>
-          </div>
-          {connexionLog.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              Aucune connexion enregistrée pour l'instant.
-            </p>
-          ) : (
-            <ul className="space-y-1 text-xs">
-              {journalVisible.map((entry) => (
-                <li
-                  key={`${entry.id}-${entry.created_at}`}
-                  className="flex flex-wrap items-baseline gap-x-2 text-muted-foreground"
-                >
-                  <span className="text-foreground">
-                    {formatEspaceConnexionEvent(entry.event)}
-                  </span>
-                  <span>{formatEspaceTimestamp(entry.created_at)}</span>
-                  {entry.ip ? (
-                    <span className="font-mono text-[10px]">{entry.ip}</span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      {isActif && contact.id != null ? (
+        <ContactEspaceConnexionLog contactId={contact.id} />
       ) : null}
 
       {isActif && contact.id != null ? (

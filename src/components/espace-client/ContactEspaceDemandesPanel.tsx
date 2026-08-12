@@ -19,8 +19,10 @@ import {
   createEspaceDemande,
   importEspaceDepots,
   listEspaceDemandes,
+  listEspaceScpiDeclarationsPending,
   type EspaceDemande,
 } from "@/lib/api/tauri-espace-client";
+import { ESPACE_CLIENT_CHANGED_EVENT } from "@/lib/espace-client/espace-client-events";
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
 import { notifyDocumentsChanged } from "@/lib/documents/document-events";
 import {
@@ -64,18 +66,21 @@ export function ContactEspaceDemandesPanel({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [pendingScpiCount, setPendingScpiCount] = useState(0);
   const [templateKey, setTemplateKey] = useState("");
   const [customLabel, setCustomLabel] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [rows, opts] = await Promise.all([
+      const [rows, opts, scpiPending] = await Promise.all([
         listEspaceDemandes(contactId),
         loadEspaceDemandeOptions(),
+        listEspaceScpiDeclarationsPending(contactId).catch(() => []),
       ]);
       setDemandes(rows);
       setOptions(opts);
+      setPendingScpiCount(scpiPending.length);
       if (!templateKey && opts.length > 0) {
         setTemplateKey(opts[0].templateKey);
       }
@@ -88,7 +93,16 @@ export function ContactEspaceDemandesPanel({
 
   useEffect(() => {
     void load();
+    const handler = () => void load();
+    window.addEventListener(ESPACE_CLIENT_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(ESPACE_CLIENT_CHANGED_EVENT, handler);
   }, [load]);
+
+  const pendingImportCount = demandes.filter(
+    (d) => d.statut === ESPACE_DEMANDE_STATUT.RECU
+  ).length;
+
+  const pendingPortalCount = pendingImportCount + pendingScpiCount;
 
   const groupedOptions = useMemo(() => {
     const groups = new Map<EspaceDemandeOptionGroup, EspaceDemandeOption[]>();
@@ -99,10 +113,6 @@ export function ContactEspaceDemandesPanel({
     }
     return groups;
   }, [options]);
-
-  const pendingImportCount = demandes.filter(
-    (d) => d.statut === ESPACE_DEMANDE_STATUT.RECU
-  ).length;
 
   const handleCreate = async () => {
     const resolved = resolveEspaceDemandeSelection(
@@ -149,13 +159,20 @@ export function ContactEspaceDemandesPanel({
     setImporting(true);
     try {
       const result = await importEspaceDepots(contactId);
+      const parts: string[] = [];
       if (result.imported > 0) {
         notifyDocumentsChanged();
-        toast.success(
-          `${result.imported} document(s) importé(s) dans la GED`
+        parts.push(`${result.imported} document(s) importé(s) dans la GED`);
+      }
+      if (result.scpiDeclarationsImported > 0) {
+        parts.push(
+          `${result.scpiDeclarationsImported} déclaration(s) SCPI importée(s)`
         );
+      }
+      if (parts.length > 0) {
+        toast.success(parts.join(" · "));
       } else if (result.errors.length === 0) {
-        toast.message("Aucun dépôt en attente sur le portail");
+        toast.message("Aucun dépôt ni déclaration SCPI en attente sur le portail");
       }
       for (const err of result.errors) {
         toast.error(err);
@@ -174,15 +191,21 @@ export function ContactEspaceDemandesPanel({
     <div className="mt-4 space-y-3 border-t border-border/60 pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium text-foreground">Demandes de documents</p>
-        {pendingImportCount > 0 ? (
+        {pendingPortalCount > 0 ? (
           <Badge variant="outline" className="font-normal">
-            {pendingImportCount} dépôt(s) à importer
+            {[
+              pendingImportCount > 0 ? `${pendingImportCount} dépôt(s)` : null,
+              pendingScpiCount > 0 ? `${pendingScpiCount} SCPI` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}{" "}
+            à importer
           </Badge>
         ) : null}
       </div>
       <p className="text-xs text-muted-foreground">
-        Le client reçoit un email à la création. Après dépôt sur le portail,
-        importez le fichier dans la GED.
+        Le client reçoit un email à la création. Après dépôt sur le portail ou
+        déclaration SCPI, importez dans le CRM.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
@@ -245,7 +268,7 @@ export function ContactEspaceDemandesPanel({
           ) : (
             <FileUp className="mr-1.5 h-3.5 w-3.5" />
           )}
-          Importer les dépôts
+          Importer dépôts et SCPI
         </Button>
       </div>
 

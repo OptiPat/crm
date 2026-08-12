@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { createPortal } from "react-dom";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { Partenaire } from "@/lib/api/tauri-partenaires";
 import {
@@ -10,6 +11,16 @@ import { isScpiCreditEligibleType } from "@/lib/investissements/investissement-s
 import { hasActiveVersementProgramme } from "@/lib/investissements/investissement-versements";
 import { formatShortEuro } from "./client-preview-format";
 import { CP } from "./client-preview-theme";
+import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
+import {
+  isScpiClientTrackingEligible,
+  type ScpiClientDeclarationInput,
+} from "@/lib/espace-client/scpi-client-tracking";
+import { isClientPreviewValorisationHistoryEligible } from "@/lib/investissements/investissement-encours";
+import type { ClientPreviewViewport } from "./ClientPreviewAdvisorPanel";
+import { ClientPreviewPlacementValorisation } from "./ClientPreviewPlacementValorisation";
+import { ClientPreviewScpiDeclarationForm } from "./ClientPreviewScpiDeclarationForm";
+import { useClientPreviewOverlayPortal } from "./client-preview-overlay";
 
 const IMMOBILIER_SET = new Set<string>(IMMOBILIER_TYPES);
 
@@ -54,14 +65,36 @@ function formatReinvestissement(inv: Investissement): string | null {
 export interface ClientPreviewPlacementDetailProps {
   inv: Investissement;
   partenaire?: Partenaire;
+  viewport: ClientPreviewViewport;
+  valorisationHistoriesByInvestissementId?: EvolutionHistoryById;
+  enableScpiTracking?: boolean;
+  scpiDeclarationSubmitting?: boolean;
+  onSubmitScpiDeclaration?: (
+    input: ScpiClientDeclarationInput
+  ) => Promise<void>;
   onClose: () => void;
 }
 
 export function ClientPreviewPlacementDetail({
   inv,
   partenaire,
+  viewport,
+  valorisationHistoriesByInvestissementId,
+  enableScpiTracking = false,
+  scpiDeclarationSubmitting = false,
+  onSubmitScpiDeclaration,
   onClose,
 }: ClientPreviewPlacementDetailProps) {
+  const isMobile = viewport === "mobile";
+  const overlayPortal = useClientPreviewOverlayPortal();
+  const inFrame = overlayPortal != null;
+  /** Simulateur CRM : modale centrée dans le cadre. Portail réel mobile : bottom sheet. */
+  const alignSheet = inFrame ? "items-center" : isMobile ? "items-end" : "items-center";
+  const sheetShape = inFrame
+    ? "max-h-[85dvh] rounded-2xl"
+    : isMobile
+      ? "max-h-[88%] rounded-t-2xl"
+      : "max-h-[85dvh] rounded-2xl";
   const label = inv.nom_produit || formatNomProduit(inv.type_produit);
   const typeLabel = formatNomProduit(inv.type_produit);
   const declared = isDeclareClientOrigine(inv.origine);
@@ -73,10 +106,21 @@ export function ClientPreviewPlacementDetail({
   const hasLoyer = inv.loyer_mensuel != null && inv.loyer_mensuel > 0;
   const vpLabel = formatVersementProgramme(inv);
   const reinvestLabel = formatReinvestissement(inv);
+  const showValorisationHistory = isClientPreviewValorisationHistoryEligible(
+    inv.type_produit
+  );
+  const valorisationHistory = valorisationHistoriesByInvestissementId?.get(
+    inv.id
+  );
+  // La fusion des deux sources est faite en amont, une seule fois, par
+  // buildValorisationHistories : la refaire ici les laisserait diverger.
+  const mergedHistory = valorisationHistory ?? [];
+  const canTrackScpi =
+    enableScpiTracking && isScpiClientTrackingEligible(inv);
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center"
+      className={`${inFrame ? "absolute" : "fixed"} inset-0 z-50 flex justify-center ${alignSheet}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="cp-placement-detail-title"
@@ -88,7 +132,7 @@ export function ClientPreviewPlacementDetail({
         onClick={onClose}
       />
       <div
-        className={`${CP.card} relative z-10 flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl`}
+        className={`${CP.card} relative z-10 flex w-full max-w-lg flex-col overflow-hidden ${sheetShape}`}
       >
         <div className="flex items-start justify-between gap-3 border-b border-[var(--cp-line-soft)] px-5 py-4">
           <div className="min-w-0">
@@ -137,9 +181,24 @@ export function ClientPreviewPlacementDetail({
                 </span>
               </div>
             ) : null}
+            {showValorisationHistory ? (
+              <ClientPreviewPlacementValorisation
+                inv={inv}
+                history={mergedHistory}
+              />
+            ) : null}
+            {canTrackScpi && onSubmitScpiDeclaration ? (
+              <ClientPreviewScpiDeclarationForm
+                inv={inv}
+                history={mergedHistory}
+                submitting={scpiDeclarationSubmitting}
+                onSubmit={onSubmitScpiDeclaration}
+              />
+            ) : null}
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    inFrame ? overlayPortal : document.body
   );
 }

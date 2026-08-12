@@ -68,6 +68,7 @@ const TABLE_POLICIES: &[(&str, WorkspaceTablePolicy)] = &[
     ),
     ("investissement_versements", WorkspaceTablePolicy::Shared),
     ("investissement_valorisations", WorkspaceTablePolicy::Shared),
+    ("investissement_revenus_percus", WorkspaceTablePolicy::Shared),
     ("contact_template_envois", WorkspaceTablePolicy::Shared),
     ("template_email_actions", WorkspaceTablePolicy::Shared),
     ("placement_operations", WorkspaceTablePolicy::Shared),

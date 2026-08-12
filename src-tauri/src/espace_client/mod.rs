@@ -6,6 +6,7 @@ pub mod depot_import;
 pub mod echeance_commands;
 pub mod portal_api;
 pub mod push;
+pub mod scpi_declaration_import;
 pub mod snapshot;
 pub mod sync_payload;
 pub mod visibilite;

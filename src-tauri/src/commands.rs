@@ -12,7 +12,8 @@ use crate::database::{
         CustomFieldDef, CustomFieldValueInput, CustomFieldValueRow, DashboardStatContact,
         DashboardStats, Document, EmailSendLogEntry, Etiquette, EtiquetteAction,
         EtiquettePipelineBoard, EtiquetteWithCount, ExchangeHistoryEntry, Famille, Foyer,
-        Interaction, InteractionWithContact, Investissement, InvestissementValorisation,
+        Interaction, InteractionWithContact, Investissement, InvestissementRevenuPercu,
+        InvestissementValorisation,
         InvestissementVersement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
         NewCustomFieldDef, NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInteraction,
         NewInvestissement, NewInvestissementValorisation, NewInvestissementVersement,
@@ -1993,6 +1994,19 @@ pub fn get_valorisations_by_investissement(
     database
         .get_valorisations_by_investissement(investissement_id)
         .map_err(|e| format!("Failed to get valorisations: {}", e))
+}
+
+#[tauri::command]
+pub fn get_revenus_percus_by_investissement(
+    db: State<'_, DbState>,
+    investissement_id: i64,
+) -> Result<Vec<InvestissementRevenuPercu>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_revenus_percus_by_investissement(investissement_id)
+        .map_err(|e| format!("Failed to get revenus perçus: {}", e))
 }
 
 #[tauri::command]

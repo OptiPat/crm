@@ -1660,7 +1660,20 @@ export function InvestissementForm({
             />
           )}
 
-          {showEncoursSection && editingInvestissement && valorisationUiMode && (
+          {showEncoursSection && editingInvestissement && valorisationUiMode ? (
+            <>
+              {editingInvestissement.derniere_maj_client ? (
+                <p className="text-xs text-muted-foreground">
+                  Dernière saisie client le{" "}
+                  {new Date(
+                    editingInvestissement.derniere_maj_client * 1000
+                  ).toLocaleDateString("fr-FR", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </p>
+              ) : null}
             <InvestissementEncoursPanel
               investissementId={editingInvestissement.id}
               montantInitial={editingInvestissement.montant_initial}
@@ -1681,7 +1694,8 @@ export function InvestissementForm({
                 }
               }}
             />
-          )}
+            </>
+          ) : null}
           </InvestissementFormSection>
         </>
       )}

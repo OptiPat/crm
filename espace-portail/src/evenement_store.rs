@@ -47,8 +47,14 @@ impl PortalDb {
         Ok(())
     }
 
-    /// Événements de la charge utile jamais annoncés à ce client.
-    pub fn pending_evenement_notifications(
+    /// Événements de la charge utile jamais annoncés à ce client, **réservés**
+    /// au passage.
+    ///
+    /// La réservation est prise ici, avant l'envoi : deux synchronisations
+    /// simultanées (push unitaire et push groupé, par exemple) sélectionneraient
+    /// sinon le même événement et le client recevrait deux fois la nouvelle. Un
+    /// envoi qui échoue rend sa réservation (`release_evenement_notification`).
+    pub fn claim_evenement_notifications(
         &self,
         contact_id: i64,
         payload: &Value,
@@ -75,7 +81,7 @@ impl PortalDb {
             let Some(id) = event.get("id").and_then(|v| v.as_str()) else {
                 continue;
             };
-            if self.evenement_deja_notifie(id)? {
+            if !self.claim_evenement_notification(id, contact_id)? {
                 continue;
             }
 
@@ -102,23 +108,23 @@ impl PortalDb {
         Ok(notifications)
     }
 
-    fn evenement_deja_notifie(&self, evenement_id: &str) -> Result<bool> {
-        let existe: Option<i64> = self
-            .conn()
-            .query_row(
-                "SELECT 1 FROM espace_evenement_notifie WHERE evenement_id = ?1",
-                params![evenement_id],
-                |row| row.get(0),
-            )
-            .ok();
-        Ok(existe.is_some())
-    }
-
-    pub fn mark_evenement_notifie(&self, evenement_id: &str, contact_id: i64) -> Result<()> {
-        self.conn().execute(
+    /// `true` si la réservation vient d'être prise, `false` si l'événement
+    /// était déjà annoncé ou réservé ailleurs. L'insertion étant atomique, deux
+    /// appels concurrents ne peuvent pas réussir tous les deux.
+    fn claim_evenement_notification(&self, evenement_id: &str, contact_id: i64) -> Result<bool> {
+        let inserees = self.conn().execute(
             "INSERT OR IGNORE INTO espace_evenement_notifie (evenement_id, contact_id)
              VALUES (?1, ?2)",
             params![evenement_id, contact_id],
+        )?;
+        Ok(inserees > 0)
+    }
+
+    /// Envoi échoué : la nouvelle sera reproposée à la prochaine photo.
+    pub fn release_evenement_notification(&self, evenement_id: &str) -> Result<()> {
+        self.conn().execute(
+            "DELETE FROM espace_evenement_notifie WHERE evenement_id = ?1",
+            params![evenement_id],
         )?;
         Ok(())
     }
@@ -158,14 +164,14 @@ mod tests {
             { "id": "inv-2-fin_pret", "kind": "fin_pret", "label": "Fin de prêt", "date": 1_800_000_000 },
         ]));
 
-        let notifications = db.pending_evenement_notifications(1, &charge).unwrap();
+        let notifications = db.claim_evenement_notifications(1, &charge).unwrap();
         assert_eq!(notifications.len(), 1);
         assert_eq!(notifications[0].evenement_id, "echeance-1");
         assert_eq!(notifications[0].titre, "Déclaration");
     }
 
-    /// Sans trace des envois, chaque synchronisation renverrait le même
-    /// message — le défaut le plus sûr pour faire ignorer une alerte.
+    /// La réservation est prise dès la sélection : deux synchronisations qui se
+    /// croisent ne peuvent pas annoncer deux fois la même nouvelle.
     #[test]
     fn an_event_is_announced_once() {
         let db = db_avec_client();
@@ -173,9 +179,22 @@ mod tests {
             { "id": "echeance-1", "kind": "conseiller", "label": "Déclaration", "date": 1_800_000_000 },
         ]));
 
-        assert_eq!(db.pending_evenement_notifications(1, &charge).unwrap().len(), 1);
-        db.mark_evenement_notifie("echeance-1", 1).unwrap();
-        assert!(db.pending_evenement_notifications(1, &charge).unwrap().is_empty());
+        assert_eq!(db.claim_evenement_notifications(1, &charge).unwrap().len(), 1);
+        assert!(db.claim_evenement_notifications(1, &charge).unwrap().is_empty());
+    }
+
+    /// Envoi échoué : la nouvelle doit repartir à la synchronisation suivante,
+    /// sinon le client ne l'apprendra jamais.
+    #[test]
+    fn a_failed_send_is_offered_again() {
+        let db = db_avec_client();
+        let charge = payload(json!([
+            { "id": "echeance-1", "kind": "conseiller", "label": "Déclaration", "date": 1_800_000_000 },
+        ]));
+
+        assert_eq!(db.claim_evenement_notifications(1, &charge).unwrap().len(), 1);
+        db.release_evenement_notification("echeance-1").unwrap();
+        assert_eq!(db.claim_evenement_notifications(1, &charge).unwrap().len(), 1);
     }
 
     #[test]
@@ -191,6 +210,6 @@ mod tests {
             { "id": "echeance-9", "kind": "conseiller", "label": "X", "date": 1_800_000_000 },
         ]));
 
-        assert!(db.pending_evenement_notifications(2, &charge).unwrap().is_empty());
+        assert!(db.claim_evenement_notifications(2, &charge).unwrap().is_empty());
     }
 }

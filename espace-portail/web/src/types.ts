@@ -1,27 +1,9 @@
+import type { ValorisationPointDto } from "@/lib/espace-client/espace-valorisations";
+
 export interface EspaceClientPartenaireLine {
   id: number;
   raisonSociale: string;
   urlExtranet?: string | null;
-}
-
-export interface EspaceClientSyncPayload {
-  schemaVersion: number;
-  sequence: number;
-  generatedAt: number;
-  contact: {
-    contactId: number;
-    prenom: string;
-    nom: string;
-  };
-  acces: {
-    statut: string;
-    emailUtilise?: string | null;
-  };
-  investissements: EspaceClientInvestissementLine[];
-  partenaires?: EspaceClientPartenaireLine[];
-  timeline: EspaceClientTimelineEvent[];
-  /** Absent des anciens snapshots : le bouton disparaît alors, sans erreur. */
-  rdvUrl?: string | null;
 }
 
 export interface EspaceClientInvestissementLine {
@@ -48,6 +30,43 @@ export interface EspaceClientInvestissementLine {
   frequenceVersement?: string | null;
   reinvestissementDividendes?: boolean;
   reinvestissementPourcent?: number | null;
+}
+
+export interface EspaceClientScpiDeclarationLine {
+  id: number;
+  investissementId: number;
+  dateTs: number;
+  valorisationCentimes: number;
+  revenuPercuCentimes?: number | null;
+  createdAt: number;
+}
+
+export interface EspaceClientSyncPayload {
+  schemaVersion: number;
+  sequence: number;
+  generatedAt: number;
+  contact: {
+    contactId: number;
+    prenom: string;
+    nom: string;
+  };
+  acces: {
+    statut: string;
+    emailUtilise?: string | null;
+  };
+  investissements: EspaceClientInvestissementLine[];
+  partenaires?: EspaceClientPartenaireLine[];
+  timeline: EspaceClientTimelineEvent[];
+  /**
+   * Historique de valorisation étiqueté par source. Absent des snapshots
+   * antérieurs au schéma 6 : le client ne voit alors que ses déclarations,
+   * comme avant.
+   */
+  valorisations?: ValorisationPointDto[];
+  /** Absent des anciens snapshots : le bouton disparaît alors, sans erreur. */
+  rdvUrl?: string | null;
+  /** Déclarations SCPI en attente de sync CRM — injectées par le portail. */
+  scpiClientDeclarations?: EspaceClientScpiDeclarationLine[];
 }
 
 export interface EspaceClientTimelineEvent {

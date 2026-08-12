@@ -246,3 +246,40 @@ pub fn ack_espace_depot(
     signed_post_bytes(app, db, &path, &body_bytes)
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PortalScpiDeclarationLine {
+    pub id: i64,
+    pub investissement_id: i64,
+    pub date_ts: i64,
+    pub valorisation_centimes: i64,
+    pub revenu_percu_centimes: Option<i64>,
+    pub created_at: i64,
+}
+
+pub fn pull_espace_scpi_declarations(
+    app: &tauri::AppHandle,
+    db: &Database,
+    contact_id: i64,
+) -> Result<Vec<PortalScpiDeclarationLine>, String> {
+    let path = format!("/api/v1/sync/contact/{contact_id}/scpi-declarations");
+    #[derive(serde::Deserialize)]
+    struct Response {
+        declarations: Vec<PortalScpiDeclarationLine>,
+    }
+    let body: Response = signed_get_json(app, db, &path)?;
+    Ok(body.declarations)
+}
+
+pub fn ack_espace_scpi_declaration(
+    app: &tauri::AppHandle,
+    db: &Database,
+    contact_id: i64,
+    declaration_id: i64,
+) -> Result<(), String> {
+    let path = format!(
+        "/api/v1/sync/contact/{contact_id}/scpi-declarations/{declaration_id}/ack"
+    );
+    signed_portal_request(app, db, "POST", &path, None)
+}
+

@@ -7,10 +7,14 @@ use crate::espace_client::config::{
     save_sync_config, EspaceClientSyncConfig, PORTAL_URL_SETTING_KEY,
 };
 use crate::espace_client::depot_import::{import_espace_depots, ImportEspaceDepotsResult};
-use crate::espace_client::portal_api::{pull_espace_connexion_log, push_espace_acces_revoke};
+use crate::espace_client::scpi_declaration_import::{
+    ack_espace_scpi_declarations, import_espace_scpi_declarations,
+};
+use crate::espace_client::portal_api::{pull_espace_connexion_log, pull_espace_scpi_declarations, push_espace_acces_revoke, PortalScpiDeclarationLine};
 use crate::espace_client::push::push_espace_client_snapshot;
 use crate::espace_client::snapshot::{
-    build_espace_client_snapshot, build_espace_client_snapshot_for_push,
+    build_espace_client_preview, build_espace_client_snapshot,
+    build_espace_client_snapshot_for_push, EspaceClientPreview,
 };
 use crate::espace_client::sync_payload::EspaceClientSyncPayload;
 use crate::database::Database;
@@ -158,6 +162,22 @@ pub fn build_espace_client_snapshot_cmd(
     let database = guard.as_ref().ok_or("Base non ouverte")?;
     require_espace_client_active(database)?;
     build_espace_client_snapshot(database, contact_id)
+}
+
+/// L'aperçu lit la timeline du moteur Rust plutôt que de la reconstruire :
+/// une règle d'affichage écrite deux fois finit par diverger, ce qui est déjà
+/// arrivé (alertes transmises d'un côté, masquées de l'autre).
+#[tauri::command]
+pub fn build_espace_client_preview_cmd(
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+    contact_id: i64,
+) -> Result<EspaceClientPreview, String> {
+    require_ui_session(&session)?;
+    let guard = db.lock().map_err(|e| e.to_string())?;
+    let database = guard.as_ref().ok_or("Base non ouverte")?;
+    require_espace_client_active(database)?;
+    build_espace_client_preview(database, contact_id)
 }
 
 #[derive(serde::Serialize)]
@@ -390,7 +410,41 @@ pub fn import_espace_depots_cmd(
     let guard = db.lock().map_err(|e| e.to_string())?;
     let database = guard.as_ref().ok_or("Base non ouverte")?;
     require_espace_client_active(database)?;
-    import_espace_depots(&app, database, contact_id)
+    let mut result = import_espace_depots(&app, database, contact_id)?;
+    let scpi = import_espace_scpi_declarations(&app, database, contact_id)?;
+    result.scpi_declarations_imported = scpi.imported;
+    result.errors.extend(scpi.errors);
+    if !scpi.a_accuser.is_empty() {
+        // Photo d'abord, accusé de réception ensuite : le client doit continuer
+        // à voir le montant qu'il a saisi tant que le portail n'a pas reçu la
+        // valeur reprise par le CRM.
+        match try_push_contact_snapshot(&app, database, contact_id) {
+            Ok(()) => result.errors.extend(ack_espace_scpi_declarations(
+                &app,
+                database,
+                contact_id,
+                &scpi.a_accuser,
+            )),
+            Err(error) => result.errors.push(format!(
+                "Déclarations SCPI importées mais synchronisation portail échouée : {error}"
+            )),
+        }
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn list_espace_scpi_declarations_pending_cmd(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+    contact_id: i64,
+) -> Result<Vec<PortalScpiDeclarationLine>, String> {
+    require_ui_session(&session)?;
+    let guard = db.lock().map_err(|e| e.to_string())?;
+    let database = guard.as_ref().ok_or("Base non ouverte")?;
+    require_espace_client_active(database)?;
+    pull_espace_scpi_declarations(&app, database, contact_id)
 }
 
 #[cfg(test)]

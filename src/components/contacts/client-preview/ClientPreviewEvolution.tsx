@@ -13,6 +13,7 @@ import {
   buildPatrimoineEvolution,
   type PatrimoineEvolutionPoint,
 } from "@/lib/patrimoine/patrimoine-evolution";
+import type { ValorisationHistoryById } from "@/lib/espace-client/espace-valorisations";
 import { formatShortEuro } from "./client-preview-format";
 import { CP } from "./client-preview-theme";
 
@@ -20,10 +21,7 @@ const LINE_COLOR = "#5B9EA6";
 const GRID_COLOR = "rgba(255,255,255,0.06)";
 const AXIS_COLOR = "#6b6b6b";
 
-export type EvolutionHistoryById = Map<
-  number,
-  Array<{ dateTs: number; montantCentimes: number }>
->;
+export type EvolutionHistoryById = ValorisationHistoryById;
 
 function EvolutionTooltip({
   active,

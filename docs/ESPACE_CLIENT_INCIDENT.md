@@ -5,6 +5,12 @@ Ne pas versionner de données nominatives réelles.
 
 Complète la procédure RGPD §7 de `docs/ESPACE_CLIENT_RGPD.md`.
 
+**État des lieux** : le canvas Cursor **Espace client — état des lieux**
+(`canvases/espace-client-etat-des-lieux.canvas.tsx`, hors dépôt) synthétise
+l'avancement technique, la posture sécurité et les écarts restants. Ce runbook
+décrit quoi faire **le jour J** ; le canvas décrit **où on en est** avant
+l'incident.
+
 ---
 
 ## 1. Quand déclencher ce plan
@@ -181,7 +187,9 @@ Rôles à y renseigner :
 
 ## Références
 
+- Canvas Cursor **Espace client — état des lieux** — synthèse visuelle (avancement, sécurité, écarts) ; lien croisé depuis la section « Plan de réponse à incident »
 - `docs/ESPACE_CLIENT_RGPD.md` — cadre légal
+- `docs/ESPACE_CLIENT_PLAN.md` — plan d'implémentation et phases fonctionnelles
 - `espace-portail/deploy/README.md` — déploiement, sauvegarde
 - `espace-portail/deploy/backup-portail.sh` — sauvegarde quotidienne
 - `espace-portail/deploy/restore-portail-test.sh` — test de restauration

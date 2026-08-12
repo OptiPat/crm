@@ -108,6 +108,7 @@ impl PortalDb {
                 "ALTER TABLE espace_session ADD COLUMN last_seen_at INTEGER NOT NULL DEFAULT 0;",
             )?;
         }
+        self.migrate_scpi_declarations()?;
         Ok(())
     }
 

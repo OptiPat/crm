@@ -7,7 +7,8 @@ use crate::database::espace_client::ESPACE_STATUT_ACTIF;
 use super::sync_payload::{
     EspaceClientAccesSnapshot, EspaceClientContactSnapshot, EspaceClientDemandeLine,
     EspaceClientInvestissementLine, EspaceClientPartenaireLine, EspaceClientRdvLien,
-    EspaceClientSyncPayload, EspaceClientTimelineEvent, ESPACE_SYNC_SCHEMA_VERSION,
+    EspaceClientSyncPayload, EspaceClientTimelineEvent, EspaceClientValorisationPoint,
+    ESPACE_SYNC_SCHEMA_VERSION, VALORISATION_SOURCE_CABINET, VALORISATION_SOURCE_CLIENT,
 };
 use super::visibilite::{
     FoyerMemberRef, PatrimoineInvestissement, PatrimoineViewer, is_investissement_visible_to_viewer,
@@ -18,6 +19,83 @@ pub fn build_espace_client_snapshot(
     contact_id: i64,
 ) -> Result<EspaceClientSyncPayload, String> {
     build_espace_client_snapshot_with_sequence(db, contact_id, None)
+}
+
+/// Ce que l'aperçu du conseiller doit afficher : les mêmes échéances et le
+/// même bouton de rendez-vous que la photo envoyée au portail.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EspaceClientPreview {
+    pub timeline: Vec<EspaceClientTimelineEvent>,
+    pub valorisations: Vec<EspaceClientValorisationPoint>,
+    /// Uniquement les pièces encore attendues, comme sur le portail.
+    pub demandes: Vec<EspaceClientDemandeLine>,
+    pub rdv_url: Option<String>,
+}
+
+/// Aperçu conseiller : construit la timeline avec **le même** `build_timeline`
+/// que la synchronisation, pour qu'une règle écrite une fois s'applique aux
+/// deux écrans. Contrairement à la photo, l'accès n'a pas besoin d'être actif :
+/// le conseiller doit pouvoir juger l'écran avant d'ouvrir l'espace.
+pub fn build_espace_client_preview(
+    db: &Database,
+    contact_id: i64,
+) -> Result<EspaceClientPreview, String> {
+    let contact = db
+        .get_contact_by_id(contact_id)
+        .map_err(|e| e.to_string())?;
+
+    let now = chrono::Utc::now().timestamp();
+    let foyer_members = load_foyer_members(db, &contact)?;
+    let viewer = PatrimoineViewer {
+        id: contact_id,
+        foyer_id: contact.foyer_id,
+        role_foyer: contact.role_foyer.clone(),
+    };
+
+    let visible: Vec<Investissement> = load_patrimoine_rows(db, &contact)?
+        .into_iter()
+        .filter(|inv| {
+            is_investissement_visible_to_viewer(
+                &PatrimoineInvestissement {
+                    contact_id: inv.contact_id,
+                    foyer_id: inv.foyer_id,
+                    statut: Some(inv.statut.clone()),
+                },
+                &viewer,
+                &foyer_members,
+                now,
+                false,
+            )
+        })
+        .collect();
+
+    let rdv_liens = collect_rdv_liens(db);
+    let echeances = db
+        .list_espace_echeances(contact_id)
+        .map_err(|e| e.to_string())?;
+
+    let demandes = db
+        .list_espace_demandes_for_sync(contact_id)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .filter(|d| d.statut == crate::database::espace_demande::ESPACE_DEMANDE_EN_ATTENTE)
+        .map(|d| EspaceClientDemandeLine {
+            id: d.id,
+            type_document: d.type_document,
+            template_key: d.template_key,
+            libelle: d.libelle,
+            statut: d.statut,
+            demande_at: d.demande_at,
+        })
+        .collect();
+
+    Ok(EspaceClientPreview {
+        timeline: build_timeline(&visible, &echeances, &rdv_liens),
+        valorisations: build_valorisations(db, &visible)?,
+        demandes,
+        rdv_url: resolve_rdv_general(db, &rdv_liens),
+    })
 }
 
 pub fn build_espace_client_snapshot_for_push(
@@ -129,6 +207,7 @@ fn build_espace_client_snapshot_with_sequence(
         investissements,
         partenaires,
         timeline,
+        valorisations: build_valorisations(db, &visible)?,
         demandes,
         rdv_url,
         // Simple lecture : la paire est créée par la commande de push, qui
@@ -139,6 +218,78 @@ fn build_espace_client_snapshot_with_sequence(
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty()),
     })
+}
+
+/// Historique de valorisation des placements visibles, chaque point étiqueté.
+///
+/// Le client voyait jusqu'ici ses seules déclarations : dès qu'il en faisait
+/// une, les valorisations du cabinet disparaissaient de la liste sans que rien
+/// ne l'explique. Les deux sources partent désormais ensemble.
+fn build_valorisations(
+    db: &Database,
+    investissements: &[Investissement],
+) -> Result<Vec<EspaceClientValorisationPoint>, String> {
+    let mut points: Vec<EspaceClientValorisationPoint> = Vec::new();
+
+    for inv in investissements {
+        // Un même jour peut porter une valorisation et un revenu : ils font une
+        // seule ligne à l'écran.
+        let mut par_jour: HashMap<i64, EspaceClientValorisationPoint> = HashMap::new();
+
+        for valo in db
+            .get_valorisations_by_investissement(inv.id)
+            .map_err(|e| e.to_string())?
+        {
+            par_jour.insert(
+                valo.date_valorisation,
+                EspaceClientValorisationPoint {
+                    investissement_id: inv.id,
+                    date_ts: valo.date_valorisation,
+                    montant_centimes: valo.montant,
+                    revenu_percu_centimes: None,
+                    source: source_valorisation(valo.notes.as_deref()).to_string(),
+                },
+            );
+        }
+
+        for revenu in db
+            .get_revenus_percus_by_investissement(inv.id)
+            .map_err(|e| e.to_string())?
+        {
+            par_jour
+                .entry(revenu.date_perception)
+                .and_modify(|point| point.revenu_percu_centimes = Some(revenu.montant))
+                .or_insert(EspaceClientValorisationPoint {
+                    investissement_id: inv.id,
+                    date_ts: revenu.date_perception,
+                    // Revenu seul : aucun montant valorisé ce jour-là.
+                    montant_centimes: 0,
+                    revenu_percu_centimes: Some(revenu.montant),
+                    source: source_revenu(&revenu.source).to_string(),
+                });
+        }
+
+        points.extend(par_jour.into_values());
+    }
+
+    points.sort_by_key(|point| (point.investissement_id, point.date_ts));
+    Ok(points)
+}
+
+/// L'import des déclarations client annote ses lignes « Espace client ».
+fn source_valorisation(notes: Option<&str>) -> &'static str {
+    match notes {
+        Some(notes) if notes.contains("Espace client") => VALORISATION_SOURCE_CLIENT,
+        _ => VALORISATION_SOURCE_CABINET,
+    }
+}
+
+fn source_revenu(source: &str) -> &'static str {
+    if source == "ESPACE_CLIENT" {
+        VALORISATION_SOURCE_CLIENT
+    } else {
+        VALORISATION_SOURCE_CABINET
+    }
 }
 
 fn load_partenaires_for_investissements(
@@ -167,7 +318,7 @@ fn load_partenaires_for_investissements(
     Ok(partenaires)
 }
 
-fn load_foyer_members(db: &Database, contact: &Contact) -> Result<Vec<FoyerMemberRef>, String> {
+pub(crate) fn load_foyer_members(db: &Database, contact: &Contact) -> Result<Vec<FoyerMemberRef>, String> {
     let contact_id = contact.id.ok_or_else(|| "Contact sans identifiant".to_string())?;
 
     let Some(foyer_id) = contact.foyer_id else {
@@ -429,6 +580,173 @@ mod tests {
             .unwrap();
         let payload = build_espace_client_snapshot(&db, contact_id).unwrap();
         assert_eq!(payload.acces.statut, ESPACE_STATUT_ACTIF);
+    }
+
+    /// L'aperçu du conseiller et la photo envoyée au portail doivent montrer
+    /// exactement la même chose. Ce test échoue si l'un des deux se met à
+    /// filtrer, trier ou enrichir de son côté.
+    #[test]
+    fn advisor_preview_shows_the_same_timeline_as_the_portal() {
+        use crate::database::models::{AgendaLink, CgpConfig};
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = db
+            .create_contact(NewContact {
+                categorie: "CLIENT".into(),
+                nom: "LEGRAND".into(),
+                prenom: "Paul".into(),
+                email: Some("paul@example.com".into()),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .unwrap();
+        db.activate_espace_acces(contact_id, "paul@example.com", "hash-activation-test")
+            .unwrap();
+
+        db.save_cgp_config(&CgpConfig {
+            agenda_links: vec![AgendaLink {
+                id: "bilan".into(),
+                label: "Bilan annuel".into(),
+                url: "https://calendar.example.com/bilan".into(),
+            }],
+            ..Default::default()
+        })
+        .unwrap();
+        db.set_setting(crate::espace_client::config::RDV_LIEN_SETTING_KEY, "bilan")
+            .unwrap();
+
+        let futur = chrono::Utc::now().timestamp() + 86_400;
+        db.create_espace_echeance(
+            contact_id,
+            futur,
+            "Préparez vos justificatifs",
+            Some("Avis d'imposition et relevés SCPI."),
+            Some("bilan"),
+        )
+        .unwrap();
+
+        let snapshot = build_espace_client_snapshot(&db, contact_id).unwrap();
+        let preview = build_espace_client_preview(&db, contact_id).unwrap();
+
+        assert_eq!(preview.rdv_url, snapshot.rdv_url);
+        assert_eq!(preview.valorisations.len(), snapshot.valorisations.len());
+        assert_eq!(preview.timeline.len(), snapshot.timeline.len());
+        assert_eq!(preview.timeline.len(), 1);
+        for (apercu, portail) in preview.timeline.iter().zip(snapshot.timeline.iter()) {
+            assert_eq!(apercu.id, portail.id);
+            assert_eq!(apercu.kind, portail.kind);
+            assert_eq!(apercu.date, portail.date);
+            assert_eq!(apercu.label, portail.label);
+            assert_eq!(apercu.detail, portail.detail);
+            assert_eq!(apercu.rdv_url, portail.rdv_url);
+        }
+    }
+
+    /// Le client doit pouvoir distinguer ce qu'il a déclaré de ce que le
+    /// cabinet a valorisé : les deux sources partent, chacune étiquetée.
+    #[test]
+    fn valuation_history_carries_both_sources() {
+        use crate::database::models::{
+            NewInvestissement, NewInvestissementRevenuPercu, NewInvestissementValorisation,
+        };
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = db
+            .create_contact(NewContact {
+                categorie: "CLIENT".into(),
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let inv = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(contact_id),
+                foyer_id: None,
+                type_produit: "SCPI".into(),
+                partenaire_id: None,
+                nom_produit: "SCPI Test".into(),
+                numero_contrat: None,
+                montant_initial: Some(1_000_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: inv.id,
+            montant: 1_100_000,
+            date_valorisation: Some("2026-01-15T00:00:00+00:00".into()),
+            notes: Some("Relevé annuel".into()),
+            stellium_versements_nets_centimes: None,
+            stellium_perf_euro_centimes: None,
+        })
+        .unwrap();
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: inv.id,
+            montant: 1_200_000,
+            date_valorisation: Some("2026-06-15T00:00:00+00:00".into()),
+            notes: Some("Espace client".into()),
+            stellium_versements_nets_centimes: None,
+            stellium_perf_euro_centimes: None,
+        })
+        .unwrap();
+        db.create_investissement_revenu_percu(NewInvestissementRevenuPercu {
+            investissement_id: inv.id,
+            montant: 12_000,
+            date_perception: Some("2026-06-15T00:00:00+00:00".into()),
+            source: Some("ESPACE_CLIENT".into()),
+        })
+        .unwrap();
+
+        let points = build_valorisations(&db, &[inv]).unwrap();
+
+        assert_eq!(points.len(), 2, "un point par jour, revenu compris");
+        assert_eq!(points[0].montant_centimes, 1_100_000);
+        assert_eq!(points[0].source, VALORISATION_SOURCE_CABINET);
+        assert!(points[0].revenu_percu_centimes.is_none());
+        assert_eq!(points[1].montant_centimes, 1_200_000);
+        assert_eq!(points[1].source, VALORISATION_SOURCE_CLIENT);
+        assert_eq!(points[1].revenu_percu_centimes, Some(12_000));
+    }
+
+    /// Le conseiller doit pouvoir juger l'écran avant d'ouvrir l'espace : sans
+    /// cela l'aperçu resterait vide jusqu'à l'activation.
+    #[test]
+    fn preview_works_before_the_access_is_opened() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = db
+            .create_contact(NewContact {
+                categorie: "PROSPECT".into(),
+                nom: "BERNARD".into(),
+                prenom: "Luc".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        assert!(build_espace_client_snapshot(&db, contact_id).is_err());
+        assert!(build_espace_client_preview(&db, contact_id).is_ok());
     }
 
     #[test]

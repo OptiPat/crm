@@ -13,6 +13,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  getRevenusPercusByInvestissement,
+  formatRevenuPercuSource,
+  type InvestissementRevenuPercu,
+} from "@/lib/api/tauri-investissement-revenus";
+import {
   createInvestissementValorisation,
   deleteInvestissementValorisation,
   getValorisationsByInvestissement,
@@ -138,6 +143,7 @@ export function InvestissementEncoursPanel({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [valorisations, setValorisations] = useState<InvestissementValorisation[]>([]);
+  const [revenusPercus, setRevenusPercus] = useState<InvestissementRevenuPercu[]>([]);
   const [versements, setVersements] = useState<InvestissementVersement[]>([]);
   const [montant, setMontant] = useState("");
   const [dateValorisation, setDateValorisation] = useState(todayLocal());
@@ -145,12 +151,16 @@ export function InvestissementEncoursPanel({
   const loadHistory = useCallback(async () => {
     try {
       setLoading(true);
-      const [vals, vcs] = await Promise.all([
+      const [vals, vcs, revenus] = await Promise.all([
         getValorisationsByInvestissement(investissementId),
         getVersementsByInvestissement(investissementId),
+        isValorisation
+          ? getRevenusPercusByInvestissement(investissementId)
+          : Promise.resolve([]),
       ]);
       setValorisations(vals);
       setVersements(vcs);
+      setRevenusPercus(revenus);
     } catch (error) {
       console.error(error);
       toast.error(
@@ -497,6 +507,11 @@ export function InvestissementEncoursPanel({
                 <span className="text-muted-foreground ml-2 text-xs">
                   {formatCalendarDateFr(v.date_valorisation)}
                 </span>
+                {v.notes?.trim() ? (
+                  <span className="text-muted-foreground ml-2 text-xs">
+                    · {v.notes.trim()}
+                  </span>
+                ) : null}
               </span>
               <Button
                 type="button"
@@ -515,6 +530,30 @@ export function InvestissementEncoursPanel({
             </li>
           ))}
         </ul>
+      )}
+
+      {isValorisation && revenusPercus.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-foreground">Revenus perçus</p>
+          <ul className="space-y-1.5 max-h-36 overflow-y-auto rounded-md border border-border/60 p-2">
+            {[...revenusPercus].reverse().map((revenu) => (
+              <li
+                key={revenu.id}
+                className="flex items-baseline justify-between gap-2 text-sm py-0.5"
+              >
+                <span className="tabular-nums">
+                  {formatEuroCentimes(revenu.montant)}
+                  <span className="text-muted-foreground ml-2 text-xs">
+                    {formatCalendarDateFr(revenu.date_perception)}
+                  </span>
+                </span>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {formatRevenuPercuSource(revenu.source)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

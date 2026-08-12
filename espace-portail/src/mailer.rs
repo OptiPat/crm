@@ -67,6 +67,10 @@ impl Mailer {
         })
     }
 
+    fn cabinet_html(&self) -> String {
+        escape_html(&self.from_name)
+    }
+
     pub async fn send_login_code(&self, to: &str, code: &str) -> Result<(), String> {
         self.send_email(
             to,
@@ -104,7 +108,9 @@ impl Mailer {
              <p>Connectez-vous à votre espace pour effectuer le dépôt \
              (PDF, JPEG ou PNG — 10 Mo maximum).</p>\
              <p>{cabinet}</p>",
-            cabinet = self.from_name
+            greeting = escape_html(&greeting),
+            libelle = escape_html(libelle),
+            cabinet = self.cabinet_html()
         );
         self.send_email(to, "Document à déposer sur votre espace", &text, &html)
             .await
@@ -135,7 +141,7 @@ impl Mailer {
         let precision_html = message
             .map(str::trim)
             .filter(|m| !m.is_empty())
-            .map(|m| format!("<p>{m}</p>"))
+            .map(|m| format!("<p>{}</p>", escape_html(m)))
             .unwrap_or_default();
 
         let text = format!(
@@ -154,7 +160,10 @@ impl Mailer {
              {precision_html}\
              <p>Connectez-vous à votre espace pour le consulter.</p>\
              <p>{cabinet}</p>",
-            cabinet = self.from_name
+            greeting = escape_html(&greeting),
+            titre = escape_html(titre),
+            date_label = escape_html(date_label),
+            cabinet = self.cabinet_html()
         );
         self.send_email(to, "Nouvel événement sur votre espace", &text, &html)
             .await
@@ -175,11 +184,58 @@ impl Mailer {
             "<p>Bonjour,</p>\
              <p><strong>{client_label}</strong> a déposé le document demandé : \
              <strong>{libelle}</strong>.</p>\
-             <p>Importez-le depuis le CRM (panneau Espace client).</p>"
+             <p>Importez-le depuis le CRM (panneau Espace client).</p>",
+            client_label = escape_html(client_label),
+            libelle = escape_html(libelle)
         );
         self.send_email(
             advisor_email,
             "Dépôt reçu sur l'espace client",
+            &text,
+            &html,
+        )
+        .await
+    }
+
+    pub async fn send_scpi_declaration_received(
+        &self,
+        advisor_email: &str,
+        client_label: &str,
+        nom_produit: &str,
+        date_label: &str,
+        valorisation_euros: f64,
+        revenu_euros: Option<f64>,
+    ) -> Result<(), String> {
+        let revenu_text = revenu_euros
+            .filter(|v| *v > 0.0)
+            .map(|v| format!("\nRevenu perçu : {v:.2} €"))
+            .unwrap_or_default();
+        let revenu_html = revenu_euros
+            .filter(|v| *v > 0.0)
+            .map(|v| format!("<br/><strong>Revenu perçu :</strong> {v:.2} €"))
+            .unwrap_or_default();
+        let text = format!(
+            "Bonjour,\n\n\
+             {client_label} a mis à jour une SCPI depuis l'espace client.\n\
+             Produit : {nom_produit}\n\
+             Date : {date_label}\n\
+             Valorisation : {valorisation_euros:.2} €{revenu_text}\n\n\
+             Importez la déclaration depuis le CRM (panneau Espace client) pour mettre à jour le dossier.\n"
+        );
+        let html = format!(
+            "<p>Bonjour,</p>\
+             <p><strong>{client_label}</strong> a mis à jour une SCPI depuis l'espace client.</p>\
+             <p><strong>Produit :</strong> {nom_produit}<br/>\
+             <strong>Date :</strong> {date_label}<br/>\
+             <strong>Valorisation :</strong> {valorisation_euros:.2} €{revenu_html}</p>\
+             <p>Importez la déclaration depuis le CRM (panneau Espace client) pour mettre à jour le dossier.</p>",
+            client_label = escape_html(client_label),
+            nom_produit = escape_html(nom_produit),
+            date_label = escape_html(date_label)
+        );
+        self.send_email(
+            advisor_email,
+            "Mise à jour SCPI — espace client",
             &text,
             &html,
         )
@@ -224,15 +280,25 @@ impl Mailer {
              <p>Si vous êtes à l'origine de cette connexion, vous pouvez ignorer ce message.</p>\
              <p>Sinon, contactez immédiatement votre conseiller pour faire révoquer l'accès.</p>\
              <p>{cabinet}</p>",
+            // L'adresse et surtout le navigateur viennent de la requête : un
+            // visiteur choisit son User-Agent, et ce message part dans la boîte
+            // du client.
             ip_html = ip
                 .filter(|value| !value.is_empty())
-                .map(|value| format!("<strong>Adresse réseau :</strong> {value}<br/>"))
+                .map(|value| {
+                    format!(
+                        "<strong>Adresse réseau :</strong> {}<br/>",
+                        escape_html(value)
+                    )
+                })
                 .unwrap_or_default(),
             ua_html = user_agent
                 .filter(|value| !value.is_empty())
-                .map(|value| format!("<strong>Navigateur :</strong> {value}<br/>"))
+                .map(|value| {
+                    format!("<strong>Navigateur :</strong> {}<br/>", escape_html(value))
+                })
                 .unwrap_or_default(),
-            cabinet = self.from_name
+            cabinet = self.cabinet_html()
         );
         self.send_email(to, "Nouvelle connexion à votre espace", &text, &html)
             .await
@@ -303,13 +369,52 @@ pub fn login_code_html(cabinet: &str, code: &str) -> String {
          <p style=\"font-size:28px;font-weight:700;letter-spacing:6px\">{code}</p>\
          <p>Il est valable 15 minutes et ne fonctionne qu'une seule fois.</p>\
          <p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>\
-         <p>{cabinet}</p>"
+         <p>{cabinet}</p>",
+        code = escape_html(code),
+        cabinet = escape_html(cabinet)
     )
+}
+
+/// Tout texte libre inséré dans un corps HTML passe par ici : titres et
+/// messages écrits par le conseiller, mais aussi le navigateur annoncé par le
+/// visiteur, que rien n'empêche de contenir du balisage.
+fn escape_html(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for c in value.chars() {
+        match c {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&#39;"),
+            _ => escaped.push(c),
+        }
+    }
+    escaped
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Un titre ou un navigateur contenant du balisage ne doit pas pouvoir
+    /// réécrire l'email qui arrive dans la boîte du client.
+    #[test]
+    fn free_text_cannot_inject_markup() {
+        assert_eq!(
+            escape_html("<script>alert('x')</script>"),
+            "&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt;"
+        );
+        assert_eq!(escape_html("Dupont & fils"), "Dupont &amp; fils");
+        assert_eq!(escape_html("Bilan annuel"), "Bilan annuel");
+    }
+
+    #[test]
+    fn login_code_email_escapes_the_cabinet_name() {
+        let html = login_code_html("<b>Cabinet</b>", "123456");
+        assert!(html.contains("&lt;b&gt;Cabinet&lt;/b&gt;"));
+        assert!(html.contains("123456"));
+    }
 
     #[test]
     fn mailer_requires_key_and_sender() {

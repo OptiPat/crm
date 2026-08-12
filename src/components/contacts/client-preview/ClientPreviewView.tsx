@@ -26,6 +26,7 @@ import { ClientPreviewInventory } from "./ClientPreviewInventory";
 
 import { ClientPreviewEvolution } from "./ClientPreviewEvolution";
 import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
+import type { ScpiClientDeclarationInput } from "@/lib/espace-client/scpi-client-tracking";
 
 import { ClientPreviewRdvButton } from "./ClientPreviewRdvButton";
 import { ClientPreviewHeader } from "./ClientPreviewHeader";
@@ -72,6 +73,12 @@ export interface ClientPreviewViewProps {
 
   /** Historiques de valorisation (CRM) pour affiner la courbe d'évolution. */
   evolutionHistoriesByInvestissementId?: EvolutionHistoryById;
+
+  enableScpiTracking?: boolean;
+  scpiDeclarationSubmitting?: boolean;
+  onSubmitScpiDeclaration?: (
+    input: ScpiClientDeclarationInput
+  ) => Promise<void>;
 
   /** Adresse du bouton permanent de rendez-vous. Absente : aucun bouton. */
   rdvUrl?: string;
@@ -123,6 +130,12 @@ export function ClientPreviewView({
   hideTimelineSync = false,
 
   evolutionHistoriesByInvestissementId,
+
+  enableScpiTracking = false,
+
+  scpiDeclarationSubmitting = false,
+
+  onSubmitScpiDeclaration,
 
   rdvUrl,
 
@@ -179,6 +192,7 @@ export function ClientPreviewView({
             nom={contact.nom}
             logoUrl={logoUrl}
             lastSyncLabel={lastSyncLabel}
+            viewport={viewport}
             onLogout={onLogout}
           />
         ) : null}
@@ -214,6 +228,18 @@ export function ClientPreviewView({
           sortedInventory={sortedInventory}
 
           partenaireById={partenaireById}
+
+          viewport={viewport}
+
+          valorisationHistoriesByInvestissementId={
+            evolutionHistoriesByInvestissementId
+          }
+
+          enableScpiTracking={enableScpiTracking}
+
+          scpiDeclarationSubmitting={scpiDeclarationSubmitting}
+
+          onSubmitScpiDeclaration={onSubmitScpiDeclaration}
 
           emptyState={emptyState}
 

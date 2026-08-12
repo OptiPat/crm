@@ -92,6 +92,9 @@ async fn get_patrimoine_for_contact(state: AppState, contact_id: i64) -> axum::r
             let mut payload = row.payload;
             strip_client_hidden_timeline_events(&mut payload);
             strip_unsafe_rdv_url(&mut payload);
+            if let Ok(declarations) = state.db.list_scpi_declarations_for_contact(contact_id) {
+                crate::scpi_declarations::overlay_scpi_declarations(&mut payload, &declarations);
+            }
             (
                 StatusCode::OK,
                 Json(PatrimoineResponse {

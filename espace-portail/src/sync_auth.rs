@@ -250,3 +250,90 @@ fn handle_post_depot_ack(
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScpiDeclarationsResponse {
+    declarations: Vec<crate::scpi_declarations::ScpiDeclarationLine>,
+}
+
+pub async fn get_scpi_declarations(
+    State(state): State<AppState>,
+    Path(contact_id): Path<i64>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let canonical = format!("/api/v1/sync/contact/{contact_id}/scpi-declarations");
+    match handle_get_scpi_declarations(&state, contact_id, &headers, canonical.as_bytes()) {
+        Ok(declarations) => (
+            StatusCode::OK,
+            Json(ScpiDeclarationsResponse { declarations }),
+        )
+            .into_response(),
+        Err(message) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": message })),
+        )
+            .into_response(),
+    }
+}
+
+fn handle_get_scpi_declarations(
+    state: &AppState,
+    contact_id: i64,
+    headers: &HeaderMap,
+    sign_body: &[u8],
+) -> Result<Vec<crate::scpi_declarations::ScpiDeclarationLine>, String> {
+    verify_sync_request(state, headers, sign_body)?;
+    let rows = state
+        .db
+        .list_scpi_declarations_pending_sync(contact_id)
+        .map_err(|e| e.to_string())?;
+    Ok(rows
+        .into_iter()
+        .map(crate::scpi_declarations::ScpiDeclarationLine::from)
+        .collect())
+}
+
+pub async fn post_scpi_declaration_ack(
+    State(state): State<AppState>,
+    Path((contact_id, declaration_id)): Path<(i64, i64)>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let canonical = format!(
+        "/api/v1/sync/contact/{contact_id}/scpi-declarations/{declaration_id}/ack"
+    );
+    match handle_post_scpi_declaration_ack(
+        &state,
+        contact_id,
+        declaration_id,
+        &headers,
+        canonical.as_bytes(),
+    ) {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "accepted": true }))).into_response(),
+        Err(message) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": message })),
+        )
+            .into_response(),
+    }
+}
+
+fn handle_post_scpi_declaration_ack(
+    state: &AppState,
+    contact_id: i64,
+    declaration_id: i64,
+    headers: &HeaderMap,
+    sign_body: &[u8],
+) -> Result<(), String> {
+    verify_sync_request(state, headers, sign_body)?;
+    let updated = state
+        .db
+        .ack_scpi_declaration(contact_id, declaration_id)
+        .map_err(|e| e.to_string())?;
+    if !updated {
+        tracing::info!(
+            "Accusé réception idempotent déclaration SCPI contact={contact_id} id={declaration_id}"
+        );
+    }
+    Ok(())
+}
+

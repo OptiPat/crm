@@ -728,6 +728,24 @@ pub struct NewInvestissementVersement {
     pub notes: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct InvestissementRevenuPercu {
+    pub id: i64,
+    pub investissement_id: i64,
+    pub montant: i64,
+    pub date_perception: i64,
+    pub source: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewInvestissementRevenuPercu {
+    pub investissement_id: i64,
+    pub montant: i64,
+    pub date_perception: Option<String>,
+    pub source: Option<String>,
+}
+
 // ==================== ETIQUETTES ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -29,6 +29,21 @@ export function isPlacementEncoursEligible(typeProduit: string | undefined): boo
   return (PLACEMENT_ENCOURS_TYPES as readonly string[]).includes(typeProduit);
 }
 
+export function isScpiValorisationType(typeProduit: string | undefined): boolean {
+  if (!typeProduit) return false;
+  return SCPI_VALORISATION_TYPES.has(typeProduit);
+}
+
+/** Espace client — historique encours / valorisation dans la fiche placement. */
+export function isClientPreviewValorisationHistoryEligible(
+  typeProduit: string | undefined
+): boolean {
+  return (
+    isPlacementEncoursEligible(typeProduit) ||
+    isScpiValorisationType(typeProduit)
+  );
+}
+
 /** Immobilier / SCPI : même mécanique de relevés, copy « valorisation ». */
 export function isPlacementImmoScpiValorisationEligible(
   typeProduit: string | undefined

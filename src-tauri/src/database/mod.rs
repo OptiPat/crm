@@ -40,6 +40,7 @@ pub mod foyers;
 pub mod google_contact_name_dismissals;
 pub mod interactions;
 pub mod investissement_produit_match;
+pub mod investissement_revenus;
 pub mod investissements;
 pub mod models;
 pub mod newsletter_ops;
@@ -614,6 +615,7 @@ impl Database {
         self.migrate_add_investissement_arbitrage_dates()?;
         self.migrate_add_alerte_investissement_id()?;
         self.migrate_investissement_valorisations()?;
+        self.migrate_investissement_revenus_percus()?;
         self.migrate_stellium_fields_on_valorisations()?;
 
         self.migrate_investissement_versements()?;
