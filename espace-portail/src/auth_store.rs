@@ -47,12 +47,17 @@ impl PortalDb {
              ) VALUES (?1, ?2, ?3, ?4, ?5, unixepoch())
              ON CONFLICT(contact_id) DO UPDATE SET
                 statut = excluded.statut,
-                email = CASE WHEN excluded.email != '' THEN excluded.email ELSE espace_acces.email END,
+                email = CASE
+                    WHEN excluded.statut = 'revoque' THEN ''
+                    WHEN excluded.email != '' THEN excluded.email
+                    ELSE espace_acces.email
+                END,
                 -- Un nouveau code d'activation signifie une reactivation
                 -- deliberee par le conseiller : la premiere connexion est a
                 -- refaire, sinon le portail attendrait un code par email que
                 -- le client ne peut pas obtenir.
                 activation_code_hash = CASE
+                    WHEN excluded.statut = 'revoque' THEN NULL
                     WHEN excluded.activation_code_hash IS NOT NULL THEN excluded.activation_code_hash
                     WHEN espace_acces.premiere_connexion_at IS NOT NULL THEN NULL
                     ELSE espace_acces.activation_code_hash
@@ -790,6 +795,15 @@ mod tests {
         db.upsert_acces_from_sync(2, "revoque", None, None, None)
             .unwrap();
         assert!(db.is_new_device(2, &hash).unwrap());
+        let email: String = db
+            .conn()
+            .query_row(
+                "SELECT email FROM espace_acces WHERE contact_id = 2",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(email, "");
     }
 }
 

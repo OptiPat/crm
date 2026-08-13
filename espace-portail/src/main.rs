@@ -4,6 +4,7 @@ mod client_auth;
 mod secrets;
 mod db;
 mod demande_store;
+mod demande_reminder;
 mod depot_crypto;
 mod document_scan;
 mod evenement_store;
@@ -13,6 +14,7 @@ mod login_code;
 mod mailer;
 mod portal_branding;
 mod privacy_config;
+mod purge;
 mod read;
 mod security;
 mod sync;
@@ -208,6 +210,7 @@ async fn main() {
         privacy,
         branding,
     };
+    crate::demande_reminder::spawn_demande_reminder_loop(state.clone());
 
     let static_root = static_dir();
     let index_path = static_root.join("index.html");

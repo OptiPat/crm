@@ -1,7 +1,8 @@
 # Espace client — plan d'implémentation
 
-> **Statut au 13 août 2026** : en production, phases 0 à 2 faites, premiers clients en bêta.
-> Mise à jour des placements par le client **déployée**.
+> **Statut au 13 août 2026** : en production, phases 0 à 2, **4 et 5 faites**.
+> Phase 3 (documents consultables sur le portail) **abandonnée**. **5 clients** ont
+> déjà ouvert l'espace en rendez-vous. CRM 0.5.25.
 > Cadrage initial du 8 août. Voir §0 pour l'état d'avancement réel.
 > **Public** : agent ou développeur qui reprend le sujet. Lire les sections 2 et 3 avant toute
 > proposition alternative, et **§15 avant de toucher à un écran client**.
@@ -10,19 +11,19 @@
 
 ## 0. Où on en est
 
-**En production, ouvert aux premiers clients.** Le portail tourne sur un VPS OVH en
+**En production, testé avec 5 clients en rendez-vous.** Le portail tourne sur un VPS OVH en
 France, en HTTPS, avec ses sauvegardes quotidiennes. Le parcours complet — consultation
 du patrimoine, demande de document, dépôt, rapatriement en GED, purge — a été joué de
-bout en bout sur un contact fictif. Trois investisseurs entrent en phase bêta.
+bout en bout, d'abord sur un contact fictif, puis avec cinq investisseurs réels.
 
 | Phase | État |
 |---|---|
 | 0 — Fondations CRM (logique pure, aperçu conseiller) | **Fait** |
 | 1 — Portail en lecture, authentification client | **Fait** |
 | 2 — Dépôt de documents | **Fait**, validé en production |
-| 3 — Documents mis à disposition | Non commencé — c'est là que se branchera la ré-authentification (R7) |
-| 4 — Déclaration des avoirs extérieurs | **Déployé** : mise à jour des lignes déjà synchronisées, et création de lignes `DECLARE_CLIENT` (immobilier, SCPI, placements, épargne / banque). Jauge de complétude et vieillissement : non commencés |
-| 5 — Notifications et cycle de vie | Partiel : révocation, alerte nouvel appareil, annonce des événements |
+| 3 — Documents mis à disposition | **Abandonné** (13 août) : le dépôt client → GED suffit. Publier un PDF sur le portail duplique le mail / le rendez-vous, et contredit **R3** (le fichier devrait résider sur le serveur) |
+| 4 — Déclaration des avoirs extérieurs | **Fait** : mise à jour, création et retrait `DECLARE_CLIENT`. Jauge de complétude et vieillissement **abandonnés** (13 août) : le total dit déjà « estimé », chaque ligne porte déjà sa date de valorisation |
+| 5 — Notifications et cycle de vie | **Fait** (13 août). Rappel auto **72 h** après la demande si la pièce est toujours en attente (un seul mail, relecture avant envoi). Purge portail à la révocation (RGPD) — **jamais** le CRM ; un échec disque refuse la révocation. Messagerie conseiller : non, les échéances suffisent |
 | Déploiement serveur | **Fait** — procédure dans `espace-portail/deploy/README.md` |
 
 Ajouts postérieurs au plan initial, non prévus ici mais livrés :
@@ -38,10 +39,20 @@ Ajouts postérieurs au plan initial, non prévus ici mais livrés :
   à côté) avec valorisation et revenus perçus ; épargne et placements financiers **à côté**
   avec l'encours ; immobilier **à côté** avec valorisation, loyer, mensualité et fin de
   prêt. Le client peut aussi **déclarer un avoir hors cabinet** (`DECLARE_CLIENT`,
-  rattachement personnel, jamais fusionné avec une ligne cabinet). Le conseiller est
-  prévenu par email et reprend la déclaration à l'import. Plafond de 10 000 000 € par
-  montant, jour civil en UTC comme le reste de la chaîne. Un import rejoué réutilise
-  la ligne déjà créée si l'accusé n'a pas abouti.
+  rattachement personnel, jamais fusionné avec une ligne cabinet) et **retirer**
+  uniquement une ligne qu'il a lui-même déclarée — jamais une ligne cabinet, jamais
+  un avoir du conjoint. Le conseiller est prévenu par email (déclaration et retrait)
+  et reprend à l'import. Un retrait en attente n'est **pas** annulé si le client
+  redéclare le même produit : l'import clôture d'abord, puis crée la nouvelle ligne.
+  Plafond de 10 000 000 € par montant, jour civil en UTC comme le reste de la chaîne.
+  Un import rejoué réutilise la ligne déjà créée si l'accusé n'a pas abouti.
+  La courbe d'évolution d'un placement déclaré est la même que « avec moi » : elle
+  n'apparaît qu'à partir de deux dates (un seul point à la création).
+  L'écran de connexion met en avant « Recevoir un code par email » (bouton, toast
+  « Email envoyé ») ; cet écran n'existe **pas** dans l'aperçu CRM (**R18**).
+  L'inventaire se classe par **type de produit** (quatre paniers), pas par origine.
+  Horizon : court (épargne bancaire), moyen (AV / PEA / CTO), long (PER / SCPI /
+  immobilier locatif), résidence principale en tranche dédiée.
 - **Historique de valorisation étiqueté par source** : « Valorisé par votre conseiller »
   ou « Déclaré par vous », les deux sources fusionnées dans une seule liste. Applique
   **R1** là où le client ne voyait auparavant que ses propres déclarations. Un point
@@ -70,7 +81,6 @@ Côté client :
 - **Deux graphiques** : répartition par catégorie d'actifs, et répartition par disponibilité (quand il peut y accéder)
 - **Timeline** : les événements datés qui le concernent (fin de démembrement, échéance de prêt, prochain arbitrage, déclaration fiscale, rendez-vous)
 - **Dépôt de documents** : uniquement ceux que le conseiller demande
-- **Documents mis à disposition** par le conseiller (rapport, fiche conseil, attestation)
 - **Déclaration de ses avoirs extérieurs**, pour compléter lui-même sa vue
 
 Côté CRM : le conseiller pilote tout depuis l'application desktop existante.
@@ -166,7 +176,8 @@ conséquences pratiques.
   client-preview/`). Le portail ne redessine rien pour son compte.
 - **Ce qui reste différent doit être nommé et justifié** dans le composant : le cadre
   simulateur, le bouton de déconnexion inerte, le logo du cabinet à défaut de celui du
-  serveur. Tout le reste est un défaut.
+  serveur, **l'écran de connexion** (absent de l'aperçu : le conseiller n'y entre pas).
+  Tout le reste est un défaut.
 
 Le corollaire vaut pour les **règles métier** : le portail ne classe pas les produits, ne
 décide pas de ce qui est immobilier ou SCPI, ne recopie aucune liste de types. Il lit ce
@@ -234,9 +245,9 @@ if !self.table_has_column("partenaires", "url_extranet")? {
 
 Les nouvelles tables suivent `CREATE TABLE IF NOT EXISTS`. Appeler `ensure_workspace_outbox_triggers_for_table` sur les tables destinées à la synchronisation. **Synchroniser `src/lib/db/schema.ts` (Drizzle = doc/dev, la source de vérité reste le Rust).**
 
-### 5.1 Troisième valeur d'origine — à faire en premier
+### 5.1 Troisième valeur d'origine — fait
 
-`investissements.origine` accepte aujourd'hui `MON_CONSEIL` et `EXISTANT_CLIENT`. Ajouter **`DECLARE_CLIENT`**.
+`investissements.origine` accepte `MON_CONSEIL`, `EXISTANT_CLIENT` et **`DECLARE_CLIENT`**.
 
 Distinction essentielle : `EXISTANT_CLIENT` = saisi par le conseiller depuis un document (vérifié). `DECLARE_CLIENT` = tapé par le client (déclaratif, non vérifié).
 
@@ -357,21 +368,49 @@ ayant la main sur la machine l'aurait trouvée à côté des fichiers. Ici la cl
 sur le poste du conseiller — voir `espace_client/depot_crypto.rs`, dupliqué à l'identique
 des deux côtés.
 
-### Phase 3 — Documents mis à disposition
+### Phase 3 — Documents mis à disposition — **abandonnée**
 
-Publication manuelle depuis la GED, décidée au cas par cas par le conseiller. Date d'expiration, retrait possible. Aucune exposition automatique de la GED.
+Publication manuelle depuis la GED vers le portail (rapport, fiche conseil, attestation),
+expiration, retrait. **Non faite, et ne sera pas faite.**
+
+Le dépôt (phase 2) est le sens utile : le conseiller demande une pièce, le client l'envoie,
+elle atterrit en GED et disparaît du serveur. L'inverse — poser un PDF consultable sur le
+portail — duplique ce que le mail et le rendez-vous font déjà, oblige le fichier à
+**résider** sur le serveur (contraire à **R3**), et n'apporte rien à un client qui ne
+viendra pas chercher un document derrière un second code. La ré-authentification **R7**
+reste écrite, branchée sur rien.
 
 ### Phase 4 — Déclaration des avoirs extérieurs
 
 Saisie par le client (`origine = DECLARE_CLIENT`), jauge de complétude, vieillissement visible des lignes non mises à jour.
 
-**Tranche livrée (13 août)** : le client met à jour des lignes **déjà synchronisées** — SCPI (cabinet ou à côté), épargne et placements financiers à côté, immobilier à côté — et **crée** des lignes `DECLARE_CLIENT` via quatre paniers (immobilier, SCPI, placements, épargne / banque). La jauge de complétude et le vieillissement des lignes restent à faire.
+**Tranche livrée (13 août)** : le client met à jour des lignes **déjà synchronisées** — SCPI (cabinet ou à côté), épargne et placements financiers à côté, immobilier à côté — **crée** des lignes `DECLARE_CLIENT` via quatre paniers (immobilier, SCPI, placements, épargne / banque), et **retire** uniquement une ligne `DECLARE_CLIENT` (mail conseiller, import CRM qui clôture). Une redéclaration pendant un retrait en attente conserve les deux gestes : l'import traite les retraits **avant** les déclarations, et ne réutilise pas une ligne déjà `CLOTURE`.
+
+**Abandonné (13 août)** : jauge de complétude (le total dit déjà « estimé » ; un indicateur « image partielle » n'ajoute rien) et vieillissement des lignes (chaque investissement affiche déjà `Au {date}` — c'est la même information).
 
 **Contrainte de conception** : ne jamais présenter un formulaire vide. Proposer une confirmation (« vous avez aussi un PEA, confirmez le montant ? ») plutôt qu'une saisie libre. Et l'interface doit être excellente **pour le conseiller en rendez-vous**, car c'est là que se fera l'essentiel de la complétion — saisie rapide au clavier, à deux devant l'écran.
 
 ### Phase 5 — Notifications et cycle de vie
 
-Notifications par email, alerte sur connexion depuis un nouvel appareil, bouton de révocation d'accès, purge à la fin de la relation.
+Déjà en production : alerte nouvel appareil, révocation d'accès, annonce des événements,
+mails de déclaration / retrait / demande de pièce.
+
+**Rappel de pièce (fait, 13 août)** : si une demande de document est toujours `en_attente`
+**72 heures** après `demande_at`, le portail envoie **un** mail de relance, puis s'arrête.
+Pas de relance sur un Livret à actualiser. Pas de série de mails. Annulée, déjà déposée
+ou accès révoqué : aucun rappel — y compris si le statut change **entre** la réservation
+et l'envoi (relecture juste avant Brevo). Le premier mail doit être parti
+(`client_notified_at`) ; un envoi de relance qui échoue rend sa réservation, comme pour
+les événements (**§15**).
+
+**Purge à la révocation (fait, 13 août, RGPD)** : couper l'accès **et** effacer du VPS la copie
+portail (photo patrimoine, sessions, journal de connexions, fichiers encore en transit,
+déclarations non importées). Un échec d'effacement disque **refuse** la révocation côté
+portail : le CRM reste actif, on réessaie. Le CRM et la GED **ne sont pas touchés** —
+le portail est une copie ; le dossier cabinet reste la source de vérité. La ligne
+d'accès reste marquée révoquée, sans email.
+
+**Messages du conseiller** : abandonnés. Les échéances (texte + mail une fois) sont le canal.
 
 ---
 
@@ -430,6 +469,7 @@ CRM → portail    publications de documents
 CRM ← portail    documents déposés (puis purge côté portail)
 CRM ← portail    déclarations du client (SCPI, épargne à côté, immobilier à côté)
 CRM ← portail    avoirs déclarés par le client
+CRM ← portail    retraits d'avoirs `DECLARE_CLIENT`
 CRM ← portail    journal d'activité (connexions, consultations)
 ```
 
@@ -527,13 +567,15 @@ Ce qui est en place est décrit au §10 et couvert par les tests de `espace-port
 | **Cloison conseiller / client** | Fait. Alertes et tâches ne quittent plus le CRM ; le portail écarte en outre celles des anciennes photos |
 | **Miroir aperçu / portail** | Fait. Un seul moteur de règles, des composants partagés, un test qui compare les deux sorties (**R18**). Voir §15 : c'est la dette qui a coûté le plus cher |
 | **Textes libres dans les emails** | Fait. Titres, messages et navigateur annoncé par le visiteur sont échappés avant insertion dans le HTML |
+| **Relance de pièce à J+3** | Fait. Un seul mail, 72 h après la demande, envoyé par le portail. Réservation avant envoi, **relecture** juste avant Brevo (annulé / reçu / révoqué) |
+| **Purge portail à la révocation** | Fait. Photo, sessions, journaux, fichiers en transit et saisies non importées. Un échec disque refuse la révocation (le CRM reste actif). Le CRM n'est pas touché |
 
 ### Reste à faire
 
 | Sujet | Pourquoi |
 |---|---|
 | **Délivrabilité des codes par email** | Expéditeur Gmail via Brevo, décision assumée. C'est le seul maillon dont l'échec est silencieux : noter le fournisseur de messagerie à chaque activation, et rouvrir la question du domaine authentifié au premier échec |
-| **Ré-authentification à la consultation** (**R7**) | Écrite et testée, mais branchée sur rien tant que la mise à disposition de documents (phase 3) n'existe pas |
+| **Ré-authentification à la consultation** (**R7**) | Écrite et testée, volontairement non branchée : la mise à disposition de documents (phase 3) est abandonnée |
 | **Test de restauration mensuel** | Une sauvegarde jamais restaurée n'est pas une sauvegarde |
 | **Migration `oauth2` 4.4 → 5.0** | Seule dette technique réelle : elle fait disparaître les trois avis RUSTSEC neutralisés dans `src-tauri/.cargo/audit.toml`. Déclencheur : le jour où l'on touche à l'authentification Gmail |
 | **Revue de sécurité extérieure** | Aucun regard tiers sur un service qui héberge des données patrimoniales nominatives |
@@ -602,6 +644,9 @@ regardée **sur le portail déployé**, pas seulement dans le CRM.
 | **Bouton affiché, POST refusé** | Après le schéma 7, l'écran classait encore avec les listes TypeScript alors que l'API exige `estScpi` / `estImmobilier` sur la photo. Une SCPI « avec moi » sur une photo ancienne : bouton visible, enregistrement rejeté | L'écran lit la nature annoncée par la photo, comme l'API. `estScpi` absent refuse, visible. Resynchroniser les clients |
 | **Palier « aujourd'hui » identique au dernier relevé** | La courbe forçait un point à la date du jour avec l'encours actuel, pour coller au total en tête. Ouvrir la fiche (ou synchroniser) faisait apparaître 12 672 € au 13 août alors que le dernier vrai relevé était au 2 mars, même montant | Un point d'historique n'existe que si le montant a changé. Une sync republie la photo, elle n'ajoute pas de relevé |
 | **Le formulaire renvoyait tous les champs affichés** | Une fin de prêt saisie par le conseiller disparaissait si le client enregistrait une valorisation pendant que l'écran était ouvert : les champs non touchés partaient avec l'ancienne valeur ou à vide | N'envoyer que ce que le client a modifié |
+| **Redéclaration pendant un retrait en attente** | L'overlay masquait la ligne CRM, le POST de déclaration était accepté, puis l'import clôturait la nouvelle ligne comme si elle était l'ancienne. Annuler silencieusement le retrait aurait été pire : le mail conseiller était déjà parti | Conserver les deux gestes. L'import traite les **retraits avant** les déclarations. Une ligne déjà `CLOTURE` n'est jamais réutilisée. Ne pas annuler un retrait pending |
+| **Relance partie après dépôt ou révocation** | La réservation `client_reminded_at` était prise, puis l'envoi partait sans relire le statut | Réserver, **relire**, puis envoyer. Annulé, reçu ou révoqué entre-temps : pas de mail |
+| **Purge RGPD qui avalait l'erreur disque** | `let _ = remove_dir_all(...)` : la base portail était vide, des `.sealed` pouvaient rester sur le VPS, et le CRM marquait quand même révoqué | Un échec d'effacement refuse la révocation portail ; le CRM reste actif jusqu'à ce que les fichiers partent |
 
 ---
 
@@ -624,22 +669,24 @@ regardée **sur le portail déployé**, pas seulement dans le CRM.
 ## 13. Feuille de route
 
 Les cinq étapes du plan initial — déploiement HTTPS, envoi des codes, séparation des clés,
-formalités RGPD, dépôt de documents — sont faites. Ce qui suit, dans cet ordre :
+formalités RGPD, dépôt de documents — sont faites. L'ouverture aux premiers clients aussi
+(**5 clients** ont ouvert l'espace en rendez-vous). Ce qui suit, dans cet ordre :
 
-1. **Ouvrir l'espace à un premier vrai client, en rendez-vous.** Il n'y a plus de code à
-   écrire pour cela ; ce qui manque est de l'usage. Un client de 65 ans devant l'écran
-   apprendra en dix minutes ce que trois semaines de développement ne diraient pas.
-2. **Surveiller la réception des codes** pendant cette phase. C'est le seul maillon dont
-   l'échec est silencieux : personne ne prévient qu'un message est parti en indésirables.
-   Noter le fournisseur de messagerie à chaque activation, et rouvrir la question du
-   domaine authentifié au premier échec constaté.
-3. **Phase 3 — documents mis à disposition.** C'est là que se branche enfin la
-   ré-authentification à la consultation (**R7**), écrite et testée mais reliée à rien.
-4. **Phase 4 — déclaration des avoirs extérieurs.** Mise à jour et création
-   `DECLARE_CLIENT` sont livrées. Restent la jauge de complétude et le vieillissement
-   des lignes non mises à jour, pour que le camembert reste honnête dans la durée.
-5. **Phase 5 — notifications restantes** : rappels, messages du conseiller, purge en fin de
-   relation.
+1. ~~Ouvrir l'espace à un premier vrai client, en rendez-vous.~~ **Fait** — 5 clients.
+2. **Surveiller la réception des codes** (en cours, à chaque nouvelle activation). C'est le
+   seul maillon dont l'échec est silencieux : personne ne prévient qu'un message est parti
+   en indésirables. Noter le fournisseur de messagerie à chaque activation, et rouvrir la
+   question du domaine authentifié au premier échec constaté.
+3. ~~Phase 3 — documents mis à disposition.~~ **Abandonné.** Le dépôt client → GED suffit ;
+   publier un PDF sur le portail duplique le mail / le rendez-vous et ferait résider des
+   fichiers sur le serveur (**R3**). **R7** reste écrite, non branchée.
+4. **Phase 4 — déclaration des avoirs extérieurs.** **Faite.** Mise à jour, création et
+   retrait `DECLARE_CLIENT` sont livrés. Jauge et vieillissement abandonnés : le total
+   est déjà libellé « estimé », chaque ligne porte déjà sa date de valorisation.
+5. **Phase 5 — cycle de vie.** **Faite.** Rappel de pièce 72 h après la demande (un seul
+   mail, relecture avant envoi) et purge portail à la révocation (RGPD — le CRM n'est
+   jamais vidé ; un échec disque refuse la révocation). Pas de messagerie dans l'espace :
+   les échéances suffisent.
 
 Dettes à traiter en chemin, sans urgence propre : le test de restauration mensuel, la
 migration `oauth2` 4.4 → 5.0 le jour où l'on touche à l'authentification Gmail, et une revue

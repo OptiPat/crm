@@ -116,6 +116,41 @@ impl Mailer {
             .await
     }
 
+    pub async fn send_document_request_reminder(
+        &self,
+        to: &str,
+        prenom: &str,
+        libelle: &str,
+    ) -> Result<(), String> {
+        let greeting = if prenom.trim().is_empty() {
+            "Bonjour".to_string()
+        } else {
+            format!("Bonjour {}", prenom.trim())
+        };
+        let text = format!(
+            "{greeting},\n\n\
+             Il y a quelques jours, votre conseiller vous a demandé de déposer \
+             le document suivant sur votre espace client : {libelle}.\n\n\
+             Si c'est déjà fait, ignorez ce message. Sinon, connectez-vous à \
+             votre espace pour effectuer le dépôt (PDF, JPEG ou PNG — 10 Mo maximum).\n\n\
+             {cabinet}",
+            cabinet = self.from_name
+        );
+        let html = format!(
+            "<p>{greeting},</p>\
+             <p>Il y a quelques jours, votre conseiller vous a demandé de déposer \
+             le document suivant sur votre espace client : <strong>{libelle}</strong>.</p>\
+             <p>Si c'est déjà fait, ignorez ce message. Sinon, connectez-vous à \
+             votre espace pour effectuer le dépôt (PDF, JPEG ou PNG — 10 Mo maximum).</p>\
+             <p>{cabinet}</p>",
+            greeting = escape_html(&greeting),
+            libelle = escape_html(libelle),
+            cabinet = self.cabinet_html()
+        );
+        self.send_email(to, "Rappel : document à déposer sur votre espace", &text, &html)
+            .await
+    }
+
     /// Événement ajouté par le conseiller à l'espace du client.
     ///
     /// Le mot « échéance » reste au CRM : côté client, une échéance évoque une

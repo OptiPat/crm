@@ -19,7 +19,7 @@ coordonnées du cabinet et à conserver hors dépôt public.
 | Authentification par code email | Exécution du contrat + intérêt légitime sécurité | Email, empreintes de codes (pas le code en clair), journal connexions | Codes OTP : 15 min ; sessions : 30 j max / 30 min inactivité ; journal : 24 mois |
 | Envoi transactionnel (Brevo) | Sous-traitant — art. 28 RGPD | Email, contenu du message (code à 6 chiffres) | Logs Brevo selon contrat ; pas de contenu patrimonial dans les emails |
 | Dépôt de documents (phase 2) | Exécution du contrat | Fichiers demandés par le conseiller | **Transit uniquement** : purge portail après rapatriement CRM (cible ≤ 7 jours) |
-| Synchronisation CRM → portail | Exécution du contrat | Copie partielle du dossier client | Jusqu'à révocation de l'accès ou suppression côté CRM |
+| Synchronisation CRM → portail | Exécution du contrat | Copie partielle du dossier client | Jusqu'à révocation : la copie **portail** (base + fichiers en transit) est alors effacée. Si les fichiers ne peuvent pas être supprimés, la révocation est **refusée** et le CRM reste actif. Le CRM et la GED ne sont pas touchés |
 
 ## 3. Sous-traitants
 

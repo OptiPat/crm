@@ -48,8 +48,7 @@ fn handle_revoke_acces(
     verify_sync_request(state, headers, sign_body)?;
     state
         .db
-        .upsert_acces_from_sync(contact_id, "revoque", None, None, None)
-        .map_err(|e| e.to_string())
+        .purge_contact_on_revoke(contact_id, &state.data_dir)
 }
 
 pub async fn get_connexions(

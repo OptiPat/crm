@@ -67,6 +67,7 @@ impl super::PortalDb {
                 statut TEXT NOT NULL,
                 demande_at INTEGER NOT NULL,
                 client_notified_at INTEGER,
+                client_reminded_at INTEGER,
                 updated_at INTEGER NOT NULL DEFAULT (unixepoch())
             );
             CREATE TABLE IF NOT EXISTS espace_depot (
@@ -83,6 +84,11 @@ impl super::PortalDb {
         if !self.has_column("espace_depot", "content_sha256")? {
             self.conn().execute_batch(
                 "ALTER TABLE espace_depot ADD COLUMN content_sha256 TEXT NOT NULL DEFAULT '';",
+            )?;
+        }
+        if !self.has_column("espace_demande", "client_reminded_at")? {
+            self.conn().execute_batch(
+                "ALTER TABLE espace_demande ADD COLUMN client_reminded_at INTEGER;",
             )?;
         }
         Ok(())

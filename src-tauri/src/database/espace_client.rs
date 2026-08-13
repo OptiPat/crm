@@ -325,6 +325,8 @@ impl super::Database {
             return Err("Aucun accès actif à révoquer".to_string());
         }
 
+        // Coupe l'accès portail. Ne touche ni au contact, ni à la GED, ni au
+        // patrimoine : le dossier cabinet reste la source de vérité.
         self.conn
             .execute(
                 "UPDATE espace_acces
@@ -451,6 +453,10 @@ mod tests {
         let revoked = db.revoke_espace_acces(contact_id).unwrap();
         assert_eq!(revoked.statut, ESPACE_STATUT_REVOQUE);
         assert!(revoked.revoked_at.is_some());
+        let contact = db.get_contact_by_id(contact_id).unwrap();
+        assert_eq!(contact.nom, "DUPONT");
+        assert_eq!(contact.prenom, "Jean");
+        assert_eq!(contact.email.as_deref(), Some("jean@example.com"));
 
         let reactivated = db
             .activate_espace_acces(contact_id, "autre@example.com", "hash-activation-test")
