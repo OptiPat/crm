@@ -805,6 +805,45 @@ pub async fn apply_client_onedrive_folder_proposal(
     .await
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CopyDocumentToOneDriveResult {
+    pub copied: bool,
+    pub already_exists: bool,
+    pub message: String,
+}
+
+#[tauri::command]
+pub async fn copy_document_to_contact_onedrive_cmd(
+    app: AppHandle,
+    session: State<'_, UiSessionState>,
+    document_id: i64,
+    overwrite: Option<bool>,
+) -> Result<CopyDocumentToOneDriveResult, String> {
+    require_ui_session(&session)?;
+    run_onedrive_blocking(move || {
+        let db_state = app.state::<DbState>();
+        let document = {
+            let guard = db_state.lock().unwrap();
+            let database = guard.as_ref().ok_or("Database not initialized")?;
+            database
+                .get_document_by_id(document_id)
+                .map_err(|e| format!("Document introuvable : {e}"))?
+        };
+        let result = super::hooks::copy_document_to_contact_onedrive(
+            &app,
+            &document,
+            overwrite.unwrap_or(false),
+        )?;
+        Ok(CopyDocumentToOneDriveResult {
+            copied: result.copied,
+            already_exists: result.already_exists,
+            message: result.message,
+        })
+    })
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -14,6 +14,10 @@ type DocumentListRowProps = {
   onOpenFile: (doc: Document) => void;
   onDelete: (doc: Document) => void;
   onOpenClient?: (contactId: number) => void;
+  onSendToOneDrive?: (doc: Document) => void;
+  sendingToOneDrive?: boolean;
+  sendToOneDriveDisabled?: boolean;
+  sendToOneDriveTitle?: string;
   onReimportStellium?: (doc: Document) => void;
   onEdit?: (doc: Document) => void;
 };
@@ -63,6 +67,10 @@ export function DocumentListRow({
   onOpenFile,
   onDelete,
   onOpenClient,
+  onSendToOneDrive,
+  sendingToOneDrive,
+  sendToOneDriveDisabled,
+  sendToOneDriveTitle,
   onReimportStellium,
   onEdit,
 }: DocumentListRowProps) {
@@ -129,6 +137,12 @@ export function DocumentListRow({
                 ? () => onOpenClient(doc.contact_id!)
                 : undefined
             }
+            onSendToOneDrive={
+              onSendToOneDrive ? () => onSendToOneDrive(doc) : undefined
+            }
+            sendingToOneDrive={sendingToOneDrive}
+            sendToOneDriveDisabled={sendToOneDriveDisabled}
+            sendToOneDriveTitle={sendToOneDriveTitle}
             onReimportStellium={
               onReimportStellium ? () => onReimportStellium(doc) : undefined
             }

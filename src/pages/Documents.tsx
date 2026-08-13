@@ -61,6 +61,7 @@ import {
   type DocumentsPortfolioSort,
 } from "@/lib/documents/documents-portfolio-utils";
 import { toast } from "sonner";
+import { invokeErrorMessage } from "@/lib/api/invoke-error";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeDocumentsChanged } from "@/lib/documents/document-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
@@ -103,10 +104,17 @@ import { cn } from "@/lib/utils";
 import { DocumentsOneDriveLibrary } from "@/components/documents/DocumentsOneDriveLibrary";
 import {
   getClientOneDriveStatus,
+  getClientOneDriveStatusLocal,
+  listContactsOneDriveLinkFlags,
   resolveContactOneDriveFolder,
+  copyDocumentToContactOneDrive,
   type ClientOneDriveFolderLink,
 } from "@/lib/api/tauri-client-onedrive";
-import { setClientOneDriveStatusCache } from "@/lib/client-onedrive/client-onedrive-cache";
+import {
+  getClientOneDriveStatusCache,
+  setClientOneDriveStatusCache,
+} from "@/lib/client-onedrive/client-onedrive-cache";
+import { resolveSendDocumentToOneDriveAction } from "@/lib/client-onedrive/send-document-to-onedrive";
 import { subscribeClientOneDriveChanged } from "@/lib/client-onedrive/client-onedrive-events";
 import { openClientOneDriveFolderWithFeedback } from "@/lib/client-onedrive/open-client-onedrive-folder";
 
@@ -144,6 +152,12 @@ export function Documents({ onNavigate }: DocumentsProps) {
     useState<ClientOneDriveFolderLink | null>(null);
   const [contactOnedriveLinkLoading, setContactOnedriveLinkLoading] = useState(false);
   const [openingOnedriveFolder, setOpeningOnedriveFolder] = useState(false);
+  const [sendingToOneDriveId, setSendingToOneDriveId] = useState<number | null>(null);
+  const [overwriteOneDriveTarget, setOverwriteOneDriveTarget] = useState<Document | null>(null);
+  const [onedriveConnected, setOnedriveConnected] = useState(
+    () => getClientOneDriveStatusCache()?.connected ?? false
+  );
+  const [linkedContactIds, setLinkedContactIds] = useState<Set<number>>(() => new Set());
 
   const openedFolderContactId = useMemo(() => {
     if (!openedFolderKey?.startsWith("contact:")) return null;
@@ -228,8 +242,36 @@ export function Documents({ onNavigate }: DocumentsProps) {
   }, [loadDocuments]);
 
   useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [flags, status] = await Promise.all([
+          listContactsOneDriveLinkFlags(),
+          getClientOneDriveStatusLocal(),
+        ]);
+        if (cancelled) return;
+        setClientOneDriveStatusCache(status);
+        setOnedriveConnected(status.connected);
+        setLinkedContactIds(
+          new Set(flags.filter((flag) => flag.linked).map((flag) => flag.contactId))
+        );
+      } catch {
+        if (cancelled) return;
+        setOnedriveConnected(false);
+        setLinkedContactIds(new Set());
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     void getClientOneDriveStatus()
-      .then(setClientOneDriveStatusCache)
+      .then((status) => {
+        setClientOneDriveStatusCache(status);
+        setOnedriveConnected(status.connected);
+      })
       .catch(() => {});
   }, []);
 
@@ -257,6 +299,19 @@ export function Documents({ onNavigate }: DocumentsProps) {
 
   useEffect(() => {
     return subscribeClientOneDriveChanged(() => {
+      void getClientOneDriveStatusLocal()
+        .then((status) => {
+          setClientOneDriveStatusCache(status);
+          setOnedriveConnected(status.connected);
+        })
+        .catch(() => setOnedriveConnected(false));
+      void listContactsOneDriveLinkFlags()
+        .then((flags) => {
+          setLinkedContactIds(
+            new Set(flags.filter((flag) => flag.linked).map((flag) => flag.contactId))
+          );
+        })
+        .catch(() => setLinkedContactIds(new Set()));
       if (openedFolderContactId == null) return;
       void resolveContactOneDriveFolder(openedFolderContactId)
         .then(setContactOnedriveLink)
@@ -529,8 +584,50 @@ export function Documents({ onNavigate }: DocumentsProps) {
     setRioReimportDoc(doc);
   };
 
+  const handleSendToOneDrive = async (doc: Document, overwrite = false) => {
+    if (doc.contact_id == null) {
+      toast.error("Ce document n'est lié à aucun client.");
+      return;
+    }
+    setSendingToOneDriveId(doc.id);
+    try {
+      const result = await copyDocumentToContactOneDrive(doc.id, overwrite);
+      if (result.alreadyExists) {
+        setOverwriteOneDriveTarget(doc);
+        return;
+      }
+      if (result.copied) {
+        toast.success(result.message);
+      }
+    } catch (error) {
+      toast.error(invokeErrorMessage(error));
+    } finally {
+      setSendingToOneDriveId(null);
+    }
+  };
+
+  const confirmOverwriteOneDrive = async () => {
+    const doc = overwriteOneDriveTarget;
+    if (!doc) return;
+    setOverwriteOneDriveTarget(null);
+    await handleSendToOneDrive(doc, true);
+  };
+
+  const sendActionFor = (doc: Document) =>
+    resolveSendDocumentToOneDriveAction({
+      contactId: doc.contact_id,
+      tailleFichier: doc.taille_fichier,
+      onedriveConnected,
+      contactLinked:
+        doc.contact_id != null &&
+        (openedFolderContactId === doc.contact_id
+          ? !contactOnedriveLinkLoading && contactOnedriveLink != null
+          : linkedContactIds.has(doc.contact_id)),
+    });
+
   const renderDocumentRow = (doc: Document) => {
     const client = doc.contact_id != null ? contactsById[doc.contact_id] : undefined;
+    const sendAction = sendActionFor(doc);
     return (
       <DocumentListRow
         key={doc.id}
@@ -540,6 +637,12 @@ export function Documents({ onNavigate }: DocumentsProps) {
         onOpenFile={(item) => void handleOpenFile(item)}
         onDelete={setDeleteTarget}
         onOpenClient={openClient}
+        onSendToOneDrive={
+          sendAction.show ? (item) => void handleSendToOneDrive(item) : undefined
+        }
+        sendingToOneDrive={sendingToOneDriveId === doc.id}
+        sendToOneDriveDisabled={sendAction.disabled}
+        sendToOneDriveTitle={sendAction.title}
         onReimportStellium={handleReimportStellium}
         onEdit={setEditTarget}
       />
@@ -912,6 +1015,20 @@ export function Documents({ onNavigate }: DocumentsProps) {
             ? () => openClient(previewDoc.contact_id!)
             : undefined
         }
+        onSendToOneDrive={
+          previewDoc && sendActionFor(previewDoc).show
+            ? () => void handleSendToOneDrive(previewDoc)
+            : undefined
+        }
+        sendingToOneDrive={
+          previewDoc != null && sendingToOneDriveId === previewDoc.id
+        }
+        sendToOneDriveDisabled={
+          previewDoc ? sendActionFor(previewDoc).disabled : false
+        }
+        sendToOneDriveTitle={
+          previewDoc ? sendActionFor(previewDoc).title : undefined
+        }
       />
 
       <RioImportWizard
@@ -954,6 +1071,43 @@ export function Documents({ onNavigate }: DocumentsProps) {
         }}
         onSaved={() => void loadDocuments()}
       />
+
+      <AlertDialog
+        open={overwriteOneDriveTarget != null}
+        onOpenChange={(open) => {
+          if (!open) setOverwriteOneDriveTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remplacer le fichier sur OneDrive ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {overwriteOneDriveTarget ? (
+                <>
+                  Un fichier{" "}
+                  <span className="font-medium text-foreground">
+                    {overwriteOneDriveTarget.nom_fichier}
+                  </span>{" "}
+                  existe déjà dans le dossier OneDrive du client. Le remplacer écrase la copie
+                  cloud ; le document reste en GED.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={sendingToOneDriveId != null}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmOverwriteOneDrive();
+              }}
+            >
+              Remplacer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={deleteTarget != null}

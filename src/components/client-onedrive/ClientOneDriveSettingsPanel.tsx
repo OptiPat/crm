@@ -353,7 +353,8 @@ export function ClientOneDriveSettingsPanel() {
                   <div>
                     <p className="text-sm">Copier les documents importés vers OneDrive</p>
                     <p className="text-xs text-muted-foreground">
-                      Lors de l&apos;ajout d&apos;un document au CRM (max 4 Mo)
+                      À l&apos;import dans la GED (portail inclus). Envoi manuel aussi possible
+                      depuis Documents (max 4 Mo).
                     </p>
                   </div>
                   <Switch

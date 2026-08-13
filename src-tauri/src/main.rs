@@ -60,10 +60,10 @@ use birthday_notifications::{
 };
 use client_onedrive::commands::{
     apply_client_onedrive_folder_proposal, browse_client_onedrive,
-    connect_microsoft_onedrive_oauth_cmd, create_contact_onedrive_folder_cmd,
-    disconnect_microsoft_onedrive_oauth_cmd, get_client_onedrive_status,
-    get_client_onedrive_status_local,
-    link_contact_onedrive_folder, list_contacts_onedrive_link_flags,
+    connect_microsoft_onedrive_oauth_cmd, copy_document_to_contact_onedrive_cmd,
+    create_contact_onedrive_folder_cmd, disconnect_microsoft_onedrive_oauth_cmd,
+    get_client_onedrive_status, get_client_onedrive_status_local, link_contact_onedrive_folder,
+    list_contacts_onedrive_link_flags,
     open_client_onedrive_folder, get_contact_onedrive_health, unlink_contact_onedrive_folder,
     propose_client_onedrive_folder_matches, resolve_contact_onedrive_folder,
     save_client_onedrive_local_sync_root, save_client_onedrive_root_folder,
@@ -608,6 +608,7 @@ fn main() {
             create_contact_onedrive_folder_cmd,
             propose_client_onedrive_folder_matches,
             apply_client_onedrive_folder_proposal,
+            copy_document_to_contact_onedrive_cmd,
             get_microsoft_team_connection_status,
             connect_microsoft_team_oauth_cmd,
             disconnect_microsoft_team_oauth_cmd,

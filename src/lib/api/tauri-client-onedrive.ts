@@ -221,3 +221,20 @@ export async function applyClientOneDriveFolderProposal(
   });
   notifyClientOneDriveChanged();
 }
+
+export interface CopyDocumentToOneDriveResult {
+  copied: boolean;
+  alreadyExists: boolean;
+  message: string;
+}
+
+/** Copie un document GED vers le dossier OneDrive déjà relié au client. */
+export async function copyDocumentToContactOneDrive(
+  documentId: number,
+  overwrite = false
+): Promise<CopyDocumentToOneDriveResult> {
+  return invoke<CopyDocumentToOneDriveResult>("copy_document_to_contact_onedrive_cmd", {
+    documentId,
+    overwrite,
+  });
+}

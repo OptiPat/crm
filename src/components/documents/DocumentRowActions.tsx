@@ -10,7 +10,9 @@ import {
   getStelliumReimportActionLabel,
 } from "@/lib/documents/document-display";
 import {
+  CloudUpload,
   ExternalLink,
+  Loader2,
   MoreHorizontal,
   Pencil,
   RefreshCw,
@@ -22,6 +24,10 @@ type DocumentRowActionsProps = {
   doc: Document;
   onOpenFile: () => void;
   onOpenClient?: () => void;
+  onSendToOneDrive?: () => void;
+  sendingToOneDrive?: boolean;
+  sendToOneDriveDisabled?: boolean;
+  sendToOneDriveTitle?: string;
   onReimportStellium?: () => void;
   onEdit?: () => void;
   onDelete: () => void;
@@ -31,12 +37,17 @@ export function DocumentRowActions({
   doc,
   onOpenFile,
   onOpenClient,
+  onSendToOneDrive,
+  sendingToOneDrive = false,
+  sendToOneDriveDisabled = false,
+  sendToOneDriveTitle = "Copie vers le dossier OneDrive du client (max 4 Mo)",
   onReimportStellium,
   onEdit,
   onDelete,
 }: DocumentRowActionsProps) {
   const showReimport = canReimportStelliumDocument(doc) && onReimportStellium;
   const showClient = doc.contact_id != null && onOpenClient;
+  const showSendToOneDrive = doc.contact_id != null && onSendToOneDrive;
 
   return (
     <Popover>
@@ -76,6 +87,24 @@ export function DocumentRowActions({
           >
             <UserRound className="h-4 w-4" />
             Voir fiche client
+          </Button>
+        )}
+        {showSendToOneDrive && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2 h-9"
+            disabled={sendingToOneDrive || sendToOneDriveDisabled}
+            title={sendToOneDriveTitle}
+            onClick={onSendToOneDrive}
+          >
+            {sendingToOneDrive ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CloudUpload className="h-4 w-4" />
+            )}
+            Envoyer vers OneDrive
           </Button>
         )}
         {showReimport && (

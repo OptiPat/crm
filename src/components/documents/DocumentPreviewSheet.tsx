@@ -14,7 +14,7 @@ import {
   isDocumentPreviewable,
 } from "@/lib/documents/document-display";
 import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
-import { ExternalLink, UserRound } from "lucide-react";
+import { CloudUpload, ExternalLink, Loader2, UserRound } from "lucide-react";
 
 type DocumentPreviewSheetProps = {
   doc: Document | null;
@@ -23,6 +23,10 @@ type DocumentPreviewSheetProps = {
   clientLabel?: string;
   onOpenExternal?: () => void;
   onOpenClient?: () => void;
+  onSendToOneDrive?: () => void;
+  sendingToOneDrive?: boolean;
+  sendToOneDriveDisabled?: boolean;
+  sendToOneDriveTitle?: string;
 };
 
 export function DocumentPreviewSheet({
@@ -32,6 +36,10 @@ export function DocumentPreviewSheet({
   clientLabel,
   onOpenExternal,
   onOpenClient,
+  onSendToOneDrive,
+  sendingToOneDrive = false,
+  sendToOneDriveDisabled = false,
+  sendToOneDriveTitle = "Copie vers le dossier OneDrive du client (max 4 Mo)",
 }: DocumentPreviewSheetProps) {
   const previewable = doc ? isDocumentPreviewable(doc) : false;
 
@@ -76,6 +84,23 @@ export function DocumentPreviewSheet({
                 <Button type="button" variant="outline" size="sm" onClick={onOpenClient}>
                   <UserRound className="h-4 w-4 mr-2" />
                   Voir fiche
+                </Button>
+              )}
+              {onSendToOneDrive && doc.contact_id != null && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={sendingToOneDrive || sendToOneDriveDisabled}
+                  title={sendToOneDriveTitle}
+                  onClick={onSendToOneDrive}
+                >
+                  {sendingToOneDrive ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <CloudUpload className="h-4 w-4 mr-2" />
+                  )}
+                  Envoyer vers OneDrive
                 </Button>
               )}
               {previewable && onOpenExternal && (

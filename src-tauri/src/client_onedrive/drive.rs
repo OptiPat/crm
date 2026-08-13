@@ -210,7 +210,10 @@ pub fn verify_onedrive_folder_health(
         return Err("cloud_missing".into());
     }
     if !res.status().is_success() {
-        return Err(format!("OneDrive API: {}", res.text().unwrap_or_default()));
+        return Err(format_onedrive_http_error(
+            "Dossier OneDrive",
+            res.status(),
+        ));
     }
     ensure_folder_under_client_root(app, folder_id, root_folder_id)?;
     Ok(())
@@ -442,7 +445,25 @@ pub fn ensure_folder_under_client_root(
     )
 }
 
-const SIMPLE_UPLOAD_MAX_BYTES: usize = 4 * 1024 * 1024;
+pub const SIMPLE_UPLOAD_MAX_BYTES: usize = 4 * 1024 * 1024;
+
+pub(crate) fn format_onedrive_http_error(
+    context: &str,
+    status: reqwest::StatusCode,
+) -> String {
+    match status.as_u16() {
+        401 | 403 => format!(
+            "{context} : accès OneDrive refusé. Reconnectez Microsoft dans Paramètres."
+        ),
+        404 => format!("{context} : introuvable sur OneDrive."),
+        409 => format!("{context} : un fichier du même nom existe déjà sur OneDrive."),
+        413 => format!("{context} : fichier trop volumineux (max 4 Mo)."),
+        429 => format!(
+            "{context} : OneDrive est temporairement saturé. Réessayez dans un instant."
+        ),
+        _ => format!("{context} : erreur OneDrive (HTTP {}).", status.as_u16()),
+    }
+}
 
 fn graph_encode_path_segment(segment: &str) -> String {
     segment
@@ -478,6 +499,36 @@ pub fn sanitize_onedrive_upload_filename(file_name: &str) -> Result<String, Stri
     Ok(base.to_string())
 }
 
+/// `true` si un item du même nom existe déjà dans le dossier OneDrive.
+pub fn onedrive_child_item_exists(
+    app: &AppHandle,
+    folder_id: &str,
+    file_name: &str,
+) -> Result<bool, String> {
+    let safe_name = sanitize_onedrive_upload_filename(file_name)?;
+    let token = onedrive_token(app)?;
+    let client = reqwest::blocking::Client::new();
+    let encoded_name = graph_encode_path_segment(&safe_name);
+    let url = format!(
+        "https://graph.microsoft.com/v1.0/me/drive/items/{folder_id}:/{encoded_name}"
+    );
+    let res = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .map_err(|e| e.to_string())?;
+    if res.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(false);
+    }
+    if res.status().is_success() {
+        return Ok(true);
+    }
+    Err(format_onedrive_http_error(
+        "Vérification OneDrive",
+        res.status(),
+    ))
+}
+
 /// Copie un fichier vers un dossier OneDrive (upload simple Graph, max 4 Mo).
 pub fn upload_file_to_onedrive_folder(
     app: &AppHandle,
@@ -506,10 +557,7 @@ pub fn upload_file_to_onedrive_folder(
         .send()
         .map_err(|e| e.to_string())?;
     if !res.status().is_success() {
-        return Err(format!(
-            "Copie OneDrive : {}",
-            res.text().unwrap_or_default()
-        ));
+        return Err(format_onedrive_http_error("Copie OneDrive", res.status()));
     }
     Ok(())
 }
@@ -528,7 +576,9 @@ pub fn list_client_onedrive_child_folders(
 
 #[cfg(test)]
 mod upload_tests {
-    use super::{graph_encode_path_segment, sanitize_onedrive_upload_filename};
+    use super::{
+        format_onedrive_http_error, graph_encode_path_segment, sanitize_onedrive_upload_filename,
+    };
 
     #[test]
     fn graph_encode_path_segment_handles_utf8_accents() {
@@ -547,5 +597,21 @@ mod upload_tests {
             sanitize_onedrive_upload_filename("  rapport QPI.pdf  ").unwrap(),
             "rapport QPI.pdf"
         );
+    }
+
+    #[test]
+    fn format_onedrive_http_error_hides_raw_body() {
+        assert!(
+            format_onedrive_http_error("Copie OneDrive", reqwest::StatusCode::UNAUTHORIZED)
+                .contains("Reconnectez Microsoft")
+        );
+        assert!(
+            format_onedrive_http_error("Copie OneDrive", reqwest::StatusCode::NOT_FOUND)
+                .contains("introuvable")
+        );
+        let generic =
+            format_onedrive_http_error("Copie OneDrive", reqwest::StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(generic.contains("HTTP 500"));
+        assert!(!generic.to_lowercase().contains("error"));
     }
 }
