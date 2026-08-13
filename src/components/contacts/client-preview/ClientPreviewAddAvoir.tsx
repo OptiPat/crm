@@ -264,7 +264,7 @@ export function ClientPreviewAddAvoir({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="w-full rounded-xl border border-dashed border-[var(--cp-line)] px-3 py-3 text-sm text-[var(--cp-ink-muted)] transition-colors hover:border-[var(--cp-ink-muted)] hover:text-[var(--cp-ink)]"
+          className="w-full rounded-xl border border-[var(--cp-line)] bg-[var(--cp-surface-raised)] px-3 py-3 text-sm text-[var(--cp-ink)] transition-colors hover:border-[var(--cp-ink-muted)]"
         >
           Ajouter un avoir
         </button>
