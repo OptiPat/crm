@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FileUp, Loader2, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -8,9 +8,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -27,11 +25,9 @@ import { ESPACE_CLIENT_CHANGED_EVENT } from "@/lib/espace-client/espace-client-e
 import { invokeErrorMessage } from "@/lib/api/invoke-error";
 import { notifyDocumentsChanged } from "@/lib/documents/document-events";
 import {
-  espaceDemandeGroupLabel,
   loadEspaceDemandeOptions,
   resolveEspaceDemandeSelection,
   type EspaceDemandeOption,
-  type EspaceDemandeOptionGroup,
 } from "@/lib/espace-client/espace-demande-options";
 import {
   ESPACE_DEMANDE_STATUT,
@@ -90,15 +86,12 @@ export function ContactEspaceDemandesPanel({
       setPendingScpiCount(scpiPending.length);
       setPendingAvoirDeclarations(avoirPending.declarations);
       setPendingAvoirRetraits(avoirPending.retraits);
-      if (!templateKey && opts.length > 0) {
-        setTemplateKey(opts[0].templateKey);
-      }
     } catch {
       toast.error("Impossible de charger les demandes de documents");
     } finally {
       setLoading(false);
     }
-  }, [contactId, templateKey]);
+  }, [contactId]);
 
   useEffect(() => {
     void load();
@@ -116,16 +109,6 @@ export function ContactEspaceDemandesPanel({
     pendingScpiCount +
     pendingAvoirDeclarations +
     pendingAvoirRetraits;
-
-  const groupedOptions = useMemo(() => {
-    const groups = new Map<EspaceDemandeOptionGroup, EspaceDemandeOption[]>();
-    for (const opt of options) {
-      const list = groups.get(opt.group) ?? [];
-      list.push(opt);
-      groups.set(opt.group, list);
-    }
-    return groups;
-  }, [options]);
 
   const handleCreate = async () => {
     const resolved = resolveEspaceDemandeSelection(
@@ -241,20 +224,18 @@ export function ContactEspaceDemandesPanel({
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <div className="space-y-2">
           <Label className="text-xs">Document demandé</Label>
-          <Select value={templateKey} onValueChange={setTemplateKey}>
+          <Select
+            value={templateKey || undefined}
+            onValueChange={setTemplateKey}
+          >
             <SelectTrigger className="h-9">
-              <SelectValue placeholder="Choisir un document" />
+              <SelectValue placeholder="Choisir le document" />
             </SelectTrigger>
             <SelectContent>
-              {[...groupedOptions.entries()].map(([group, items]) => (
-                <SelectGroup key={group}>
-                  <SelectLabel>{espaceDemandeGroupLabel(group)}</SelectLabel>
-                  {items.map((item) => (
-                    <SelectItem key={item.templateKey} value={item.templateKey}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
+              {options.map((item) => (
+                <SelectItem key={item.templateKey} value={item.templateKey}>
+                  {item.label}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
