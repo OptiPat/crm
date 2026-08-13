@@ -5,6 +5,8 @@ import {
 } from "./stellium-box-placement-labels";
 import { VERSEMENT_COMPLEMENTAIRE_ACT_LABEL } from "@/lib/pipe/pipe-suivi";
 import {
+  mapSuiviStelliumActRowToInput,
+  mapSuiviStelliumActRowsToInputs,
   validateSuiviStelliumActInput,
   validateSuiviStelliumActs,
 } from "./suivi-stellium-acts";
@@ -23,6 +25,27 @@ describe("suivi-stellium-acts", () => {
         actLabel: VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
         montantCentimes: 1_000_000,
       })
+    ).toBeNull();
+  });
+
+  it("mappe le montant euros du formulaire avant validation (versement complémentaire)", () => {
+    const input = mapSuiviStelliumActRowToInput({
+      productLabel: "Cristalliance Evoluvie",
+      actLabel: VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
+      montantEuros: "6250",
+    });
+    expect(input.montantCentimes).toBe(625_000);
+    expect(validateSuiviStelliumActInput(input)).toBeNull();
+    expect(
+      validateSuiviStelliumActs(
+        mapSuiviStelliumActRowsToInputs([
+          {
+            productLabel: "Cristalliance Evoluvie",
+            actLabel: VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
+            montantEuros: "6250",
+          },
+        ])
+      )
     ).toBeNull();
   });
 

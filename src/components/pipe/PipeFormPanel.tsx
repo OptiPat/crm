@@ -53,12 +53,9 @@ import {
 } from "@/components/pipe/SuiviStelliumActsForm";
 import {
   applySuiviStelliumActsAfterPipeCreate,
+  mapSuiviStelliumActRowsToInputs,
   validateSuiviStelliumActs,
 } from "@/lib/placement/suivi-stellium-acts";
-import { parseMontantEurosToCentimes } from "@/lib/pipe/placement-montant";
-import { isVpModificationStelliumAct, isVpMiseEnPlaceStelliumAct } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
-import { vpModificationMontantCentimesFromAct } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
-import { vpMiseEnPlaceMontantCentimesFromAct } from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-types";
 import { toast } from "sonner";
 import { TeamLockBanner } from "@/components/team/TeamLockBanner";
 import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
@@ -470,8 +467,11 @@ export function PipeFormPanel({
       return;
     }
     const isSuiviCreate = !pipe && form.pipeType === "ACTE_GESTION";
+    const stelliumActs = isSuiviCreate
+      ? mapSuiviStelliumActRowsToInputs(suiviStelliumActs)
+      : [];
     if (isSuiviCreate) {
-      const actsError = validateSuiviStelliumActs(suiviStelliumActs);
+      const actsError = validateSuiviStelliumActs(stelliumActs);
       if (actsError) {
         toast.error(actsError);
         return;
@@ -484,18 +484,7 @@ export function PipeFormPanel({
         ? await updatePipe(pipe.id, payload)
         : await createPipe(payload);
       if (isSuiviCreate) {
-        await applySuiviStelliumActsAfterPipeCreate(
-          saved,
-          suiviStelliumActs.map((row) => ({
-            productLabel: row.productLabel,
-            actLabel: row.actLabel,
-            montantCentimes: isVpModificationStelliumAct(row.actLabel)
-              ? vpModificationMontantCentimesFromAct(row.vpModification)
-              : isVpMiseEnPlaceStelliumAct(row.actLabel)
-                ? vpMiseEnPlaceMontantCentimesFromAct(row.vpMiseEnPlace)
-                : parseMontantEurosToCentimes(row.montantEuros),
-          }))
-        );
+        await applySuiviStelliumActsAfterPipeCreate(saved, stelliumActs);
       }
       toast.success(pipe ? "Enregistré" : "Pipe créé");
       onSuccess(saved);

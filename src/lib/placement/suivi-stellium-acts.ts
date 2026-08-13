@@ -11,6 +11,15 @@ import { trackVersementAffaireOnPipeCreate } from "@/lib/placement/pipe-placemen
 import { resolveInvestissementIdForStelliumAct } from "@/lib/placement/resolve-investissement-for-stellium-act";
 import { isVpModificationStelliumAct, isVpMiseEnPlaceStelliumAct } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
 import {
+  vpMiseEnPlaceMontantCentimesFromAct,
+  type VpMiseEnPlaceActValue,
+} from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-types";
+import {
+  vpModificationMontantCentimesFromAct,
+  type VpModificationActValue,
+} from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
+import { parseMontantEurosToCentimes } from "@/lib/pipe/placement-montant";
+import {
   buildVersementAffaireTitre,
   defaultVersementComplementaireAffaireStage,
   isVersementComplementaireActLabel,
@@ -21,6 +30,35 @@ export interface SuiviStelliumActInput {
   actLabel: string;
   montantCentimes?: number | null;
   investissementId?: number | null;
+}
+
+/** Ligne de saisie formulaire (euros) — à mapper avant validation / persistance. */
+export interface SuiviStelliumActFormRow {
+  productLabel: string;
+  actLabel: string;
+  montantEuros: string;
+  vpModification?: VpModificationActValue;
+  vpMiseEnPlace?: VpMiseEnPlaceActValue;
+}
+
+export function mapSuiviStelliumActRowToInput(
+  row: SuiviStelliumActFormRow
+): SuiviStelliumActInput {
+  return {
+    productLabel: row.productLabel,
+    actLabel: row.actLabel,
+    montantCentimes: isVpModificationStelliumAct(row.actLabel)
+      ? vpModificationMontantCentimesFromAct(row.vpModification)
+      : isVpMiseEnPlaceStelliumAct(row.actLabel)
+        ? vpMiseEnPlaceMontantCentimesFromAct(row.vpMiseEnPlace)
+        : parseMontantEurosToCentimes(row.montantEuros),
+  };
+}
+
+export function mapSuiviStelliumActRowsToInputs(
+  rows: SuiviStelliumActFormRow[]
+): SuiviStelliumActInput[] {
+  return rows.map(mapSuiviStelliumActRowToInput);
 }
 
 export function validateSuiviStelliumActInput(
