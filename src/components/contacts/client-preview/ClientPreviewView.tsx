@@ -61,7 +61,8 @@ export interface ClientPreviewViewProps {
 
   timeline: PatrimoineTimelineEvent[];
 
-  viewport: ClientPreviewViewport;
+  /** Cadre simulateur CRM uniquement. Ignoré sur le portail (`showDeviceFrame={false}`). */
+  viewport?: ClientPreviewViewport;
 
   emptyState?: ClientPreviewEmptyState;
 
@@ -210,10 +211,7 @@ export function ClientPreviewView({
 
   return (
 
-    <div
-      className={`${CP.root} flex w-full flex-col items-center py-1 md:py-2`}
-      data-cp-viewport={viewport}
-    >
+    <div className={`${CP.root} flex w-full flex-col items-center py-2`}>
 
       <ClientPreviewDeviceFrame viewport={viewport} framed={showDeviceFrame}>
 
@@ -223,7 +221,6 @@ export function ClientPreviewView({
             nom={contact.nom}
             logoUrl={logoUrl}
             lastSyncLabel={lastSyncLabel}
-            viewport={viewport}
             onLogout={onLogout}
           />
         ) : null}
@@ -234,7 +231,6 @@ export function ClientPreviewView({
           contact={contact}
           perimetre={perimetre}
           valorisationLabel={valorisationLabel}
-          viewport={viewport}
           emptyState={emptyState}
         />
 
@@ -249,8 +245,6 @@ export function ClientPreviewView({
           categorieData={categorieData}
 
           disponibiliteData={disponibiliteData}
-
-          viewport={viewport}
 
         />
 

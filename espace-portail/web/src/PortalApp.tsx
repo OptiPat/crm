@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClientPreviewView } from "@/components/contacts/client-preview/ClientPreviewView";
 import { CP } from "@/components/contacts/client-preview/client-preview-theme";
-import { useClientPreviewViewport } from "@/components/contacts/client-preview/use-client-preview-viewport";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { Partenaire } from "@/lib/api/tauri-partenaires";
@@ -133,9 +132,6 @@ function isPrivacyPath(): boolean {
 
 export function PortalApp() {
   const [showPrivacy, setShowPrivacy] = useState(() => isPrivacyPath());
-  // Le navigateur du client sait deja sur quel appareil il tourne : la mise en
-  // page suit l'ecran, sans bascule a proposer.
-  const { viewport } = useClientPreviewViewport();
   const [screen, setScreen] = useState<PortalScreen>("loading");
   const [devMode, setDevMode] = useState(false);
   const [devInputId, setDevInputId] = useState(
@@ -668,7 +664,6 @@ export function PortalApp() {
         disponibiliteData={disponibiliteData}
         timeline={timeline}
         rdvUrl={payload?.rdvUrl ?? undefined}
-        viewport={viewport}
         showDeviceFrame={false}
         hideTimelineSync
         emptyState={visible.length === 0 ? "empty" : null}

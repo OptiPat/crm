@@ -1,5 +1,4 @@
 import { LogOut } from "lucide-react";
-import type { ClientPreviewViewport } from "./ClientPreviewAdvisorPanel";
 import { CP } from "./client-preview-theme";
 
 export interface ClientPreviewHeaderProps {
@@ -10,8 +9,6 @@ export interface ClientPreviewHeaderProps {
   /** Titre affiché à côté du logo — aligné sur l'écran de connexion. */
   portalTitle?: string;
   lastSyncLabel?: string | null;
-  /** Mobile : icône seule ; desktop : icône + libellé (comme le portail réel). */
-  viewport: ClientPreviewViewport;
   /**
    * Absent dans l'aperçu conseiller : le bouton reste dessiné pour que
    * l'aperçu montre l'écran réel, mais il ne déconnecte personne.
@@ -32,21 +29,19 @@ export function ClientPreviewHeader({
   logoUrl,
   portalTitle = "Espace investisseur",
   lastSyncLabel,
-  viewport,
   onLogout,
 }: ClientPreviewHeaderProps) {
   const clientLabel = `${prenom} ${nom}`.trim();
-  const isMobile = viewport === "mobile";
 
   return (
-    <header className="flex w-full max-w-5xl flex-col gap-2 px-4 pt-4">
+    <header className="flex w-full flex-col gap-2 px-4 pt-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           {logoUrl ? (
             <img
               src={logoUrl}
               alt="Logo du cabinet"
-              className="h-8 w-8 shrink-0 object-contain sm:h-9 sm:w-9"
+              className="h-8 w-8 shrink-0 object-contain @min-[36rem]:h-9 @min-[36rem]:w-9"
             />
           ) : null}
           <div className="min-w-0">
@@ -63,11 +58,11 @@ export function ClientPreviewHeader({
         <button
           type="button"
           onClick={onLogout}
-          className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--cp-line)] bg-[var(--cp-surface)] py-2 text-sm text-[var(--cp-ink)] transition-colors hover:bg-[var(--cp-surface-raised)] ${isMobile ? "px-2.5" : "px-3"}`}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--cp-line)] bg-[var(--cp-surface)] px-2.5 py-2 text-sm text-[var(--cp-ink)] transition-colors hover:bg-[var(--cp-surface-raised)] @min-[28rem]:px-3"
           aria-label="Déconnexion"
         >
           <LogOut className="h-4 w-4" aria-hidden />
-          {!isMobile ? <span>Déconnexion</span> : null}
+          <span className="hidden @min-[28rem]:inline">Déconnexion</span>
         </button>
       </div>
       {lastSyncLabel ? (

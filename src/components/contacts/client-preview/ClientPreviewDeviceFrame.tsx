@@ -28,7 +28,8 @@ function MobileStatusBar() {
 
 export interface ClientPreviewDeviceFrameProps {
   children: ReactNode;
-  viewport: ClientPreviewViewport;
+  /** Chrome du cadre CRM (téléphone vs ordi). Inutile si `framed={false}`. */
+  viewport?: ClientPreviewViewport;
   /** Cadre simulateur (conseiller). Désactivé sur le portail client réel. */
   framed?: boolean;
 }
@@ -45,16 +46,11 @@ export function ClientPreviewDeviceFrame({
   }, []);
 
   if (!framed) {
-    // Portail réel : la largeur suit l'écran du client. Plus large que la
-    // maquette du CRM, qui simule un appareil et reste volontairement étroite.
+    // Portail réel : largeur fluide. Le contenu interroge ce cadre
+    // (@container), pas la fenêtre — même code que l'aperçu CRM.
     return (
       <ClientPreviewOverlayPortalProvider portalEl={null}>
-        <div
-          className={cn(
-            "relative w-full overflow-x-hidden",
-            isMobile ? "max-w-[430px]" : "max-w-5xl"
-          )}
-        >
+        <div className="relative w-full max-w-7xl overflow-x-hidden @container">
           <div className="min-h-[100dvh] bg-[var(--cp-bg)]">{children}</div>
         </div>
       </ClientPreviewOverlayPortalProvider>
@@ -122,7 +118,7 @@ export function ClientPreviewDeviceFrame({
                 : "max-h-[min(85vh,900px)] min-h-[580px]"
             )}
           >
-            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto @container">
               {isMobile ? <MobileStatusBar /> : null}
               {children}
             </div>

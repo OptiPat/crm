@@ -4,63 +4,47 @@ import type { PerimetrePatrimoine } from "@/lib/patrimoine/perimetre";
 import { ClientPreviewProportionBar } from "./ClientPreviewProportionBar";
 import { distributeIntegerPercents } from "@/lib/patrimoine/chart-percents";
 import { cn } from "@/lib/utils";
-import type { ClientPreviewViewport } from "./ClientPreviewAdvisorPanel";
 import {
-  formatChartCenterTotal,
   formatClientPreviewTotal,
   formatShortEuro,
 } from "./client-preview-format";
 import { CP, SOURCE_SLICE_COLORS, getGreetingHour } from "./client-preview-theme";
 
-const HERO_TOTAL_MOBILE_MAX_REM = 2;
-const HERO_TOTAL_MOBILE_MIN_REM = 1.5;
-const HERO_TOTAL_DESKTOP_REM = 3.25;
+const HERO_TOTAL_MAX_REM = 3.25;
+const HERO_TOTAL_MIN_REM = 1.5;
 
-function HeroTotal({
-  centimes,
-  viewport,
-}: {
-  centimes: number;
-  viewport: ClientPreviewViewport;
-}) {
-  const isMobile = viewport === "mobile";
-  const text = isMobile
-    ? formatChartCenterTotal(centimes)
-    : formatClientPreviewTotal(centimes);
+function HeroTotal({ centimes }: { centimes: number }) {
+  const text = formatClientPreviewTotal(centimes);
   const ref = useRef<HTMLParagraphElement>(null);
-  const [fontSizeRem, setFontSizeRem] = useState(
-    isMobile ? HERO_TOTAL_MOBILE_MAX_REM : HERO_TOTAL_DESKTOP_REM
-  );
+  const [fontSizeRem, setFontSizeRem] = useState(HERO_TOTAL_MAX_REM);
 
   useLayoutEffect(() => {
-    if (!isMobile) {
-      setFontSizeRem(HERO_TOTAL_DESKTOP_REM);
-      return;
-    }
-
     const el = ref.current;
-    if (!el) return;
+    const box = el?.parentElement;
+    if (!el || !box) return;
 
-    const maxWidthPx = el.parentElement?.clientWidth ?? 320;
-    let sizeRem = HERO_TOTAL_MOBILE_MAX_REM;
-    el.style.fontSize = `${sizeRem}rem`;
-
-    while (sizeRem > HERO_TOTAL_MOBILE_MIN_REM && el.scrollWidth > maxWidthPx) {
-      sizeRem -= 0.0625;
+    const fit = () => {
+      const maxWidthPx = box.clientWidth;
+      let sizeRem = HERO_TOTAL_MAX_REM;
       el.style.fontSize = `${sizeRem}rem`;
-    }
+      while (sizeRem > HERO_TOTAL_MIN_REM && el.scrollWidth > maxWidthPx) {
+        sizeRem -= 0.0625;
+        el.style.fontSize = `${sizeRem}rem`;
+      }
+      setFontSizeRem(sizeRem);
+    };
 
-    setFontSizeRem(sizeRem);
-  }, [text, isMobile]);
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [text]);
 
   return (
     <p
       ref={ref}
-      className={cn(
-        CP.heroTotal,
-        isMobile ? "cp-hero-total--mobile" : "cp-hero-total--desktop"
-      )}
-      style={isMobile ? { fontSize: `${fontSizeRem}rem` } : undefined}
+      className={CP.heroTotal}
+      style={{ fontSize: `${fontSizeRem}rem` }}
     >
       {text}
     </p>
@@ -125,7 +109,6 @@ export interface ClientPreviewHeroProps {
   contact: Contact;
   perimetre: PerimetrePatrimoine;
   valorisationLabel: string | null;
-  viewport: ClientPreviewViewport;
   emptyState?: ClientPreviewEmptyState;
 }
 
@@ -133,10 +116,8 @@ export function ClientPreviewHero({
   contact,
   perimetre,
   valorisationLabel,
-  viewport,
   emptyState = null,
 }: ClientPreviewHeroProps) {
-  const isMobile = viewport === "mobile";
   const completenessLabel =
     emptyState === "all_hidden"
       ? "Aucun placement visible pour ce contact (règles de confidentialité)"
@@ -150,19 +131,17 @@ export function ClientPreviewHero({
     emptyState != null || !hasSourceBreakdown;
 
   return (
-    <header
-      className={cn(CP.padX, "pt-6 pb-2", !isMobile && "md:pt-8")}
-    >
-      <p className={cn(CP.heroGreeting, isMobile && "cp-hero-greeting--mobile")}>
+    <header className={cn(CP.padX, "pt-6 pb-2 @min-[36rem]:pt-8")}>
+      <p className={CP.heroGreeting}>
         {getGreetingHour()}, {contact.prenom}
       </p>
 
       <div className="mt-3">
-        <p className={cn(CP.heroLabel, isMobile && "cp-hero-label--mobile")}>
+        <p className={CP.heroLabel}>
           Patrimoine total estimé
         </p>
         <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <HeroTotal centimes={perimetre.totalCentimes} viewport={viewport} />
+          <HeroTotal centimes={perimetre.totalCentimes} />
           {valorisationLabel && emptyState == null ? (
             <span className="cp-hero-date-badge mb-1 shrink-0 rounded-full border border-[var(--cp-line)] bg-[var(--cp-surface-raised)] px-2.5 py-0.5 text-xs leading-none text-[var(--cp-ink-muted)]">
               Valorisation au {valorisationLabel}

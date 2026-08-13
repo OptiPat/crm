@@ -8,8 +8,6 @@ import { distributeIntegerPercents } from "@/lib/patrimoine/chart-percents";
 
 import { cn } from "@/lib/utils";
 
-import type { ClientPreviewViewport } from "./ClientPreviewAdvisorPanel";
-
 import { formatChartCenterTotal, formatShortEuro } from "./client-preview-format";
 
 import { CP, CP_CHART_STROKE } from "./client-preview-theme";
@@ -285,81 +283,11 @@ function ChartPanel({
 
 
 
-function SegmentedControl({
-
-  value,
-
-  onChange,
-
-}: {
-
-  value: "categorie" | "disponibilite";
-
-  onChange: (v: "categorie" | "disponibilite") => void;
-
-}) {
-
-  return (
-
-    <div className="flex gap-4 border-b border-[var(--cp-line)]">
-
-      {(
-
-        [
-
-          ["categorie", "Catégorie"],
-
-          ["disponibilite", "Horizon"],
-
-        ] as const
-
-      ).map(([id, label]) => (
-
-        <button
-
-          key={id}
-
-          type="button"
-
-          onClick={() => onChange(id)}
-
-          className={cn(
-
-            "relative pb-2.5 transition-colors",
-
-            CP.tab,
-
-            value === id
-
-              ? `${CP.tabActive} after:absolute after:bottom-0 after:left-0 after:right-0 after:h-px after:bg-[var(--cp-ink)]`
-
-              : CP.tabIdle
-
-          )}
-
-        >
-
-          {label}
-
-        </button>
-
-      ))}
-
-    </div>
-
-  );
-
-}
-
-
-
 export interface ClientPreviewChartsProps {
 
   categorieData: PatrimoineChartSlice[];
 
   disponibiliteData: PatrimoineChartSlice[];
-
-  viewport: ClientPreviewViewport;
 
 }
 
@@ -371,27 +299,7 @@ export function ClientPreviewCharts({
 
   disponibiliteData,
 
-  viewport,
-
 }: ClientPreviewChartsProps) {
-
-  const [chartTab, setChartTab] = useState<"categorie" | "disponibilite">(
-
-    "categorie"
-
-  );
-
-
-
-  const isMobileLayout = viewport === "mobile";
-
-  const activeChart =
-
-    chartTab === "categorie" ? categorieData : disponibiliteData;
-
-  const activeTotal = activeChart.reduce((s, d) => s + d.value, 0);
-
-
 
   return (
 
@@ -399,37 +307,13 @@ export function ClientPreviewCharts({
 
       <h3 className={CP.sectionTitle}>Répartition</h3>
 
+      <div className="mt-4 grid grid-cols-1 gap-3 @min-[36rem]:grid-cols-2">
 
+        <ChartPanel title="Par catégorie" data={categorieData} compact />
 
-      {isMobileLayout ? (
+        <ChartPanel title="Par horizon" data={disponibiliteData} compact />
 
-        <div className={`${CP.card} mt-4 p-4`}>
-
-          <SegmentedControl value={chartTab} onChange={setChartTab} />
-
-          <div className="mt-5">
-            <DonutChart data={activeChart} total={activeTotal} />
-          </div>
-
-          <div className="mt-4 border-t border-[var(--cp-line-soft)] pt-3">
-
-            <ChartLegend data={activeChart} />
-
-          </div>
-
-        </div>
-
-      ) : (
-
-        <div className="mt-4 grid grid-cols-2 gap-3">
-
-          <ChartPanel title="Par catégorie" data={categorieData} compact />
-
-          <ChartPanel title="Par horizon" data={disponibiliteData} compact />
-
-        </div>
-
-      )}
+      </div>
 
     </section>
 

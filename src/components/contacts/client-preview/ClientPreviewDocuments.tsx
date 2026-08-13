@@ -42,7 +42,7 @@ export function ClientPreviewDocuments({
 
   if (loading) {
     return (
-      <section className="w-full max-w-5xl px-4 pb-6">
+      <section className="w-full px-4 pb-6">
         <p className="cp-caption text-[var(--cp-ink-muted)]">Documents demandés…</p>
       </section>
     );
@@ -53,7 +53,7 @@ export function ClientPreviewDocuments({
   }
 
   return (
-    <section className="w-full max-w-5xl px-4 pb-6">
+    <section className="w-full px-4 pb-6">
       <div className="rounded-2xl border border-[var(--cp-line)] bg-[var(--cp-surface)] p-4 shadow-sm">
         <p className="cp-kicker">Documents</p>
         <h2 className="mt-1 text-base font-medium text-[var(--cp-ink)]">

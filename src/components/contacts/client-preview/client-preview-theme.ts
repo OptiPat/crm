@@ -38,7 +38,7 @@ export const CP = {
   rdvMenu: "cp-rdv-menu",
   rdvMenuItem: "cp-rdv-menu-item",
   sectionGap: "mt-8",
-  padX: "px-5 md:px-6",
+  padX: "px-5 @min-[36rem]:px-6",
 } as const;
 
 export const SOURCE_SLICE_COLORS = PATRIMOINE_SOURCE_COLORS;
