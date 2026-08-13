@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Lock } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Lock, Mail } from "lucide-react";
 import { CP } from "@/components/contacts/client-preview/client-preview-theme";
 import { PortalOtpInput } from "./PortalOtpInput";
 
@@ -40,6 +40,15 @@ export function PortalLogin({
   onOpenPrivacy,
 }: PortalLoginProps) {
   const [step, setStep] = useState<LoginStep>(email.trim() ? "code" : "email");
+  const [emailToast, setEmailToast] = useState(false);
+  const requestingCode = useRef(false);
+
+  useEffect(() => {
+    if (!info) return;
+    setEmailToast(true);
+    const hide = window.setTimeout(() => setEmailToast(false), 3200);
+    return () => window.clearTimeout(hide);
+  }, [info]);
 
   const goToCodeStep = () => {
     if (!email.trim().includes("@")) return;
@@ -98,7 +107,7 @@ export function PortalLogin({
               <button
                 type="submit"
                 disabled={loading || !email.trim().includes("@")}
-                className="w-full rounded-xl bg-[var(--cp-ink)] px-4 py-2.5 text-sm font-medium text-[var(--cp-bg)] transition-opacity disabled:opacity-40"
+                className="min-h-11 w-full rounded-xl bg-[var(--cp-ink)] px-4 py-2.5 text-sm font-medium text-[var(--cp-bg)] transition-opacity disabled:opacity-40"
               >
                 Continuer
               </button>
@@ -133,27 +142,29 @@ export function PortalLogin({
               <button
                 type="button"
                 disabled={loading || !email.trim()}
-                onClick={onRequestCode}
-                className="text-sm text-[var(--cp-ink-muted)] underline-offset-2 hover:text-[var(--cp-ink)] hover:underline disabled:opacity-40"
+                onClick={() => {
+                  requestingCode.current = true;
+                  onRequestCode();
+                }}
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--cp-line)] bg-[var(--cp-surface-raised)] px-4 py-2.5 text-sm font-medium text-[var(--cp-ink)] transition-colors hover:border-[var(--cp-ink-muted)] disabled:opacity-40"
               >
-                {loading ? "Envoi…" : "Recevoir un code par email"}
+                <Mail className="h-4 w-4" aria-hidden />
+                {loading && requestingCode.current
+                  ? "Envoi…"
+                  : "Recevoir un code par email"}
               </button>
 
               <button
                 type="submit"
                 disabled={loading || code.length !== 6}
-                className="w-full rounded-xl bg-[var(--cp-ink)] px-4 py-2.5 text-sm font-medium text-[var(--cp-bg)] transition-opacity disabled:opacity-40"
+                className="min-h-11 w-full rounded-xl bg-[var(--cp-ink)] px-4 py-2.5 text-sm font-medium text-[var(--cp-bg)] transition-opacity disabled:opacity-40"
               >
-                {loading ? "Connexion…" : "Se connecter"}
+                {loading && !requestingCode.current
+                  ? "Connexion…"
+                  : "Se connecter"}
               </button>
             </div>
           )}
-
-          {info ? (
-            <p className="mt-3 text-sm text-[var(--cp-ink-muted)]" role="status">
-              {info}
-            </p>
-          ) : null}
 
           {error ? (
             <p className="mt-3 text-sm text-amber-600 dark:text-amber-400/90" role="alert">
@@ -178,6 +189,21 @@ export function PortalLogin({
           </footer>
         </form>
       </div>
+      {info ? (
+        <p className="sr-only" role="status">
+          {info}
+        </p>
+      ) : null}
+      {emailToast ? (
+        <div
+          className="pointer-events-none fixed inset-x-0 top-[max(1.25rem,env(safe-area-inset-top))] z-50 flex justify-center px-4"
+          role="status"
+        >
+          <p className="rounded-xl border border-[var(--cp-line)] bg-[var(--cp-surface-raised)] px-4 py-2.5 text-sm font-medium text-[var(--cp-ink)] shadow-[0_16px_40px_-16px_rgba(0,0,0,0.7)]">
+            Email envoyé
+          </p>
+        </div>
+      ) : null}
     </main>
   );
 }
