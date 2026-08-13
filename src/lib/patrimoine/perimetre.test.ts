@@ -38,6 +38,7 @@ describe("buildPerimetrePatrimoine", () => {
     expect(result.slices).toHaveLength(1);
     expect(result.slices[0].origine).toBe("EXISTANT_CLIENT");
     expect(result.slices[0].referenceDate).toBe(1_735_689_600);
+    expect(result.slices[0].label).toBe("Détenu ailleurs");
   });
 
   it("formate une ligne avec date", () => {

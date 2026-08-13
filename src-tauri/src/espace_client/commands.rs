@@ -424,16 +424,21 @@ pub fn import_espace_depots_cmd(
     // nouvelle. L'inverse écraserait puis clôturerait la redéclaration.
     let retraits = import_espace_avoir_retraits(&app, database, contact_id)?;
     let avoirs = import_espace_avoir_declarations(&app, database, contact_id)?;
+    let promoted = database
+        .promote_espace_declare_client_to_existant(contact_id)
+        .map_err(|e| e.to_string())?;
     result.scpi_declarations_imported = scpi.imported;
     result.avoirs_imported = avoirs.imported;
     result.avoirs_retires = retraits.imported;
+    result.declare_client_promoted = promoted;
     result.errors.extend(scpi.errors);
     result.errors.extend(avoirs.errors);
     result.errors.extend(retraits.errors);
-    if !scpi.a_accuser.is_empty()
+    let must_push = !scpi.a_accuser.is_empty()
         || !avoirs.a_accuser.is_empty()
         || !retraits.a_accuser.is_empty()
-    {
+        || promoted > 0;
+    if must_push {
         // Photo d'abord, accusé de réception ensuite : le client doit continuer
         // à voir le montant qu'il a saisi tant que le portail n'a pas reçu la
         // valeur reprise par le CRM.

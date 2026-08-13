@@ -474,6 +474,23 @@ impl super::Database {
         self.get_investissement_by_id(id)
     }
 
+    /// L'import espace client valide la déclaration : elle rejoint le
+    /// patrimoine « à côté », plus « déclaré par le client ».
+    pub fn promote_espace_declare_client_to_existant(
+        &self,
+        contact_id: i64,
+    ) -> Result<usize> {
+        let n = self.conn.execute(
+            "UPDATE investissements
+             SET origine = 'EXISTANT_CLIENT', updated_at = unixepoch()
+             WHERE contact_id = ?1
+               AND origine = 'DECLARE_CLIENT'
+               AND statut != 'CLOTURE'",
+            params![contact_id],
+        )?;
+        Ok(n)
+    }
+
     pub fn update_investissement(
         &self,
         id: i64,
@@ -1769,6 +1786,127 @@ mod tests {
 
         let updated = db.get_investissement_by_id(created.id).unwrap();
         assert_eq!(updated.origine, "EXISTANT_CLIENT");
+    }
+
+    #[test]
+    fn promote_espace_declare_client_to_existant_skips_cabinet_and_closed() {
+        use super::super::models::NewInvestissement;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.get_connection()
+            .execute(
+                "INSERT INTO contacts (categorie, nom, prenom, created_at, updated_at)
+                 VALUES ('CLIENT', 'DUPONT', 'Jean', 1, 1)",
+                [],
+            )
+            .unwrap();
+        db.get_connection()
+            .execute(
+                "INSERT INTO contacts (categorie, nom, prenom, created_at, updated_at)
+                 VALUES ('CLIENT', 'MARTIN', 'Paul', 1, 1)",
+                [],
+            )
+            .unwrap();
+
+        let declared = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(1),
+                foyer_id: None,
+                type_produit: "PER".into(),
+                partenaire_id: None,
+                nom_produit: "Swiss Life".into(),
+                numero_contrat: None,
+                montant_initial: Some(100),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("DECLARE_CLIENT".into()),
+            })
+            .unwrap();
+        let cabinet = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(1),
+                foyer_id: None,
+                type_produit: "PER".into(),
+                partenaire_id: None,
+                nom_produit: "Cabinet".into(),
+                numero_contrat: None,
+                montant_initial: Some(100),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+        let other = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(2),
+                foyer_id: None,
+                type_produit: "PER".into(),
+                partenaire_id: None,
+                nom_produit: "Autre".into(),
+                numero_contrat: None,
+                montant_initial: Some(100),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("DECLARE_CLIENT".into()),
+            })
+            .unwrap();
+
+        let n = db.promote_espace_declare_client_to_existant(1).unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(
+            db.get_investissement_by_id(declared.id).unwrap().origine,
+            "EXISTANT_CLIENT"
+        );
+        assert_eq!(
+            db.get_investissement_by_id(cabinet.id).unwrap().origine,
+            "MON_CONSEIL"
+        );
+        assert_eq!(
+            db.get_investissement_by_id(other.id).unwrap().origine,
+            "DECLARE_CLIENT"
+        );
     }
 
     #[test]

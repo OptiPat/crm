@@ -167,11 +167,6 @@ fn import_one_retrait(
 }
 
 /// Accuse réception une fois la nouvelle photo en ligne.
-///
-/// Une déclaration non accusée sera réimportée : si une ligne
-/// `DECLARE_CLIENT` existe déjà (même type + nom normalisé), on la met à
-/// jour au lieu d'en créer une seconde. La valorisation du jour est
-/// upsertée, pas dupliquée.
 pub fn ack_espace_avoir_declarations(
     app: &tauri::AppHandle,
     db: &Database,
@@ -187,14 +182,18 @@ pub fn ack_espace_avoir_declarations(
     errors
 }
 
-fn find_existing_declare_client(
+/// Une déclaration non accusée sera réimportée : si une ligne
+/// `DECLARE_CLIENT` ou `EXISTANT_CLIENT` existe déjà (même type + nom
+/// normalisé), on la met à jour au lieu d'en créer une seconde. Jamais
+/// de fusion avec une ligne cabinet (`MON_CONSEIL`).
+fn find_existing_avoir_replay(
     existing: &[Investissement],
     type_produit: &str,
     nom_produit: &str,
 ) -> Option<i64> {
     let nom_norm = normaliser_nom_produit(nom_produit);
     existing.iter().find_map(|inv| {
-        if inv.origine != "DECLARE_CLIENT" {
+        if inv.origine != "DECLARE_CLIENT" && inv.origine != "EXISTANT_CLIENT" {
             return None;
         }
         if inv.statut == "CLOTURE" {
@@ -238,13 +237,14 @@ fn import_one_avoir(
         .ok_or_else(|| "Date invalide".to_string())?
         .to_rfc3339();
 
-    // Rejeu si l'accusé n'a pas abouti : même contact, DECLARE_CLIENT,
-    // type + nom normalisé. Jamais de fusion avec une ligne cabinet (R9).
+    // Rejeu si l'accusé n'a pas abouti : même contact, DECLARE_CLIENT ou
+    // EXISTANT_CLIENT, type + nom normalisé. Jamais de fusion avec une ligne
+    // cabinet (R9).
     let existing = db
         .get_investissements_by_contact(contact_id)
         .map_err(|e| e.to_string())?;
     let existing_id =
-        find_existing_declare_client(&existing, &decl.type_produit, &decl.nom_produit);
+        find_existing_avoir_replay(&existing, &decl.type_produit, &decl.nom_produit);
 
     let inv_id = if let Some(id) = existing_id {
         db.apply_espace_client_avoir_replay(
@@ -282,7 +282,7 @@ fn import_one_avoir(
                 frequence_versement: None,
                 reinvestissement_dividendes: None,
                 notes: Some("Espace client".into()),
-                origine: Some("DECLARE_CLIENT".into()),
+                origine: Some("EXISTANT_CLIENT".into()),
             })
             .map_err(|e| e.to_string())?;
         inv.id
@@ -306,7 +306,7 @@ fn import_one_avoir(
 
 #[cfg(test)]
 mod tests {
-    use super::find_existing_declare_client;
+    use super::find_existing_avoir_replay;
     use crate::database::models::Investissement;
     use crate::espace_client::avoir_catalogue::type_autorise_pour_panier;
 
@@ -364,16 +364,28 @@ mod tests {
             sample(11, "DECLARE_CLIENT", "PER", "Swiss Life"),
         ];
         assert_eq!(
-            find_existing_declare_client(&lines, "PER", "swiss  life"),
+            find_existing_avoir_replay(&lines, "PER", "swiss  life"),
             Some(11)
         );
         assert_eq!(
-            find_existing_declare_client(&lines, "PER", "Corum"),
+            find_existing_avoir_replay(&lines, "PER", "Corum"),
             None
         );
         assert_eq!(
-            find_existing_declare_client(&lines, "ASSURANCE_VIE", "Swiss Life"),
+            find_existing_avoir_replay(&lines, "ASSURANCE_VIE", "Swiss Life"),
             None
+        );
+    }
+
+    #[test]
+    fn replay_reuses_an_existant_client_line_not_a_cabinet_line() {
+        let lines = vec![
+            sample(10, "MON_CONSEIL", "PER", "Swiss Life"),
+            sample(11, "EXISTANT_CLIENT", "PER", "Swiss Life"),
+        ];
+        assert_eq!(
+            find_existing_avoir_replay(&lines, "PER", "swiss life"),
+            Some(11)
         );
     }
 
@@ -382,7 +394,7 @@ mod tests {
         let mut closed = sample(11, "DECLARE_CLIENT", "PER", "Swiss Life");
         closed.statut = "CLOTURE".into();
         assert_eq!(
-            find_existing_declare_client(&[closed], "PER", "Swiss Life"),
+            find_existing_avoir_replay(&[closed], "PER", "Swiss Life"),
             None
         );
     }

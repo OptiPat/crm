@@ -27,7 +27,7 @@ export interface PerimetrePatrimoine {
 
 const SOURCE_LABELS: Record<string, string> = {
   MON_CONSEIL: "Investis avec votre conseiller",
-  EXISTANT_CLIENT: "Déjà en place",
+    EXISTANT_CLIENT: "Détenu ailleurs",
   DECLARE_CLIENT: "Déclaré par vous",
 };
 

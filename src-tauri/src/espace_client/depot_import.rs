@@ -19,6 +19,7 @@ pub struct ImportEspaceDepotsResult {
     pub scpi_declarations_imported: usize,
     pub avoirs_imported: usize,
     pub avoirs_retires: usize,
+    pub declare_client_promoted: usize,
     pub errors: Vec<String>,
 }
 
@@ -43,6 +44,7 @@ pub fn import_espace_depots(
             scpi_declarations_imported: 0,
             avoirs_imported: 0,
             avoirs_retires: 0,
+            declare_client_promoted: 0,
             errors: vec![],
         });
     }
@@ -81,6 +83,7 @@ pub fn import_espace_depots(
         scpi_declarations_imported: 0,
         avoirs_imported: 0,
         avoirs_retires: 0,
+        declare_client_promoted: 0,
         errors,
     })
 }

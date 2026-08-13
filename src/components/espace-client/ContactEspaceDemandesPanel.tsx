@@ -185,6 +185,11 @@ export function ContactEspaceDemandesPanel({
       if (result.avoirsImported > 0) {
         parts.push(`${result.avoirsImported} avoir(s) déclaré(s) importé(s)`);
       }
+      if (result.declareClientPromoted > 0) {
+        parts.push(
+          `${result.declareClientPromoted} déclaration(s) reprise(s) à côté`
+        );
+      }
       if (result.avoirsRetires > 0) {
         parts.push(`${result.avoirsRetires} avoir(s) retiré(s)`);
       }
@@ -293,7 +298,7 @@ export function ContactEspaceDemandesPanel({
           ) : (
             <FileUp className="mr-1.5 h-3.5 w-3.5" />
           )}
-          Importer dépôts et SCPI
+          Récupérer l'espace client
         </Button>
       </div>
 

@@ -65,6 +65,7 @@ export interface ImportEspaceDepotsResult {
   scpiDeclarationsImported: number;
   avoirsImported: number;
   avoirsRetires: number;
+  declareClientPromoted: number;
   errors: string[];
 }
 
@@ -208,7 +209,8 @@ export async function importEspaceDepots(
   if (
     result.scpiDeclarationsImported > 0 ||
     result.avoirsImported > 0 ||
-    result.avoirsRetires > 0
+    result.avoirsRetires > 0 ||
+    result.declareClientPromoted > 0
   ) {
     notifyInvestissementsChanged();
   }
