@@ -147,9 +147,7 @@ export function ClientPreviewHero({
   const hasSourceBreakdown =
     perimetre.slices.length > 0 && perimetre.totalCentimes > 0;
   const showCompletenessLabel =
-    emptyState != null ||
-    !hasSourceBreakdown ||
-    perimetre.partDeclaree > 0;
+    emptyState != null || !hasSourceBreakdown;
 
   return (
     <header

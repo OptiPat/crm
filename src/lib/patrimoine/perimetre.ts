@@ -98,23 +98,11 @@ export function buildPerimetrePatrimoine(
   const partDeclaree =
     totalCentimes > 0 ? declareCentimes / totalCentimes : 0;
 
-  let completenessLabel =
-    "Synthèse à partir des informations connues à ce jour";
-  if (partDeclaree > 0 && partDeclaree < 0.25) {
-    completenessLabel =
-      "Quelques avoirs complémentaires déclarés par vous — vue en cours de mise à jour";
-  } else if (partDeclaree >= 0.25) {
-    completenessLabel =
-      "Une part significative de cette vue provient de vos déclarations";
-  } else if (!buckets.has("MON_CONSEIL") && buckets.has("EXISTANT_CLIENT")) {
-    completenessLabel = "Montants validés avec votre conseiller";
-  }
-
   return {
     slices,
     totalCentimes,
     partDeclaree,
-    completenessLabel,
+    completenessLabel: "Synthèse à partir des informations connues à ce jour",
   };
 }
 

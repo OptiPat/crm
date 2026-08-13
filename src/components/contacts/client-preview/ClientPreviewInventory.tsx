@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { Partenaire } from "@/lib/api/tauri-partenaires";
-import { formatNomProduit } from "@/lib/investissements/investissement-display";
 import { getEffectiveEncoursCentimes } from "@/lib/investissements/investissement-encours";
-import { isDeclareClientOrigine } from "@/lib/investissements/investissement-origine";
 import {
   getPatrimoineCategorie,
   PATRIMOINE_CATEGORIE_COLORS,
@@ -20,13 +18,11 @@ import type {
   ClientInvestissementUpdateInput,
 } from "@/lib/espace-client/client-investissement-update";
 import type { ClientAvoirDeclarationInput } from "@/lib/espace-client/client-avoir-declaration";
+import { inventoryRowLabels } from "@/lib/espace-client/client-inventory-labels";
 import { ClientPreviewAddAvoir } from "./ClientPreviewAddAvoir";
 import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
 import { formatShortEuro } from "./client-preview-format";
 import { CP } from "./client-preview-theme";
-
-const DECLARE_BADGE_TITLE =
-  "Non vérifié par le cabinet — saisi par le client dans son espace";
 
 function groupByCategory(
   items: Investissement[]
@@ -70,8 +66,11 @@ function PlacementRow({
       ? partenaireById.get(inv.partenaire_id)
       : undefined;
   const amount = getEffectiveEncoursCentimes(inv);
-  const label = inv.nom_produit || formatNomProduit(inv.type_produit);
-  const declared = isDeclareClientOrigine(inv.origine);
+  const { title, subtitle } = inventoryRowLabels({
+    typeProduit: inv.type_produit,
+    nomProduit: inv.nom_produit,
+    partenaireNom: partenaire?.raison_sociale,
+  });
   const rowColor = getClientPreviewInvestissementColor(
     inv.type_produit,
     inv.origine
@@ -91,20 +90,11 @@ function PlacementRow({
               style={{ backgroundColor: rowColor }}
               aria-hidden
             />
-            <p className={`${CP.body} truncate`}>{label}</p>
+            <p className={`${CP.body} truncate`}>{title}</p>
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            {partenaire ? (
-              <span className={`${CP.caption} truncate`}>
-                {partenaire.raison_sociale}
-              </span>
-            ) : null}
-            {declared ? (
-              <span className={CP.badge} title={DECLARE_BADGE_TITLE}>
-                Déclaré
-              </span>
-            ) : null}
-          </div>
+          {subtitle ? (
+            <p className={`${CP.caption} mt-0.5 truncate`}>{subtitle}</p>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-start gap-2">
           <div className="text-right">

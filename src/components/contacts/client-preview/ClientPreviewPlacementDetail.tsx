@@ -6,7 +6,6 @@ import {
   formatNomProduit,
   IMMOBILIER_TYPES,
 } from "@/lib/investissements/investissement-display";
-import { isDeclareClientOrigine } from "@/lib/investissements/investissement-origine";
 import { isScpiCreditEligibleType } from "@/lib/investissements/investissement-scpi-reinvest";
 import { hasActiveVersementProgramme } from "@/lib/investissements/investissement-versements";
 import { formatShortEuro } from "./client-preview-format";
@@ -17,15 +16,13 @@ import {
   type ClientInvestissementNature,
   type ClientInvestissementUpdateInput,
 } from "@/lib/espace-client/client-investissement-update";
+import { inventoryRowLabels } from "@/lib/espace-client/client-inventory-labels";
 import { isClientPreviewValorisationHistoryEligible } from "@/lib/investissements/investissement-encours";
 import { ClientPreviewPlacementValorisation } from "./ClientPreviewPlacementValorisation";
 import { ClientPreviewScpiDeclarationForm } from "./ClientPreviewScpiDeclarationForm";
 import { useClientPreviewOverlayPortal } from "./client-preview-overlay";
 
 const IMMOBILIER_SET = new Set<string>(IMMOBILIER_TYPES);
-
-const DECLARE_BADGE_TITLE =
-  "Non vérifié par le cabinet — saisi par le client dans son espace";
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -102,9 +99,16 @@ export function ClientPreviewPlacementDetail({
   const sheetShape = inFrame
     ? "max-h-full min-h-0 rounded-2xl"
     : "max-h-[85dvh] rounded-2xl";
-  const label = inv.nom_produit || formatNomProduit(inv.type_produit);
+  const { title } = inventoryRowLabels({
+    typeProduit: inv.type_produit,
+    nomProduit: inv.nom_produit,
+    partenaireNom: partenaire?.raison_sociale,
+  });
   const typeLabel = formatNomProduit(inv.type_produit);
-  const declared = isDeclareClientOrigine(inv.origine);
+  const partnerCaption = partenaire?.raison_sociale?.trim() || "";
+  const showPartnerCaption =
+    partnerCaption.length > 0 &&
+    partnerCaption.toLowerCase() !== title.toLowerCase();
   const showCreditBlock =
     IMMOBILIER_SET.has(inv.type_produit) ||
     isScpiCreditEligibleType(inv.type_produit);
@@ -144,10 +148,10 @@ export function ClientPreviewPlacementDetail({
         <div className="flex items-start justify-between gap-3 border-b border-[var(--cp-line-soft)] px-5 py-4">
           <div className="min-w-0">
             <p id="cp-placement-detail-title" className={`${CP.body} font-medium`}>
-              {label}
+              {title}
             </p>
-            {partenaire ? (
-              <p className={`${CP.caption} mt-0.5`}>{partenaire.raison_sociale}</p>
+            {showPartnerCaption ? (
+              <p className={`${CP.caption} mt-0.5`}>{partnerCaption}</p>
             ) : null}
           </div>
           <button
@@ -180,13 +184,6 @@ export function ClientPreviewPlacementDetail({
             ) : null}
             {reinvestLabel ? (
               <DetailRow label="Réinvestissement" value={reinvestLabel} />
-            ) : null}
-            {declared ? (
-              <div className="py-2.5">
-                <span className={CP.badge} title={DECLARE_BADGE_TITLE}>
-                  Déclaré par vous
-                </span>
-              </div>
             ) : null}
             {showValorisationHistory ? (
               <ClientPreviewPlacementValorisation
