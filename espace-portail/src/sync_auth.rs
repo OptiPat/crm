@@ -424,3 +424,82 @@ fn handle_post_avoir_declaration_ack(
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AvoirRetraitsResponse {
+    retraits: Vec<crate::avoir_declarations::AvoirRetraitLine>,
+}
+
+pub async fn get_avoir_retraits(
+    State(state): State<AppState>,
+    Path(contact_id): Path<i64>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let canonical = format!("/api/v1/sync/contact/{contact_id}/avoir-retraits");
+    match handle_get_avoir_retraits(&state, contact_id, &headers, canonical.as_bytes()) {
+        Ok(retraits) => (StatusCode::OK, Json(AvoirRetraitsResponse { retraits })).into_response(),
+        Err(message) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": message })),
+        )
+            .into_response(),
+    }
+}
+
+fn handle_get_avoir_retraits(
+    state: &AppState,
+    contact_id: i64,
+    headers: &HeaderMap,
+    sign_body: &[u8],
+) -> Result<Vec<crate::avoir_declarations::AvoirRetraitLine>, String> {
+    verify_sync_request(state, headers, sign_body)?;
+    let rows = state
+        .db
+        .list_avoir_retraits_for_contact(contact_id)
+        .map_err(|e| e.to_string())?;
+    Ok(rows
+        .into_iter()
+        .map(crate::avoir_declarations::AvoirRetraitLine::from)
+        .collect())
+}
+
+pub async fn post_avoir_retrait_ack(
+    State(state): State<AppState>,
+    Path((contact_id, retrait_id)): Path<(i64, i64)>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let canonical = format!("/api/v1/sync/contact/{contact_id}/avoir-retraits/{retrait_id}/ack");
+    match handle_post_avoir_retrait_ack(
+        &state,
+        contact_id,
+        retrait_id,
+        &headers,
+        canonical.as_bytes(),
+    ) {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "accepted": true }))).into_response(),
+        Err(message) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": message })),
+        )
+            .into_response(),
+    }
+}
+
+fn handle_post_avoir_retrait_ack(
+    state: &AppState,
+    contact_id: i64,
+    retrait_id: i64,
+    headers: &HeaderMap,
+    sign_body: &[u8],
+) -> Result<(), String> {
+    verify_sync_request(state, headers, sign_body)?;
+    let updated = state
+        .db
+        .ack_avoir_retrait(contact_id, retrait_id)
+        .map_err(|e| e.to_string())?;
+    if !updated {
+        tracing::info!("Accusé réception idempotent retrait contact={contact_id} id={retrait_id}");
+    }
+    Ok(())
+}
+

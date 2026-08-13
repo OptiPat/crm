@@ -20,6 +20,7 @@ import {
   importEspaceDepots,
   listEspaceDemandes,
   listEspaceScpiDeclarationsPending,
+  listEspaceAvoirPending,
   type EspaceDemande,
 } from "@/lib/api/tauri-espace-client";
 import { ESPACE_CLIENT_CHANGED_EVENT } from "@/lib/espace-client/espace-client-events";
@@ -67,20 +68,28 @@ export function ContactEspaceDemandesPanel({
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [pendingScpiCount, setPendingScpiCount] = useState(0);
+  const [pendingAvoirDeclarations, setPendingAvoirDeclarations] = useState(0);
+  const [pendingAvoirRetraits, setPendingAvoirRetraits] = useState(0);
   const [templateKey, setTemplateKey] = useState("");
   const [customLabel, setCustomLabel] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [rows, opts, scpiPending] = await Promise.all([
+      const [rows, opts, scpiPending, avoirPending] = await Promise.all([
         listEspaceDemandes(contactId),
         loadEspaceDemandeOptions(),
         listEspaceScpiDeclarationsPending(contactId).catch(() => []),
+        listEspaceAvoirPending(contactId).catch(() => ({
+          declarations: 0,
+          retraits: 0,
+        })),
       ]);
       setDemandes(rows);
       setOptions(opts);
       setPendingScpiCount(scpiPending.length);
+      setPendingAvoirDeclarations(avoirPending.declarations);
+      setPendingAvoirRetraits(avoirPending.retraits);
       if (!templateKey && opts.length > 0) {
         setTemplateKey(opts[0].templateKey);
       }
@@ -102,7 +111,11 @@ export function ContactEspaceDemandesPanel({
     (d) => d.statut === ESPACE_DEMANDE_STATUT.RECU
   ).length;
 
-  const pendingPortalCount = pendingImportCount + pendingScpiCount;
+  const pendingPortalCount =
+    pendingImportCount +
+    pendingScpiCount +
+    pendingAvoirDeclarations +
+    pendingAvoirRetraits;
 
   const groupedOptions = useMemo(() => {
     const groups = new Map<EspaceDemandeOptionGroup, EspaceDemandeOption[]>();
@@ -172,6 +185,9 @@ export function ContactEspaceDemandesPanel({
       if (result.avoirsImported > 0) {
         parts.push(`${result.avoirsImported} avoir(s) déclaré(s) importé(s)`);
       }
+      if (result.avoirsRetires > 0) {
+        parts.push(`${result.avoirsRetires} avoir(s) retiré(s)`);
+      }
       if (parts.length > 0) {
         toast.success(parts.join(" · "));
       } else if (result.errors.length === 0) {
@@ -199,6 +215,12 @@ export function ContactEspaceDemandesPanel({
             {[
               pendingImportCount > 0 ? `${pendingImportCount} dépôt(s)` : null,
               pendingScpiCount > 0 ? `${pendingScpiCount} SCPI` : null,
+              pendingAvoirDeclarations > 0
+                ? `${pendingAvoirDeclarations} avoir(s)`
+                : null,
+              pendingAvoirRetraits > 0
+                ? `${pendingAvoirRetraits} retrait(s)`
+                : null,
             ]
               .filter(Boolean)
               .join(" · ")}{" "}
@@ -207,8 +229,8 @@ export function ContactEspaceDemandesPanel({
         ) : null}
       </div>
       <p className="text-xs text-muted-foreground">
-        Le client reçoit un email à la création. Après dépôt sur le portail ou
-        déclaration SCPI, importez dans le CRM.
+        Le client reçoit un email à la création. Après dépôt, déclaration ou
+        retrait sur le portail, importez dans le CRM.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">

@@ -18,6 +18,7 @@ pub struct ImportEspaceDepotsResult {
     pub document_ids: Vec<i64>,
     pub scpi_declarations_imported: usize,
     pub avoirs_imported: usize,
+    pub avoirs_retires: usize,
     pub errors: Vec<String>,
 }
 
@@ -41,6 +42,7 @@ pub fn import_espace_depots(
             document_ids: vec![],
             scpi_declarations_imported: 0,
             avoirs_imported: 0,
+            avoirs_retires: 0,
             errors: vec![],
         });
     }
@@ -78,6 +80,7 @@ pub fn import_espace_depots(
         document_ids,
         scpi_declarations_imported: 0,
         avoirs_imported: 0,
+        avoirs_retires: 0,
         errors,
     })
 }

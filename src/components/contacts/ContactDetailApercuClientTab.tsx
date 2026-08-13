@@ -289,6 +289,12 @@ export function ContactDetailApercuClientTab({
     []
   );
 
+  const handlePreviewRetirer = useCallback(async (_investissementId: number) => {
+    toast.message(
+      "Aperçu conseiller — le client retire ce placement depuis son espace."
+    );
+  }, []);
+
   return (
     <div className="flex flex-col items-center gap-4">
       <ContactEspaceAccesPanel
@@ -321,6 +327,8 @@ export function ContactDetailApercuClientTab({
         onSubmitScpiDeclaration={handlePreviewScpiDeclaration}
         enableAddAvoir
         onSubmitAvoir={handlePreviewAvoir}
+        enableRetirerAvoir
+        onRetirerAvoir={handlePreviewRetirer}
         rdvUrl={rdvUrl}
         showHeader
         logoUrl={logoSrc}

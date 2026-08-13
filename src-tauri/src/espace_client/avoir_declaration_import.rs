@@ -6,7 +6,8 @@ use crate::espace_client::avoir_catalogue::{
     normaliser_nom_produit, type_autorise_pour_panier,
 };
 use crate::espace_client::portal_api::{
-    ack_espace_avoir_declaration, pull_espace_avoir_declarations, PortalAvoirDeclarationLine,
+    ack_espace_avoir_declaration, ack_espace_avoir_retrait, pull_espace_avoir_declarations,
+    pull_espace_avoir_retraits, PortalAvoirDeclarationLine, PortalAvoirRetraitLine,
 };
 
 #[derive(serde::Serialize)]
@@ -54,6 +55,117 @@ pub fn import_espace_avoir_declarations(
     })
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportEspaceAvoirRetraitsResult {
+    pub imported: usize,
+    pub errors: Vec<String>,
+    #[serde(skip)]
+    pub a_accuser: Vec<i64>,
+}
+
+pub fn import_espace_avoir_retraits(
+    app: &tauri::AppHandle,
+    db: &Database,
+    contact_id: i64,
+) -> Result<ImportEspaceAvoirRetraitsResult, String> {
+    let retraits = pull_espace_avoir_retraits(app, db, contact_id)?;
+    if retraits.is_empty() {
+        return Ok(ImportEspaceAvoirRetraitsResult {
+            imported: 0,
+            errors: vec![],
+            a_accuser: vec![],
+        });
+    }
+
+    let mut imported = 0usize;
+    let mut errors = Vec::new();
+    let mut a_accuser = Vec::new();
+
+    for row in retraits {
+        match import_one_retrait(db, contact_id, &row) {
+            Ok(RetraitApply::Closed) => {
+                imported += 1;
+                a_accuser.push(row.id);
+            }
+            Ok(RetraitApply::AlreadyClosed) => a_accuser.push(row.id),
+            Ok(RetraitApply::Unimportable(message)) => {
+                // Cas définitif (introuvable, cabinet, hors périmètre) : accuser
+                // pour débloquer l'overlay portail plutôt que masquer à jamais.
+                errors.push(format!("Retrait {} : {message}", row.id));
+                a_accuser.push(row.id);
+            }
+            Err(message) => errors.push(format!("Retrait {} : {message}", row.id)),
+        }
+    }
+
+    Ok(ImportEspaceAvoirRetraitsResult {
+        imported,
+        errors,
+        a_accuser,
+    })
+}
+
+pub fn ack_espace_avoir_retraits(
+    app: &tauri::AppHandle,
+    db: &Database,
+    contact_id: i64,
+    retrait_ids: &[i64],
+) -> Vec<String> {
+    let mut errors = Vec::new();
+    for id in retrait_ids {
+        if let Err(message) = ack_espace_avoir_retrait(app, db, contact_id, *id) {
+            errors.push(format!("Retrait {id} : accusé de réception refusé ({message})"));
+        }
+    }
+    errors
+}
+
+fn retrait_importable(inv: &Investissement, contact_id: i64) -> Result<(), String> {
+    if inv.origine != "DECLARE_CLIENT" {
+        return Err("Seul un avoir déclaré par le client peut être clôturé".into());
+    }
+    if inv.contact_id != Some(contact_id) {
+        return Err("Investissement hors périmètre client".into());
+    }
+    Ok(())
+}
+
+enum RetraitApply {
+    Closed,
+    AlreadyClosed,
+    Unimportable(String),
+}
+
+fn investissement_absent(err: &rusqlite::Error) -> bool {
+    matches!(err, rusqlite::Error::QueryReturnedNoRows)
+}
+
+fn import_one_retrait(
+    db: &Database,
+    contact_id: i64,
+    row: &PortalAvoirRetraitLine,
+) -> Result<RetraitApply, String> {
+    let inv = match db.get_investissement_by_id(row.investissement_id) {
+        Ok(inv) => inv,
+        Err(err) if investissement_absent(&err) => {
+            return Ok(RetraitApply::Unimportable(
+                "Investissement introuvable".into(),
+            ));
+        }
+        Err(err) => return Err(err.to_string()),
+    };
+    if let Err(message) = retrait_importable(&inv, contact_id) {
+        return Ok(RetraitApply::Unimportable(message));
+    }
+    if inv.statut == "CLOTURE" {
+        return Ok(RetraitApply::AlreadyClosed);
+    }
+    db.close_investissement(inv.id, None)
+        .map_err(|e| e.to_string())?;
+    Ok(RetraitApply::Closed)
+}
+
 /// Accuse réception une fois la nouvelle photo en ligne.
 ///
 /// Une déclaration non accusée sera réimportée : si une ligne
@@ -83,6 +195,9 @@ fn find_existing_declare_client(
     let nom_norm = normaliser_nom_produit(nom_produit);
     existing.iter().find_map(|inv| {
         if inv.origine != "DECLARE_CLIENT" {
+            return None;
+        }
+        if inv.statut == "CLOTURE" {
             return None;
         }
         if inv.type_produit != type_produit {
@@ -260,5 +375,34 @@ mod tests {
             find_existing_declare_client(&lines, "ASSURANCE_VIE", "Swiss Life"),
             None
         );
+    }
+
+    #[test]
+    fn replay_skips_a_closed_declared_line() {
+        let mut closed = sample(11, "DECLARE_CLIENT", "PER", "Swiss Life");
+        closed.statut = "CLOTURE".into();
+        assert_eq!(
+            find_existing_declare_client(&[closed], "PER", "Swiss Life"),
+            None
+        );
+    }
+
+    #[test]
+    fn retrait_rejects_cabinet_and_other_contacts() {
+        let declared = sample(11, "DECLARE_CLIENT", "PER", "Swiss Life");
+        assert!(super::retrait_importable(&declared, 1).is_ok());
+        let cabinet = sample(10, "MON_CONSEIL", "PER", "Swiss Life");
+        assert!(super::retrait_importable(&cabinet, 1).is_err());
+        let other = sample(12, "DECLARE_CLIENT", "PER", "Swiss Life");
+        // sample() fixe contact_id = 1
+        assert!(super::retrait_importable(&other, 99).is_err());
+    }
+
+    #[test]
+    fn missing_investment_is_a_stale_retrait() {
+        assert!(super::investissement_absent(
+            &rusqlite::Error::QueryReturnedNoRows
+        ));
+        assert!(!super::investissement_absent(&rusqlite::Error::InvalidQuery));
     }
 }

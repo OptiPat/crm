@@ -93,6 +93,9 @@ export interface ClientPreviewViewProps {
   enableAddAvoir?: boolean;
   avoirSubmitting?: boolean;
   onSubmitAvoir?: (input: ClientAvoirDeclarationInput) => Promise<void>;
+  enableRetirerAvoir?: boolean;
+  retirerSubmitting?: boolean;
+  onRetirerAvoir?: (investissementId: number) => Promise<void>;
 
   /** Adresse du bouton permanent de rendez-vous. Absente : aucun bouton. */
   rdvUrl?: string;
@@ -158,6 +161,12 @@ export function ClientPreviewView({
   avoirSubmitting = false,
 
   onSubmitAvoir,
+
+  enableRetirerAvoir = false,
+
+  retirerSubmitting = false,
+
+  onRetirerAvoir,
 
   rdvUrl,
 
@@ -268,6 +277,12 @@ export function ClientPreviewView({
           avoirSubmitting={avoirSubmitting}
 
           onSubmitAvoir={onSubmitAvoir}
+
+          enableRetirerAvoir={enableRetirerAvoir}
+
+          retirerSubmitting={retirerSubmitting}
+
+          onRetirerAvoir={onRetirerAvoir}
 
           emptyState={emptyState}
 

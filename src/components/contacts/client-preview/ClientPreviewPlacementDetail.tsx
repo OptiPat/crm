@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { X } from "lucide-react";
 import { createPortal } from "react-dom";
 import type { Investissement } from "@/lib/api/tauri-investissements";
@@ -17,6 +18,7 @@ import {
   type ClientInvestissementUpdateInput,
 } from "@/lib/espace-client/client-investissement-update";
 import { inventoryRowLabels } from "@/lib/espace-client/client-inventory-labels";
+import { canClientRetirerAvoir } from "@/lib/espace-client/client-avoir-retrait";
 import { isClientPreviewValorisationHistoryEligible } from "@/lib/investissements/investissement-encours";
 import { ClientPreviewPlacementValorisation } from "./ClientPreviewPlacementValorisation";
 import { ClientPreviewScpiDeclarationForm } from "./ClientPreviewScpiDeclarationForm";
@@ -70,6 +72,9 @@ export interface ClientPreviewPlacementDetailProps {
   onSubmitScpiDeclaration?: (
     input: ClientInvestissementUpdateInput
   ) => Promise<void>;
+  enableRetirerAvoir?: boolean;
+  retirerSubmitting?: boolean;
+  onRetirerAvoir?: (investissementId: number) => Promise<void>;
   onClose: () => void;
 }
 
@@ -81,6 +86,9 @@ export function ClientPreviewPlacementDetail({
   enableScpiTracking = false,
   scpiDeclarationSubmitting = false,
   onSubmitScpiDeclaration,
+  enableRetirerAvoir = false,
+  retirerSubmitting = false,
+  onRetirerAvoir,
   onClose,
 }: ClientPreviewPlacementDetailProps) {
   const overlayPortal = useClientPreviewOverlayPortal();
@@ -128,6 +136,12 @@ export function ClientPreviewPlacementDetail({
   const mergedHistory = valorisationHistory ?? [];
   const canTrackClientUpdate =
     enableScpiTracking && isClientInvestissementUpdateEligible(inv, nature);
+  const canRetirer =
+    enableRetirerAvoir &&
+    Boolean(onRetirerAvoir) &&
+    canClientRetirerAvoir(inv.origine);
+  const [confirmRetirer, setConfirmRetirer] = useState(false);
+  const [retirerError, setRetirerError] = useState<string | null>(null);
 
   return createPortal(
     <div
@@ -199,6 +213,61 @@ export function ClientPreviewPlacementDetail({
                 submitting={scpiDeclarationSubmitting}
                 onSubmit={onSubmitScpiDeclaration}
               />
+            ) : null}
+            {canRetirer ? (
+              <div className="py-3">
+                {confirmRetirer ? (
+                  <div className="space-y-2">
+                    <p className={CP.caption}>
+                      Retirer cet investissement de votre espace ? Votre
+                      conseiller en sera informé.
+                    </p>
+                    {retirerError ? (
+                      <p className={`${CP.caption} text-red-400`}>{retirerError}</p>
+                    ) : null}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={retirerSubmitting}
+                        onClick={() => {
+                          void (async () => {
+                            try {
+                              setRetirerError(null);
+                              await onRetirerAvoir?.(inv.id);
+                              onClose();
+                            } catch (error) {
+                              setRetirerError(
+                                error instanceof Error
+                                  ? error.message
+                                  : "Retrait impossible"
+                              );
+                            }
+                          })();
+                        }}
+                        className="flex-1 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300 disabled:opacity-60"
+                      >
+                        {retirerSubmitting ? "Retrait…" : "Confirmer"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={retirerSubmitting}
+                        onClick={() => setConfirmRetirer(false)}
+                        className="flex-1 rounded-lg border border-[var(--cp-line)] px-3 py-2 text-sm text-[var(--cp-ink-muted)]"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmRetirer(true)}
+                    className="text-sm text-[var(--cp-ink-muted)] underline-offset-2 hover:text-[var(--cp-ink)] hover:underline"
+                  >
+                    Retirer cet investissement
+                  </button>
+                )}
+              </div>
             ) : null}
           </div>
         </div>

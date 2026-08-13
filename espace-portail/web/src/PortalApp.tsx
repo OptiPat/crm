@@ -152,6 +152,7 @@ export function PortalApp() {
   const [branding, setBranding] = useState<PortalBrandingResponse>(DEFAULT_BRANDING);
   const [scpiSubmitting, setScpiSubmitting] = useState(false);
   const [avoirSubmitting, setAvoirSubmitting] = useState(false);
+  const [retirerSubmitting, setRetirerSubmitting] = useState(false);
 
   const applyPatrimoineResponse = useCallback((body: PatrimoineApiResponse) => {
     setPayload(body.payload);
@@ -523,6 +524,30 @@ export function PortalApp() {
     [loadPatrimoineMe]
   );
 
+  const handleRetirerAvoir = useCallback(
+    async (investissementId: number) => {
+      setRetirerSubmitting(true);
+      try {
+        const response = await fetch("/api/v1/avoir-declarations/retrait", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ investissementId }),
+        });
+        const body = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        if (!response.ok) {
+          throw new Error(body.error ?? "Retrait impossible");
+        }
+        await loadPatrimoineMe();
+      } finally {
+        setRetirerSubmitting(false);
+      }
+    },
+    [loadPatrimoineMe]
+  );
+
   if (showPrivacy) {
     return <PortalPrivacy onBack={closePrivacy} />;
   }
@@ -657,6 +682,9 @@ export function PortalApp() {
         enableAddAvoir
         avoirSubmitting={avoirSubmitting}
         onSubmitAvoir={handleSubmitAvoir}
+        enableRetirerAvoir
+        retirerSubmitting={retirerSubmitting}
+        onRetirerAvoir={handleRetirerAvoir}
       />
     </main>
   );

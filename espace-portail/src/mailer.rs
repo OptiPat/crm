@@ -356,6 +356,39 @@ impl Mailer {
         .await
     }
 
+    pub async fn send_avoir_retire(
+        &self,
+        advisor_email: &str,
+        client_label: &str,
+        nom_produit: &str,
+        type_produit: &str,
+    ) -> Result<(), String> {
+        let text = format!(
+            "Bonjour,\n\n\
+             {client_label} a retiré un avoir déclaré depuis l'espace client.\n\
+             Produit : {nom_produit} ({type_produit})\n\n\
+             S'il n'était pas encore dans le dossier, ignorez le mail de déclaration.\n\
+             S'il y était déjà, importez depuis le CRM (panneau Espace client) pour clôturer la ligne.\n"
+        );
+        let html = format!(
+            "<p>Bonjour,</p>\
+             <p><strong>{client_label}</strong> a retiré un avoir déclaré depuis l'espace client.</p>\
+             <p><strong>Produit :</strong> {nom_produit} ({type_produit})</p>\
+             <p>S'il n'était pas encore dans le dossier, ignorez le mail de déclaration.<br/>\
+             S'il y était déjà, importez depuis le CRM (panneau Espace client) pour clôturer la ligne.</p>",
+            client_label = escape_html(client_label),
+            nom_produit = escape_html(nom_produit),
+            type_produit = escape_html(type_produit)
+        );
+        self.send_email(
+            advisor_email,
+            "Avoir retiré — espace client",
+            &text,
+            &html,
+        )
+        .await
+    }
+
     pub async fn send_new_device_alert(
         &self,
         to: &str,

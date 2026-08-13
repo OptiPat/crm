@@ -98,6 +98,9 @@ async fn get_patrimoine_for_contact(state: AppState, contact_id: i64) -> axum::r
             if let Ok(avoirs) = state.db.list_avoir_declarations_for_contact(contact_id) {
                 crate::avoir_declarations::overlay_avoir_declarations(&mut payload, &avoirs);
             }
+            if let Ok(retraits) = state.db.list_avoir_retraits_for_contact(contact_id) {
+                crate::avoir_declarations::overlay_avoir_retraits(&mut payload, &retraits);
+            }
             (
                 StatusCode::OK,
                 Json(PatrimoineResponse {

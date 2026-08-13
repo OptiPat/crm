@@ -335,3 +335,38 @@ pub fn ack_espace_avoir_declaration(
     signed_portal_request(app, db, "POST", &path, None)
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct PortalAvoirRetraitLine {
+    pub id: i64,
+    pub investissement_id: i64,
+    pub type_produit: String,
+    pub nom_produit: String,
+    pub created_at: i64,
+}
+
+pub fn pull_espace_avoir_retraits(
+    app: &tauri::AppHandle,
+    db: &Database,
+    contact_id: i64,
+) -> Result<Vec<PortalAvoirRetraitLine>, String> {
+    let path = format!("/api/v1/sync/contact/{contact_id}/avoir-retraits");
+    #[derive(serde::Deserialize)]
+    struct Response {
+        retraits: Vec<PortalAvoirRetraitLine>,
+    }
+    let body: Response = signed_get_json(app, db, &path)?;
+    Ok(body.retraits)
+}
+
+pub fn ack_espace_avoir_retrait(
+    app: &tauri::AppHandle,
+    db: &Database,
+    contact_id: i64,
+    retrait_id: i64,
+) -> Result<(), String> {
+    let path = format!("/api/v1/sync/contact/{contact_id}/avoir-retraits/{retrait_id}/ack");
+    signed_portal_request(app, db, "POST", &path, None)
+}
+

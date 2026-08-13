@@ -8,12 +8,16 @@ use crate::espace_client::config::{
 };
 use crate::espace_client::depot_import::{import_espace_depots, ImportEspaceDepotsResult};
 use crate::espace_client::avoir_declaration_import::{
-    ack_espace_avoir_declarations, import_espace_avoir_declarations,
+    ack_espace_avoir_declarations, ack_espace_avoir_retraits, import_espace_avoir_declarations,
+    import_espace_avoir_retraits,
 };
 use crate::espace_client::scpi_declaration_import::{
     ack_espace_scpi_declarations, import_espace_scpi_declarations,
 };
-use crate::espace_client::portal_api::{pull_espace_connexion_log, pull_espace_scpi_declarations, push_espace_acces_revoke, PortalScpiDeclarationLine};
+use crate::espace_client::portal_api::{
+    pull_espace_avoir_declarations, pull_espace_avoir_retraits, pull_espace_connexion_log,
+    pull_espace_scpi_declarations, push_espace_acces_revoke, PortalScpiDeclarationLine,
+};
 use crate::espace_client::push::push_espace_client_snapshot;
 use crate::espace_client::snapshot::{
     build_espace_client_preview, build_espace_client_snapshot,
@@ -415,12 +419,21 @@ pub fn import_espace_depots_cmd(
     require_espace_client_active(database)?;
     let mut result = import_espace_depots(&app, database, contact_id)?;
     let scpi = import_espace_scpi_declarations(&app, database, contact_id)?;
+    // Retraits avant déclarations : si le client a retiré puis redéclaré le
+    // même produit, on clôture d'abord l'ancienne ligne, puis on en crée une
+    // nouvelle. L'inverse écraserait puis clôturerait la redéclaration.
+    let retraits = import_espace_avoir_retraits(&app, database, contact_id)?;
     let avoirs = import_espace_avoir_declarations(&app, database, contact_id)?;
     result.scpi_declarations_imported = scpi.imported;
     result.avoirs_imported = avoirs.imported;
+    result.avoirs_retires = retraits.imported;
     result.errors.extend(scpi.errors);
     result.errors.extend(avoirs.errors);
-    if !scpi.a_accuser.is_empty() || !avoirs.a_accuser.is_empty() {
+    result.errors.extend(retraits.errors);
+    if !scpi.a_accuser.is_empty()
+        || !avoirs.a_accuser.is_empty()
+        || !retraits.a_accuser.is_empty()
+    {
         // Photo d'abord, accusé de réception ensuite : le client doit continuer
         // à voir le montant qu'il a saisi tant que le portail n'a pas reçu la
         // valeur reprise par le CRM.
@@ -437,6 +450,12 @@ pub fn import_espace_depots_cmd(
                     database,
                     contact_id,
                     &avoirs.a_accuser,
+                ));
+                result.errors.extend(ack_espace_avoir_retraits(
+                    &app,
+                    database,
+                    contact_id,
+                    &retraits.a_accuser,
                 ));
             }
             Err(error) => result.errors.push(format!(
@@ -459,6 +478,32 @@ pub fn list_espace_scpi_declarations_pending_cmd(
     let database = guard.as_ref().ok_or("Base non ouverte")?;
     require_espace_client_active(database)?;
     pull_espace_scpi_declarations(&app, database, contact_id)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EspaceAvoirPendingCounts {
+    pub declarations: usize,
+    pub retraits: usize,
+}
+
+#[tauri::command]
+pub fn list_espace_avoir_pending_cmd(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+    contact_id: i64,
+) -> Result<EspaceAvoirPendingCounts, String> {
+    require_ui_session(&session)?;
+    let guard = db.lock().map_err(|e| e.to_string())?;
+    let database = guard.as_ref().ok_or("Base non ouverte")?;
+    require_espace_client_active(database)?;
+    let declarations = pull_espace_avoir_declarations(&app, database, contact_id)?;
+    let retraits = pull_espace_avoir_retraits(&app, database, contact_id)?;
+    Ok(EspaceAvoirPendingCounts {
+        declarations: declarations.len(),
+        retraits: retraits.len(),
+    })
 }
 
 #[cfg(test)]

@@ -22,6 +22,7 @@ mod scpi_declarations;
 mod avoir_catalogue;
 mod avoir_declaration_store;
 mod avoir_declarations;
+mod avoir_retrait_store;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -262,12 +263,24 @@ async fn main() {
             post(avoir_declarations::post_avoir_declaration),
         )
         .route(
+            "/api/v1/avoir-declarations/retrait",
+            post(avoir_declarations::post_avoir_retrait),
+        )
+        .route(
             "/api/v1/sync/contact/{contact_id}/avoir-declarations",
             get(sync_auth::get_avoir_declarations),
         )
         .route(
             "/api/v1/sync/contact/{contact_id}/avoir-declarations/{declaration_id}/ack",
             post(sync_auth::post_avoir_declaration_ack),
+        )
+        .route(
+            "/api/v1/sync/contact/{contact_id}/avoir-retraits",
+            get(sync_auth::get_avoir_retraits),
+        )
+        .route(
+            "/api/v1/sync/contact/{contact_id}/avoir-retraits/{retrait_id}/ack",
+            post(sync_auth::post_avoir_retrait_ack),
         )
         .route("/api/v1/demandes/me", get(documents::get_demandes_me))
         .route(

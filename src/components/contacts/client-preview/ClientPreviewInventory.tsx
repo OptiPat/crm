@@ -198,6 +198,9 @@ export interface ClientPreviewInventoryProps {
   enableAddAvoir?: boolean;
   avoirSubmitting?: boolean;
   onSubmitAvoir?: (input: ClientAvoirDeclarationInput) => Promise<void>;
+  enableRetirerAvoir?: boolean;
+  retirerSubmitting?: boolean;
+  onRetirerAvoir?: (investissementId: number) => Promise<void>;
   emptyState?: ClientPreviewEmptyState;
 }
 
@@ -212,6 +215,9 @@ export function ClientPreviewInventory({
   enableAddAvoir = false,
   avoirSubmitting = false,
   onSubmitAvoir,
+  enableRetirerAvoir = false,
+  retirerSubmitting = false,
+  onRetirerAvoir,
   emptyState = null,
 }: ClientPreviewInventoryProps) {
   const grouped = useMemo(
@@ -309,6 +315,9 @@ export function ClientPreviewInventory({
           enableScpiTracking={enableScpiTracking}
           scpiDeclarationSubmitting={scpiDeclarationSubmitting}
           onSubmitScpiDeclaration={onSubmitScpiDeclaration}
+          enableRetirerAvoir={enableRetirerAvoir}
+          retirerSubmitting={retirerSubmitting}
+          onRetirerAvoir={onRetirerAvoir}
           onClose={() => setSelectedId(null)}
         />
       ) : null}

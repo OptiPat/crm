@@ -152,4 +152,108 @@ impl super::db::PortalDb {
         )?;
         Ok(updated > 0)
     }
+
+    pub fn cancel_pending_avoir_declaration(
+        &self,
+        contact_id: i64,
+        declaration_id: i64,
+    ) -> Result<Option<AvoirDeclarationRow>> {
+        let row = self.get_pending_avoir_declaration(contact_id, declaration_id)?;
+        if row.is_none() {
+            return Ok(None);
+        }
+        self.conn().execute(
+            "DELETE FROM espace_avoir_declaration
+             WHERE id = ?1 AND contact_id = ?2 AND acked_at IS NULL",
+            params![declaration_id, contact_id],
+        )?;
+        Ok(row)
+    }
+
+    pub fn cancel_pending_avoir_declaration_matching(
+        &self,
+        contact_id: i64,
+        type_produit: &str,
+        nom_produit_norm: &str,
+    ) -> Result<Option<AvoirDeclarationRow>> {
+        let id: Option<i64> = self
+            .conn()
+            .query_row(
+                "SELECT id FROM espace_avoir_declaration
+                 WHERE contact_id = ?1 AND type_produit = ?2 AND nom_produit_norm = ?3
+                   AND acked_at IS NULL",
+                params![contact_id, type_produit, nom_produit_norm],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(id) = id else {
+            return Ok(None);
+        };
+        self.cancel_pending_avoir_declaration(contact_id, id)
+    }
+
+    pub(crate) fn get_pending_avoir_declaration(
+        &self,
+        contact_id: i64,
+        declaration_id: i64,
+    ) -> Result<Option<AvoirDeclarationRow>> {
+        self.conn()
+            .query_row(
+                "SELECT id, contact_id, panier, type_produit, nom_produit,
+                        valorisation_centimes, date_souscription, created_at,
+                        loyer_mensuel_centimes, mensualite_credit_centimes, date_fin_pret
+                 FROM espace_avoir_declaration
+                 WHERE id = ?1 AND contact_id = ?2 AND acked_at IS NULL",
+                params![declaration_id, contact_id],
+                |row| {
+                    Ok(AvoirDeclarationRow {
+                        id: row.get(0)?,
+                        contact_id: row.get(1)?,
+                        panier: row.get(2)?,
+                        type_produit: row.get(3)?,
+                        nom_produit: row.get(4)?,
+                        valorisation_centimes: row.get(5)?,
+                        date_souscription: row.get(6)?,
+                        created_at: row.get(7)?,
+                        loyer_mensuel_centimes: row.get(8)?,
+                        mensualite_credit_centimes: row.get(9)?,
+                        date_fin_pret: row.get(10)?,
+                    })
+                },
+            )
+            .optional()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::db::PortalDb;
+
+    #[test]
+    fn matching_cancel_removes_the_pending_twin() {
+        let db = PortalDb::open(":memory:").unwrap();
+        db.insert_avoir_declaration(
+            1,
+            "placements",
+            "PER",
+            "Swisslife",
+            "swisslife",
+            100,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(db.list_avoir_declarations_for_contact(1).unwrap().len(), 1);
+        let removed = db
+            .cancel_pending_avoir_declaration_matching(1, "PER", "swisslife")
+            .unwrap();
+        assert!(removed.is_some());
+        assert!(db.list_avoir_declarations_for_contact(1).unwrap().is_empty());
+        assert!(db
+            .cancel_pending_avoir_declaration_matching(1, "PER", "swisslife")
+            .unwrap()
+            .is_none());
+    }
 }

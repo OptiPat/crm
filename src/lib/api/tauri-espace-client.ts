@@ -64,6 +64,7 @@ export interface ImportEspaceDepotsResult {
   documentIds: number[];
   scpiDeclarationsImported: number;
   avoirsImported: number;
+  avoirsRetires: number;
   errors: string[];
 }
 
@@ -83,6 +84,19 @@ export async function listEspaceScpiDeclarationsPending(
     "list_espace_scpi_declarations_pending_cmd",
     { contactId }
   );
+}
+
+export interface EspaceAvoirPendingCounts {
+  declarations: number;
+  retraits: number;
+}
+
+export async function listEspaceAvoirPending(
+  contactId: number
+): Promise<EspaceAvoirPendingCounts> {
+  return invoke<EspaceAvoirPendingCounts>("list_espace_avoir_pending_cmd", {
+    contactId,
+  });
 }
 
 /**
@@ -191,7 +205,11 @@ export async function importEspaceDepots(
     contactId,
   });
   notifyEspaceClientChanged();
-  if (result.scpiDeclarationsImported > 0 || result.avoirsImported > 0) {
+  if (
+    result.scpiDeclarationsImported > 0 ||
+    result.avoirsImported > 0 ||
+    result.avoirsRetires > 0
+  ) {
     notifyInvestissementsChanged();
   }
   return result;
