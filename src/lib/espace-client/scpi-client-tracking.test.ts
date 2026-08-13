@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultValorisationCentimes,
   isScpiClientTrackingEligible,
+  parseDeclarationDate,
   validateScpiClientDeclaration,
   PLAFOND_DECLARATION_CENTIMES,
 } from "./scpi-client-tracking";
@@ -57,6 +58,37 @@ describe("scpi-client-tracking", () => {
         date: `${y}-${m}-${d}`,
         valorisationCentimes: 1,
       })
+    ).toBe("date_future");
+  });
+
+  it("parse un jour civil en minuit UTC, comme le portail", () => {
+    expect(parseDeclarationDate("2026-06-15")).toBe(1_781_481_600);
+    expect(parseDeclarationDate("2026-02-30")).toBeNull();
+  });
+
+  it("accepte le lendemain UTC grâce au battement d'un jour", () => {
+    const now = Math.floor(Date.UTC(2026, 7, 13, 22, 0, 0) / 1000);
+    expect(
+      validateScpiClientDeclaration(
+        inv,
+        {
+          investissementId: 42,
+          date: "2026-08-14",
+          valorisationCentimes: 1,
+        },
+        now
+      )
+    ).toMatchObject({ ok: true, dateTs: 1_786_665_600 });
+    expect(
+      validateScpiClientDeclaration(
+        inv,
+        {
+          investissementId: 42,
+          date: "2026-08-15",
+          valorisationCentimes: 1,
+        },
+        now
+      )
     ).toBe("date_future");
   });
 

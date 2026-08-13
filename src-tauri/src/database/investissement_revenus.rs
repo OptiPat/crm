@@ -170,6 +170,35 @@ impl super::Database {
         )?;
         Ok(())
     }
+
+    /// Rejeu d'une déclaration d'avoir déjà importée : les `None` écrasent
+    /// (dernière déclaration portail = source de vérité).
+    pub fn apply_espace_client_avoir_replay(
+        &self,
+        investissement_id: i64,
+        date_souscription: Option<i64>,
+        loyer_mensuel: Option<i64>,
+        mensualite_credit: Option<i64>,
+        date_fin_pret: Option<i64>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE investissements SET
+                date_souscription = ?1,
+                loyer_mensuel = ?2,
+                mensualite_credit = ?3,
+                date_fin_pret = ?4,
+                updated_at = unixepoch()
+             WHERE id = ?5",
+            params![
+                date_souscription,
+                loyer_mensuel,
+                mensualite_credit,
+                date_fin_pret,
+                investissement_id
+            ],
+        )?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -234,5 +263,54 @@ mod tests {
         let rows = db.get_revenus_percus_by_investissement(inv.id).unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].montant, 35_000);
+    }
+
+    #[test]
+    fn replay_overwrites_optional_fields_including_none() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.get_connection()
+            .execute(
+                "INSERT INTO contacts (categorie, nom, prenom, created_at, updated_at)
+                 VALUES ('CLIENT', 'DUPONT', 'Jean', 1, 1)",
+                [],
+            )
+            .unwrap();
+        let inv = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(1),
+                foyer_id: None,
+                type_produit: "LMNP".into(),
+                partenaire_id: None,
+                nom_produit: "Studio Lyon".into(),
+                numero_contrat: None,
+                montant_initial: Some(180_000_00),
+                date_souscription: Some("2024-01-15T00:00:00.000Z".into()),
+                date_fin_demembrement: None,
+                date_fin_pret: Some("2035-06-01T00:00:00.000Z".into()),
+                date_dernier_arbitrage: None,
+                date_prochain_arbitrage: None,
+                mensualite_credit: Some(1_200_00),
+                credit_crd: None,
+                loyer_mensuel: Some(850_00),
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("DECLARE_CLIENT".into()),
+            })
+            .unwrap();
+
+        db.apply_espace_client_avoir_replay(inv.id, Some(1_704_067_200), None, None, None)
+            .unwrap();
+
+        let updated = db.get_investissement_by_id(inv.id).unwrap();
+        assert_eq!(updated.date_souscription, Some(1_704_067_200));
+        assert_eq!(updated.loyer_mensuel, None);
+        assert_eq!(updated.mensualite_credit, None);
+        assert_eq!(updated.date_fin_pret, None);
     }
 }

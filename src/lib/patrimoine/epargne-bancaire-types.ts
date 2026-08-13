@@ -9,4 +9,6 @@ export const EPARGNE_BANCAIRE_TYPES = new Set([
   "CEL",
   "CSL",
   "COMPTE_COURANT",
+  "CAT",
+  "PEAC",
 ]);

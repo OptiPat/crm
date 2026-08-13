@@ -18,6 +18,13 @@ describe("client-investissement-update", () => {
     ).toBe("scpi");
     expect(
       getClientInvestissementUpdateKind({
+        id: -4,
+        type_produit: "PER",
+        origine: "DECLARE_CLIENT",
+      })
+    ).toBeNull();
+    expect(
+      getClientInvestissementUpdateKind({
         type_produit: "SCPI_FISCALE",
         origine: "EXISTANT_CLIENT",
       })
@@ -99,7 +106,7 @@ describe("client-investissement-update", () => {
     ).toBe("immobilier");
   });
 
-  it("refuse la prévoyance et AUTRE", () => {
+  it("refuse la prévoyance, accepte Autre comme le reste du panier", () => {
     expect(
       getClientInvestissementUpdateKind({
         type_produit: "PREVOYANCE",
@@ -111,7 +118,19 @@ describe("client-investissement-update", () => {
         type_produit: "AUTRE",
         origine: "EXISTANT_CLIENT",
       })
-    ).toBeNull();
+    ).toBe("encours");
+    expect(
+      getClientInvestissementUpdateKind({
+        type_produit: "IMMOBILIER",
+        origine: "DECLARE_CLIENT",
+      })
+    ).toBe("immobilier");
+    expect(
+      getClientInvestissementUpdateKind({
+        type_produit: "EPARGNE_BANCAIRE",
+        origine: "DECLARE_CLIENT",
+      })
+    ).toBe("encours");
   });
 
   it("accepte PEA et compte-titres hors avec moi", () => {

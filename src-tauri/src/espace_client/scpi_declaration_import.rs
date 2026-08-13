@@ -91,8 +91,8 @@ fn declaration_importable(inv: &Investissement) -> Result<(), String> {
     if !is_a_cote(&inv.origine) {
         return Err("Origine non importable".into());
     }
-    // Miroir du filtre portail / TS : pas la prévoyance ni le fourre-tout AUTRE.
-    if inv.type_produit == "PREVOYANCE" || inv.type_produit == "AUTRE" {
+    // Miroir du filtre portail / TS : pas la prévoyance.
+    if inv.type_produit == "PREVOYANCE" {
         return Err("Type produit non importable".into());
     }
     Ok(())

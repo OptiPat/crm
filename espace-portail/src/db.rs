@@ -109,6 +109,7 @@ impl PortalDb {
             )?;
         }
         self.migrate_scpi_declarations()?;
+        self.migrate_avoir_declarations()?;
         Ok(())
     }
 

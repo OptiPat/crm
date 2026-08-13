@@ -28,6 +28,7 @@ import {
   parseDemembrementDuree,
   parseModeDetention,
 } from "@/lib/investissements/investissement-demembrement";
+import { isPatrimoineACoteOrigine } from "@/lib/investissements/investissement-origine";
 import { isInvestissementCloture } from "@/lib/investissements/investissement-statut";
 import { cn } from "@/lib/utils";
 import {
@@ -152,7 +153,7 @@ export function InvestissementCard({
                 Crédit
               </Badge>
             )}
-            {inv.origine === "EXISTANT_CLIENT" && (
+            {isPatrimoineACoteOrigine(inv.origine) && (
               <span className="text-xs text-gray-500 italic">à côté</span>
             )}
             {isCloture && (

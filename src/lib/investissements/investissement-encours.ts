@@ -23,11 +23,12 @@ const SCPI_VALORISATION_TYPES = new Set([
   "SCPI_FISCALE",
 ]);
 
-/** PEA / CTO : encours côté client, hors liste dashboard « placements avec moi ». */
+/** PEA / CTO / fourre-tout client : encours côté espace, hors liste dashboard. */
 const PLACEMENT_CLIENT_ENCOURS_EXTRA = new Set([
   "PEA",
   "COMPTE_TITRE",
   "COMPTE_TITRES",
+  "AUTRE",
 ]);
 
 export type PlacementValorisationUiMode = "encours" | "valorisation";

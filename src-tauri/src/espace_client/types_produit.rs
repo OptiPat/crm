@@ -12,7 +12,7 @@
 //! « placements financiers » n'ont pas de liste — ils sont le complément, donc
 //! rien ne peut y être oublié.
 
-pub const IMMOBILIER_TYPES: [&str; 25] = [
+pub const IMMOBILIER_TYPES: [&str; 26] = [
     "IMMOBILIER",
     "LMNP",
     "LMP",
@@ -35,6 +35,7 @@ pub const IMMOBILIER_TYPES: [&str; 25] = [
     "LOCATIF_CLASSIQUE",
     "NUE_PROPRIETE",
     "RESIDENCE_PRINCIPALE",
+    "RESIDENCE_SECONDAIRE",
     "COLOCATION",
     "MONOLOCATION",
     "SCI",
@@ -61,6 +62,7 @@ mod tests {
         assert!(is_immobilier_type("LMNP"));
         assert!(is_immobilier_type("MALRAUX"));
         assert!(is_immobilier_type("SCI"));
+        assert!(is_immobilier_type("RESIDENCE_SECONDAIRE"));
         assert!(!is_immobilier_type("SCPI"));
         assert!(!is_immobilier_type("ASSURANCE_VIE"));
         assert!(!is_immobilier_type(""));

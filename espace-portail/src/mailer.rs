@@ -299,6 +299,63 @@ impl Mailer {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub async fn send_avoir_declared(
+        &self,
+        advisor_email: &str,
+        client_label: &str,
+        nom_produit: &str,
+        kind: &str,
+        valorisation_euros: f64,
+        loyer_euros: Option<f64>,
+        mensualite_euros: Option<f64>,
+        date_fin_pret_label: Option<String>,
+    ) -> Result<(), String> {
+        let mut extras_text = String::new();
+        let mut extras_html = String::new();
+        if let Some(v) = loyer_euros {
+            extras_text.push_str(&format!("\nLoyer mensuel : {v:.2} €"));
+            extras_html.push_str(&format!("<br/><strong>Loyer mensuel :</strong> {v:.2} €"));
+        }
+        if let Some(v) = mensualite_euros {
+            extras_text.push_str(&format!("\nMensualité de crédit : {v:.2} €"));
+            extras_html
+                .push_str(&format!("<br/><strong>Mensualité de crédit :</strong> {v:.2} €"));
+        }
+        if let Some(label) = date_fin_pret_label {
+            extras_text.push_str(&format!("\nFin de prêt : {label}"));
+            extras_html.push_str(&format!(
+                "<br/><strong>Fin de prêt :</strong> {}",
+                escape_html(&label)
+            ));
+        }
+        let text = format!(
+            "Bonjour,\n\n\
+             {client_label} a déclaré {kind} depuis l'espace client.\n\
+             Produit : {nom_produit}\n\
+             Valorisation : {valorisation_euros:.2} €{extras_text}\n\n\
+             Importez la déclaration depuis le CRM (panneau Espace client) pour l'ajouter au dossier.\n"
+        );
+        let html = format!(
+            "<p>Bonjour,</p>\
+             <p><strong>{client_label}</strong> a déclaré {kind} depuis l'espace client.</p>\
+             <p><strong>Produit :</strong> {nom_produit}<br/>\
+             <strong>Valorisation :</strong> {valorisation_euros:.2} €{extras_html}</p>\
+             <p>Importez la déclaration depuis le CRM (panneau Espace client) pour l'ajouter au dossier.</p>",
+            client_label = escape_html(client_label),
+            kind = kind,
+            nom_produit = escape_html(nom_produit),
+            extras_html = extras_html
+        );
+        self.send_email(
+            advisor_email,
+            "Nouvel avoir déclaré — espace client",
+            &text,
+            &html,
+        )
+        .await
+    }
+
     pub async fn send_new_device_alert(
         &self,
         to: &str,

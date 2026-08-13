@@ -9,6 +9,8 @@ import { getPatrimoineCategorie } from "@/lib/patrimoine/categories";
 import {
   PLAFOND_DECLARATION_CENTIMES,
   parseDeclarationDate,
+  startOfUtcDay,
+  DECLARATION_DATE_GRACE_SECONDS,
   type ScpiClientDeclarationError,
   type ScpiClientDeclarationInput,
   type ScpiClientDeclarationValidation,
@@ -48,15 +50,15 @@ function isOrigineACote(origine: string | undefined): boolean {
  * Pas de création d'avoir — mise à jour de lignes déjà synchronisées.
  */
 export function getClientInvestissementUpdateKind(
-  inv: Pick<Investissement, "type_produit" | "origine">,
+  inv: Pick<Investissement, "type_produit" | "origine"> & { id?: number },
   nature?: ClientInvestissementNature
 ): ClientInvestissementUpdateKind | null {
+  // Ligne overlay (déclaration pas encore reprise) : pas de mise à jour.
+  if (inv.id != null && inv.id < 0) return null;
   const estScpi = nature?.estScpi ?? isScpiValorisationType(inv.type_produit);
   if (estScpi) return "scpi";
   if (!isOrigineACote(inv.origine)) return null;
-  // getPatrimoineCategorie("AUTRE") retombe sur « Placements financiers » :
-  // on l'exclut explicitement, comme le portail et l'import CRM.
-  if (!inv.type_produit || inv.type_produit === "AUTRE") return null;
+  if (!inv.type_produit || inv.type_produit === "PREVOYANCE") return null;
   const estImmobilier =
     nature?.estImmobilier ?? IMMOBILIER_SET.has(inv.type_produit);
   if (estImmobilier) return "immobilier";
@@ -68,7 +70,7 @@ export function getClientInvestissementUpdateKind(
 }
 
 export function isClientInvestissementUpdateEligible(
-  inv: Pick<Investissement, "type_produit" | "origine">,
+  inv: Pick<Investissement, "type_produit" | "origine"> & { id?: number },
   nature?: ClientInvestissementNature
 ): boolean {
   return getClientInvestissementUpdateKind(inv, nature) != null;
@@ -95,12 +97,6 @@ export type ClientInvestissementUpdateError =
   | "loyer_invalide"
   | "mensualite_invalide"
   | "date_fin_pret_invalide";
-
-function startOfLocalDay(unix: number): number {
-  const d = new Date(unix * 1000);
-  d.setHours(0, 0, 0, 0);
-  return Math.floor(d.getTime() / 1000);
-}
 
 function parseOptionalMoney(
   value: number | null | undefined,
@@ -218,7 +214,9 @@ export function validateClientInvestissementUpdate(
 
   const dateTs = parseDeclarationDate(input.date);
   if (dateTs == null) return "date_invalide";
-  if (dateTs > startOfLocalDay(nowUnix)) return "date_future";
+  if (dateTs > startOfUtcDay(nowUnix) + DECLARATION_DATE_GRACE_SECONDS) {
+    return "date_future";
+  }
 
   const valorisationCentimes = Math.round(input.valorisationCentimes);
   if (

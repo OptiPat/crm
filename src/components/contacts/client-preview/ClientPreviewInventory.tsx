@@ -19,6 +19,8 @@ import type {
   ClientInvestissementNatureById,
   ClientInvestissementUpdateInput,
 } from "@/lib/espace-client/client-investissement-update";
+import type { ClientAvoirDeclarationInput } from "@/lib/espace-client/client-avoir-declaration";
+import { ClientPreviewAddAvoir } from "./ClientPreviewAddAvoir";
 import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
 import { formatShortEuro } from "./client-preview-format";
 import { CP } from "./client-preview-theme";
@@ -203,6 +205,9 @@ export interface ClientPreviewInventoryProps {
   onSubmitScpiDeclaration?: (
     input: ClientInvestissementUpdateInput
   ) => Promise<void>;
+  enableAddAvoir?: boolean;
+  avoirSubmitting?: boolean;
+  onSubmitAvoir?: (input: ClientAvoirDeclarationInput) => Promise<void>;
   emptyState?: ClientPreviewEmptyState;
 }
 
@@ -214,6 +219,9 @@ export function ClientPreviewInventory({
   enableScpiTracking = false,
   scpiDeclarationSubmitting = false,
   onSubmitScpiDeclaration,
+  enableAddAvoir = false,
+  avoirSubmitting = false,
+  onSubmitAvoir,
   emptyState = null,
 }: ClientPreviewInventoryProps) {
   const grouped = useMemo(
@@ -288,6 +296,13 @@ export function ClientPreviewInventory({
           ))}
         </div>
       )}
+
+      {enableAddAvoir ? (
+        <ClientPreviewAddAvoir
+          submitting={avoirSubmitting}
+          onSubmit={onSubmitAvoir}
+        />
+      ) : null}
 
       {selected ? (
         <ClientPreviewPlacementDetail

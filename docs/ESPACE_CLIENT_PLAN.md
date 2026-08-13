@@ -1,6 +1,7 @@
 # Espace client — plan d'implémentation
 
-> **Statut au 12 août 2026** : en production, phases 0 à 2 faites, premiers clients en bêta.
+> **Statut au 13 août 2026** : en production, phases 0 à 2 faites, premiers clients en bêta.
+> Mise à jour des placements par le client **déployée**.
 > Cadrage initial du 8 août. Voir §0 pour l'état d'avancement réel.
 > **Public** : agent ou développeur qui reprend le sujet. Lire les sections 2 et 3 avant toute
 > proposition alternative, et **§15 avant de toucher à un écran client**.
@@ -20,7 +21,7 @@ bout en bout sur un contact fictif. Trois investisseurs entrent en phase bêta.
 | 1 — Portail en lecture, authentification client | **Fait** |
 | 2 — Dépôt de documents | **Fait**, validé en production |
 | 3 — Documents mis à disposition | Non commencé — c'est là que se branchera la ré-authentification (R7) |
-| 4 — Déclaration des avoirs extérieurs | Non commencé. Une première tranche existe : le client met à jour ses SCPI conseillées |
+| 4 — Déclaration des avoirs extérieurs | **Déployé** : mise à jour des lignes déjà synchronisées, et création de lignes `DECLARE_CLIENT` (immobilier, SCPI, placements, épargne / banque). Jauge de complétude et vieillissement : non commencés |
 | 5 — Notifications et cycle de vie | Partiel : révocation, alerte nouvel appareil, annonce des événements |
 | Déploiement serveur | **Fait** — procédure dans `espace-portail/deploy/README.md` |
 
@@ -36,12 +37,20 @@ Ajouts postérieurs au plan initial, non prévus ici mais livrés :
 - **Mise à jour des placements par le client** : SCPI (suivie par le cabinet ou détenue
   à côté) avec valorisation et revenus perçus ; épargne et placements financiers **à côté**
   avec l'encours ; immobilier **à côté** avec valorisation, loyer, mensualité et fin de
-  prêt. Aucune création de ligne — uniquement la mise à jour de ce qui est déjà
-  synchronisé. Le conseiller est prévenu par email et reprend la déclaration à l'import.
-  Plafond de 10 000 000 € par montant, jour civil en UTC comme le reste de la chaîne.
+  prêt. Le client peut aussi **déclarer un avoir hors cabinet** (`DECLARE_CLIENT`,
+  rattachement personnel, jamais fusionné avec une ligne cabinet). Le conseiller est
+  prévenu par email et reprend la déclaration à l'import. Plafond de 10 000 000 € par
+  montant, jour civil en UTC comme le reste de la chaîne. Un import rejoué réutilise
+  la ligne déjà créée si l'accusé n'a pas abouti.
 - **Historique de valorisation étiqueté par source** : « Valorisé par votre conseiller »
   ou « Déclaré par vous », les deux sources fusionnées dans une seule liste. Applique
-  **R1** là où le client ne voyait auparavant que ses propres déclarations.
+  **R1** là où le client ne voyait auparavant que ses propres déclarations. Un point
+  n'existe que si le montant a changé : l'écran n'invente plus un palier « aujourd'hui »
+  à chaque ouverture ou sync.
+- **Nature lue sur la photo, y compris à l'écran** : le bouton de mise à jour suit
+  `estScpi` / `estImmobilier` transmis par le CRM, plus les listes TypeScript.
+- **Le formulaire n'envoie que les champs modifiés** : une valorisation client n'efface
+  plus une fin de prêt saisie par le conseiller.
 
 Documents liés : `docs/ESPACE_CLIENT_RGPD.md` (registre, bases légales, sous-traitants),
 `docs/ESPACE_CLIENT_INCIDENT.md` (plan de réponse à incident),
@@ -356,6 +365,8 @@ Publication manuelle depuis la GED, décidée au cas par cas par le conseiller. 
 
 Saisie par le client (`origine = DECLARE_CLIENT`), jauge de complétude, vieillissement visible des lignes non mises à jour.
 
+**Tranche livrée (13 août)** : le client met à jour des lignes **déjà synchronisées** — SCPI (cabinet ou à côté), épargne et placements financiers à côté, immobilier à côté — et **crée** des lignes `DECLARE_CLIENT` via quatre paniers (immobilier, SCPI, placements, épargne / banque). La jauge de complétude et le vieillissement des lignes restent à faire.
+
 **Contrainte de conception** : ne jamais présenter un formulaire vide. Proposer une confirmation (« vous avez aussi un PEA, confirmez le montant ? ») plutôt qu'une saisie libre. Et l'interface doit être excellente **pour le conseiller en rendez-vous**, car c'est là que se fera l'essentiel de la complétion — saisie rapide au clavier, à deux devant l'écran.
 
 ### Phase 5 — Notifications et cycle de vie
@@ -417,7 +428,7 @@ CRM → portail    demandes de documents
 CRM → portail    publications de documents
 
 CRM ← portail    documents déposés (puis purge côté portail)
-CRM ← portail    déclarations SCPI du client (valorisation, revenus)
+CRM ← portail    déclarations du client (SCPI, épargne à côté, immobilier à côté)
 CRM ← portail    avoirs déclarés par le client
 CRM ← portail    journal d'activité (connexions, consultations)
 ```
@@ -588,6 +599,9 @@ regardée **sur le portail déployé**, pas seulement dans le CRM.
 | **Antivirus déclaré injoignable alors qu'il répondait** | La réponse de `clamd` se termine par un octet nul, et le transport par défaut sous Debian est un socket local, pas un port TCP | Lire la réponse réelle du démon avant de conclure |
 | **La documentation affirmait l'inverse du code** | Le README présentait ClamAV comme optionnel quand le binaire refuse de démarrer sans lui | Une affirmation de doc sur un garde-fou se vérifie dans le code |
 | **Les listes de types recopiées d'un langage à l'autre** | L'ouverture de la mise à jour aux placements « à côté » a créé quatre copies de la liste immobilière — TypeScript, portail, import, et une cinquième incomplète dans un email — plus trois copies de la liste SCPI. Ces listes décident de l'enregistrement du loyer et du revenu : un type oublié d'un côté, et le montant saisi par le client disparaît sans un mot | La classification appartient au CRM et voyage dans la photo (`estImmobilier`, `estScpi`) ; le portail n'en tient aucune. Les deux listes qui restent, une par langage, sont comparées par un test qui lit les deux fichiers. À l'inverse, « placements financiers » est un **complément** et non une liste : rien ne peut y être oublié |
+| **Bouton affiché, POST refusé** | Après le schéma 7, l'écran classait encore avec les listes TypeScript alors que l'API exige `estScpi` / `estImmobilier` sur la photo. Une SCPI « avec moi » sur une photo ancienne : bouton visible, enregistrement rejeté | L'écran lit la nature annoncée par la photo, comme l'API. `estScpi` absent refuse, visible. Resynchroniser les clients |
+| **Palier « aujourd'hui » identique au dernier relevé** | La courbe forçait un point à la date du jour avec l'encours actuel, pour coller au total en tête. Ouvrir la fiche (ou synchroniser) faisait apparaître 12 672 € au 13 août alors que le dernier vrai relevé était au 2 mars, même montant | Un point d'historique n'existe que si le montant a changé. Une sync republie la photo, elle n'ajoute pas de relevé |
+| **Le formulaire renvoyait tous les champs affichés** | Une fin de prêt saisie par le conseiller disparaissait si le client enregistrait une valorisation pendant que l'écran était ouvert : les champs non touchés partaient avec l'ancienne valeur ou à vide | N'envoyer que ce que le client a modifié |
 
 ---
 
@@ -621,10 +635,9 @@ formalités RGPD, dépôt de documents — sont faites. Ce qui suit, dans cet or
    domaine authentifié au premier échec constaté.
 3. **Phase 3 — documents mis à disposition.** C'est là que se branche enfin la
    ré-authentification à la consultation (**R7**), écrite et testée mais reliée à rien.
-4. **Phase 4 — déclaration des avoirs extérieurs.** La tranche SCPI en donne le patron :
-   saisie côté client, notification du conseiller, reprise à l'import, plafond de bon sens.
-   C'est ce qui rendra le camembert honnête, puisqu'il ne montre aujourd'hui que ce que le
-   cabinet connaît.
+4. **Phase 4 — déclaration des avoirs extérieurs.** Mise à jour et création
+   `DECLARE_CLIENT` sont livrées. Restent la jauge de complétude et le vieillissement
+   des lignes non mises à jour, pour que le camembert reste honnête dans la durée.
 5. **Phase 5 — notifications restantes** : rappels, messages du conseiller, purge en fin de
    relation.
 

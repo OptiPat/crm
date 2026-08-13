@@ -39,10 +39,14 @@ describe("investissement-encours", () => {
     expect(isPlacementValorisationUpdateEligible("PER")).toBe(true);
     expect(getPlacementValorisationUiMode("SCPI")).toBe("valorisation");
     expect(getPlacementValorisationUiMode("ASSURANCE_VIE")).toBe("encours");
+    expect(getPlacementValorisationUiMode("AUTRE")).toBe("encours");
+    expect(getPlacementValorisationUiMode("IMMOBILIER")).toBe("valorisation");
     expect(isClientPreviewValorisationHistoryEligible("ASSURANCE_VIE")).toBe(true);
     expect(isClientPreviewValorisationHistoryEligible("SCPI")).toBe(true);
     expect(isClientPreviewValorisationHistoryEligible("LMNP")).toBe(true);
     expect(isClientPreviewValorisationHistoryEligible("LIVRET_A")).toBe(true);
+    expect(isClientPreviewValorisationHistoryEligible("AUTRE")).toBe(true);
+    expect(isClientPreviewValorisationHistoryEligible("IMMOBILIER")).toBe(true);
     expect(isClientPreviewValorisationHistoryEligible("PREVOYANCE")).toBe(false);
   });
 

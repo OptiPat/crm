@@ -75,6 +75,43 @@ describe("buildPatrimoineEvolution", () => {
     expect(series![series!.length - 1].totalCentimes).toBe(180_000_00);
   });
 
+  it("n'invente pas un point « aujourd'hui » si le montant n'a pas changé", () => {
+    const lastKnown = toEvolutionDayTs(Date.UTC(2025, 2, 2) / 1000);
+    const today = toEvolutionDayTs(Date.UTC(2026, 7, 13) / 1000);
+    const series = buildPatrimoineEvolution(
+      [
+        {
+          id: 1,
+          encours_actuel: 12_672_00,
+          encours_date: lastKnown,
+          valorisations: [{ dateTs: lastKnown, montantCentimes: 12_672_00 }],
+        },
+      ],
+      { asOfUnix: today }
+    );
+
+    expect(series).toBeNull();
+  });
+
+  it("ajoute le point courant seulement si l'encours a bougé sans nouvelle date", () => {
+    const lastKnown = toEvolutionDayTs(Date.UTC(2025, 2, 2) / 1000);
+    const today = toEvolutionDayTs(Date.UTC(2026, 7, 13) / 1000);
+    const series = buildPatrimoineEvolution(
+      [
+        {
+          id: 1,
+          encours_actuel: 13_000_00,
+          valorisations: [{ dateTs: lastKnown, montantCentimes: 12_672_00 }],
+        },
+      ],
+      { asOfUnix: today }
+    );
+
+    expect(series?.map((p) => p.dateTs)).toEqual([lastKnown, today]);
+    expect(series?.[0].totalCentimes).toBe(12_672_00);
+    expect(series?.[1].totalCentimes).toBe(13_000_00);
+  });
+
   it("distingue deux jours du même mois dans le libellé", () => {
     const a = toEvolutionDayTs(Date.UTC(2026, 7, 5) / 1000);
     const b = toEvolutionDayTs(Date.UTC(2026, 7, 11) / 1000);

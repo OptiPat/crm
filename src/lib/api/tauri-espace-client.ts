@@ -63,6 +63,7 @@ export interface ImportEspaceDepotsResult {
   imported: number;
   documentIds: number[];
   scpiDeclarationsImported: number;
+  avoirsImported: number;
   errors: string[];
 }
 
@@ -190,7 +191,7 @@ export async function importEspaceDepots(
     contactId,
   });
   notifyEspaceClientChanged();
-  if (result.scpiDeclarationsImported > 0) {
+  if (result.scpiDeclarationsImported > 0 || result.avoirsImported > 0) {
     notifyInvestissementsChanged();
   }
   return result;

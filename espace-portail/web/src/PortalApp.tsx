@@ -29,6 +29,7 @@ import type {
   PatrimoineApiResponse,
 } from "./types";
 import type { ClientInvestissementUpdateInput } from "@/lib/espace-client/client-investissement-update";
+import type { ClientAvoirDeclarationInput } from "@/lib/espace-client/client-avoir-declaration";
 import type { EvolutionHistoryById } from "@/components/contacts/client-preview/ClientPreviewEvolution";
 
 interface AuthMeResponse {
@@ -150,6 +151,7 @@ export function PortalApp() {
   const [error, setError] = useState<string | null>(null);
   const [branding, setBranding] = useState<PortalBrandingResponse>(DEFAULT_BRANDING);
   const [scpiSubmitting, setScpiSubmitting] = useState(false);
+  const [avoirSubmitting, setAvoirSubmitting] = useState(false);
 
   const applyPatrimoineResponse = useCallback((body: PatrimoineApiResponse) => {
     setPayload(body.payload);
@@ -488,6 +490,39 @@ export function PortalApp() {
     [loadPatrimoineMe]
   );
 
+  const handleSubmitAvoir = useCallback(
+    async (input: ClientAvoirDeclarationInput) => {
+      setAvoirSubmitting(true);
+      try {
+        const response = await fetch("/api/v1/avoir-declarations", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            panier: input.panier,
+            typeProduit: input.typeProduit,
+            nomProduit: input.nomProduit,
+            valorisationCentimes: input.valorisationCentimes,
+            dateSouscription: input.dateSouscription,
+            loyerMensuelCentimes: input.loyerMensuelCentimes,
+            mensualiteCreditCentimes: input.mensualiteCreditCentimes,
+            dateFinPret: input.dateFinPret,
+          }),
+        });
+        const body = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        if (!response.ok) {
+          throw new Error(body.error ?? "Enregistrement impossible");
+        }
+        await loadPatrimoineMe();
+      } finally {
+        setAvoirSubmitting(false);
+      }
+    },
+    [loadPatrimoineMe]
+  );
+
   if (showPrivacy) {
     return <PortalPrivacy onBack={closePrivacy} />;
   }
@@ -619,6 +654,9 @@ export function PortalApp() {
         enableScpiTracking
         scpiDeclarationSubmitting={scpiSubmitting}
         onSubmitScpiDeclaration={handleSubmitScpiDeclaration}
+        enableAddAvoir
+        avoirSubmitting={avoirSubmitting}
+        onSubmitAvoir={handleSubmitAvoir}
       />
     </main>
   );

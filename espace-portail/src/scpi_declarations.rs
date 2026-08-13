@@ -145,9 +145,8 @@ fn investissement_eligible(line: &Value) -> bool {
     if !is_a_cote(origine) {
         return false;
     }
-    // Immobilier, épargne et placements financiers — pas la prévoyance ni le
-    // fourre-tout AUTRE (aligné sur getPatrimoineCategorie côté TS).
-    type_produit != "PREVOYANCE" && type_produit != "AUTRE" && !type_produit.is_empty()
+    // Immobilier, épargne et placements financiers — pas la prévoyance.
+    type_produit != "PREVOYANCE" && !type_produit.is_empty()
 }
 
 fn optional_money(value: Option<i64>) -> Result<Option<i64>, String> {
@@ -490,9 +489,18 @@ mod tests {
             "typeProduit": "PREVOYANCE",
             "origine": "EXISTANT_CLIENT"
         })));
-        assert!(!investissement_eligible(&json!({
+        assert!(investissement_eligible(&json!({
             "typeProduit": "AUTRE",
             "origine": "EXISTANT_CLIENT"
+        })));
+        assert!(investissement_eligible(&json!({
+            "typeProduit": "IMMOBILIER",
+            "estImmobilier": true,
+            "origine": "DECLARE_CLIENT"
+        })));
+        assert!(investissement_eligible(&json!({
+            "typeProduit": "EPARGNE_BANCAIRE",
+            "origine": "DECLARE_CLIENT"
         })));
     }
 

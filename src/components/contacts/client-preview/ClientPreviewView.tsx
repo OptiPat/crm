@@ -30,6 +30,7 @@ import type {
   ClientInvestissementNatureById,
   ClientInvestissementUpdateInput,
 } from "@/lib/espace-client/client-investissement-update";
+import type { ClientAvoirDeclarationInput } from "@/lib/espace-client/client-avoir-declaration";
 
 import { ClientPreviewRdvButton } from "./ClientPreviewRdvButton";
 import { ClientPreviewHeader } from "./ClientPreviewHeader";
@@ -89,6 +90,10 @@ export interface ClientPreviewViewProps {
     input: ClientInvestissementUpdateInput
   ) => Promise<void>;
 
+  enableAddAvoir?: boolean;
+  avoirSubmitting?: boolean;
+  onSubmitAvoir?: (input: ClientAvoirDeclarationInput) => Promise<void>;
+
   /** Adresse du bouton permanent de rendez-vous. Absente : aucun bouton. */
   rdvUrl?: string;
 
@@ -147,6 +152,12 @@ export function ClientPreviewView({
   scpiDeclarationSubmitting = false,
 
   onSubmitScpiDeclaration,
+
+  enableAddAvoir = false,
+
+  avoirSubmitting = false,
+
+  onSubmitAvoir,
 
   rdvUrl,
 
@@ -251,6 +262,12 @@ export function ClientPreviewView({
           scpiDeclarationSubmitting={scpiDeclarationSubmitting}
 
           onSubmitScpiDeclaration={onSubmitScpiDeclaration}
+
+          enableAddAvoir={enableAddAvoir}
+
+          avoirSubmitting={avoirSubmitting}
+
+          onSubmitAvoir={onSubmitAvoir}
 
           emptyState={emptyState}
 

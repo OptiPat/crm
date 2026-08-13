@@ -4,6 +4,7 @@ import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { Partenaire } from "@/lib/api/tauri-partenaires";
 import type { ClientInvestissementUpdateInput } from "@/lib/espace-client/client-investissement-update";
+import type { ClientAvoirDeclarationInput } from "@/lib/espace-client/client-avoir-declaration";
 import {
   buildValorisationHistories,
   type ValorisationPointDto,
@@ -279,6 +280,15 @@ export function ContactDetailApercuClientTab({
     []
   );
 
+  const handlePreviewAvoir = useCallback(
+    async (_input: ClientAvoirDeclarationInput) => {
+      toast.message(
+        "Aperçu conseiller — le client enregistre cette saisie sur son espace."
+      );
+    },
+    []
+  );
+
   return (
     <div className="flex flex-col items-center gap-4">
       <ContactEspaceAccesPanel
@@ -309,6 +319,8 @@ export function ContactDetailApercuClientTab({
         evolutionHistoriesByInvestissementId={evolutionHistories}
         enableScpiTracking
         onSubmitScpiDeclaration={handlePreviewScpiDeclaration}
+        enableAddAvoir
+        onSubmitAvoir={handlePreviewAvoir}
         rdvUrl={rdvUrl}
         showHeader
         logoUrl={logoSrc}

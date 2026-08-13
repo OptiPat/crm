@@ -166,13 +166,16 @@ export function ContactEspaceDemandesPanel({
       }
       if (result.scpiDeclarationsImported > 0) {
         parts.push(
-          `${result.scpiDeclarationsImported} déclaration(s) SCPI importée(s)`
+          `${result.scpiDeclarationsImported} mise(s) à jour importée(s)`
         );
+      }
+      if (result.avoirsImported > 0) {
+        parts.push(`${result.avoirsImported} avoir(s) déclaré(s) importé(s)`);
       }
       if (parts.length > 0) {
         toast.success(parts.join(" · "));
       } else if (result.errors.length === 0) {
-        toast.message("Aucun dépôt ni déclaration SCPI en attente sur le portail");
+        toast.message("Aucun dépôt ni déclaration en attente sur le portail");
       }
       for (const err of result.errors) {
         toast.error(err);

@@ -5,6 +5,7 @@ describe("getPatrimoineCategorie", () => {
   it("classe l'immobilier", () => {
     expect(getPatrimoineCategorie("LMNP")).toBe("Immobilier");
     expect(getPatrimoineCategorie("PINEL")).toBe("Immobilier");
+    expect(getPatrimoineCategorie("RESIDENCE_SECONDAIRE")).toBe("Immobilier");
   });
 
   it("classe les SCPI", () => {
@@ -23,6 +24,8 @@ describe("getPatrimoineCategorie", () => {
     expect(getPatrimoineCategorie("EPARGNE_BANCAIRE")).toBe("Épargne bancaire");
     expect(getPatrimoineCategorie("LIVRET_A")).toBe("Épargne bancaire");
     expect(getPatrimoineCategorie("PEL")).toBe("Épargne bancaire");
+    expect(getPatrimoineCategorie("CAT")).toBe("Épargne bancaire");
+    expect(getPatrimoineCategorie("PEAC")).toBe("Épargne bancaire");
   });
 
   it("classe les placements financiers", () => {

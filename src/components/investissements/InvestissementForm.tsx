@@ -66,6 +66,7 @@ const KNOWN_TYPE_PRODUITS = new Set<string>([
   "LMP",
   "NUE_PROPRIETE",
   "RESIDENCE_PRINCIPALE",
+  "RESIDENCE_SECONDAIRE",
   "LOCATIF_CLASSIQUE",
   "LOCATIF",
   "IMMOBILIER",
@@ -76,6 +77,8 @@ const KNOWN_TYPE_PRODUITS = new Set<string>([
   "CEL",
   "CSL",
   "COMPTE_COURANT",
+  "CAT",
+  "PEAC",
   "EPARGNE_BANCAIRE",
   "PEA",
   "COMPTE_TITRE",
@@ -98,6 +101,7 @@ import {
   type NomProduitSuggestion,
   type OrigineInvestissement,
 } from "@/lib/api/tauri-investissements";
+import { isPatrimoineACoteOrigine } from "@/lib/investissements/investissement-origine";
 import { checkAndCreateArbitrageAlerts } from "@/lib/api/tauri-alertes";
 import { notifyAlertesChanged } from "@/lib/alertes/alert-events";
 import { InvestissementEncoursPanel } from "@/components/investissements/InvestissementEncoursPanel";
@@ -1042,9 +1046,11 @@ export function InvestissementForm({
               </Button>
               <Button
                 type="button"
-                variant={origine === "EXISTANT_CLIENT" ? "default" : "outline"}
+                variant={isPatrimoineACoteOrigine(origine) ? "default" : "outline"}
                 size="sm"
-                onClick={() => setOrigine("EXISTANT_CLIENT")}
+                onClick={() => {
+                  if (origine !== "DECLARE_CLIENT") setOrigine("EXISTANT_CLIENT");
+                }}
               >
                 À côté
               </Button>
@@ -1106,6 +1112,7 @@ export function InvestissementForm({
                   <SelectItem value="LMP">LMP</SelectItem>
                   <SelectItem value="NUE_PROPRIETE">Nue-Propriété</SelectItem>
                   <SelectItem value="RESIDENCE_PRINCIPALE">Résidence Principale</SelectItem>
+                  <SelectItem value="RESIDENCE_SECONDAIRE">Résidence Secondaire</SelectItem>
                   <SelectItem value="LOCATIF_CLASSIQUE">Locatif Classique</SelectItem>
                   <SelectItem value="LOCATIF">Locatif</SelectItem>
                   <SelectItem value="IMMOBILIER">Immobilier (ancien)</SelectItem>
@@ -1119,6 +1126,8 @@ export function InvestissementForm({
                   <SelectItem value="CEL">CEL</SelectItem>
                   <SelectItem value="CSL">Compte sur livret (CSL)</SelectItem>
                   <SelectItem value="COMPTE_COURANT">Compte courant</SelectItem>
+                  <SelectItem value="CAT">Compte à Terme</SelectItem>
+                  <SelectItem value="PEAC">PEAC</SelectItem>
                   <SelectItem value="EPARGNE_BANCAIRE">Épargne bancaire</SelectItem>
                   <SelectItem value="PEA">PEA</SelectItem>
                   <SelectItem value="COMPTE_TITRE">Compte-titres</SelectItem>

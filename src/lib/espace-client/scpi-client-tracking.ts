@@ -57,7 +57,9 @@ export function validateScpiClientDeclaration(
 
   const dateTs = parseDeclarationDate(input.date);
   if (dateTs == null) return "date_invalide";
-  if (dateTs > startOfLocalDay(nowUnix)) return "date_future";
+  if (dateTs > startOfUtcDay(nowUnix) + DECLARATION_DATE_GRACE_SECONDS) {
+    return "date_future";
+  }
 
   const valorisationCentimes = Math.round(input.valorisationCentimes);
   if (
@@ -93,30 +95,39 @@ export function validateScpiClientDeclaration(
   };
 }
 
-function startOfLocalDay(unix: number): number {
+export function startOfUtcDay(unix: number): number {
   const d = new Date(unix * 1000);
-  d.setHours(0, 0, 0, 0);
-  return Math.floor(d.getTime() / 1000);
+  return Math.floor(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 1000
+  );
 }
 
-/** Accepte YYYY-MM-DD ou timestamp unix (jour). */
+/**
+ * Un jour de battement : le client saisit le jour de son fuseau, qui peut
+ * être en avance sur UTC en début de nuit. Même règle que le portail
+ * (`start_of_today_utc() + 86_400`).
+ */
+export const DECLARATION_DATE_GRACE_SECONDS = 86_400;
+
+/** Accepte YYYY-MM-DD (minuit UTC) ou timestamp unix (jour UTC). */
 export function parseDeclarationDate(value: string): number | null {
   const trimmed = value.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
     const [y, m, d] = trimmed.split("-").map(Number);
-    const date = new Date(y, m - 1, d);
+    const utcMs = Date.UTC(y, m - 1, d);
+    const date = new Date(utcMs);
     if (
-      date.getFullYear() !== y ||
-      date.getMonth() !== m - 1 ||
-      date.getDate() !== d
+      date.getUTCFullYear() !== y ||
+      date.getUTCMonth() !== m - 1 ||
+      date.getUTCDate() !== d
     ) {
       return null;
     }
-    return Math.floor(date.getTime() / 1000);
+    return utcMs / 1000;
   }
   const n = Number(trimmed);
   if (!Number.isFinite(n) || n <= 0) return null;
-  return startOfLocalDay(n);
+  return startOfUtcDay(n);
 }
 
 /** Dernière valorisation connue pour pré-remplir le formulaire. */

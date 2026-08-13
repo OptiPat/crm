@@ -1,4 +1,6 @@
 pub mod activation;
+pub mod avoir_catalogue;
+pub mod avoir_declaration_import;
 pub mod commands;
 pub mod config;
 pub mod depot_crypto;

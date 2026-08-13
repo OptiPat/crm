@@ -119,9 +119,15 @@ export function buildPatrimoineEvolution(
       continue;
     }
 
-    // Point courant = encours effectif (aligné inventaire / hero).
+    // Point courant = encours effectif (aligné inventaire / hero), mais
+    // seulement si le montant a vraiment changé. Sinon chaque ouverture
+    // d'écran (ou une sync) inventait un palier « aujourd'hui » identique
+    // au dernier relevé, et l'historique gonflait sans information.
     const byDay = new Map(dated.map((p) => [p.dateTs, p.montantCentimes]));
-    byDay.set(asOfDayTs, effective);
+    const lastDated = dated[dated.length - 1];
+    if (lastDated.montantCentimes !== effective) {
+      byDay.set(asOfDayTs, effective);
+    }
     datedTimelines.push(
       [...byDay.entries()]
         .map(([dateTs, montantCentimes]) => ({ dateTs, montantCentimes }))

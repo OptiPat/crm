@@ -7,6 +7,9 @@ use crate::espace_client::config::{
     save_sync_config, EspaceClientSyncConfig, PORTAL_URL_SETTING_KEY,
 };
 use crate::espace_client::depot_import::{import_espace_depots, ImportEspaceDepotsResult};
+use crate::espace_client::avoir_declaration_import::{
+    ack_espace_avoir_declarations, import_espace_avoir_declarations,
+};
 use crate::espace_client::scpi_declaration_import::{
     ack_espace_scpi_declarations, import_espace_scpi_declarations,
 };
@@ -412,21 +415,32 @@ pub fn import_espace_depots_cmd(
     require_espace_client_active(database)?;
     let mut result = import_espace_depots(&app, database, contact_id)?;
     let scpi = import_espace_scpi_declarations(&app, database, contact_id)?;
+    let avoirs = import_espace_avoir_declarations(&app, database, contact_id)?;
     result.scpi_declarations_imported = scpi.imported;
+    result.avoirs_imported = avoirs.imported;
     result.errors.extend(scpi.errors);
-    if !scpi.a_accuser.is_empty() {
+    result.errors.extend(avoirs.errors);
+    if !scpi.a_accuser.is_empty() || !avoirs.a_accuser.is_empty() {
         // Photo d'abord, accusé de réception ensuite : le client doit continuer
         // à voir le montant qu'il a saisi tant que le portail n'a pas reçu la
         // valeur reprise par le CRM.
         match try_push_contact_snapshot(&app, database, contact_id) {
-            Ok(()) => result.errors.extend(ack_espace_scpi_declarations(
-                &app,
-                database,
-                contact_id,
-                &scpi.a_accuser,
-            )),
+            Ok(()) => {
+                result.errors.extend(ack_espace_scpi_declarations(
+                    &app,
+                    database,
+                    contact_id,
+                    &scpi.a_accuser,
+                ));
+                result.errors.extend(ack_espace_avoir_declarations(
+                    &app,
+                    database,
+                    contact_id,
+                    &avoirs.a_accuser,
+                ));
+            }
             Err(error) => result.errors.push(format!(
-                "Déclarations SCPI importées mais synchronisation portail échouée : {error}"
+                "Déclarations importées mais synchronisation portail échouée : {error}"
             )),
         }
     }

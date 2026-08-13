@@ -291,3 +291,47 @@ pub fn ack_espace_scpi_declaration(
     signed_portal_request(app, db, "POST", &path, None)
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PortalAvoirDeclarationLine {
+    pub id: i64,
+    pub panier: String,
+    pub type_produit: String,
+    pub nom_produit: String,
+    pub valorisation_centimes: i64,
+    pub date_souscription: Option<i64>,
+    #[serde(default)]
+    pub loyer_mensuel_centimes: Option<i64>,
+    #[serde(default)]
+    pub mensualite_credit_centimes: Option<i64>,
+    #[serde(default)]
+    pub date_fin_pret: Option<i64>,
+    pub created_at: i64,
+}
+
+pub fn pull_espace_avoir_declarations(
+    app: &tauri::AppHandle,
+    db: &Database,
+    contact_id: i64,
+) -> Result<Vec<PortalAvoirDeclarationLine>, String> {
+    let path = format!("/api/v1/sync/contact/{contact_id}/avoir-declarations");
+    #[derive(serde::Deserialize)]
+    struct Response {
+        declarations: Vec<PortalAvoirDeclarationLine>,
+    }
+    let body: Response = signed_get_json(app, db, &path)?;
+    Ok(body.declarations)
+}
+
+pub fn ack_espace_avoir_declaration(
+    app: &tauri::AppHandle,
+    db: &Database,
+    contact_id: i64,
+    declaration_id: i64,
+) -> Result<(), String> {
+    let path = format!(
+        "/api/v1/sync/contact/{contact_id}/avoir-declarations/{declaration_id}/ack"
+    );
+    signed_portal_request(app, db, "POST", &path, None)
+}
+
