@@ -23,34 +23,10 @@
 
 .cp-login-brand {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.65rem;
+  gap: 1rem 1.25rem;
   max-width: 100%;
-}
-
-@media (min-width: 28rem) {
-  .cp-login-brand {
-    flex-direction: row;
-    gap: 1rem 1.15rem;
-  }
-}
-
-.cp-login-logo {
-  height: 4.25rem;
-  width: auto;
-  max-width: 8.5rem;
-  flex-shrink: 0;
-  object-fit: contain;
-  object-position: center;
-}
-
-@media (min-width: 28rem) {
-  .cp-login-logo {
-    height: 5rem;
-    max-width: 9rem;
-  }
 }
 
 .cp-login-tagline {
@@ -64,6 +40,15 @@
   line-height: 1.4;
   letter-spacing: -0.01em;
   text-wrap: pretty;
+}
+
+.cp-login-logo {
+  height: 5.5rem;
+  width: auto;
+  max-width: 5.5rem;
+  flex-shrink: 0;
+  object-fit: contain;
+  object-position: center;
 }
 
 .cp-login-card {

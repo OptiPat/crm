@@ -1,5 +1,4 @@
 import { LogOut } from "lucide-react";
-import { useKnockoutWhiteLogo } from "@/hooks/useKnockoutWhiteLogo";
 import { CP } from "./client-preview-theme";
 
 export interface ClientPreviewHeaderProps {
@@ -33,17 +32,16 @@ export function ClientPreviewHeader({
   onLogout,
 }: ClientPreviewHeaderProps) {
   const clientLabel = `${prenom} ${nom}`.trim();
-  const logoSrc = useKnockoutWhiteLogo(logoUrl);
 
   return (
     <header className="flex w-full flex-col gap-2 px-4 pt-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
-          {logoSrc ? (
+          {logoUrl ? (
             <img
-              src={logoSrc}
+              src={logoUrl}
               alt="Logo du cabinet"
-              className="h-7 w-7 shrink-0 object-contain @min-[36rem]:h-8 @min-[36rem]:w-8"
+              className="h-8 w-8 shrink-0 object-contain @min-[36rem]:h-9 @min-[36rem]:w-9"
             />
           ) : null}
           <div className="min-w-0">
