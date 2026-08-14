@@ -1,7 +1,7 @@
 /**
  * Courbe d'évolution du patrimoine total (espace client).
  * Pas de perf %, pas d'interpolation mensuelle.
- * Dernier point = total patrimoine (même règle que le hero).
+ * Uniquement les dates enregistrées — jamais « aujourd'hui » inventé à l'affichage.
  */
 
 import { getEffectiveEncoursCentimes } from "@/lib/investissements/investissement-encours";
@@ -53,7 +53,7 @@ function effectiveAmount(asset: PatrimoineEvolutionAssetInput): number {
 }
 
 /**
- * Points datés (hors point « aujourd'hui »).
+ * Points datés.
  * À la souscription : montant_initial si connu, sinon l'effectif
  * (évite un trou jusqu'à la première valorisation).
  */
@@ -98,13 +98,8 @@ function valueAt(points: AssetPoint[], dayTs: number): number {
  * distinctes (pas de courbe trompeuse / vide).
  */
 export function buildPatrimoineEvolution(
-  assets: PatrimoineEvolutionAssetInput[],
-  options?: { asOfUnix?: number }
+  assets: PatrimoineEvolutionAssetInput[]
 ): PatrimoineEvolutionPoint[] | null {
-  const asOfDayTs = toEvolutionDayTs(
-    options?.asOfUnix ?? Math.floor(Date.now() / 1000)
-  );
-
   const datedTimelines: AssetPoint[][] = [];
   /** Actifs sans aucune date : ajoutés à chaque point pour coller au total. */
   let undatedTotal = 0;
@@ -118,21 +113,7 @@ export function buildPatrimoineEvolution(
       undatedTotal += effective;
       continue;
     }
-
-    // Point courant = encours effectif (aligné inventaire / hero), mais
-    // seulement si le montant a vraiment changé. Sinon chaque ouverture
-    // d'écran (ou une sync) inventait un palier « aujourd'hui » identique
-    // au dernier relevé, et l'historique gonflait sans information.
-    const byDay = new Map(dated.map((p) => [p.dateTs, p.montantCentimes]));
-    const lastDated = dated[dated.length - 1];
-    if (lastDated.montantCentimes !== effective) {
-      byDay.set(asOfDayTs, effective);
-    }
-    datedTimelines.push(
-      [...byDay.entries()]
-        .map(([dateTs, montantCentimes]) => ({ dateTs, montantCentimes }))
-        .sort((a, b) => a.dateTs - b.dateTs)
-    );
+    datedTimelines.push(dated);
   }
 
   if (datedTimelines.length === 0 && undatedTotal <= 0) return null;
@@ -140,9 +121,6 @@ export function buildPatrimoineEvolution(
   const dateSet = new Set<number>();
   for (const points of datedTimelines) {
     for (const p of points) dateSet.add(p.dateTs);
-  }
-  if (undatedTotal > 0) {
-    dateSet.add(asOfDayTs);
   }
 
   const dates = [...dateSet].sort((a, b) => a - b);

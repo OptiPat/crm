@@ -76,8 +76,7 @@ export function ClientPreviewEvolution({
     <section className={`${CP.sectionGap} ${CP.padX} pb-2`}>
       <h3 className={CP.sectionTitle}>Évolution</h3>
       <p className={`${CP.meta} mt-1`}>
-        D&apos;après les dates connues — le dernier point correspond au total
-        actuel.
+        Uniquement les dates enregistrées (souscription, encours, relevés).
       </p>
       <div className={`${CP.card} mt-4 p-4`}>
         <div className="h-[180px] w-full">
