@@ -31,6 +31,8 @@ pub struct PostAvoirDeclarationBody {
     pub loyer_mensuel_centimes: Option<i64>,
     pub mensualite_credit_centimes: Option<i64>,
     pub date_fin_pret: Option<String>,
+    /// Favori client — jamais persisté dans `espace_avoir_declaration` (pull CRM).
+    pub extranet_url: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -387,6 +389,8 @@ async fn handle_post_avoir_declaration(
         return Err(message.into());
     }
 
+    crate::extranet_bookmark::validated_extranet_url(&panier, body.extranet_url.as_deref())?;
+
     let id = state
         .db
         .insert_avoir_declaration(
@@ -402,6 +406,16 @@ async fn handle_post_avoir_declaration(
             date_fin_pret,
         )
         .map_err(|e| e.to_string())?;
+
+    crate::extranet_bookmark::save_extranet_for_declaration(
+        &state.db,
+        contact_id,
+        id,
+        &panier,
+        &type_produit,
+        &nom,
+        body.extranet_url.as_deref(),
+    )?;
 
     let created_at = chrono::Utc::now().timestamp();
     let row = AvoirDeclarationRow {
@@ -489,6 +503,7 @@ fn apply_avoir_retrait(
         let _ = db
             .cancel_pending_avoir_declaration(contact_id, declaration_id)
             .map_err(|e| e.to_string())?;
+        let _ = db.delete_extranet_bookmark(contact_id, investissement_id);
         return Ok(AvoirRetraitApplied {
             nom_produit: row.nom_produit,
             type_produit: row.type_produit,
@@ -519,6 +534,7 @@ fn apply_avoir_retrait(
             &normaliser_nom_produit(&nom),
         )
         .map_err(|e| e.to_string())?;
+    let _ = db.delete_extranet_bookmark(contact_id, investissement_id);
     Ok(AvoirRetraitApplied {
         nom_produit: nom,
         type_produit: ty,
@@ -667,6 +683,25 @@ mod tests {
         assert_eq!(lines[0]["origine"], "DECLARE_CLIENT");
         assert_eq!(lines[0]["estScpi"], false);
         assert_eq!(lines[0]["nomProduit"], "Swisslife");
+    }
+
+    #[test]
+    fn pull_crm_line_does_not_carry_extranet_url() {
+        let line = AvoirDeclarationLine {
+            id: 4,
+            panier: "placements".into(),
+            type_produit: "PER".into(),
+            nom_produit: "Swisslife".into(),
+            valorisation_centimes: 12_000_00,
+            date_souscription: None,
+            loyer_mensuel_centimes: None,
+            mensualite_credit_centimes: None,
+            date_fin_pret: None,
+            created_at: 1,
+        };
+        let value = serde_json::to_value(&line).unwrap();
+        assert!(value.get("extranetUrl").is_none());
+        assert!(value.get("url").is_none());
     }
 
     #[test]

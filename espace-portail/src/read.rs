@@ -128,6 +128,20 @@ async fn get_patrimoine_for_contact(state: AppState, contact_id: i64) -> axum::r
             if let Ok(retraits) = state.db.list_avoir_retraits_for_contact(contact_id) {
                 crate::avoir_declarations::overlay_avoir_retraits(&mut payload, &retraits);
             }
+            if let Ok(mut bookmarks) = state.db.list_extranet_bookmarks(contact_id) {
+                let avoirs = state
+                    .db
+                    .list_avoir_declarations_for_contact(contact_id)
+                    .unwrap_or_default();
+                crate::extranet_bookmark::rematch_pending_extranet_bookmarks(
+                    &state.db,
+                    contact_id,
+                    &payload,
+                    &avoirs,
+                    &mut bookmarks,
+                );
+                crate::extranet_bookmark::overlay_extranet_bookmarks(&mut payload, &bookmarks);
+            }
             (
                 StatusCode::OK,
                 Json(PatrimoineResponse {

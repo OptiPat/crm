@@ -27,6 +27,8 @@ export interface ClientAvoirDeclarationInput {
   mensualiteCreditCentimes?: number | null;
   /** YYYY-MM-DD. La fin de prêt peut être dans le futur. */
   dateFinPret?: string | null;
+  /** Favori https du client — ignoré hors portail, jamais envoyé au CRM. */
+  extranetUrl?: string | null;
 }
 
 export type ClientAvoirDeclarationError =

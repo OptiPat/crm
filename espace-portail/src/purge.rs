@@ -18,6 +18,7 @@ impl PortalDb {
         self.migrate_scpi_declarations().map_err(|e| e.to_string())?;
         self.migrate_avoir_declarations().map_err(|e| e.to_string())?;
         self.migrate_avoir_retraits().map_err(|e| e.to_string())?;
+        self.migrate_extranet_bookmarks().map_err(|e| e.to_string())?;
 
         let email = self.client_email(contact_id).map_err(|e| e.to_string())?;
         let stored_paths = self
@@ -87,6 +88,11 @@ impl PortalDb {
         .map_err(|e| e.to_string())?;
         tx.execute(
             "DELETE FROM espace_avoir_retrait WHERE contact_id = ?1",
+            params![contact_id],
+        )
+        .map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM espace_investissement_extranet WHERE contact_id = ?1",
             params![contact_id],
         )
         .map_err(|e| e.to_string())?;
@@ -169,6 +175,8 @@ mod tests {
                 [],
             )
             .unwrap();
+        db.upsert_extranet_bookmark(1, 12, "https://espace.example.com/", "PER", "x")
+            .unwrap();
 
         let tmp = std::env::temp_dir().join(format!("espace-purge-{}", std::process::id()));
         let depot_dir = tmp.join("depots").join("1");
@@ -197,6 +205,15 @@ mod tests {
             )
             .unwrap();
         assert_eq!(logs, 0);
+        let extras: i64 = db
+            .conn()
+            .query_row(
+                "SELECT COUNT(*) FROM espace_investissement_extranet WHERE contact_id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(extras, 0);
         let guards: i64 = db
             .conn()
             .query_row(

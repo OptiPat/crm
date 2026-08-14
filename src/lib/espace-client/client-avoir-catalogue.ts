@@ -132,6 +132,11 @@ export function panierEstMeubles(panier: AvoirPanier): boolean {
   return panier === "meubles";
 }
 
+/** Lien extranet (favori) : placements, SCPI, épargne — pas l'immobilier ni les meubles. */
+export function panierAccepteLienExtranet(panier: AvoirPanier): boolean {
+  return panier === "placements" || panier === "scpi" || panier === "epargne";
+}
+
 export function normaliserNomProduit(nom: string): string {
   return nom.trim().replace(/\s+/g, " ").toLowerCase();
 }

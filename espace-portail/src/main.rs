@@ -25,6 +25,8 @@ mod avoir_catalogue;
 mod avoir_declaration_store;
 mod avoir_declarations;
 mod avoir_retrait_store;
+mod extranet_bookmark_store;
+mod extranet_bookmark;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -34,7 +36,7 @@ use axum::{
     extract::{DefaultBodyLimit, State},
     middleware,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, post, put},
     Json, Router,
 };
 use tower_http::services::{ServeDir, ServeFile};
@@ -268,6 +270,10 @@ async fn main() {
         .route(
             "/api/v1/avoir-declarations/retrait",
             post(avoir_declarations::post_avoir_retrait),
+        )
+        .route(
+            "/api/v1/investissements/{investissement_id}/extranet",
+            put(extranet_bookmark::put_extranet_bookmark),
         )
         .route(
             "/api/v1/sync/contact/{contact_id}/avoir-declarations",

@@ -96,6 +96,10 @@ pub fn panier_est_scpi(panier: &str) -> bool {
     panier == "scpi"
 }
 
+pub fn panier_accepte_lien_extranet(panier: &str) -> bool {
+    matches!(panier, "placements" | "scpi" | "epargne")
+}
+
 pub fn normaliser_nom_produit(nom: &str) -> String {
     nom.split_whitespace()
         .collect::<Vec<_>>()

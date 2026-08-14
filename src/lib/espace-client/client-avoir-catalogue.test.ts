@@ -8,6 +8,7 @@ import {
   optionAvoirParValeur,
   panierEstImmobilier,
   panierEstScpi,
+  panierAccepteLienExtranet,
 } from "./client-avoir-catalogue";
 
 function lireListeRust(fichier: string, nom: string): string[] {
@@ -37,6 +38,14 @@ describe("catalogue avoirs client", () => {
     expect(panierEstScpi("scpi")).toBe(true);
     expect(panierEstImmobilier("scpi")).toBe(false);
     expect(panierEstScpi("immobilier")).toBe(false);
+  });
+
+  it("réserve le lien extranet aux paniers financiers", () => {
+    expect(panierAccepteLienExtranet("placements")).toBe(true);
+    expect(panierAccepteLienExtranet("scpi")).toBe(true);
+    expect(panierAccepteLienExtranet("epargne")).toBe(true);
+    expect(panierAccepteLienExtranet("immobilier")).toBe(false);
+    expect(panierAccepteLienExtranet("meubles")).toBe(false);
   });
 
   it("Autre immobilier reste dans le camembert immobilier", () => {

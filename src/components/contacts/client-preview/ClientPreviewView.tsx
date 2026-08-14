@@ -99,6 +99,10 @@ export interface ClientPreviewViewProps {
   retirerSubmitting?: boolean;
   onRetirerAvoir?: (investissementId: number) => Promise<void>;
 
+  extranetUrlById?: Map<number, string>;
+  extranetSubmitting?: boolean;
+  onSaveExtranet?: (investissementId: number, url: string | null) => Promise<void>;
+
   /** Adresse du bouton permanent de rendez-vous. Absente : aucun bouton. */
   rdvUrl?: string;
 
@@ -172,6 +176,10 @@ export function ClientPreviewView({
   retirerSubmitting = false,
 
   onRetirerAvoir,
+
+  extranetUrlById,
+  extranetSubmitting = false,
+  onSaveExtranet,
 
   rdvUrl,
 
@@ -283,6 +291,10 @@ export function ClientPreviewView({
           retirerSubmitting={retirerSubmitting}
 
           onRetirerAvoir={onRetirerAvoir}
+
+          extranetUrlById={extranetUrlById}
+          extranetSubmitting={extranetSubmitting}
+          onSaveExtranet={onSaveExtranet}
 
           emptyState={emptyState}
 

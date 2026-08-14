@@ -22,6 +22,8 @@ import { canClientRetirerAvoir } from "@/lib/espace-client/client-avoir-retrait"
 import { isClientPreviewValorisationHistoryEligible } from "@/lib/investissements/investissement-encours";
 import { ClientPreviewPlacementValorisation } from "./ClientPreviewPlacementValorisation";
 import { ClientPreviewScpiDeclarationForm } from "./ClientPreviewScpiDeclarationForm";
+import { ClientPreviewExtranetBookmark } from "./ClientPreviewExtranetBookmark";
+import { isExtranetBookmarkEligible } from "@/lib/espace-client/client-extranet-bookmark";
 import { useClientPreviewOverlayPortal } from "./client-preview-overlay";
 
 const IMMOBILIER_SET = new Set<string>(IMMOBILIER_TYPES);
@@ -75,6 +77,9 @@ export interface ClientPreviewPlacementDetailProps {
   enableRetirerAvoir?: boolean;
   retirerSubmitting?: boolean;
   onRetirerAvoir?: (investissementId: number) => Promise<void>;
+  extranetUrl?: string | null;
+  extranetSubmitting?: boolean;
+  onSaveExtranet?: (investissementId: number, url: string | null) => Promise<void>;
   onClose: () => void;
 }
 
@@ -89,6 +94,9 @@ export function ClientPreviewPlacementDetail({
   enableRetirerAvoir = false,
   retirerSubmitting = false,
   onRetirerAvoir,
+  extranetUrl,
+  extranetSubmitting = false,
+  onSaveExtranet,
   onClose,
 }: ClientPreviewPlacementDetailProps) {
   const overlayPortal = useClientPreviewOverlayPortal();
@@ -140,6 +148,9 @@ export function ClientPreviewPlacementDetail({
     enableRetirerAvoir &&
     Boolean(onRetirerAvoir) &&
     canClientRetirerAvoir(inv.origine);
+  const canEditExtranet =
+    Boolean(onSaveExtranet) &&
+    isExtranetBookmarkEligible(inv.type_produit, nature?.estScpi);
   const [confirmRetirer, setConfirmRetirer] = useState(false);
   const [retirerError, setRetirerError] = useState<string | null>(null);
 
@@ -212,6 +223,13 @@ export function ClientPreviewPlacementDetail({
                 history={mergedHistory}
                 submitting={scpiDeclarationSubmitting}
                 onSubmit={onSubmitScpiDeclaration}
+              />
+            ) : null}
+            {canEditExtranet && onSaveExtranet ? (
+              <ClientPreviewExtranetBookmark
+                currentUrl={extranetUrl}
+                submitting={extranetSubmitting}
+                onSave={(url) => onSaveExtranet(inv.id, url)}
               />
             ) : null}
             {canRetirer ? (

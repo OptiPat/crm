@@ -5,6 +5,7 @@ import {
   optionAvoirParValeur,
   panierEstImmobilier,
   panierEstMeubles,
+  panierAccepteLienExtranet,
   type AvoirPanier,
 } from "@/lib/espace-client/client-avoir-catalogue";
 import {
@@ -12,6 +13,7 @@ import {
   type ClientAvoirDeclarationInput,
 } from "@/lib/espace-client/client-avoir-declaration";
 import { parseEurosInput } from "@/lib/espace-client/client-investissement-update";
+import { normalizeExtranetBookmarkUrl } from "@/lib/espace-client/client-extranet-bookmark";
 import { PLAFOND_DECLARATION_CENTIMES } from "@/lib/espace-client/scpi-client-tracking";
 import { CP } from "./client-preview-theme";
 
@@ -36,6 +38,7 @@ const ERROR_LABEL: Record<string, string> = {
   loyer_invalide: "Indiquez un loyer mensuel valide.",
   mensualite_invalide: "Indiquez une mensualité de crédit valide.",
   date_fin_pret_invalide: "Indiquez une date de fin de prêt valide.",
+  extranet_invalide: "Indiquez une adresse https, sans identifiant ni mot de passe.",
 };
 
 function dateFieldLabel(panier: AvoirPanier): string {
@@ -59,11 +62,14 @@ function errorMessage(code: string, panier: AvoirPanier | ""): string {
 export interface ClientPreviewAddAvoirProps {
   submitting?: boolean;
   onSubmit?: (input: ClientAvoirDeclarationInput) => Promise<void>;
+  /** Portail réel uniquement — l'aperçu conseiller n'enregistre pas ce favori. */
+  enableExtranetBookmark?: boolean;
 }
 
 export function ClientPreviewAddAvoir({
   submitting = false,
   onSubmit,
+  enableExtranetBookmark = false,
 }: ClientPreviewAddAvoirProps) {
   const [open, setOpen] = useState(false);
   const [panier, setPanier] = useState<AvoirPanier | "">("");
@@ -75,6 +81,7 @@ export function ClientPreviewAddAvoir({
   const [loyer, setLoyer] = useState("");
   const [mensualite, setMensualite] = useState("");
   const [dateFinPret, setDateFinPret] = useState("");
+  const [extranetUrl, setExtranetUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const types = useMemo(
@@ -96,6 +103,7 @@ export function ClientPreviewAddAvoir({
     setLoyer("");
     setMensualite("");
     setDateFinPret("");
+    setExtranetUrl("");
     setError(null);
   };
 
@@ -136,6 +144,15 @@ export function ClientPreviewAddAvoir({
       setError(errorMessage(validated, panier));
       return;
     }
+    let lien: string | null = null;
+    if (enableExtranetBookmark && panierAccepteLienExtranet(validated.panier)) {
+      const normalized = normalizeExtranetBookmarkUrl(extranetUrl);
+      if (normalized === "invalid") {
+        setError(ERROR_LABEL.extranet_invalide);
+        return;
+      }
+      lien = normalized;
+    }
     setError(null);
     try {
       await onSubmit({
@@ -147,6 +164,7 @@ export function ClientPreviewAddAvoir({
         loyerMensuelCentimes: validated.loyerMensuelCentimes,
         mensualiteCreditCentimes: validated.mensualiteCreditCentimes,
         dateFinPret: validated.dateFinPret,
+        extranetUrl: lien,
       });
       reset();
       setOpen(false);
@@ -243,6 +261,25 @@ export function ClientPreviewAddAvoir({
                   />
                 </label>
               </>
+            ) : null}
+            {enableExtranetBookmark && panier && panierAccepteLienExtranet(panier) ? (
+              <label className="block">
+                <span className={CP.meta}>
+                  Lien vers votre espace en ligne — optionnel
+                </span>
+                <input
+                  type="url"
+                  inputMode="url"
+                  autoComplete="url"
+                  placeholder="https://espace.assureur.fr"
+                  value={extranetUrl}
+                  onChange={(e) => setExtranetUrl(e.target.value)}
+                  className={INPUT_CLASS}
+                />
+                <span className={`${CP.caption} mt-1 block`}>
+                  L&apos;adresse seulement, comme un favori — pas d&apos;identifiant.
+                </span>
+              </label>
             ) : null}
             {panier === "immobilier" ? (
               <>

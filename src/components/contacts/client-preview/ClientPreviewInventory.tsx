@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { Partenaire } from "@/lib/api/tauri-partenaires";
 import { getEffectiveEncoursCentimes } from "@/lib/investissements/investissement-encours";
@@ -58,10 +58,12 @@ function formatInventoryDate(unix: number): string {
 function PlacementRow({
   inv,
   partenaireById,
+  extranetUrl,
   onSelect,
 }: {
   inv: Investissement;
   partenaireById: Map<number, Partenaire>;
+  extranetUrl?: string | null;
   onSelect: (inv: Investissement) => void;
 }) {
   const partenaire =
@@ -80,11 +82,11 @@ function PlacementRow({
   );
 
   return (
-    <li>
+    <li className="flex items-start">
       <button
         type="button"
         onClick={() => onSelect(inv)}
-        className="flex w-full items-start justify-between gap-4 py-3 text-left transition-colors hover:bg-[var(--cp-surface-raised)]/40"
+        className="flex min-w-0 flex-1 items-start justify-between gap-4 py-3 text-left transition-colors hover:bg-[var(--cp-surface-raised)]/40"
       >
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
@@ -120,6 +122,18 @@ function PlacementRow({
           />
         </div>
       </button>
+      {extranetUrl ? (
+        <a
+          href={extranetUrl}
+          target="_blank"
+          rel="noreferrer noopener"
+          title="Ouvrir l'espace en ligne"
+          aria-label="Ouvrir l'espace en ligne"
+          className="mt-3 shrink-0 rounded-lg p-2 text-[var(--cp-ink-muted)] transition-colors hover:bg-[var(--cp-surface-raised)] hover:text-[var(--cp-ink)]"
+        >
+          <ExternalLink className="h-4 w-4" aria-hidden />
+        </a>
+      ) : null}
     </li>
   );
 }
@@ -128,6 +142,7 @@ function CategorySection({
   category,
   items,
   partenaireById,
+  extranetUrlById,
   open,
   onToggle,
   onSelect,
@@ -135,6 +150,7 @@ function CategorySection({
   category: PatrimoineCategorie;
   items: Investissement[];
   partenaireById: Map<number, Partenaire>;
+  extranetUrlById?: Map<number, string>;
   open: boolean;
   onToggle: () => void;
   onSelect: (inv: Investissement) => void;
@@ -180,6 +196,7 @@ function CategorySection({
               key={inv.id}
               inv={inv}
               partenaireById={partenaireById}
+              extranetUrl={extranetUrlById?.get(inv.id)}
               onSelect={onSelect}
             />
           ))}
@@ -205,6 +222,9 @@ export interface ClientPreviewInventoryProps {
   enableRetirerAvoir?: boolean;
   retirerSubmitting?: boolean;
   onRetirerAvoir?: (investissementId: number) => Promise<void>;
+  extranetUrlById?: Map<number, string>;
+  extranetSubmitting?: boolean;
+  onSaveExtranet?: (investissementId: number, url: string | null) => Promise<void>;
   emptyState?: ClientPreviewEmptyState;
 }
 
@@ -222,6 +242,9 @@ export function ClientPreviewInventory({
   enableRetirerAvoir = false,
   retirerSubmitting = false,
   onRetirerAvoir,
+  extranetUrlById,
+  extranetSubmitting = false,
+  onSaveExtranet,
   emptyState = null,
 }: ClientPreviewInventoryProps) {
   const grouped = useMemo(
@@ -282,6 +305,7 @@ export function ClientPreviewInventory({
               category={cat}
               items={grouped.get(cat)!}
               partenaireById={partenaireById}
+              extranetUrlById={extranetUrlById}
               open={openCategories.has(cat)}
               onToggle={() => {
                 setOpenCategories((prev) => {
@@ -301,6 +325,7 @@ export function ClientPreviewInventory({
         <ClientPreviewAddAvoir
           submitting={avoirSubmitting}
           onSubmit={onSubmitAvoir}
+          enableExtranetBookmark={Boolean(onSaveExtranet)}
         />
       ) : null}
 
@@ -322,6 +347,9 @@ export function ClientPreviewInventory({
           enableRetirerAvoir={enableRetirerAvoir}
           retirerSubmitting={retirerSubmitting}
           onRetirerAvoir={onRetirerAvoir}
+          extranetUrl={extranetUrlById?.get(selected.id)}
+          extranetSubmitting={extranetSubmitting}
+          onSaveExtranet={onSaveExtranet}
           onClose={() => setSelectedId(null)}
         />
       ) : null}

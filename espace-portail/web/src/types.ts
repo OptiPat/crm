@@ -32,6 +32,8 @@ export interface EspaceClientInvestissementLine {
   creditCrd?: number | null;
   loyerMensuel?: number | null;
   urlContrat?: string | null;
+  /** Favori client, injecté par le portail — jamais présent dans le snapshot CRM. */
+  extranetUrl?: string | null;
   versementProgramme?: boolean;
   montantVersementProgramme?: number | null;
   frequenceVersement?: string | null;

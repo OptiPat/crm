@@ -149,6 +149,7 @@ export function PortalApp() {
   const [scpiSubmitting, setScpiSubmitting] = useState(false);
   const [avoirSubmitting, setAvoirSubmitting] = useState(false);
   const [retirerSubmitting, setRetirerSubmitting] = useState(false);
+  const [extranetSubmitting, setExtranetSubmitting] = useState(false);
 
   const applyPatrimoineResponse = useCallback((body: PatrimoineApiResponse) => {
     setPayload(body.payload);
@@ -384,6 +385,15 @@ export function PortalApp() {
     return map;
   }, [payload]);
 
+  const extranetUrlById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const line of payload?.investissements ?? []) {
+      const url = line.extranetUrl?.trim();
+      if (url) map.set(line.id, url);
+    }
+    return map;
+  }, [payload]);
+
   const perimetre = useMemo(
     () => buildPerimetrePatrimoine(visible),
     [visible]
@@ -504,6 +514,7 @@ export function PortalApp() {
             loyerMensuelCentimes: input.loyerMensuelCentimes,
             mensualiteCreditCentimes: input.mensualiteCreditCentimes,
             dateFinPret: input.dateFinPret,
+            extranetUrl: input.extranetUrl,
           }),
         });
         const body = (await response.json().catch(() => ({}))) as {
@@ -515,6 +526,33 @@ export function PortalApp() {
         await loadPatrimoineMe();
       } finally {
         setAvoirSubmitting(false);
+      }
+    },
+    [loadPatrimoineMe]
+  );
+
+  const handleSaveExtranet = useCallback(
+    async (investissementId: number, url: string | null) => {
+      setExtranetSubmitting(true);
+      try {
+        const response = await fetch(
+          `/api/v1/investissements/${investissementId}/extranet`,
+          {
+            method: "PUT",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+          }
+        );
+        const body = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        if (!response.ok) {
+          throw new Error(body.error ?? "Enregistrement impossible");
+        }
+        await loadPatrimoineMe();
+      } finally {
+        setExtranetSubmitting(false);
       }
     },
     [loadPatrimoineMe]
@@ -681,6 +719,9 @@ export function PortalApp() {
         enableRetirerAvoir
         retirerSubmitting={retirerSubmitting}
         onRetirerAvoir={handleRetirerAvoir}
+        extranetUrlById={extranetUrlById}
+        extranetSubmitting={extranetSubmitting}
+        onSaveExtranet={handleSaveExtranet}
       />
     </main>
   );
