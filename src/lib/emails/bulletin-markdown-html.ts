@@ -14,7 +14,11 @@ function blankLine(): string {
 const SUBSECTION_TITLES = ["Chiffres clés", "Ce trimestre", "Acquisitions"] as const;
 
 function subsectionTitleCandidate(rest: string): string {
-  return rest.trim().replace(/:\s*$/, "").trim();
+  return rest
+    .trim()
+    .replace(/:\s*$/, "")
+    .replace(/\s*\([^)]*\)\s*$/u, "")
+    .trim();
 }
 
 function foldSubsectionKey(s: string): string {
@@ -97,18 +101,21 @@ function unwrapMistralMarkdownLine(line: string): string {
 function normalizeSubsectionLine(line: string): string {
   const trimmed = unwrapMistralMarkdownLine(line);
   if (!trimmed) return "";
-  const titleOnly = canonicalSubsectionTitle(trimmed);
+  const withoutBullet = trimmed.replace(/^[-*]\s+/, "").trim();
+  const titleOnly = canonicalSubsectionTitle(withoutBullet);
   if (titleOnly) {
     return `${subsectionDisplayNumber(titleOnly)}. ${titleOnly}`;
   }
-  const dotIdx = trimmed.indexOf(".");
-  if (dotIdx <= 0) return trimmed;
-  const num = Number.parseInt(trimmed.slice(0, dotIdx).trim(), 10);
-  if (!Number.isFinite(num) || num < 1 || num > 4) return trimmed;
-  const rest = trimmed.slice(dotIdx + 1).trim();
-  const title = canonicalSubsectionTitle(rest);
-  if (!title) return trimmed;
-  return `${subsectionDisplayNumber(title)}. ${title}`;
+  const dotIdx = withoutBullet.indexOf(".");
+  if (dotIdx > 0) {
+    const num = Number.parseInt(withoutBullet.slice(0, dotIdx).trim(), 10);
+    if (Number.isFinite(num) && num >= 1 && num <= 4) {
+      const rest = withoutBullet.slice(dotIdx + 1).trim();
+      const title = canonicalSubsectionTitle(rest);
+      if (title) return `${subsectionDisplayNumber(title)}. ${title}`;
+    }
+  }
+  return trimmed;
 }
 
 function shouldUseCrmPeriode(periodClean: string, periode: string): boolean {
@@ -361,7 +368,13 @@ export function normalizeScpiBulletinMarkdown(
   }
 
   const body = removeEmptySubsectionHeadings(
-    prefixAcquisitionBullets(dedupeProductTitleLines(out, periode))
+    prefixAcquisitionBullets(
+      ensureSubsectionHeadings(
+        dropMisplacedSubsectionHeadings(
+          canonicalizeHeadingLines(dedupeProductTitleLines(out, periode))
+        )
+      )
+    )
   )
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
@@ -442,15 +455,36 @@ function expandInlineNumberedSections(line: string): string[] {
 }
 
 function isSubsectionHeadingLine(trimmed: string): boolean {
-  const m = trimmed.match(/^([1-3])\.\s+(.+)$/i);
-  if (!m) return false;
-  return canonicalSubsectionTitle(m[2]!) !== null;
+  return subsectionHeadingCanonical(trimmed) !== null;
 }
 
 function subsectionHeadingCanonical(trimmed: string): (typeof SUBSECTION_TITLES)[number] | null {
-  const m = trimmed.match(/^([1-3])\.\s+(.+)$/i);
-  if (!m) return null;
-  return canonicalSubsectionTitle(m[2]!);
+  const bare = trimmed.replace(/^[-*]\s+/, "").trim();
+  const m = bare.match(/^([1-3])\.\s+(.+)$/i);
+  if (m) return canonicalSubsectionTitle(m[2]!);
+  return canonicalSubsectionTitle(bare);
+}
+
+function formatSubsectionHeading(title: (typeof SUBSECTION_TITLES)[number]): string {
+  return `${subsectionDisplayNumber(title)}. ${title}`;
+}
+
+function canonicalizeHeadingLines(lines: string[]): string[] {
+  const out: string[] = [];
+  let lastTitle: (typeof SUBSECTION_TITLES)[number] | null = null;
+  for (const line of lines) {
+    const t = line.trim();
+    const title = subsectionHeadingCanonical(t);
+    if (title) {
+      if (lastTitle === title) continue;
+      lastTitle = title;
+      out.push(formatSubsectionHeading(title));
+      continue;
+    }
+    if (t) lastTitle = null;
+    out.push(line);
+  }
+  return out;
 }
 
 function isAcquisitionContentLine(trimmed: string): boolean {
@@ -458,7 +492,108 @@ function isAcquisitionContentLine(trimmed: string): boolean {
   if (isSubsectionHeadingLine(trimmed)) return false;
   if (trimmed.startsWith("## ") || isProductTitleLine(trimmed)) return false;
   if (/^---+$/.test(trimmed)) return false;
-  return /^[^:\n]+,\s+[^:\n]+:\s+.+/.test(trimmed);
+  const bare = trimmed.replace(/^[-*]\s+/, "").trim();
+  const colon = bare.indexOf(": ");
+  if (colon <= 0) return false;
+  const left = bare.slice(0, colon);
+  const comma = left.indexOf(", ");
+  if (comma <= 0) return false;
+  const country = left.slice(0, comma).trim();
+  const city = left.slice(comma + 2).trim();
+  return /^[A-Za-zÀ-ÿ]/.test(country) && /^[A-Za-zÀ-ÿ]/.test(city) && !/\d/.test(country);
+}
+
+function nextNonEmptyLine(lines: string[], from: number): string {
+  for (let i = from; i < lines.length; i += 1) {
+    const t = lines[i]?.trim() ?? "";
+    if (t) return t;
+  }
+  return "";
+}
+
+/** Titre 3. collé au milieu des KPI (ex. « Capitalisation : 1,38 Md€ » pris pour une ville). */
+function dropMisplacedSubsectionHeadings(lines: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const title = subsectionHeadingCanonical(lines[i]?.trim() ?? "");
+    if (title === "Acquisitions") {
+      const next = nextNonEmptyLine(lines, i + 1);
+      if (next && isKpiContentLine(next) && !isAcquisitionContentLine(next.replace(/^[-*]\s+/, ""))) {
+        continue;
+      }
+    }
+    out.push(lines[i]!);
+  }
+  return out;
+}
+
+function isKpiContentLine(trimmed: string): boolean {
+  const bare = trimmed.replace(/^[-*]\s+/, "").trim();
+  if (!bare || bare.length > 120) return false;
+  if (isSubsectionHeadingLine(bare) || isProductTitleLine(bare) || bare.startsWith("## ")) {
+    return false;
+  }
+  if (isAcquisitionContentLine(bare)) return false;
+  const key = foldSubsectionKey(bare);
+  return ["collecte", "capitalisation", "distribution", "occupation", "endettement", "tof"].some(
+    (k) => key.includes(k)
+  );
+}
+
+function isProseContentLine(trimmed: string): boolean {
+  const bare = trimmed.replace(/^[-*]\s+/, "").trim();
+  if (!bare || bare.length < 70) return false;
+  if (isSubsectionHeadingLine(bare) || isProductTitleLine(bare) || bare.startsWith("## ")) {
+    return false;
+  }
+  if (isKpiContentLine(bare) || isAcquisitionContentLine(bare)) return false;
+  return true;
+}
+
+/** Mistral oublie parfois 1/2/3 (ex. Transitions) — on les réinjecte sans dupliquer. */
+function ensureSubsectionHeadings(lines: string[]): string[] {
+  const has = {
+    chiffres: false,
+    trimestre: false,
+    acquisitions: false,
+  };
+  for (const line of lines) {
+    const section = subsectionHeadingCanonical(line.trim());
+    if (section === "Chiffres clés") has.chiffres = true;
+    if (section === "Ce trimestre") has.trimestre = true;
+    if (section === "Acquisitions") has.acquisitions = true;
+  }
+  if (has.chiffres && has.trimestre && has.acquisitions) return lines;
+
+  const out: string[] = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (
+      !t ||
+      t === "---" ||
+      t.startsWith("## ") ||
+      isProductTitleLine(t) ||
+      isSubsectionHeadingLine(t)
+    ) {
+      out.push(line);
+      continue;
+    }
+    if (!has.chiffres && isKpiContentLine(t)) {
+      if (out[out.length - 1]?.trim()) out.push("");
+      out.push("1. Chiffres clés");
+      has.chiffres = true;
+    } else if (!has.trimestre && isProseContentLine(t)) {
+      if (out[out.length - 1]?.trim()) out.push("");
+      out.push("2. Ce trimestre");
+      has.trimestre = true;
+    } else if (!has.acquisitions && isAcquisitionContentLine(t.replace(/^[-*]\s+/, ""))) {
+      if (out[out.length - 1]?.trim()) out.push("");
+      out.push("3. Acquisitions");
+      has.acquisitions = true;
+    }
+    out.push(line);
+  }
+  return out;
 }
 
 function prefixAcquisitionBullets(lines: string[]): string[] {
@@ -513,9 +648,15 @@ function bulletinLinesForRender(
     ? markdown.replace(/\r\n/g, "\n").split("\n")
     : normalizeBulletinMarkdown(markdown);
   return prefixAcquisitionBullets(
-    canonicalizeTitleLinesForRender(
-      stripTrailingProductTitleLines(dedupeProductTitleLines(raw, periode)),
-      periode
+    ensureSubsectionHeadings(
+      dropMisplacedSubsectionHeadings(
+        canonicalizeHeadingLines(
+          canonicalizeTitleLinesForRender(
+            stripTrailingProductTitleLines(dedupeProductTitleLines(raw, periode)),
+            periode
+          )
+        )
+      )
     )
   );
 }

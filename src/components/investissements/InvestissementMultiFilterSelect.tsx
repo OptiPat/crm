@@ -96,5 +96,10 @@ export const INVESTISSEMENT_TYPE_FILTER_OPTIONS: MultiFilterOption[] = [
   { value: "FIP_FCPI", label: "FIP / FCPI" },
   { value: "FCPR", label: "FCPR / FPCI" },
   { value: "G3F", label: "G3F" },
+  { value: "BIJOUX", label: "Bijoux" },
+  { value: "OBJET_ART", label: "Objet d'art" },
+  { value: "VOITURE_COLLECTION", label: "Voiture de collection" },
+  { value: "PARTS_SOCIETE", label: "Parts de société" },
+  { value: "FONDS_COMMERCE", label: "Fonds de commerce" },
   { value: "AUTRE", label: "Autre" },
 ];

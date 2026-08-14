@@ -1,4 +1,5 @@
 import { IMMOBILIER_TYPES } from "@/lib/investissements/investissement-display";
+import { isBiensMeublesType } from "@/lib/investissements/biens-meubles-types";
 import { EPARGNE_BANCAIRE_TYPES } from "./epargne-bancaire-types";
 import { PATRIMOINE_CATEGORIE_COLORS } from "./patrimoine-palette";
 
@@ -8,6 +9,7 @@ export type PatrimoineCategorie =
   | "Épargne bancaire"
   | "Placements financiers"
   | "Prévoyance"
+  | "Biens meubles, professionnels"
   | "Autre";
 
 const SCPI_TYPES = new Set(["SCPI", "SCPI_DEMEMBREMENT", "SCPI_FISCALE"]);
@@ -21,6 +23,7 @@ export function getPatrimoineCategorie(typeProduit: string | undefined): Patrimo
   if (SCPI_TYPES.has(typeProduit)) return "SCPI";
   if (EPARGNE_BANCAIRE_TYPES.has(typeProduit)) return "Épargne bancaire";
   if (typeProduit === "PREVOYANCE") return "Prévoyance";
+  if (isBiensMeublesType(typeProduit)) return "Biens meubles, professionnels";
   return "Placements financiers";
 }
 
@@ -30,6 +33,7 @@ export const PATRIMOINE_CATEGORIE_ORDER: PatrimoineCategorie[] = [
   "Placements financiers",
   "Épargne bancaire",
   "Prévoyance",
+  "Biens meubles, professionnels",
   "Autre",
 ];
 

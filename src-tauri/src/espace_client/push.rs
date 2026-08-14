@@ -24,22 +24,32 @@ pub fn sign_espace_sync_body(secret: &str, timestamp: i64, body: &[u8]) -> Strin
         .collect()
 }
 
-pub fn push_espace_client_snapshot(
+/// URL + secret si le portail est configuré. `None` = pas d'URL, rien à pousser.
+pub fn load_portal_push_target(
     app: &tauri::AppHandle,
     db: &Database,
-    payload: &EspaceClientSyncPayload,
-) -> Result<(), String> {
+) -> Result<Option<(String, String)>, String> {
     let portal_url = db
         .get_setting(PORTAL_URL_SETTING_KEY)
         .map_err(|e| e.to_string())?
         .map(|v| v.trim().trim_end_matches('/').to_string())
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| "URL du portail espace client non configurée".to_string())?;
-
+        .filter(|v| !v.is_empty());
+    let Some(portal_url) = portal_url else {
+        return Ok(None);
+    };
     let secret = load_sync_secret(app, db)?;
+    Ok(Some((portal_url, secret)))
+}
+
+/// Envoi HTTP seul : pas de verrou SQLite pendant les 30 s du timeout.
+pub fn post_espace_client_snapshot_http(
+    portal_url: &str,
+    secret: &str,
+    payload: &EspaceClientSyncPayload,
+) -> Result<(), String> {
     let body = serde_json::to_vec(payload).map_err(|e| e.to_string())?;
     let timestamp = chrono::Utc::now().timestamp();
-    let signature = sign_espace_sync_body(&secret, timestamp, &body);
+    let signature = sign_espace_sync_body(secret, timestamp, &body);
 
     let endpoint = format!(
         "{}/api/v1/sync/contact/{}",
@@ -64,8 +74,6 @@ pub fn push_espace_client_snapshot(
     let response_body = response.text().unwrap_or_default();
 
     if status.is_success() {
-        db.record_espace_sync_success("ok", Some(payload.sequence))
-            .map_err(|e| e.to_string())?;
         return Ok(());
     }
 
@@ -74,8 +82,38 @@ pub fn push_espace_client_snapshot(
     } else {
         response_body
     };
-    let _ = db.record_espace_sync_success("error", Some(payload.sequence));
-    Err(format!("Le portail a refusé la synchronisation ({status}) : {detail}"))
+    Err(format!(
+        "Le portail a refusé la synchronisation ({status}) : {detail}"
+    ))
+}
+
+pub fn record_espace_push_outcome(
+    db: &Database,
+    sequence: i64,
+    ok: bool,
+) -> Result<(), String> {
+    db.record_espace_sync_success(if ok { "ok" } else { "error" }, Some(sequence))
+        .map_err(|e| e.to_string())
+}
+
+pub fn push_espace_client_snapshot(
+    app: &tauri::AppHandle,
+    db: &Database,
+    payload: &EspaceClientSyncPayload,
+) -> Result<(), String> {
+    let (portal_url, secret) = load_portal_push_target(app, db)?
+        .ok_or_else(|| "URL du portail espace client non configurée".to_string())?;
+
+    match post_espace_client_snapshot_http(&portal_url, &secret, payload) {
+        Ok(()) => {
+            record_espace_push_outcome(db, payload.sequence, true)?;
+            Ok(())
+        }
+        Err(error) => {
+            let _ = record_espace_push_outcome(db, payload.sequence, false);
+            Err(error)
+        }
+    }
 }
 
 #[cfg(test)]

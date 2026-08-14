@@ -46,6 +46,16 @@ export const INVESTISSEMENT_TYPE_GROUPS: { label: string; types: { value: string
     ],
   },
   {
+    label: "Biens meubles, professionnels",
+    types: [
+      { value: "BIJOUX", label: "Bijoux" },
+      { value: "OBJET_ART", label: "Objet d'art" },
+      { value: "VOITURE_COLLECTION", label: "Voiture de collection" },
+      { value: "PARTS_SOCIETE", label: "Parts de société" },
+      { value: "FONDS_COMMERCE", label: "Fonds de commerce" },
+    ],
+  },
+  {
     label: "Autre",
     types: [{ value: "AUTRE", label: "Autre" }],
   },

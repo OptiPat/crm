@@ -148,6 +148,33 @@ describe("client-investissement-update", () => {
     ).toBe("encours");
   });
 
+  it("autorise les biens meubles hors avec moi", () => {
+    expect(
+      getClientInvestissementUpdateKind({
+        type_produit: "BIJOUX",
+        origine: "EXISTANT_CLIENT",
+      })
+    ).toBe("encours");
+    expect(
+      getClientInvestissementUpdateKind({
+        type_produit: "OBJET_ART",
+        origine: "DECLARE_CLIENT",
+      })
+    ).toBe("encours");
+    expect(
+      getClientInvestissementUpdateKind({
+        type_produit: "PARTS_SOCIETE",
+        origine: "MON_CONSEIL",
+      })
+    ).toBeNull();
+    expect(
+      getClientInvestissementUpdateKind(
+        { type_produit: "FONDS_COMMERCE", origine: "EXISTANT_CLIENT" },
+        { estScpi: false, estImmobilier: false }
+      )
+    ).toBe("encours");
+  });
+
   it("refuse une date future", () => {
     const future = new Date();
     future.setFullYear(future.getFullYear() + 1);
@@ -185,6 +212,19 @@ describe("client-investissement-update", () => {
       valorisationCentimes: 12_000_00,
       revenuPercuCentimes: null,
     });
+  });
+
+  it("valide une mise à jour de valorisation sur un bien meuble", () => {
+    expect(
+      validateClientInvestissementUpdate(
+        { id: 11, type_produit: "OBJET_ART", origine: "DECLARE_CLIENT" },
+        {
+          investissementId: 11,
+          date: "2026-08-12",
+          valorisationCentimes: 8_000_00,
+        }
+      )
+    ).toMatchObject({ ok: true, valorisationCentimes: 8_000_00 });
   });
 
   it("valide l'immobilier avec loyer, crédit et fin de prêt", () => {

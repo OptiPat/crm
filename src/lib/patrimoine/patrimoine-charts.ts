@@ -51,7 +51,10 @@ export function aggregateByDisponibilite(
 ): PatrimoineChartSlice[] {
   const totals = new Map<string, number>();
   for (const inv of investissements) {
-    const horizon = getDisponibiliteHorizon({ type_produit: inv.type_produit });
+    const horizon = getDisponibiliteHorizon({
+      type_produit: inv.type_produit,
+      nom_produit: inv.nom_produit,
+    });
     const label = formatDisponibiliteLabel(horizon);
     const amount = getEffectiveEncoursCentimes(inv);
     if (amount <= 0) continue;

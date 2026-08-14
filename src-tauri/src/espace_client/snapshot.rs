@@ -22,8 +22,9 @@ pub fn build_espace_client_snapshot(
     build_espace_client_snapshot_with_sequence(db, contact_id, None)
 }
 
-/// Ce que l'aperçu du conseiller doit afficher : les mêmes échéances et le
-/// même bouton de rendez-vous que la photo envoyée au portail.
+/// Ce que l'aperçu du conseiller doit afficher : les mêmes échéances, le
+/// même bouton de rendez-vous et le même lien WhatsApp que la photo envoyée
+/// au portail.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EspaceClientPreview {
@@ -32,6 +33,7 @@ pub struct EspaceClientPreview {
     /// Uniquement les pièces encore attendues, comme sur le portail.
     pub demandes: Vec<EspaceClientDemandeLine>,
     pub rdv_url: Option<String>,
+    pub whatsapp_url: Option<String>,
 }
 
 /// Aperçu conseiller : construit la timeline avec **le même** `build_timeline`
@@ -96,6 +98,7 @@ pub fn build_espace_client_preview(
         valorisations: build_valorisations(db, &visible)?,
         demandes,
         rdv_url: resolve_rdv_general(db, &rdv_liens),
+        whatsapp_url: resolve_whatsapp_url(db),
     })
 }
 
@@ -186,6 +189,8 @@ fn build_espace_client_snapshot_with_sequence(
         })
         .collect();
 
+    let whatsapp_url = resolve_whatsapp_url(db);
+
     Ok(EspaceClientSyncPayload {
         schema_version: ESPACE_SYNC_SCHEMA_VERSION,
         sequence,
@@ -211,6 +216,7 @@ fn build_espace_client_snapshot_with_sequence(
         valorisations: build_valorisations(db, &visible)?,
         demandes,
         rdv_url,
+        whatsapp_url,
         // Simple lecture : la paire est créée par la commande de push, qui
         // dispose du handle nécessaire au chiffrement de la clé privée.
         depot_public_key: db
@@ -468,6 +474,16 @@ fn resolve_rdv_general(db: &Database, liens: &[EspaceClientRdvLien]) -> Option<S
         .map(|lien| lien.url.clone())
 }
 
+fn resolve_whatsapp_url(db: &Database) -> Option<String> {
+    let telephone = db
+        .get_setting(super::config::WHATSAPP_SETTING_KEY)
+        .ok()
+        .flatten()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())?;
+    super::whatsapp::build_whatsapp_click_url(&telephone)
+}
+
 /// Échéances du client : celles que portent ses placements, et celles que le
 /// conseiller a rédigées pour lui.
 ///
@@ -618,6 +634,11 @@ mod tests {
         .unwrap();
         db.set_setting(crate::espace_client::config::RDV_LIEN_SETTING_KEY, "bilan")
             .unwrap();
+        db.set_setting(
+            crate::espace_client::config::WHATSAPP_SETTING_KEY,
+            "06 12 34 56 78",
+        )
+        .unwrap();
 
         let futur = chrono::Utc::now().timestamp() + 86_400;
         db.create_espace_echeance(
@@ -633,6 +654,14 @@ mod tests {
         let preview = build_espace_client_preview(&db, contact_id).unwrap();
 
         assert_eq!(preview.rdv_url, snapshot.rdv_url);
+        assert_eq!(preview.whatsapp_url, snapshot.whatsapp_url);
+        assert!(
+            snapshot
+                .whatsapp_url
+                .as_deref()
+                .unwrap_or("")
+                .starts_with("https://wa.me/33612345678")
+        );
         assert_eq!(preview.valorisations.len(), snapshot.valorisations.len());
         assert_eq!(preview.timeline.len(), snapshot.timeline.len());
         assert_eq!(preview.timeline.len(), 1);

@@ -664,6 +664,7 @@ export function PortalApp() {
         disponibiliteData={disponibiliteData}
         timeline={timeline}
         rdvUrl={payload?.rdvUrl ?? undefined}
+        whatsappUrl={payload?.whatsappUrl ?? undefined}
         showDeviceFrame={false}
         hideTimelineSync
         emptyState={visible.length === 0 ? "empty" : null}

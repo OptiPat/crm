@@ -1,14 +1,16 @@
 import { SettingsPanel } from "@/components/settings/parametres-ui";
 import { useEspaceClientActive } from "@/components/espace-client/EspaceClientProvider";
+import { EspaceClientBroadcastPanel } from "@/components/settings/EspaceClientBroadcastPanel";
 import { EspaceClientConnexionPanel } from "@/components/settings/EspaceClientConnexionPanel";
 import { EspaceClientRdvPanel } from "@/components/settings/EspaceClientRdvPanel";
+import { EspaceClientWhatsAppPanel } from "@/components/settings/EspaceClientWhatsAppPanel";
 import { EspaceClientSyncPanel } from "@/components/settings/EspaceClientSyncPanel";
 
 /**
  * Réglages de l'espace client : ce qui vaut pour tous les clients.
  *
- * Ce qui appartient à une personne — activer son accès, lui écrire une
- * échéance, lui demander un document — reste dans sa fiche.
+ * Activer un accès reste dans la fiche. Les campagnes ci-dessous
+ * s'adressent à tous les espaces actifs.
  */
 export function ParametresEspaceClientSection() {
   const espaceActif = useEspaceClientActive();
@@ -30,6 +32,8 @@ export function ParametresEspaceClientSection() {
     <div className="space-y-6">
       <EspaceClientConnexionPanel />
       <EspaceClientRdvPanel />
+      <EspaceClientWhatsAppPanel />
+      <EspaceClientBroadcastPanel />
       <EspaceClientSyncPanel />
     </div>
   );

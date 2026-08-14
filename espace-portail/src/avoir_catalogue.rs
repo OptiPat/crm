@@ -3,9 +3,10 @@
 //! Doit rester identique à `src/lib/espace-client/client-avoir-catalogue.ts`
 //! et à `src-tauri/src/espace_client/avoir_catalogue.rs`.
 
-pub const AVOIR_TYPES_AUTORISES: [&str; 26] = [
+pub const AVOIR_TYPES_AUTORISES: [&str; 31] = [
     "ASSURANCE_VIE",
     "AUTRE",
+    "BIJOUX",
     "CAT",
     "CEL",
     "COMPTE_COURANT",
@@ -15,12 +16,15 @@ pub const AVOIR_TYPES_AUTORISES: [&str; 26] = [
     "DENORMANDIE",
     "EPARGNE_BANCAIRE",
     "EPARGNE_SALARIALE",
+    "FONDS_COMMERCE",
     "IMMOBILIER",
     "LDDS",
     "LEP",
     "LIVRET_A",
     "LMNP",
     "LOCATIF_CLASSIQUE",
+    "OBJET_ART",
+    "PARTS_SOCIETE",
     "PEA",
     "PEAC",
     "PEL",
@@ -30,6 +34,7 @@ pub const AVOIR_TYPES_AUTORISES: [&str; 26] = [
     "RESIDENCE_SECONDAIRE",
     "SCPI",
     "SCPI_DEMEMBREMENT",
+    "VOITURE_COLLECTION",
 ];
 
 pub fn type_autorise_pour_panier(panier: &str, type_produit: &str) -> bool {
@@ -70,6 +75,14 @@ pub fn type_autorise_pour_panier(panier: &str, type_produit: &str) -> bool {
                 | "CAT"
                 | "CSL"
                 | "EPARGNE_BANCAIRE"
+        ),
+        "meubles" => matches!(
+            type_produit,
+            "BIJOUX"
+                | "OBJET_ART"
+                | "VOITURE_COLLECTION"
+                | "PARTS_SOCIETE"
+                | "FONDS_COMMERCE"
         ),
         _ => false,
     }

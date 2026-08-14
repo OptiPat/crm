@@ -141,6 +141,45 @@ impl super::Database {
             .ok_or_else(|| "Demande introuvable après création".to_string())
     }
 
+    /// Statut d'une demande encore ouverte ou déjà honorée (pas annulée).
+    ///
+    /// Une pièce custom sans `template_key` mais au même libellé bloque aussi :
+    /// relancer la campagne créerait un doublon visible chez le client.
+    pub fn blocking_espace_demande_statut(
+        &self,
+        contact_id: i64,
+        template_key: &str,
+        libelle: &str,
+    ) -> Result<Option<String>> {
+        let found: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT statut FROM espace_demande
+                 WHERE contact_id = ?1
+                   AND statut IN (?3, ?4, ?5, ?6)
+                   AND (template_key = ?2 OR (template_key IS NULL AND libelle = ?7))
+                 ORDER BY CASE statut
+                   WHEN ?6 THEN 0
+                   WHEN ?5 THEN 1
+                   WHEN ?4 THEN 2
+                   ELSE 3
+                 END
+                 LIMIT 1",
+                params![
+                    contact_id,
+                    template_key,
+                    ESPACE_DEMANDE_EN_ATTENTE,
+                    ESPACE_DEMANDE_RECU,
+                    ESPACE_DEMANDE_IMPORT_EN_COURS,
+                    ESPACE_DEMANDE_VALIDE,
+                    libelle
+                ],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(found)
+    }
+
     pub fn cancel_espace_demande(&self, demande_id: i64) -> std::result::Result<EspaceDemande, String> {
         let existing = self
             .get_espace_demande_by_id(demande_id)
@@ -423,5 +462,71 @@ mod tests {
             EspaceDepotImportLock::AlreadyImported(doc_id) => assert_eq!(doc_id, 42),
             other => panic!("unexpected lock result: {other:?}"),
         }
+    }
+
+    #[test]
+    fn open_demande_blocks_broadcast_until_cancelled() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        let contact_id = sample_contact(&db);
+        assert!(db
+            .blocking_espace_demande_statut(
+                contact_id,
+                "R1:avis_imposition",
+                "Dernier avis d'imposition"
+            )
+            .unwrap()
+            .is_none());
+
+        let demande = db
+            .create_espace_demande(
+                contact_id,
+                "FISCAL",
+                Some("R1:avis_imposition"),
+                "Dernier avis d'imposition",
+            )
+            .unwrap();
+        assert_eq!(
+            db.blocking_espace_demande_statut(
+                contact_id,
+                "R1:avis_imposition",
+                "Dernier avis d'imposition"
+            )
+            .unwrap()
+            .as_deref(),
+            Some(ESPACE_DEMANDE_EN_ATTENTE)
+        );
+
+        db.cancel_espace_demande(demande.id).unwrap();
+        assert!(db
+            .blocking_espace_demande_statut(
+                contact_id,
+                "R1:avis_imposition",
+                "Dernier avis d'imposition"
+            )
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn custom_libelle_without_template_key_blocks_same_piece() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        let contact_id = sample_contact(&db);
+        db.create_espace_demande(
+            contact_id,
+            "FISCAL",
+            None,
+            "Dernier avis d'imposition",
+        )
+        .unwrap();
+        assert_eq!(
+            db.blocking_espace_demande_statut(
+                contact_id,
+                "R1:avis_imposition",
+                "Dernier avis d'imposition"
+            )
+            .unwrap()
+            .as_deref(),
+            Some(ESPACE_DEMANDE_EN_ATTENTE)
+        );
     }
 }

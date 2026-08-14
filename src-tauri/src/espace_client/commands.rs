@@ -4,7 +4,7 @@ use crate::database::models::{EspaceAcces, EspaceConnexionLogEntry, EspaceDemand
 use crate::espace_client::activation::{generate_six_digit_code, hash_espace_otp};
 use crate::espace_client::config::{
     ensure_depot_public_key, get_sync_config, is_espace_client_active, load_sync_secret,
-    save_sync_config, EspaceClientSyncConfig, PORTAL_URL_SETTING_KEY,
+    save_sync_config, save_whatsapp_telephone, EspaceClientSyncConfig, PORTAL_URL_SETTING_KEY,
 };
 use crate::espace_client::depot_import::{import_espace_depots, ImportEspaceDepotsResult};
 use crate::espace_client::avoir_declaration_import::{
@@ -18,7 +18,10 @@ use crate::espace_client::portal_api::{
     pull_espace_avoir_declarations, pull_espace_avoir_retraits, pull_espace_connexion_log,
     pull_espace_scpi_declarations, push_espace_acces_revoke, PortalScpiDeclarationLine,
 };
-use crate::espace_client::push::push_espace_client_snapshot;
+use crate::espace_client::push::{
+    load_portal_push_target, post_espace_client_snapshot_http, push_espace_client_snapshot,
+    record_espace_push_outcome,
+};
 use crate::espace_client::snapshot::{
     build_espace_client_preview, build_espace_client_snapshot,
     build_espace_client_snapshot_for_push, EspaceClientPreview,
@@ -159,6 +162,19 @@ pub fn save_espace_client_sync_config_cmd(
 }
 
 #[tauri::command]
+pub fn save_espace_client_whatsapp_cmd(
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+    telephone: String,
+) -> Result<EspaceClientSyncConfig, String> {
+    require_ui_session(&session)?;
+    let guard = db.lock().map_err(|e| e.to_string())?;
+    let database = guard.as_ref().ok_or("Base non ouverte")?;
+    require_espace_client_active(database)?;
+    save_whatsapp_telephone(database, &telephone)
+}
+
+#[tauri::command]
 pub fn build_espace_client_snapshot_cmd(
     db: State<'_, DbState>,
     session: State<'_, UiSessionState>,
@@ -235,28 +251,70 @@ pub fn push_all_espace_clients_cmd(
     session: State<'_, UiSessionState>,
 ) -> Result<PushEspaceClientAllResult, String> {
     require_ui_session(&session)?;
-    let guard = db.lock().map_err(|e| e.to_string())?;
-    let database = guard.as_ref().ok_or("Base non ouverte")?;
-    require_espace_client_active(database)?;
-    ensure_depot_public_key(&app, database)?;
+    let (total, payloads, portal, mut echecs) = {
+        let guard = db.lock().map_err(|e| e.to_string())?;
+        let database = guard.as_ref().ok_or("Base non ouverte")?;
+        require_espace_client_active(database)?;
+        ensure_depot_public_key(&app, database)?;
 
-    let contacts = database
-        .list_espace_contacts_actifs()
-        .map_err(|e| e.to_string())?;
+        let contacts = database
+            .list_espace_contacts_actifs()
+            .map_err(|e| e.to_string())?;
+        let portal = load_portal_push_target(&app, database)?;
+        let mut payloads = Vec::new();
+        let mut echecs = Vec::new();
+        for contact_id in &contacts {
+            match build_espace_client_snapshot_for_push(database, *contact_id) {
+                Ok(payload) => payloads.push(payload),
+                Err(error) => echecs.push(format!("contact {contact_id} : {error}")),
+            }
+        }
+        (contacts.len(), payloads, portal, echecs)
+    };
+
+    let http_results: Vec<(i64, i64, Result<(), String>)> = match portal {
+        Some((url, secret)) => payloads
+            .iter()
+            .map(|payload| {
+                (
+                    payload.sequence,
+                    payload.contact.contact_id,
+                    post_espace_client_snapshot_http(&url, &secret, payload),
+                )
+            })
+            .collect(),
+        None => payloads
+            .iter()
+            .map(|payload| {
+                (
+                    payload.sequence,
+                    payload.contact.contact_id,
+                    Err("URL du portail espace client non configurée".to_string()),
+                )
+            })
+            .collect(),
+    };
 
     let mut reussis = 0usize;
-    let mut echecs = Vec::new();
-    for contact_id in &contacts {
-        let resultat = build_espace_client_snapshot_for_push(database, *contact_id)
-            .and_then(|payload| push_espace_client_snapshot(&app, database, &payload));
-        match resultat {
-            Ok(()) => reussis += 1,
-            Err(error) => echecs.push(format!("contact {contact_id} : {error}")),
+    {
+        let guard = db.lock().map_err(|e| e.to_string())?;
+        let database = guard.as_ref().ok_or("Base non ouverte")?;
+        for (sequence, contact_id, resultat) in http_results {
+            match resultat {
+                Ok(()) => {
+                    let _ = record_espace_push_outcome(database, sequence, true);
+                    reussis += 1;
+                }
+                Err(error) => {
+                    let _ = record_espace_push_outcome(database, sequence, false);
+                    echecs.push(format!("contact {contact_id} : {error}"));
+                }
+            }
         }
     }
 
     Ok(PushEspaceClientAllResult {
-        total: contacts.len(),
+        total,
         reussis,
         echecs,
     })
@@ -315,7 +373,7 @@ fn portal_configured(database: &Database) -> bool {
         .is_some_and(|url| !url.trim().is_empty())
 }
 
-fn try_push_contact_snapshot(
+pub(super) fn try_push_contact_snapshot(
     app: &tauri::AppHandle,
     database: &Database,
     contact_id: i64,

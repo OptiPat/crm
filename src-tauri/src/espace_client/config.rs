@@ -16,11 +16,15 @@ pub const SYNC_SECRET_SETTING_KEY: &str = "espace_client_sync_secret_enc";
 /// sienne. Les échéances, elles, désignent chacune leur propre lien.
 pub const RDV_LIEN_SETTING_KEY: &str = "espace_client_rdv_lien_id";
 
+/// Mobile WhatsApp du cabinet, tel que saisi. Vide = pas de bouton flottant.
+pub const WHATSAPP_SETTING_KEY: &str = "espace_client_whatsapp";
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct EspaceClientSyncConfig {
     pub portal_url: Option<String>,
     pub has_sync_secret: bool,
     pub rdv_lien_id: Option<String>,
+    pub whatsapp_telephone: Option<String>,
 }
 
 /// Le portail transporte des données patrimoniales nominatives : HTTPS exigé,
@@ -116,11 +120,36 @@ pub fn get_sync_config(db: &Database) -> Result<EspaceClientSyncConfig, String> 
         .map_err(|e| e.to_string())?
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
+    let whatsapp_telephone = db
+        .get_setting(WHATSAPP_SETTING_KEY)
+        .map_err(|e| e.to_string())?
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
     Ok(EspaceClientSyncConfig {
         portal_url,
         has_sync_secret,
         rdv_lien_id,
+        whatsapp_telephone,
     })
+}
+
+/// Chaîne vide = retirer le bouton. Un numéro rejeté n'est pas enregistré.
+pub fn save_whatsapp_telephone(
+    db: &Database,
+    telephone: &str,
+) -> Result<EspaceClientSyncConfig, String> {
+    let trimmed = telephone.trim();
+    if trimmed.is_empty() {
+        db.set_setting(WHATSAPP_SETTING_KEY, "")
+            .map_err(|e| e.to_string())?;
+        return get_sync_config(db);
+    }
+    if crate::espace_client::whatsapp::whatsapp_digits(trimmed).is_none() {
+        return Err("Numéro incompatible avec WhatsApp (mobile attendu).".into());
+    }
+    db.set_setting(WHATSAPP_SETTING_KEY, trimmed)
+        .map_err(|e| e.to_string())?;
+    get_sync_config(db)
 }
 
 pub fn save_sync_config(
@@ -173,7 +202,8 @@ pub fn load_sync_secret(app: &AppHandle, db: &Database) -> Result<String, String
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_active_flag, validate_portal_url};
+    use super::{parse_active_flag, save_whatsapp_telephone, validate_portal_url};
+    use crate::database::Database;
 
     #[test]
     fn active_flag_defaults_to_false() {
@@ -193,5 +223,15 @@ mod tests {
         assert!(validate_portal_url("http://127.0.0.1:8080").is_ok());
         assert!(validate_portal_url("http://espace.example.com").is_err());
         assert!(validate_portal_url("ftp://espace.example.com").is_err());
+    }
+
+    #[test]
+    fn whatsapp_telephone_rejects_landline_and_accepts_mobile() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        assert!(save_whatsapp_telephone(&db, "01 23 45 67 89").is_err());
+        let saved = save_whatsapp_telephone(&db, "06 12 34 56 78").unwrap();
+        assert_eq!(saved.whatsapp_telephone.as_deref(), Some("06 12 34 56 78"));
+        let cleared = save_whatsapp_telephone(&db, "  ").unwrap();
+        assert_eq!(cleared.whatsapp_telephone, None);
     }
 }

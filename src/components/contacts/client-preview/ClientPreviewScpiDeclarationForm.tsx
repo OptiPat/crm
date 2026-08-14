@@ -143,7 +143,9 @@ export function ClientPreviewScpiDeclarationForm({
           ? "Enregistrez la valorisation à cette date, et corrigez le cas échéant le loyer, la mensualité ou la fin de prêt."
           : kind === "scpi"
             ? "Enregistrez la valorisation à cette date et, le cas échéant, le revenu perçu (dividendes)."
-            : "Enregistrez l'encours à cette date."}
+            : uiMode === "valorisation"
+              ? "Enregistrez la valorisation à cette date."
+              : "Enregistrez l'encours à cette date."}
       </p>
 
       <div className="mt-4 space-y-3">

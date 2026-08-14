@@ -84,6 +84,11 @@ const KNOWN_TYPE_PRODUITS = new Set<string>([
   "COMPTE_TITRE",
   "PERP",
   "AUTRE",
+  "BIJOUX",
+  "OBJET_ART",
+  "VOITURE_COLLECTION",
+  "PARTS_SOCIETE",
+  "FONDS_COMMERCE",
 ]);
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers } from "@/lib/api/tauri-foyers";
@@ -117,6 +122,7 @@ import {
   isNumeroContratEligible,
   normalizeNumeroContrat,
 } from "@/lib/investissements/investissement-display";
+import { isBiensMeublesType } from "@/lib/investissements/biens-meubles-types";
 import { isVersementComplementaireEligible } from "@/lib/investissements/investissement-versements";
 import {
   ContactFormExceltisSection,
@@ -376,6 +382,7 @@ export function InvestissementForm({
   // SCPI accepte le réinvestissement des dividendes
   const accepteReinvestissement = ["SCPI", "SCPI_FISCALE"].includes(typeProduit);
   const isPrevoyance = typeProduit === "PREVOYANCE";
+  const isMeubles = isBiensMeublesType(typeProduit);
   const showArbitrageFields =
     isArbitrageSuiviEligible(typeProduit, origine, editingInvestissement?.statut) &&
     isActifEncours;
@@ -689,7 +696,7 @@ export function InvestissementForm({
 
     // Pour un investissement de foyer, contactId n'est pas obligatoire
     const hasOwner = investissementCommun ? !!foyerId : !!contactId;
-    if (!hasOwner || !typeProduit || !nomProduit) {
+    if (!hasOwner || !typeProduit || !nomProduit.trim()) {
       toast.error("Veuillez remplir tous les champs obligatoires");
       return;
     }
@@ -760,8 +767,12 @@ export function InvestissementForm({
           investissementCommun || !contactId ? undefined : parseInt(contactId),
         foyer_id: investissementCommun && foyerId ? parseInt(foyerId) : undefined,
         type_produit: typeProduit,
-        partenaire_id: partenaireId ? parseInt(partenaireId) : undefined,
-        nom_produit: nomProduit,
+        partenaire_id: isMeubles
+          ? undefined
+          : partenaireId
+            ? parseInt(partenaireId)
+            : undefined,
+        nom_produit: nomProduit.trim(),
         numero_contrat: showNumeroContratField
           ? normalizeNumeroContrat(numeroContrat)
           : undefined,
@@ -1065,7 +1076,16 @@ export function InvestissementForm({
             <Label htmlFor="type-produit">
               Type de produit <span className="text-red-500">*</span>
             </Label>
-            <Select value={typeProduit} onValueChange={setTypeProduit} required>
+            <Select
+              value={typeProduit}
+              onValueChange={(value) => {
+                setTypeProduit(value);
+                if (isBiensMeublesType(value)) {
+                  setPartenaireId("");
+                }
+              }}
+              required
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Sélectionnez un type" />
               </SelectTrigger>
@@ -1134,6 +1154,16 @@ export function InvestissementForm({
                   <SelectItem value="PERP">PERP</SelectItem>
                 </SelectGroup>
                 <SelectGroup>
+                  <SelectLabel className={TYPE_PRODUIT_GROUP_LABEL}>
+                    Biens meubles, professionnels
+                  </SelectLabel>
+                  <SelectItem value="BIJOUX">Bijoux</SelectItem>
+                  <SelectItem value="OBJET_ART">Objet d&apos;art</SelectItem>
+                  <SelectItem value="VOITURE_COLLECTION">Voiture de collection</SelectItem>
+                  <SelectItem value="PARTS_SOCIETE">Parts de société</SelectItem>
+                  <SelectItem value="FONDS_COMMERCE">Fonds de commerce</SelectItem>
+                </SelectGroup>
+                <SelectGroup>
                   <SelectLabel className={TYPE_PRODUIT_GROUP_LABEL}>Autre</SelectLabel>
                   <SelectItem value="AUTRE">Autre</SelectItem>
                 </SelectGroup>
@@ -1149,7 +1179,7 @@ export function InvestissementForm({
             />
           )}
 
-          {/* Partenaire */}
+          {!isMeubles ? (
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <Label htmlFor="partenaire">Partenaire</Label>
@@ -1183,8 +1213,8 @@ export function InvestissementForm({
               </SelectContent>
             </Select>
           </div>
+          ) : null}
 
-          {/* Nom du produit */}
           <div className="space-y-2">
             <Label htmlFor="nom-produit">
               Nom du produit <span className="text-red-500">*</span>
@@ -1198,7 +1228,9 @@ export function InvestissementForm({
               }
               value={nomProduit}
               onChange={(e) => setNomProduit(e.target.value)}
-              placeholder="Ex: SCPI Pierre Europe"
+              placeholder={
+                isMeubles ? "Ex. tableau, enseigne…" : "Ex: SCPI Pierre Europe"
+              }
               required
             />
             {nomProduitSuggestions.length > 0 && (
@@ -1255,7 +1287,9 @@ export function InvestissementForm({
       <InvestissementFormSection sectionKey="montants">
           {/* Montant initial */}
           <div className="space-y-2">
-            <Label htmlFor="montant">Montant initial (€)</Label>
+            <Label htmlFor="montant">
+              {isMeubles ? "Valorisation (€)" : "Montant initial (€)"}
+            </Label>
             <Input
               id="montant"
               type="number"
@@ -1268,7 +1302,9 @@ export function InvestissementForm({
 
           {/* Date de souscription */}
           <div className="space-y-2">
-            <Label htmlFor="date-souscription">Date de souscription</Label>
+            <Label htmlFor="date-souscription">
+              {isMeubles ? "Date" : "Date de souscription"}
+            </Label>
             <Input
               id="date-souscription"
               type="date"

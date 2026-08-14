@@ -6,13 +6,20 @@
  * pour rester dans le bon camembert. « Autre » placements = AUTRE.
  */
 
-export type AvoirPanier = "immobilier" | "scpi" | "placements" | "epargne";
+export type AvoirPanier =
+  | "immobilier"
+  | "scpi"
+  | "placements"
+  | "epargne"
+  | "meubles";
 
 export interface AvoirTypeOption {
   typeProduit: string;
   label: string;
   /** Distinct quand deux libellés retombent sur le même type CRM. */
   valeurOption?: string;
+  /** Nom CRM figé : pas de champ nom côté déclaration client. */
+  nomImplicite?: string;
 }
 
 export const AVOIR_PANIERS: Array<{ id: AvoirPanier; label: string }> = [
@@ -20,6 +27,7 @@ export const AVOIR_PANIERS: Array<{ id: AvoirPanier; label: string }> = [
   { id: "scpi", label: "SCPI" },
   { id: "placements", label: "Placements financiers" },
   { id: "epargne", label: "Épargne / Banque" },
+  { id: "meubles", label: "Biens meubles, professionnels" },
 ];
 
 export const AVOIR_TYPES_PAR_PANIER: Record<AvoirPanier, AvoirTypeOption[]> = {
@@ -42,6 +50,18 @@ export const AVOIR_TYPES_PAR_PANIER: Record<AvoirPanier, AvoirTypeOption[]> = {
     { typeProduit: "ASSURANCE_VIE", label: "Assurance vie" },
     { typeProduit: "CONTRAT_CAPITALISATION", label: "Contrat de Capitalisation" },
     { typeProduit: "PER", label: "PER" },
+    {
+      typeProduit: "EPARGNE_SALARIALE",
+      label: "PEE",
+      valeurOption: "EPARGNE_SALARIALE_PEE",
+      nomImplicite: "PEE",
+    },
+    {
+      typeProduit: "EPARGNE_SALARIALE",
+      label: "PERCOL",
+      valeurOption: "EPARGNE_SALARIALE_PERCOL",
+      nomImplicite: "PERCOL",
+    },
     { typeProduit: "EPARGNE_SALARIALE", label: "Épargne Salariale" },
     { typeProduit: "AUTRE", label: "Autre" },
   ],
@@ -61,6 +81,13 @@ export const AVOIR_TYPES_PAR_PANIER: Record<AvoirPanier, AvoirTypeOption[]> = {
       label: "Autre",
       valeurOption: "EPARGNE_BANCAIRE_AUTRE",
     },
+  ],
+  meubles: [
+    { typeProduit: "BIJOUX", label: "Bijoux" },
+    { typeProduit: "OBJET_ART", label: "Objet d'art" },
+    { typeProduit: "VOITURE_COLLECTION", label: "Voiture de collection" },
+    { typeProduit: "PARTS_SOCIETE", label: "Parts de société" },
+    { typeProduit: "FONDS_COMMERCE", label: "Fonds de commerce" },
   ],
 };
 
@@ -84,12 +111,25 @@ export function isTypeAutorisePourPanier(
   return AVOIR_TYPES_PAR_PANIER[panier].some((o) => o.typeProduit === typeProduit);
 }
 
+export function optionAvoirParValeur(
+  panier: AvoirPanier,
+  valeur: string
+): AvoirTypeOption | undefined {
+  return AVOIR_TYPES_PAR_PANIER[panier].find(
+    (o) => (o.valeurOption ?? o.typeProduit) === valeur
+  );
+}
+
 export function panierEstImmobilier(panier: AvoirPanier): boolean {
   return panier === "immobilier";
 }
 
 export function panierEstScpi(panier: AvoirPanier): boolean {
   return panier === "scpi";
+}
+
+export function panierEstMeubles(panier: AvoirPanier): boolean {
+  return panier === "meubles";
 }
 
 export function normaliserNomProduit(nom: string): string {

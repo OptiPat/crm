@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::avoir_catalogue::{
-    normaliser_nom_produit, panier_est_immobilier, panier_est_scpi, type_autorise_pour_panier,
+    normaliser_nom_produit, panier_est_immobilier, panier_est_scpi,
+    type_autorise_pour_panier,
 };
 use crate::avoir_declaration_store::AvoirDeclarationRow;
 use crate::avoir_retrait_store::AvoirRetraitRow;

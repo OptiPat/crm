@@ -319,4 +319,83 @@ describe("bulletin-markdown-html", () => {
     expect(philippeHtml).toContain("font-size:1.1em");
     expect(philippeHtml).not.toMatch(/<li[^>]*>[\s\S]*Comète/);
   });
+
+  it("réinjecte 1/2/3 si Mistral omet les titres (Transitions)", () => {
+    const md = [
+      "Transitions Europe – T2 2026",
+      "274 M€ : collecte nette",
+      "1,38 Md€ : capitalisation",
+      "4,10 €/part : distribution brute de fiscalité étrangère",
+      "98 % : taux d’occupation financier (TOF)",
+      "0 % : endettement",
+      "",
+      "Le premier semestre 2026 confirme une trajectoire de développement marquée par une collecte soutenue et un déploiement rapide des capitaux.",
+      "",
+      "Allemagne, Neubrandenbourg : Commerce, TK Maxx, dm, New Yorker",
+      "Pologne, Cracovie : Bureaux, PepsiCo GBS Poland, EY, Medicover",
+    ].join("\n");
+    const plain = bulletinMarkdownToPlainEmail(md, true, "T2 2026");
+    expect(plain).toContain("1. Chiffres clés");
+    expect(plain).toContain("2. Ce trimestre");
+    expect(plain).toContain("3. Acquisitions");
+    expect(plain.indexOf("1. Chiffres clés")).toBeLessThan(plain.indexOf("274 M€"));
+    expect(plain.indexOf("2. Ce trimestre")).toBeLessThan(plain.indexOf("premier semestre"));
+    expect(plain.indexOf("3. Acquisitions")).toBeLessThan(plain.indexOf("Neubrandenbourg"));
+    expect((plain.match(/1\. Chiffres clés/g) ?? []).length).toBe(1);
+  });
+
+  it("ne colle pas 3. Acquisitions sur une capitalisation 1,38 Md€", () => {
+    const md = [
+      "Transitions Europe – T2 2026",
+      "Chiffres clés :",
+      "",
+      "1. Chiffres clés",
+      "Collecte nette : 274 M€",
+      "",
+      "3. Acquisitions",
+      "Capitalisation : 1,38 Md€",
+      "Trésorerie disponible : 238 M€",
+      "Taux d'endettement : 0 %",
+      "",
+      "Ce trimestre :",
+      "",
+      "2. Ce trimestre",
+      "Le premier semestre 2026 confirme une trajectoire de développement marquée par une collecte soutenue et un déploiement rapide des capitaux.",
+      "",
+      "Acquisitions :",
+      "Allemagne, Neubrandenbourg : Commerce, TK Maxx, dm, New Yorker",
+      "Pologne, Cracovie : Bureaux, PepsiCo, EY, Medicover",
+    ].join("\n");
+    const plain = bulletinMarkdownToPlainEmail(md, true, "T2 2026");
+    expect(plain).toContain("1. Chiffres clés");
+    expect(plain).toContain("2. Ce trimestre");
+    expect(plain).toContain("3. Acquisitions");
+    expect(plain).not.toContain("Chiffres clés :");
+    expect(plain).not.toContain("Ce trimestre :");
+    expect((plain.match(/1\. Chiffres clés/g) ?? []).length).toBe(1);
+    expect((plain.match(/2\. Ce trimestre/g) ?? []).length).toBe(1);
+    expect((plain.match(/3\. Acquisitions/g) ?? []).length).toBe(1);
+    const acq = plain.indexOf("3. Acquisitions");
+    expect(acq).toBeGreaterThan(plain.indexOf("premier semestre"));
+    expect(acq).toBeLessThan(plain.indexOf("Neubrandenbourg"));
+    expect(plain.indexOf("Capitalisation")).toBeLessThan(acq);
+  });
+
+  it("retire la consigne prompt recopiée comme titre Acquisitions", () => {
+    const md = [
+      "ActivImmo – T2 2026",
+      "1. Chiffres clés",
+      "Collecte nette : 3,7 M€",
+      "2. Ce trimestre",
+      "La stratégie d'internationalisation s'est poursuivie avec des acquisitions ciblées.",
+      "3. Acquisitions (uniquement si le bulletin en liste)",
+      "",
+      "3. Acquisitions",
+      "Allemagne, Bönen : Entrepôt logistique, occupé à 100 %",
+    ].join("\n");
+    const plain = bulletinMarkdownToPlainEmail(md, true, "T2 2026");
+    expect(plain).not.toContain("uniquement si le bulletin");
+    expect((plain.match(/3\. Acquisitions/g) ?? []).length).toBe(1);
+    expect(plain).toContain("Allemagne, Bönen");
+  });
 });

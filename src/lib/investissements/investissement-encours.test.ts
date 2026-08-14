@@ -48,6 +48,11 @@ describe("investissement-encours", () => {
     expect(isClientPreviewValorisationHistoryEligible("AUTRE")).toBe(true);
     expect(isClientPreviewValorisationHistoryEligible("IMMOBILIER")).toBe(true);
     expect(isClientPreviewValorisationHistoryEligible("PREVOYANCE")).toBe(false);
+    expect(getPlacementValorisationUiMode("BIJOUX")).toBe("valorisation");
+    expect(isPlacementValorisationUpdateEligible("FONDS_COMMERCE")).toBe(true);
+    expect(isClientPreviewValorisationHistoryEligible("PARTS_SOCIETE")).toBe(
+      true
+    );
   });
 
   it("utilise encours_actuel sinon montant_initial", () => {

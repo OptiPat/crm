@@ -2,7 +2,8 @@
 
 use super::mistral::{mistral_ocr_pdf, mistral_summarize_scpi_bulletin, SCPI_BULLETIN_CHAT_MODEL};
 use super::nom_produit::{
-    align_nom_produit_with_portfolio, guess_periode, pick_nom_produit, scpi_name_from_file_name,
+    align_nom_produit_with_portfolio, choose_campaign_periode, guess_periode, pick_nom_produit,
+    scpi_name_from_file_name,
 };
 use crate::database::scpi_campaigns::{
     PrepareScpiCampaignInput, PrepareScpiCampaignResult, ScpiBulletinInput,
@@ -53,7 +54,7 @@ pub fn process_scpi_bulletin_pdfs(
 
     let total = pdf_paths.len() as u32;
     let mut bulletins: Vec<ScpiBulletinInput> = Vec::new();
-    let mut periode: Option<String> = None;
+    let mut periode_guesses: Vec<String> = Vec::new();
 
     for (index, path) in pdf_paths.iter().enumerate() {
         let file_name = file_name_from_path(path);
@@ -101,9 +102,7 @@ pub fn process_scpi_bulletin_pdfs(
         let guess = pick_nom_produit(&summary_email, &file_name, &scpi_name);
         let nom_produit = align_nom_produit_with_portfolio(&guess, portfolio);
 
-        if periode.is_none() {
-            periode = Some(guess_periode(&file_name, &summary_email));
-        }
+        periode_guesses.push(guess_periode(&file_name, &summary_email));
 
         bulletins.push(ScpiBulletinInput {
             nom_produit,
@@ -113,7 +112,7 @@ pub fn process_scpi_bulletin_pdfs(
     }
 
     Ok(ProcessedScpiBulletinBatch {
-        periode: periode.unwrap_or_else(|| "Trimestre".into()),
+        periode: choose_campaign_periode(&periode_guesses),
         bulletins,
     })
 }

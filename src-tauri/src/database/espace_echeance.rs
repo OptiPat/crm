@@ -113,6 +113,31 @@ impl super::Database {
         }
         Ok(())
     }
+
+    pub fn contact_has_echeance_same_day(
+        &self,
+        contact_id: i64,
+        date_echeance: i64,
+        titre: &str,
+    ) -> Result<bool> {
+        let titre = match normalize_echeance_titre(titre) {
+            Ok(t) => t,
+            Err(_) => return Ok(false),
+        };
+        let found: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT id FROM espace_echeance
+                 WHERE contact_id = ?1
+                   AND titre = ?2
+                   AND date(date_echeance, 'unixepoch') = date(?3, 'unixepoch')
+                 LIMIT 1",
+                params![contact_id, titre, date_echeance],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(found.is_some())
+    }
 }
 
 #[cfg(test)]
@@ -195,5 +220,23 @@ mod tests {
     fn delete_rejects_unknown_id() {
         let db = Database::open_in_memory_for_tests().unwrap();
         assert!(db.delete_espace_echeance(404).is_err());
+    }
+
+    #[test]
+    fn same_day_title_is_detected_for_broadcast() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let id = contact(&db);
+        let midi = 1_800_000_000;
+        db.create_espace_echeance(id, midi, "Assemblée", None, None)
+            .unwrap();
+        assert!(db
+            .contact_has_echeance_same_day(id, midi + 3_600, "Assemblée")
+            .unwrap());
+        assert!(!db
+            .contact_has_echeance_same_day(id, midi + 86_400, "Assemblée")
+            .unwrap());
+        assert!(!db
+            .contact_has_echeance_same_day(id, midi, "Autre titre")
+            .unwrap());
     }
 }

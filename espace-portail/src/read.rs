@@ -52,6 +52,32 @@ fn strip_unsafe_rdv_url(payload: &mut serde_json::Value) {
     }
 }
 
+/// Seul `https://wa.me/` suivi de chiffres internationaux est proposé au client.
+fn strip_unsafe_whatsapp_url(payload: &mut serde_json::Value) {
+    let est_sur = |valeur: Option<&serde_json::Value>| {
+        valeur
+            .and_then(|v| v.as_str())
+            .map(is_safe_whatsapp_url)
+            .unwrap_or(false)
+    };
+
+    if !est_sur(payload.get("whatsappUrl")) {
+        if let Some(objet) = payload.as_object_mut() {
+            objet.remove("whatsappUrl");
+        }
+    }
+}
+
+fn is_safe_whatsapp_url(url: &str) -> bool {
+    let url = url.trim();
+    let Some(rest) = url.strip_prefix("https://wa.me/") else {
+        return false;
+    };
+    let digits = rest.split(['?', '#']).next().unwrap_or("");
+    let len = digits.len();
+    (10..=15).contains(&len) && digits.bytes().all(|b| b.is_ascii_digit())
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PatrimoineResponse {
@@ -92,6 +118,7 @@ async fn get_patrimoine_for_contact(state: AppState, contact_id: i64) -> axum::r
             let mut payload = row.payload;
             strip_client_hidden_timeline_events(&mut payload);
             strip_unsafe_rdv_url(&mut payload);
+            strip_unsafe_whatsapp_url(&mut payload);
             if let Ok(declarations) = state.db.list_scpi_declarations_for_contact(contact_id) {
                 crate::scpi_declarations::overlay_scpi_declarations(&mut payload, &declarations);
             }
@@ -168,5 +195,23 @@ mod tests {
         let timeline = payload["timeline"].as_array().unwrap();
         assert!(timeline[0].get("rdvUrl").is_none());
         assert_eq!(timeline[1]["rdvUrl"], "https://agenda.example.com/ok");
+    }
+
+    #[test]
+    fn insecure_whatsapp_urls_are_dropped() {
+        let mut payload = json!({
+            "whatsappUrl": "https://evil.example/phish",
+        });
+        strip_unsafe_whatsapp_url(&mut payload);
+        assert!(payload.get("whatsappUrl").is_none());
+
+        let mut ok = json!({
+            "whatsappUrl": "https://wa.me/33612345678?text=Bonjour",
+        });
+        strip_unsafe_whatsapp_url(&mut ok);
+        assert_eq!(
+            ok["whatsappUrl"],
+            "https://wa.me/33612345678?text=Bonjour"
+        );
     }
 }

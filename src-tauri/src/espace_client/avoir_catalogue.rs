@@ -4,9 +4,10 @@
 //! et à `espace-portail/src/avoir_catalogue.rs`. Le test
 //! `client-avoir-catalogue.test.ts` compare les trois.
 
-pub const AVOIR_TYPES_AUTORISES: [&str; 26] = [
+pub const AVOIR_TYPES_AUTORISES: [&str; 31] = [
     "ASSURANCE_VIE",
     "AUTRE",
+    "BIJOUX",
     "CAT",
     "CEL",
     "COMPTE_COURANT",
@@ -16,12 +17,15 @@ pub const AVOIR_TYPES_AUTORISES: [&str; 26] = [
     "DENORMANDIE",
     "EPARGNE_BANCAIRE",
     "EPARGNE_SALARIALE",
+    "FONDS_COMMERCE",
     "IMMOBILIER",
     "LDDS",
     "LEP",
     "LIVRET_A",
     "LMNP",
     "LOCATIF_CLASSIQUE",
+    "OBJET_ART",
+    "PARTS_SOCIETE",
     "PEA",
     "PEAC",
     "PEL",
@@ -31,6 +35,7 @@ pub const AVOIR_TYPES_AUTORISES: [&str; 26] = [
     "RESIDENCE_SECONDAIRE",
     "SCPI",
     "SCPI_DEMEMBREMENT",
+    "VOITURE_COLLECTION",
 ];
 
 pub fn type_autorise_pour_panier(panier: &str, type_produit: &str) -> bool {
@@ -72,6 +77,14 @@ pub fn type_autorise_pour_panier(panier: &str, type_produit: &str) -> bool {
                 | "CSL"
                 | "EPARGNE_BANCAIRE"
         ),
+        "meubles" => matches!(
+            type_produit,
+            "BIJOUX"
+                | "OBJET_ART"
+                | "VOITURE_COLLECTION"
+                | "PARTS_SOCIETE"
+                | "FONDS_COMMERCE"
+        ),
         _ => false,
     }
 }
@@ -109,7 +122,9 @@ mod tests {
         let mut sorted = AVOIR_TYPES_AUTORISES.to_vec();
         sorted.sort_unstable();
         assert_eq!(sorted, AVOIR_TYPES_AUTORISES);
-        assert_eq!(AVOIR_TYPES_AUTORISES.len(), 26);
+        assert_eq!(AVOIR_TYPES_AUTORISES.len(), 31);
+        assert!(type_autorise_pour_panier("meubles", "BIJOUX"));
+        assert!(!type_autorise_pour_panier("placements", "BIJOUX"));
     }
 
     #[test]

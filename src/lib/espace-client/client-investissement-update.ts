@@ -46,7 +46,7 @@ function isOrigineACote(origine: string | undefined): boolean {
 
 /**
  * SCPI : avec moi ou à côté (même formulaire, revenu inclus).
- * Épargne / placements / immobilier : uniquement hors « avec moi ».
+ * Épargne / placements / immobilier / biens meubles : uniquement hors « avec moi ».
  * Pas de création d'avoir — mise à jour de lignes déjà synchronisées.
  */
 export function getClientInvestissementUpdateKind(
@@ -63,7 +63,11 @@ export function getClientInvestissementUpdateKind(
     nature?.estImmobilier ?? IMMOBILIER_SET.has(inv.type_produit);
   if (estImmobilier) return "immobilier";
   const cat = getPatrimoineCategorie(inv.type_produit);
-  if (cat === "Épargne bancaire" || cat === "Placements financiers") {
+  if (
+    cat === "Épargne bancaire" ||
+    cat === "Placements financiers" ||
+    cat === "Biens meubles, professionnels"
+  ) {
     return "encours";
   }
   return null;

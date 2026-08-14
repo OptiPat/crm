@@ -1,4 +1,5 @@
 import { isPatrimoineACoteOrigine } from "./investissement-origine";
+import { isBiensMeublesType } from "./biens-meubles-types";
 
 /** Types avec n° contrat assureur (AV, PER, contrat de capi). */
 export const NUMERO_CONTRAT_TYPES = [
@@ -96,6 +97,11 @@ const PRODUCT_TYPE_LABELS: Record<string, string> = {
   COMPTE_TITRE: "Compte-Titres",
   COMPTE_TITRES: "Compte-Titres",
   AUTRE: "Autre",
+  BIJOUX: "Bijoux",
+  OBJET_ART: "Objet d'art",
+  VOITURE_COLLECTION: "Voiture de collection",
+  PARTS_SOCIETE: "Parts de société",
+  FONDS_COMMERCE: "Fonds de commerce",
 };
 
 /** Noms courts / variantes import (ex. « Fip » en base → FIP). */
@@ -177,6 +183,9 @@ export function getTypeProduitBgColor(type: string, origine?: string): string {
   }
   if (IMMOBILIER_TYPES.includes(type as (typeof IMMOBILIER_TYPES)[number])) {
     return "#85ad39";
+  }
+  if (isBiensMeublesType(type)) {
+    return "#A68B5B";
   }
   return "#dc216e";
 }

@@ -72,6 +72,8 @@ export interface EspaceClientSyncPayload {
   valorisations?: ValorisationPointDto[];
   /** Absent des anciens snapshots : le bouton disparaît alors, sans erreur. */
   rdvUrl?: string | null;
+  /** Bouton WhatsApp flottant. Absent des anciens snapshots : pas de bouton. */
+  whatsappUrl?: string | null;
   /** Déclarations SCPI en attente de sync CRM — injectées par le portail. */
   scpiClientDeclarations?: EspaceClientScpiDeclarationLine[];
 }

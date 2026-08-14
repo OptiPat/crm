@@ -1,6 +1,6 @@
 //! Heuristiques nom SCPI / période (ex-n8n « Accumuler bulletin »).
 
-use crate::database::investissement_produit_match::nom_produit_matches;
+use crate::database::investissement_produit_match::nom_produit_matches_same_scpi;
 
 const FICHIER_SKIP_TOKENS: &[&str] = &[
     "bti", "bulletin", "trimestre", "trim", "scpi", "t1", "t2", "t3", "t4", "1er", "2e", "3e",
@@ -108,40 +108,66 @@ pub fn pick_nom_produit(summary: &str, file_name: &str, scpi_name: &str) -> Stri
 }
 
 pub fn guess_periode(file_name: &str, summary: &str) -> String {
+    // Le nom de fichier prime : le résumé cite souvent le trimestre précédent (ex. « vs T1 2026 »).
+    if let Some(p) = parse_t_period(file_name) {
+        return p;
+    }
+    if let Some(p) = parse_trimestre_period(file_name) {
+        return p;
+    }
     let summary_head: String = summary.chars().take(800).collect();
-    let text = format!("{file_name} {summary_head}");
-    if let Some(p) = parse_t_period(&text) {
+    if let Some(p) = parse_t_period(&summary_head) {
         return p;
     }
-    if let Some(p) = parse_trimestre_period(&text) {
+    if let Some(p) = parse_trimestre_period(&summary_head) {
         return p;
-    }
-    if let Some(year) = find_four_digit_year(&text) {
-        return format!("T1 {year}");
     }
     "Trimestre".to_string()
 }
 
+/// Période de campagne : majorité des guesses fichiers (évite un 1er PDF mal parsé).
+pub fn choose_campaign_periode(guesses: &[String]) -> String {
+    if guesses.is_empty() {
+        return "Trimestre".into();
+    }
+    let mut best: Option<(&str, usize, bool)> = None;
+    for guess in guesses {
+        let count = guesses.iter().filter(|g| g.as_str() == guess.as_str()).count();
+        let looks_like_t = guess.len() >= 6
+            && guess.starts_with('T')
+            && guess.chars().nth(1).is_some_and(|c| matches!(c, '1' | '2' | '3' | '4'));
+        match best {
+            None => best = Some((guess.as_str(), count, looks_like_t)),
+            Some((_, best_count, best_t)) => {
+                if count > best_count || (count == best_count && looks_like_t && !best_t) {
+                    best = Some((guess.as_str(), count, looks_like_t));
+                }
+            }
+        }
+    }
+    best.map(|(p, _, _)| p.to_string())
+        .unwrap_or_else(|| guesses[0].clone())
+}
+
 fn parse_t_period(text: &str) -> Option<String> {
-    let upper = text.to_uppercase();
-    let bytes = upper.as_bytes();
-    let len = bytes.len();
+    let upper: Vec<char> = text.to_uppercase().chars().collect();
+    let len = upper.len();
     let mut i = 0;
     while i + 2 < len {
-        if bytes[i].eq_ignore_ascii_case(&b't') {
+        if upper[i] == 'T' {
             let mut j = i + 1;
-            while j < len && (bytes[j].is_ascii_whitespace() || bytes[j] == b'_') {
+            while j < len && (upper[j].is_whitespace() || upper[j] == '_') {
                 j += 1;
             }
-            if j < len && matches!(bytes[j], b'1' | b'2' | b'3' | b'4') {
-                let quarter = bytes[j] as char;
+            if j < len && matches!(upper[j], '1' | '2' | '3' | '4') {
+                let quarter = upper[j];
                 let mut k = j + 1;
-                while k < len && (bytes[k].is_ascii_whitespace() || bytes[k] == b'_') {
+                while k < len && (upper[k].is_whitespace() || upper[k] == '_') {
                     k += 1;
                 }
-                if k + 3 < len && &bytes[k..k + 2] == b"20" {
-                    let year: String = upper.chars().skip(k).take(4).collect();
-                    if year.len() == 4 && year.chars().all(|c| c.is_ascii_digit()) {
+                if k + 3 < len {
+                    let year: String = upper[k..=k + 3].iter().collect();
+                    if year.starts_with("20") && year.chars().all(|c| c.is_ascii_digit()) {
                         return Some(format!("T{quarter} {year}"));
                     }
                 }
@@ -177,7 +203,7 @@ fn find_four_digit_year(text: &str) -> Option<String> {
 pub fn align_nom_produit_with_portfolio(guess: &str, products: &[String]) -> String {
     products
         .iter()
-        .filter(|p| nom_produit_matches(p, guess))
+        .filter(|p| nom_produit_matches_same_scpi(p, guess))
         .max_by_key(|p| p.len())
         .cloned()
         .unwrap_or_else(|| guess.trim().to_string())
@@ -225,6 +251,27 @@ mod tests {
             guess_periode("Comete_T1_2026.pdf", ""),
             "T1 2026"
         );
+        assert_eq!(
+            guess_periode("Comète T2 2026.pdf", "Capitalisation +7 % vs T1 2026"),
+            "T2 2026"
+        );
+        assert_eq!(
+            guess_periode("Épargne Pierre Europe T2 2026.pdf", ""),
+            "T2 2026"
+        );
+    }
+
+    #[test]
+    fn guess_periode_does_not_default_year_to_t1() {
+        assert_eq!(guess_periode("bulletin 2026.pdf", ""), "Trimestre");
+    }
+
+    #[test]
+    fn choose_campaign_periode_majority_prefers_tx() {
+        assert_eq!(
+            choose_campaign_periode(&["T1 2026".into(), "T2 2026".into(), "T2 2026".into()]),
+            "T2 2026"
+        );
     }
 
     #[test]
@@ -247,6 +294,18 @@ mod tests {
         assert_eq!(
             align_nom_produit_with_portfolio("Transitions Europe", &products),
             "Transitions Europe"
+        );
+        let nested = vec![
+            "Epargne Pierre".into(),
+            "Epargne Pierre Europe".into(),
+        ];
+        assert_eq!(
+            align_nom_produit_with_portfolio("Epargne Pierre", &nested),
+            "Epargne Pierre"
+        );
+        assert_eq!(
+            align_nom_produit_with_portfolio("Epargne Pierre Europe", &nested),
+            "Epargne Pierre Europe"
         );
     }
 }

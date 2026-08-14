@@ -27,6 +27,9 @@ pub struct EspaceClientSyncPayload {
     /// conseiller dans ses réglages. Absente = pas de bouton.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rdv_url: Option<String>,
+    /// Lien wa.me du bouton WhatsApp flottant. Absente = pas de bouton.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub whatsapp_url: Option<String>,
     /// Clé publique de scellement des dépôts. La privée reste sur ce poste.
     pub depot_public_key: Option<String>,
 }

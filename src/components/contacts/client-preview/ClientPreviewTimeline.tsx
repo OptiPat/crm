@@ -90,22 +90,24 @@ export function ClientPreviewTimeline({
                       aria-hidden
                     />
                   </div>
-                  <div className="min-w-0">
-                    <p className={CP.body}>{ev.label}</p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+                      <p className={`${CP.body} min-w-0`}>{ev.label}</p>
+                      {ev.rdvUrl ? (
+                        <a
+                          href={ev.rdvUrl}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className={`${CP.rdvButton} shrink-0`}
+                        >
+                          Prendre rendez-vous
+                        </a>
+                      ) : null}
+                    </div>
                     {ev.detail ? (
                       <p className={`${CP.meta} mt-0.5 line-clamp-2`}>
                         {ev.detail}
                       </p>
-                    ) : null}
-                    {ev.rdvUrl ? (
-                      <a
-                        href={ev.rdvUrl}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className={`${CP.rdvButton} mt-2`}
-                      >
-                        Prendre rendez-vous
-                      </a>
                     ) : null}
                   </div>
                 </div>

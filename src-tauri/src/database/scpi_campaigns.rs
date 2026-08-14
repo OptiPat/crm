@@ -1,7 +1,7 @@
 //! Campagnes email bulletins SCPI (digest par contact, file modèle sans étiquette).
 
 use super::investissement_produit_match::{
-    nom_produit_matches, normalize_produit_match_key, MIN_PRODUIT_MATCH_LEN,
+    nom_produit_matches_same_scpi, normalize_produit_match_key, MIN_PRODUIT_MATCH_LEN,
 };
 use super::models::NewTemplateEmail;
 use super::Database;
@@ -56,7 +56,7 @@ pub fn contact_inherits_foyer_scpi_investments(role_foyer: Option<&str>) -> bool
 fn pick_display_produit_nom(investissement_noms: &[String], bulletin_key: &str) -> String {
     investissement_noms
         .iter()
-        .filter(|nom| nom_produit_matches(nom, bulletin_key))
+        .filter(|nom| nom_produit_matches_same_scpi(nom, bulletin_key))
         .max_by_key(|nom| nom.len())
         .cloned()
         .unwrap_or_else(|| bulletin_key.trim().to_string())
@@ -164,7 +164,9 @@ fn bulletin_match_key(bulletin: &ScpiBulletinInput) -> String {
         .as_deref()
         .and_then(infer_produit_from_fichier);
     match (from_summary, from_fichier) {
-        (Some(summary), Some(fichier)) if !nom_produit_matches(&fichier, &summary) => fichier,
+        (Some(summary), Some(fichier)) if !nom_produit_matches_same_scpi(&fichier, &summary) => {
+            fichier
+        }
         (Some(summary), Some(fichier)) => pick_longer_produit_name(&summary, &fichier),
         (Some(summary), None) => summary,
         (None, Some(fichier)) => fichier,
@@ -198,7 +200,12 @@ fn is_subsection_title(rest: &str) -> bool {
 }
 
 fn canonical_subsection_title(rest: &str) -> Option<&'static str> {
-    let key = fold_subsection_key(subsection_title_candidate(rest));
+    let candidate = subsection_title_candidate(rest);
+    let without_paren = candidate
+        .split_once('(')
+        .map(|(left, _)| left.trim())
+        .unwrap_or(candidate);
+    let key = fold_subsection_key(without_paren);
     match key.as_str() {
         "chiffres cles" => Some("Chiffres clés"),
         "ce trimestre" => Some("Ce trimestre"),
@@ -239,6 +246,7 @@ fn preprocess_mistral_bulletin_line(line: &str) -> Option<String> {
             || unwrapped.starts_with("2.")
             || unwrapped.starts_with("3.")
             || unwrapped.starts_with("4.")
+            || canonical_subsection_title(&unwrapped).is_some()
         {
             return if unwrapped.is_empty() {
                 None
@@ -461,7 +469,11 @@ fn is_subsection_heading_line(line: &str) -> bool {
 }
 
 fn subsection_heading_canonical(line: &str) -> Option<&'static str> {
-    let t = line.trim();
+    let t = line
+        .trim()
+        .trim_start_matches("- ")
+        .trim_start_matches("* ")
+        .trim();
     for n in 1..=3 {
         let prefix = format!("{n}.");
         if let Some(rest) = t.strip_prefix(&prefix) {
@@ -470,12 +482,75 @@ fn subsection_heading_canonical(line: &str) -> Option<&'static str> {
             }
         }
     }
-    None
+    canonical_subsection_title(t)
+}
+
+fn format_subsection_heading(title: &str) -> String {
+    let num = match title {
+        "Chiffres clés" => 1,
+        "Ce trimestre" => 2,
+        "Acquisitions" => 3,
+        _ => 0,
+    };
+    format!("{num}. {title}")
+}
+
+fn canonicalize_heading_lines(lines: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut last: Option<&'static str> = None;
+    for line in lines {
+        let t = line.trim();
+        if let Some(title) = subsection_heading_canonical(t) {
+            if last == Some(title) {
+                continue;
+            }
+            last = Some(title);
+            out.push(format_subsection_heading(title));
+            continue;
+        }
+        if !t.is_empty() {
+            last = None;
+        }
+        out.push(line);
+    }
+    out
+}
+
+fn next_non_empty_line(lines: &[String], from: usize) -> &str {
+    lines
+        .iter()
+        .skip(from)
+        .map(|l| l.trim())
+        .find(|t| !t.is_empty())
+        .unwrap_or("")
+}
+
+fn drop_misplaced_subsection_headings(lines: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for i in 0..lines.len() {
+        if subsection_heading_canonical(lines[i].trim()) == Some("Acquisitions") {
+            let next = next_non_empty_line(&lines, i + 1);
+            if !next.is_empty()
+                && is_kpi_content_line(next)
+                && !is_acquisition_content_line(
+                    next.trim_start_matches("- ").trim_start_matches("* ").trim(),
+                )
+            {
+                continue;
+            }
+        }
+        out.push(lines[i].clone());
+    }
+    out
 }
 
 fn is_acquisition_content_line(line: &str) -> bool {
-    let t = line.trim();
-    if t.is_empty() || t.starts_with("- ") || t.starts_with("* ") {
+    let t = line
+        .trim()
+        .trim_start_matches("- ")
+        .trim_start_matches("* ")
+        .trim();
+    if t.is_empty() {
         return false;
     }
     if subsection_heading_canonical(t).is_some() {
@@ -484,7 +559,117 @@ fn is_acquisition_content_line(line: &str) -> bool {
     if t.starts_with("## ") || is_product_title_line(t) {
         return false;
     }
-    t.contains(": ") && t.contains(',')
+    let Some((left, _)) = t.split_once(": ") else {
+        return false;
+    };
+    let Some((country, city)) = left.split_once(", ") else {
+        return false;
+    };
+    let country = country.trim();
+    let city = city.trim();
+    country.chars().next().is_some_and(|c| c.is_alphabetic())
+        && city.chars().next().is_some_and(|c| c.is_alphabetic())
+        && !country.chars().any(|c| c.is_ascii_digit())
+}
+
+fn is_kpi_content_line(line: &str) -> bool {
+    let bare = line
+        .trim()
+        .trim_start_matches("- ")
+        .trim_start_matches("* ")
+        .trim();
+    if bare.is_empty() || bare.chars().count() > 120 {
+        return false;
+    }
+    if subsection_heading_canonical(bare).is_some()
+        || is_product_title_line(bare)
+        || bare.starts_with("## ")
+    {
+        return false;
+    }
+    if is_acquisition_content_line(bare) {
+        return false;
+    }
+    let key = fold_subsection_key(bare);
+    ["collecte", "capitalisation", "distribution", "occupation", "endettement", "tof"]
+        .iter()
+        .any(|k| key.contains(k))
+}
+
+fn is_prose_content_line(line: &str) -> bool {
+    let bare = line
+        .trim()
+        .trim_start_matches("- ")
+        .trim_start_matches("* ")
+        .trim();
+    if bare.chars().count() < 70 {
+        return false;
+    }
+    if subsection_heading_canonical(bare).is_some()
+        || is_product_title_line(bare)
+        || bare.starts_with("## ")
+    {
+        return false;
+    }
+    if is_kpi_content_line(bare) || is_acquisition_content_line(bare) {
+        return false;
+    }
+    true
+}
+
+fn ensure_subsection_headings(lines: Vec<String>) -> Vec<String> {
+    let mut has_chiffres = false;
+    let mut has_trimestre = false;
+    let mut has_acq = false;
+    for line in &lines {
+        match subsection_heading_canonical(line.trim()) {
+            Some("Chiffres clés") => has_chiffres = true,
+            Some("Ce trimestre") => has_trimestre = true,
+            Some("Acquisitions") => has_acq = true,
+            _ => {}
+        }
+    }
+    if has_chiffres && has_trimestre && has_acq {
+        return lines;
+    }
+
+    let mut out: Vec<String> = Vec::new();
+    for line in lines {
+        let t = line.trim();
+        if t.is_empty()
+            || t == "---"
+            || t.starts_with("## ")
+            || is_product_title_line(t)
+            || is_subsection_heading_line(t)
+        {
+            out.push(line);
+            continue;
+        }
+        if !has_chiffres && is_kpi_content_line(t) {
+            if out.last().is_some_and(|l| !l.trim().is_empty()) {
+                out.push(String::new());
+            }
+            out.push("1. Chiffres clés".into());
+            has_chiffres = true;
+        } else if !has_trimestre && is_prose_content_line(t) {
+            if out.last().is_some_and(|l| !l.trim().is_empty()) {
+                out.push(String::new());
+            }
+            out.push("2. Ce trimestre".into());
+            has_trimestre = true;
+        } else if !has_acq {
+            let bare = t.trim_start_matches("- ").trim_start_matches("* ").trim();
+            if is_acquisition_content_line(bare) {
+                if out.last().is_some_and(|l| !l.trim().is_empty()) {
+                    out.push(String::new());
+                }
+                out.push("3. Acquisitions".into());
+                has_acq = true;
+            }
+        }
+        out.push(line);
+    }
+    out
 }
 
 fn prefix_acquisition_bullets(lines: Vec<String>) -> Vec<String> {
@@ -554,19 +739,17 @@ fn normalize_subsection_line(line: &str) -> String {
     if trimmed.is_empty() {
         return String::new();
     }
-    if let Some(title) = canonical_subsection_title(&trimmed) {
-        let num = match title {
-            "Chiffres clés" => 1,
-            "Ce trimestre" => 2,
-            "Acquisitions" => 3,
-            _ => return trimmed,
-        };
-        return format!("{num}. {title}");
+    let without_bullet = trimmed
+        .trim_start_matches("- ")
+        .trim_start_matches("* ")
+        .trim();
+    if let Some(title) = canonical_subsection_title(without_bullet) {
+        return format_subsection_heading(title);
     }
-    if let Some(dot_idx) = trimmed.find('.') {
-        let num_str = trimmed[..dot_idx].trim();
+    if let Some(dot_idx) = without_bullet.find('.') {
+        let num_str = without_bullet[..dot_idx].trim();
         if let Ok(num) = num_str.parse::<u32>() {
-            let rest = trimmed[dot_idx + 1..].trim();
+            let rest = without_bullet[dot_idx + 1..].trim();
             if let Some(canonical) = canonical_subsection_title(rest) {
                 if let Some(normalized) = legacy_subsection_number(num, rest) {
                     return format!("{normalized}. {canonical}");
@@ -849,11 +1032,13 @@ fn normalize_bulletin_summary_markdown(
     }
 
     let body = remove_empty_subsection_headings(prefix_acquisition_bullets(
-        canonicalize_product_title_lines(
-            dedupe_product_title_lines(out, periode),
-            display_name,
-            periode,
-        ),
+        ensure_subsection_headings(drop_misplaced_subsection_headings(
+            canonicalize_heading_lines(canonicalize_product_title_lines(
+                dedupe_product_title_lines(out, periode),
+                display_name,
+                periode,
+            )),
+        )),
     ))
     .join("\n")
     .replace("\n\n\n", "\n\n")
@@ -1218,7 +1403,7 @@ impl Database {
         let mut matched = Vec::new();
         for bulletin in bulletins {
             let key = bulletin_match_key(bulletin);
-            if noms.iter().any(|nom| nom_produit_matches(nom, &key)) {
+            if noms.iter().any(|nom| nom_produit_matches_same_scpi(nom, &key)) {
                 matched.push(ScpiBulletinInput {
                     nom_produit: pick_display_produit_nom(&noms, &key),
                     ..bulletin.clone()
@@ -1749,6 +1934,96 @@ mod tests {
     }
 
     #[test]
+    fn normalize_injects_missing_1_2_3_headings() {
+        let resume = build_bulletin_resume(
+            &[ScpiBulletinInput {
+                nom_produit: "Transitions Europe".into(),
+                summary_markdown: [
+                    "Transitions Europe – T2 2026",
+                    "274 M€ : collecte nette",
+                    "1,38 Md€ : capitalisation",
+                    "4,10 €/part : distribution brute",
+                    "98 % : taux d'occupation financier (TOF)",
+                    "0 % : endettement",
+                    "",
+                    "Le premier semestre 2026 confirme une trajectoire de développement marquée par une collecte soutenue et un déploiement rapide des capitaux.",
+                    "",
+                    "Allemagne, Neubrandenbourg : Commerce, TK Maxx, dm, New Yorker",
+                    "Pologne, Cracovie : Bureaux, PepsiCo GBS Poland, EY",
+                ]
+                .join("\n"),
+                fichier_source: None,
+            }],
+            "T2 2026",
+        );
+        assert!(resume.contains("1. Chiffres clés"));
+        assert!(resume.contains("2. Ce trimestre"));
+        assert!(resume.contains("3. Acquisitions"));
+        assert!(resume.find("1. Chiffres clés").unwrap() < resume.find("274 M€").unwrap());
+        assert!(resume.find("2. Ce trimestre").unwrap() < resume.find("premier semestre").unwrap());
+        assert!(resume.find("3. Acquisitions").unwrap() < resume.find("Neubrandenbourg").unwrap());
+        assert_eq!(resume.matches("1. Chiffres clés").count(), 1);
+    }
+
+    #[test]
+    fn normalize_does_not_treat_french_decimal_as_acquisition() {
+        let resume = build_bulletin_resume(
+            &[ScpiBulletinInput {
+                nom_produit: "Transitions Europe".into(),
+                summary_markdown: [
+                    "Transitions Europe – T2 2026",
+                    "Chiffres clés :",
+                    "Collecte nette : 274 M€",
+                    "3. Acquisitions",
+                    "Capitalisation : 1,38 Md€",
+                    "Taux d'endettement : 0 %",
+                    "Ce trimestre :",
+                    "Le premier semestre 2026 confirme une trajectoire de développement marquée par une collecte soutenue et un déploiement rapide des capitaux.",
+                    "Acquisitions :",
+                    "Allemagne, Neubrandenbourg : Commerce, TK Maxx, dm, New Yorker",
+                ]
+                .join("\n"),
+                fichier_source: None,
+            }],
+            "T2 2026",
+        );
+        assert_eq!(resume.matches("1. Chiffres clés").count(), 1);
+        assert_eq!(resume.matches("2. Ce trimestre").count(), 1);
+        assert_eq!(resume.matches("3. Acquisitions").count(), 1);
+        assert!(!resume.contains("Chiffres clés :"));
+        let acq = resume.find("3. Acquisitions").unwrap();
+        assert!(acq > resume.find("premier semestre").unwrap());
+        assert!(acq < resume.find("Neubrandenbourg").unwrap());
+        assert!(resume.find("Capitalisation").unwrap() < acq);
+    }
+
+    #[test]
+    fn normalize_strips_prompt_instruction_leaked_as_heading() {
+        let resume = build_bulletin_resume(
+            &[ScpiBulletinInput {
+                nom_produit: "ActivImmo".into(),
+                summary_markdown: [
+                    "ActivImmo – T2 2026",
+                    "1. Chiffres clés",
+                    "Collecte nette : 3,7 M€",
+                    "2. Ce trimestre",
+                    "La stratégie d'internationalisation s'est poursuivie.",
+                    "3. Acquisitions (uniquement si le bulletin en liste)",
+                    "",
+                    "3. Acquisitions",
+                    "Allemagne, Bönen : Entrepôt logistique, occupé à 100 %",
+                ]
+                .join("\n"),
+                fichier_source: None,
+            }],
+            "T2 2026",
+        );
+        assert!(!resume.contains("uniquement si le bulletin"));
+        assert_eq!(resume.matches("3. Acquisitions").count(), 1);
+        assert!(resume.contains("Allemagne, Bönen"));
+    }
+
+    #[test]
     fn build_bulletin_resume_single_omits_product_header() {
         let bulletins = vec![ScpiBulletinInput {
             nom_produit: "Comète".into(),
@@ -1838,11 +2113,22 @@ mod tests {
     }
 
     #[test]
-    fn pick_display_produit_nom_prefers_longest_crm_label() {
-        let noms = vec!["Transitions Europe".into(), "Europe".into()];
+    fn pick_display_produit_nom_keeps_nested_scpi_distinct() {
+        let noms = vec![
+            "Epargne Pierre".into(),
+            "Epargne Pierre Europe".into(),
+        ];
         assert_eq!(
-            pick_display_produit_nom(&noms, "Europe"),
-            "Transitions Europe"
+            pick_display_produit_nom(&noms, "Epargne Pierre"),
+            "Epargne Pierre"
+        );
+        assert_eq!(
+            pick_display_produit_nom(&noms, "Epargne Pierre Europe"),
+            "Epargne Pierre Europe"
+        );
+        assert_eq!(
+            pick_display_produit_nom(&["SCPI Comète".into()], "Comète"),
+            "SCPI Comète"
         );
     }
 
@@ -1919,16 +2205,6 @@ mod tests {
     fn scpi_template_user_customized_blocks_upgrade() {
         let vars = r#"{"corps_html":"<p>x</p>","scpi_template_version":1,"scpi_template_user_customized":true}"#;
         assert!(!scpi_template_needs_upgrade(Some(vars)));
-    }
-
-    #[test]
-    fn nom_produit_matches_fuzzy() {
-        assert!(nom_produit_matches("SCPI Comète", "Comète"));
-        assert!(nom_produit_matches("Comete", "Comète"));
-        assert!(nom_produit_matches("Corum Origin", "Corum"));
-        assert!(!nom_produit_matches("Primovie", "Comète"));
-        assert!(!nom_produit_matches("Primovie", "Vie"));
-        assert!(!nom_produit_matches("Primovie", "vie"));
     }
 
     #[test]
@@ -2548,6 +2824,115 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    fn scpi_inv(contact_id: i64, nom_produit: &str) -> NewInvestissement {
+        NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: nom_produit.into(),
+            numero_contrat: None,
+            montant_initial: None,
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            date_dernier_arbitrage: None,
+            date_prochain_arbitrage: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            prevoyance_perso: None,
+            prevoyance_pro: None,
+            prevoyance_versement_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: None,
+        }
+    }
+
+    #[test]
+    fn prepare_campaign_does_not_send_france_bulletin_to_europe_holders() {
+        let db = mem_db();
+        let europe_only = db
+            .create_contact(NewContact {
+                email: Some("amandine@example.com".into()),
+                categorie: "CLIENT".into(),
+                nom: "MARTIN".into(),
+                prenom: "Amandine".into(),
+                statut_suivi: Some("ACTIF".into()),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .unwrap();
+        let france_only = db
+            .create_contact(NewContact {
+                email: Some("paul@example.com".into()),
+                categorie: "CLIENT".into(),
+                nom: "DURAND".into(),
+                prenom: "Paul".into(),
+                statut_suivi: Some("ACTIF".into()),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .unwrap();
+        db.create_investissement(scpi_inv(europe_only, "Epargne Pierre Europe"))
+            .unwrap();
+        db.create_investissement(scpi_inv(france_only, "Epargne Pierre"))
+            .unwrap();
+
+        db.prepare_scpi_bulletin_campaign(PrepareScpiCampaignInput {
+            periode: "T2 2026".into(),
+            bulletins: vec![
+                ScpiBulletinInput {
+                    nom_produit: "Epargne Pierre".into(),
+                    summary_markdown:
+                        "1. Epargne Pierre – T2 2026\n\n2. Chiffres clés\nCollecte nette : 23 M€\nCapitalisation : 2 811 M€\nFrance, Reims : Retail Park"
+                            .into(),
+                    fichier_source: Some("Epargne Pierre T2 2026.pdf".into()),
+                },
+                ScpiBulletinInput {
+                    nom_produit: "Epargne Pierre Europe".into(),
+                    summary_markdown:
+                        "1. Epargne Pierre Europe – T2 2026\n\n2. Chiffres clés\nCollecte brute : 67,9 M€\nCapitalisation : 702 M€"
+                            .into(),
+                    fichier_source: Some("Epargne Pierre Europe T2 2026.pdf".into()),
+                },
+            ],
+        })
+        .unwrap();
+
+        let europe_vars: String = db
+            .conn
+            .query_row(
+                "SELECT campaign_variables FROM contact_template_envois WHERE contact_id = ?1",
+                params![europe_only],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(europe_vars.contains("702 M€"));
+        assert!(!europe_vars.contains("2 811 M€"));
+        assert!(!europe_vars.contains("Reims"));
+        assert!(europe_vars.contains("Epargne Pierre Europe"));
+
+        let france_vars: String = db
+            .conn
+            .query_row(
+                "SELECT campaign_variables FROM contact_template_envois WHERE contact_id = ?1",
+                params![france_only],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(france_vars.contains("2 811 M€"));
+        assert!(france_vars.contains("Reims"));
+        assert!(!france_vars.contains("702 M€"));
+        assert!(!france_vars.contains("Epargne Pierre Europe"));
     }
 
     #[test]

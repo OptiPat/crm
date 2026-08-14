@@ -48,11 +48,17 @@ export function ClientPreviewDeviceFrame({
   if (!framed) {
     // Portail réel : largeur fluide. Le contenu interroge ce cadre
     // (@container), pas la fenêtre — même code que l'aperçu CRM.
+    // La couche overlay (bouton WhatsApp, fiches) est fixée à la fenêtre,
+    // pas au bloc max-w-7xl : sinon le logo collerait au contenu, pas au coin.
     return (
-      <ClientPreviewOverlayPortalProvider portalEl={null}>
+      <ClientPreviewOverlayPortalProvider portalEl={overlayPortalEl}>
         <div className="relative w-full max-w-7xl overflow-x-hidden @container">
           <div className="min-h-[100dvh] bg-[var(--cp-bg)]">{children}</div>
         </div>
+        <div
+          ref={overlayPortalRef}
+          className="pointer-events-none fixed inset-0 z-50 [&>*]:pointer-events-auto"
+        />
       </ClientPreviewOverlayPortalProvider>
     );
   }

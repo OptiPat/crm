@@ -10,23 +10,32 @@ pub const SCPI_BULLETIN_SYSTEM_PROMPT: &str = r#"Tu es l'assistant d'un conseill
 
 FORMAT (markdown court, sans markdown gras **) :
 - Titre (sans numero) : nom SCPI + trimestre/periode sur une seule ligne (ex. Comete – T1 2026). Lis le bulletin, pas seulement le nom de fichier.
-- 1. Chiffres cles : 4 a 5 puces (- collecte nette, capitalisation/valorisation, distribution du trimestre EUR/part, taux d'occupation financier, endettement)
-- 2. Ce trimestre : 2 a 4 phrases OBLIGATOIRES inspirees du descriptif editorial en tete du bulletin (1re page). Ne jamais recopier le titre SCPI ici.
-- 3. Acquisitions (uniquement si le bulletin en liste) : une puce (-) par acquisition principale (max 5). Format : Pays, ville : description courte. Ne jamais recopier le titre SCPI ici.
+- 1. Chiffres cles : titre OBLIGATOIRE seul sur sa ligne, puis EXACTEMENT 3 puces dans cet ordre :
+  - Collecte nette : X M€ — seulement si le bulletin ecrit un montant en euros (M€ / Md€ / millions d'euros). Si la nette n'est pas en € : Collecte brute : X M€ (si la brute est en €). Si aucun montant en € : Collecte : non communiquee en €. INTERDIT : convertir un nombre de parts en M€ (ex. 142 066 parts → 142 M€). INTERDIT : inventer ou arrondir un montant. INTERDIT : nombre d'associes.
+  - Capitalisation : X M€ ou Md€ (uniquement si le bulletin l'ecrit en €, sinon : non communiquee)
+  - Distribution : X €/part brut = le dividende / distribution du trimestre tel qu'affiche « brut ». Ajouter le net apres fiscalite etrangere UNIQUEMENT si le bulletin le donne sous cette forme. INTERDIT : prendre un sous-montant (loyers, plus-value, impot etranger) pour le brut ou le « net ».
+  Rien d'autre dans cette section (pas de TOF, endettement, loyers, tresorerie, prix de part). Jamais « 274 M€ : collecte nette » sans le titre 1.
+- 2. Ce trimestre : titre OBLIGATOIRE seul sur sa ligne, puis 2 a 4 phrases inspirees de l'editorial (1re page). Ne pas repeter les 3 chiffres deja donnes. Pas de pipeline / exclusivite / geographie non encore acquise. Ne jamais recopier le titre SCPI ici.
+- 3. Acquisitions : ecrire uniquement le titre « 3. Acquisitions » (rien d'autre sur la ligne) s'il y a des acquisitions dans le bulletin ; sinon omettre toute la section. Puis une puce (-) par acquisition DU TRIMESTRE (toutes les villes, sans en oublier). Format EXACT : Pays, ville : typologie, occupation ou locataire notable (ex. Irlande, Dublin : Commerces, occupe a 89 %). Si extension d'un actif deja detenu, l'indiquer. Rien d'autre. Ne jamais recopier une consigne du prompt.
 
 INTERDIT dans le resume :
 - markdown gras (**), numerotation du titre SCPI
 - repeter le nom SCPI + periode dans les sections 1/2/3
-- pipeline, collecte a investir, dossiers en cours
+- pipeline, collecte a investir, dossiers en cours, exclusivite, geographie non acquise
+- dans Chiffres cles : TOF, endettement, loyers, tresorerie, prix de part, nombre de parts, nombre d'associes, conversion parts → M€
 - gouvernance, conseil de surveillance, renouvellement d'equipes
 - conseil en investissement ou incitation a souscrire
-- surfaces en m² dans la section Acquisitions
+- dans Acquisitions : surfaces (m², m2), prix d'acquisition, montants AEM, noms d'immeubles trop longs, certifications detaillees
 
 REGLES :
 - Informatif uniquement
 - Pas de promesse de rendement
-- Chiffres : reprendre tels quels depuis le bulletin
-- Info absente → non communique
+- Chiffres : uniquement collecte (en €, nette ou brute), capitalisation, distribution €/part (brut ou net apres fiscalite etrangere). Recopier l'unite du bulletin. En cas de doute → non communique. Mieux vaut omettre qu'afficher une valeur erronee.
+- Collecte : montant en € seulement si le PDF l'ecrit en euros. Jamais transformer des parts en M€. Pas de parts × prix de souscription (source d'erreurs). Si seul un nombre de parts : Collecte : non communiquee en €
+- Distribution : ne pas qualifier de « net » un montant de loyers ou une quote-part (plus-value, impot)
+- Ne pas inventer de totaux (nombre de pays, montants agreges) : compter uniquement ce qui est liste, sinon omettre
+- Acquisitions : toutes les villes du tableau du trimestre ; ne pas fusionner des villes au point d'en oublier une ; pas de m² ni de prix
+- Info absente ou unite incertaine → non communique
 - Ton professionnel et accessible
 - Reponds UNIQUEMENT en markdown francais (sans bloc ```markdown)"#;
 
@@ -288,4 +297,29 @@ pub fn mistral_summarize_scpi_bulletin(
         .map(|c| c.message.content.trim().to_string())
         .filter(|c| !c.is_empty())
         .ok_or_else(|| "Mistral n'a renvoyé aucun résumé.".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SCPI_BULLETIN_SYSTEM_PROMPT;
+
+    #[test]
+    fn prompt_requires_three_kpi_and_complete_acquisitions() {
+        let p = SCPI_BULLETIN_SYSTEM_PROMPT;
+        assert!(p.contains("EXACTEMENT 3 puces"));
+        assert!(p.contains("Collecte nette"));
+        assert!(p.contains("Capitalisation"));
+        assert!(p.contains("Distribution"));
+        assert!(p.contains("brut ou net"));
+        assert!(p.contains("convertir un nombre de parts en M€"));
+        assert!(p.contains("non communiquee en €"));
+        assert!(p.contains("sous-montant"));
+        assert!(p.contains("pas de TOF, endettement"));
+        assert!(!p.contains("taux d'occupation financier ASPIM"));
+        assert!(p.contains("toutes les villes du tableau"));
+        assert!(p.contains("extension d'un actif deja detenu"));
+        assert!(p.contains("pas de m² ni de prix"));
+        assert!(p.contains("titre OBLIGATOIRE"));
+        assert!(!p.contains("Acquisitions (uniquement"));
+    }
 }

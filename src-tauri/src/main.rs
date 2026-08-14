@@ -86,7 +86,11 @@ use espace_client::commands::{
     list_espace_demandes_cmd, list_espace_avoir_pending_cmd, list_espace_scpi_declarations_pending_cmd,
     push_all_espace_clients_cmd, push_espace_client_contact_cmd,
     revoke_espace_acces_cmd,
-    save_espace_client_sync_config_cmd,
+    save_espace_client_sync_config_cmd, save_espace_client_whatsapp_cmd,
+};
+use espace_client::broadcast::{
+    broadcast_espace_avis_imposition_cmd, broadcast_espace_echeance_cmd,
+    preview_espace_broadcast_cmd,
 };
 use espace_client::echeance_commands::{
     create_espace_echeance_cmd, delete_espace_echeance_cmd, list_espace_echeances_cmd,
@@ -657,6 +661,7 @@ fn main() {
             get_espace_sync_summary_cmd,
             get_espace_client_sync_config_cmd,
             save_espace_client_sync_config_cmd,
+            save_espace_client_whatsapp_cmd,
             build_espace_client_snapshot_cmd,
             build_espace_client_preview_cmd,
             push_espace_client_contact_cmd,
@@ -671,6 +676,9 @@ fn main() {
             list_espace_echeances_cmd,
             create_espace_echeance_cmd,
             delete_espace_echeance_cmd,
+            preview_espace_broadcast_cmd,
+            broadcast_espace_echeance_cmd,
+            broadcast_espace_avis_imposition_cmd,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

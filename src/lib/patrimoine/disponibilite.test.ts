@@ -29,10 +29,60 @@ describe("getDisponibiliteHorizon", () => {
     );
   });
 
-  it("classe PER et épargne salariale en long terme", () => {
+  it("classe PER en long terme", () => {
     expect(getDisponibiliteHorizon({ type_produit: "PER" })).toBe("long_terme");
-    expect(getDisponibiliteHorizon({ type_produit: "PEE" })).toBe("long_terme");
+  });
+
+  it("lit PEE / PEI dans le type ou le nom → moyen terme", () => {
+    expect(getDisponibiliteHorizon({ type_produit: "PEE" })).toBe("moyen_terme");
+    expect(getDisponibiliteHorizon({ type_produit: "PEI" })).toBe("moyen_terme");
+    expect(
+      getDisponibiliteHorizon({
+        type_produit: "EPARGNE_SALARIALE",
+        nom_produit: "PEE",
+      })
+    ).toBe("moyen_terme");
+    expect(
+      getDisponibiliteHorizon({
+        type_produit: "EPARGNE_SALARIALE",
+        nom_produit: "PEE Amundi",
+      })
+    ).toBe("moyen_terme");
+    expect(
+      getDisponibiliteHorizon({
+        type_produit: "EPARGNE_SALARIALE",
+        nom_produit: "PEI entreprise",
+      })
+    ).toBe("moyen_terme");
+  });
+
+  it("lit PERCO / PERCOL / PERECO dans le type ou le nom → long terme", () => {
     expect(getDisponibiliteHorizon({ type_produit: "PERCO" })).toBe("long_terme");
+    expect(getDisponibiliteHorizon({ type_produit: "PERCOL" })).toBe("long_terme");
+    expect(
+      getDisponibiliteHorizon({
+        type_produit: "EPARGNE_SALARIALE",
+        nom_produit: "PERCOL",
+      })
+    ).toBe("long_terme");
+    expect(
+      getDisponibiliteHorizon({
+        type_produit: "EPARGNE_SALARIALE",
+        nom_produit: "PERCO+",
+      })
+    ).toBe("long_terme");
+    expect(
+      getDisponibiliteHorizon({
+        type_produit: "EPARGNE_SALARIALE",
+        nom_produit: "PERECO",
+      })
+    ).toBe("long_terme");
+    expect(
+      getDisponibiliteHorizon({
+        type_produit: "EPARGNE_SALARIALE",
+        nom_produit: "Amundi",
+      })
+    ).toBe("long_terme");
   });
 
   it("classe assurance-vie, PEA et CTO en moyen terme", () => {

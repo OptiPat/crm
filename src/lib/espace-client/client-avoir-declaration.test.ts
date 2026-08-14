@@ -129,4 +129,75 @@ describe("validateClientAvoirDeclaration", () => {
       )
     ).toBe("mensualite_invalide");
   });
+
+  it("refuse un bien meuble sans nom de produit", () => {
+    const baseMeuble = {
+      panier: "meubles" as const,
+      valorisationCentimes: 8_000_00,
+    };
+    expect(
+      validateClientAvoirDeclaration(
+        { ...baseMeuble, typeProduit: "OBJET_ART", nomProduit: "" },
+        NOW
+      )
+    ).toBe("nom_invalide");
+    expect(
+      validateClientAvoirDeclaration(
+        { ...baseMeuble, typeProduit: "PARTS_SOCIETE", nomProduit: "" },
+        NOW
+      )
+    ).toBe("nom_invalide");
+  });
+
+  it("mappe PEE et PERCOL en épargne salariale nommée", () => {
+    expect(
+      validateClientAvoirDeclaration(
+        {
+          panier: "placements",
+          typeProduit: "EPARGNE_SALARIALE",
+          nomProduit: "PEE",
+          valorisationCentimes: 15_000_00,
+        },
+        NOW
+      )
+    ).toMatchObject({
+      ok: true,
+      typeProduit: "EPARGNE_SALARIALE",
+      nomProduit: "PEE",
+    });
+    expect(
+      validateClientAvoirDeclaration(
+        {
+          panier: "placements",
+          typeProduit: "EPARGNE_SALARIALE",
+          nomProduit: "PERCOL",
+          valorisationCentimes: 22_000_00,
+        },
+        NOW
+      )
+    ).toMatchObject({
+      ok: true,
+      typeProduit: "EPARGNE_SALARIALE",
+      nomProduit: "PERCOL",
+    });
+  });
+
+  it("garde le nom saisi pour des parts de société", () => {
+    expect(
+      validateClientAvoirDeclaration(
+        {
+          panier: "meubles",
+          typeProduit: "PARTS_SOCIETE",
+          nomProduit: "SARL Dupont",
+          valorisationCentimes: 50_000_00,
+          dateSouscription: "2024-03-01",
+        },
+        NOW
+      )
+    ).toMatchObject({
+      ok: true,
+      nomProduit: "SARL Dupont",
+      dateSouscription: "2024-03-01",
+    });
+  });
 });

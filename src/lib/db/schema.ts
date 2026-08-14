@@ -258,6 +258,11 @@ export const investissements = sqliteTable("investissements", {
       "FCPR",
       "G3F",
       "AUTRE",
+      "BIJOUX",
+      "OBJET_ART",
+      "VOITURE_COLLECTION",
+      "PARTS_SOCIETE",
+      "FONDS_COMMERCE",
     ],
   }).notNull(),
   partenaireId: integer("partenaire_id").references(() => partenaires.id, {

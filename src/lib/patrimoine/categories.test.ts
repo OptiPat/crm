@@ -32,4 +32,11 @@ describe("getPatrimoineCategorie", () => {
     expect(getPatrimoineCategorie("ASSURANCE_VIE")).toBe("Placements financiers");
     expect(getPatrimoineCategorie("PEA")).toBe("Placements financiers");
   });
+
+  it("classe les biens meubles et professionnels", () => {
+    expect(getPatrimoineCategorie("BIJOUX")).toBe("Biens meubles, professionnels");
+    expect(getPatrimoineCategorie("FONDS_COMMERCE")).toBe(
+      "Biens meubles, professionnels"
+    );
+  });
 });

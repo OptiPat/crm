@@ -29,12 +29,15 @@ describe("formatNomProduit", () => {
     expect(formatNomProduit("LIVRET_A")).toBe("Livret A");
     expect(formatNomProduit("COMPTE_TITRE")).toBe("Compte-Titres");
     expect(formatNomProduit("RP")).toBe("Résidence Principale");
+    expect(formatNomProduit("BIJOUX")).toBe("Bijoux");
+    expect(formatNomProduit("OBJET_ART")).toBe("Objet d'art");
   });
 });
 
 describe("getTypeProduitBgColor", () => {
   it("vert immobilier, rose financier, gris à côté", () => {
     expect(getTypeProduitBgColor("IMMOBILIER")).toBe("#85ad39");
+    expect(getTypeProduitBgColor("BIJOUX")).toBe("#A68B5B");
     expect(getTypeProduitBgColor("SCPI")).toBe("#dc216e");
     expect(getTypeProduitBgColor("SCPI", "EXISTANT_CLIENT")).toBe("#9ca3af");
     expect(getTypeProduitBgColor("SCPI", "DECLARE_CLIENT")).toBe("#9ca3af");

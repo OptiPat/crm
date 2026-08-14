@@ -63,6 +63,7 @@ export function ContactDetailApercuClientTab({
   const [valorisations, setValorisations] = useState<ValorisationPointDto[]>([]);
   const [demandes, setDemandes] = useState<ClientPreviewDocumentDemande[]>([]);
   const [rdvUrl, setRdvUrl] = useState<string | undefined>(undefined);
+  const [whatsappUrl, setWhatsappUrl] = useState<string | undefined>(undefined);
   const [timelineLoading, setTimelineLoading] = useState(true);
   const [viewport, setViewport] = useState<ClientPreviewViewport>("mobile");
   const [lastSyncLabel, setLastSyncLabel] = useState<string | null>(null);
@@ -117,11 +118,13 @@ export function ContactDetailApercuClientTab({
         }))
       );
       setRdvUrl(preview.rdvUrl ?? undefined);
+      setWhatsappUrl(preview.whatsappUrl ?? undefined);
     } catch {
       setTimeline([]);
       setValorisations([]);
       setDemandes([]);
       setRdvUrl(undefined);
+      setWhatsappUrl(undefined);
     } finally {
       setTimelineLoading(false);
     }
@@ -330,6 +333,7 @@ export function ContactDetailApercuClientTab({
         enableRetirerAvoir
         onRetirerAvoir={handlePreviewRetirer}
         rdvUrl={rdvUrl}
+        whatsappUrl={whatsappUrl}
         showHeader
         logoUrl={logoSrc}
         // Même section que sur le portail, bouton compris : sans elle,

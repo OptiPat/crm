@@ -5,6 +5,7 @@
  * `DASHBOARD_PRODUCT_FAMILY_META` (familles dashboard).
  */
 import { IMMOBILIER_TYPES } from "@/lib/investissements/investissement-display";
+import { isBiensMeublesType } from "@/lib/investissements/biens-meubles-types";
 import { isMonConseilOrigine } from "@/lib/investissements/investissement-origine";
 import { EPARGNE_BANCAIRE_TYPES } from "./epargne-bancaire-types";
 import type { PatrimoineCategorie } from "./categories";
@@ -28,12 +29,16 @@ const IMMOBILIER_SET = new Set<string>(IMMOBILIER_TYPES);
 /** Gris ardoise — épargne bancaire / court terme. */
 export const CRM_EPARGNE_BANCAIRE_COLOR = "#737373";
 
+/** Bronze — biens meubles / professionnels. */
+export const CRM_BIENS_MEUBLES_COLOR = "#A68B5B";
+
 export const PATRIMOINE_CATEGORIE_COLORS: Record<PatrimoineCategorie, string> = {
   Immobilier: CRM_IMMOBILIER_COLOR,
   SCPI: CRM_SCPI_COLOR,
   "Épargne bancaire": CRM_EPARGNE_BANCAIRE_COLOR,
   "Placements financiers": CRM_PLACEMENT_COLOR,
   Prévoyance: CRM_PLACEMENT_COLOR,
+  "Biens meubles, professionnels": CRM_BIENS_MEUBLES_COLOR,
   Autre: CRM_A_COTE_COLOR,
 };
 
@@ -60,6 +65,7 @@ export const PATRIMOINE_CHART_SEQUENCE = [
   CRM_PLACEMENT_COLOR,
   CRM_EPARGNE_BANCAIRE_COLOR,
   CRM_PLACEMENT_COLOR,
+  CRM_BIENS_MEUBLES_COLOR,
   CRM_A_COTE_COLOR,
 ] as const;
 
@@ -98,6 +104,7 @@ export function getClientPreviewInvestissementColor(
   if (IMMOBILIER_SET.has(type)) return CRM_IMMOBILIER_COLOR;
   if (SCPI_TYPES.has(type)) return CRM_SCPI_COLOR;
   if (EPARGNE_BANCAIRE_TYPES.has(type)) return CRM_EPARGNE_BANCAIRE_COLOR;
+  if (isBiensMeublesType(type)) return CRM_BIENS_MEUBLES_COLOR;
   return CRM_PLACEMENT_COLOR;
 }
 

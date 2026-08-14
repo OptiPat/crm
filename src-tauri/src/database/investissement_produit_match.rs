@@ -31,6 +31,19 @@ fn produit_match_tokens(value: &str) -> Vec<String> {
         .collect()
 }
 
+/// Préfixes d’enveloppe / canal, pas une SCPI distincte.
+const PRODUIT_IGNORABLE_TOKENS: &[&str] = &["scpi", "alpsi", "cif"];
+
+fn significant_produit_tokens(value: &str) -> Vec<String> {
+    let mut tokens: Vec<String> = produit_match_tokens(value)
+        .into_iter()
+        .filter(|t| !PRODUIT_IGNORABLE_TOKENS.contains(&t.as_str()))
+        .collect();
+    tokens.sort();
+    tokens.dedup();
+    tokens
+}
+
 pub fn nom_produit_matches(investissement_nom: &str, target: &str) -> bool {
     let target_norm = normalize_produit_match_key(target);
     if target_norm.is_empty() {
@@ -53,9 +66,28 @@ pub fn nom_produit_matches(investissement_nom: &str, target: &str) -> bool {
         .all(|token| inv_tokens.iter().any(|it| it == token))
 }
 
+/// Même SCPI (campagnes bulletins) : « Épargne Pierre » ≠ « Épargne Pierre Europe ».
+/// Les préfixes SCPI / ALPSI / CIF restent ignorés (« SCPI Comète » = « Comète »).
+pub fn nom_produit_matches_same_scpi(investissement_nom: &str, bulletin_key: &str) -> bool {
+    let inv_norm = normalize_produit_match_key(investissement_nom);
+    let target_norm = normalize_produit_match_key(bulletin_key);
+    if inv_norm.is_empty() || target_norm.is_empty() {
+        return false;
+    }
+    if inv_norm == target_norm {
+        return true;
+    }
+    let inv_sig = significant_produit_tokens(investissement_nom);
+    let target_sig = significant_produit_tokens(bulletin_key);
+    if inv_sig.is_empty() || target_sig.is_empty() {
+        return nom_produit_matches(investissement_nom, bulletin_key);
+    }
+    inv_sig == target_sig
+}
+
 #[cfg(test)]
 mod tests {
-    use super::nom_produit_matches;
+    use super::{nom_produit_matches, nom_produit_matches_same_scpi};
 
     #[test]
     fn nom_produit_matches_fuzzy() {
@@ -71,5 +103,29 @@ mod tests {
     fn nom_produit_matches_exact_short_name() {
         assert!(nom_produit_matches("Vie", "Vie"));
         assert!(nom_produit_matches("Contrat Vie", "Contrat Vie"));
+    }
+
+    #[test]
+    fn nom_produit_matches_same_scpi_distinguishes_nested_names() {
+        assert!(nom_produit_matches("Epargne Pierre Europe", "Epargne Pierre"));
+        assert!(!nom_produit_matches_same_scpi(
+            "Epargne Pierre Europe",
+            "Epargne Pierre"
+        ));
+        assert!(nom_produit_matches_same_scpi(
+            "Epargne Pierre Europe",
+            "Epargne Pierre Europe"
+        ));
+        assert!(nom_produit_matches_same_scpi(
+            "Épargne Pierre Europe ALPSI",
+            "Epargne Pierre Europe"
+        ));
+        assert!(nom_produit_matches_same_scpi("SCPI Comète", "Comète"));
+        assert!(nom_produit_matches_same_scpi("Comète", "SCPI Comète"));
+        assert!(!nom_produit_matches_same_scpi(
+            "Transitions Europe",
+            "Europe"
+        ));
+        assert!(!nom_produit_matches_same_scpi("Corum Origin", "Corum"));
     }
 }

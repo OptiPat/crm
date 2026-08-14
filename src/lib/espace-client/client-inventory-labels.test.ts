@@ -69,4 +69,19 @@ describe("inventoryRowLabels", () => {
       })
     ).toEqual({ title: "Compte-Titres", subtitle: null });
   });
+
+  it("affiche PEE / PERCOL en titre sous le type épargne salariale", () => {
+    expect(
+      inventoryRowLabels({
+        typeProduit: "EPARGNE_SALARIALE",
+        nomProduit: "PEE",
+      })
+    ).toEqual({ title: "PEE", subtitle: "Épargne Salariale" });
+    expect(
+      inventoryRowLabels({
+        typeProduit: "EPARGNE_SALARIALE",
+        nomProduit: "PERCOL",
+      })
+    ).toEqual({ title: "PERCOL", subtitle: "Épargne Salariale" });
+  });
 });

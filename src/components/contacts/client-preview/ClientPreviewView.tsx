@@ -33,6 +33,7 @@ import type {
 import type { ClientAvoirDeclarationInput } from "@/lib/espace-client/client-avoir-declaration";
 
 import { ClientPreviewRdvButton } from "./ClientPreviewRdvButton";
+import { ClientPreviewWhatsAppFab } from "./ClientPreviewWhatsAppFab";
 import { ClientPreviewHeader } from "./ClientPreviewHeader";
 
 import { ClientPreviewTimeline } from "./ClientPreviewTimeline";
@@ -100,6 +101,9 @@ export interface ClientPreviewViewProps {
 
   /** Adresse du bouton permanent de rendez-vous. Absente : aucun bouton. */
   rdvUrl?: string;
+
+  /** Lien wa.me du bouton WhatsApp flottant. Absente : aucun bouton. */
+  whatsappUrl?: string;
 
   /** En-tête client : logo, titre, déconnexion. Masqué si absent. */
   showHeader?: boolean;
@@ -170,6 +174,8 @@ export function ClientPreviewView({
   onRetirerAvoir,
 
   rdvUrl,
+
+  whatsappUrl,
 
   showHeader = false,
 
@@ -296,6 +302,8 @@ export function ClientPreviewView({
           lastSyncLabel={hideTimelineSync ? null : lastSyncLabel}
 
         />
+
+        {whatsappUrl ? <ClientPreviewWhatsAppFab url={whatsappUrl} /> : null}
 
       </ClientPreviewDeviceFrame>
 

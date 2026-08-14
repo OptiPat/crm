@@ -1,5 +1,6 @@
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { IMMOBILIER_TYPES } from "@/lib/investissements/investissement-display";
+import { isBiensMeublesType } from "@/lib/investissements/biens-meubles-types";
 import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
 import { EPARGNE_BANCAIRE_TYPES } from "@/lib/patrimoine/epargne-bancaire-types";
 
@@ -58,7 +59,8 @@ export function isClientPreviewValorisationHistoryEligible(
 ): boolean {
   return (
     isClientEncoursHistoryType(typeProduit) ||
-    isPlacementImmoScpiValorisationEligible(typeProduit)
+    isPlacementImmoScpiValorisationEligible(typeProduit) ||
+    isBiensMeublesType(typeProduit)
   );
 }
 
@@ -78,7 +80,8 @@ export function isPlacementValorisationUpdateEligible(
 ): boolean {
   return (
     isPlacementEncoursEligible(typeProduit) ||
-    isPlacementImmoScpiValorisationEligible(typeProduit)
+    isPlacementImmoScpiValorisationEligible(typeProduit) ||
+    isBiensMeublesType(typeProduit)
   );
 }
 
@@ -86,7 +89,12 @@ export function getPlacementValorisationUiMode(
   typeProduit: string | undefined
 ): PlacementValorisationUiMode | null {
   if (isClientEncoursHistoryType(typeProduit)) return "encours";
-  if (isPlacementImmoScpiValorisationEligible(typeProduit)) return "valorisation";
+  if (
+    isPlacementImmoScpiValorisationEligible(typeProduit) ||
+    isBiensMeublesType(typeProduit)
+  ) {
+    return "valorisation";
+  }
   return null;
 }
 

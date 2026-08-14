@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import {
   AVOIR_PANIERS,
   AVOIR_TYPES_PAR_PANIER,
+  optionAvoirParValeur,
+  panierEstMeubles,
   type AvoirPanier,
 } from "@/lib/espace-client/client-avoir-catalogue";
 import {
@@ -20,6 +22,7 @@ const NOM_PLACEHOLDER: Record<AvoirPanier, string> = {
   scpi: "Ex. Corum",
   placements: "Ex. Swisslife",
   epargne: "Ex. Livret A",
+  meubles: "Ex. tableau, enseigne…",
 };
 
 const ERROR_LABEL: Record<string, string> = {
@@ -59,6 +62,10 @@ export function ClientPreviewAddAvoir({
     () => (panier ? AVOIR_TYPES_PAR_PANIER[panier] : []),
     [panier]
   );
+  const optionChoisie = panier && valeurType
+    ? optionAvoirParValeur(panier, valeurType)
+    : undefined;
+  const nomImplicite = optionChoisie?.nomImplicite ?? null;
 
   const reset = () => {
     setPanier("");
@@ -77,6 +84,7 @@ export function ClientPreviewAddAvoir({
     setPanier((value || "") as AvoirPanier | "");
     setValeurType("");
     setTypeProduit("");
+    setNomProduit("");
     setLoyer("");
     setMensualite("");
     setDateFinPret("");
@@ -87,6 +95,7 @@ export function ClientPreviewAddAvoir({
     setValeurType(valeur);
     const option = types.find((o) => (o.valeurOption ?? o.typeProduit) === valeur);
     setTypeProduit(option?.typeProduit ?? "");
+    setNomProduit("");
     setError(null);
   };
 
@@ -95,7 +104,7 @@ export function ClientPreviewAddAvoir({
     const validated = validateClientAvoirDeclaration({
       panier,
       typeProduit,
-      nomProduit,
+      nomProduit: nomImplicite ?? nomProduit.trim(),
       valorisationCentimes: parseEurosInput(valorisation),
       dateSouscription: dateSouscription || null,
       loyerMensuelCentimes: loyer.trim() ? parseEurosInput(loyer) : null,
@@ -180,19 +189,19 @@ export function ClientPreviewAddAvoir({
                 </select>
               </label>
             ) : null}
-            <label className="block">
-              <span className={CP.meta}>Nom du produit</span>
-              <input
-                type="text"
-                value={nomProduit}
-                onChange={(e) => setNomProduit(e.target.value)}
-                placeholder={
-                  panier ? NOM_PLACEHOLDER[panier] : "Ex. nom du produit"
-                }
-                maxLength={80}
-                className={INPUT_CLASS}
-              />
-            </label>
+            {panier && !nomImplicite ? (
+              <label className="block">
+                <span className={CP.meta}>Nom du produit</span>
+                <input
+                  type="text"
+                  value={nomProduit}
+                  onChange={(e) => setNomProduit(e.target.value)}
+                  placeholder={NOM_PLACEHOLDER[panier]}
+                  maxLength={80}
+                  className={INPUT_CLASS}
+                />
+              </label>
+            ) : null}
             <label className="block">
               <span className={CP.meta}>Valorisation actuelle (€)</span>
               <input
@@ -204,7 +213,11 @@ export function ClientPreviewAddAvoir({
               />
             </label>
             <label className="block">
-              <span className={CP.meta}>Date de souscription — optionnel</span>
+              <span className={CP.meta}>
+                {panier && panierEstMeubles(panier)
+                  ? "Date — optionnel"
+                  : "Date de souscription — optionnel"}
+              </span>
               <input
                 type="date"
                 value={dateSouscription}

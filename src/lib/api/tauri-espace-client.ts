@@ -36,6 +36,8 @@ export interface EspaceClientSyncConfig {
   has_sync_secret: boolean;
   /** Lien d'agenda du bouton permanent, choisi parmi ceux des réglages. */
   rdv_lien_id?: string | null;
+  /** Mobile WhatsApp du cabinet. Vide = pas de bouton flottant. */
+  whatsapp_telephone?: string | null;
 }
 
 export interface PushEspaceClientContactResult {
@@ -116,6 +118,7 @@ export interface EspaceClientPreview {
   valorisations: ValorisationPointDto[];
   demandes: EspaceClientPreviewDemande[];
   rdvUrl: string | null;
+  whatsappUrl: string | null;
 }
 
 export async function buildEspaceClientPreview(
@@ -285,6 +288,17 @@ export async function saveEspaceClientSyncConfig(
   return config;
 }
 
+export async function saveEspaceClientWhatsApp(
+  telephone: string
+): Promise<EspaceClientSyncConfig> {
+  const config = await invoke<EspaceClientSyncConfig>(
+    "save_espace_client_whatsapp_cmd",
+    { telephone }
+  );
+  notifyEspaceClientChanged();
+  return config;
+}
+
 export interface PushEspaceClientAllResult {
   total: number;
   reussis: number;
@@ -305,6 +319,55 @@ export async function pushEspaceClientContact(
   const result = await invoke<PushEspaceClientContactResult>(
     "push_espace_client_contact_cmd",
     { contactId }
+  );
+  notifyEspaceClientChanged();
+  return result;
+}
+
+export interface EspaceBroadcastPreview {
+  actifs: number;
+  avisADemander: number;
+  avisDejaTraites: number;
+  avisEnAttente: number;
+  echeanceACreer: number;
+  echeanceIgnores: number;
+}
+
+export interface EspaceBroadcastResult {
+  total: number;
+  crees: number;
+  ignores: number;
+  relances: number;
+  echecs: string[];
+}
+
+export async function previewEspaceBroadcast(
+  dateEcheance?: number | null,
+  titre?: string | null
+): Promise<EspaceBroadcastPreview> {
+  return invoke<EspaceBroadcastPreview>("preview_espace_broadcast_cmd", {
+    dateEcheance: dateEcheance ?? null,
+    titre: titre ?? null,
+  });
+}
+
+export async function broadcastEspaceEcheance(
+  dateEcheance: number,
+  titre: string,
+  message: string | null,
+  rdvLienId: string | null
+): Promise<EspaceBroadcastResult> {
+  const result = await invoke<EspaceBroadcastResult>(
+    "broadcast_espace_echeance_cmd",
+    { dateEcheance, titre, message, rdvLienId }
+  );
+  notifyEspaceClientChanged();
+  return result;
+}
+
+export async function broadcastEspaceAvisImposition(): Promise<EspaceBroadcastResult> {
+  const result = await invoke<EspaceBroadcastResult>(
+    "broadcast_espace_avis_imposition_cmd"
   );
   notifyEspaceClientChanged();
   return result;

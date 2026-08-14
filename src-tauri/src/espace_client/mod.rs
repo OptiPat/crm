@@ -1,6 +1,7 @@
 pub mod activation;
 pub mod avoir_catalogue;
 pub mod avoir_declaration_import;
+pub mod broadcast;
 pub mod commands;
 pub mod config;
 pub mod depot_crypto;
@@ -13,5 +14,6 @@ pub mod snapshot;
 pub mod sync_payload;
 pub mod types_produit;
 pub mod visibilite;
+pub mod whatsapp;
 
 pub use config::SYNC_SECRET_SETTING_KEY;
