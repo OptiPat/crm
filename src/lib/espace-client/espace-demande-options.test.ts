@@ -184,7 +184,7 @@ describe("espace-demande-options", () => {
   it("trie les libellés par ordre alphabétique, Autre en dernier", async () => {
     const options = await loadEspaceDemandeOptions();
     const labels = options.map((o) => o.label);
-    expect(labels.at(-1)).toBe("Autre (libellé personnalisé)");
+    expect(labels[labels.length - 1]).toBe("Autre (libellé personnalisé)");
     const avisAt = labels.indexOf("Dernier avis d'imposition");
     expect(labels.slice(avisAt, avisAt + 3)).toEqual([
       "Dernier avis d'imposition",
