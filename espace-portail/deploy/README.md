@@ -112,7 +112,7 @@ Depuis le poste de l'éditeur, avec un alias SSH `espace-vps` défini dans
 cd D:\crm
 .\espace-portail\deploy\pack-for-vps.ps1
 scp -o BatchMode=yes D:\crm\dist-espace-portail-vps.zip espace-vps:/tmp/
-ssh espace-vps "sudo rm -rf /tmp/espace-build; mkdir -p /tmp/espace-build; unzip -q -o /tmp/dist-espace-portail-vps.zip -d /tmp/espace-build 2>/dev/null"
+ssh espace-vps "sudo rm -rf /tmp/espace-build; mkdir -p /tmp/espace-build; unzip -o /tmp/dist-espace-portail-vps.zip -d /tmp/espace-build"
 ssh espace-vps "sudo bash /tmp/espace-build/deploy/install-vps.sh espace.VOTRE-DOMAINE.FR /tmp/espace-build"
 ssh espace-vps "sudo systemctl restart espace-portail"
 ```
@@ -135,7 +135,7 @@ symptôme est trompeur puisque le `.env` semble correct.
 | Symptôme | Cause | Correctif |
 |----------|-------|-----------|
 | `$'\r': command not found` | Scripts en CRLF | `pack-for-vps.ps1` normalise déjà ; sinon `sed -i 's/\r$//'` |
-| `appears to use backslashes` | Entrées zip Windows | Avertissement sans gravité, `unzip` convertit |
+| `appears to use backslashes` / unzip exit 1 | Ancien zip Windows | Extraire **sans** `-q` ; continuer si `install-vps.sh` est là. `pack-for-vps.ps1` écrit désormais des slash POSIX. |
 | Caddy refuse de recharger | `/var/log/caddy` non accessible | `chown -R caddy:caddy /var/log/caddy` |
 | Réglage `.env` sans effet | Clé absente du binaire déployé | Redéployer, pas seulement redémarrer |
 | Logo invisible | PNG sans transparence + fusion CSS | Fournir un PNG à fond réellement transparent |

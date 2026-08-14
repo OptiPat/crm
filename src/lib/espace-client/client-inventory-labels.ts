@@ -48,3 +48,8 @@ export function inventoryRowLabels(input: {
 
   return { title, subtitle: parts.length > 0 ? parts.join(" · ") : null };
 }
+
+/** Date d'origine sur une ligne d'inventaire : achat immo vs souscription contrat. */
+export function inventoryOriginDatePrefix(categorie: string): string {
+  return categorie === "Immobilier" ? "Acquisition le" : "Souscrit le";
+}

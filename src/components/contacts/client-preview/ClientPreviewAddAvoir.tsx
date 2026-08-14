@@ -3,6 +3,7 @@ import {
   AVOIR_PANIERS,
   AVOIR_TYPES_PAR_PANIER,
   optionAvoirParValeur,
+  panierEstImmobilier,
   panierEstMeubles,
   type AvoirPanier,
 } from "@/lib/espace-client/client-avoir-catalogue";
@@ -36,6 +37,24 @@ const ERROR_LABEL: Record<string, string> = {
   mensualite_invalide: "Indiquez une mensualité de crédit valide.",
   date_fin_pret_invalide: "Indiquez une date de fin de prêt valide.",
 };
+
+function dateFieldLabel(panier: AvoirPanier): string {
+  if (panierEstImmobilier(panier)) return "Date d'acquisition — optionnel";
+  if (panierEstMeubles(panier)) return "Date — optionnel";
+  return "Date de souscription — optionnel";
+}
+
+function errorMessage(code: string, panier: AvoirPanier | ""): string {
+  if (panier && panierEstImmobilier(panier)) {
+    if (code === "date_souscription_invalide") {
+      return "Date d'acquisition invalide.";
+    }
+    if (code === "date_future") {
+      return "La date d'acquisition ne peut pas être dans le futur.";
+    }
+  }
+  return ERROR_LABEL[code] ?? "Saisie invalide.";
+}
 
 export interface ClientPreviewAddAvoirProps {
   submitting?: boolean;
@@ -114,7 +133,7 @@ export function ClientPreviewAddAvoir({
       dateFinPret: dateFinPret || null,
     });
     if (typeof validated === "string") {
-      setError(ERROR_LABEL[validated] ?? "Saisie invalide.");
+      setError(errorMessage(validated, panier));
       return;
     }
     setError(null);
@@ -202,29 +221,29 @@ export function ClientPreviewAddAvoir({
                 />
               </label>
             ) : null}
-            <label className="block">
-              <span className={CP.meta}>Valorisation actuelle (€)</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={valorisation}
-                onChange={(e) => setValorisation(e.target.value)}
-                className={`${INPUT_CLASS} tabular-nums`}
-              />
-            </label>
-            <label className="block">
-              <span className={CP.meta}>
-                {panier && panierEstMeubles(panier)
-                  ? "Date — optionnel"
-                  : "Date de souscription — optionnel"}
-              </span>
-              <input
-                type="date"
-                value={dateSouscription}
-                onChange={(e) => setDateSouscription(e.target.value)}
-                className={INPUT_CLASS}
-              />
-            </label>
+            {panier ? (
+              <>
+                <label className="block">
+                  <span className={CP.meta}>Valorisation actuelle (€)</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={valorisation}
+                    onChange={(e) => setValorisation(e.target.value)}
+                    className={`${INPUT_CLASS} tabular-nums`}
+                  />
+                </label>
+                <label className="block">
+                  <span className={CP.meta}>{dateFieldLabel(panier)}</span>
+                  <input
+                    type="date"
+                    value={dateSouscription}
+                    onChange={(e) => setDateSouscription(e.target.value)}
+                    className={INPUT_CLASS}
+                  />
+                </label>
+              </>
+            ) : null}
             {panier === "immobilier" ? (
               <>
                 <label className="block">

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { inventoryRowLabels } from "./client-inventory-labels";
+import {
+  inventoryOriginDatePrefix,
+  inventoryRowLabels,
+} from "./client-inventory-labels";
 
 describe("inventoryRowLabels", () => {
   it("affiche le type et le partenaire si le nom n'est que le type", () => {
@@ -83,5 +86,15 @@ describe("inventoryRowLabels", () => {
         nomProduit: "PERCOL",
       })
     ).toEqual({ title: "PERCOL", subtitle: "Épargne Salariale" });
+  });
+});
+
+describe("inventoryOriginDatePrefix", () => {
+  it("dit Acquisition pour l'immobilier, Souscrit pour le reste", () => {
+    expect(inventoryOriginDatePrefix("Immobilier")).toBe("Acquisition le");
+    expect(inventoryOriginDatePrefix("SCPI")).toBe("Souscrit le");
+    expect(inventoryOriginDatePrefix("Placements financiers")).toBe(
+      "Souscrit le"
+    );
   });
 });

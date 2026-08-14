@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Lock, Mail } from "lucide-react";
 import { CP } from "@/components/contacts/client-preview/client-preview-theme";
 import { PortalOtpInput } from "./PortalOtpInput";
+import { useKnockoutWhiteLogo } from "@/hooks/useKnockoutWhiteLogo";
 
 export interface PortalLoginBranding {
   logoUrl?: string;
@@ -42,6 +43,7 @@ export function PortalLogin({
   const [step, setStep] = useState<LoginStep>(email.trim() ? "code" : "email");
   const [emailToast, setEmailToast] = useState(false);
   const requestingCode = useRef(false);
+  const logoSrc = useKnockoutWhiteLogo(branding.logoUrl);
 
   useEffect(() => {
     if (!info) return;
@@ -62,9 +64,9 @@ export function PortalLogin({
       <div className="w-full max-w-sm space-y-6">
         <header className="cp-login-header">
           <div className="cp-login-brand">
-            {branding.logoUrl ? (
+            {logoSrc ? (
               <img
-                src={branding.logoUrl}
+                src={logoSrc}
                 alt="Logo du cabinet"
                 className="cp-login-logo"
               />

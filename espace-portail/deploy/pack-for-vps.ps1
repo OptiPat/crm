@@ -43,7 +43,29 @@ Get-ChildItem (Join-Path $staging 'deploy') -File |
 
 $zip = Join-Path $root 'dist-espace-portail-vps.zip'
 if (Test-Path $zip) { Remove-Item $zip }
-Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $zip -Force
+# Compress-Archive stocke des backslash : unzip Linux sort en warning (exit 1)
+# et unzip -q fait croire à un échec. Entrées en slash POSIX.
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$stagingRoot = (Resolve-Path $staging).Path.TrimEnd('\')
+$prefixLen = $stagingRoot.Length + 1
+$archive = [System.IO.Compression.ZipFile]::Open(
+    $zip,
+    [System.IO.Compression.ZipArchiveMode]::Create
+)
+try {
+    Get-ChildItem $stagingRoot -Recurse -File | ForEach-Object {
+        $entryName = $_.FullName.Substring($prefixLen).Replace('\', '/')
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $archive,
+            $_.FullName,
+            $entryName,
+            [System.IO.Compression.CompressionLevel]::Optimal
+        )
+    }
+} finally {
+    $archive.Dispose()
+}
 Remove-Item -Recurse -Force $staging
 
 Write-Host ""

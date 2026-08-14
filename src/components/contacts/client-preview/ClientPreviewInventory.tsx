@@ -18,7 +18,10 @@ import type {
   ClientInvestissementUpdateInput,
 } from "@/lib/espace-client/client-investissement-update";
 import type { ClientAvoirDeclarationInput } from "@/lib/espace-client/client-avoir-declaration";
-import { inventoryRowLabels } from "@/lib/espace-client/client-inventory-labels";
+import {
+  inventoryOriginDatePrefix,
+  inventoryRowLabels,
+} from "@/lib/espace-client/client-inventory-labels";
 import { ClientPreviewAddAvoir } from "./ClientPreviewAddAvoir";
 import type { EvolutionHistoryById } from "./ClientPreviewEvolution";
 import { formatShortEuro } from "./client-preview-format";
@@ -106,7 +109,8 @@ function PlacementRow({
             ) : null}
             {inv.date_souscription ? (
               <p className={`${CP.caption} mt-0.5`}>
-                Souscrit le {formatInventoryDate(inv.date_souscription)}
+                {inventoryOriginDatePrefix(getPatrimoineCategorie(inv.type_produit))}{" "}
+                {formatInventoryDate(inv.date_souscription)}
               </p>
             ) : null}
           </div>
