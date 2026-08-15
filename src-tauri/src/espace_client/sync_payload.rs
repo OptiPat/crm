@@ -1,11 +1,13 @@
 use serde::Serialize;
 
+/// 8 : identité du conseiller (profil CRM) pour le pied de page PDF,
+/// sans recopier prénom / téléphone dans les mentions privacy du VPS.
 /// 7 : chaque ligne annonce si elle est immobilière et si elle est une SCPI,
 /// pour que le portail cesse de recopier les listes de types du CRM
 /// (6 : historique de valorisation étiqueté).
 /// Le portail ne compare pas cette valeur, elle sert de repère de lecture pour
 /// les payloads archivés.
-pub const ESPACE_SYNC_SCHEMA_VERSION: u32 = 7;
+pub const ESPACE_SYNC_SCHEMA_VERSION: u32 = 8;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,8 +32,23 @@ pub struct EspaceClientSyncPayload {
     /// Lien wa.me du bouton WhatsApp flottant. Absente = pas de bouton.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub whatsapp_url: Option<String>,
+    /// Prénom, nom et téléphone du profil CRM — pied de page PDF portail.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub advisor: Option<EspaceClientAdvisorSnapshot>,
     /// Clé publique de scellement des dépôts. La privée reste sur ce poste.
     pub depot_public_key: Option<String>,
+}
+
+/// Identité du conseiller (profil CRM), pour le pied de page du PDF client.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EspaceClientAdvisorSnapshot {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prenom: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nom: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub telephone: Option<String>,
 }
 
 /// Lien d'agenda du profil CGP, tel que le CRM le manipule en interne pour

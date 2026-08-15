@@ -1,0 +1,192 @@
+.synthese-preview-doc {
+  box-sizing: border-box;
+  margin: 0 auto;
+  max-width: 40rem;
+  padding: 1.25rem 1.1rem 1.5rem;
+  border: 1px solid var(--cp-line);
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #111;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.synthese-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 0.5px solid #111;
+}
+
+.synthese-preview-date {
+  margin: 0 0 0.45rem;
+  font-size: 0.7rem;
+  color: #6b6b6b;
+}
+
+.synthese-preview-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.synthese-preview-subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.synthese-preview-logo {
+  display: block;
+  max-width: 4.5rem;
+  max-height: 2.25rem;
+  object-fit: contain;
+}
+
+.synthese-preview-total {
+  margin: 0.85rem 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.synthese-preview-charts {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 0.4px solid #ddd;
+}
+
+.synthese-preview-chart h2,
+.synthese-preview-group h2 {
+  margin: 0 0 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #444;
+}
+
+.synthese-preview-chart-body {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.synthese-preview-legend {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.7rem;
+  color: #333;
+}
+
+.synthese-preview-legend li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0 0 0.3rem;
+}
+
+.synthese-preview-swatch {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.synthese-preview-group {
+  margin-top: 1rem;
+}
+
+.synthese-preview-group h2 {
+  padding-bottom: 0.3rem;
+  border-bottom: 0.5px solid #111;
+  color: #111;
+}
+
+.synthese-preview-row {
+  padding: 0.55rem 0;
+  border-bottom: 0.3px solid #eee;
+}
+
+.synthese-preview-row-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.synthese-preview-row-title {
+  margin: 0;
+  font-weight: 500;
+}
+
+.synthese-preview-meta {
+  margin: 0.15rem 0 0;
+  font-size: 0.7rem;
+  color: #555;
+}
+
+.synthese-preview-row-end {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.synthese-preview-amount {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.synthese-preview-valos {
+  margin: 0.3rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.7rem;
+  color: #555;
+}
+
+.synthese-preview-valos li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.synthese-preview-legal {
+  margin-top: 1.25rem;
+  padding-top: 0.7rem;
+  border-top: 0.4px solid #ccc;
+  font-size: 0.62rem;
+  line-height: 1.45;
+  color: #777;
+}
+
+.synthese-preview-legal p {
+  margin: 0 0 0.2rem;
+}
+
+.synthese-preview-legal p:first-child,
+.synthese-preview-legal p:nth-child(2) {
+  font-size: 0.75rem;
+  color: #111;
+}
+
+.synthese-preview-legal p:first-child {
+  font-weight: 600;
+}
+
+.synthese-preview-legal p:nth-child(2) {
+  margin-bottom: 0.4rem;
+}

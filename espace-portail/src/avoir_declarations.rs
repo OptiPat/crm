@@ -407,7 +407,7 @@ async fn handle_post_avoir_declaration(
         )
         .map_err(|e| e.to_string())?;
 
-    crate::extranet_bookmark::save_extranet_for_declaration(
+    attach_extranet_or_rollback(
         &state.db,
         contact_id,
         id,
@@ -442,6 +442,30 @@ async fn handle_post_avoir_declaration(
     notify_advisor_avoir(state, contact_id, &snapshot_payload, &nom, kind, &row).await;
 
     Ok(row.into())
+}
+
+fn attach_extranet_or_rollback(
+    db: &crate::db::PortalDb,
+    contact_id: i64,
+    declaration_id: i64,
+    panier: &str,
+    type_produit: &str,
+    nom: &str,
+    raw_url: Option<&str>,
+) -> Result<(), String> {
+    if let Err(error) = crate::extranet_bookmark::save_extranet_for_declaration(
+        db,
+        contact_id,
+        declaration_id,
+        panier,
+        type_produit,
+        nom,
+        raw_url,
+    ) {
+        let _ = db.cancel_pending_avoir_declaration(contact_id, declaration_id);
+        return Err(error);
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -657,6 +681,37 @@ async fn notify_advisor_avoir(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn extranet_failure_rolls_back_the_declaration() {
+        let db = crate::db::PortalDb::open(":memory:").unwrap();
+        let id = db
+            .insert_avoir_declaration(
+                1,
+                "immobilier",
+                "LMNP",
+                "Appartement",
+                &normaliser_nom_produit("Appartement"),
+                100_00,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        let error = attach_extranet_or_rollback(
+            &db,
+            1,
+            id,
+            "immobilier",
+            "LMNP",
+            "Appartement",
+            Some("https://extranet.example.com"),
+        )
+        .unwrap_err();
+        assert!(error.contains("extranet"));
+        assert!(db.list_avoir_declarations_for_contact(1).unwrap().is_empty());
+    }
 
     #[test]
     fn overlay_injects_a_pending_line() {

@@ -68,7 +68,7 @@ export function ClientPreviewDeviceFrame({
       <div
         className={cn(
           "relative w-full",
-          isMobile ? "max-w-[390px]" : "max-w-3xl"
+          isMobile ? "max-w-[390px]" : "max-w-4xl"
         )}
       >
         <div

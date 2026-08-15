@@ -42,6 +42,8 @@ import {
   type ClientPreviewDocumentDemande,
 } from "@/components/contacts/client-preview/ClientPreviewDocuments";
 import type { ClientPreviewEmptyState } from "@/components/contacts/client-preview/ClientPreviewHero";
+import { getCgpConfig } from "@/lib/api/tauri-settings";
+import { legalLinesFromCgpConfig } from "@/lib/espace-client/synthese-patrimoniale-pdf";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 
 export interface ContactDetailApercuClientTabProps {
@@ -64,6 +66,7 @@ export function ContactDetailApercuClientTab({
   const [demandes, setDemandes] = useState<ClientPreviewDocumentDemande[]>([]);
   const [rdvUrl, setRdvUrl] = useState<string | undefined>(undefined);
   const [whatsappUrl, setWhatsappUrl] = useState<string | undefined>(undefined);
+  const [legalLines, setLegalLines] = useState<string[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(true);
   const [viewport, setViewport] = useState<ClientPreviewViewport>("mobile");
   const [lastSyncLabel, setLastSyncLabel] = useState<string | null>(null);
@@ -83,6 +86,12 @@ export function ContactDetailApercuClientTab({
   useEffect(() => {
     void loadSyncSummary();
   }, [loadSyncSummary]);
+
+  useEffect(() => {
+    void getCgpConfig()
+      .then((cgp) => setLegalLines(legalLinesFromCgpConfig(cgp)))
+      .catch(() => setLegalLines([]));
+  }, []);
 
   useEffect(() => {
     const handler = () => void loadSyncSummary();
@@ -334,6 +343,7 @@ export function ContactDetailApercuClientTab({
         onRetirerAvoir={handlePreviewRetirer}
         rdvUrl={rdvUrl}
         whatsappUrl={whatsappUrl}
+        legalLines={legalLines}
         showHeader
         logoUrl={logoSrc}
         // Même section que sur le portail, bouton compris : sans elle,

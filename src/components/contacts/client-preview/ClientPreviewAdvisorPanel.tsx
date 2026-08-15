@@ -62,7 +62,7 @@ export function ClientPreviewAdvisorPanel({
   lastSyncLabel,
 }: ClientPreviewAdvisorPanelProps) {
   return (
-    <div className="w-full max-w-3xl space-y-3 font-sans">
+    <div className="w-full max-w-4xl space-y-3 font-sans">
       <div className="rounded-lg border border-border bg-card px-4 py-3 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 space-y-1.5 text-sm">

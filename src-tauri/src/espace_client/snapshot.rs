@@ -5,10 +5,11 @@ use crate::database::Database;
 use crate::database::espace_client::ESPACE_STATUT_ACTIF;
 
 use super::sync_payload::{
-    EspaceClientAccesSnapshot, EspaceClientContactSnapshot, EspaceClientDemandeLine,
-    EspaceClientInvestissementLine, EspaceClientPartenaireLine, EspaceClientRdvLien,
-    EspaceClientSyncPayload, EspaceClientTimelineEvent, EspaceClientValorisationPoint,
-    ESPACE_SYNC_SCHEMA_VERSION, VALORISATION_SOURCE_CABINET, VALORISATION_SOURCE_CLIENT,
+    EspaceClientAccesSnapshot, EspaceClientAdvisorSnapshot, EspaceClientContactSnapshot,
+    EspaceClientDemandeLine, EspaceClientInvestissementLine, EspaceClientPartenaireLine,
+    EspaceClientRdvLien, EspaceClientSyncPayload, EspaceClientTimelineEvent,
+    EspaceClientValorisationPoint, ESPACE_SYNC_SCHEMA_VERSION, VALORISATION_SOURCE_CABINET,
+    VALORISATION_SOURCE_CLIENT,
 };
 use super::types_produit::{is_immobilier_type, is_scpi_type};
 use super::visibilite::{
@@ -217,6 +218,7 @@ fn build_espace_client_snapshot_with_sequence(
         demandes,
         rdv_url,
         whatsapp_url,
+        advisor: collect_advisor(db),
         // Simple lecture : la paire est créée par la commande de push, qui
         // dispose du handle nécessaire au chiffrement de la clé privée.
         depot_public_key: db
@@ -482,6 +484,25 @@ fn resolve_whatsapp_url(db: &Database) -> Option<String> {
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())?;
     super::whatsapp::build_whatsapp_click_url(&telephone)
+}
+
+fn nonempty(value: Option<String>) -> Option<String> {
+    value.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+fn collect_advisor(db: &Database) -> Option<EspaceClientAdvisorSnapshot> {
+    let cgp = db.get_cgp_config().ok()?;
+    let prenom = nonempty(cgp.prenom);
+    let nom = nonempty(cgp.nom);
+    let telephone = nonempty(cgp.telephone);
+    if prenom.is_none() && nom.is_none() && telephone.is_none() {
+        return None;
+    }
+    Some(EspaceClientAdvisorSnapshot {
+        prenom,
+        nom,
+        telephone,
+    })
 }
 
 /// Échéances du client : celles que portent ses placements, et celles que le
@@ -1016,5 +1037,38 @@ mod tests {
 
         let partenaires = load_partenaires_for_investissements(&db, &[inv]).unwrap();
         assert!(partenaires.is_empty());
+    }
+
+    #[test]
+    fn snapshot_carries_advisor_identity_from_cgp_profile() {
+        use crate::database::models::{CgpConfig, NewContact};
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = db
+            .create_contact(NewContact {
+                categorie: "CLIENT".into(),
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                email: Some("jean@example.com".into()),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .unwrap();
+        db.activate_espace_acces(contact_id, "jean@example.com", "hash-test")
+            .unwrap();
+        db.save_cgp_config(&CgpConfig {
+            prenom: Some("Paul".into()),
+            nom: Some("LEGRAND".into()),
+            telephone: Some("0612345678".into()),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let snapshot = build_espace_client_snapshot(&db, contact_id).unwrap();
+        let advisor = snapshot.advisor.expect("advisor");
+        assert_eq!(advisor.prenom.as_deref(), Some("Paul"));
+        assert_eq!(advisor.nom.as_deref(), Some("LEGRAND"));
+        assert_eq!(advisor.telephone.as_deref(), Some("0612345678"));
     }
 }

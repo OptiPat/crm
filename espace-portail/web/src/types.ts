@@ -76,6 +76,12 @@ export interface EspaceClientSyncPayload {
   rdvUrl?: string | null;
   /** Bouton WhatsApp flottant. Absent des anciens snapshots : pas de bouton. */
   whatsappUrl?: string | null;
+  /** Identité du conseiller (profil CRM). Absente des snapshots antérieurs au schéma 8. */
+  advisor?: {
+    prenom?: string | null;
+    nom?: string | null;
+    telephone?: string | null;
+  } | null;
   /** Déclarations SCPI en attente de sync CRM — injectées par le portail. */
   scpiClientDeclarations?: EspaceClientScpiDeclarationLine[];
 }

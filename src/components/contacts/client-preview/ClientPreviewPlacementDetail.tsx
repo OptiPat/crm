@@ -156,7 +156,7 @@ export function ClientPreviewPlacementDetail({
 
   return createPortal(
     <div
-      className={`cp-layer ${inFrame ? "absolute" : "fixed"} inset-0 z-50 flex items-center justify-center p-3`}
+      className={`cp-layer ${inFrame ? "absolute" : "fixed"} inset-0 z-50 flex items-center justify-center p-3 @container`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="cp-placement-detail-title"
@@ -168,7 +168,7 @@ export function ClientPreviewPlacementDetail({
         onClick={onClose}
       />
       <div
-        className={`${CP.card} relative z-10 flex w-full max-w-lg flex-col overflow-hidden ${sheetShape}`}
+        className={`${CP.card} relative z-10 flex w-full max-w-lg flex-col overflow-hidden @min-[36rem]:max-w-3xl ${sheetShape}`}
       >
         <div className="flex items-start justify-between gap-3 border-b border-[var(--cp-line-soft)] px-5 py-4">
           <div className="min-w-0">

@@ -14,7 +14,8 @@ import { buildValorisationHistories } from "@/lib/espace-client/espace-valorisat
 import { PortalDevGate } from "./PortalDevGate";
 import { PortalLogin } from "./PortalLogin";
 import { PortalDocumentsSection } from "./PortalDocumentsSection";
-import { PortalPrivacy } from "./PortalPrivacy";
+import { PortalPrivacy, type PortalPrivacyConfig } from "./PortalPrivacy";
+import { legalLinesFromPrivacyAndAdvisor } from "@/lib/espace-client/synthese-patrimoniale-pdf";
 import {
   applyPortalColorScheme,
   applyPortalFavicon,
@@ -48,6 +49,7 @@ interface PortalBrandingResponse {
 interface PortalConfigResponse {
   devMode: boolean;
   branding?: PortalBrandingResponse;
+  privacy?: PortalPrivacyConfig;
 }
 
 const DEFAULT_LOGIN_TAGLINE =
@@ -146,6 +148,10 @@ export function PortalApp() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [branding, setBranding] = useState<PortalBrandingResponse>(DEFAULT_BRANDING);
+  const [privacyConfig, setPrivacyConfig] = useState<PortalPrivacyConfig | null>(
+    null
+  );
+  const [legalLines, setLegalLines] = useState<string[]>([]);
   const [scpiSubmitting, setScpiSubmitting] = useState(false);
   const [avoirSubmitting, setAvoirSubmitting] = useState(false);
   const [retirerSubmitting, setRetirerSubmitting] = useState(false);
@@ -226,6 +232,9 @@ export function PortalApp() {
       const configResponse = await fetch("/api/v1/portal-config");
       const config = (await configResponse.json()) as PortalConfigResponse;
       setDevMode(Boolean(config.devMode));
+      if (config.privacy) {
+        setPrivacyConfig(config.privacy);
+      }
       if (config.branding) {
         setBranding(config.branding);
         applyPortalColorScheme(config.branding.colorScheme);
@@ -274,6 +283,12 @@ export function PortalApp() {
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+
+  useEffect(() => {
+    setLegalLines(
+      legalLinesFromPrivacyAndAdvisor(privacyConfig ?? {}, payload?.advisor)
+    );
+  }, [privacyConfig, payload?.advisor]);
 
   useEffect(() => {
     const onNavigate = () => setShowPrivacy(isPrivacyPath());
@@ -703,6 +718,7 @@ export function PortalApp() {
         timeline={timeline}
         rdvUrl={payload?.rdvUrl ?? undefined}
         whatsappUrl={payload?.whatsappUrl ?? undefined}
+        legalLines={legalLines}
         showDeviceFrame={false}
         hideTimelineSync
         emptyState={visible.length === 0 ? "empty" : null}

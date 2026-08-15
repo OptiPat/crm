@@ -33,8 +33,13 @@ import type {
 import type { ClientAvoirDeclarationInput } from "@/lib/espace-client/client-avoir-declaration";
 
 import { ClientPreviewRdvButton } from "./ClientPreviewRdvButton";
+import { ClientPreviewPdfButton } from "./ClientPreviewPdfButton";
 import { ClientPreviewWhatsAppFab } from "./ClientPreviewWhatsAppFab";
 import { ClientPreviewHeader } from "./ClientPreviewHeader";
+import { SynthesePatrimonialePreview } from "./SynthesePatrimonialePreview";
+import { useSynthesePrintExport } from "@/hooks/use-synthese-print-export";
+import { buildSynthesePatrimonialePdfModel } from "@/lib/espace-client/synthese-patrimoniale-pdf";
+import { synthesePdfOpensPreview } from "@/lib/espace-client/synthese-patrimoniale-pdf-export";
 
 import { ClientPreviewTimeline } from "./ClientPreviewTimeline";
 
@@ -102,6 +107,9 @@ export interface ClientPreviewViewProps {
   extranetUrlById?: Map<number, string>;
   extranetSubmitting?: boolean;
   onSaveExtranet?: (investissementId: number, url: string | null) => Promise<void>;
+
+  /** Mentions cabinet (Protection des données / signature existante). */
+  legalLines?: string[];
 
   /** Adresse du bouton permanent de rendez-vous. Absente : aucun bouton. */
   rdvUrl?: string;
@@ -181,6 +189,8 @@ export function ClientPreviewView({
   extranetSubmitting = false,
   onSaveExtranet,
 
+  legalLines = [],
+
   rdvUrl,
 
   whatsappUrl,
@@ -194,6 +204,15 @@ export function ClientPreviewView({
   headerSlot,
 
 }: ClientPreviewViewProps) {
+
+  const {
+    printSynthese,
+    previewModel,
+    previewReady,
+    closePreview,
+    sharePreview,
+    isPrinting,
+  } = useSynthesePrintExport();
 
   const valorisationLabel = useMemo(
 
@@ -248,11 +267,34 @@ export function ClientPreviewView({
           emptyState={emptyState}
         />
 
-        {rdvUrl ? (
-          <div className={`${CP.padX} mt-4`}>
+        <div className={`${CP.padX} mt-4 flex w-full min-w-0 flex-col gap-2 @min-[36rem]:flex-row @min-[36rem]:flex-wrap @min-[36rem]:items-center`}>
             <ClientPreviewRdvButton url={rdvUrl} />
+            <ClientPreviewPdfButton
+              disabled={isPrinting}
+              onClick={() => {
+                const model = buildSynthesePatrimonialePdfModel({
+                  prenom: contact.prenom,
+                  nom: contact.nom,
+                  totalCentimes: perimetre.totalCentimes,
+                  categorieData,
+                  disponibiliteData,
+                  investissements: sortedInventory,
+                  partenaireById,
+                  historiesByInvestissementId:
+                    evolutionHistoriesByInvestissementId,
+                  logoUrl,
+                  legalLines,
+                });
+                void printSynthese(model, {
+                  preview: synthesePdfOpensPreview({
+                    framed: showDeviceFrame,
+                    viewport,
+                    viewportWidthPx: window.innerWidth,
+                  }),
+                });
+              }}
+            />
           </div>
-        ) : null}
 
         <ClientPreviewCharts
 
@@ -316,6 +358,18 @@ export function ClientPreviewView({
         />
 
         {whatsappUrl ? <ClientPreviewWhatsAppFab url={whatsappUrl} /> : null}
+
+        {previewModel ? (
+          <SynthesePatrimonialePreview
+            model={previewModel}
+            saving={isPrinting}
+            ready={previewReady}
+            onClose={closePreview}
+            onShare={() => {
+              void sharePreview();
+            }}
+          />
+        ) : null}
 
       </ClientPreviewDeviceFrame>
 

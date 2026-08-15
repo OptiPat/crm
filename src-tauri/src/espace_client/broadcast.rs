@@ -159,11 +159,14 @@ pub(crate) fn preview_broadcast(
     })
 }
 
-fn finish_jobs(jobs: Vec<PreparedJob>) -> EspaceBroadcastResult {
+/// Sans URL portail, rien n'est poussé : on annule les créations locales
+/// et on compte des échecs, pas des succès.
+fn abandon_unpushed_jobs(
+    database: &Database,
+    jobs: Vec<PreparedJob>,
+) -> EspaceBroadcastResult {
     let total = jobs.len();
-    let mut crees = 0usize;
     let mut ignores = 0usize;
-    let mut relances = 0usize;
     let mut echecs = Vec::new();
 
     for job in jobs {
@@ -173,16 +176,25 @@ fn finish_jobs(jobs: Vec<PreparedJob>) -> EspaceBroadcastResult {
         }
         match job.kind {
             JobKind::Skip => ignores += 1,
-            JobKind::Created => crees += 1,
-            JobKind::Retry => relances += 1,
+            JobKind::Created | JobKind::Retry => {
+                match job.rollback {
+                    Rollback::Demande(id) => rollback_created_demande(database, id),
+                    Rollback::Echeance(id) => rollback_created_echeance(database, id),
+                    Rollback::None => {}
+                }
+                echecs.push(format!(
+                    "contact {} : adresse du portail absente",
+                    job.contact_id
+                ));
+            }
         }
     }
 
     EspaceBroadcastResult {
         total,
-        crees,
+        crees: 0,
         ignores,
-        relances,
+        relances: 0,
         echecs,
     }
 }
@@ -249,7 +261,7 @@ fn run_broadcast_jobs(
     portal: Option<(String, String)>,
 ) -> Result<EspaceBroadcastResult, String> {
     let Some((url, secret)) = portal else {
-        return Ok(finish_jobs(jobs));
+        return with_db(db, |database| Ok(abandon_unpushed_jobs(database, jobs)));
     };
     let outcomes: Vec<(PreparedJob, Result<(), String>)> = jobs
         .into_iter()
@@ -611,5 +623,42 @@ mod tests {
         let preview = preview_broadcast(&db, None, None).unwrap();
         assert_eq!(preview.avis_en_attente, 1);
         assert_eq!(preview.avis_a_demander, 0);
+    }
+
+    #[test]
+    fn without_portal_rolls_back_created_jobs() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let a = contact_actif(&db, "DUPONT", "Jean", "a@example.com");
+        let midi = 1_800_000_000;
+        let echeance = db
+            .create_espace_echeance(a, midi, "Assemblée", None, None)
+            .unwrap();
+        let result = abandon_unpushed_jobs(
+            &db,
+            vec![
+                PreparedJob {
+                    contact_id: a,
+                    kind: JobKind::Created,
+                    rollback: Rollback::Echeance(echeance.id),
+                    payload: None,
+                    prepare_error: None,
+                },
+                PreparedJob {
+                    contact_id: a,
+                    kind: JobKind::Skip,
+                    rollback: Rollback::None,
+                    payload: None,
+                    prepare_error: None,
+                },
+            ],
+        );
+        assert_eq!(result.crees, 0);
+        assert_eq!(result.relances, 0);
+        assert_eq!(result.ignores, 1);
+        assert_eq!(result.echecs.len(), 1);
+        assert!(result.echecs[0].contains("portail absente"));
+        assert!(!db
+            .contact_has_echeance_same_day(a, midi, "Assemblée")
+            .unwrap());
     }
 }
