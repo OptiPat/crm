@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>CRM équipe — feuille de route</title>
+  <style>
+    @page { size: A4; margin: 14mm 14mm 16mm 14mm; }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      font-family: "Segoe UI", Calibri, Arial, sans-serif;
+      color: #1a1a1a;
+      font-size: 14px;
+      line-height: 1.38;
+    }
+    h1 { font-size: 24px; margin: 0 0 6px; }
+    h2 {
+      font-size: 17px;
+      margin: 0 0 8px;
+      padding-bottom: 3px;
+      border-bottom: 3px solid #1e3a5f;
+      color: #1e3a5f;
+    }
+    h3 { font-size: 14px; margin: 10px 0 5px; color: #1e3a5f; }
+    p { margin: 0 0 7px; }
+    .sub { color: #444; font-size: 13px; margin-bottom: 10px; }
+    .page { page-break-after: always; }
+    .page:last-child { page-break-after: auto; }
+    .box {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 9px 11px;
+      margin: 8px 0;
+    }
+    .ok { background: #eef7ee; border-color: #8fbf8f; }
+    .warn { background: #fff6e5; border-color: #e0b85c; }
+    .stop { background: #fdecec; border-color: #d98989; }
+    .it { background: #eef3f8; border-color: #8aa3bf; }
+    .fiche { background: #fafafa; }
+    ol.steps { padding-left: 22px; margin: 4px 0 8px; }
+    ol.steps li { margin: 5px 0; }
+    ol.steps > li > ol { margin: 4px 0; padding-left: 18px; }
+    .btn {
+      display: inline-block;
+      background: #1e3a5f;
+      color: #fff;
+      padding: 0 7px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .chk { font-family: "Segoe UI", Arial, sans-serif; }
+    table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; }
+    td, th { border: 1px solid #ccc; padding: 5px 7px; text-align: left; vertical-align: top; }
+    th { background: #1e3a5f; color: #fff; font-weight: 600; }
+    .small { font-size: 12px; color: #444; }
+    ul { margin: 4px 0 6px; padding-left: 18px; }
+    code, .mono {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 11.5px;
+      background: #f0f0f0;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    pre {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 11px;
+      background: #f4f4f4;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 8px 10px;
+      white-space: pre-wrap;
+      margin: 6px 0;
+    }
+    .line { border-bottom: 1px dotted #999; min-width: 12em; display: inline-block; }
+    .footer { margin-top: 8px; font-size: 11px; color: #666; }
+    .who {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+      background: #1e3a5f;
+      color: #fff;
+      padding: 1px 7px;
+      border-radius: 10px;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .who.it { background: #3d5a80; }
+    .who.tony { background: #2d6a4f; }
+    .who.asst { background: #7b2d5a; }
+    .num {
+      display: inline-block;
+      width: 22px;
+      height: 22px;
+      line-height: 22px;
+      text-align: center;
+      background: #1e3a5f;
+      color: #fff;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+    .roadmap td:first-child { width: 28px; font-weight: 700; color: #1e3a5f; }
+  </style>
+</head>
+<body>
+
+<section class="page">
+  <h1>CRM en équipe — feuille de route</h1>
+  <p class="sub">Un seul document. Cochez dans l’ordre. Ne sautez aucune étape.</p>
+
+  <div class="box ok">
+    <strong>But.</strong> Tony et les assistantes voient les mêmes clients.
+    Les données vivent chez Microsoft (SharePoint). Chaque PC a une copie de travail.
+    Internet reste allumé.
+  </div>
+
+  <h2>L’ordre (ne pas inverser)</h2>
+  <table class="roadmap">
+    <tr><th></th><th>Étape</th><th>Qui</th><th>Où</th></tr>
+    <tr><td>A</td><td>Comptes Microsoft + code à 2 facteurs</td><td>Informatique</td><td>admin.microsoft.com</td></tr>
+    <tr><td>B</td><td>2 groupes Entra (Conseillers / Assistantes)</td><td>Informatique</td><td>Entra → Groupes</td></tr>
+    <tr><td>C</td><td>Site SharePoint du CRM</td><td>Informatique</td><td>SharePoint</td></tr>
+    <tr><td>D</td><td>Application « Patrimoine CRM » + droits</td><td>Informatique</td><td>Entra → Applications</td></tr>
+    <tr><td>E</td><td>Autoriser l’appli sur le site</td><td>Informatique</td><td>Graph Explorer</td></tr>
+    <tr><td>F</td><td>Boîte e-mail du cabinet</td><td>Informatique</td><td>admin.microsoft.com</td></tr>
+    <tr><td>G</td><td>Remplir la fiche (page 4) et la photocopier</td><td>Les deux</td><td>ce guide</td></tr>
+    <tr><td>H</td><td>Allumer l’équipe sur le PC de Tony</td><td>Tony</td><td>CRM</td></tr>
+    <tr><td>I</td><td>Brancher chaque PC assistante</td><td>Assistante</td><td>CRM</td></tr>
+    <tr><td>J</td><td>Essai à 3 (contact TEST)</td><td>Tout le monde</td><td>CRM</td></tr>
+  </table>
+
+  <h3>Ce qui change selon le poste</h3>
+  <table>
+    <tr><th></th><th>PC Tony</th><th>PC assistante</th></tr>
+    <tr><td>Compte Microsoft</td><td>Le sien, dans le groupe Conseillers</td><td>Le sien, dans le groupe Assistantes</td></tr>
+    <tr><td>CRM</td><td>Le sien, même version</td><td>Tout neuf, vide, même version. Pas de copie de fichiers.</td></tr>
+    <tr><td>Rôle dans le CRM</td><td>Conseiller</td><td>Secrétaire</td></tr>
+    <tr><td>Bouton qui allume ce PC</td><td>Activer la synchronisation équipe</td><td>Rejoindre sur ce poste</td></tr>
+    <tr><td>Peut exporter / sauvegarder</td><td>Oui</td><td>Non (normal)</td></tr>
+  </table>
+
+  <div class="box stop">
+    <strong>Interdit.</strong> Compte de Tony sur un PC assistante.
+    Copier un fichier .db. Mettre le dossier du CRM dans OneDrive.
+    Ouvrir la liste <em>CRM_Secrets</em> dans SharePoint (elle est masquée ; ne la cherchez pas).
+  </div>
+  <p class="footer">Patrimoine CRM — feuille de route Tony</p>
+</section>
+
+<section class="page">
+  <h2><span class="who it">Informatique</span> A · Comptes Microsoft</h2>
+  <p>Centre d’admin : <span class="mono">admin.microsoft.com</span></p>
+  <ol class="steps">
+    <li>Créer ou vérifier 1 compte par personne (prénom.nom du cabinet), pas une boîte partagée :
+      <ul>
+        <li>Tony — e-mail : <span class="line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+        <li>Assistante 1 — e-mail : <span class="line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+        <li>Assistante 2 — e-mail : <span class="line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
+      </ul>
+    </li>
+    <li>Chaque compte a une licence avec SharePoint et messagerie.</li>
+    <li>Activer le code à 2 facteurs (MFA) sur les 3 comptes.</li>
+    <li>Chacun se connecte une fois sur <span class="mono">portal.office.com</span> et valide le code. <span class="chk">☐ fait</span></li>
+  </ol>
+
+  <h2><span class="who it">Informatique</span> B · Groupes Entra (les rôles)</h2>
+  <p>Entra admin → Identity → Groups → All groups</p>
+  <ol class="steps">
+    <li>Créer un groupe de sécurité <strong>CRM - Conseillers</strong>. Y mettre <em>uniquement Tony</em>.</li>
+    <li>Ouvrir le groupe → copier l’<strong>Object ID</strong> (un long numéro) → le coller page 4.</li>
+    <li>Créer un groupe de sécurité <strong>CRM - Assistantes</strong>. Y mettre <em>uniquement</em> les assistantes.</li>
+    <li>Copier l’Object ID → le coller page 4.</li>
+    <li>Vérifier : personne n’est dans les deux groupes. <span class="chk">☐ fait</span></li>
+  </ol>
+
+  <h2><span class="who it">Informatique</span> C · Site SharePoint</h2>
+  <ol class="steps">
+    <li>Créer un site rien que pour le CRM, par exemple :<br>
+      <span class="mono">https://cabinet.sharepoint.com/sites/crm-patrimoine</span></li>
+    <li>Tony = <strong>propriétaire</strong> du site. Les assistantes = <strong>membres</strong>.</li>
+    <li>Noter (page 4) :
+      <ul>
+        <li>Hostname = la partie avant <span class="mono">/sites/</span> (ex. <span class="mono">cabinet.sharepoint.com</span>)</li>
+        <li>Chemin = ce qui commence par <span class="mono">/sites/…</span></li>
+      </ul>
+    </li>
+    <li>Les 3 personnes ouvrent l’URL du site dans le navigateur. Ça doit marcher. <span class="chk">☐ fait</span></li>
+    <li>Ne créez <strong>aucune</strong> liste à la main. Tony le fera dans le CRM.</li>
+  </ol>
+  <p class="footer">Suite page suivante : application Entra, autorisation du site, boîte cabinet.</p>
+</section>
+
+<section class="page">
+  <h2><span class="who it">Informatique</span> D · Application Entra « Patrimoine CRM »</h2>
+  <p>Entra admin → App registrations → New registration</p>
+  <ol class="steps">
+    <li>Nom : <strong>Patrimoine CRM</strong>. Comptes : cet annuaire uniquement.</li>
+    <li>Authentication → Add a platform → <strong>Mobile and desktop applications</strong>.</li>
+    <li>URI de redirection, <em>exactement</em> :<br>
+      <span class="mono">http://127.0.0.1:3847/callback</span></li>
+    <li>Autoriser les <strong>flux clients publics</strong> (Allow public client flows = Oui).</li>
+    <li>API permissions → Microsoft Graph → Delegated, ajouter pile ceci :
+      <ul>
+        <li><span class="mono">User.Read</span></li>
+        <li><span class="mono">GroupMember.Read.All</span></li>
+        <li><span class="mono">Sites.Selected</span></li>
+        <li><span class="mono">Mail.Send.Shared</span></li>
+        <li><span class="mono">offline_access</span></li>
+        <li><span class="mono">openid</span></li>
+        <li><span class="mono">email</span></li>
+      </ul>
+    </li>
+    <li>Grant admin consent (bouton « Accorder le consentement administrateur »). <span class="chk">☐ fait</span></li>
+    <li>Copier l’<strong>Application (client) ID</strong> → page 4. Ce n’est pas un mot de passe.</li>
+    <li>Ne créez <strong>aucun</strong> secret client / certificat. Le CRM n’en veut pas.</li>
+  </ol>
+
+  <h2><span class="who it">Informatique</span> E · Autoriser l’appli sur le site</h2>
+  <p class="small">Sans ça, Tester SharePoint dans le CRM dit « accès refusé ». Ouvrir Graph Explorer en admin SharePoint.</p>
+  <ol class="steps">
+    <li>Récupérer l’ID du site (remplacer cabinet et le chemin) :
+<pre>GET https://graph.microsoft.com/v1.0/sites/cabinet.sharepoint.com:/sites/crm-patrimoine</pre>
+      Copier le champ <span class="mono">id</span> (3 morceaux séparés par des virgules) → page 4.
+    </li>
+    <li>Donner le droit <strong>manage</strong> le temps que Tony crée les listes (coller le Client ID) :
+<pre>POST https://graph.microsoft.com/v1.0/sites/{ID-DU-SITE}/permissions
+{
+  "roles": ["manage"],
+  "grantedToIdentities": [{
+    "application": { "id": "CLIENT-ID-DU-CRM", "displayName": "Patrimoine CRM" }
+  }]
+}</pre>
+    </li>
+    <li><strong>Après</strong> que Tony a cliqué Provisionner listes CRM : supprimer ce droit manage, recréer le même avec <span class="mono">"roles": ["write"]</span>. Relancer Tester SharePoint. <span class="chk">☐ après H</span></li>
+  </ol>
+
+  <h2><span class="who it">Informatique</span> F · Boîte e-mail du cabinet</h2>
+  <p>admin.microsoft.com → Teams &amp; groups → Shared mailboxes</p>
+  <ol class="steps">
+    <li>Créer la boîte (ex. cabinet@…). Ce n’est <strong>pas</strong> un compte pour ouvrir le CRM.</li>
+    <li>Pour Tony et chaque assistante : <strong>Full Access</strong> + <strong>Send As</strong>. Pas « Send on behalf ».</li>
+    <li>Attendre jusqu’à 1 h, puis tester un envoi. <span class="chk">☐ fait</span></li>
+  </ol>
+</section>
+
+<section class="page">
+  <h2>G · Fiche à coller dans le CRM (les 3 PC)</h2>
+  <p>Remplir ici, photocopier, donner une copie à chaque assistante. Pas de mot de passe dessus.</p>
+  <div class="box fiche">
+    <table>
+      <tr><th>À coller dans le CRM</th><th>Valeur</th></tr>
+      <tr><td>Client ID Azure</td><td><br><br></td></tr>
+      <tr><td>Object ID groupe Conseillers</td><td><br><br></td></tr>
+      <tr><td>Object ID groupe Assistantes</td><td><br><br></td></tr>
+      <tr><td>Hostname SharePoint<br><span class="small">sans https://</span></td><td><br><br></td></tr>
+      <tr><td>Chemin du site<br><span class="small">commence par /sites/</span></td><td><br><br></td></tr>
+      <tr><td>ID site Graph</td><td><br><br></td></tr>
+      <tr><td>Nom du site</td><td><br><br></td></tr>
+      <tr><td>Boîte e-mail cabinet</td><td><br><br></td></tr>
+    </table>
+    <p class="small">Ne jamais transmettre : mot de passe, fichier .db, secrets.key, compte de Tony.</p>
+  </div>
+
+  <h3>Avant de toucher aux PC</h3>
+  <table>
+    <tr><th>Contrôle</th><th>Tony</th><th>Ass. 1</th><th>Ass. 2</th></tr>
+    <tr><td>Même version du CRM</td><td class="chk">☐</td><td class="chk">☐</td><td class="chk">☐</td></tr>
+    <tr><td>Session Windows ou Mac à son nom</td><td class="chk">☐</td><td class="chk">☐</td><td class="chk">☐</td></tr>
+    <tr><td>Disque chiffré (BitLocker ou FileVault)</td><td class="chk">☐</td><td class="chk">☐</td><td class="chk">☐</td></tr>
+    <tr><td>CRM vide (pas d’import)</td><td class="small">son CRM</td><td class="chk">☐</td><td class="chk">☐</td></tr>
+    <tr><td>Office.com OK avec MFA</td><td class="chk">☐</td><td class="chk">☐</td><td class="chk">☐</td></tr>
+    <tr><td>Site SharePoint s’ouvre</td><td class="chk">☐</td><td class="chk">☐</td><td class="chk">☐</td></tr>
+  </table>
+  <p class="small">Mac : mêmes boutons, même fiche, même ordre. À la place de BitLocker : FileVault. À la place de Windows Hello : Touch ID. Ne pas copier de fichiers entre un PC et un Mac.</p>
+</section>
+
+<section class="page">
+  <h2><span class="who tony">Tony</span> H · Allumer l’équipe sur votre PC</h2>
+  <p>Fiche page 4 sous les yeux. Ne fermez pas le CRM pendant cette page.</p>
+  <ol class="steps">
+    <li>Paramètres → Intégrations → <strong>Mode équipe SharePoint</strong>.</li>
+    <li>Coller le Client ID → <span class="btn">Enregistrer Client ID</span>. <span class="chk">☐</span></li>
+    <li><span class="btn">Connecter Microsoft</span> → <strong>votre</strong> compte pro (pas la boîte cabinet) → code MFA. <span class="chk">☐</span></li>
+    <li>Activer le mode équipe. Rôle : <strong>Conseiller</strong>.</li>
+    <li>Coller groupes, hostname, chemin, boîte → <span class="btn">Enregistrer la configuration équipe</span>. <span class="chk">☐</span></li>
+    <li><span class="btn">Tester SharePoint</span> → OK → <span class="btn">Enregistrer la configuration équipe</span> <em>encore une fois</em> (garde l’ID du site). <span class="chk">☐</span></li>
+    <li><span class="btn">Provisionner listes CRM</span> → attendre le OK. Cela crée aussi la clé de cache et masque <em>CRM_Secrets</em>. Ne rien créer dans SharePoint à la main. <span class="chk">☐</span></li>
+    <li>Dire à l’informatique de passer le droit du site de <strong>manage</strong> à <strong>write</strong> (étape E.3), puis retester. <span class="chk">☐</span></li>
+    <li><span class="btn">Copier la fiche pour une assistante</span> (après le 2ᵉ enregistrement, l’ID site est dedans). Coller dans un e-mail interne ou imprimer. <span class="chk">☐</span></li>
+    <li>Dans cet ordre, sans fermer :
+      <ol>
+        <li><span class="btn">Préparer la migration</span></li>
+        <li><span class="btn">Envoyer la copie test vers SharePoint</span></li>
+        <li><span class="btn">Valider la restauration test</span></li>
+        <li><span class="btn">Activer la synchronisation équipe</span></li>
+      </ol>
+    </li>
+  </ol>
+  <div class="box warn">
+    <strong>Pourquoi « migration » si le CRM est vide ?</strong>
+    Le CRM a déjà posé tout seul quelques étiquettes et modèles d’e-mails. Ce n’est pas vos clients.
+    Cette série allume l’équipe <em>sur votre PC</em>. Ne cliquez pas sur <em>Rejoindre sur ce poste</em> chez vous.
+  </div>
+  <div class="box ok">
+    <strong>C’est bon chez vous</strong> quand l’espace équipe / cache est actif, sans bandeau rouge.
+    Ensuite seulement : les assistantes.
+  </div>
+</section>
+
+<section class="page">
+  <h2><span class="who asst">Assistante</span> I · Chaque PC (recommencer à zéro)</h2>
+  <p>Uniquement après le OK de Tony. Un PC = une personne = <em>son</em> compte. Fiche page 4.</p>
+  <ol class="steps">
+    <li>Installer le CRM (même version que Tony). Créer le mot de passe local. <strong>Aucun import, aucun fichier copié.</strong> <span class="chk">☐</span></li>
+    <li>Paramètres → Intégrations → Mode équipe SharePoint.</li>
+    <li>Coller le Client ID → <span class="btn">Enregistrer Client ID</span>. <span class="chk">☐</span></li>
+    <li><span class="btn">Connecter Microsoft</span> → <strong>son</strong> e-mail pro → MFA. <span class="chk">☐</span></li>
+    <li>L’adresse affichée doit être la sienne. Si c’est Tony ou la boîte cabinet : on arrête. <span class="chk">☐</span></li>
+    <li>Activer le mode équipe. Rôle : <strong>Secrétaire</strong>.</li>
+    <li>Coller <strong>toute</strong> la fiche, y compris l’ID du site, <em>avant</em> d’enregistrer. <span class="chk">☐</span></li>
+    <li><span class="btn">Enregistrer la configuration équipe</span> → <span class="btn">Rejoindre sur ce poste</span>. Les étiquettes et modèles d’e-mails posés tout seuls au 1er ouverture ne bloquent plus. Laisser ouvert. <span class="chk">☐</span></li>
+  </ol>
+  <div class="box stop">
+    <strong>Si le CRM dit « ce poste contient déjà des données »</strong> — il y a de vrais contacts, dossiers ou investissements (un import, par exemple). Ne forcez pas. Prévenez Tony. Ne copiez aucun .db.
+  </div>
+  <div class="box warn">
+    Après enregistrement en secrétaire, elle ne peut plus changer la config (groupes, site).
+    Elle peut encore <em>Connecter Microsoft</em> si le compte expire, et <em>Reconnecter le compte Microsoft</em> à l’écran de verrouillage.
+  </div>
+
+  <p><strong>Suivi</strong></p>
+  <table>
+    <tr><th></th><th>Assistante 1</th><th>Assistante 2</th></tr>
+    <tr><td>Date</td><td></td><td></td></tr>
+    <tr><td>Compte Microsoft vu dans le CRM</td><td></td><td></td></tr>
+    <tr><td>Rejoindre OK</td><td class="chk">☐</td><td class="chk">☐</td></tr>
+  </table>
+
+  <h2>J · Essai 5 minutes (les 3 PC allumés, internet)</h2>
+  <ol class="steps">
+    <li>Une assistante crée un contact <strong>TEST Equipe</strong>.</li>
+    <li>Chez Tony : il apparaît en moins de 20 secondes. <span class="chk">☐</span></li>
+    <li>Les deux ouvrent la même fiche : une seule peut modifier. <span class="chk">☐</span></li>
+    <li>Chez l’assistante : pas de bouton Exporter / copie de secours complète. Normal. <span class="chk">☐</span></li>
+  </ol>
+</section>
+
+<section class="page">
+  <h2>Tous les jours</h2>
+  <table>
+    <tr><th>Situation</th><th>Vous faites</th></tr>
+    <tr><td>Travailler</td><td>Internet allumé. Comme d’habitude.</td></tr>
+    <tr><td>Éteindre l’ordinateur</td><td>Attendre 20 secondes, ou verrouiller le CRM (cadenas), puis éteindre. Pas de croix juste après une saisie.</td></tr>
+    <tr><td>« Hors connexion » / écran Microsoft</td><td>D’abord le Wi‑Fi. Puis <em>Reconnecter le compte Microsoft</em> à l’écran de verrouillage (mot de passe ou code à 2 facteurs changé). Pas de bricolage de fichiers.</td></tr>
+    <tr><td>Une assistante part</td><td>L’informatique la retire du groupe <strong>CRM - Assistantes</strong> <em>et</em> du site SharePoint, tout de suite. Puis récupérer le PC. Rien à cliquer dans le CRM.</td></tr>
+  </table>
+  <div class="box ok">
+    Après son départ elle ne peut plus ouvrir le CRM équipe, ni lire la copie sur son disque.
+    Les données du cabinet restent chez Microsoft et sur les PC encore autorisés.
+  </div>
+
+  <h2>En cas de blocage</h2>
+  <table>
+    <tr><th>Message / symptôme</th><th>Cause fréquente</th></tr>
+    <tr><td>Accès SharePoint refusé</td><td>Étape E pas faite, ou droit encore en manage / pas en write.</td></tr>
+    <tr><td>N’appartient à aucun groupe</td><td>Mauvais compte, ou pas dans Conseillers / Assistantes.</td></tr>
+    <tr><td>Appartient aux deux groupes</td><td>Retirer d’un des deux groupes Entra.</td></tr>
+    <tr><td>Rejoindre grisé / ID site vide</td><td>Tony : Tester puis Enregistrer une 2ᵉ fois, ou <em>Copier la fiche pour une assistante</em>. Assistante : coller l’ID site avant Enregistrer.</td></tr>
+    <tr><td>Ce poste contient déjà des données</td><td>Vrais contacts/dossiers déjà là. Pas les étiquettes auto. Arrêter, prévenir Tony.</td></tr>
+    <tr><td>Mauvais e-mail affiché</td><td>Déconnecter, puis Connecter Microsoft avec le bon compte (possible aussi en secrétaire).</td></tr>
+    <tr><td>Plus de bouton Connecter (écran mot de passe)</td><td>Choisir <em>Reconnecter le compte Microsoft</em>, puis déverrouiller.</td></tr>
+  </table>
+  <p class="footer">Ne jamais ouvrir ni modifier CRM_Secrets (liste masquée, limitée aux deux groupes). Ne jamais mettre le dossier du CRM dans OneDrive.</p>
+</section>
+
+</body>
+</html>

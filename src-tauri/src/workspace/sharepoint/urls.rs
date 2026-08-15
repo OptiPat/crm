@@ -59,6 +59,10 @@ impl SharePointGraphUrls {
         format!("{}/sites/{site_id}/lists", self.base())
     }
 
+    pub fn list(&self, site_id: &str, list_id: &str) -> String {
+        format!("{}/sites/{site_id}/lists/{list_id}", self.base())
+    }
+
     pub fn list_columns(&self, site_id: &str, list_id: &str) -> String {
         format!("{}/sites/{site_id}/lists/{list_id}/columns", self.base())
     }
@@ -174,6 +178,10 @@ mod tests {
     #[test]
     fn list_and_drive_urls_are_composed_from_site_and_resource_ids() {
         let urls = SharePointGraphUrls::new(sample_site());
+        assert_eq!(
+            urls.list("site-abc", "list-123"),
+            "https://graph.microsoft.com/v1.0/sites/site-abc/lists/list-123"
+        );
         assert_eq!(
             urls.list_items("site-abc", "list-123"),
             "https://graph.microsoft.com/v1.0/sites/site-abc/lists/list-123/items?expand=fields"

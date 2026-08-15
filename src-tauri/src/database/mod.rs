@@ -1,4 +1,6 @@
 use rusqlite::{params, Connection, Result};
+use std::io::Read;
+use std::path::Path;
 use tauri::{AppHandle, Manager};
 
 pub mod alertes;
@@ -83,6 +85,30 @@ pub mod workspace_outbox;
 pub mod workspace_restore;
 pub mod workspace_sync;
 
+const SQLITE_HEADER: &[u8] = b"SQLite format 3\0";
+
+fn ensure_historical_sqlite_is_plaintext(path: &Path) -> Result<()> {
+    let mut file = std::fs::File::open(path).map_err(|error| {
+        rusqlite::Error::InvalidParameterName(format!(
+            "Ouverture de patrimoine-crm.db impossible : {error}"
+        ))
+    })?;
+    let mut header = [0_u8; 16];
+    file.read_exact(&mut header).map_err(|error| {
+        rusqlite::Error::InvalidParameterName(format!(
+            "En-tête de patrimoine-crm.db illisible : {error}"
+        ))
+    })?;
+    if header.as_slice() != SQLITE_HEADER {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "La base locale patrimoine-crm.db n'est pas un SQLite lisible. \
+             Le CRM refuse de la modifier (protection anti-SQLCipher). Restaurez une sauvegarde."
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
 pub struct Database {
     conn: Connection,
 }
@@ -99,6 +125,9 @@ impl Database {
     ///
     /// Une sauvegarde de sécurité est créée avant toute migration de schéma, puis
     /// une sauvegarde quotidienne si nécessaire.
+    ///
+    /// Mode équipe : le cache est chargé en mémoire après Entra. SQLCipher n'est
+    /// pas utilisé. `patrimoine-crm.db` n'est jamais chiffré ni modifié par ce flux.
     pub fn open(app_handle: &AppHandle) -> Result<Self> {
         let app_data_dir = app_handle
             .path()
@@ -111,7 +140,12 @@ impl Database {
         let db_existed = db_path.exists();
         println!("Database path: {:?}", db_path);
 
-        if db_existed && !crate::workspace::cache::is_team_cache_path(&db_path) {
+        if crate::workspace::cache::is_team_cache_path(&db_path) {
+            return Self::open_team_cache_session(app_handle);
+        }
+
+        if db_existed {
+            ensure_historical_sqlite_is_plaintext(&db_path)?;
             match crate::backup::lock_backup_operations() {
                 Ok(_backup_guard) => {
                     if let Err(e) =
@@ -170,6 +204,66 @@ impl Database {
         crate::licensing::refresh_write_gate(&db);
 
         Ok(db)
+    }
+
+    fn open_team_cache_session(app_handle: &AppHandle) -> Result<Self> {
+        let app_data_dir = app_handle
+            .path()
+            .app_data_dir()
+            .expect("Failed to get app data directory");
+        let conn = crate::workspace::cache_seal::open_team_cache_connection(app_handle)
+            .map_err(rusqlite::Error::InvalidParameterName)?;
+        let db = Database { conn };
+        db.init_tables().map_err(|e| {
+            eprintln!("❌ Échec init_tables / migration cache équipe : {e}");
+            e
+        })?;
+        let workspace_config = db.get_workspace_config()?;
+        crate::workspace::enrollment::validate_workspace_enrollment(app_handle, &workspace_config)
+            .map_err(rusqlite::Error::InvalidParameterName)?;
+        if let Err(e) =
+            crate::documents_storage::migrate_documents_to_contact_folders(&app_data_dir, &db)
+        {
+            eprintln!("⚠️ Migration dossiers documents : {e}");
+        }
+        match crate::documents_storage::prune_orphan_staging_files_on_open(&app_data_dir, &db) {
+            Ok(removed) if removed > 0 => {
+                println!(
+                    "✅ Nettoyage staging documents : {removed} fichier(s) orphelin(s) supprimé(s)"
+                );
+            }
+            Err(e) => eprintln!("⚠️ Nettoyage staging documents : {e}"),
+            _ => {}
+        }
+        crate::workspace::cache_seal::checkpoint_team_cache_database(app_handle, &db)
+            .map_err(rusqlite::Error::InvalidParameterName)
+            .and_then(|sealed| {
+                if sealed {
+                    Ok(())
+                } else {
+                    Err(rusqlite::Error::InvalidParameterName(
+                        "Scellement initial du cache équipe impossible.".into(),
+                    ))
+                }
+            })?;
+        crate::licensing::refresh_write_gate(&db);
+        Ok(db)
+    }
+
+    pub(crate) fn snapshot_connection(&self) -> Result<Connection> {
+        let mut memory = Connection::open_in_memory()?;
+        {
+            let backup = rusqlite::backup::Backup::new(&self.conn, &mut memory)?;
+            backup.run_to_completion(64, std::time::Duration::from_millis(10), None)?;
+        }
+        memory.execute("PRAGMA foreign_keys = ON", [])?;
+        Ok(memory)
+    }
+
+    pub(crate) fn backup_into_memory(&self) -> Result<Self> {
+        let conn = self.snapshot_connection()?;
+        crate::licensing::install_authorizer(&conn);
+        Ok(Database { conn })
     }
 
     pub(crate) fn open_workspace_cache_at_path(
@@ -2846,5 +2940,23 @@ mod open_tests {
             traitee_at, legacy_ts,
             "backfill doit reprendre date_alerte pour les alertes déjà traitées"
         );
+    }
+
+    #[test]
+    fn historical_database_without_sqlite_header_is_refused() {
+        let dir = std::env::temp_dir().join(format!(
+            "crm_hist_header_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("patrimoine-crm.db");
+        std::fs::write(&path, b"SQLCIPHER-LOOKALIKE").unwrap();
+        let error = ensure_historical_sqlite_is_plaintext(&path).unwrap_err();
+        assert!(error.to_string().contains("anti-SQLCipher"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

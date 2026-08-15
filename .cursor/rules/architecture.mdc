@@ -48,13 +48,16 @@ Doc étiquettes : `docs/ETIQUETTES.md`. Doc chiffrement : `docs/CHIFFREMENT.md`.
 
 ## Sécurité & accès (données au repos)
 
-- Base SQLite **non chiffrée** (`rusqlite` feature `bundled`). Le chiffrement applicatif
-  a été retiré : une base en clair s'ouvre toujours, **aucune clé ne peut être perdue**.
-  Pour une protection au repos, utiliser le chiffrement disque de l'OS (BitLocker).
+- Base individuelle `patrimoine-crm.db` **non chiffrée** (`rusqlite` feature `bundled`).
+  Une base en clair s'ouvre toujours : **aucune clé ne peut la rendre illisible**.
+  Protection au repos = chiffrement disque OS (BitLocker / FileVault).
 - **Mot de passe = simple verrou d'accès** : hash Argon2id dans `auth.json`
   (`{ password_hash, created_at }`). Perdre/réinitialiser ce fichier **ne perd aucune donnée**.
 - **Ouverture différée** : la base n'est ouverte qu'**après** le verrou
-  (commandes `unlock` / `create_master_password`), via `Database::open` — pas de clé.
+  (commandes `unlock` / `create_master_password`), via `Database::open`.
+  En mode équipe, Microsoft Entra est vérifié **avant** toute lecture du cache
+  (`workspace/team_access.rs`). La clé du cache est lue sur SharePoint et reste
+  uniquement en mémoire. SQLCipher n'est **pas** réactivé (pas d'OpenSSL/NASM).
 - **Secrets applicatifs** (tokens OAuth, clé API Mistral) chiffrés au repos (XOR + nonce)
   avec une clé propre à l'installation : `secrets.key` (générée auto, indépendante de la base).
   Voir `docs/CHIFFREMENT.md`.

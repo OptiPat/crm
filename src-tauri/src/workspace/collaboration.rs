@@ -13,7 +13,7 @@ use crate::workspace::presence::{
 };
 use crate::workspace::sharepoint::{
     GraphWriteConflict, GraphWriteOutcome, ParsedSharePointListItem, SharePointGraphClient,
-    LIST_CRM_AUDIT, LIST_CRM_LOCKS, LIST_CRM_PRESENCE, TEAM_WORKSPACE_LISTS,
+    LIST_CRM_AUDIT, LIST_CRM_LOCKS, LIST_CRM_PRESENCE, LIST_CRM_SECRETS, TEAM_WORKSPACE_LISTS,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,7 @@ use tauri::AppHandle;
 use super::commands::resolve_microsoft_team_connection;
 use crate::workspace::guard::resolve_sharepoint_site_ref;
 use crate::workspace::identity::require_sensitive_team_authority;
+use crate::workspace::team_cache_key::fetch_or_create_team_cache_dek;
 
 pub const WORKSPACE_NOT_PROVISIONED_MESSAGE: &str =
     "Espace équipe non provisionné sur SharePoint. Le conseiller doit lancer le provisionnement.";
@@ -222,9 +223,40 @@ pub fn provision_team_workspace(
     let site_ref = resolve_sharepoint_site_ref(config)?;
     let client = SharePointGraphClient::new(site_ref);
     let site = client.resolve_site_blocking(&connection.access_token)?;
+    let advisor_group_id = config
+        .advisor_group_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            "Renseignez l'Object ID du groupe Entra conseillers avant de provisionner.".to_string()
+        })?;
+    let secretary_group_id = config
+        .secretary_group_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            "Renseignez l'Object ID du groupe Entra assistantes avant de provisionner.".to_string()
+        })?;
+    let mut secrets_list = None;
     for list_def in TEAM_WORKSPACE_LISTS {
-        client.ensure_team_list_blocking(&connection.access_token, &site.id, list_def)?;
+        let list =
+            client.ensure_team_list_blocking(&connection.access_token, &site.id, list_def)?;
+        if list_def.display_name == LIST_CRM_SECRETS {
+            secrets_list = Some(list);
+        }
     }
+    let secrets_list = secrets_list
+        .ok_or_else(|| format!("Liste SharePoint introuvable : {LIST_CRM_SECRETS}"))?;
+    client.harden_crm_secrets_list_blocking(
+        &connection.access_token,
+        &site,
+        &secrets_list,
+        advisor_group_id,
+        secretary_group_id,
+    )?;
+    fetch_or_create_team_cache_dek(&client, &connection.access_token, &site.id)?;
     Ok(WorkspaceConfig {
         site_id: Some(site.id),
         site_name: Some(site.name),

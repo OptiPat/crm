@@ -1,9 +1,27 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime};
+use serde::Serialize;
 use tauri::State;
 
 pub const UI_SESSION_LOCKED_EVENT: &str = "ui-session-locked";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UiSessionLockedPayload {
+    pub reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+impl UiSessionLockedPayload {
+    pub fn idle() -> Self {
+        Self {
+            reason: "idle".into(),
+            message: None,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 struct ActivityTime {
@@ -28,9 +46,8 @@ impl ActivityTime {
 
 /// État d'accès de l'interface, distinct de la connexion SQLite.
 ///
-/// Un verrouillage automatique ferme l'interface sans fermer la base afin que
-/// les automatisations en tray puissent continuer. Les commandes IPC sensibles
-/// doivent donc vérifier explicitement cet état.
+/// Un verrouillage ferme l'interface **et** la base : en mode équipe le cache
+/// est scellé. Les commandes IPC sensibles doivent aussi vérifier cet état.
 #[derive(Debug)]
 pub struct UiSessionState {
     unlocked: AtomicBool,

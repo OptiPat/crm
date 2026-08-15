@@ -11,6 +11,7 @@ const CACHE_MANIFEST_FILE: &str = "workspace_cache_manifest.sealed";
 pub const TEAM_CACHE_DATABASE_FILE: &str = "workspace-team-cache.db";
 pub const TEAM_CACHE_TEMP_FILE: &str = "workspace-team-cache.db.tmp";
 pub const TEAM_CACHE_SEALED_FILE: &str = "workspace-team-cache.db.sealed";
+pub const HISTORICAL_DATABASE_FILE: &str = "patrimoine-crm.db";
 const CACHE_MANIFEST_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,6 +53,19 @@ pub fn is_team_cache_path(path: &std::path::Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| name == TEAM_CACHE_DATABASE_FILE)
+}
+
+pub fn is_historical_database_path(path: &std::path::Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == HISTORICAL_DATABASE_FILE)
+}
+
+pub fn is_team_cache_artifact_name(name: &str) -> bool {
+    name == TEAM_CACHE_DATABASE_FILE
+        || name == TEAM_CACHE_TEMP_FILE
+        || name == TEAM_CACHE_SEALED_FILE
+        || name.starts_with("workspace-team-cache.db.")
 }
 
 pub fn load_workspace_cache_manifest(
@@ -135,11 +149,11 @@ pub fn active_database_path(app: &AppHandle) -> Result<PathBuf, String> {
             }
             Ok(path)
         }
-        Some(_) => Ok(app_data.join("patrimoine-crm.db")),
+        Some(_) => Ok(app_data.join(HISTORICAL_DATABASE_FILE)),
         None if manifest.is_some() => {
             Err("Manifeste cache équipe présent sans enrôlement. Accès bloqué.".into())
         }
-        None => Ok(app_data.join("patrimoine-crm.db")),
+        None => Ok(app_data.join(HISTORICAL_DATABASE_FILE)),
     }
 }
 
@@ -159,7 +173,14 @@ mod tests {
             "workspace-team-cache.db"
         )));
         assert!(!is_team_cache_path(std::path::Path::new(
-            "patrimoine-crm.db"
+            HISTORICAL_DATABASE_FILE
         )));
+        assert!(is_historical_database_path(std::path::Path::new(
+            HISTORICAL_DATABASE_FILE
+        )));
+        assert!(is_team_cache_artifact_name(
+            "workspace-team-cache.db.seal-snapshot"
+        ));
+        assert!(!is_team_cache_artifact_name(HISTORICAL_DATABASE_FILE));
     }
 }

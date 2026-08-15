@@ -30,8 +30,8 @@ Utiliser uniquement des identités et données fictives dans les scénarios ci-d
 - [ ] Les trois utilisateurs ouvrent le site SharePoint.
 - [ ] L'application possède `Sites.Selected`.
 - [ ] Le site accorde le rôle `write` à l'application CRM.
-- [ ] Les listes `CRM_Data`, `CRM_Sequences`, `CRM_Locks`, `CRM_Presence`, `CRM_Audit` et
-      `CRM_Members` existent.
+- [ ] Les listes `CRM_Data`, `CRM_Sequences`, `CRM_Secrets`, `CRM_Locks`, `CRM_Presence`,
+      `CRM_Audit` et `CRM_Members` existent.
 - [ ] La bibliothèque **Documents** existe.
 - [ ] Les trois comptes possèdent Full Access et Send As sur la boîte cabinet.
 
@@ -193,10 +193,8 @@ Avec un compte de test assistante :
 
 Contrôles :
 
-- [ ] L'identité n'est plus autorisée.
-- [ ] Les nouvelles écritures SQLite sont refusées.
-- [ ] Les opérations sensibles sont bloquées.
-- [ ] La bannière d'autorité est visible.
+- [ ] L'écran de verrouillage s'affiche avec le message **Accès équipe révoqué**.
+- [ ] La session CRM est fermée : plus d'accès aux fiches ni aux écritures.
 - [ ] Après réintégration contrôlée au groupe, l'accès revient sans altération de données.
 
 Résultat : ☐ GO ☐ STOP

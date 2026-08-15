@@ -242,7 +242,12 @@ Sur le poste du conseiller :
    - `CRM_Locks` ;
    - `CRM_Audit` ;
    - `CRM_Data` ;
-   - `CRM_Sequences`.
+   - `CRM_Sequences` ;
+   - `CRM_Secrets`.
+
+   **Ne pas ouvrir ni modifier `CRM_Secrets` dans l'interface SharePoint.** Cette liste contient
+   la clé du cache local. Les assistantes n'ont besoin que d'un accès Graph en lecture ; seul
+   le conseiller provisionne la liste. Une édition manuelle rend le cache local illisible.
 8. Vérifier également la bibliothèque native **Documents**.
 9. Demander à l'administrateur de remplacer le grant `manage` par `write`, comme expliqué en 7.3.
 10. Relancer **Tester SharePoint**.
@@ -288,8 +293,9 @@ Répéter ces étapes séparément sur les deux postes.
 14. Attendre le message indiquant le nombre d'enregistrements téléchargés.
 15. Fermer puis rouvrir le CRM et vérifier que le déverrouillage fonctionne.
 
-Si le CRM indique que le poste contient déjà des données, ne pas forcer : repartir d'une
-installation locale vide.
+Si le CRM indique que le poste contient déjà des données, ne pas forcer : ce message
+n'apparaît plus pour les seules étiquettes et modèles d'e-mails posés au premier
+déverrouillage. Il reste valable s'il y a de vrais contacts, dossiers ou investissements.
 
 ## 14. Vérifier le fonctionnement avant les données réelles
 
@@ -338,7 +344,11 @@ L'administrateur Microsoft 365 doit :
 5. récupérer le poste puis désinstaller le CRM ou supprimer le profil utilisateur conformément à
    la politique informatique.
 
-Le CRM bloque les écritures dès que l'autorité Entra actualisée ne reconnaît plus le compte.
+Le CRM bloque les **lectures** et les écritures dès que l'autorité Entra actualisée ne
+reconnaît plus le compte : le cache local n'est pas déchiffré, une session déjà ouverte
+est verrouillée, et le fichier SQLite clair est purgé. Le mot de passe du poste ne suffit
+plus. Une copie faite **pendant** que la personne était encore autorisée ne peut pas être
+rappelée à distance.
 
 ## 17. Reconstruire un cache
 
@@ -363,6 +373,9 @@ déverrouillage propose **Restaurer le cache équipe**.
   propagation Exchange.
 - **Bouton Rejoindre indisponible** : vérifier connexion Microsoft, ID Graph et configuration
   enregistrée.
+- **Jeton Microsoft expiré (MFA / mot de passe)** : à l'écran de verrouillage, **Reconnecter le
+  compte Microsoft**, puis déverrouiller. Depuis Paramètres, **Connecter Microsoft** reste
+  disponible en mode secrétaire.
 - **Synchronisation suspendue** : vérifier Internet, OAuth et conflits.
 - **Cache incohérent** : ne supprimer aucun fichier au hasard ; utiliser la reconstruction depuis
   SharePoint.

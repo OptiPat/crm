@@ -15,13 +15,14 @@ fn open_backup_source(
     db: &State<'_, DbState>,
     db_path: &std::path::Path,
 ) -> Result<rusqlite::Connection, String> {
-    {
-        let guard = db
-            .lock()
-            .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
-        if guard.is_none() {
-            return Err("Base non initialisée".to_string());
-        }
+    let guard = db
+        .lock()
+        .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
+    let database = guard.as_ref().ok_or("Base non initialisée")?;
+    if crate::workspace::cache::is_team_cache_path(db_path) {
+        return database
+            .snapshot_connection()
+            .map_err(|error| format!("Snapshot du cache équipe pour sauvegarde : {error}"));
     }
     rusqlite::Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|error| format!("Ouverture de la base pour sauvegarde impossible : {error}"))

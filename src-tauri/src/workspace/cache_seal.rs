@@ -1,10 +1,11 @@
 //! Scellement du cache SQLite équipe lorsqu'aucune session CRM n'est ouverte.
 
 use crate::database::Database;
-use crate::email::oauth_secrets::load_storage_key;
 use crate::workspace::cache::{
-    team_cache_database_path, team_cache_sealed_path, TEAM_CACHE_DATABASE_FILE,
+    is_historical_database_path, is_team_cache_artifact_name, team_cache_database_path,
+    team_cache_sealed_path, TEAM_CACHE_DATABASE_FILE,
 };
+use crate::workspace::team_cache_key::{session_dek, wipe_session_dek};
 use crate::workspace::enrollment::load_workspace_enrollment;
 use atomic_write_file::AtomicWriteFile;
 use chacha20poly1305::{
@@ -12,6 +13,7 @@ use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
 };
 use rand::{rngs::OsRng, RngCore};
+use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -73,7 +75,27 @@ fn read_header(input: &mut File) -> Result<(Vec<u8>, u64, [u8; 16]), String> {
     Ok((header, plain_len, prefix))
 }
 
+fn assert_team_cache_artifact(path: &Path) -> Result<(), String> {
+    if is_historical_database_path(path) {
+        return Err(
+            "Refus de modifier patrimoine-crm.db : le cache équipe est un fichier séparé.".into(),
+        );
+    }
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("");
+    if !is_team_cache_artifact_name(name) {
+        return Err(format!(
+            "Refus d'opérer sur un fichier hors cache équipe : {name}"
+        ));
+    }
+    Ok(())
+}
+
 fn encrypt_database_file(source: &Path, destination: &Path, key: &[u8; 32]) -> Result<(), String> {
+    assert_team_cache_artifact(source)?;
+    assert_team_cache_artifact(destination)?;
     let plain_len = fs::metadata(source)
         .map_err(|error| format!("Métadonnées du cache équipe inaccessibles : {error}"))?
         .len();
@@ -132,6 +154,8 @@ fn encrypt_database_file(source: &Path, destination: &Path, key: &[u8; 32]) -> R
 }
 
 fn decrypt_database_file(source: &Path, destination: &Path, key: &[u8; 32]) -> Result<(), String> {
+    assert_team_cache_artifact(source)?;
+    assert_team_cache_artifact(destination)?;
     let mut input =
         File::open(source).map_err(|error| format!("Lecture du cache scellé : {error}"))?;
     let (header, plain_len, prefix) = read_header(&mut input)?;
@@ -215,6 +239,20 @@ fn remove_sqlite_artifacts(path: &Path) {
     }
 }
 
+pub fn wipe_plaintext_team_cache(app: &AppHandle) -> Result<(), String> {
+    let database_path = team_cache_database_path(app)?;
+    wipe_plaintext_cache_files(&database_path)
+}
+
+pub(crate) fn wipe_plaintext_cache_files(path: &Path) -> Result<(), String> {
+    assert_team_cache_artifact(path)?;
+    remove_plaintext_cache_artifacts_checked(path)?;
+    for suffix in ["unseal", "seal-snapshot", "seal-verify"] {
+        remove_sqlite_artifacts(&temporary_sibling(path, suffix));
+    }
+    Ok(())
+}
+
 fn remove_plaintext_cache_artifacts_checked(path: &Path) -> Result<(), String> {
     for candidate in [
         PathBuf::from(format!("{}-wal", path.display())),
@@ -262,65 +300,90 @@ fn validate_plaintext_cache(path: &Path) -> Result<(), String> {
         .map_err(|error| format!("Cache équipe clair invalide : {error}"))
 }
 
-pub fn unseal_team_cache_if_needed(app: &AppHandle) -> Result<(), String> {
-    let Some(enrollment) = load_workspace_enrollment(app)? else {
-        return Ok(());
-    };
-    if !enrollment.sync_activated {
-        return Ok(());
+fn backup_sqlite_file_into_memory(source: &Path) -> Result<Connection, String> {
+    validate_plaintext_cache(source)?;
+    let source_conn = Connection::open_with_flags(
+        source,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .map_err(|error| format!("Ouverture du cache équipe source : {error}"))?;
+    let mut memory = Connection::open_in_memory()
+        .map_err(|error| format!("Création du cache équipe mémoire : {error}"))?;
+    {
+        let backup = rusqlite::backup::Backup::new(&source_conn, &mut memory)
+            .map_err(|error| format!("Préparation du cache équipe mémoire : {error}"))?;
+        backup
+            .run_to_completion(64, std::time::Duration::from_millis(10), None)
+            .map_err(|error| format!("Chargement du cache équipe en mémoire : {error}"))?;
     }
-    let database_path = team_cache_database_path(app)?;
-    let sealed_path = team_cache_sealed_path(app)?;
-    if !sealed_path.is_file() {
-        if database_path.is_file() {
-            validate_plaintext_cache(&database_path)?;
-            return Ok(());
-        }
-        return Err("Cache équipe absent : ni base locale ni copie scellée disponible.".into());
-    }
-    if database_path.is_file() {
-        let clear_modified = latest_plaintext_modified(&database_path);
-        let sealed_modified = fs::metadata(&sealed_path)
-            .ok()
-            .and_then(|metadata| metadata.modified().ok());
-        if plaintext_is_at_least_as_recent(clear_modified, sealed_modified) {
-            validate_plaintext_cache(&database_path)?;
-            return Ok(());
-        }
-    }
-    let key = load_storage_key(app)?
-        .ok_or_else(|| "Clé protégée du cache équipe indisponible.".to_string())?;
-    let unsealed_path = temporary_sibling(&database_path, "unseal");
-    remove_sqlite_artifacts(&unsealed_path);
-    let result = (|| {
-        decrypt_database_file(&sealed_path, &unsealed_path, &key)?;
-        crate::export_archive::validate_database_file(&unsealed_path)?;
-        if database_path.is_file() {
-            remove_plaintext_cache_artifacts_checked(&database_path)?;
-        }
-        fs::rename(&unsealed_path, &database_path)
-            .map_err(|error| format!("Activation du cache déchiffré impossible : {error}"))
-    })();
-    if result.is_err() {
-        remove_sqlite_artifacts(&unsealed_path);
-    }
-    result
+    drop(source_conn);
+    memory
+        .execute("PRAGMA foreign_keys = ON", [])
+        .map_err(|error| format!("Activation des clés étrangères du cache équipe : {error}"))?;
+    crate::licensing::install_authorizer(&memory);
+    Ok(memory)
 }
 
-pub fn seal_team_cache_database(app: &AppHandle, database: Database) -> Result<bool, String> {
+fn decrypt_sealed_cache(sealed_path: &Path, destination: &Path) -> Result<(), String> {
+    let dek = session_dek()?;
+    decrypt_database_file(sealed_path, destination, &dek)
+}
+
+/// Charge le cache équipe en mémoire. Aucun SQLite clair n'est laissé comme
+/// fichier de session : le disque ne conserve que `.sealed` après un checkpoint.
+pub fn open_team_cache_connection(app: &AppHandle) -> Result<Connection, String> {
     let Some(enrollment) = load_workspace_enrollment(app)? else {
-        drop(database);
-        return Ok(false);
+        return Err("Enrôlement équipe absent.".into());
     };
     if !enrollment.sync_activated {
-        drop(database);
+        return Err("La synchronisation équipe n'est pas activée sur ce poste.".into());
+    }
+    let database_path = team_cache_database_path(app)?;
+    assert_team_cache_artifact(&database_path)?;
+    let sealed_path = team_cache_sealed_path(app)?;
+    let unsealed_path = temporary_sibling(&database_path, "unseal");
+    remove_sqlite_artifacts(&unsealed_path);
+
+    let source = if sealed_path.is_file() {
+        let use_plaintext = database_path.is_file() && {
+            let clear_modified = latest_plaintext_modified(&database_path);
+            let sealed_modified = fs::metadata(&sealed_path)
+                .ok()
+                .and_then(|metadata| metadata.modified().ok());
+            plaintext_is_at_least_as_recent(clear_modified, sealed_modified)
+        };
+        if use_plaintext {
+            database_path.clone()
+        } else {
+            decrypt_sealed_cache(&sealed_path, &unsealed_path)?;
+            crate::export_archive::validate_database_file(&unsealed_path).map_err(|error| {
+                remove_sqlite_artifacts(&unsealed_path);
+                format!("Cache équipe scellé invalide : {error}")
+            })?;
+            unsealed_path.clone()
+        }
+    } else if database_path.is_file() {
+        database_path.clone()
+    } else {
+        return Err("Cache équipe absent : ni base locale ni copie scellée disponible.".into());
+    };
+
+    let opened = backup_sqlite_file_into_memory(&source);
+    if source == unsealed_path {
+        remove_sqlite_artifacts(&unsealed_path);
+    }
+    opened
+}
+
+pub fn checkpoint_team_cache_database(app: &AppHandle, database: &Database) -> Result<bool, String> {
+    let Some(enrollment) = load_workspace_enrollment(app)? else {
+        return Ok(false);
+    };
+    if !enrollment.sync_activated && session_dek().is_err() {
         return Ok(false);
     }
     let database_path = team_cache_database_path(app)?;
-    if !database_path.is_file() {
-        drop(database);
-        return Err("Cache équipe clair introuvable pendant le scellement.".into());
-    }
+    assert_team_cache_artifact(&database_path)?;
     let open_path: String = database
         .connection()
         .query_row(
@@ -329,46 +392,81 @@ pub fn seal_team_cache_database(app: &AppHandle, database: Database) -> Result<b
             |row| row.get(0),
         )
         .map_err(|error| format!("Identification du cache SQLite ouvert : {error}"))?;
-    let expected_path = fs::canonicalize(&database_path)
-        .map_err(|error| format!("Résolution du chemin du cache équipe : {error}"))?;
-    let actual_path = fs::canonicalize(&open_path)
-        .map_err(|error| format!("Résolution du cache SQLite ouvert : {error}"))?;
-    if actual_path != expected_path {
-        drop(database);
-        return Err("La base ouverte ne correspond pas au cache équipe attendu.".into());
+    if !open_path.is_empty() && open_path != ":memory:" {
+        let expected_path = fs::canonicalize(&database_path)
+            .map_err(|error| format!("Résolution du chemin du cache équipe : {error}"))?;
+        let actual_path = fs::canonicalize(&open_path)
+            .map_err(|error| format!("Résolution du cache SQLite ouvert : {error}"))?;
+        if actual_path != expected_path {
+            return Err("La base ouverte ne correspond pas au cache équipe attendu.".into());
+        }
     }
-    let key = load_storage_key(app)?
-        .ok_or_else(|| "Clé protégée du cache équipe indisponible.".to_string())?;
+    let key = session_dek()?;
     let sealed_path = team_cache_sealed_path(app)?;
+    let next_path = temporary_sibling(&sealed_path, "next");
     let snapshot_path = temporary_sibling(&database_path, "seal-snapshot");
     let verification_path = temporary_sibling(&database_path, "seal-verify");
     remove_sqlite_artifacts(&snapshot_path);
     remove_sqlite_artifacts(&verification_path);
+    if next_path.exists() {
+        fs::remove_file(&next_path).map_err(|error| {
+            format!("Suppression du cache scellé temporaire impossible : {error}")
+        })?;
+    }
 
     let result = (|| {
         database
             .backup_to_path(&snapshot_path)
             .map_err(|error| format!("Snapshot SQLite avant scellement : {error}"))?;
         crate::export_archive::validate_database_file(&snapshot_path)?;
-        drop(database);
-        encrypt_database_file(&snapshot_path, &sealed_path, &key)?;
-        decrypt_database_file(&sealed_path, &verification_path, &key)?;
+        encrypt_database_file(&snapshot_path, &next_path, &key)?;
+        decrypt_database_file(&next_path, &verification_path, &key)?;
         crate::export_archive::validate_database_file(&verification_path)?;
         if file_sha256(&snapshot_path)? != file_sha256(&verification_path)? {
             return Err("Le contrôle binaire du cache scellé a échoué.".into());
         }
+        replace_sealed_file(&next_path, &sealed_path)?;
         remove_plaintext_cache_artifacts_checked(&database_path)?;
         Ok(true)
     })();
+    if next_path.exists() {
+        let _ = fs::remove_file(&next_path);
+    }
     remove_sqlite_artifacts(&snapshot_path);
     remove_sqlite_artifacts(&verification_path);
     result
 }
 
+fn replace_sealed_file(from: &Path, to: &Path) -> Result<(), String> {
+    assert_team_cache_artifact(from)?;
+    assert_team_cache_artifact(to)?;
+    if to.exists() {
+        fs::remove_file(to).map_err(|error| {
+            format!("Remplacement du cache scellé impossible : {error}")
+        })?;
+    }
+    fs::rename(from, to).map_err(|error| format!("Activation du cache scellé impossible : {error}"))
+}
+
+pub fn seal_team_cache_database(app: &AppHandle, database: Database) -> Result<bool, String> {
+    match checkpoint_team_cache_database(app, &database) {
+        Ok(sealed) => {
+            drop(database);
+            if sealed {
+                wipe_session_dek();
+            }
+            Ok(sealed)
+        }
+        Err(error) => {
+            drop(database);
+            Err(error)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusqlite::Connection;
     use std::sync::atomic::{AtomicU64, Ordering};
 
     fn temp_dir() -> PathBuf {
@@ -407,9 +505,9 @@ mod tests {
     fn sealed_database_roundtrip_preserves_integrity_and_bytes() {
         let dir = temp_dir();
         fs::create_dir_all(&dir).unwrap();
-        let source = dir.join("cache.db");
-        let sealed = dir.join("cache.db.sealed");
-        let restored = dir.join("restored.db");
+        let source = dir.join("workspace-team-cache.db");
+        let sealed = dir.join("workspace-team-cache.db.sealed");
+        let restored = dir.join("workspace-team-cache.db.unseal");
         let connection = Connection::open(&source).unwrap();
         connection
             .execute_batch("CREATE TABLE data (id INTEGER PRIMARY KEY, value TEXT); INSERT INTO data VALUES (1, 'test');")
@@ -422,6 +520,28 @@ mod tests {
 
         assert_eq!(file_sha256(&source).unwrap(), file_sha256(&restored).unwrap());
         crate::export_archive::validate_database_file(&restored).unwrap();
+        let header = fs::read(&sealed).unwrap();
+        assert_ne!(&header[..16.min(header.len())], b"SQLite format 3\0");
+        assert!(crate::export_archive::validate_database_file(&sealed).is_err());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn wipe_plaintext_leaves_the_sealed_copy() {
+        let dir = temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        let clear = dir.join("workspace-team-cache.db");
+        let wal = PathBuf::from(format!("{}-wal", clear.display()));
+        let sealed = dir.join("workspace-team-cache.db.sealed");
+        fs::write(&clear, b"clear-cache").unwrap();
+        fs::write(&wal, b"wal").unwrap();
+        fs::write(&sealed, b"sealed-bytes").unwrap();
+
+        wipe_plaintext_cache_files(&clear).unwrap();
+
+        assert!(!clear.exists());
+        assert!(!wal.exists());
+        assert_eq!(fs::read(&sealed).unwrap(), b"sealed-bytes");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -429,9 +549,9 @@ mod tests {
     fn altered_sealed_database_is_rejected() {
         let dir = temp_dir();
         fs::create_dir_all(&dir).unwrap();
-        let source = dir.join("cache.db");
-        let sealed = dir.join("cache.db.sealed");
-        let restored = dir.join("restored.db");
+        let source = dir.join("workspace-team-cache.db");
+        let sealed = dir.join("workspace-team-cache.db.sealed");
+        let restored = dir.join("workspace-team-cache.db.unseal");
         fs::write(&source, vec![3_u8; CHUNK_SIZE + 17]).unwrap();
         let key = [9_u8; 32];
         encrypt_database_file(&source, &sealed, &key).unwrap();
@@ -441,6 +561,36 @@ mod tests {
         fs::write(&sealed, bytes).unwrap();
 
         assert!(decrypt_database_file(&sealed, &restored, &key).is_err());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn wrong_dek_cannot_read_the_sealed_cache() {
+        let dir = temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("workspace-team-cache.db");
+        let sealed = dir.join("workspace-team-cache.db.sealed");
+        let restored = dir.join("workspace-team-cache.db.unseal");
+        let connection = Connection::open(&source).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE data (id INTEGER PRIMARY KEY); INSERT INTO data VALUES (1);",
+            )
+            .unwrap();
+        drop(connection);
+        encrypt_database_file(&source, &sealed, &[7_u8; 32]).unwrap();
+        assert!(decrypt_database_file(&sealed, &restored, &[8_u8; 32]).is_err());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn historical_database_is_never_treated_as_team_cache() {
+        let dir = temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        let historical = dir.join("patrimoine-crm.db");
+        fs::write(&historical, b"SQLite format 3\0").unwrap();
+        assert!(wipe_plaintext_cache_files(&historical).is_err());
+        assert!(historical.exists());
         let _ = fs::remove_dir_all(dir);
     }
 }

@@ -1,4 +1,6 @@
-use super::session::{require_ui_session, UiSessionState, UI_SESSION_LOCKED_EVENT};
+use super::session::{
+    require_ui_session, UiSessionState, UiSessionLockedPayload, UI_SESSION_LOCKED_EVENT,
+};
 use super::{AuthManager, PasswordAttemptOutcome};
 use crate::commands::DbState;
 use crate::database::Database;
@@ -56,6 +58,17 @@ impl AuthCommandError {
 
     fn internal(message: impl Into<String>) -> Self {
         Self::new("internal_error", message)
+    }
+
+    fn from_open_database_error(error: String) -> Self {
+        if let Some(kind) = crate::workspace::team_access::parse_team_access_denial(&error) {
+            Self::new(
+                crate::workspace::team_access::team_access_error_code(kind),
+                crate::workspace::team_access::team_access_public_message(kind),
+            )
+        } else {
+            Self::internal(error)
+        }
     }
 
     fn rate_limited(retry_after_seconds: u64) -> Self {
@@ -172,7 +185,7 @@ fn restore_database_state(db: &DbState, database: Database) -> Result<(), String
 }
 
 fn reopen_database_after_close_failure(app: &AppHandle, db: &DbState) -> Result<(), String> {
-    crate::workspace::cache_seal::unseal_team_cache_if_needed(app)?;
+    crate::workspace::team_access::prepare_team_cache_open(app)?;
     crate::licensing::set_workspace_write_allowed(true);
     let database =
         Database::open(app).map_err(|error| format!("Réouverture de la base : {error}"))?;
@@ -217,6 +230,43 @@ pub(crate) fn close_database(app: &AppHandle, db: &DbState) -> Result<(), String
         }
     }
     Ok(())
+}
+
+pub(crate) fn lock_ui_after_team_access_denied(
+    app: &AppHandle,
+    db: &DbState,
+    session: &UiSessionState,
+    source: &str,
+) -> String {
+    let kind = crate::workspace::team_access::parse_team_access_denial(source)
+        .unwrap_or_else(|| crate::workspace::team_access::classify_team_authority_error(source));
+    crate::licensing::set_workspace_write_allowed(false);
+    crate::workspace::identity::clear_authoritative_identity_cache();
+    if let Ok(Some(database)) = take_database(db) {
+        let _ = database.workspace_blob_stash_pending_content();
+        if let Err(error) = crate::workspace::cache_seal::seal_team_cache_database(app, database) {
+            eprintln!("⚠️ Scellement après refus d'accès équipe : {error}");
+        }
+    }
+    if crate::workspace::team_access::should_wipe_plaintext_on_denial(kind) {
+        if let Err(wipe_error) = crate::workspace::cache_seal::wipe_plaintext_team_cache(app) {
+            eprintln!("⚠️ Purge du cache clair après révocation : {wipe_error}");
+        }
+    }
+    if let Err(purge_error) = crate::workspace::documents::purge_local_team_document_cache(app) {
+        eprintln!("⚠️ Purge du cache documentaire équipe après verrouillage : {purge_error}");
+    }
+    crate::workspace::team_cache_key::wipe_session_dek();
+    session.lock();
+    let message = crate::workspace::team_access::team_access_public_message(kind).to_string();
+    let _ = app.emit(
+        UI_SESSION_LOCKED_EVENT,
+        UiSessionLockedPayload {
+            reason: crate::workspace::team_access::team_access_error_code(kind).to_string(),
+            message: Some(message.clone()),
+        },
+    );
+    message
 }
 
 fn require_active_ui_session(session: &State<'_, UiSessionState>) -> Result<(), AuthCommandError> {
@@ -341,12 +391,31 @@ fn open_database(
             .map_err(|_| "État de la base inaccessible".to_string())?;
         if db_guard.is_some() {
             drop(db_guard);
+            if let Err(error) = crate::workspace::team_access::revalidate_open_team_session(app) {
+                if let Ok(Some(database)) = take_database(db.inner()) {
+                    let _ = database.workspace_blob_stash_pending_content();
+                    if let Err(seal_error) =
+                        crate::workspace::cache_seal::seal_team_cache_database(app, database)
+                    {
+                        eprintln!("⚠️ Scellement après refus d'accès équipe : {seal_error}");
+                    }
+                }
+                let kind = crate::workspace::team_access::parse_team_access_denial(&error)
+                    .unwrap_or_else(|| {
+                        crate::workspace::team_access::classify_team_authority_error(&error)
+                    });
+                if crate::workspace::team_access::should_wipe_plaintext_on_denial(kind) {
+                    let _ = crate::workspace::cache_seal::wipe_plaintext_team_cache(app);
+                }
+                crate::workspace::team_cache_key::wipe_session_dek();
+                return Err(error);
+            }
             crate::birthday_notifications::spawn_run_if_due(app);
             return Ok(());
         }
     }
 
-    crate::workspace::cache_seal::unseal_team_cache_if_needed(app)?;
+    crate::workspace::team_access::prepare_team_cache_open(app)?;
     crate::licensing::set_workspace_write_allowed(true);
     let database = Database::open(app).map_err(|e| {
         eprintln!("❌ open_database: échec ouverture base : {e}");
@@ -355,7 +424,19 @@ fn open_database(
     let workspace_config = database
         .get_workspace_config()
         .map_err(|error| format!("Configuration workspace inaccessible : {error}"))?;
-    crate::workspace::identity::initialize_workspace_write_gate(app, &workspace_config)?;
+    if let Err(error) =
+        crate::workspace::identity::initialize_workspace_write_gate(app, &workspace_config)
+    {
+        drop(database);
+        if crate::workspace::team_access::should_wipe_plaintext_on_denial(
+            crate::workspace::team_access::parse_team_access_denial(&error).unwrap_or_else(|| {
+                crate::workspace::team_access::classify_team_authority_error(&error)
+            }),
+        ) {
+            let _ = crate::workspace::cache_seal::wipe_plaintext_team_cache(app);
+        }
+        return Err(error);
+    }
     let installed_at = {
         let guard = auth
             .lock()
@@ -436,12 +517,28 @@ pub fn touch_ui_session_activity(
     if was_unlocked && !active {
         match close_database(&app, db.inner()) {
             Ok(()) => {
-                let _ = app.emit(UI_SESSION_LOCKED_EVENT, ());
+                let _ = app.emit(UI_SESSION_LOCKED_EVENT, UiSessionLockedPayload::idle());
             }
             Err(error) => {
                 eprintln!("⚠️ Verrouillage différé, scellement impossible : {error}");
                 session.unlock();
                 active = true;
+            }
+        }
+    } else if active {
+        if let Err(error) = crate::workspace::team_access::revalidate_open_team_session(&app) {
+            if crate::workspace::team_access::should_lock_open_session_on_denial(
+                crate::workspace::team_access::parse_team_access_denial(&error).unwrap_or_else(|| {
+                    crate::workspace::team_access::classify_team_authority_error(&error)
+                }),
+            ) {
+                let _ = lock_ui_after_team_access_denied(
+                    &app,
+                    db.inner(),
+                    session.inner(),
+                    &error,
+                );
+                return false;
             }
         }
     }
@@ -465,7 +562,7 @@ pub async fn unlock(
         authenticate_with_system(app.clone()).await?;
     }
 
-    open_database(&app, &db, &auth).map_err(AuthCommandError::internal)?;
+    open_database(&app, &db, &auth).map_err(AuthCommandError::from_open_database_error)?;
     session.unlock();
     Ok(true)
 }
@@ -540,7 +637,7 @@ pub async fn recover_without_system_auth(
         // de récupération afin de ne jamais rendre les données inaccessibles.
     }
     set_system_auth_enabled(&auth, false)?;
-    open_database(&app, &db, &auth).map_err(AuthCommandError::internal)?;
+    open_database(&app, &db, &auth).map_err(AuthCommandError::from_open_database_error)?;
     session.unlock();
     Ok(true)
 }
@@ -568,7 +665,7 @@ pub async fn recover_missing_team_cache_cmd(
         authenticate_with_system(app.clone()).await?;
     }
     crate::workspace::sync::rebuild::recover_missing_team_cache(&app)
-        .map_err(AuthCommandError::internal)
+        .map_err(AuthCommandError::from_open_database_error)
 }
 
 /// Change le mot de passe d'accès (la base reste ouverte).
@@ -602,7 +699,7 @@ pub fn change_master_password(
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_system_auth_error, take_database, SystemAuthGuard};
+    use super::{classify_system_auth_error, take_database, AuthCommandError, SystemAuthGuard};
     use crate::database::Database;
     use std::sync::atomic::AtomicBool;
     use std::sync::Mutex;
@@ -642,5 +739,25 @@ mod tests {
         let db = Mutex::new(Some(Database::open_in_memory_for_tests().unwrap()));
         drop(take_database(&db).unwrap());
         assert!(db.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn open_database_maps_revoked_team_access_to_a_stable_code() {
+        let error = AuthCommandError::from_open_database_error(
+            crate::workspace::team_access::TEAM_ACCESS_REVOKED_MESSAGE.to_string(),
+        );
+        assert_eq!(error.code, "team_access_revoked");
+        assert_eq!(
+            error.message,
+            crate::workspace::team_access::TEAM_ACCESS_REVOKED_MESSAGE
+        );
+    }
+
+    #[test]
+    fn open_database_keeps_unrelated_failures_internal() {
+        let error = AuthCommandError::from_open_database_error(
+            "Cache équipe clair invalide : fichier corrompu".into(),
+        );
+        assert_eq!(error.code, "internal_error");
     }
 }

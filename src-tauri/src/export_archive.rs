@@ -9,7 +9,7 @@ use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
 /// Copies locales redondantes — l'export contient déjà un snapshot cohérent de la base.
-const EXPORT_SKIP_DIRS: &[&str] = &["backups"];
+const EXPORT_SKIP_DIRS: &[&str] = &["backups", "_team_cache"];
 const EXPORT_SKIP_FILES: &[&str] = &["external_backup_status.json"];
 const AUTOMATIC_ARCHIVE_PREFIX: &str = "patrimoine-crm_auto_";
 const MAX_AUTOMATIC_ARCHIVES: usize = 10;
@@ -88,6 +88,9 @@ fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
         let file_type = entry.file_type()?;
         let from = entry.path();
         let to = dst.join(entry.file_name());
+        if should_skip_entry(&entry.file_name().to_string_lossy(), file_type.is_dir(), false) {
+            continue;
+        }
         if file_type.is_dir() {
             copy_dir_all(&from, &to)?;
         } else {
@@ -530,6 +533,9 @@ mod tests {
         .expect("conflicting secrets");
         fs::write(app_data.join("email_oauth.json"), b"{}").expect("oauth");
         fs::write(app_data.join("external_backup_status.json"), b"{}").expect("status");
+        let team_cache = app_data.join("documents").join("_team_cache");
+        fs::create_dir_all(&team_cache).expect("team cache");
+        fs::write(team_cache.join("doc.pdf"), b"cached").expect("cached doc");
         write_marker_db(&app_data.join("patrimoine-crm.db"), "live");
 
         let temp = unique_temp_dir();
@@ -543,6 +549,7 @@ mod tests {
         assert!(!temp.join("external_backup_status.json").exists());
         assert!(!temp.join("backups").exists());
         assert!(!temp.join("patrimoine-crm.db").exists());
+        assert!(!temp.join("documents").join("_team_cache").exists());
 
         let _ = fs::remove_dir_all(&app_data);
         let _ = fs::remove_dir_all(&temp);

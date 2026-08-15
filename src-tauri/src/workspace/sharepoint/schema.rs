@@ -28,6 +28,7 @@ pub const LIST_CRM_LOCKS: &str = "CRM_Locks";
 pub const LIST_CRM_AUDIT: &str = "CRM_Audit";
 pub const LIST_CRM_DATA: &str = "CRM_Data";
 pub const LIST_CRM_SEQUENCES: &str = "CRM_Sequences";
+pub const LIST_CRM_SECRETS: &str = "CRM_Secrets";
 
 const MEMBERS_COLUMNS: &[ListColumnDef] = &[
     ListColumnDef {
@@ -184,6 +185,19 @@ const SEQUENCES_COLUMNS: &[ListColumnDef] = &[
     },
 ];
 
+const SECRETS_COLUMNS: &[ListColumnDef] = &[
+    ListColumnDef {
+        name: "SecretName",
+        display_name: "Secret name",
+        kind: ColumnKind::Text,
+    },
+    ListColumnDef {
+        name: "SecretValue",
+        display_name: "Secret value",
+        kind: ColumnKind::Text,
+    },
+];
+
 const AUDIT_COLUMNS: &[ListColumnDef] = &[
     ListColumnDef {
         name: "MutationId",
@@ -247,6 +261,10 @@ pub const TEAM_WORKSPACE_LISTS: &[ListDef] = &[
         display_name: LIST_CRM_SEQUENCES,
         columns: SEQUENCES_COLUMNS,
     },
+    ListDef {
+        display_name: LIST_CRM_SECRETS,
+        columns: SECRETS_COLUMNS,
+    },
 ];
 
 #[cfg(test)]
@@ -284,6 +302,7 @@ mod tests {
                 LIST_CRM_AUDIT,
                 LIST_CRM_DATA,
                 LIST_CRM_SEQUENCES,
+                LIST_CRM_SECRETS,
             ]
         );
     }

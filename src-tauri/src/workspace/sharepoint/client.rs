@@ -137,7 +137,7 @@ impl SharePointGraphClient {
         self
     }
 
-    fn http_client(&self) -> &BlockingClient {
+    pub(crate) fn http_client(&self) -> &BlockingClient {
         static DEFAULT: OnceLock<BlockingClient> = OnceLock::new();
         DEFAULT.get_or_init(|| {
             BlockingClient::builder()
@@ -572,6 +572,34 @@ impl SharePointGraphClient {
         Ok(list)
     }
 
+    pub fn hide_list_blocking(
+        &self,
+        access_token: &str,
+        site_id: &str,
+        list: &ParsedSharePointList,
+    ) -> Result<(), String> {
+        let etag = list
+            .etag
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("*");
+        let url = self.urls().list(site_id, &list.id);
+        let payload = serde_json::json!({ "list": { "hidden": true } });
+        let (status, body) = graph_patch_with_retry(
+            self.http_client(),
+            &url,
+            access_token,
+            etag,
+            &payload,
+            "Masquage liste SharePoint",
+        )?;
+        if status == 200 || status == 201 || status == 204 {
+            return Ok(());
+        }
+        Err(map_graph_http_error(status, &body))
+    }
+
     pub fn list_items_all_blocking(
         &self,
         access_token: &str,
@@ -754,7 +782,7 @@ fn column_definition_payload(column: &ListColumnDef) -> Value {
     // Sans unicité serveur, deux clients pourraient créer chacun une ligne LockKey.
     let unique = matches!(
         column.name,
-        "LockKey" | "SyncKey" | "SequenceKey" | "MutationId"
+        "LockKey" | "SyncKey" | "SequenceKey" | "MutationId" | "SecretName"
     );
     let mut payload = serde_json::json!({
         "name": column.name,
@@ -826,15 +854,7 @@ pub fn is_sites_selected_access_denied(status: u16, body: &str) -> bool {
     if status != 403 {
         return false;
     }
-    let lower = body.to_lowercase();
-    let code = graph_error_code(body);
-    matches!(
-        code.as_deref(),
-        Some("accessDenied") | Some("Authorization_RequestDenied") | Some("generalException")
-    ) || lower.contains("sites.selected")
-        || lower.contains("access denied")
-        || lower.contains("insufficient")
-        || lower.contains("authorization")
+    body.to_lowercase().contains("sites.selected")
 }
 
 pub fn map_graph_http_error(status: u16, body: &str) -> String {
@@ -1181,10 +1201,18 @@ mod tests {
 
     #[test]
     fn map_graph_http_error_describes_sites_selected_admin_grant() {
-        let body = r#"{"error":{"code":"accessDenied","message":"Access denied"}}"#;
+        let body = r#"{"error":{"code":"accessDenied","message":"Sites.Selected access denied"}}"#;
         let message = map_graph_http_error(403, body);
         assert!(message.contains("Sites.Selected"));
         assert!(message.contains("administrateur"));
+    }
+
+    #[test]
+    fn generic_sharepoint_403_is_a_site_account_denial() {
+        let body = r#"{"error":{"code":"accessDenied","message":"Access denied"}}"#;
+        let message = map_graph_http_error(403, body);
+        assert!(message.contains("pour ce compte ou ce site"));
+        assert!(!message.contains("Sites.Selected"));
     }
 
     #[test]
@@ -1212,6 +1240,17 @@ mod tests {
         let payload = column_definition_payload(&ListColumnDef {
             name: "LockKey",
             display_name: "Lock key",
+            kind: ColumnKind::Text,
+        });
+        assert_eq!(payload["enforceUniqueValues"], true);
+        assert_eq!(payload["indexed"], true);
+    }
+
+    #[test]
+    fn secret_name_column_is_unique_and_indexed() {
+        let payload = column_definition_payload(&ListColumnDef {
+            name: "SecretName",
+            display_name: "Secret name",
             kind: ColumnKind::Text,
         });
         assert_eq!(payload["enforceUniqueValues"], true);
@@ -1259,9 +1298,11 @@ mod tests {
 
     #[test]
     fn is_sites_selected_access_denied_detects_authorization_errors() {
-        let body = r#"{"error":{"code":"Authorization_RequestDenied"}}"#;
-        assert!(is_sites_selected_access_denied(403, body));
-        assert!(!is_sites_selected_access_denied(404, body));
+        let selected = r#"{"error":{"message":"Sites.Selected is required"}}"#;
+        assert!(is_sites_selected_access_denied(403, selected));
+        let generic = r#"{"error":{"code":"Authorization_RequestDenied"}}"#;
+        assert!(!is_sites_selected_access_denied(403, generic));
+        assert!(!is_sites_selected_access_denied(404, selected));
     }
 
     #[test]

@@ -47,6 +47,7 @@ import { useBackgroundAutomationListener } from "@/hooks/useBackgroundAutomation
 import { useAutomationNotificationListener } from "@/hooks/useAutomationNotificationListener";
 import { useOneDriveBackgroundListener } from "@/hooks/useOneDriveBackgroundListener";
 import { useAutoLock } from "@/hooks/useAutoLock";
+import type { UiSessionLockedPayload } from "@/lib/api/tauri-auth";
 import { useFundWatchlistCoachGlobalListener } from "@/hooks/useFundWatchlistCoachGlobalListener";
 import { loadCoachGenerating } from "@/lib/fund-watchlist/fund-watchlist-coach-store";
 
@@ -59,14 +60,18 @@ function AppInner() {
   const [showWizard, setShowWizard] = useState(false);
   const [showLicense, setShowLicense] = useState(false);
   const [currentPage, setCurrentPage] = useState("dashboard");
+  const [unlockNotice, setUnlockNotice] = useState("");
+  const [unlockReason, setUnlockReason] = useState("");
   const etiquettesRecalcDone = useRef(
     sessionStorage.getItem(ETIQUETTES_RECALC_SESSION_KEY) === "1"
   );
   const etiquettesRecalcInFlight = useRef(false);
 
-  const handleSessionLocked = useCallback(() => {
+  const handleSessionLocked = useCallback((payload?: UiSessionLockedPayload) => {
     setIsAuthenticated(false);
     setCurrentPage("dashboard");
+    setUnlockNotice((prev) => payload?.message || prev);
+    setUnlockReason(payload?.reason || "");
   }, []);
 
   const handleLogout = useCallback(async () => {
@@ -177,6 +182,8 @@ function AppInner() {
   };
 
   const handleUnlocked = async () => {
+    setUnlockNotice("");
+    setUnlockReason("");
     setIsEngineAvailable(true);
     setIsAuthenticated(true);
     try {
@@ -358,7 +365,7 @@ function AppInner() {
 
   // Lancements suivants : afficher l'écran de déverrouillage si pas authentifié
   if (!isAuthenticated) {
-    return <UnlockScreen onUnlocked={handleUnlocked} />;
+    return <UnlockScreen onUnlocked={handleUnlocked} initialNotice={unlockNotice} initialReason={unlockReason} />;
   }
 
   // Afficher l'écran d'activation licence si nécessaire

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Cloud, Database, Loader2, PlugZap, ShieldAlert, Unplug, Users } from "lucide-react";
+import { Cloud, Copy, Database, Loader2, PlugZap, ShieldAlert, Unplug, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -187,7 +187,9 @@ export function TeamWorkspaceSettingsPanel() {
     }
     setConnecting(true);
     try {
-      const next = await connectMicrosoftTeamOAuth({ forceConsent: false });
+      const next = await connectMicrosoftTeamOAuth({
+        forceConsent: Boolean(connection?.connected),
+      });
       setConnection(next);
       toast.success("Compte Microsoft équipe connecté.");
     } catch (error) {
@@ -238,6 +240,28 @@ export function TeamWorkspaceSettingsPanel() {
       toast.error(invokeErrorMessage(error) || "Enregistrement impossible.");
     } finally {
       setSavingConfig(false);
+    }
+  };
+
+  const handleCopyAssistantFiche = async () => {
+    const lines = [
+      "Fiche CRM équipe (à coller sur le PC assistante)",
+      `Client ID Azure : ${microsoftClientId.trim() || "—"}`,
+      `Object ID groupe Conseillers : ${advisorGroupId.trim() || "—"}`,
+      `Object ID groupe Assistantes : ${secretaryGroupId.trim() || "—"}`,
+      `Hostname SharePoint : ${siteHostname.trim() || "—"}`,
+      `Chemin du site : ${sitePath.trim() || "—"}`,
+      `ID site Graph : ${siteId.trim() || "—"}`,
+      `Nom du site : ${siteName.trim() || "—"}`,
+      `Boîte e-mail cabinet : ${officeMailboxEmail.trim() || "—"}`,
+      "",
+      "Ne jamais transmettre : mot de passe, fichier .db, secrets.key, compte de Tony.",
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(lines);
+      toast.success("Fiche copiée. Donnez-la à l’assistante — pas de mot de passe dessus.");
+    } catch {
+      toast.error("Impossible de copier la fiche. Sélectionnez les champs à la main.");
     }
   };
 
@@ -505,7 +529,7 @@ export function TeamWorkspaceSettingsPanel() {
   return (
     <SettingsPanel
       title="Mode équipe SharePoint"
-      description="Prototype : base partagée sur un site SharePoint d'équipe, avec rôles conseiller / secrétaire."
+      description="Base partagée sur un site SharePoint d’équipe, avec rôles conseiller / secrétaire."
       action={<Users className="h-5 w-5 text-muted-foreground" aria-hidden />}
     >
       <div className="space-y-6">
@@ -570,7 +594,7 @@ export function TeamWorkspaceSettingsPanel() {
             <Button
               type="button"
               onClick={() => void handleConnect()}
-              disabled={connecting || !canManage}
+              disabled={connecting}
               className="gap-2"
             >
               {connecting ? (
@@ -585,7 +609,6 @@ export function TeamWorkspaceSettingsPanel() {
                 type="button"
                 variant="outline"
                 onClick={() => void handleDisconnect()}
-                disabled={!canManage}
                 className="gap-2"
               >
                 <Unplug className="h-4 w-4" />
@@ -630,7 +653,7 @@ export function TeamWorkspaceSettingsPanel() {
                 Indication locale pour le premier paramétrage. Le rôle effectif est déterminé
                 par votre appartenance aux groupes Microsoft Entra configurés ci-dessous.
                 Le secrétaire ne peut pas exporter les données ni modifier cette configuration
-                une fois le mode équipe activé.
+                une fois le mode équipe activé. Connecter / reconnecter Microsoft reste possible.
               </p>
             </div>
 
@@ -659,8 +682,9 @@ export function TeamWorkspaceSettingsPanel() {
               <p className="text-xs text-muted-foreground">
                 Identifiants UUID des groupes Microsoft Entra (Azure). Deux groupes distincts
                 sont requis avant les opérations sensibles sur un espace SharePoint provisionné
-                (export, migration, déconnexion OAuth, etc.). Seul un conseiller peut les
-                configurer.
+                (export, migration). Seul un conseiller peut les configurer. Retirer une
+                assistante se fait dans Microsoft 365 (groupe Entra + site SharePoint), pas
+                dans le CRM.
               </p>
             </div>
 
@@ -1061,17 +1085,33 @@ export function TeamWorkspaceSettingsPanel() {
         {!canManage && teamConfigured ? (
           <p className="text-xs text-muted-foreground">
             Configuration verrouillée en mode secrétaire. Seul un conseiller peut modifier
-            ou désactiver le mode équipe.
+            ou désactiver le mode équipe. Pour retirer une personne : l’informatique la sort
+            du groupe Entra Assistantes et du site SharePoint — rien à cliquer ici.
+            En cas de mot de passe Microsoft ou de code à 2 facteurs changé : utilisez
+            Connecter Microsoft ci-dessus, ou Reconnecter à l’écran de verrouillage.
           </p>
         ) : null}
 
-        <Button
-          type="button"
-          onClick={() => void handleSaveConfig()}
-          disabled={savingConfig || !canManage}
-        >
-          {savingConfig ? "Enregistrement…" : "Enregistrer la configuration équipe"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            onClick={() => void handleSaveConfig()}
+            disabled={savingConfig || !canManage}
+          >
+            {savingConfig ? "Enregistrement…" : "Enregistrer la configuration équipe"}
+          </Button>
+          {canManage && teamEnabled ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleCopyAssistantFiche()}
+              className="gap-2"
+            >
+              <Copy className="h-4 w-4" />
+              Copier la fiche pour une assistante
+            </Button>
+          ) : null}
+        </div>
       </div>
     </SettingsPanel>
   );

@@ -1,19 +1,19 @@
 # Sécurité des données (au repos)
 
-> **Important** : le chiffrement applicatif de la base a été **retiré**. La base
-> La base individuelle `patrimoine-crm.db` reste en **SQLite simple (non chiffré)**. Ce choix est
-> assumé : une base en clair s'ouvre **toujours**, donc **aucune clé ne peut être perdue
-> ou écrasée** et entraîner une perte définitive des données (ce qui était le risque du
-> chiffrement par enveloppe précédent).
+> **Important** : la base individuelle `patrimoine-crm.db` reste en **SQLite
+> simple (non chiffré)**. Ce choix est assumé : une base en clair s'ouvre
+> **toujours**, donc **aucune clé ne peut être perdue ou écrasée** et entraîner
+> une perte définitive des données (ce qui était le risque de SQLCipher et du
+> chiffrement par enveloppe précédent). SQLCipher n'est **pas** réactivé.
 
 ## Modèle actuel
 
 | Élément | État | Détail |
 |--------|------|--------|
-| Base `patrimoine-crm.db` | **En clair** | `rusqlite` feature `bundled` (SQLite standard). Ouverte par `Database::open`, sans clé. |
-| Cache `workspace-team-cache.db` | **Scellé au verrouillage** | SQLite standard pendant la session ; snapshot chiffré XChaCha20-Poly1305 après contrôle d'intégrité lors du verrouillage ou de la fermeture. |
+| Base `patrimoine-crm.db` | **En clair** | `rusqlite` feature `bundled` (SQLite standard). Ouverte par `Database::open`, sans clé. **Jamais** chiffrée par SQLCipher. |
+| Cache `workspace-team-cache.db` | **Illisible sans Entra** | Pas de SQLite clair pendant la session (copie mémoire). Snapshot scellé XChaCha20-Poly1305 sur disque, clé délivrée par SharePoint (`CRM_Secrets`) **après** vérification Microsoft Entra. Une révocation refuse l'ouverture, verrouille la session, oublie la clé mémoire, supprime tout fichier clair local et le cache `documents/_team_cache`. Copier le `.db.sealed` sans accès SharePoint ne permet pas de le lire. SQLCipher n'est **pas** utilisé. |
 | Documents téléchargés en mode équipe | **Cache temporaire purgé** | Les fichiers sont contrôlés par SHA-256 puis conservés sous `documents/_team_cache` uniquement pendant la session. Les nouveaux fichiers non encore envoyés sont intégrés à la base avant son scellement, puis le cache clair est supprimé. |
-| Accès au CRM | **Verrou local** | Mot de passe Argon2id, avec Windows Hello ou Touch ID en second facteur optionnel. Ne chiffre pas la base. |
+| Accès au CRM | **Verrou local + Entra en mode équipe** | Mot de passe Argon2id, avec Windows Hello ou Touch ID en second facteur optionnel. En mode équipe, le mot de passe local ne suffit plus à lire le cache. |
 | Secrets applicatifs | **Chiffrés au repos** | Tokens OAuth, clé API Mistral et token Telegram — XChaCha20-Poly1305 avec une clé protégée par DPAPI/Trousseau. |
 
 ### Conséquences
@@ -21,14 +21,38 @@
 - **Oublier le mot de passe ≠ perte de données** : il suffit de supprimer/réinitialiser
   `auth.json` pour redéfinir un mot de passe. La base reste lisible.
 - **Mode individuel sans clé de récupération** : la base historique reste toujours lisible.
-- **Mode équipe reconstructible** : le cache scellé dépend du coffre OS, tandis que SharePoint
-  reste la source partagée. Le fichier clair n'est supprimé qu'après déchiffrement de contrôle,
-  comparaison binaire et `PRAGMA integrity_check`.
+- **Mode équipe reconstructible** : la clé du cache n'est **pas** dans le coffre OS.
+  Elle est lue sur SharePoint (`CRM_Secrets`) après Entra, uniquement en mémoire.
+  Au provisionnement, cette liste est masquée et limitée aux deux groupes Entra
+  (conseillers / assistantes) : elle n'apparaît plus dans le contenu du site.
+  Une assistante retirée des groupes ou du site ne peut plus obtenir cette clé :
+  le fichier scellé local reste illisible, y compris hors du CRM.
+  Si le cache scellé est illisible, on le reconstruit depuis SharePoint.
+  `patrimoine-crm.db` n'est jamais chiffré ni modifié par ce flux.
 - **Aucune perte lors d'une fermeture hors ligne** : le contenu d'un document encore en attente
   d'envoi est placé dans l'outbox SQLite avant le scellement. Il repart vers SharePoint après
   le prochain déverrouillage.
 - **Protection au repos** : si tu veux protéger le fichier en cas de vol du poste, active
   le **chiffrement disque de l'OS** (BitLocker sur Windows). C'est le niveau recommandé.
+
+### Pourquoi pas SQLCipher (même en mode équipe)
+
+SQLCipher chiffre le fichier SQLite **au niveau du moteur**. Dans ce projet, `rusqlite`
+active le chiffrement à la **compilation** (`bundled-sqlcipher`) : **toutes** les bases
+ouvertes par l'app passeraient par SQLCipher, y compris `patrimoine-crm.db`. C'est
+précisément ce qui a déjà rendu une base individuelle illisible (clé perdue / en-tête
+chiffré). Le build Windows imposait aussi OpenSSL + NASM, volontairement retiré.
+
+L'effet voulu (« une assistante ne peut plus lire le SQLite de son PC ») est obtenu
+**sans** SQLCipher :
+
+1. pendant la session, le cache équipe vit en SQLite **mémoire** (`:memory:`), pas en `.db` clair ;
+2. sur disque, seul `workspace-team-cache.db.sealed` reste (XChaCha20-Poly1305) ;
+3. la clé (DEK) est lue sur SharePoint `CRM_Secrets` **après** Entra, uniquement en RAM ;
+4. sans accès Graph/SharePoint (compte retiré), le `.sealed` est du bruit, y compris hors du CRM.
+
+Copier le fichier local ne suffit plus. SQLCipher n'apporterait rien de plus, et
+réintroduirait le risque sur la base historique.
 
 ## Verrou d'accès (`auth.json`)
 
@@ -65,10 +89,12 @@ explicitement : aucune panne biométrique ne peut rendre les données inaccessib
 
 La base n'est **pas** ouverte au démarrage : elle ne l'est qu'après le premier déverrouillage.
 Tout verrouillage ferme la connexion et rend les commandes IPC métier inopérantes. En mode équipe,
-un snapshot SQLite cohérent est alors chiffré par blocs ; le `.db` clair n'est effacé qu'après
-avoir déchiffré et validé une copie de contrôle. Au déverrouillage, le cache est déchiffré dans un
-fichier temporaire, validé, puis activé par renommage atomique. Pendant une session déverrouillée,
-le cache reste nécessairement un SQLite clair ; BitLocker/FileVault demeure donc complémentaire.
+Microsoft Entra est interrogé **avant** toute lecture. La clé SharePoint reste en mémoire
+le temps de la session ; le cache vivant est un SQLite mémoire, le disque ne conserve que
+le snapshot scellé (contrôle binaire + `PRAGMA integrity_check` avant d'effacer un éventuel
+clair de migration). Une révocation Entra ferme la session, oublie la clé et affiche
+« Accès équipe révoqué ». Copier `workspace-team-cache.db.sealed` sans accès SharePoint
+ne permet pas de lire le CRM.
 
 ## Secrets applicatifs (DPAPI / Trousseau)
 
@@ -94,9 +120,10 @@ et authentifiés au repos** :
   réessaie au prochain chargement et affiche un avertissement dans **Paramètres > Données**.
 
 La base individuelle, ses documents et les fiches historiques restent récupérables indépendamment
-de cette clé. En mode équipe, perdre le coffre OS impose de reconstruire le cache depuis SharePoint ;
-les mutations encore uniquement présentes dans l'outbox locale doivent donc être synchronisées
-avant toute migration de compte OS.
+de cette clé. En mode équipe, la clé du cache vient de SharePoint : perdre le coffre OS n'empêche
+pas de reconstruire le cache. Les mutations encore uniquement présentes dans l'outbox locale
+doivent être synchronisées avant une coupure brutale, car le snapshot scellé est rafraîchi
+périodiquement et au verrouillage.
 
 ## Sauvegardes
 

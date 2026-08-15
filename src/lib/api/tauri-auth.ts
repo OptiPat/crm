@@ -6,6 +6,19 @@ export interface AuthCommandError {
   retryAfterSeconds?: number;
 }
 
+export interface UiSessionLockedPayload {
+  reason?: string;
+  message?: string;
+}
+
+export function isTeamAccessDenied(code: string | undefined): boolean {
+  return code === "team_access_revoked" || code === "team_access_required";
+}
+
+export function isTeamAccessReconnectable(code: string | undefined): boolean {
+  return code === "team_access_required";
+}
+
 export interface SystemAuthStatus {
   supported: boolean;
   available: boolean;

@@ -13,15 +13,17 @@ use crate::workspace::cache::{
 };
 use crate::workspace::commands::resolve_microsoft_team_connection;
 use crate::workspace::enrollment::{
-    load_workspace_enrollment, validate_workspace_enrollment, WorkspaceEnrollment,
+    load_workspace_enrollment, validate_workspace_enrollment,
 };
 use crate::workspace::guard::{resolve_sharepoint_site_ref, workspace_config_from_db};
 use crate::workspace::identity::require_fresh_sensitive_team_authority;
+use crate::workspace::team_access::{
+    classify_team_authority_error, should_lock_open_session_on_denial,
+};
 use crate::workspace::migration::{
     rebuild_snapshot_from_remote_items, remote_item_record_identity,
     validate_rebuilt_snapshot_in_memory,
 };
-use crate::workspace::mode::WorkspaceMode;
 use crate::workspace::sharepoint::{
     ParsedSharePointListItem, SharePointGraphClient, LIST_CRM_DATA, LIST_CRM_SEQUENCES,
 };
@@ -51,20 +53,6 @@ fn remove_sqlite_artifacts(path: &Path) -> Result<(), String> {
         }
     }
     Ok(())
-}
-
-fn config_from_enrollment(enrollment: &WorkspaceEnrollment) -> WorkspaceConfig {
-    WorkspaceConfig {
-        mode: WorkspaceMode::TeamSharepoint,
-        role: None,
-        site_hostname: Some(enrollment.site_hostname.clone()),
-        site_path: Some(enrollment.site_path.clone()),
-        site_id: Some(enrollment.site_id.clone()),
-        site_name: enrollment.site_name.clone(),
-        office_mailbox_email: enrollment.office_mailbox_email.clone(),
-        advisor_group_id: Some(enrollment.advisor_group_id.clone()),
-        secretary_group_id: Some(enrollment.secretary_group_id.clone()),
-    }
 }
 
 fn prepare_rebuilt_cache(
@@ -188,52 +176,22 @@ fn replace_active_team_cache(
     rebuilt_database: Database,
 ) -> Result<Database, String> {
     drop(rebuilt_database);
-    let final_path = team_cache_database_path(app)?;
-    let backup_path = final_path.with_extension("db.before-rebuild");
-    remove_sqlite_artifacts(&backup_path)?;
     if guard.is_some() {
         return Err("La base active a été rouverte pendant la reconstruction.".into());
     }
-    std::fs::rename(&final_path, &backup_path)
-        .map_err(|error| format!("Mise à l'abri de l'ancien cache impossible : {error}"))?;
-    if let Err(error) = std::fs::rename(temp_path, &final_path) {
-        let _ = std::fs::rename(&backup_path, &final_path);
-        let restored = Database::open_workspace_cache_at_path(app, &final_path)
-            .map_err(|reopen| format!("{error}. Réouverture de l'ancien cache : {reopen}"))?;
-        *guard = Some(restored);
-        return Err(format!("Remplacement du cache équipe impossible : {error}"));
+    let file_db = Database::open_workspace_cache_at_path(app, temp_path).map_err(|error| {
+        format!("Le cache reconstruit est invalide : {error}")
+    })?;
+    let memory = file_db
+        .backup_into_memory()
+        .map_err(|error| format!("Passage du cache reconstruit en mémoire : {error}"))?;
+    crate::workspace::cache_seal::checkpoint_team_cache_database(app, &memory)
+        .map_err(|error| format!("Scellement du cache reconstruit : {error}"))?;
+    let _ = remove_sqlite_artifacts(temp_path);
+    if let Err(error) = crate::workspace::cache_seal::wipe_plaintext_team_cache(app) {
+        eprintln!("⚠️ Purge du cache clair après reconstruction : {error}");
     }
-    match Database::open_workspace_cache_at_path(app, &final_path) {
-        Ok(database) => {
-            if let Err(error) = remove_sqlite_artifacts(&backup_path) {
-                *guard = Some(database);
-                return Err(format!(
-                    "Cache reconstruit mais nettoyage sécurisé de l'ancien cache impossible : {error}"
-                ));
-            }
-            let sealed_path = team_cache_sealed_path(app)?;
-            if sealed_path.exists() {
-                if let Err(error) = std::fs::remove_file(&sealed_path) {
-                    eprintln!("⚠️ Suppression du cache scellé obsolète différée : {error}");
-                }
-            }
-            Ok(database)
-        }
-        Err(error) => {
-            remove_sqlite_artifacts(&final_path)?;
-            std::fs::rename(&backup_path, &final_path).map_err(|rollback| {
-                format!(
-                    "Nouveau cache invalide ({error}) et restauration de l'ancien impossible : {rollback}"
-                )
-            })?;
-            let restored = Database::open_workspace_cache_at_path(app, &final_path)
-                .map_err(|reopen| format!("Réouverture de l'ancien cache : {reopen}"))?;
-            *guard = Some(restored);
-            Err(format!(
-                "Le cache reconstruit est invalide, ancien cache restauré : {error}"
-            ))
-        }
-    }
+    Ok(memory)
 }
 
 fn restore_active_cache_after_rebuild_failure(app: &AppHandle, db: &DbState) -> Result<(), String> {
@@ -243,8 +201,7 @@ fn restore_active_cache_after_rebuild_failure(app: &AppHandle, db: &DbState) -> 
     if guard.is_some() {
         return Ok(());
     }
-    let final_path = team_cache_database_path(app)?;
-    let database = Database::open_workspace_cache_at_path(app, &final_path)
+    let database = Database::open(app)
         .map_err(|error| format!("Réouverture de l'ancien cache équipe : {error}"))?;
     *guard = Some(database);
     Ok(())
@@ -270,7 +227,20 @@ pub fn rebuild_team_cache_from_sharepoint_cmd(
     if !enrollment.sync_activated {
         return Err("La reconstruction requiert un cache équipe déjà activé.".into());
     }
-    let authority = require_fresh_sensitive_team_authority(&app_handle, &config)?;
+    let authority = match require_fresh_sensitive_team_authority(&app_handle, &config) {
+        Ok(authority) => authority,
+        Err(error) => {
+            if should_lock_open_session_on_denial(classify_team_authority_error(&error)) {
+                return Err(crate::auth::commands::lock_ui_after_team_access_denied(
+                    &app_handle,
+                    db.inner(),
+                    session.inner(),
+                    &error,
+                ));
+            }
+            return Err(error);
+        }
+    };
     if !authority.capabilities.can_manage_members {
         return Err("Seul le conseiller peut reconstruire le cache équipe.".into());
     }
@@ -340,26 +310,34 @@ pub fn recover_missing_team_cache(
     if !enrollment.sync_activated {
         return Err("La synchronisation équipe n'est pas activée sur ce poste.".into());
     }
+    crate::workspace::team_access::prepare_team_cache_open(app)?;
     let final_path = team_cache_database_path(app)?;
     let sealed_path = team_cache_sealed_path(app)?;
     if final_path.exists() || sealed_path.exists() {
         save_workspace_cache_manifest(app, &enrollment.workspace_id)?;
-        crate::workspace::cache_seal::unseal_team_cache_if_needed(app)?;
-        let database = Database::open_workspace_cache_at_path(app, &final_path)
-            .map_err(|error| format!("Validation du cache local existant : {error}"))?;
-        crate::workspace::cache_seal::seal_team_cache_database(app, database)?;
-        return Ok(TeamCacheRebuildReport {
-            rebuilt: false,
-            synchronized_records: 0,
-            reserved_id_blocks: 0,
-        });
+        match Database::open(app) {
+            Ok(database) => {
+                crate::workspace::cache_seal::seal_team_cache_database(app, database)?;
+                return Ok(TeamCacheRebuildReport {
+                    rebuilt: false,
+                    synchronized_records: 0,
+                    reserved_id_blocks: 0,
+                });
+            }
+            Err(error) => {
+                eprintln!(
+                    "⚠️ Cache équipe local illisible ({error}), reconstruction depuis SharePoint."
+                );
+            }
+        }
     }
-    let mut config = config_from_enrollment(&enrollment);
+    let mut config = enrollment.to_workspace_config();
     let authority = require_fresh_sensitive_team_authority(app, &config)?;
     config.role = Some(authority.role);
     let (temp_path, rebuilt_database, report) = prepare_rebuilt_cache(app, &config, false)?;
     drop(rebuilt_database);
     let activation = (|| {
+        remove_sqlite_artifacts(&final_path)?;
         std::fs::rename(&temp_path, &final_path)
             .map_err(|error| format!("Activation du cache reconstruit impossible : {error}"))?;
         save_workspace_cache_manifest(app, &enrollment.workspace_id)?;
@@ -371,7 +349,6 @@ pub fn recover_missing_team_cache(
     if let Err(error) = activation {
         let _ = remove_sqlite_artifacts(&temp_path);
         let _ = remove_sqlite_artifacts(&final_path);
-        let _ = std::fs::remove_file(&sealed_path);
         return Err(error);
     }
     Ok(report)

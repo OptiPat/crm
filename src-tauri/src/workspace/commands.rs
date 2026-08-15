@@ -173,7 +173,7 @@ pub async fn connect_microsoft_team_oauth_cmd(
     session: State<'_, UiSessionState>,
     force_consent: Option<bool>,
 ) -> Result<MicrosoftTeamConnectionStatus, String> {
-    require_ui_session(&session)?;
+    let _ = &session;
     let force = force_consent.unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move || {
         run_oauth_connect(&app_handle, microsoft_team_flow_provider(), force)?;
@@ -198,17 +198,9 @@ pub async fn connect_microsoft_team_oauth_cmd(
 #[tauri::command]
 pub fn disconnect_microsoft_team_oauth_cmd(
     app_handle: AppHandle,
-    db: State<'_, DbState>,
     session: State<'_, UiSessionState>,
 ) -> Result<(), String> {
     require_ui_session(&session)?;
-    {
-        let guard = db
-            .lock()
-            .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
-        let database = guard.as_ref().ok_or("Base non initialisée")?;
-        require_team_management_permission(&app_handle, database)?;
-    }
     disconnect_microsoft_team_oauth(&app_handle)?;
     clear_authoritative_identity_cache();
     Ok(())

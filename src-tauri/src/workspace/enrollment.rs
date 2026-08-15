@@ -117,6 +117,20 @@ impl WorkspaceEnrollment {
                     .eq_ignore_ascii_case(&self.secretary_group_id)
             })
     }
+
+    pub fn to_workspace_config(&self) -> WorkspaceConfig {
+        WorkspaceConfig {
+            mode: WorkspaceMode::TeamSharepoint,
+            role: None,
+            site_hostname: Some(self.site_hostname.clone()),
+            site_path: Some(self.site_path.clone()),
+            site_id: Some(self.site_id.clone()),
+            site_name: self.site_name.clone(),
+            office_mailbox_email: self.office_mailbox_email.clone(),
+            advisor_group_id: Some(self.advisor_group_id.clone()),
+            secretary_group_id: Some(self.secretary_group_id.clone()),
+        }
+    }
 }
 
 fn enrollment_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -251,6 +265,14 @@ mod tests {
             enrollment.office_mailbox_email.as_deref(),
             Some("cabinet@example.com")
         );
+        let restored = enrollment.to_workspace_config();
+        assert_eq!(restored.mode, WorkspaceMode::TeamSharepoint);
+        assert_eq!(restored.site_id.as_deref(), Some("site-1"));
+        assert_eq!(
+            restored.advisor_group_id.as_deref(),
+            Some("11111111-1111-1111-1111-111111111111")
+        );
+        assert!(enrollment.matches_config(&restored));
     }
 
     #[test]

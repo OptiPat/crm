@@ -1,0 +1,314 @@
+//! Restriction SharePoint REST de `CRM_Secrets` (héritage + groupes Entra).
+//! Graph n'expose pas `breakRoleInheritance` ni l'ajout d'un groupe Entra sur une liste.
+
+use super::client::{ParsedSharePointList, ParsedSharePointSite, SharePointGraphClient};
+use reqwest::blocking::Client as BlockingClient;
+use serde_json::Value;
+
+pub fn entra_security_group_login(object_id: &str) -> String {
+    format!("c:0t.c|tenant|{}", object_id.trim())
+}
+
+pub fn sharepoint_list_guid_literal(list_id: &str) -> String {
+    let trimmed = list_id.trim().trim_matches('{').trim_matches('}');
+    format!("guid'{trimmed}'")
+}
+
+impl SharePointGraphClient {
+    pub fn harden_crm_secrets_list_blocking(
+        &self,
+        access_token: &str,
+        site: &ParsedSharePointSite,
+        list: &ParsedSharePointList,
+        advisor_group_id: &str,
+        secretary_group_id: &str,
+    ) -> Result<(), String> {
+        if let Err(error) = self.hide_list_blocking(access_token, &site.id, list) {
+            eprintln!("⚠️ Masquage CRM_Secrets : {error}");
+        }
+        let web_url = site
+            .web_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.trim_end_matches('/').to_string())
+            .unwrap_or_else(|| {
+                let path = if self.site.site_path.starts_with('/') {
+                    self.site.site_path.clone()
+                } else {
+                    format!("/{}", self.site.site_path)
+                };
+                format!("https://{}{path}", self.site.hostname)
+            });
+        if let Err(error) = restrict_secrets_via_sharepoint_rest(
+            self.http_client(),
+            access_token,
+            &web_url,
+            &list.id,
+            advisor_group_id,
+            secretary_group_id,
+        ) {
+            eprintln!("⚠️ Restriction CRM_Secrets : {error}");
+        }
+        Ok(())
+    }
+}
+
+fn restrict_secrets_via_sharepoint_rest(
+    http: &BlockingClient,
+    access_token: &str,
+    web_url: &str,
+    list_id: &str,
+    advisor_group_id: &str,
+    secretary_group_id: &str,
+) -> Result<(), String> {
+    let digest = fetch_form_digest(http, access_token, web_url)?;
+    let list_literal = sharepoint_list_guid_literal(list_id);
+    let break_url = format!(
+        "{web_url}/_api/web/lists({list_literal})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)"
+    );
+    let (break_status, break_body) =
+        sharepoint_rest_post(http, access_token, &digest, &break_url, None)?;
+    if !rest_success(break_status) && !already_unique(break_status, &break_body) {
+        return Err(format!(
+            "Impossible de restreindre CRM_Secrets ({break_status}) : {}",
+            truncate_body(&break_body)
+        ));
+    }
+    let contribute_id = fetch_contribute_role_id(http, access_token, web_url)?;
+    for group_id in [advisor_group_id, secretary_group_id] {
+        let principal_id =
+            ensure_entra_group_principal(http, access_token, &digest, web_url, group_id)?;
+        let assign_url = format!(
+            "{web_url}/_api/web/lists({list_literal})/roleassignments/addroleassignment(principalid={principal_id},roleDefId={contribute_id})"
+        );
+        let (status, body) = sharepoint_rest_post(http, access_token, &digest, &assign_url, None)?;
+        if !rest_success(status) && !already_assigned(status, &body) {
+            return Err(format!(
+                "Impossible d'autoriser le groupe {group_id} sur CRM_Secrets ({status}) : {}",
+                truncate_body(&body)
+            ));
+        }
+    }
+    let hide_url = format!("{web_url}/_api/web/lists({list_literal})");
+    let hide_payload = serde_json::json!({ "Hidden": true });
+    let (hide_status, hide_body) =
+        sharepoint_rest_merge(http, access_token, &digest, &hide_url, &hide_payload)?;
+    if !rest_success(hide_status) {
+        eprintln!(
+            "⚠️ Masquage REST CRM_Secrets ({hide_status}) : {}",
+            truncate_body(&hide_body)
+        );
+    }
+    Ok(())
+}
+
+fn fetch_form_digest(
+    http: &BlockingClient,
+    access_token: &str,
+    web_url: &str,
+) -> Result<String, String> {
+    let url = format!("{web_url}/_api/contextinfo");
+    let (status, body) = sharepoint_rest_post(http, access_token, "", &url, None)?;
+    if !rest_success(status) {
+        return Err(format!(
+            "Contexte SharePoint inaccessible ({status}) : {}",
+            truncate_body(&body)
+        ));
+    }
+    json_find_string(&body, "FormDigestValue").ok_or_else(|| {
+        format!("Jeton de formulaire SharePoint absent : {}", truncate_body(&body))
+    })
+}
+
+fn fetch_contribute_role_id(
+    http: &BlockingClient,
+    access_token: &str,
+    web_url: &str,
+) -> Result<i64, String> {
+    let url = format!("{web_url}/_api/web/roledefinitions/getbyname('Contribute')");
+    let response = http
+        .get(&url)
+        .bearer_auth(access_token)
+        .header("Accept", "application/json;odata=nometadata")
+        .send()
+        .map_err(|error| format!("Requête SharePoint impossible : {error}"))?;
+    let status = response.status().as_u16();
+    let body = response.text().unwrap_or_default();
+    if !rest_success(status) {
+        return Err(format!(
+            "Rôle Contribute introuvable ({status}) : {}",
+            truncate_body(&body)
+        ));
+    }
+    json_find_i64(&body, "Id").ok_or_else(|| {
+        format!("Identifiant du rôle Contribute absent : {}", truncate_body(&body))
+    })
+}
+
+fn ensure_entra_group_principal(
+    http: &BlockingClient,
+    access_token: &str,
+    digest: &str,
+    web_url: &str,
+    group_id: &str,
+) -> Result<i64, String> {
+    let url = format!("{web_url}/_api/web/ensureuser");
+    let payload = serde_json::json!({ "logonName": entra_security_group_login(group_id) });
+    let (status, body) = sharepoint_rest_post(http, access_token, digest, &url, Some(&payload))?;
+    if !rest_success(status) {
+        return Err(format!(
+            "Groupe Entra {group_id} introuvable sur le site ({status}) : {}",
+            truncate_body(&body)
+        ));
+    }
+    json_find_i64(&body, "Id").ok_or_else(|| {
+        format!("Identifiant SharePoint du groupe absent : {}", truncate_body(&body))
+    })
+}
+
+fn sharepoint_rest_post(
+    http: &BlockingClient,
+    access_token: &str,
+    digest: &str,
+    url: &str,
+    payload: Option<&Value>,
+) -> Result<(u16, String), String> {
+    let mut request = http
+        .post(url)
+        .bearer_auth(access_token)
+        .header("Accept", "application/json;odata=nometadata");
+    if !digest.is_empty() {
+        request = request.header("X-RequestDigest", digest);
+    }
+    let response = if let Some(payload) = payload {
+        request
+            .header("Content-Type", "application/json;odata=nometadata")
+            .json(payload)
+            .send()
+    } else {
+        request.send()
+    }
+    .map_err(|error| format!("Requête SharePoint impossible : {error}"))?;
+    Ok((
+        response.status().as_u16(),
+        response.text().unwrap_or_default(),
+    ))
+}
+
+fn sharepoint_rest_merge(
+    http: &BlockingClient,
+    access_token: &str,
+    digest: &str,
+    url: &str,
+    payload: &Value,
+) -> Result<(u16, String), String> {
+    let response = http
+        .post(url)
+        .bearer_auth(access_token)
+        .header("Accept", "application/json;odata=nometadata")
+        .header("Content-Type", "application/json;odata=nometadata")
+        .header("X-RequestDigest", digest)
+        .header("X-HTTP-Method", "MERGE")
+        .header("If-Match", "*")
+        .json(payload)
+        .send()
+        .map_err(|error| format!("Requête SharePoint impossible : {error}"))?;
+    Ok((
+        response.status().as_u16(),
+        response.text().unwrap_or_default(),
+    ))
+}
+
+fn rest_success(status: u16) -> bool {
+    status == 200 || status == 201 || status == 204
+}
+
+fn already_unique(status: u16, body: &str) -> bool {
+    if status != 400 && status != 409 {
+        return false;
+    }
+    let lower = body.to_lowercase();
+    lower.contains("already") || lower.contains("unique") || lower.contains("role inheritance")
+}
+
+fn already_assigned(status: u16, body: &str) -> bool {
+    if status != 400 && status != 409 {
+        return false;
+    }
+    let lower = body.to_lowercase();
+    lower.contains("already") || lower.contains("exist")
+}
+
+fn json_find_string(body: &str, key: &str) -> Option<String> {
+    serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|value| find_string(&value, key))
+}
+
+fn json_find_i64(body: &str, key: &str) -> Option<i64> {
+    serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|value| find_i64(&value, key))
+}
+
+fn find_string(value: &Value, key: &str) -> Option<String> {
+    match value {
+        Value::Object(map) => {
+            if let Some(Value::String(text)) = map.get(key) {
+                if !text.trim().is_empty() {
+                    return Some(text.clone());
+                }
+            }
+            map.values().find_map(|child| find_string(child, key))
+        }
+        Value::Array(items) => items.iter().find_map(|child| find_string(child, key)),
+        _ => None,
+    }
+}
+
+fn find_i64(value: &Value, key: &str) -> Option<i64> {
+    match value {
+        Value::Object(map) => {
+            if let Some(found) = map.get(key).and_then(Value::as_i64) {
+                return Some(found);
+            }
+            map.values().find_map(|child| find_i64(child, key))
+        }
+        Value::Array(items) => items.iter().find_map(|child| find_i64(child, key)),
+        _ => None,
+    }
+}
+
+fn truncate_body(body: &str) -> String {
+    let trimmed = body.trim();
+    if trimmed.chars().count() <= 180 {
+        trimmed.to_string()
+    } else {
+        format!("{}…", trimmed.chars().take(180).collect::<String>())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entra_login_and_list_guid_are_sharepoint_literals() {
+        assert_eq!(
+            entra_security_group_login(" 11111111-1111-1111-1111-111111111111 "),
+            "c:0t.c|tenant|11111111-1111-1111-1111-111111111111"
+        );
+        assert_eq!(
+            sharepoint_list_guid_literal("{44ca0d29-33d3-47c9-8f12-eb0c46e3c7ad}"),
+            "guid'44ca0d29-33d3-47c9-8f12-eb0c46e3c7ad'"
+        );
+    }
+
+    #[test]
+    fn digest_is_found_in_nested_sharepoint_json() {
+        let body = r#"{"d":{"GetContextWebInformation":{"FormDigestValue":"0xDIGEST,1"}}}"#;
+        assert_eq!(json_find_string(body, "FormDigestValue").unwrap(), "0xDIGEST,1");
+        assert_eq!(json_find_i64(r#"{"Id": 42}"#, "Id"), Some(42));
+    }
+}

@@ -6,14 +6,14 @@ use std::time::{Duration, Instant, SystemTime};
 use tauri::{AppHandle, Emitter, Manager};
 use rand::RngCore;
 
-use crate::auth::session::{UiSessionState, UI_SESSION_LOCKED_EVENT};
+use crate::auth::session::{UiSessionState, UiSessionLockedPayload, UI_SESSION_LOCKED_EVENT};
 use crate::commands::DbState;
 
 use super::prefs::load_runtime_prefs;
 use super::shutdown::automation_should_stop;
 
 const TICK_SECS: u64 = 180;
-const UI_LOCK_CHECK_SECS: u64 = 30;
+const UI_LOCK_CHECK_SECS: u64 = 15;
 const RESUME_GAP_SECS: u64 = 5;
 const BACKGROUND_AUTOMATION_TICK: &str = "background-automation-tick";
 
@@ -76,6 +76,7 @@ pub(super) fn automation_tick_allowed(app: &AppHandle) -> bool {
 }
 
 fn emit_tick_if_enabled(app: &AppHandle) {
+    checkpoint_open_team_cache(app);
     create_daily_backup_if_due(app);
     let prefs = load_runtime_prefs(app);
     if !prefs.tray_tick_enabled() {
@@ -125,6 +126,9 @@ fn create_daily_backup_if_due(app: &AppHandle) {
             return;
         }
     };
+    if crate::workspace::cache::is_team_cache_path(&db_path) {
+        return;
+    }
     let source = match rusqlite::Connection::open_with_flags(
         &db_path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
@@ -170,6 +174,43 @@ fn create_daily_backup_if_due(app: &AppHandle) {
     }
 }
 
+fn checkpoint_open_team_cache(app: &AppHandle) {
+    let db = app.state::<DbState>();
+    let guard = match db.try_lock() {
+        Ok(guard) => guard,
+        _ => return,
+    };
+    let Some(database) = guard.as_ref() else {
+        return;
+    };
+    if let Err(error) = crate::workspace::cache_seal::checkpoint_team_cache_database(app, database)
+    {
+        eprintln!("⚠️ Scellement périodique du cache équipe : {error}");
+    }
+}
+
+fn lock_ui_if_team_access_revoked(app: &AppHandle) {
+    let session = app.state::<UiSessionState>();
+    if !session.is_unlocked() {
+        return;
+    }
+    if let Err(error) = crate::workspace::team_access::revalidate_open_team_session(app) {
+        if crate::workspace::team_access::should_lock_open_session_on_denial(
+            crate::workspace::team_access::parse_team_access_denial(&error).unwrap_or_else(|| {
+                crate::workspace::team_access::classify_team_authority_error(&error)
+            }),
+        ) {
+            let db = app.state::<DbState>();
+            let _ = crate::auth::commands::lock_ui_after_team_access_denied(
+                app,
+                db.inner(),
+                session.inner(),
+                &error,
+            );
+        }
+    }
+}
+
 fn lock_ui_if_due(app: &AppHandle) {
     let prefs = load_runtime_prefs(app);
     if prefs.auto_lock_minutes == 0 {
@@ -179,7 +220,7 @@ fn lock_ui_if_due(app: &AppHandle) {
     if app.state::<UiSessionState>().lock_if_idle(timeout) {
         match crate::auth::commands::close_database(app, app.state::<DbState>().inner()) {
             Ok(()) => {
-                let _ = app.emit(UI_SESSION_LOCKED_EVENT, ());
+                let _ = app.emit(UI_SESSION_LOCKED_EVENT, UiSessionLockedPayload::idle());
             }
             Err(error) => {
                 app.state::<UiSessionState>().unlock();
@@ -226,6 +267,7 @@ pub fn start_background_automation_worker(app: AppHandle) {
                             >= Duration::from_secs(UI_LOCK_CHECK_SECS)
                     {
                         lock_ui_if_due(&app);
+                        lock_ui_if_team_access_revoked(&app);
                         last_lock_check = now;
                     }
                 }

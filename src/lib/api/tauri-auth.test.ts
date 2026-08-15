@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRetryDelay, parseAuthCommandError } from "./tauri-auth";
+import { formatRetryDelay, isTeamAccessDenied, isTeamAccessReconnectable, parseAuthCommandError } from "./tauri-auth";
 
 describe("parseAuthCommandError", () => {
   it("conserve une erreur structurée Tauri", () => {
@@ -35,6 +35,22 @@ describe("parseAuthCommandError", () => {
       code: "unknown",
       message: "Échec natif",
     });
+  });
+
+  it("reconnaît un accès équipe révoqué", () => {
+    expect(
+      parseAuthCommandError({
+        code: "team_access_revoked",
+        message: "Accès équipe révoqué. Ce compte Microsoft n'est plus autorisé à ouvrir le CRM.",
+      }),
+    ).toMatchObject({
+      code: "team_access_revoked",
+    });
+    expect(isTeamAccessDenied("team_access_revoked")).toBe(true);
+    expect(isTeamAccessDenied("team_access_required")).toBe(true);
+    expect(isTeamAccessDenied("invalid_password")).toBe(false);
+    expect(isTeamAccessReconnectable("team_access_required")).toBe(true);
+    expect(isTeamAccessReconnectable("team_access_revoked")).toBe(false);
   });
 });
 

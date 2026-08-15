@@ -18,6 +18,8 @@ pub mod presence;
 pub mod sharepoint;
 pub mod sync;
 pub mod team;
+pub mod team_access;
+pub mod team_cache_key;
 pub mod team_connection;
 
 pub use guard::require_export_permission_state;

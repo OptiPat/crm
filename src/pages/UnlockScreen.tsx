@@ -11,24 +11,44 @@ import {
   recoverWithoutSystemAuth,
   type SystemAuthStatus,
   unlockWithPassword,
+  isTeamAccessDenied,
+  isTeamAccessReconnectable,
 } from "@/lib/api/tauri-auth";
-import { AlertCircle, Eye, EyeOff, Fingerprint, ShieldCheck } from "lucide-react";
+import { connectMicrosoftTeamOAuth } from "@/lib/api/tauri-team";
+import { invokeErrorMessage } from "@/lib/api/invoke-error";
+import { AlertCircle, Eye, EyeOff, Fingerprint, PlugZap, ShieldCheck } from "lucide-react";
 
 interface UnlockScreenProps {
   onUnlocked: () => void;
+  initialNotice?: string;
+  initialReason?: string;
 }
 
-export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
+export function UnlockScreen({
+  onUnlocked,
+  initialNotice = "",
+  initialReason = "",
+}: UnlockScreenProps) {
   const { displayName, logoSrc } = useAppBranding();
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialNotice);
   const [loading, setLoading] = useState(false);
   const [systemAuth, setSystemAuth] = useState<SystemAuthStatus | null>(null);
   const [recoveryAvailable, setRecoveryAvailable] = useState(false);
   const [teamCacheRecoveryAvailable, setTeamCacheRecoveryAvailable] = useState(false);
+  const [microsoftReconnectAvailable, setMicrosoftReconnectAvailable] = useState(
+    isTeamAccessReconnectable(initialReason)
+  );
   const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
+
+  useEffect(() => {
+    if (initialNotice) {
+      setError(initialNotice);
+    }
+    setMicrosoftReconnectAvailable(isTeamAccessReconnectable(initialReason));
+  }, [initialNotice, initialReason]);
 
   useEffect(() => {
     void getSystemAuthStatus()
@@ -74,6 +94,10 @@ export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
       }
       if (authError.code === "system_auth_unavailable") {
         setRecoveryAvailable(true);
+      } else if (isTeamAccessReconnectable(authError.code)) {
+        setMicrosoftReconnectAvailable(true);
+      } else if (isTeamAccessDenied(authError.code)) {
+        setTeamCacheRecoveryAvailable(false);
       } else if (
         authError.message.includes("Cache équipe") ||
         authError.message.includes("manifeste local absent")
@@ -82,6 +106,27 @@ export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
       } else {
         setPassword("");
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMicrosoftReconnect = async () => {
+    if (remainingSeconds > 0) return;
+    setError("");
+    setLoading(true);
+    try {
+      await connectMicrosoftTeamOAuth({ forceConsent: true });
+      setMicrosoftReconnectAvailable(false);
+      setError(
+        "Compte Microsoft reconnecté. Entrez votre mot de passe du CRM pour déverrouiller."
+      );
+    } catch (caught) {
+      setMicrosoftReconnectAvailable(true);
+      setError(
+        invokeErrorMessage(caught) ||
+          "Connexion Microsoft impossible. Vérifiez Internet et le code à 2 facteurs."
+      );
     } finally {
       setLoading(false);
     }
@@ -212,6 +257,26 @@ export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
                             disabled={loading || !password}
                           >
                             Accès de récupération
+                          </Button>
+                        </div>
+                      )}
+                      {microsoftReconnectAvailable && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-red-700">
+                            Si le mot de passe Microsoft ou le code à 2 facteurs a changé,
+                            reconnectez le compte professionnel de cette personne, puis
+                            déverrouillez.
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void handleMicrosoftReconnect()}
+                            disabled={loading}
+                            className="gap-2"
+                          >
+                            <PlugZap className="h-4 w-4" />
+                            Reconnecter le compte Microsoft
                           </Button>
                         </div>
                       )}

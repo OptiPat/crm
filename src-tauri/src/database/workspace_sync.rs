@@ -111,6 +111,45 @@ const TABLE_POLICIES: &[(&str, WorkspaceTablePolicy)] = &[
     ("espace_echeance", WorkspaceTablePolicy::LocalOnly),
 ];
 
+/// Tables que le CRM peut remplir tout seul au premier déverrouillage.
+/// Elles ne doivent pas bloquer « Rejoindre » : on les jette, SharePoint fait foi.
+const TEAM_JOIN_SEED_TABLES: &[&str] = &[
+    "etiquettes",
+    "templates_email",
+    "etiquette_actions",
+    "template_email_actions",
+    "fiche_conseil_redaction_presets",
+    "contact_etiquettes",
+    "segments",
+    "alerte_segment_links",
+    "contact_etiquette_auto_log",
+    "contact_etiquette_auto_exclusions",
+];
+
+pub fn local_snapshot_blocks_team_join(snapshot: &TeamMigrationSnapshot) -> bool {
+    snapshot.records.iter().any(|record| {
+        !TEAM_JOIN_SEED_TABLES.contains(&record.table_name.as_str())
+    })
+}
+
+pub fn clear_team_join_seed_tables(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "PRAGMA foreign_keys = OFF;
+         DELETE FROM template_email_actions;
+         DELETE FROM templates_email;
+         DELETE FROM contact_etiquettes;
+         DELETE FROM contact_etiquette_auto_log;
+         DELETE FROM contact_etiquette_auto_exclusions;
+         DELETE FROM etiquette_actions;
+         DELETE FROM etiquettes;
+         DELETE FROM alerte_segment_links;
+         DELETE FROM segments;
+         DELETE FROM fiche_conseil_redaction_presets;
+         PRAGMA foreign_keys = ON;",
+    )?;
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamMigrationSnapshot {
@@ -864,6 +903,45 @@ mod tests {
             db.get_setting("ui_preference").unwrap().as_deref(),
             Some("compact")
         );
+    }
+
+    #[test]
+    fn join_allows_auto_seeded_catalogs_but_blocks_contacts() {
+        let seeds_only = TeamMigrationSnapshot {
+            schema_version: WORKSPACE_SYNC_SCHEMA_VERSION,
+            generated_at: "2026-01-01T00:00:00Z".into(),
+            table_counts: BTreeMap::new(),
+            records: vec![SnapshotRecord {
+                table_name: "etiquettes".into(),
+                record_key: "1".into(),
+                payload: Map::new(),
+            }],
+        };
+        assert!(!local_snapshot_blocks_team_join(&seeds_only));
+
+        let with_contact = TeamMigrationSnapshot {
+            schema_version: WORKSPACE_SYNC_SCHEMA_VERSION,
+            generated_at: "2026-01-01T00:00:00Z".into(),
+            table_counts: BTreeMap::new(),
+            records: vec![SnapshotRecord {
+                table_name: "contacts".into(),
+                record_key: "1".into(),
+                payload: Map::new(),
+            }],
+        };
+        assert!(local_snapshot_blocks_team_join(&with_contact));
+
+        let with_segments = TeamMigrationSnapshot {
+            schema_version: WORKSPACE_SYNC_SCHEMA_VERSION,
+            generated_at: "2026-01-01T00:00:00Z".into(),
+            table_counts: BTreeMap::new(),
+            records: vec![SnapshotRecord {
+                table_name: "segments".into(),
+                record_key: "1".into(),
+                payload: Map::new(),
+            }],
+        };
+        assert!(!local_snapshot_blocks_team_join(&with_segments));
     }
 
     #[test]

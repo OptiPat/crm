@@ -10,7 +10,8 @@ use super::push::{
 use crate::auth::session::{require_ui_session, UiSessionState};
 use crate::commands::DbState;
 use crate::database::workspace_sync::{
-    build_team_migration_snapshot, snapshot_checksum, WorkspaceSyncConflict,
+    build_team_migration_snapshot, clear_team_join_seed_tables, local_snapshot_blocks_team_join,
+    snapshot_checksum, WorkspaceSyncConflict,
 };
 use crate::database::Database;
 use crate::workspace::cache::{
@@ -22,6 +23,9 @@ use crate::workspace::enrollment::{
 };
 use crate::workspace::guard::{resolve_sharepoint_site_ref, workspace_config_from_db};
 use crate::workspace::identity::require_fresh_sensitive_team_authority;
+use crate::workspace::team_access::{
+    classify_team_authority_error, should_lock_open_session_on_denial,
+};
 use crate::workspace::migration::{
     compute_mutation_id, compute_sync_key, validate_team_remote_snapshot,
 };
@@ -99,14 +103,33 @@ fn finalize_team_cache(
     team_database: Database,
 ) -> Result<Database, String> {
     drop(team_database);
+    let enrollment = load_workspace_enrollment(app)?
+        .ok_or_else(|| "Enrôlement équipe absent lors du cutover.".to_string())?;
+    crate::workspace::team_access::authorize_team_enrollment(
+        app,
+        &enrollment.to_workspace_config(),
+    )?;
+    crate::workspace::team_cache_key::ensure_session_dek_from_sharepoint(app, &enrollment)?;
     let final_path = team_cache_database_path(app)?;
     remove_sqlite_cache_artifacts(&final_path)?;
     std::fs::rename(temp_path, &final_path)
         .map_err(|error| format!("Activation atomique du cache équipe impossible : {error}"))?;
-    let active_database = Database::open_workspace_cache_at_path(app, &final_path)
+    let file_database = Database::open_workspace_cache_at_path(app, &final_path)
         .map_err(|error| format!("Réouverture du cache équipe impossible : {error}"))?;
-    let enrollment = load_workspace_enrollment(app)?
-        .ok_or_else(|| "Enrôlement équipe absent lors du cutover.".to_string())?;
+    let memory = file_database
+        .backup_into_memory()
+        .map_err(|error| format!("Passage du cache équipe en mémoire : {error}"))?;
+    match crate::workspace::cache_seal::checkpoint_team_cache_database(app, &memory) {
+        Ok(true) => {}
+        Ok(false) => {
+            let _ = crate::workspace::cache_seal::wipe_plaintext_team_cache(app);
+            return Err("Scellement du cache équipe impossible avant activation.".into());
+        }
+        Err(error) => {
+            let _ = crate::workspace::cache_seal::wipe_plaintext_team_cache(app);
+            return Err(format!("Scellement du cache équipe activé : {error}"));
+        }
+    }
     activate_manifest_with_rollback(
         || mark_workspace_sync_activated(app).map(|_| ()),
         || save_workspace_cache_manifest(app, &enrollment.workspace_id).map(|_| ()),
@@ -114,12 +137,7 @@ fn finalize_team_cache(
             crate::workspace::enrollment::set_workspace_sync_activated(app, false).map(|_| ())
         },
     )?;
-    let sealed_path = crate::workspace::cache::team_cache_sealed_path(app)?;
-    if sealed_path.exists() {
-        std::fs::remove_file(&sealed_path)
-            .map_err(|error| format!("Suppression de l'ancien cache scellé : {error}"))?;
-    }
-    Ok(active_database)
+    Ok(memory)
 }
 
 pub(super) fn reserve_and_install_id_blocks(
@@ -385,13 +403,15 @@ pub fn bootstrap_team_sync_cmd(
     let source_database = guard.as_ref().ok_or("Base non initialisée")?;
     let local_snapshot =
         build_team_migration_snapshot(source_database).map_err(|error| error.to_string())?;
-    if !local_snapshot.records.is_empty() {
+    if local_snapshot_blocks_team_join(&local_snapshot) {
         return Err(
-            "Ce poste contient déjà des données CRM. Utilisez la migration conseiller ou un poste local vide pour rejoindre l'équipe."
+            "Ce poste contient déjà des données CRM (contacts, dossiers ou investissements). Utilisez un poste local vide pour rejoindre l'équipe."
                 .into(),
         );
     }
     let (temp_path, team_database) = create_team_cache_copy(&app_handle, source_database)?;
+    clear_team_join_seed_tables(team_database.connection())
+        .map_err(|error| format!("Préparation du cache équipe : {error}"))?;
     let initial_delta =
         client.list_items_delta_blocking(&connection.access_token, site_id, &data_list.id, None)?;
     let synchronized_records = initial_delta.items.len();
@@ -446,7 +466,20 @@ pub fn team_sync_once_cmd(
         )
     };
     validate_workspace_enrollment(&app_handle, &config)?;
-    let authority = require_fresh_sensitive_team_authority(&app_handle, &config)?;
+    let authority = match require_fresh_sensitive_team_authority(&app_handle, &config) {
+        Ok(authority) => authority,
+        Err(error) => {
+            if should_lock_open_session_on_denial(classify_team_authority_error(&error)) {
+                return Err(crate::auth::commands::lock_ui_after_team_access_denied(
+                    &app_handle,
+                    db.inner(),
+                    session.inner(),
+                    &error,
+                ));
+            }
+            return Err(error);
+        }
+    };
     let actor_id = authority
         .identity
         .as_ref()

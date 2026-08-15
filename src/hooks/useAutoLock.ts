@@ -8,6 +8,7 @@ import {
   type AppRuntimePrefs,
 } from "@/lib/api/tauri-app-runtime";
 import { shouldAutoLock } from "@/lib/security/auto-lock";
+import type { UiSessionLockedPayload } from "@/lib/api/tauri-auth";
 
 const CHECK_INTERVAL_MS = 1_000;
 const BACKEND_TOUCH_INTERVAL_MS = 5_000;
@@ -23,7 +24,7 @@ const ACTIVITY_EVENTS: Array<keyof WindowEventMap> = [
 export function useAutoLock(
   enabled: boolean,
   onLock: () => void | Promise<void>,
-  onBackendLocked: () => void | Promise<void>,
+  onBackendLocked: (payload?: UiSessionLockedPayload) => void | Promise<void>,
 ): void {
   const onLockRef = useRef(onLock);
   const onBackendLockedRef = useRef(onBackendLocked);
@@ -50,10 +51,10 @@ export function useAutoLock(
           locking = false;
         });
     };
-    const acceptBackendLock = () => {
+    const acceptBackendLock = (payload?: UiSessionLockedPayload) => {
       if (locking) return;
       locking = true;
-      void Promise.resolve(onBackendLockedRef.current())
+      void Promise.resolve(onBackendLockedRef.current(payload))
         .catch(() => undefined)
         .finally(() => {
           locking = false;
@@ -99,7 +100,9 @@ export function useAutoLock(
     const timer = window.setInterval(check, CHECK_INTERVAL_MS);
     let unlistenLocked: (() => void) | undefined;
     let cancelled = false;
-    void listen(UI_SESSION_LOCKED_EVENT, acceptBackendLock)
+    void listen<UiSessionLockedPayload>(UI_SESSION_LOCKED_EVENT, (event) => {
+      acceptBackendLock(event.payload);
+    })
       .then((unlisten) => {
         if (cancelled) unlisten();
         else unlistenLocked = unlisten;
