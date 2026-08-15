@@ -223,9 +223,15 @@ export function ClientPreviewPlacementDetail({
                 history={mergedHistory}
                 submitting={scpiDeclarationSubmitting}
                 onSubmit={onSubmitScpiDeclaration}
+                extranetUrl={canEditExtranet ? extranetUrl : undefined}
+                extranetSubmitting={extranetSubmitting}
+                onSaveExtranet={
+                  canEditExtranet && onSaveExtranet
+                    ? (url) => onSaveExtranet(inv.id, url)
+                    : undefined
+                }
               />
-            ) : null}
-            {canEditExtranet && onSaveExtranet ? (
+            ) : canEditExtranet && onSaveExtranet ? (
               <ClientPreviewExtranetBookmark
                 currentUrl={extranetUrl}
                 submitting={extranetSubmitting}

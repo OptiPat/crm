@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildClientInvestissementUpdateInput,
   getClientInvestissementUpdateKind,
+  isClientInvestissementFormDirty,
   isClientInvestissementUpdateEligible,
+  planClientPlacementSubmit,
   unixToDateInput,
   validateClientInvestissementUpdate,
 } from "./client-investissement-update";
@@ -437,6 +439,171 @@ describe("client-investissement-update", () => {
       expect(
         buildClientInvestissementUpdateInput(scpi, champs).revenuPercuCentimes
       ).toBeNull();
+    });
+  });
+
+  describe("isClientInvestissementFormDirty", () => {
+    const encours = {
+      type_produit: "COMPTE_COURANT",
+      origine: "EXISTANT_CLIENT" as const,
+    };
+    const initial = { valorisationCentimes: 20_000_00 };
+    const champs = {
+      date: "2026-08-15",
+      valorisation: "20000,00",
+      revenu: "",
+      loyer: "",
+      mensualite: "",
+      dateFinPret: "",
+    };
+
+    it("reste propre si l'encours est celui du préremplissage, même à la date du jour", () => {
+      expect(
+        isClientInvestissementFormDirty(encours, champs, initial)
+      ).toBe(false);
+      expect(
+        isClientInvestissementFormDirty(
+          encours,
+          { ...champs, valorisation: "20000" },
+          initial
+        )
+      ).toBe(false);
+      expect(
+        isClientInvestissementFormDirty(
+          encours,
+          { ...champs, date: "2026-08-01" },
+          initial
+        )
+      ).toBe(false);
+    });
+
+    it("détecte un changement de montant ou un revenu SCPI", () => {
+      expect(
+        isClientInvestissementFormDirty(
+          encours,
+          { ...champs, valorisation: "21000" },
+          initial
+        )
+      ).toBe(true);
+      expect(
+        isClientInvestissementFormDirty(
+          { ...encours, type_produit: "SCPI" },
+          { ...champs, revenu: "300" },
+          initial
+        )
+      ).toBe(true);
+    });
+
+    it("détecte un loyer ou une fin de prêt immobilier réellement changés", () => {
+      const immo = {
+        type_produit: "LMNP",
+        origine: "EXISTANT_CLIENT" as const,
+        loyer_mensuel: 850_00,
+        mensualite_credit: 1_200_00,
+        date_fin_pret: undefined as number | undefined,
+      };
+      const champsImmo = {
+        ...champs,
+        loyer: "850,00",
+        mensualite: "1200",
+        dateFinPret: "",
+      };
+      expect(isClientInvestissementFormDirty(immo, champsImmo, initial)).toBe(
+        false
+      );
+      expect(
+        isClientInvestissementFormDirty(
+          immo,
+          { ...champsImmo, loyer: "900" },
+          initial
+        )
+      ).toBe(true);
+      expect(
+        isClientInvestissementFormDirty(
+          immo,
+          { ...champsImmo, dateFinPret: "2035-06-01" },
+          initial
+        )
+      ).toBe(true);
+    });
+  });
+
+  describe("planClientPlacementSubmit", () => {
+    it("n'envoie pas de déclaration si seul le lien change", () => {
+      expect(
+        planClientPlacementSubmit({
+          formDirty: false,
+          alreadyPosted: false,
+          extranetDelta: { url: "https://espace.assureur.fr/" },
+        })
+      ).toEqual({
+        kind: "extranet_only",
+        url: "https://espace.assureur.fr/",
+      });
+      expect(
+        planClientPlacementSubmit({
+          formDirty: false,
+          alreadyPosted: false,
+          extranetDelta: { url: null },
+        })
+      ).toEqual({ kind: "extranet_only", url: null });
+    });
+
+    it("poste la valorisation malgré une URL invalide, et refuse l'URL seule invalide", () => {
+      expect(
+        planClientPlacementSubmit({
+          formDirty: true,
+          alreadyPosted: false,
+          extranetDelta: "invalid",
+        })
+      ).toEqual({ kind: "valorisation", warnExtranetInvalid: true });
+      expect(
+        planClientPlacementSubmit({
+          formDirty: false,
+          alreadyPosted: false,
+          extranetDelta: "invalid",
+        })
+      ).toEqual({ kind: "extranet_error" });
+    });
+
+    it("ne re-poste pas la valorisation déjà enregistrée si le lien échoue puis on réessaie", () => {
+      expect(
+        planClientPlacementSubmit({
+          formDirty: false,
+          alreadyPosted: true,
+          extranetDelta: { url: "https://espace.assureur.fr/" },
+        })
+      ).toEqual({
+        kind: "extranet_only",
+        url: "https://espace.assureur.fr/",
+      });
+      expect(
+        planClientPlacementSubmit({
+          formDirty: false,
+          alreadyPosted: true,
+          extranetDelta: "unchanged",
+        })
+      ).toEqual({ kind: "noop" });
+    });
+
+    it("conserve le gros bouton : Enregistrer sans changement d'URL poste encore", () => {
+      expect(
+        planClientPlacementSubmit({
+          formDirty: false,
+          alreadyPosted: false,
+          extranetDelta: "unchanged",
+        })
+      ).toEqual({ kind: "valorisation" });
+      expect(
+        planClientPlacementSubmit({
+          formDirty: true,
+          alreadyPosted: false,
+          extranetDelta: { url: "https://espace.assureur.fr/" },
+        })
+      ).toEqual({
+        kind: "valorisation",
+        extranet: "https://espace.assureur.fr/",
+      });
     });
   });
 

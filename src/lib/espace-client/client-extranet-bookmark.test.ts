@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  extranetBookmarkDelta,
   isExtranetBookmarkEligible,
   normalizeExtranetBookmarkUrl,
 } from "./client-extranet-bookmark";
@@ -40,5 +41,30 @@ describe("normalizeExtranetBookmarkUrl", () => {
       normalizeExtranetBookmarkUrl("https://user:secret@extranet.swisslife.fr")
     ).toBe("invalid");
     expect(normalizeExtranetBookmarkUrl("javascript:alert(1)")).toBe("invalid");
+  });
+});
+
+describe("extranetBookmarkDelta", () => {
+  it("ne voit pas de changement si le client reprend l'URL déjà enregistrée", () => {
+    expect(
+      extranetBookmarkDelta(
+        "https://espace.assureur.fr",
+        "https://espace.assureur.fr/"
+      )
+    ).toBe("unchanged");
+    expect(extranetBookmarkDelta("", null)).toBe("unchanged");
+    expect(extranetBookmarkDelta("  ", "")).toBe("unchanged");
+  });
+
+  it("signale une nouvelle URL, un effacement, ou une saisie invalide", () => {
+    expect(extranetBookmarkDelta("espace.assureur.fr", null)).toEqual({
+      url: "https://espace.assureur.fr/",
+    });
+    expect(
+      extranetBookmarkDelta("", "https://espace.assureur.fr/")
+    ).toEqual({ url: null });
+    expect(extranetBookmarkDelta("http://espace.assureur.fr", null)).toBe(
+      "invalid"
+    );
   });
 });

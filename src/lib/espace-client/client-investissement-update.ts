@@ -205,6 +205,80 @@ export function buildClientInvestissementUpdateInput(
   return input;
 }
 
+/**
+ * Le formulaire pré-remplit la date du jour : ce n'est pas un signal de mise
+ * à jour. On ne déclare un placement (ni e-mail conseiller) que si le montant,
+ * un revenu SCPI, ou un champ immobilier a réellement changé.
+ */
+export function isClientInvestissementFormDirty(
+  inv: Pick<
+    Investissement,
+    | "type_produit"
+    | "origine"
+    | "loyer_mensuel"
+    | "mensualite_credit"
+    | "date_fin_pret"
+  >,
+  fields: ClientInvestissementFormFields,
+  initial: { valorisationCentimes: number },
+  nature?: ClientInvestissementNature
+): boolean {
+  if (parseEurosInput(fields.valorisation) !== initial.valorisationCentimes) {
+    return true;
+  }
+  const kind = getClientInvestissementUpdateKind(inv, nature);
+  if (kind === "scpi" && fields.revenu.trim()) return true;
+  if (kind === "immobilier") {
+    const loyer = fields.loyer.trim() ? parseEurosInput(fields.loyer) : 0;
+    if (loyer !== (inv.loyer_mensuel ?? 0)) return true;
+    const mensualite = fields.mensualite.trim()
+      ? parseEurosInput(fields.mensualite)
+      : 0;
+    if (mensualite !== (inv.mensualite_credit ?? 0)) return true;
+    if (fields.dateFinPret.trim() !== unixToDateInput(inv.date_fin_pret)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export type ExtranetSubmitDelta =
+  | "invalid"
+  | "unchanged"
+  | { url: string | null };
+
+export type ClientPlacementSubmitPlan =
+  | { kind: "noop" }
+  | { kind: "extranet_error" }
+  | { kind: "extranet_only"; url: string | null }
+  | {
+      kind: "valorisation";
+      extranet?: string | null;
+      warnExtranetInvalid?: boolean;
+    };
+
+/**
+ * Un seul Enregistrer : le favori invalide ne bloque pas une vraie mise à jour
+ * de montant, et un favori seul ne déclenche pas de déclaration.
+ */
+export function planClientPlacementSubmit(input: {
+  formDirty: boolean;
+  alreadyPosted: boolean;
+  extranetDelta: ExtranetSubmitDelta | null;
+}): ClientPlacementSubmitPlan {
+  const delta = input.extranetDelta ?? "unchanged";
+  if (delta === "invalid") {
+    if (!input.formDirty) return { kind: "extranet_error" };
+    return { kind: "valorisation", warnExtranetInvalid: true };
+  }
+  if (delta !== "unchanged") {
+    if (!input.formDirty) return { kind: "extranet_only", url: delta.url };
+    return { kind: "valorisation", extranet: delta.url };
+  }
+  if (!input.formDirty && input.alreadyPosted) return { kind: "noop" };
+  return { kind: "valorisation" };
+}
+
 /** Valide une mise à jour client (SCPI, encours à côté, ou immobilier à côté). */
 export function validateClientInvestissementUpdate(
   inv: Pick<Investissement, "id" | "type_produit" | "origine">,

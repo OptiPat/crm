@@ -50,3 +50,20 @@ export function normalizeExtranetBookmarkUrl(
   if (href.length > URL_MAX) return "invalid";
   return href;
 }
+
+/**
+ * Comparaison du champ favori avec la valeur déjà enregistrée.
+ * `"invalid"` bloque l'enregistrement ; `"unchanged"` n'appelle pas l'API.
+ */
+export function extranetBookmarkDelta(
+  draft: string,
+  current?: string | null
+): "invalid" | "unchanged" | { url: string | null } {
+  const next = normalizeExtranetBookmarkUrl(draft);
+  if (next === "invalid") return "invalid";
+  const prevRaw = current?.trim() || "";
+  const prev = prevRaw ? normalizeExtranetBookmarkUrl(prevRaw) : null;
+  const prevUrl = prev === "invalid" ? prevRaw : prev;
+  if ((next ?? null) === (prevUrl ?? null)) return "unchanged";
+  return { url: next };
+}

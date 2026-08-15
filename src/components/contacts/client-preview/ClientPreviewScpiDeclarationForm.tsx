@@ -3,7 +3,9 @@ import type { Investissement } from "@/lib/api/tauri-investissements";
 import {
   buildClientInvestissementUpdateInput,
   getClientInvestissementUpdateKind,
+  isClientInvestissementFormDirty,
   parseEurosInput as eurosToCentimes,
+  planClientPlacementSubmit,
   unixToDateInput,
   validateClientInvestissementUpdate,
   type ClientInvestissementNature,
@@ -16,7 +18,21 @@ import {
 } from "@/lib/espace-client/scpi-client-tracking";
 import { todayLocal } from "@/lib/contacts/contact-form-utils";
 import { getPlacementValorisationUiMode } from "@/lib/investissements/investissement-encours";
+import { extranetBookmarkDelta } from "@/lib/espace-client/client-extranet-bookmark";
 import { CP } from "./client-preview-theme";
+import {
+  ClientPreviewExtranetBookmarkField,
+  EXTRANET_BOOKMARK_ERROR,
+} from "./ClientPreviewExtranetBookmark";
+
+const EXTRANET_AFTER_VALORISATION_ERROR =
+  "La mise à jour a été enregistrée, mais le lien n'a pas pu l'être. Réessayez.";
+
+function submitErrorMessage(err: unknown): string {
+  return err instanceof Error && err.message
+    ? err.message
+    : "Enregistrement impossible. Réessayez dans un instant.";
+}
 
 function centimesToEurosInput(centimes: number): string {
   if (centimes <= 0) return "";
@@ -30,6 +46,9 @@ export interface ClientPreviewScpiDeclarationFormProps {
   history?: Array<{ dateTs: number; montantCentimes: number }>;
   submitting?: boolean;
   onSubmit: (input: ClientInvestissementUpdateInput) => Promise<void>;
+  extranetUrl?: string | null;
+  extranetSubmitting?: boolean;
+  onSaveExtranet?: (url: string | null) => Promise<void>;
 }
 
 export function ClientPreviewScpiDeclarationForm({
@@ -38,6 +57,9 @@ export function ClientPreviewScpiDeclarationForm({
   history,
   submitting = false,
   onSubmit,
+  extranetUrl,
+  extranetSubmitting = false,
+  onSaveExtranet,
 }: ClientPreviewScpiDeclarationFormProps) {
   const kind: ClientInvestissementUpdateKind | null = useMemo(
     () => getClientInvestissementUpdateKind(inv, nature),
@@ -67,10 +89,51 @@ export function ClientPreviewScpiDeclarationForm({
     unixToDateInput(inv.date_fin_pret)
   );
   const [error, setError] = useState<string | null>(null);
+  const [extranetDraft, setExtranetDraft] = useState(extranetUrl ?? "");
+  const [postedFieldsKey, setPostedFieldsKey] = useState<string | null>(null);
+  const busy = submitting || extranetSubmitting;
+  const fieldsKey = [valorisation, revenu, loyer, mensualite, dateFinPret].join(
+    "\0"
+  );
 
   if (!kind) return null;
 
   const handleSubmit = async () => {
+    const amountsDirty = isClientInvestissementFormDirty(
+      inv,
+      { date, valorisation, revenu, loyer, mensualite, dateFinPret },
+      { valorisationCentimes: defaultValorisation },
+      nature
+    );
+    const alreadyPosted = postedFieldsKey === fieldsKey;
+    const formDirty = amountsDirty && !alreadyPosted;
+    const extranetDelta = onSaveExtranet
+      ? extranetBookmarkDelta(extranetDraft, extranetUrl)
+      : null;
+    const plan = planClientPlacementSubmit({
+      formDirty,
+      alreadyPosted,
+      extranetDelta,
+    });
+
+    if (plan.kind === "noop") {
+      setError(null);
+      return;
+    }
+    if (plan.kind === "extranet_error") {
+      setError(EXTRANET_BOOKMARK_ERROR);
+      return;
+    }
+    if (plan.kind === "extranet_only") {
+      setError(null);
+      try {
+        await onSaveExtranet?.(plan.url);
+      } catch (err) {
+        setError(submitErrorMessage(err));
+      }
+      return;
+    }
+
     const valorisationCentimes = eurosToCentimes(valorisation);
     // Seuls les champs réellement modifiés partent : voir
     // buildClientInvestissementUpdateInput.
@@ -125,14 +188,25 @@ export function ClientPreviewScpiDeclarationForm({
     try {
       await onSubmit(input);
     } catch (err) {
-      setError(
-        err instanceof Error && err.message
-          ? err.message
-          : "Enregistrement impossible. Réessayez dans un instant."
-      );
+      setError(submitErrorMessage(err));
       return;
     }
+    setPostedFieldsKey(
+      [valorisation, "", loyer, mensualite, dateFinPret].join("\0")
+    );
     setRevenu("");
+
+    if (plan.warnExtranetInvalid) {
+      setError(EXTRANET_BOOKMARK_ERROR);
+      return;
+    }
+    if (plan.extranet !== undefined) {
+      try {
+        await onSaveExtranet?.(plan.extranet);
+      } catch {
+        setError(EXTRANET_AFTER_VALORISATION_ERROR);
+      }
+    }
   };
 
   return (
@@ -220,17 +294,28 @@ export function ClientPreviewScpiDeclarationForm({
           </>
         ) : null}
 
+        {onSaveExtranet ? (
+          <ClientPreviewExtranetBookmarkField
+            draft={extranetDraft}
+            onDraftChange={(value) => {
+              setExtranetDraft(value);
+              setError(null);
+            }}
+            savedUrl={extranetUrl}
+          />
+        ) : null}
+
         {error ? (
           <p className={`${CP.caption} text-red-400`}>{error}</p>
         ) : null}
 
         <button
           type="button"
-          disabled={submitting}
+          disabled={busy}
           onClick={() => void handleSubmit()}
           className="w-full rounded-lg border border-[var(--cp-line)] bg-[var(--cp-surface-raised)] px-3 py-2.5 text-sm text-[var(--cp-ink)] transition-colors hover:border-[var(--cp-ink-muted)] disabled:opacity-60"
         >
-          {submitting ? "Enregistrement…" : "Enregistrer"}
+          {busy ? "Enregistrement…" : "Enregistrer"}
         </button>
       </div>
     </div>
