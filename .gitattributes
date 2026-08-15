@@ -1,5 +1,8 @@
 # Normalisation des fins de ligne.
-* text=auto
+# eol=lf : checkout toujours LF (Windows + Mac). Sans ça, Git Windows
+# reconvertit en CRLF et Cargo.toml / *.rs apparaissent « modifiés » à vide.
+* text=auto eol=lf
+*.pdf binary
 
 # Fichiers consommés par Linux : jamais de CRLF, sinon bash refuse de les lire
 # (« $'\r': command not found ») et systemd/Caddy rejettent leur configuration.
