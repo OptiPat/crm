@@ -13,7 +13,8 @@ use crate::workspace::presence::{
 };
 use crate::workspace::sharepoint::{
     GraphWriteConflict, GraphWriteOutcome, ParsedSharePointListItem, SharePointGraphClient,
-    LIST_CRM_AUDIT, LIST_CRM_LOCKS, LIST_CRM_PRESENCE, LIST_CRM_SECRETS, TEAM_WORKSPACE_LISTS,
+    LIST_CRM_AUDIT, LIST_CRM_LOCKS, LIST_CRM_PRESENCE, LIST_CRM_SECRETS, LIST_CRM_SEQUENCES,
+    TEAM_WORKSPACE_LISTS,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -27,6 +28,24 @@ use crate::workspace::team_cache_key::fetch_or_create_team_cache_dek;
 
 pub const WORKSPACE_NOT_PROVISIONED_MESSAGE: &str =
     "Espace équipe non provisionné sur SharePoint. Le conseiller doit lancer le provisionnement.";
+pub const TEAM_JOIN_REQUIRES_REMOTE_ACTIVATION: &str =
+    "Tony n'a pas encore activé la synchronisation sur son PC. Rejoindre uniquement après son OK.";
+
+pub fn require_remote_sync_started(
+    client: &SharePointGraphClient,
+    access_token: &str,
+    site_id: &str,
+) -> Result<(), String> {
+    let sequence_list = client
+        .find_list_by_display_name_blocking(access_token, site_id, LIST_CRM_SEQUENCES)?
+        .ok_or_else(|| format!("Liste SharePoint introuvable : {LIST_CRM_SEQUENCES}"))?;
+    let items =
+        client.list_items_all_blocking(access_token, site_id, &sequence_list.id, None)?;
+    if items.is_empty() {
+        return Err(TEAM_JOIN_REQUIRES_REMOTE_ACTIVATION.to_string());
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

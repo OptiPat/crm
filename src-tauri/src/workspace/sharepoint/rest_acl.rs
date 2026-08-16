@@ -48,7 +48,10 @@ impl SharePointGraphClient {
             advisor_group_id,
             secretary_group_id,
         ) {
-            eprintln!("⚠️ Restriction CRM_Secrets : {error}");
+            return Err(format!(
+                "Impossible de restreindre CRM_Secrets (la clé n'a pas été écrite). \
+                 Vérifiez que vous êtes propriétaire du site SharePoint, puis recliquez Provisionner. {error}"
+            ));
         }
         Ok(())
     }
@@ -64,16 +67,20 @@ fn restrict_secrets_via_sharepoint_rest(
 ) -> Result<(), String> {
     let digest = fetch_form_digest(http, access_token, web_url)?;
     let list_literal = sharepoint_list_guid_literal(list_id);
-    let break_url = format!(
-        "{web_url}/_api/web/lists({list_literal})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)"
-    );
-    let (break_status, break_body) =
-        sharepoint_rest_post(http, access_token, &digest, &break_url, None)?;
-    if !rest_success(break_status) && !already_unique(break_status, &break_body) {
-        return Err(format!(
-            "Impossible de restreindre CRM_Secrets ({break_status}) : {}",
-            truncate_body(&break_body)
-        ));
+    let already_unique_acl =
+        list_has_unique_role_assignments(http, access_token, web_url, &list_literal)?;
+    if !already_unique_acl {
+        let break_url = format!(
+            "{web_url}/_api/web/lists({list_literal})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)"
+        );
+        let (break_status, break_body) =
+            sharepoint_rest_post(http, access_token, &digest, &break_url, None)?;
+        if !rest_success(break_status) && !already_unique(break_status, &break_body) {
+            return Err(format!(
+                "Impossible de restreindre CRM_Secrets ({break_status}) : {}",
+                truncate_body(&break_body)
+            ));
+        }
     }
     let contribute_id = fetch_contribute_role_id(http, access_token, web_url)?;
     for group_id in [advisor_group_id, secretary_group_id] {
@@ -101,6 +108,28 @@ fn restrict_secrets_via_sharepoint_rest(
         );
     }
     Ok(())
+}
+
+fn list_has_unique_role_assignments(
+    http: &BlockingClient,
+    access_token: &str,
+    web_url: &str,
+    list_literal: &str,
+) -> Result<bool, String> {
+    let url = format!("{web_url}/_api/web/lists({list_literal})?$select=HasUniqueRoleAssignments");
+    let (status, body) = sharepoint_rest_get(http, access_token, &url)?;
+    if !rest_success(status) {
+        return Err(format!(
+            "Lecture des droits CRM_Secrets impossible ({status}) : {}",
+            truncate_body(&body)
+        ));
+    }
+    json_find_bool(&body, "HasUniqueRoleAssignments").ok_or_else(|| {
+        format!(
+            "HasUniqueRoleAssignments absent : {}",
+            truncate_body(&body)
+        )
+    })
 }
 
 fn fetch_form_digest(
@@ -165,6 +194,23 @@ fn ensure_entra_group_principal(
     json_find_i64(&body, "Id").ok_or_else(|| {
         format!("Identifiant SharePoint du groupe absent : {}", truncate_body(&body))
     })
+}
+
+fn sharepoint_rest_get(
+    http: &BlockingClient,
+    access_token: &str,
+    url: &str,
+) -> Result<(u16, String), String> {
+    let response = http
+        .get(url)
+        .bearer_auth(access_token)
+        .header("Accept", "application/json;odata=nometadata")
+        .send()
+        .map_err(|error| format!("Requête SharePoint impossible : {error}"))?;
+    Ok((
+        response.status().as_u16(),
+        response.text().unwrap_or_default(),
+    ))
 }
 
 fn sharepoint_rest_post(
@@ -252,6 +298,12 @@ fn json_find_i64(body: &str, key: &str) -> Option<i64> {
         .and_then(|value| find_i64(&value, key))
 }
 
+fn json_find_bool(body: &str, key: &str) -> Option<bool> {
+    serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|value| find_bool(&value, key))
+}
+
 fn find_string(value: &Value, key: &str) -> Option<String> {
     match value {
         Value::Object(map) => {
@@ -263,6 +315,19 @@ fn find_string(value: &Value, key: &str) -> Option<String> {
             map.values().find_map(|child| find_string(child, key))
         }
         Value::Array(items) => items.iter().find_map(|child| find_string(child, key)),
+        _ => None,
+    }
+}
+
+fn find_bool(value: &Value, key: &str) -> Option<bool> {
+    match value {
+        Value::Object(map) => {
+            if let Some(Value::Bool(flag)) = map.get(key) {
+                return Some(*flag);
+            }
+            map.values().find_map(|child| find_bool(child, key))
+        }
+        Value::Array(items) => items.iter().find_map(|child| find_bool(child, key)),
         _ => None,
     }
 }
@@ -310,5 +375,16 @@ mod tests {
         let body = r#"{"d":{"GetContextWebInformation":{"FormDigestValue":"0xDIGEST,1"}}}"#;
         assert_eq!(json_find_string(body, "FormDigestValue").unwrap(), "0xDIGEST,1");
         assert_eq!(json_find_i64(r#"{"Id": 42}"#, "Id"), Some(42));
+        assert_eq!(
+            json_find_bool(r#"{"HasUniqueRoleAssignments": true}"#, "HasUniqueRoleAssignments"),
+            Some(true)
+        );
+        assert_eq!(
+            json_find_bool(
+                r#"{"d":{"HasUniqueRoleAssignments": false}}"#,
+                "HasUniqueRoleAssignments"
+            ),
+            Some(false)
+        );
     }
 }

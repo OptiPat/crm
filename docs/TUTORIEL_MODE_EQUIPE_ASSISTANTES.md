@@ -279,6 +279,8 @@ Répéter ces étapes séparément sur les deux postes.
 
 1. Installer exactement la même version du CRM.
 2. Démarrer avec un CRM vide et créer le mot de passe de verrouillage local.
+   À l'assistant de premier lancement : **Passer** les partenaires, puis **Commencer à vide**
+   (pas Importer).
 3. Ouvrir **Paramètres → Intégrations → Mode équipe SharePoint**.
 4. Coller le Client ID puis cliquer sur **Enregistrer Client ID**.
 5. Cliquer sur **Connecter Microsoft**.

@@ -124,6 +124,7 @@ const TEAM_JOIN_SEED_TABLES: &[&str] = &[
     "alerte_segment_links",
     "contact_etiquette_auto_log",
     "contact_etiquette_auto_exclusions",
+    "partenaires",
 ];
 
 pub fn local_snapshot_blocks_team_join(snapshot: &TeamMigrationSnapshot) -> bool {
@@ -145,6 +146,7 @@ pub fn clear_team_join_seed_tables(conn: &Connection) -> Result<()> {
          DELETE FROM alerte_segment_links;
          DELETE FROM segments;
          DELETE FROM fiche_conseil_redaction_presets;
+         DELETE FROM partenaires;
          PRAGMA foreign_keys = ON;",
     )?;
     Ok(())
@@ -942,6 +944,18 @@ mod tests {
             }],
         };
         assert!(!local_snapshot_blocks_team_join(&with_segments));
+
+        let with_partners = TeamMigrationSnapshot {
+            schema_version: WORKSPACE_SYNC_SCHEMA_VERSION,
+            generated_at: "2026-01-01T00:00:00Z".into(),
+            table_counts: BTreeMap::new(),
+            records: vec![SnapshotRecord {
+                table_name: "partenaires".into(),
+                record_key: "1".into(),
+                payload: Map::new(),
+            }],
+        };
+        assert!(!local_snapshot_blocks_team_join(&with_partners));
     }
 
     #[test]

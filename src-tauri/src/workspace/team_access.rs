@@ -45,14 +45,8 @@ pub fn team_access_public_message(kind: TeamAccessDenialKind) -> &'static str {
 }
 
 pub fn classify_team_authority_error(error: &str) -> TeamAccessDenialKind {
-    let lower = error.to_lowercase();
     if error.contains("n'appartient à aucun groupe")
         || error.contains("appartient aux deux groupes")
-        || lower.contains("invalid_grant")
-        || lower.contains("aadsts50173")
-        || lower.contains("aadsts70008")
-        || lower.contains("aadsts500011")
-        || error.contains("Accès SharePoint refusé pour ce compte ou ce site")
         || error.contains("Clé de cache équipe introuvable")
         || error.contains("clés de cache équipe contradictoires")
     {
@@ -200,12 +194,29 @@ mod tests {
     }
 
     #[test]
-    fn disabled_account_token_is_a_confirmed_revocation() {
+    fn microsoft_token_or_sharepoint_grant_issues_are_reconnectable() {
         assert_eq!(
             classify_team_authority_error(
                 "Rafraîchissement du token: invalid_grant AADSTS50173"
             ),
-            TeamAccessDenialKind::Revoked
+            TeamAccessDenialKind::AuthorityRequired
+        );
+        assert!(!should_wipe_plaintext_on_denial(
+            TeamAccessDenialKind::AuthorityRequired
+        ));
+        assert_eq!(
+            classify_team_authority_error(
+                "Accès SharePoint refusé pour ce compte ou ce site."
+            ),
+            TeamAccessDenialKind::AuthorityRequired
+        );
+        assert_eq!(
+            classify_team_authority_error(
+                "Accès SharePoint refusé : avec le scope Sites.Selected, l'administrateur Microsoft 365 \
+                doit accorder explicitement l'application CRM au site (rôle manage pour \
+                provisionner les listes, puis write en exploitation)."
+            ),
+            TeamAccessDenialKind::AuthorityRequired
         );
     }
 
@@ -222,16 +233,6 @@ mod tests {
                 "Session Microsoft expirée ou invalide. Reconnectez le compte équipe."
             ),
             TeamAccessDenialKind::AuthorityRequired
-        );
-    }
-
-    #[test]
-    fn sharepoint_site_denial_is_a_confirmed_revocation() {
-        assert_eq!(
-            classify_team_authority_error(
-                "Accès SharePoint refusé pour ce compte ou ce site."
-            ),
-            TeamAccessDenialKind::Revoked
         );
     }
 

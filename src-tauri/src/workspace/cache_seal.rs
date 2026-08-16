@@ -341,6 +341,7 @@ pub fn open_team_cache_connection(app: &AppHandle) -> Result<Connection, String>
     let database_path = team_cache_database_path(app)?;
     assert_team_cache_artifact(&database_path)?;
     let sealed_path = team_cache_sealed_path(app)?;
+    recover_sealed_path(&sealed_path)?;
     let unsealed_path = temporary_sibling(&database_path, "unseal");
     remove_sqlite_artifacts(&unsealed_path);
 
@@ -440,12 +441,46 @@ pub fn checkpoint_team_cache_database(app: &AppHandle, database: &Database) -> R
 fn replace_sealed_file(from: &Path, to: &Path) -> Result<(), String> {
     assert_team_cache_artifact(from)?;
     assert_team_cache_artifact(to)?;
+    let prev_path = temporary_sibling(to, "prev");
+    assert_team_cache_artifact(&prev_path)?;
     if to.exists() {
-        fs::remove_file(to).map_err(|error| {
-            format!("Remplacement du cache scellé impossible : {error}")
+        if prev_path.exists() {
+            fs::remove_file(&prev_path).map_err(|error| {
+                format!("Nettoyage de l'ancienne copie scellée impossible : {error}")
+            })?;
+        }
+        fs::rename(to, &prev_path).map_err(|error| {
+            format!("Sauvegarde du cache scellé précédent impossible : {error}")
+        })?;
+        if let Err(error) = fs::rename(from, to) {
+            let _ = fs::rename(&prev_path, to);
+            return Err(format!("Activation du cache scellé impossible : {error}"));
+        }
+        let _ = fs::remove_file(&prev_path);
+        Ok(())
+    } else {
+        fs::rename(from, to).map_err(|error| format!("Activation du cache scellé impossible : {error}"))
+    }
+}
+
+fn recover_sealed_path(sealed_path: &Path) -> Result<(), String> {
+    if sealed_path.is_file() {
+        return Ok(());
+    }
+    let next_path = temporary_sibling(sealed_path, "next");
+    if next_path.is_file() {
+        fs::rename(&next_path, sealed_path).map_err(|error| {
+            format!("Récupération du cache scellé (copie suivante) : {error}")
+        })?;
+        return Ok(());
+    }
+    let prev_path = temporary_sibling(sealed_path, "prev");
+    if prev_path.is_file() {
+        fs::rename(&prev_path, sealed_path).map_err(|error| {
+            format!("Récupération du cache scellé (copie précédente) : {error}")
         })?;
     }
-    fs::rename(from, to).map_err(|error| format!("Activation du cache scellé impossible : {error}"))
+    Ok(())
 }
 
 pub fn seal_team_cache_database(app: &AppHandle, database: Database) -> Result<bool, String> {
@@ -591,6 +626,34 @@ mod tests {
         fs::write(&historical, b"SQLite format 3\0").unwrap();
         assert!(wipe_plaintext_cache_files(&historical).is_err());
         assert!(historical.exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn replace_sealed_keeps_the_new_file_without_deleting_first() {
+        let dir = temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        let sealed = dir.join("workspace-team-cache.db.sealed");
+        let next = dir.join("workspace-team-cache.db.sealed.next");
+        fs::write(&sealed, b"old-sealed").unwrap();
+        fs::write(&next, b"new-sealed").unwrap();
+        replace_sealed_file(&next, &sealed).unwrap();
+        assert_eq!(fs::read(&sealed).unwrap(), b"new-sealed");
+        assert!(!next.exists());
+        assert!(!dir.join("workspace-team-cache.db.sealed.prev").exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn recover_sealed_restores_prev_when_final_file_is_missing() {
+        let dir = temp_dir();
+        fs::create_dir_all(&dir).unwrap();
+        let sealed = dir.join("workspace-team-cache.db.sealed");
+        let prev = dir.join("workspace-team-cache.db.sealed.prev");
+        fs::write(&prev, b"previous-sealed").unwrap();
+        recover_sealed_path(&sealed).unwrap();
+        assert_eq!(fs::read(&sealed).unwrap(), b"previous-sealed");
+        assert!(!prev.exists());
         let _ = fs::remove_dir_all(dir);
     }
 }

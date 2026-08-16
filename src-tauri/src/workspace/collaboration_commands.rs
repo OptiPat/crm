@@ -2,8 +2,8 @@ use crate::auth::session::{require_ui_session, UiSessionState};
 use crate::commands::DbState;
 use crate::database::workspace::WorkspaceConfig;
 use crate::workspace::collaboration::{
-    provision_team_workspace, team_acquire_lock, team_append_audit, team_list_audit,
-    team_list_presence, team_presence_heartbeat, team_release_lock, team_renew_lock,
+    provision_team_workspace, require_remote_sync_started, team_acquire_lock, team_append_audit,
+    team_list_audit, team_list_presence, team_presence_heartbeat, team_release_lock, team_renew_lock,
     TeamAuditView, TeamLockAcquireResponse, TeamPresenceView,
 };
 use crate::workspace::guard::{require_team_management_permission, workspace_config_from_db};
@@ -119,6 +119,7 @@ pub async fn join_team_workspace_cmd(
                 ));
             }
         }
+        require_remote_sync_started(&client, &connection.access_token, site_id)?;
         Ok::<(), String>(())
     })
     .await

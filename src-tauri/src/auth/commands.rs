@@ -252,9 +252,9 @@ pub(crate) fn lock_ui_after_team_access_denied(
         if let Err(wipe_error) = crate::workspace::cache_seal::wipe_plaintext_team_cache(app) {
             eprintln!("⚠️ Purge du cache clair après révocation : {wipe_error}");
         }
-    }
-    if let Err(purge_error) = crate::workspace::documents::purge_local_team_document_cache(app) {
-        eprintln!("⚠️ Purge du cache documentaire équipe après verrouillage : {purge_error}");
+        if let Err(purge_error) = crate::workspace::documents::purge_local_team_document_cache(app) {
+            eprintln!("⚠️ Purge du cache documentaire équipe après révocation : {purge_error}");
+        }
     }
     crate::workspace::team_cache_key::wipe_session_dek();
     session.lock();
@@ -380,6 +380,7 @@ fn open_database(
     app: &AppHandle,
     db: &State<'_, DbState>,
     auth: &State<'_, AuthState>,
+    session: &UiSessionState,
 ) -> Result<(), String> {
     let _open_guard = DATABASE_OPEN_LOCK
         .get_or_init(|| Mutex::new(()))
@@ -392,22 +393,7 @@ fn open_database(
         if db_guard.is_some() {
             drop(db_guard);
             if let Err(error) = crate::workspace::team_access::revalidate_open_team_session(app) {
-                if let Ok(Some(database)) = take_database(db.inner()) {
-                    let _ = database.workspace_blob_stash_pending_content();
-                    if let Err(seal_error) =
-                        crate::workspace::cache_seal::seal_team_cache_database(app, database)
-                    {
-                        eprintln!("⚠️ Scellement après refus d'accès équipe : {seal_error}");
-                    }
-                }
-                let kind = crate::workspace::team_access::parse_team_access_denial(&error)
-                    .unwrap_or_else(|| {
-                        crate::workspace::team_access::classify_team_authority_error(&error)
-                    });
-                if crate::workspace::team_access::should_wipe_plaintext_on_denial(kind) {
-                    let _ = crate::workspace::cache_seal::wipe_plaintext_team_cache(app);
-                }
-                crate::workspace::team_cache_key::wipe_session_dek();
+                lock_ui_after_team_access_denied(app, db.inner(), session, &error);
                 return Err(error);
             }
             crate::birthday_notifications::spawn_run_if_due(app);
@@ -481,7 +467,7 @@ pub fn create_master_password(
         manager.create_master_password(&password)?;
     }
 
-    open_database(&app, &db, &auth)?;
+    open_database(&app, &db, &auth, session.inner())?;
     session.unlock();
     Ok(())
 }
@@ -562,7 +548,8 @@ pub async fn unlock(
         authenticate_with_system(app.clone()).await?;
     }
 
-    open_database(&app, &db, &auth).map_err(AuthCommandError::from_open_database_error)?;
+    open_database(&app, &db, &auth, session.inner())
+        .map_err(AuthCommandError::from_open_database_error)?;
     session.unlock();
     Ok(true)
 }
@@ -637,7 +624,8 @@ pub async fn recover_without_system_auth(
         // de récupération afin de ne jamais rendre les données inaccessibles.
     }
     set_system_auth_enabled(&auth, false)?;
-    open_database(&app, &db, &auth).map_err(AuthCommandError::from_open_database_error)?;
+    open_database(&app, &db, &auth, session.inner())
+        .map_err(AuthCommandError::from_open_database_error)?;
     session.unlock();
     Ok(true)
 }

@@ -217,6 +217,16 @@ pub fn set_workspace_sync_activated(
     Ok(enrollment)
 }
 
+pub fn refuse_if_team_sync_activated(app: &AppHandle) -> Result<(), String> {
+    if load_workspace_enrollment(app)?.is_some_and(|enrollment| enrollment.sync_activated) {
+        return Err(
+            "La synchronisation équipe est déjà active. N'envoyez plus de copie de migration."
+                .into(),
+        );
+    }
+    Ok(())
+}
+
 pub fn validate_workspace_enrollment(
     app: &AppHandle,
     config: &WorkspaceConfig,

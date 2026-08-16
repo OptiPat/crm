@@ -275,7 +275,7 @@
     <tr><td>Office.com OK avec MFA</td><td class="chk">☐</td><td class="chk">☐</td><td class="chk">☐</td></tr>
     <tr><td>Site SharePoint s’ouvre</td><td class="chk">☐</td><td class="chk">☐</td><td class="chk">☐</td></tr>
   </table>
-  <p class="small">Mac : mêmes boutons, même fiche, même ordre. À la place de BitLocker : FileVault. À la place de Windows Hello : Touch ID. Ne pas copier de fichiers entre un PC et un Mac.</p>
+  <p class="small">Mac : mêmes boutons, même fiche, même ordre. <strong>FileVault</strong> = chiffrement du disque (comme BitLocker) — à cocher avant. <strong>Touch ID</strong> = option dans Paramètres → Logiciel → Sécurité locale (comme Windows Hello), pas obligatoire pour allumer l’équipe. Ne pas copier de fichiers entre un PC et un Mac.</p>
 </section>
 
 <section class="page">
@@ -285,19 +285,20 @@
     <li>Paramètres → Intégrations → <strong>Mode équipe SharePoint</strong>.</li>
     <li>Coller le Client ID → <span class="btn">Enregistrer Client ID</span>. <span class="chk">☐</span></li>
     <li><span class="btn">Connecter Microsoft</span> → <strong>votre</strong> compte pro (pas la boîte cabinet) → code MFA. <span class="chk">☐</span></li>
-    <li>Activer le mode équipe. Rôle : <strong>Conseiller</strong>.</li>
+    <li>Passez l’interrupteur <strong>Activer le mode équipe SharePoint</strong> (à droite). Dans <strong>Rôle sur cette installation</strong>, choisissez <strong>Conseiller</strong>. Ce n’est pas le bouton <em>Activer la synchronisation équipe</em> (plus tard). <span class="chk">☐</span></li>
     <li>Coller groupes, hostname, chemin, boîte → <span class="btn">Enregistrer la configuration équipe</span>. <span class="chk">☐</span></li>
     <li><span class="btn">Tester SharePoint</span> → OK → <span class="btn">Enregistrer la configuration équipe</span> <em>encore une fois</em> (garde l’ID du site). <span class="chk">☐</span></li>
-    <li><span class="btn">Provisionner listes CRM</span> → attendre le OK. Cela crée aussi la clé de cache et masque <em>CRM_Secrets</em>. Ne rien créer dans SharePoint à la main. <span class="chk">☐</span></li>
+    <li><span class="btn">Provisionner listes CRM</span> → attendre le OK. Cela crée aussi la clé de cache et masque <em>CRM_Secrets</em>. Si vous recliquez : le CRM ne recasse pas les droits déjà posés, et ne recrée pas de secret. N’ouvrez toujours pas <em>CRM_Secrets</em>. Ne rien créer dans SharePoint à la main. <span class="chk">☐</span></li>
     <li>Dire à l’informatique de passer le droit du site de <strong>manage</strong> à <strong>write</strong> (étape E.3), puis retester. <span class="chk">☐</span></li>
-    <li><span class="btn">Copier la fiche pour une assistante</span> (après le 2ᵉ enregistrement, l’ID site est dedans). Coller dans un e-mail interne ou imprimer. <span class="chk">☐</span></li>
-    <li>Dans cet ordre, sans fermer :
+    <li><span class="btn">Copier la fiche pour une assistante</span> (après le 2ᵉ enregistrement, l’ID site est dedans — le bouton reste gris tant que l’ID est vide). Coller dans un e-mail interne ou imprimer. <span class="chk">☐</span></li>
+    <li>Chez vous, <strong>ne cliquez pas</strong> sur <em>Rejoindre sur ce poste</em> (c’est pour un PC vide). Dans cet ordre :
       <ol>
         <li><span class="btn">Préparer la migration</span></li>
         <li><span class="btn">Envoyer la copie test vers SharePoint</span></li>
         <li><span class="btn">Valider la restauration test</span></li>
         <li><span class="btn">Activer la synchronisation équipe</span></li>
       </ol>
+      Une fois l’équipe allumée, ces boutons disparaissent. Ne les recliquez jamais « pour voir ».
     </li>
   </ol>
   <div class="box warn">
@@ -306,7 +307,7 @@
     Cette série allume l’équipe <em>sur votre PC</em>. Ne cliquez pas sur <em>Rejoindre sur ce poste</em> chez vous.
   </div>
   <div class="box ok">
-    <strong>C’est bon chez vous</strong> quand l’espace équipe / cache est actif, sans bandeau rouge.
+    <strong>C’est bon chez vous</strong> quand l’espace équipe / cache est actif, sans bandeau d’erreur (ambre).
     Ensuite seulement : les assistantes.
   </div>
 </section>
@@ -315,12 +316,12 @@
   <h2><span class="who asst">Assistante</span> I · Chaque PC (recommencer à zéro)</h2>
   <p>Uniquement après le OK de Tony. Un PC = une personne = <em>son</em> compte. Fiche page 4.</p>
   <ol class="steps">
-    <li>Installer le CRM (même version que Tony). Créer le mot de passe local. <strong>Aucun import, aucun fichier copié.</strong> <span class="chk">☐</span></li>
+    <li>Installer le CRM (même version que Tony). Créer le mot de passe local. <strong>Aucun import, aucun fichier copié.</strong> À l’assistant de premier lancement : <strong>Passer</strong> les partenaires, puis <strong>Commencer à vide</strong> (pas Importer). <span class="chk">☐</span></li>
     <li>Paramètres → Intégrations → Mode équipe SharePoint.</li>
     <li>Coller le Client ID → <span class="btn">Enregistrer Client ID</span>. <span class="chk">☐</span></li>
     <li><span class="btn">Connecter Microsoft</span> → <strong>son</strong> e-mail pro → MFA. <span class="chk">☐</span></li>
     <li>L’adresse affichée doit être la sienne. Si c’est Tony ou la boîte cabinet : on arrête. <span class="chk">☐</span></li>
-    <li>Activer le mode équipe. Rôle : <strong>Secrétaire</strong>.</li>
+    <li>Passez l’interrupteur <strong>Activer le mode équipe SharePoint</strong>. Dans <strong>Rôle sur cette installation</strong>, choisissez <strong>Secrétaire</strong>.</li>
     <li>Coller <strong>toute</strong> la fiche, y compris l’ID du site, <em>avant</em> d’enregistrer. <span class="chk">☐</span></li>
     <li><span class="btn">Enregistrer la configuration équipe</span> → <span class="btn">Rejoindre sur ce poste</span>. Les étiquettes et modèles d’e-mails posés tout seuls au 1er ouverture ne bloquent plus. Laisser ouvert. <span class="chk">☐</span></li>
   </ol>
@@ -355,7 +356,7 @@
     <tr><th>Situation</th><th>Vous faites</th></tr>
     <tr><td>Travailler</td><td>Internet allumé. Comme d’habitude.</td></tr>
     <tr><td>Éteindre l’ordinateur</td><td>Attendre 20 secondes, ou verrouiller le CRM (cadenas), puis éteindre. Pas de croix juste après une saisie.</td></tr>
-    <tr><td>« Hors connexion » / écran Microsoft</td><td>D’abord le Wi‑Fi. Puis <em>Reconnecter le compte Microsoft</em> à l’écran de verrouillage (mot de passe ou code à 2 facteurs changé). Pas de bricolage de fichiers.</td></tr>
+    <tr><td>« Hors connexion » / écran Microsoft</td><td>D’abord le Wi‑Fi. Entrez le <strong>mot de passe du CRM</strong>. Si le bandeau propose <em>Reconnecter le compte Microsoft</em> : cliquez, validez le code à 2 facteurs, puis déverrouillez encore. Si le CRM dit <em>Accès équipe révoqué</em> : ne forcez pas — prévenez Tony / l’informatique (ce n’est pas le bouton Reconnecter).</td></tr>
     <tr><td>Une assistante part</td><td>L’informatique la retire du groupe <strong>CRM - Assistantes</strong> <em>et</em> du site SharePoint, tout de suite. Puis récupérer le PC. Rien à cliquer dans le CRM.</td></tr>
   </table>
   <div class="box ok">
@@ -369,10 +370,10 @@
     <tr><td>Accès SharePoint refusé</td><td>Étape E pas faite, ou droit encore en manage / pas en write.</td></tr>
     <tr><td>N’appartient à aucun groupe</td><td>Mauvais compte, ou pas dans Conseillers / Assistantes.</td></tr>
     <tr><td>Appartient aux deux groupes</td><td>Retirer d’un des deux groupes Entra.</td></tr>
-    <tr><td>Rejoindre grisé / ID site vide</td><td>Tony : Tester puis Enregistrer une 2ᵉ fois, ou <em>Copier la fiche pour une assistante</em>. Assistante : coller l’ID site avant Enregistrer.</td></tr>
+    <tr><td>Rejoindre grisé / ID site vide</td><td>Tony : Tester puis Enregistrer une 2ᵉ fois — le bouton Copier la fiche reste gris tant que l’ID est vide. Assistante : coller l’ID site <em>avant</em> Enregistrer. Si déjà enregistré sans ID : réinstaller le CRM (poste vide) et recoller toute la fiche.</td></tr>
     <tr><td>Ce poste contient déjà des données</td><td>Vrais contacts/dossiers déjà là. Pas les étiquettes auto. Arrêter, prévenir Tony.</td></tr>
     <tr><td>Mauvais e-mail affiché</td><td>Déconnecter, puis Connecter Microsoft avec le bon compte (possible aussi en secrétaire).</td></tr>
-    <tr><td>Plus de bouton Connecter (écran mot de passe)</td><td>Choisir <em>Reconnecter le compte Microsoft</em>, puis déverrouiller.</td></tr>
+    <tr><td>Plus de bouton Connecter (écran mot de passe)</td><td>Entrez le mot de passe CRM. Si <em>Reconnecter le compte Microsoft</em> apparaît : cliquez, puis déverrouillez. Si <em>Accès équipe révoqué</em> : informatique (groupes Entra / site), pas ce bouton.</td></tr>
   </table>
   <p class="footer">Ne jamais ouvrir ni modifier CRM_Secrets (liste masquée, limitée aux deux groupes). Ne jamais mettre le dossier du CRM dans OneDrive.</p>
 </section>

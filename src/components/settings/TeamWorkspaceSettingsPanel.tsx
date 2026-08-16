@@ -49,6 +49,10 @@ import type {
   TeamSyncConflict,
   WorkspaceConfig,
 } from "@/lib/team/team-capabilities";
+import {
+  assistantFicheCopyBlockedReason,
+  teamJoinBlockedReason,
+} from "@/lib/team/team-setup-guidance";
 import { toast } from "sonner";
 
 export function TeamWorkspaceSettingsPanel() {
@@ -98,6 +102,13 @@ export function TeamWorkspaceSettingsPanel() {
   const [officeMailboxEmail, setOfficeMailboxEmail] = useState("");
   const [advisorGroupId, setAdvisorGroupId] = useState("");
   const [secretaryGroupId, setSecretaryGroupId] = useState("");
+
+  const joinBlockedReason = teamJoinBlockedReason({
+    connected: Boolean(connection?.connected),
+    teamConfigured,
+    siteId: config.siteId,
+  });
+  const ficheCopyBlockedReason = assistantFicheCopyBlockedReason(siteId);
 
   const syncFormFromConfig = useCallback((next: WorkspaceConfig) => {
     setTeamEnabled(next.mode === "team_sharepoint");
@@ -244,6 +255,10 @@ export function TeamWorkspaceSettingsPanel() {
   };
 
   const handleCopyAssistantFiche = async () => {
+    if (ficheCopyBlockedReason) {
+      toast.error(ficheCopyBlockedReason);
+      return;
+    }
     const lines = [
       "Fiche CRM équipe (à coller sur le PC assistante)",
       `Client ID Azure : ${microsoftClientId.trim() || "—"}`,
@@ -769,12 +784,7 @@ export function TeamWorkspaceSettingsPanel() {
                   type="button"
                   variant="outline"
                   onClick={() => void handleJoinTeam()}
-                  disabled={
-                    joiningTeam ||
-                    !connection?.connected ||
-                    !teamConfigured ||
-                    !config.siteId?.trim()
-                  }
+                  disabled={joiningTeam || Boolean(joinBlockedReason)}
                   className="gap-2"
                 >
                   {joiningTeam ? (
@@ -785,45 +795,56 @@ export function TeamWorkspaceSettingsPanel() {
                   Rejoindre sur ce poste
                 </Button>
               ) : null}
-              <Button
-                type="button"
-                onClick={() => void handleProvisionSharePoint()}
-                disabled={
-                  provisioningSharePoint ||
-                  !canManage ||
-                  !connection?.connected ||
-                  !teamConfigured
-                }
-                className="gap-2"
-              >
-                {provisioningSharePoint ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Users className="h-4 w-4" />
-                )}
-                Provisionner listes CRM
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void handlePrepareMigration()}
-                disabled={
-                  preparingMigration ||
-                  !canManage ||
-                  !connection?.connected ||
-                  !config.siteId?.trim()
-                }
-                className="gap-2"
-              >
-                {preparingMigration ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Database className="h-4 w-4" />
-                )}
-                Préparer la migration
-              </Button>
+              {!syncActivated && canManage ? (
+                <Button
+                  type="button"
+                  onClick={() => void handleProvisionSharePoint()}
+                  disabled={
+                    provisioningSharePoint ||
+                    !connection?.connected ||
+                    !teamConfigured
+                  }
+                  className="gap-2"
+                >
+                  {provisioningSharePoint ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Users className="h-4 w-4" />
+                  )}
+                  Provisionner listes CRM
+                </Button>
+              ) : null}
+              {!syncActivated && canManage ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handlePrepareMigration()}
+                  disabled={
+                    preparingMigration ||
+                    !connection?.connected ||
+                    !config.siteId?.trim()
+                  }
+                  className="gap-2"
+                >
+                  {preparingMigration ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Database className="h-4 w-4" />
+                  )}
+                  Préparer la migration
+                </Button>
+              ) : null}
             </div>
-            {migrationPreview ? (
+            {!syncActivated && joinBlockedReason ? (
+              <p className="text-xs text-amber-800 dark:text-amber-200">{joinBlockedReason}</p>
+            ) : null}
+            {!syncActivated && canManage ? (
+              <p className="text-xs text-muted-foreground">
+                Sur le PC de Tony (dossiers déjà là) : ne cliquez pas sur Rejoindre — utilisez
+                Provisionner puis la série migration. Rejoindre est pour un poste vide.
+              </p>
+            ) : null}
+            {!syncActivated && migrationPreview ? (
               <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3 text-sm">
                 <p className="font-medium">Aperçu migration (local, lecture seule)</p>
                 <p className="text-xs text-muted-foreground">
@@ -995,11 +1016,18 @@ export function TeamWorkspaceSettingsPanel() {
                   </div>
                 ) : null}
                 <p className="text-xs text-muted-foreground">
-                  {syncActivated
-                    ? "Synchronisation automatique active toutes les 10 secondes."
-                    : "Aucune bascule automatique avant validation et activation explicite."}
+                  Cliquez les boutons dans l’ordre : Préparer, Envoyer, Valider, puis Activer.
+                  Une fois l’équipe allumée, ces boutons disparaissent.
                 </p>
-                {syncActivated && canManage ? (
+              </div>
+            ) : null}
+            {syncActivated ? (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Synchronisation automatique active toutes les 10 secondes. Ne recliquez pas
+                  Provisionner ni Envoyer une copie vers SharePoint.
+                </p>
+                {canManage ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -1071,8 +1099,9 @@ export function TeamWorkspaceSettingsPanel() {
             ) : null}
             {!config.siteId?.trim() ? (
               <p className="text-xs text-muted-foreground">
-                Après enregistrement de la configuration, le conseiller peut provisionner les
-                listes techniques CRM (présence, verrous, audit) sur le site SharePoint.
+                {canManage
+                  ? "Tester SharePoint, puis Enregistrer encore une fois pour garder l’ID site. Ensuite seulement : Copier la fiche."
+                  : "ID site manquant : Rejoindre restera gris. Demandez à Tony une fiche avec l’ID site Graph, réinstallez le CRM (poste vide) et recoller toute la fiche avant Enregistrer."}
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
@@ -1105,6 +1134,7 @@ export function TeamWorkspaceSettingsPanel() {
               type="button"
               variant="outline"
               onClick={() => void handleCopyAssistantFiche()}
+              disabled={Boolean(ficheCopyBlockedReason)}
               className="gap-2"
             >
               <Copy className="h-4 w-4" />
@@ -1112,6 +1142,9 @@ export function TeamWorkspaceSettingsPanel() {
             </Button>
           ) : null}
         </div>
+        {canManage && teamEnabled && ficheCopyBlockedReason ? (
+          <p className="text-xs text-amber-800 dark:text-amber-200">{ficheCopyBlockedReason}</p>
+        ) : null}
       </div>
     </SettingsPanel>
   );

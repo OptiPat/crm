@@ -5,7 +5,7 @@ use crate::database::workspace_sync::{build_team_migration_preview, TeamMigratio
 use crate::email::oauth_flow::{disconnect_microsoft_team_oauth, run_oauth_connect};
 use crate::email::oauth_store::EmailOAuthStore;
 use crate::workspace::collaboration::require_provisioned_team_workspace;
-use crate::workspace::enrollment::validate_workspace_enrollment;
+use crate::workspace::enrollment::{refuse_if_team_sync_activated, validate_workspace_enrollment};
 use crate::workspace::migration::{
     upload_team_migration_snapshot, validate_team_remote_snapshot, TeamMigrationUploadReport,
     TeamMigrationValidateReport,
@@ -199,10 +199,21 @@ pub async fn connect_microsoft_team_oauth_cmd(
 pub fn disconnect_microsoft_team_oauth_cmd(
     app_handle: AppHandle,
     session: State<'_, UiSessionState>,
+    db: State<'_, DbState>,
 ) -> Result<(), String> {
     require_ui_session(&session)?;
     disconnect_microsoft_team_oauth(&app_handle)?;
     clear_authoritative_identity_cache();
+    if crate::workspace::enrollment::load_workspace_enrollment(&app_handle)?
+        .is_some_and(|enrollment| enrollment.sync_activated)
+    {
+        crate::auth::commands::lock_ui_after_team_access_denied(
+            &app_handle,
+            db.inner(),
+            session.inner(),
+            crate::workspace::team_access::TEAM_ACCESS_REQUIRED_MESSAGE,
+        );
+    }
     Ok(())
 }
 
@@ -273,6 +284,7 @@ pub async fn upload_team_migration_snapshot_cmd(
     expected_checksum: String,
 ) -> Result<TeamMigrationUploadReport, String> {
     require_ui_session(&session)?;
+    refuse_if_team_sync_activated(&app_handle)?;
     {
         let guard = db
             .lock()
@@ -305,6 +317,7 @@ pub fn preview_team_migration_cmd(
     session: State<'_, UiSessionState>,
 ) -> Result<TeamMigrationPreview, String> {
     require_ui_session(&session)?;
+    refuse_if_team_sync_activated(&app_handle)?;
     let guard = db
         .lock()
         .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
@@ -325,6 +338,7 @@ pub async fn validate_team_remote_snapshot_cmd(
     expected_checksum: String,
 ) -> Result<TeamMigrationValidateReport, String> {
     require_ui_session(&session)?;
+    refuse_if_team_sync_activated(&app_handle)?;
     {
         let guard = db
             .lock()

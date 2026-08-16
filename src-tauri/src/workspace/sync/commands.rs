@@ -101,6 +101,7 @@ fn finalize_team_cache(
     app: &AppHandle,
     temp_path: &Path,
     team_database: Database,
+    create_dek: bool,
 ) -> Result<Database, String> {
     drop(team_database);
     let enrollment = load_workspace_enrollment(app)?
@@ -109,7 +110,19 @@ fn finalize_team_cache(
         app,
         &enrollment.to_workspace_config(),
     )?;
-    crate::workspace::team_cache_key::ensure_session_dek_from_sharepoint(app, &enrollment)?;
+    if create_dek {
+        crate::workspace::team_cache_key::ensure_session_dek_from_sharepoint(app, &enrollment)?;
+    } else {
+        crate::workspace::team_cache_key::load_session_dek_from_sharepoint(app, &enrollment)
+            .map_err(|error| {
+                if error.contains("introuvable") {
+                    "Tony n'a pas encore créé la clé d'équipe (Provisionner listes CRM). Attendez son OK."
+                        .into()
+                } else {
+                    error
+                }
+            })?;
+    }
     let final_path = team_cache_database_path(app)?;
     remove_sqlite_cache_artifacts(&final_path)?;
     std::fs::rename(temp_path, &final_path)
@@ -347,7 +360,7 @@ pub fn activate_team_sync_cmd(
     team_database
         .workspace_sync_activate_capture(&batch.delta_link)
         .map_err(|error| error.to_string())?;
-    let active_database = finalize_team_cache(&app_handle, &temp_path, team_database)?;
+    let active_database = finalize_team_cache(&app_handle, &temp_path, team_database, true)?;
     *guard = Some(active_database);
     Ok(TeamSyncActivationReport {
         activated: true,
@@ -396,6 +409,11 @@ pub fn bootstrap_team_sync_cmd(
     let sequence_list = client
         .find_list_by_display_name_blocking(&connection.access_token, site_id, LIST_CRM_SEQUENCES)?
         .ok_or_else(|| format!("Liste SharePoint introuvable : {LIST_CRM_SEQUENCES}"))?;
+    crate::workspace::collaboration::require_remote_sync_started(
+        &client,
+        &connection.access_token,
+        site_id,
+    )?;
 
     let mut guard = db
         .lock()
@@ -427,7 +445,7 @@ pub fn bootstrap_team_sync_cmd(
     team_database
         .workspace_sync_activate_capture(&batch.delta_link)
         .map_err(|error| error.to_string())?;
-    let active_database = finalize_team_cache(&app_handle, &temp_path, team_database)?;
+    let active_database = finalize_team_cache(&app_handle, &temp_path, team_database, false)?;
     *guard = Some(active_database);
     Ok(TeamSyncActivationReport {
         activated: true,
