@@ -1,9 +1,10 @@
 # Advisories transitoires acceptees jusqu'a migration oauth2 5 (reqwest 0.12 unifie).
-# Source : oauth2 4.4 -> reqwest 0.11 -> rustls 0.21 -> rustls-webpki 0.101.7
-# Usage : OAuth Gmail desktop uniquement, pas expose sur Internet.
+# Source : oauth2 4.4 -> reqwest 0.11 -> hyper 0.14 / h2 0.3 / rustls 0.21
+# Usage : OAuth desktop uniquement (Gmail / Microsoft), pas de serveur HTTP/2 expose.
 [advisories]
 ignore = [
     "RUSTSEC-2026-0098",
     "RUSTSEC-2026-0099",
     "RUSTSEC-2026-0104",
+    "RUSTSEC-2026-0258",
 ]

@@ -213,6 +213,22 @@ fn sharepoint_rest_get(
     ))
 }
 
+/// IIS / SharePoint Online répond **411 Length Required** si un POST n'a ni corps
+/// ni `Content-Length` (reqwest omet les deux quand `payload` est `None`).
+fn apply_sharepoint_json_payload(
+    request: reqwest::blocking::RequestBuilder,
+    payload: Option<&Value>,
+) -> reqwest::blocking::RequestBuilder {
+    match payload {
+        Some(payload) => request
+            .header("Content-Type", "application/json;odata=nometadata")
+            .json(payload),
+        None => request
+            .header("Content-Type", "application/json;odata=nometadata")
+            .body(""),
+    }
+}
+
 fn sharepoint_rest_post(
     http: &BlockingClient,
     access_token: &str,
@@ -227,15 +243,9 @@ fn sharepoint_rest_post(
     if !digest.is_empty() {
         request = request.header("X-RequestDigest", digest);
     }
-    let response = if let Some(payload) = payload {
-        request
-            .header("Content-Type", "application/json;odata=nometadata")
-            .json(payload)
-            .send()
-    } else {
-        request.send()
-    }
-    .map_err(|error| format!("Requête SharePoint impossible : {error}"))?;
+    let response = apply_sharepoint_json_payload(request, payload)
+        .send()
+        .map_err(|error| format!("Requête SharePoint impossible : {error}"))?;
     Ok((
         response.status().as_u16(),
         response.text().unwrap_or_default(),
@@ -385,6 +395,34 @@ mod tests {
                 "HasUniqueRoleAssignments"
             ),
             Some(false)
+        );
+    }
+
+    #[test]
+    fn empty_sharepoint_post_sends_content_length_so_iis_does_not_return_411() {
+        let server = crate::workspace::sharepoint::test_server::ScriptedGraphServer::spawn(vec![
+            crate::workspace::sharepoint::test_server::ScriptedResponse::json(
+                200,
+                r#"{"FormDigestValue":"0xDIGEST,1"}"#,
+            ),
+        ]);
+        let http = BlockingClient::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+        let digest = fetch_form_digest(&http, "token", &server.base_url).expect("digest");
+        assert_eq!(digest, "0xDIGEST,1");
+        let requests = server.finish();
+        assert_eq!(requests.len(), 1);
+        let request = requests[0].to_ascii_lowercase();
+        let content_length = request.lines().find_map(|line| {
+            line.strip_prefix("content-length:")
+                .and_then(|value| value.trim().parse::<usize>().ok())
+        });
+        assert!(
+            content_length.is_some(),
+            "POST _api/contextinfo sans Content-Length → 411 Length Required : {}",
+            requests[0]
         );
     }
 }

@@ -12,6 +12,8 @@ use std::time::Duration;
 use tauri::AppHandle;
 use url::Url;
 
+const OAUTH_CALLBACK_TIMEOUT_SECS: u64 = 180;
+
 struct ProviderOAuth {
     scopes: &'static [&'static str],
 }
@@ -214,16 +216,17 @@ fn try_read_oauth_callback(
 
 /// Ignore les requêtes parasites (favicon, etc.) jusqu'au vrai `/callback`.
 fn wait_for_callback(listener: &TcpListener, expected_state: &str) -> Result<String, String> {
-    let deadline = std::time::Instant::now() + Duration::from_secs(120);
+    let deadline = std::time::Instant::now() + Duration::from_secs(OAUTH_CALLBACK_TIMEOUT_SECS);
     listener
         .set_nonblocking(true)
         .map_err(|e| format!("Écoute OAuth: {}", e))?;
 
     loop {
         if std::time::Instant::now() > deadline {
-            return Err(
-                "Délai OAuth dépassé (120 s). Fermez l'onglet du navigateur et réessayez.".into(),
-            );
+            return Err(format!(
+                "Délai OAuth dépassé ({OAUTH_CALLBACK_TIMEOUT_SECS} s). Fermez l'onglet du navigateur, \
+                 validez la MFA, puis réessayez avec le compte professionnel du cabinet."
+            ));
         }
         match listener.accept() {
             Ok((mut stream, _)) => match try_read_oauth_callback(&mut stream, expected_state)? {
@@ -333,49 +336,14 @@ pub fn run_oauth_connect(
         .set_pkce_verifier(pkce_verifier)
         .request(http_client)
         .map_err(|e| match &e {
-            RequestTokenError::ServerResponse(resp) => {
-                let code = resp.error().to_string();
-                let desc = resp
+            RequestTokenError::ServerResponse(resp) => format_oauth_server_error(
+                &resp.error().to_string(),
+                &resp
                     .error_description()
                     .map(|c| c.to_string())
-                    .unwrap_or_default();
-                let hint = match code.as_str() {
-                    "redirect_uri_mismatch" => {
-                        if oauth_provider == "microsoft" {
-                            " Ajoutez http://127.0.0.1:3847/callback dans Azure → App registrations → Authentication → URI de redirection (application de bureau)."
-                        } else {
-                            " Ajoutez http://127.0.0.1:3847/callback dans Google Cloud → Clients → URI de redirection."
-                        }
-                    }
-                    "invalid_grant" => {
-                        if oauth_provider == "microsoft" {
-                            " Fermez l'onglet Microsoft, attendez 5 s, recliquez Connecter une seule fois."
-                        } else {
-                            " Fermez l'onglet Google, attendez 5 s, recliquez Connecter Google une seule fois."
-                        }
-                    }
-                    "invalid_request" => {
-                        if oauth_provider == "microsoft" {
-                            " Vérifiez l'URI de redirection Azure (http://127.0.0.1:3847/callback, application de bureau) et les permissions Graph."
-                        } else {
-                            ""
-                        }
-                    }
-                    "invalid_client" => {
-                        if oauth_provider == "microsoft" {
-                            " Vérifiez le Client ID Azure (application de bureau / comptes personnels)."
-                        } else {
-                            " Vérifiez le Client ID (Application de bureau)."
-                        }
-                    }
-                    _ => "",
-                };
-                if desc.is_empty() {
-                    format!("Échange du code OAuth: {code}{hint}")
-                } else {
-                    format!("Échange du code OAuth: {code} — {desc}{hint}")
-                }
-            }
+                    .unwrap_or_default(),
+                oauth_provider,
+            ),
             RequestTokenError::Request(err) => format!("Échange du code OAuth (réseau): {err}"),
             RequestTokenError::Parse(err, raw) => format!(
                 "Échange du code OAuth (réponse illisible): {err} — {}",
@@ -415,6 +383,70 @@ pub fn run_oauth_connect(
     Ok(connection)
 }
 
+fn is_microsoft_oauth_provider(oauth_provider: &str) -> bool {
+    oauth_provider == "microsoft"
+        || oauth_provider == "microsoft_team"
+        || oauth_provider == "microsoft_onedrive"
+}
+
+fn oauth_exchange_error_hint(
+    code: &str,
+    description: &str,
+    oauth_provider: &str,
+) -> &'static str {
+    let microsoft = is_microsoft_oauth_provider(oauth_provider);
+    match code {
+        "redirect_uri_mismatch" => {
+            if microsoft {
+                " Ajoutez http://127.0.0.1:3847/callback dans Azure → App registrations → Authentication → URI de redirection (application de bureau)."
+            } else {
+                " Ajoutez http://127.0.0.1:3847/callback dans Google Cloud → Clients → URI de redirection."
+            }
+        }
+        "invalid_grant" => {
+            if microsoft {
+                " Fermez l'onglet Microsoft, attendez 5 s, recliquez Connecter une seule fois."
+            } else {
+                " Fermez l'onglet Google, attendez 5 s, recliquez Connecter Google une seule fois."
+            }
+        }
+        "invalid_request" => {
+            if microsoft {
+                " Vérifiez l'URI de redirection Azure (http://127.0.0.1:3847/callback, application de bureau) et les permissions Graph."
+            } else {
+                ""
+            }
+        }
+        "invalid_client" => {
+            if microsoft {
+                " Vérifiez le Client ID Azure (application de bureau)."
+            } else {
+                " Vérifiez le Client ID (Application de bureau)."
+            }
+        }
+        "unauthorized_client" => {
+            let desc = description.to_ascii_lowercase();
+            if microsoft && (desc.contains("consumer") || desc.contains("personal")) {
+                " Choisissez le compte professionnel du cabinet (pas Outlook.com, Hotmail ni un compte Microsoft personnel)."
+            } else if microsoft {
+                " Connectez-vous avec le compte professionnel du cabinet, pas un compte personnel."
+            } else {
+                ""
+            }
+        }
+        _ => "",
+    }
+}
+
+fn format_oauth_server_error(code: &str, description: &str, oauth_provider: &str) -> String {
+    let hint = oauth_exchange_error_hint(code, description, oauth_provider);
+    if description.is_empty() {
+        format!("Échange du code OAuth: {code}{hint}")
+    } else {
+        format!("Échange du code OAuth: {code} — {description}{hint}")
+    }
+}
+
 pub fn disconnect_oauth(app: &AppHandle) -> Result<(), String> {
     crate::email::google_contacts::clear_session_index();
     let mut store = EmailOAuthStore::load(app)?;
@@ -443,6 +475,8 @@ pub fn disconnect_microsoft_team_oauth(app: &AppHandle) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::escape_html_text;
+    use super::format_oauth_server_error;
+    use super::oauth_exchange_error_hint;
     use super::provider_config;
     use crate::workspace::oauth::microsoft_team_flow_provider;
 
@@ -472,5 +506,23 @@ mod tests {
             .scopes
             .iter()
             .any(|s| s.contains("Sites.ReadWrite.All")));
+    }
+
+    #[test]
+    fn unauthorized_client_consumers_asks_for_work_account() {
+        let hint = oauth_exchange_error_hint(
+            "unauthorized_client",
+            "The client does not exist or is not enabled for consumers.",
+            "microsoft_team",
+        );
+        assert!(hint.contains("professionnel"));
+        assert!(hint.contains("personnel"));
+        let message = format_oauth_server_error(
+            "unauthorized_client",
+            "The client does not exist or is not enabled for consumers.",
+            "microsoft",
+        );
+        assert!(message.contains("Échange du code OAuth: unauthorized_client"));
+        assert!(message.contains("professionnel"));
     }
 }
