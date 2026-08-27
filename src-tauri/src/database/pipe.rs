@@ -93,12 +93,13 @@ fn map_pipe_row(row: &Row<'_>) -> Result<super::models::Pipe> {
         secondary_contact_prenom: row.get(13)?,
         parent_titre: row.get(14)?,
         archived_at: row.get(15)?,
+        etude_realisee: row.get::<_, i64>(16)? != 0,
     })
 }
 
 const PIPE_SELECT_FIELDS: &str = "p.id, p.contact_id, p.secondary_contact_id, p.pipe_type, p.parent_pipe_id, p.titre, p.stage, p.notes,
                     p.created_at, p.updated_at,
-                    c.nom, c.prenom, c2.nom, c2.prenom, pp.titre, p.archived_at";
+                    c.nom, c.prenom, c2.nom, c2.prenom, pp.titre, p.archived_at, p.etude_realisee";
 
 impl super::Database {
     pub fn migrate_pipes_table(&self) -> Result<()> {
@@ -153,6 +154,13 @@ impl super::Database {
         if !self.table_has_column("pipes", "archived_at")? {
             self.conn.execute("ALTER TABLE pipes ADD COLUMN archived_at INTEGER", [])?;
             println!("✅ Migration: archived_at sur pipes");
+        }
+        if !self.table_has_column("pipes", "etude_realisee")? {
+            self.conn.execute(
+                "ALTER TABLE pipes ADD COLUMN etude_realisee INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            println!("✅ Migration: etude_realisee sur pipes");
         }
         self.migrate_pipes_legacy_stages()?;
         Ok(())
@@ -549,6 +557,26 @@ impl super::Database {
         }
         tx.commit()?;
         self.sync_contact_dates_from_pipe(id)?;
+        self.get_pipe_by_id(id)
+    }
+
+    pub fn set_pipe_etude_realisee(&self, id: i64, etude_realisee: bool) -> Result<super::models::Pipe> {
+        let current = self.get_pipe_by_id(id)?;
+        if current.pipe_type != PIPE_TYPE_AFFAIRE {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "l'étude réalisée ne s'applique qu'aux affaires".into(),
+            ));
+        }
+        if current.etude_realisee == etude_realisee {
+            return Ok(current);
+        }
+        let updated = self.conn.execute(
+            "UPDATE pipes SET etude_realisee = ?1 WHERE id = ?2",
+            params![if etude_realisee { 1 } else { 0 }, id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
         self.get_pipe_by_id(id)
     }
 
@@ -1206,5 +1234,40 @@ mod tests {
             .collect_calendar_attendee_emails(&[contact_a, 99_999])
             .unwrap();
         assert_eq!(emails, vec!["jean@example.com".to_string()]);
+    }
+
+    #[test]
+    fn set_pipe_etude_realisee_toggles_without_changing_stage() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = db
+            .create_contact(NewContact {
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                categorie: "PROSPECT_CLIENT".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("contact id");
+
+        use crate::database::models::NewPipe;
+
+        let affaire = db
+            .create_pipe(NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Affaire".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+        assert!(!affaire.etude_realisee);
+
+        let updated = db.set_pipe_etude_realisee(affaire.id, true).unwrap();
+        assert!(updated.etude_realisee);
+        assert_eq!(updated.stage, PIPE_STAGE_PROSPECTION);
+        assert_eq!(updated.updated_at, affaire.updated_at);
     }
 }

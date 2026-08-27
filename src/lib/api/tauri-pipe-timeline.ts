@@ -28,6 +28,10 @@ export async function listPipeTimelineEntries(
   return invoke<PipeTimelineEntryRecord[]>("list_pipe_timeline_entries", { pipeId });
 }
 
+export async function listPipeRdvEntriesForBoard(): Promise<PipeTimelineEntryRecord[]> {
+  return invoke<PipeTimelineEntryRecord[]>("list_pipe_rdv_entries_for_board");
+}
+
 export async function createPipeTimelineEntry(
   input: NewPipeTimelineEntryInput
 ): Promise<PipeTimelineEntryRecord> {

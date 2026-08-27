@@ -20,6 +20,7 @@ export interface PipeRecord {
   secondary_contact_prenom?: string | null;
   parent_titre?: string | null;
   archived_at?: number | null;
+  etude_realisee?: boolean;
 }
 
 export interface NewPipeInput {
@@ -69,6 +70,16 @@ export async function unarchivePipe(id: number): Promise<PipeRecord> {
   const pipe = await invoke<PipeRecord>("unarchive_pipe", { id });
   notifyPipeChanged();
   return pipe;
+}
+
+export async function setPipeEtudeRealisee(
+  id: number,
+  etudeRealisee: boolean
+): Promise<PipeRecord> {
+  return invoke<PipeRecord>("set_pipe_etude_realisee", {
+    id,
+    etudeRealisee,
+  });
 }
 
 export async function setPipeStage(

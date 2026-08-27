@@ -47,6 +47,7 @@ pub(crate) fn format_rdv_entry_display_label(
         Some(super::pipe::PIPE_STAGE_R1) => "RDV R1".into(),
         Some(super::pipe::PIPE_STAGE_R2) => "RDV R2".into(),
         Some(super::pipe::PIPE_STAGE_R3) => "RDV R3".into(),
+        Some(t) if rdv_stage_from_entry_titre(Some(t)).is_some() => format!("RDV {t}"),
         Some(t) if !t.is_empty() => format!("RDV · {t}"),
         _ => "RDV".into(),
     }
@@ -87,9 +88,9 @@ fn previous_linear_stage(stage: &str) -> Option<&'static str> {
 
 fn rdv_stage_from_entry_titre(titre: Option<&str>) -> Option<&'static str> {
     match titre.map(str::trim) {
-        Some(PIPE_STAGE_R1) => Some(PIPE_STAGE_R1),
-        Some(PIPE_STAGE_R2) => Some(PIPE_STAGE_R2),
-        Some(PIPE_STAGE_R3) => Some(PIPE_STAGE_R3),
+        Some("R1") => Some(PIPE_STAGE_R1),
+        Some("R2") | Some("R2 Placement") | Some("R2 Immo") => Some(PIPE_STAGE_R2),
+        Some("R3") | Some("R3 Placements") | Some("R3 Immo") => Some(PIPE_STAGE_R3),
         _ => None,
     }
 }
@@ -405,6 +406,35 @@ mod tests {
         assert!(reverted);
         assert_eq!(db.get_pipe_by_id(pipe_id).unwrap().stage, PIPE_STAGE_R1);
         assert!(db.get_pipe_timeline_entry(rdv_id).is_ok());
+    }
+
+    #[test]
+    fn google_cancel_r2_placement_reverts_to_r1() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let (pipe_id, rdv_id) = seed_affaire_with_r1_rdv(&db);
+        db.set_pipe_stage(pipe_id, PIPE_STAGE_R2, None, None)
+            .unwrap();
+        let rdv_r2 = db
+            .create_pipe_timeline_entry(NewPipeTimelineEntry {
+                pipe_id,
+                entry_type: TIMELINE_RDV.into(),
+                titre: Some("R2 Placement".into()),
+                contenu: None,
+                occurred_at: Some(2_000_000),
+            })
+            .unwrap();
+
+        let reverted = db
+            .apply_pipe_rdv_cancelled_from_google(rdv_r2.id, "g-ev-r2-placement")
+            .unwrap();
+        assert!(reverted);
+        assert_eq!(db.get_pipe_by_id(pipe_id).unwrap().stage, PIPE_STAGE_R1);
+        assert!(db.get_pipe_timeline_entry(rdv_id).is_ok());
+        let entries = db.list_pipe_timeline_entries(pipe_id).unwrap();
+        assert!(entries.iter().any(|e| e
+            .contenu
+            .as_deref()
+            .is_some_and(|c| c.contains("R2 Placement") && c.contains("annulé"))));
     }
 
     #[test]

@@ -797,6 +797,18 @@ pub fn list_pipe_timeline_entries(
 }
 
 #[tauri::command]
+pub fn list_pipe_rdv_entries_for_board(
+    db: State<'_, DbState>,
+) -> Result<Vec<PipeTimelineEntry>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .list_pipe_rdv_entries_for_board()
+        .map_err(|e| format!("Failed to list pipe rdv entries: {}", e))
+}
+
+#[tauri::command]
 pub fn create_pipe_timeline_entry(
     db: State<'_, DbState>,
     entry: NewPipeTimelineEntry,
@@ -861,6 +873,20 @@ pub fn set_pipe_stage(
     database
         .set_pipe_stage(id, &stage, notes.as_deref(), milestone_occurred_at)
         .map_err(|e| format!("Failed to set pipe stage: {}", e))
+}
+
+#[tauri::command]
+pub fn set_pipe_etude_realisee(
+    db: State<'_, DbState>,
+    id: i64,
+    etude_realisee: bool,
+) -> Result<Pipe, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .set_pipe_etude_realisee(id, etude_realisee)
+        .map_err(|e| format!("Failed to set pipe etude realisee: {}", e))
 }
 
 #[tauri::command]

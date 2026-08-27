@@ -13,6 +13,11 @@ import {
   type PipeListSortKey,
 } from "@/lib/pipe/pipe-list-sort";
 import {
+  boardColumnMatchesPipeStageFilter,
+  resolveAffaireBoardColumn,
+} from "@/lib/pipe/pipe-board-columns";
+import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
+import {
   formatPipeParticipantsLabel,
   isPipeStage,
   isPipeType,
@@ -98,6 +103,7 @@ export interface PipeListFilterContext {
   countsByPipe: Record<number, PlacementPipeOpenCount>;
   /** Faux tant que les opérations placement ne sont pas chargées (évite faux « Journal »). */
   placementContextReady?: boolean;
+  rdvEntriesByPipeId?: Record<number, PipeTimelineEntryRecord[]>;
 }
 
 export function pipeMatchesSuiviAdvancementFilter(
@@ -175,7 +181,15 @@ export function filterPipesForList(
     }
     if (filters.stage !== "ALL") {
       if (isPipeStage(filters.stage)) {
-        if (pipe.stage !== filters.stage) return false;
+        if (pipe.pipe_type === "AFFAIRE" && context?.rdvEntriesByPipeId) {
+          const column = resolveAffaireBoardColumn(
+            pipe,
+            context.rdvEntriesByPipeId[pipe.id] ?? []
+          );
+          if (!boardColumnMatchesPipeStageFilter(column, filters.stage)) return false;
+        } else if (pipe.stage !== filters.stage) {
+          return false;
+        }
       } else if (isPipeListSuiviStepFilter(filters.stage)) {
         if (context?.placementContextReady === false) {
           // Attendre le chargement placement avant de filtrer par avancement suivi.

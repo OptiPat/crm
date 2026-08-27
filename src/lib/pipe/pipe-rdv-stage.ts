@@ -1,17 +1,28 @@
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
+import { listPipeTimelineEntries } from "@/lib/api/tauri-pipe-timeline";
 import { setPipeStage, type PipeRecord } from "@/lib/api/tauri-pipe";
-import { PIPE_RDV_CALENDAR_DURATION_SEC } from "@/lib/pipe/pipe-rdv-google-calendar";
+import {
+  resolveAffaireBoardColumn,
+  storedStageFromBoardColumn,
+  type PipeBoardColumn,
+} from "@/lib/pipe/pipe-board-columns";
+import {
+  isRdvTimelineEntryCompleted,
+  latestRdvEntryForStage,
+  rdvTimelineEntryEndAtUnix,
+} from "@/lib/pipe/pipe-rdv-completion";
 import {
   formatRdvPlanOptionLabel,
   rdvPlanOptionFromEntryTitre,
   rdvStageFromPlanOption,
 } from "@/lib/pipe/pipe-rdv-plan-option";
-import {
-  isPipeStage,
-  PIPE_LINEAR_STAGES,
-  PIPE_STAGE_LABELS,
-  type PipeStage,
-} from "@/lib/pipe/pipe-types";
+import { PIPE_STAGE_LABELS, type PipeStage } from "@/lib/pipe/pipe-types";
+
+export {
+  isRdvTimelineEntryCompleted,
+  latestRdvEntryForStage,
+  rdvTimelineEntryEndAtUnix,
+};
 
 /** Types de RDV rattachés aux étapes commerciales (extensible). */
 export const PIPE_RDV_STAGE_OPTIONS = ["R1", "R2", "R3"] as const;
@@ -48,11 +59,6 @@ export function formatRdvEntryDisplayLabel(
   return titre ? `${titre} planifié` : "RDV planifié";
 }
 
-function linearStageIndex(stage: string): number {
-  if (!isPipeStage(stage)) return -1;
-  return PIPE_LINEAR_STAGES.indexOf(stage as (typeof PIPE_LINEAR_STAGES)[number]);
-}
-
 /** Jour calendaire local (00:00) à partir d'un timestamp unix. */
 export function localDayStartFromUnix(ts: number): number {
   const d = new Date(ts * 1000);
@@ -65,34 +71,6 @@ export function isRdvStageAdvanceDue(
 ): boolean {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   return localDayStartFromUnix(occurredAtUnix) <= todayStart;
-}
-
-export function rdvTimelineEntryEndAtUnix(occurredAtUnix: number): number {
-  return occurredAtUnix + PIPE_RDV_CALENDAR_DURATION_SEC;
-}
-
-/** RDV commercial terminé (fin de créneau agenda, durée par défaut 1 h). */
-export function isRdvTimelineEntryCompleted(
-  entry: Pick<PipeTimelineEntryRecord, "entry_type" | "titre" | "occurred_at">,
-  now: Date = new Date()
-): boolean {
-  if (entry.entry_type !== "RDV") return false;
-  if (!rdvStageFromEntryTitre(entry.titre)) return false;
-  const nowUnix = Math.floor(now.getTime() / 1000);
-  return rdvTimelineEntryEndAtUnix(entry.occurred_at) <= nowUnix;
-}
-
-export function latestRdvEntryForStage(
-  entries: PipeTimelineEntryRecord[],
-  rdvStage: PipeRdvStage
-): PipeTimelineEntryRecord | null {
-  let best: PipeTimelineEntryRecord | null = null;
-  for (const entry of entries) {
-    if (entry.entry_type !== "RDV") continue;
-    if (rdvStageFromEntryTitre(entry.titre) !== rdvStage) continue;
-    if (!best || entry.occurred_at > best.occurred_at) best = entry;
-  }
-  return best;
 }
 
 /** Étape R1/R2/R3 considérée comme faite dans le stepper (dernier RDV de l'étape terminé). */
@@ -114,32 +92,43 @@ export function formatRdvScheduledAdvanceDate(occurredAtUnix: number): string {
   });
 }
 
-export function pickDueRdvStageAdvanceTarget(
-  currentStage: string,
+function notesAndMilestoneFromEntries(
   entries: PipeTimelineEntryRecord[],
-  now: Date = new Date()
-): { stage: PipeRdvStage; entry: PipeTimelineEntryRecord } | null {
-  const currentIdx = linearStageIndex(currentStage);
-  if (currentIdx < 0) return null;
-
-  let best: { stage: PipeRdvStage; entry: PipeTimelineEntryRecord; idx: number } | null =
-    null;
-
-  for (const entry of entries) {
-    if (entry.entry_type !== "RDV") continue;
-    const rdvStage = rdvStageFromEntryTitre(entry.titre);
-    if (!rdvStage) continue;
-    if (!isRdvStageAdvanceDue(entry.occurred_at, now)) continue;
-
-    const targetIdx = linearStageIndex(rdvStage);
-    if (targetIdx <= currentIdx) continue;
-
-    if (!best || targetIdx > best.idx) {
-      best = { stage: rdvStage, entry, idx: targetIdx };
+  target: PipeStage
+): { notes: string | null; milestoneOccurredAt?: number } {
+  if (isPipeRdvStage(target)) {
+    const latest = latestRdvEntryForStage(entries, target);
+    if (latest) {
+      return {
+        notes: latest.contenu?.trim() || null,
+        milestoneOccurredAt: latest.occurred_at,
+      };
     }
   }
+  const latestRdv = entries
+    .filter((entry) => entry.entry_type === "RDV")
+    .reduce<PipeTimelineEntryRecord | null>((best, entry) => {
+      if (!best || entry.occurred_at > best.occurred_at) return entry;
+      return best;
+    }, null);
+  return {
+    notes: latestRdv?.contenu?.trim() || null,
+    milestoneOccurredAt: latestRdv?.occurred_at,
+  };
+}
 
-  return best ? { stage: best.stage, entry: best.entry } : null;
+/** Rang persisté aligné sur la colonne kanban (pas le RDV le plus haut). */
+export function pickDueRdvStageAdvanceTarget(
+  currentStage: string,
+  entries: PipeTimelineEntryRecord[]
+): { stage: PipeStage; column: PipeBoardColumn } | null {
+  if (currentStage === "GAGNEE" || currentStage === "PERDUE_OU_EN_ATTENTE") {
+    return null;
+  }
+  const column = resolveAffaireBoardColumn({ stage: currentStage, pipe_type: "AFFAIRE" }, entries);
+  const target = storedStageFromBoardColumn(column);
+  if (target === currentStage) return null;
+  return { stage: target, column };
 }
 
 export async function applyDueRdvStageAdvance(
@@ -151,10 +140,10 @@ export async function applyDueRdvStageAdvance(
   const target = pickDueRdvStageAdvanceTarget(pipe.stage, entries);
   if (!target) return null;
 
-  const notes = target.entry.contenu?.trim() || null;
-  return setPipeStage(pipe.id, target.stage as PipeStage, {
+  const { notes, milestoneOccurredAt } = notesAndMilestoneFromEntries(entries, target.stage);
+  return setPipeStage(pipe.id, target.stage, {
     notes,
-    milestoneOccurredAt: target.entry.occurred_at,
+    milestoneOccurredAt,
   });
 }
 
@@ -163,27 +152,35 @@ export async function applyRdvStageOnSave(options: {
   rdvStage: PipeRdvStage;
   occurredAt: number;
   notes?: string | null;
-}): Promise<{ advanced: boolean; scheduledDateLabel?: string }> {
+  entries?: PipeTimelineEntryRecord[];
+}): Promise<{
+  advanced: boolean;
+  boardColumn?: PipeBoardColumn;
+  scheduledDateLabel?: string;
+}> {
   if (options.pipe.pipe_type !== "AFFAIRE") {
     return { advanced: false };
   }
 
-  if (!isRdvStageAdvanceDue(options.occurredAt)) {
-    return {
-      advanced: false,
-      scheduledDateLabel: formatRdvScheduledAdvanceDate(options.occurredAt),
-    };
+  const entries =
+    options.entries ?? (await listPipeTimelineEntries(options.pipe.id));
+  const column = resolveAffaireBoardColumn(options.pipe, entries);
+  const target = storedStageFromBoardColumn(column);
+  const scheduledDateLabel = isRdvStageAdvanceDue(options.occurredAt)
+    ? undefined
+    : formatRdvScheduledAdvanceDate(options.occurredAt);
+
+  if (target === options.pipe.stage) {
+    return { advanced: false, boardColumn: column, scheduledDateLabel };
   }
 
-  const currentIdx = linearStageIndex(options.pipe.stage);
-  const targetIdx = linearStageIndex(options.rdvStage);
-  if (currentIdx < 0 || targetIdx <= currentIdx) {
-    return { advanced: false };
-  }
-
-  await setPipeStage(options.pipe.id, options.rdvStage, {
+  await setPipeStage(options.pipe.id, target, {
     notes: options.notes?.trim() || null,
     milestoneOccurredAt: options.occurredAt,
   });
-  return { advanced: true };
+  return {
+    advanced: true,
+    boardColumn: column,
+    scheduledDateLabel,
+  };
 }

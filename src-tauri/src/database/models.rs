@@ -1560,6 +1560,8 @@ pub struct Pipe {
     pub parent_titre: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub archived_at: Option<i64>,
+    #[serde(default)]
+    pub etude_realisee: bool,
 }
 
 /// Entrée timeline pipe avec contexte affaire (onglet Relation client).

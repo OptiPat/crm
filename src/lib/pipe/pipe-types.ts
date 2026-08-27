@@ -31,9 +31,9 @@ export const PIPE_STAGE_LABELS: Record<PipeStage, string> = {
 /** Explications CGP pour l’UI (champ « avancement » des affaires). */
 export const PIPE_STAGE_DESCRIPTIONS: Record<PipeStage, string> = {
   PROSPECTION: "Piste identifiée, premier échange à venir ou en cours.",
-  R1: "Premier rendez-vous (découverte / qualification).",
-  R2: "Second rendez-vous (approfondissement, proposition).",
-  R3: "Troisième rendez-vous (closing ou arbitrage final).",
+  R1: "Premier rendez-vous. La carte passe en R1 positionné dès que la date est prise.",
+  R2: "Second rendez-vous. À poser avant la fin du R1.",
+  R3: "Troisième rendez-vous. À poser avant la fin du R2.",
   GAGNEE: "Accord obtenu — signature ou souscription à suivre.",
   PERDUE_OU_EN_ATTENTE: "Projet refusé, gelé ou en stand-by sans date.",
 };
@@ -102,9 +102,9 @@ export function isPipeBoardRdvDropTargetStage(stage: PipeStage): boolean {
   return stage === "R1" || stage === "R2" || stage === "R3";
 }
 
-/** Souscription partenaire Stellium sur affaire commerciale : uniquement à R3. */
+/** Souscription partenaire Stellium : colonne kanban R3 (pas le stage SQLite anticipé). */
 export function isClassicAffaireStelliumSouscriptionStage(stage: string | null | undefined): boolean {
-  return stage === "R3";
+  return stage === "R3" || stage === "R3_POSITIONNE" || stage === "R3_REALISE";
 }
 
 /** Colonnes kanban où le dépôt par glisser-déposer est autorisé. */

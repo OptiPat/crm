@@ -4,7 +4,7 @@ import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import { isVersementComplementaireAffaire } from "@/lib/pipe/pipe-suivi";
 import { applyDueRdvStageAdvance } from "@/lib/pipe/pipe-rdv-stage";
 
-/** Applique les passages d'étape dus via RDV planifiés (jour J ou passé). */
+/** Applique le rang commercial dès qu'un RDV R1/R2/R3 est enregistré (même futur). */
 export function usePipeRdvStageSync(
   pipe: Pick<PipeRecord, "id" | "stage" | "pipe_type" | "parent_pipe_id" | "titre"> | null,
   entries: PipeTimelineEntryRecord[],

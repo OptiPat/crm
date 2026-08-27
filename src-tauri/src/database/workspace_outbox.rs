@@ -171,7 +171,27 @@ fn autoincrement_primary_key(
     Ok(Some(primary_key[0].name.clone()))
 }
 
+fn drop_existing_outbox_triggers(conn: &Connection, table: &str) -> Result<()> {
+    let prefix = format!("workspace_outbox_{}", table.replace('-', "_"));
+    let pattern = format!("{prefix}%");
+    let mut stmt = conn.prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE ?1",
+    )?;
+    let names: Vec<String> = stmt
+        .query_map(params![pattern], |row| row.get(0))?
+        .collect::<Result<Vec<_>>>()?;
+    drop(stmt);
+    for name in names {
+        conn.execute(
+            &format!("DROP TRIGGER IF EXISTS {}", quote_identifier(&name)),
+            [],
+        )?;
+    }
+    Ok(())
+}
+
 fn install_table_triggers(conn: &Connection, table: &str) -> Result<()> {
+    drop_existing_outbox_triggers(conn, table)?;
     let columns = table_columns(conn, table)?;
     if columns
         .iter()
@@ -613,6 +633,24 @@ mod tests {
                 .and_then(|value| value.get("value"))
                 .and_then(serde_json::Value::as_str),
             Some("workspace-document://1")
+        );
+    }
+
+    #[test]
+    fn pipes_outbox_trigger_payload_includes_etude_realisee() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let sql: String = db
+            .connection()
+            .query_row(
+                "SELECT sql FROM sqlite_master
+                 WHERE type = 'trigger' AND name = 'workspace_outbox_pipes_ai'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            sql.contains("etude_realisee"),
+            "trigger pipes doit inclure etude_realisee: {sql}"
         );
     }
 

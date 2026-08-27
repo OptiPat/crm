@@ -5,11 +5,19 @@ import {
   type PlacementBoardColumn,
 } from "@/lib/placement/placement-operation-board";
 import { placementCountsShowListBadge } from "@/lib/pipe/pipe-list-badges";
+import {
+  PIPE_BOARD_COLUMNS,
+  resolveAffaireBoardColumn,
+} from "@/lib/pipe/pipe-board-columns";
+import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import { isPipeStage, PIPE_STAGES } from "@/lib/pipe/pipe-types";
 
 /** Rang unifié hors pipeline commercial / suivi Stellium (actions ponctuelles). */
-const ACTION_ADVANCEMENT_RANK =
-  Math.max(PIPE_STAGES.length, PLACEMENT_BOARD_COLUMNS.length);
+const ACTION_ADVANCEMENT_RANK = Math.max(
+  PIPE_BOARD_COLUMNS.length,
+  PIPE_STAGES.length,
+  PLACEMENT_BOARD_COLUMNS.length
+);
 
 export type PipeListSortKey =
   | "updated_desc"
@@ -43,11 +51,19 @@ export function isPipeListSortKey(value: string): value is PipeListSortKey {
 export interface PipeListSortContext {
   columnByPipe: Record<number, { column: PlacementBoardColumn; count: number }>;
   countsByPipe: Record<number, PlacementPipeOpenCount>;
+  rdvEntriesByPipeId?: Record<number, PipeTimelineEntryRecord[]>;
 }
 
-function affaireAdvancementRank(stage: string): number {
-  if (!isPipeStage(stage)) return PIPE_STAGES.length;
-  return PIPE_STAGES.indexOf(stage);
+function affaireAdvancementRank(
+  pipe: PipeRecord,
+  rdvEntriesByPipeId?: Record<number, PipeTimelineEntryRecord[]>
+): number {
+  if (rdvEntriesByPipeId) {
+    const column = resolveAffaireBoardColumn(pipe, rdvEntriesByPipeId[pipe.id] ?? []);
+    return PIPE_BOARD_COLUMNS.indexOf(column);
+  }
+  if (!isPipeStage(pipe.stage)) return PIPE_STAGES.length;
+  return PIPE_STAGES.indexOf(pipe.stage);
 }
 
 function suiviAdvancementRank(
@@ -78,7 +94,7 @@ export function getPipeAdvancementRank(
   context: PipeListSortContext
 ): number {
   if (pipe.pipe_type === "AFFAIRE") {
-    return affaireAdvancementRank(pipe.stage);
+    return affaireAdvancementRank(pipe, context.rdvEntriesByPipeId);
   }
   if (pipe.pipe_type === "ACTE_GESTION") {
     return suiviAdvancementRank(pipe.id, context.countsByPipe, context.columnByPipe);

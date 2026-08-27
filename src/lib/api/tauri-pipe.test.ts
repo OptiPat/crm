@@ -19,4 +19,14 @@ describe("tauri-pipe", () => {
     await listPipes(true);
     expect(invoke).toHaveBeenCalledWith("list_pipes", { includeArchived: true });
   });
+
+  it("setPipeEtudeRealisee transmet etudeRealisee en camelCase (Tauri)", async () => {
+    const { setPipeEtudeRealisee } = await import("./tauri-pipe");
+    invoke.mockResolvedValue({ id: 1, etude_realisee: true });
+    await setPipeEtudeRealisee(1, true);
+    expect(invoke).toHaveBeenCalledWith("set_pipe_etude_realisee", {
+      id: 1,
+      etudeRealisee: true,
+    });
+  });
 });

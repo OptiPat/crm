@@ -1,5 +1,6 @@
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
+import { PIPE_BOARD_COLUMN_LABELS, type PipeBoardColumn } from "@/lib/pipe/pipe-board-columns";
 import { PIPE_STAGE_LABELS } from "@/lib/pipe/pipe-types";
 import type { PipeTimelineUserType } from "@/lib/pipe/pipe-timeline-types";
 import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
@@ -31,6 +32,7 @@ import { toast } from "sonner";
 export type PipeRdvStageSaveResult = {
   advanced: boolean;
   scheduledDateLabel?: string;
+  boardColumn?: PipeBoardColumn;
   calendar?: PipeRdvCalendarSyncResult;
 };
 
@@ -270,16 +272,15 @@ export function toastAfterRdvSave(
   const level = calendarToastLevel(result.calendar);
 
   if (result.advanced) {
-    toastPipeRdvOutcome(
-      `RDV enregistré — avancement : ${PIPE_STAGE_LABELS[rdvStage]}.`,
-      result.calendar,
-      level
-    );
+    const columnLabel = result.boardColumn
+      ? PIPE_BOARD_COLUMN_LABELS[result.boardColumn]
+      : PIPE_STAGE_LABELS[rdvStage];
+    toastPipeRdvOutcome(`RDV enregistré — ${columnLabel}.`, result.calendar, level);
     return;
   }
   if (result.scheduledDateLabel) {
     toastPipeRdvOutcome(
-      `RDV planifié. Passage en ${PIPE_STAGE_LABELS[rdvStage]} le ${result.scheduledDateLabel}.`,
+      `RDV planifié le ${result.scheduledDateLabel}.`,
       result.calendar,
       level
     );

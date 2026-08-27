@@ -65,6 +65,36 @@ describe("pipe-list-filters", () => {
     ).toHaveLength(1);
   });
 
+  it("filtre R1 sur les colonnes R1 positionné et R1 réalisé", () => {
+    const future = Math.floor(new Date(2026, 6, 20, 10, 0).getTime() / 1000);
+    const list = [
+      pipe({ id: 1, titre: "Avec RDV R1", stage: "PROSPECTION" }),
+      pipe({ id: 2, titre: "Sans RDV", stage: "R1" }),
+    ];
+    const matched = filterPipesForList(
+      list,
+      { ...DEFAULT_PIPE_LIST_FILTERS, stage: "R1" },
+      {
+        columnByPipe: {},
+        countsByPipe: {},
+        rdvEntriesByPipeId: {
+          1: [
+            {
+              id: 10,
+              pipe_id: 1,
+              entry_type: "RDV",
+              titre: "R1",
+              contenu: null,
+              occurred_at: future,
+              created_at: future,
+            },
+          ],
+        },
+      }
+    );
+    expect(matched.map((p) => p.id)).toEqual([1]);
+  });
+
   it("détecte les filtres actifs", () => {
     expect(hasActivePipeListFilters(DEFAULT_PIPE_LIST_FILTERS)).toBe(false);
     expect(

@@ -135,7 +135,7 @@ export function PipeProspectionContactSection({
         className={
           layout === "stack"
             ? "grid grid-cols-1 gap-3"
-            : "grid gap-2 sm:grid-cols-2 sm:gap-3"
+            : "grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2"
         }
       >
         <div className="space-y-1 min-w-0">

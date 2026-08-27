@@ -148,7 +148,16 @@ export function listMissingR1ChecklistLabels(
 }
 
 export function isR1ChecklistPastStage(stage: string): boolean {
-  return stage === "R2" || stage === "R3" || stage === "GAGNEE" || stage === "PERDUE_OU_EN_ATTENTE";
+  return (
+    stage === "R2" ||
+    stage === "R3" ||
+    stage === "GAGNEE" ||
+    stage === "PERDUE_OU_EN_ATTENTE" ||
+    stage === "R2_POSITIONNE" ||
+    stage === "R2_REALISE" ||
+    stage === "R3_POSITIONNE" ||
+    stage === "R3_REALISE"
+  );
 }
 
 /** Checklist visible dès qu'un RDV R1 est planifié (y compris en prospection). */

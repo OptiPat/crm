@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Briefcase, ClipboardList } from "lucide-react";
-import { listPipes, getPipeById, type PipeRecord } from "@/lib/api/tauri-pipe";
+import { listPipes, getPipeById, setPipeEtudeRealisee, type PipeRecord } from "@/lib/api/tauri-pipe";
+import { listPipeRdvEntriesForBoard, type PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import {
   dismissPlacementOperation,
   getPlacementOpenCountsByPipe,
@@ -36,6 +37,11 @@ import {
 import { buildSuiviPlacementColumnByPipe } from "@/lib/pipe/pipe-list-badges";
 import { sortPipesForList } from "@/lib/pipe/pipe-list-sort";
 import { resolvePipeBoardStageDrop } from "@/lib/pipe/pipe-board-stage-actions";
+import {
+  groupRdvEntriesByPipeId,
+  resolveAffaireBoardColumn,
+  type PipeBoardColumn,
+} from "@/lib/pipe/pipe-board-columns";
 import { confirmDiscardPipeFormEdits } from "@/lib/pipe/pipe-form-dirty";
 import { trackVersementAffaireOnPipeCreate } from "@/lib/placement/pipe-placement-tracking";
 import { type PipeStage, type PipeType } from "@/lib/pipe/pipe-types";
@@ -76,6 +82,9 @@ type PanelMode = "empty" | "create" | "view" | "edit";
 
 export function Pipe() {
   const [pipes, setPipes] = useState<PipeRecord[]>([]);
+  const [rdvEntriesByPipeId, setRdvEntriesByPipeId] = useState<
+    Record<number, PipeTimelineEntryRecord[]>
+  >({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [section, setSection] = useState<PipeSection>(() => loadPipeSection());
@@ -267,10 +276,12 @@ export function Pipe() {
       columnByPipe: suiviColumnByPipe,
       countsByPipe: placementCountsByPipe,
       placementContextReady: !placementBoardLoading,
+      rdvEntriesByPipeId,
     });
     return sortPipesForList(filtered, listFilters.sort, {
       columnByPipe: suiviColumnByPipe,
       countsByPipe: placementCountsByPipe,
+      rdvEntriesByPipeId,
     });
   }, [
     activePipes,
@@ -278,6 +289,7 @@ export function Pipe() {
     suiviColumnByPipe,
     placementCountsByPipe,
     placementBoardLoading,
+    rdvEntriesByPipeId,
   ]);
 
   const setListFiltersPersisted = (filters: PipeListFilters) => {
@@ -343,11 +355,15 @@ export function Pipe() {
     const includeArchived = options?.includeArchived ?? showArchived;
     try {
       setError(null);
-      const rows = await listPipes(includeArchived);
+      const [rows, rdvRows] = await Promise.all([
+        listPipes(includeArchived),
+        listPipeRdvEntriesForBoard(),
+      ]);
       if (generation !== loadPipesGenerationRef.current) return;
 
       setPipes(rows);
       pipesRef.current = rows;
+      setRdvEntriesByPipeId(groupRdvEntriesByPipeId(rdvRows));
 
       const focusId = pendingPipeFocusRef.current ?? peekPipeFocusId();
       pendingPipeFocusRef.current = null;
@@ -599,8 +615,9 @@ export function Pipe() {
     }
   };
 
-  const handleRequestStageChange = (pipe: PipeRecord, target: PipeStage) => {
-    const action = resolvePipeBoardStageDrop(pipe, target);
+  const handleRequestStageChange = (pipe: PipeRecord, target: PipeBoardColumn) => {
+    const current = resolveAffaireBoardColumn(pipe, rdvEntriesByPipeId[pipe.id] ?? []);
+    const action = resolvePipeBoardStageDrop(current, target);
     const isDirty = panelMode === "edit" && formIsDirtyRef.current;
     if (action.kind === "plan-rdv") {
       openRdvPlanifier(pipe, defaultPlanOptionForRdvStage(action.rdvStage), { isDirty });
@@ -611,6 +628,26 @@ export function Pipe() {
       if (panelMode === "edit") setPanelMode("view");
       stageAdvance.requestStageChange(pipe.id, action.stage, pipe.titre);
     }
+  };
+
+  const handleToggleEtudeRealisee = (pipe: PipeRecord, checked: boolean) => {
+    setPipes((prev) =>
+      prev.map((row) => (row.id === pipe.id ? { ...row, etude_realisee: checked } : row))
+    );
+    setSelectedPipe((prev) =>
+      prev && prev.id === pipe.id ? { ...prev, etude_realisee: checked } : prev
+    );
+    void setPipeEtudeRealisee(pipe.id, checked).catch(() => {
+      setPipes((prev) =>
+        prev.map((row) =>
+          row.id === pipe.id ? { ...row, etude_realisee: pipe.etude_realisee } : row
+        )
+      );
+      setSelectedPipe((prev) =>
+        prev && prev.id === pipe.id ? { ...prev, etude_realisee: pipe.etude_realisee } : prev
+      );
+      toast.error("Impossible d'enregistrer l'étude réalisée.");
+    });
   };
 
   const handleRequestRdvStageFromForm = (stage: PipeRdvStage, options: { isDirty: boolean }) => {
@@ -758,10 +795,12 @@ export function Pipe() {
               <PipeBoard
                 affaires={affaires}
                 selectedId={selectedPipe?.id ?? null}
+                rdvEntriesByPipeId={rdvEntriesByPipeId}
                 onSelect={openView}
-                onRequestStageChange={(pipe, stage) =>
-                  void handleRequestStageChange(pipe, stage)
+                onRequestStageChange={(pipe, column) =>
+                  void handleRequestStageChange(pipe, column)
                 }
+                onToggleEtudeRealisee={handleToggleEtudeRealisee}
               />
             )}
           </div>
@@ -808,6 +847,7 @@ export function Pipe() {
                   r1MissingByPipeId={r1MissingByPipeId}
                   r3MissingByPipeId={r3MissingByPipeId}
                   r3ImmoMissingByPipeId={r3ImmoMissingByPipeId}
+                  rdvEntriesByPipeId={rdvEntriesByPipeId}
                 />
               )}
             </div>

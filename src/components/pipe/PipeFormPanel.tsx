@@ -664,7 +664,7 @@ export function PipeFormPanel({
             <p className="text-xs text-muted-foreground -mt-1">
               {pipe
                 ? "Où en est cette affaire dans le cycle commercial (uniquement pour les affaires)."
-                : "Étape de départ — client déjà vu (R1/R2 faits) : choisissez R2 ou R3 directement."}
+                : "Étape de départ — R2 ou R3 si ces RDV sont déjà faits (sans date, la carte attend en réalisé). R1 sans date reste en Prospection."}
             </p>
             <div className="space-y-2">
               {PIPE_STAGES.map((stage) => {

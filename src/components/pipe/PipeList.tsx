@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
+import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import { formatPipeParticipantsLabel } from "@/lib/pipe/pipe-types";
 import { isPipeArchived } from "@/lib/pipe/pipe-board-utils";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +35,7 @@ interface PipeListProps {
   r1MissingByPipeId?: Record<number, string[]>;
   r3MissingByPipeId?: Record<number, string[]>;
   r3ImmoMissingByPipeId?: Record<number, string[]>;
+  rdvEntriesByPipeId?: Record<number, PipeTimelineEntryRecord[]>;
 }
 
 export function PipeList({
@@ -45,6 +47,7 @@ export function PipeList({
   r1MissingByPipeId = {},
   r3MissingByPipeId = {},
   r3ImmoMissingByPipeId = {},
+  rdvEntriesByPipeId = {},
 }: PipeListProps) {
   if (pipes.length === 0) {
     return (
@@ -83,7 +86,11 @@ export function PipeList({
                 </Badge>
               ) : null}
               {pipe.pipe_type === "AFFAIRE" ? (
-                <PipeStageBadge stage={pipe.stage} pipe={pipe} />
+                <PipeStageBadge
+                  stage={pipe.stage}
+                  pipe={pipe}
+                  timelineEntries={rdvEntriesByPipeId[pipe.id] ?? []}
+                />
               ) : null}
               {pipe.pipe_type === "AFFAIRE" && r1MissingByPipeId[pipe.id]?.length ? (
                 <PipeR1MissingDocsBadge

@@ -53,6 +53,7 @@ describe("pipe-types", () => {
     expect(isManualPipeStageChangeAllowed("R1")).toBe(false);
     expect(isPipeBoardRdvDropTargetStage("R2")).toBe(true);
     expect(isClassicAffaireStelliumSouscriptionStage("R3")).toBe(true);
+    expect(isClassicAffaireStelliumSouscriptionStage("R3_POSITIONNE")).toBe(true);
     expect(isClassicAffaireStelliumSouscriptionStage("R2")).toBe(false);
     expect(isPipeBoardRdvDropTargetStage("GAGNEE")).toBe(false);
     expect(isPipeBoardDropTargetStage("PERDUE_OU_EN_ATTENTE")).toBe(true);

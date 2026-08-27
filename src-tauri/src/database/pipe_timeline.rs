@@ -176,6 +176,17 @@ impl super::Database {
         rows.collect()
     }
 
+    pub fn list_pipe_rdv_entries_for_board(&self) -> Result<Vec<super::models::PipeTimelineEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, pipe_id, entry_type, titre, NULL AS contenu, occurred_at, created_at, google_event_id
+             FROM pipe_timeline_entries
+             WHERE entry_type = ?1
+             ORDER BY pipe_id ASC, occurred_at DESC, id DESC",
+        )?;
+        let rows = stmt.query_map(params![TIMELINE_RDV], map_timeline_row)?;
+        rows.collect()
+    }
+
     pub fn create_pipe_timeline_entry(
         &self,
         input: super::models::NewPipeTimelineEntry,
@@ -640,5 +651,54 @@ mod tests {
         assert_eq!(updated.titre.as_deref(), Some("Appel corrigé"));
         assert_eq!(updated.contenu.as_deref(), Some("CR mis à jour"));
         assert_eq!(updated.occurred_at, 1_700_000_000);
+    }
+
+    #[test]
+    fn list_pipe_rdv_entries_for_board_filters_rdv_only() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = db
+            .create_contact(NewContact {
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                categorie: "PROSPECT_CLIENT".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("contact id");
+
+        let pipe = db
+            .create_pipe(NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Affaire".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+
+        db.create_pipe_timeline_entry(NewPipeTimelineEntry {
+            pipe_id: pipe.id,
+            entry_type: TIMELINE_APPEL.into(),
+            titre: Some("Appel".into()),
+            contenu: None,
+            occurred_at: None,
+        })
+        .unwrap();
+        db.create_pipe_timeline_entry(NewPipeTimelineEntry {
+            pipe_id: pipe.id,
+            entry_type: TIMELINE_RDV.into(),
+            titre: Some("R1".into()),
+            contenu: None,
+            occurred_at: Some(1_700_000_100),
+        })
+        .unwrap();
+
+        let rdvs = db.list_pipe_rdv_entries_for_board().unwrap();
+        assert_eq!(rdvs.len(), 1);
+        assert_eq!(rdvs[0].pipe_id, pipe.id);
+        assert_eq!(rdvs[0].titre.as_deref(), Some("R1"));
     }
 }

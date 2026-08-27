@@ -1,10 +1,11 @@
-import type { PipeRecord } from "@/lib/api/tauri-pipe";
+import type { PipeBoardColumn } from "@/lib/pipe/pipe-board-columns";
 import {
-  isManualPipeStageChangeAllowed,
-  isPipeBoardRdvDropTargetStage,
-  type PipeStage,
-} from "@/lib/pipe/pipe-types";
-import { isPipeRdvStage, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+  isPipeBoardManualDropTargetColumn,
+  isPipeBoardRdvDropTargetColumn,
+  rdvStageFromBoardColumn,
+} from "@/lib/pipe/pipe-board-columns";
+import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+import type { PipeStage } from "@/lib/pipe/pipe-types";
 
 export type PipeBoardStageDropAction =
   | { kind: "ignore" }
@@ -12,14 +13,15 @@ export type PipeBoardStageDropAction =
   | { kind: "manual-advance"; stage: PipeStage };
 
 export function resolvePipeBoardStageDrop(
-  pipe: Pick<PipeRecord, "stage">,
-  target: PipeStage
+  currentColumn: PipeBoardColumn,
+  target: PipeBoardColumn
 ): PipeBoardStageDropAction {
-  if (pipe.stage === target) return { kind: "ignore" };
-  if (isPipeBoardRdvDropTargetStage(target) && isPipeRdvStage(target)) {
-    return { kind: "plan-rdv", rdvStage: target };
+  if (currentColumn === target) return { kind: "ignore" };
+  if (isPipeBoardRdvDropTargetColumn(target)) {
+    const rdvStage = rdvStageFromBoardColumn(target);
+    if (rdvStage) return { kind: "plan-rdv", rdvStage };
   }
-  if (isManualPipeStageChangeAllowed(target)) {
+  if (isPipeBoardManualDropTargetColumn(target)) {
     return { kind: "manual-advance", stage: target };
   }
   return { kind: "ignore" };

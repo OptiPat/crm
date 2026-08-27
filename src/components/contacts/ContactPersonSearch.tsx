@@ -79,7 +79,7 @@ export function ContactPersonSearch({
       {label ? <Label>{label}</Label> : null}
       {hint ? <p className="text-xs text-muted-foreground -mt-1">{hint}</p> : null}
 
-      <div className="flex gap-2">
+      <div className="flex min-w-0 w-full gap-2">
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <Button
@@ -87,7 +87,7 @@ export function ContactPersonSearch({
               variant="outline"
               role="combobox"
               aria-expanded={open}
-              className="flex-1 justify-between font-normal"
+              className="min-w-0 flex-1 justify-between font-normal"
             >
               {selected ? (
                 <span className="truncate text-left">

@@ -19,6 +19,7 @@ import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { deletePipe, archivePipe, unarchivePipe, type PipeRecord } from "@/lib/api/tauri-pipe";
 import { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { usePipeRdvStageSync } from "@/hooks/usePipeRdvStageSync";
+import { resolveAffaireBoardColumn } from "@/lib/pipe/pipe-board-columns";
 import {
   formatPipeParticipantsLabel,
   isClassicAffaireStelliumSouscriptionStage,
@@ -104,6 +105,11 @@ export function PipeDetailPanel({
 
   usePipeRdvStageSync(pipe, timeline.entries, timeline.loading);
 
+  const affaireBoardColumn =
+    pipe.pipe_type === "AFFAIRE"
+      ? resolveAffaireBoardColumn(pipe, timeline.entries)
+      : null;
+
   const isArchived = pipe.archived_at != null && pipe.archived_at > 0;
 
   const handleArchive = async () => {
@@ -174,7 +180,7 @@ export function PipeDetailPanel({
   const showClassicAffaireStelliumSouscription =
     showAffairePlacementSection &&
     !isVersementAffaire &&
-    isClassicAffaireStelliumSouscriptionStage(pipe.stage);
+    isClassicAffaireStelliumSouscriptionStage(affaireBoardColumn ?? pipe.stage);
 
   const showR1DocumentChecklist =
     isPipeType(pipe.pipe_type) &&
@@ -308,7 +314,13 @@ export function PipeDetailPanel({
           <div className="min-w-0 space-y-2 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <PipeTypeBadge pipeType={pipe.pipe_type} />
-              {pipe.stage ? <PipeStageBadge stage={pipe.stage} pipe={pipe} /> : null}
+              {pipe.stage ? (
+                <PipeStageBadge
+                  stage={pipe.stage}
+                  pipe={pipe}
+                  timelineEntries={timeline.loading ? undefined : timeline.entries}
+                />
+              ) : null}
               {showR1DocumentChecklist ? (
                 <PipeR1MissingDocsBadge
                   checklist={r1Documents.checklist}
@@ -469,7 +481,7 @@ export function PipeDetailPanel({
             {showR1DocumentChecklist ? (
               <PipeR1DocumentChecklist
                 pipeId={pipe.id}
-                stage={pipe.stage}
+                stage={affaireBoardColumn ?? pipe.stage}
                 contactId={pipe.contact_id}
                 checklist={r1Documents.checklist}
                 documents={r1Documents.documents}
@@ -514,7 +526,7 @@ export function PipeDetailPanel({
 
             {showProspectionFields && (
               <div ref={prospectionRef} id="pipe-prospection-section">
-                <PipeProspectionContactSection contactId={pipe.contact_id} />
+                <PipeProspectionContactSection contactId={pipe.contact_id} layout="stack" />
               </div>
             )}
 

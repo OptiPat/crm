@@ -77,7 +77,9 @@ describe("r1-document-checklist", () => {
 
   it("détecte les étapes post-R1", () => {
     expect(isR1ChecklistPastStage("R1")).toBe(false);
+    expect(isR1ChecklistPastStage("R1_POSITIONNE")).toBe(false);
     expect(isR1ChecklistPastStage("R2")).toBe(true);
+    expect(isR1ChecklistPastStage("R2_POSITIONNE")).toBe(true);
     expect(isR1ChecklistPastStage("GAGNEE")).toBe(true);
   });
 
