@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
+  filterAvPerVersementProgrammeKpiInvestissements,
   filterDashboardVersementProgrammeKpiInvestissements,
+  filterScpiVersementProgrammeKpiInvestissements,
   listDashboardVersementProgrammeKpiInvestissements,
 } from "./dashboard-versements-kpi";
 import type { InvestissementWithDetails } from "@/lib/api/tauri-investissements";
@@ -41,6 +43,20 @@ describe("dashboard-versements-kpi", () => {
         inv({ id: 2, contact_id: 2, origine: "EXISTANT_CLIENT" }),
       ])
     ).toHaveLength(0);
+  });
+
+  it("sépare le VP moyen AV/PER du VP SCPI", () => {
+    const rows = [
+      inv({ id: 1, contact_id: 1, type_produit: "ASSURANCE_VIE" }),
+      inv({ id: 2, contact_id: 2, type_produit: "PER" }),
+      inv({ id: 3, contact_id: 3, type_produit: "SCPI" }),
+      inv({ id: 4, contact_id: 4, type_produit: "CONTRAT_CAPITALISATION" }),
+      inv({ id: 5, contact_id: 5, type_produit: "SCPI_FISCALE" }),
+    ];
+    expect(filterAvPerVersementProgrammeKpiInvestissements(rows).map((row) => row.id)).toEqual([
+      1, 2,
+    ]);
+    expect(filterScpiVersementProgrammeKpiInvestissements(rows).map((row) => row.id)).toEqual([3]);
   });
 
   it("trie par montant annuel decroissant", () => {

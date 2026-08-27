@@ -13,7 +13,11 @@ import {
   type InvestissementWithDetails,
 } from "@/lib/api/tauri-investissements";
 import { filterDashboardImmobilierKpiInvestissements } from "@/lib/dashboard/dashboard-immobilier-kpi";
-import { listDashboardVersementProgrammeKpiInvestissements } from "@/lib/dashboard/dashboard-versements-kpi";
+import {
+  listAvPerVersementProgrammeKpiInvestissements,
+  listDashboardVersementProgrammeKpiInvestissements,
+  listScpiVersementProgrammeKpiInvestissements,
+} from "@/lib/dashboard/dashboard-versements-kpi";
 import { listEncoursPlacementsAvecMoi } from "@/lib/investissements/investissement-encours";
 import {
   formatNomProduit,
@@ -27,10 +31,16 @@ import {
   investissementOwnerLabel,
   placementsInvestissementSubtitle,
   sortInvestissementsByOwnerThenName,
+  versementsInvestissementMensuelSubtitle,
   versementsInvestissementSubtitle,
 } from "./dashboard-investissements-sheet-utils";
 
-export type DashboardInvestissementsSheetVariant = "immo" | "placements" | "versements";
+export type DashboardInvestissementsSheetVariant =
+  | "immo"
+  | "placements"
+  | "versements"
+  | "versements_av_per"
+  | "versements_scpi";
 
 const VARIANT_CONFIG: Record<
   DashboardInvestissementsSheetVariant,
@@ -65,6 +75,22 @@ const VARIANT_CONFIG: Record<
     icon: CalendarClock,
     loadError: "Erreur chargement versements programmés dashboard:",
   },
+  versements_av_per: {
+    title: "VP moyen AV / PER",
+    description:
+      "Contrats AV et PER avec versement programmé actif « avec moi » — équivalent mensuel.",
+    empty: "Aucun VP AV / PER",
+    icon: CalendarClock,
+    loadError: "Erreur chargement versement programmé moyen AV/PER:",
+  },
+  versements_scpi: {
+    title: "VP moyen SCPI",
+    description:
+      "SCPI avec versement programmé actif « avec moi » — équivalent mensuel.",
+    empty: "Aucun VP SCPI",
+    icon: CalendarClock,
+    loadError: "Erreur chargement versement programmé moyen SCPI:",
+  },
 };
 
 function loadVariantItems(
@@ -78,6 +104,10 @@ function loadVariantItems(
       return listEncoursPlacementsAvecMoi(all);
     case "versements":
       return listDashboardVersementProgrammeKpiInvestissements(all);
+    case "versements_av_per":
+      return listAvPerVersementProgrammeKpiInvestissements(all);
+    case "versements_scpi":
+      return listScpiVersementProgrammeKpiInvestissements(all);
   }
 }
 
@@ -92,6 +122,9 @@ function itemSubtitle(
       return placementsInvestissementSubtitle(inv);
     case "versements":
       return versementsInvestissementSubtitle(inv);
+    case "versements_av_per":
+    case "versements_scpi":
+      return versementsInvestissementMensuelSubtitle(inv);
   }
 }
 

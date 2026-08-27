@@ -17,6 +17,8 @@ export type StatistiquesPanelId =
   | "age_filleul"
   | "client_encours_placements"
   | "client_versements_programmes"
+  | "client_vp_moyen"
+  | "client_vp_moyen_scpi"
   | "client_panier_moyen"
   | "client_assurance_vie"
   | "client_scpi"
@@ -136,6 +138,8 @@ export const STATISTIQUES_PANELS_BY_SECTION: Record<
     "prescripteur_conversion_client",
     "client_encours_placements",
     "client_versements_programmes",
+    "client_vp_moyen",
+    "client_vp_moyen_scpi",
     "client_panier_moyen",
     "client_assurance_vie",
     "client_scpi",

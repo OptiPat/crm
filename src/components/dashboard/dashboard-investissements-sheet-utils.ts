@@ -2,7 +2,7 @@ import type { InvestissementWithDetails } from "@/lib/api/tauri-investissements"
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { formatEuroCentimes, formatNomProduit } from "@/lib/investissements/investissement-display";
 import { getEffectiveEncoursCentimes } from "@/lib/investissements/investissement-encours";
-import { versementProgrammeAnnuelCentimes } from "@/lib/investissements/investissement-versements";
+import { versementProgrammeAnnuelCentimes, versementProgrammeMensuelCentimes } from "@/lib/investissements/investissement-versements";
 
 const FREQUENCE_LABELS: Record<string, string> = {
   MENSUEL: "mois",
@@ -53,6 +53,22 @@ export function versementsInvestissementSubtitle(inv: InvestissementWithDetails)
     formatNomProduit(inv.type_produit),
     `${formatEuroCentimes(montant)} / ${freqLabel}`,
     `${formatEuroCentimes(annuel)} / an`,
+  ].join(" · ");
+}
+
+export function versementsInvestissementMensuelSubtitle(inv: InvestissementWithDetails): string {
+  const montant = inv.montant_versement_programme ?? 0;
+  const freqKey = inv.frequence_versement ?? "MENSUEL";
+  const freqLabel = FREQUENCE_LABELS[freqKey] ?? "mois";
+  const mensuel = versementProgrammeMensuelCentimes(montant, inv.frequence_versement);
+  const isMonthly = freqKey === "MENSUEL" || !FREQUENCE_LABELS[inv.frequence_versement ?? ""];
+  if (isMonthly) {
+    return [formatNomProduit(inv.type_produit), `${formatEuroCentimes(montant)} / mois`].join(" · ");
+  }
+  return [
+    formatNomProduit(inv.type_produit),
+    `${formatEuroCentimes(montant)} / ${freqLabel}`,
+    `${formatEuroCentimes(mensuel)} / mois`,
   ].join(" · ");
 }
 

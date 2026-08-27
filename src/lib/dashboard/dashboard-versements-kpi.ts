@@ -1,21 +1,24 @@
 import type { InvestissementWithDetails } from "@/lib/api/tauri-investissements";
 import {
   hasActiveVersementProgramme,
+  isAvPerType,
   versementProgrammeAnnuelCentimes,
 } from "@/lib/investissements/investissement-versements";
 import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
 
+type VersementProgrammeKpiFields = {
+  origine?: string;
+  statut?: string;
+  type_produit?: string;
+  versement_programme?: boolean;
+  montant_versement_programme?: number | null;
+  contact_id?: number | null;
+  foyer_id?: number | null;
+};
+
 /** Aligné sur `dashboard_stats.rs` — KPI « Versements programmés » (tous types produits). */
 export function isDashboardVersementProgrammeKpiInvestissement(
-  inv: Pick<
-    InvestissementWithDetails,
-    | "origine"
-    | "statut"
-    | "versement_programme"
-    | "montant_versement_programme"
-    | "contact_id"
-    | "foyer_id"
-  >
+  inv: VersementProgrammeKpiFields
 ): boolean {
   if (inv.origine !== "MON_CONSEIL") return false;
   if (!isInvestissementActifEncours(inv)) return false;
@@ -51,5 +54,45 @@ export function listDashboardVersementProgrammeKpiInvestissements(
 ): InvestissementWithDetails[] {
   return sortVersementProgrammeKpiByAnnuelDesc(
     filterDashboardVersementProgrammeKpiInvestissements(items)
+  );
+}
+
+export function isAvPerVersementProgrammeKpiInvestissement(
+  inv: VersementProgrammeKpiFields
+): boolean {
+  return isDashboardVersementProgrammeKpiInvestissement(inv) && isAvPerType(inv.type_produit);
+}
+
+export function isScpiVersementProgrammeKpiInvestissement(
+  inv: VersementProgrammeKpiFields
+): boolean {
+  return isDashboardVersementProgrammeKpiInvestissement(inv) && inv.type_produit === "SCPI";
+}
+
+export function filterAvPerVersementProgrammeKpiInvestissements(
+  items: InvestissementWithDetails[]
+): InvestissementWithDetails[] {
+  return items.filter(isAvPerVersementProgrammeKpiInvestissement);
+}
+
+export function filterScpiVersementProgrammeKpiInvestissements(
+  items: InvestissementWithDetails[]
+): InvestissementWithDetails[] {
+  return items.filter(isScpiVersementProgrammeKpiInvestissement);
+}
+
+export function listAvPerVersementProgrammeKpiInvestissements(
+  items: InvestissementWithDetails[]
+): InvestissementWithDetails[] {
+  return sortVersementProgrammeKpiByAnnuelDesc(
+    filterAvPerVersementProgrammeKpiInvestissements(items)
+  );
+}
+
+export function listScpiVersementProgrammeKpiInvestissements(
+  items: InvestissementWithDetails[]
+): InvestissementWithDetails[] {
+  return sortVersementProgrammeKpiByAnnuelDesc(
+    filterScpiVersementProgrammeKpiInvestissements(items)
   );
 }

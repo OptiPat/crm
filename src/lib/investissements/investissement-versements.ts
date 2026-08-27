@@ -131,6 +131,14 @@ export function versementProgrammeAnnuelCentimes(
   }
 }
 
+/** Équivalent mensuel en centimes. Fréquence absente ou inconnue = mensuel. */
+export function versementProgrammeMensuelCentimes(
+  montantCentimes: number,
+  frequence?: string | null
+): number {
+  return versementProgrammeAnnuelCentimes(montantCentimes, frequence) / 12;
+}
+
 export function computeVersementsProgrammesAnnuelStats(
   investissements: VersementProgrammeFields[],
   options?: { avecMoiOnly?: boolean }

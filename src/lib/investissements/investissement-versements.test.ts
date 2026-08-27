@@ -6,6 +6,7 @@ import {
   getMontantInvestiCentimes,
   isVersementComplementaireEligible,
   versementProgrammeAnnuelCentimes,
+  versementProgrammeMensuelCentimes,
 } from "./investissement-versements";
 
 describe("investissement-versements", () => {
@@ -20,6 +21,15 @@ describe("investissement-versements", () => {
     expect(versementProgrammeAnnuelCentimes(10_000, "MENSUEL")).toBe(120_000);
     expect(versementProgrammeAnnuelCentimes(10_000, "TRIMESTRIEL")).toBe(40_000);
     expect(versementProgrammeAnnuelCentimes(10_000, "ANNUEL")).toBe(10_000);
+  });
+
+  it("ramène chaque fréquence à un équivalent mensuel (défaut = mois)", () => {
+    expect(versementProgrammeMensuelCentimes(10_000, "MENSUEL")).toBe(10_000);
+    expect(versementProgrammeMensuelCentimes(10_000, null)).toBe(10_000);
+    expect(versementProgrammeMensuelCentimes(10_000, undefined)).toBe(10_000);
+    expect(versementProgrammeMensuelCentimes(30_000, "TRIMESTRIEL")).toBe(10_000);
+    expect(versementProgrammeMensuelCentimes(60_000, "SEMESTRIEL")).toBe(10_000);
+    expect(versementProgrammeMensuelCentimes(120_000, "ANNUEL")).toBe(10_000);
   });
 
   it("cumule souscription et versements complémentaires", () => {

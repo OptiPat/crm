@@ -13,6 +13,7 @@ import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { isContactEligibleForClientProductCoverageStats } from "@/lib/statistiques/contact-client-product-coverage-stats";
 import { cn } from "@/lib/utils";
 import type { StatistiquesPanelId } from "@/lib/statistiques/statistiques-page-preferences";
+import { ContactClientVpMoyenPanels } from "./ContactClientVpMoyenPanel";
 import { StatistiquesPanel } from "./statistiques-ui";
 import { toDashboardStatContactList } from "./contact-stats-panels";
 import { useStatistiquesPageData } from "./statistiques-page-data-context";
@@ -159,7 +160,24 @@ export function ContactClientPatrimoinePanels({ onNavigate }: ContactClientPatri
 
   return (
     <>
-      {PATRIMOINE_KPIS.map((config) => (
+      {PATRIMOINE_KPIS.slice(0, 2).map((config) => (
+        <PatrimoineKpiPanel
+          key={config.panelId}
+          config={config}
+          stats={stats}
+          loading={loading}
+          onDrillDown={() => {
+            if (config.drillDown === "placements" || config.drillDown === "versements") {
+              setClientsSheetOpen(false);
+              setInvestissementsSheet(config.drillDown);
+            }
+          }}
+        />
+      ))}
+
+      <ContactClientVpMoyenPanels onNavigate={onNavigate} />
+
+      {PATRIMOINE_KPIS.slice(2).map((config) => (
         <PatrimoineKpiPanel
           key={config.panelId}
           config={config}
@@ -169,11 +187,6 @@ export function ContactClientPatrimoinePanels({ onNavigate }: ContactClientPatri
             if (config.drillDown === "clients") {
               setInvestissementsSheet(null);
               setClientsSheetOpen(true);
-              return;
-            }
-            if (config.drillDown === "placements" || config.drillDown === "versements") {
-              setClientsSheetOpen(false);
-              setInvestissementsSheet(config.drillDown);
             }
           }}
         />
