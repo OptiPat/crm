@@ -553,19 +553,21 @@ export function TeamWorkspaceSettingsPanel() {
             {authorityError}
           </div>
         ) : null}
-        <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 p-4 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
-          <div className="flex gap-2">
-            <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
-            <div className="space-y-1">
-              <p className="font-medium">Identité Microsoft nominative requise</p>
-              <p className="text-xs opacity-90">
-                Utilisez un compte professionnel Microsoft 365 (tenant organisation).
-                La MFA est un prérequis côté Microsoft Entra — elle n&apos;est pas vérifiée
-                par le CRM.
-              </p>
+        {!connection?.connected ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-50">
+            <div className="flex gap-2">
+              <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
+              <div className="space-y-1">
+                <p className="font-medium">Identité Microsoft nominative requise</p>
+                <p className="text-xs">
+                  Utilisez un compte professionnel Microsoft 365 (tenant organisation).
+                  La MFA est un prérequis côté Microsoft Entra — elle n&apos;est pas vérifiée
+                  par le CRM.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        ) : null}
 
         <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
