@@ -104,7 +104,10 @@ Dans **Microsoft Entra admin center → App registrations → New registration**
    - `openid` ;
    - `email`.
 7. Accorder le consentement administrateur au tenant.
-8. Copier l'**Application (client) ID**.
+8. Dans **API permissions → SharePoint → Delegated permissions**, ajouter `AllSites.Manage`,
+   puis accorder le consentement administrateur. Sans ce droit, Provisionner échoue en 401
+   sur `CRM_Secrets` (jeton Graph refusé par l'API REST SharePoint).
+9. Copier l'**Application (client) ID**.
 
 Le Client ID est une valeur publique de configuration. Ne jamais créer ni transmettre de secret
 client pour le CRM desktop.

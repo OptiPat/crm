@@ -14,35 +14,41 @@ pub fn sharepoint_list_guid_literal(list_id: &str) -> String {
     format!("guid'{trimmed}'")
 }
 
+/// Racine `_api` du site (sans page d'accueil `/SitePages/...`).
+pub fn sharepoint_web_root(hostname: &str, site_path: &str) -> String {
+    let host = hostname
+        .trim()
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_end_matches('/');
+    let mut path = site_path.trim().trim_end_matches('/').to_string();
+    if let Some(index) = path.to_ascii_lowercase().find("/sitepages") {
+        path.truncate(index);
+        path = path.trim_end_matches('/').to_string();
+    }
+    if !path.starts_with('/') {
+        path = format!("/{path}");
+    }
+    format!("https://{host}{path}")
+}
+
 impl SharePointGraphClient {
     pub fn harden_crm_secrets_list_blocking(
         &self,
-        access_token: &str,
+        graph_token: &str,
+        rest_token: &str,
         site: &ParsedSharePointSite,
         list: &ParsedSharePointList,
         advisor_group_id: &str,
         secretary_group_id: &str,
     ) -> Result<(), String> {
-        if let Err(error) = self.hide_list_blocking(access_token, &site.id, list) {
+        if let Err(error) = self.hide_list_blocking(graph_token, &site.id, list) {
             eprintln!("⚠️ Masquage CRM_Secrets : {error}");
         }
-        let web_url = site
-            .web_url
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(|value| value.trim_end_matches('/').to_string())
-            .unwrap_or_else(|| {
-                let path = if self.site.site_path.starts_with('/') {
-                    self.site.site_path.clone()
-                } else {
-                    format!("/{}", self.site.site_path)
-                };
-                format!("https://{}{path}", self.site.hostname)
-            });
+        let web_url = sharepoint_web_root(&self.site.hostname, &self.site.site_path);
         if let Err(error) = restrict_secrets_via_sharepoint_rest(
             self.http_client(),
-            access_token,
+            rest_token,
             &web_url,
             &list.id,
             advisor_group_id,
@@ -377,6 +383,21 @@ mod tests {
         assert_eq!(
             sharepoint_list_guid_literal("{44ca0d29-33d3-47c9-8f12-eb0c46e3c7ad}"),
             "guid'44ca0d29-33d3-47c9-8f12-eb0c46e3c7ad'"
+        );
+    }
+
+    #[test]
+    fn sharepoint_web_root_strips_sitepages_homepage() {
+        assert_eq!(
+            sharepoint_web_root(
+                "actingpeople.sharepoint.com",
+                "/sites/CRMActingpeople/SitePages/CollabHome.aspx"
+            ),
+            "https://actingpeople.sharepoint.com/sites/CRMActingpeople"
+        );
+        assert_eq!(
+            sharepoint_web_root("actingpeople.sharepoint.com", "/sites/CRMActingpeople"),
+            "https://actingpeople.sharepoint.com/sites/CRMActingpeople"
         );
     }
 

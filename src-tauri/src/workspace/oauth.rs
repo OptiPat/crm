@@ -10,10 +10,27 @@ pub fn microsoft_team_oauth_tenant() -> &'static str {
     "organizations"
 }
 
+/// Scope SharePoint REST pour `breakroleinheritance` / `_api/contextinfo`.
+/// Un jeton Graph (`Sites.Selected`) est refusé par cette API (401).
+pub fn sharepoint_rest_scope(hostname: &str) -> Result<String, String> {
+    let host = hostname
+        .trim()
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_end_matches('/')
+        .to_ascii_lowercase();
+    if host.is_empty() || host.contains('/') || host.contains(' ') || !host.contains('.') {
+        return Err("Hostname SharePoint invalide pour le jeton REST.".into());
+    }
+    Ok(format!("https://{host}/AllSites.Manage"))
+}
+
 /// Scopes Graph du mode équipe, limités aux sites explicitement accordés à l'application.
 ///
 /// `Sites.Selected` ne donne aucun accès par lui-même : l'administrateur Microsoft 365
 /// doit ensuite accorder l'application au site CRM avec le rôle `write`.
+/// Le provisionnement de `CRM_Secrets` demande en plus `AllSites.Manage` (jeton SharePoint,
+/// hostname connu) — voir `sharepoint_rest_scope`.
 pub fn microsoft_team_oauth_scopes() -> &'static [&'static str] {
     &[
         "offline_access",
@@ -55,5 +72,19 @@ mod tests {
         assert_eq!(microsoft_team_flow_provider(), "microsoft_team");
         assert_ne!(microsoft_team_flow_provider(), "microsoft");
         assert_ne!(microsoft_team_flow_provider(), "microsoft_onedrive");
+    }
+
+    #[test]
+    fn sharepoint_rest_scope_uses_tenant_host_and_all_sites_manage() {
+        assert_eq!(
+            sharepoint_rest_scope(" actingpeople.sharepoint.com/ ").unwrap(),
+            "https://actingpeople.sharepoint.com/AllSites.Manage"
+        );
+        assert_eq!(
+            sharepoint_rest_scope("https://Contoso.sharepoint.com").unwrap(),
+            "https://contoso.sharepoint.com/AllSites.Manage"
+        );
+        assert!(sharepoint_rest_scope("").is_err());
+        assert!(sharepoint_rest_scope("actingpeople.sharepoint.com/sites/x").is_err());
     }
 }

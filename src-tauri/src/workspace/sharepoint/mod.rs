@@ -1,6 +1,7 @@
 mod client;
 mod conflict;
 mod rest_acl;
+mod rest_token;
 mod schema;
 mod urls;
 #[cfg(test)]
@@ -21,3 +22,4 @@ pub use schema::{
     LIST_CRM_SEQUENCES, TEAM_WORKSPACE_LISTS,
 };
 pub use urls::SharePointGraphUrls;
+pub(crate) use rest_token::exchange_sharepoint_rest_token;

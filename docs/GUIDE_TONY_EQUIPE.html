@@ -218,6 +218,7 @@
       </ul>
     </li>
     <li>Bouton <strong>Accorder le consentement administrateur</strong>. <span class="chk">☐ fait</span></li>
+    <li>Toujours dans Autorisations de l’API → <strong>SharePoint</strong> (Office 365 SharePoint Online) → Autorisations déléguées → ajouter <span class="mono">AllSites.Manage</span>. Accorder le consentement administrateur une 2ᵉ fois. Sans ça, Provisionner échoue (401 sur CRM_Secrets). <span class="chk">☐ fait</span></li>
     <li>Copier l’<strong>ID d’application (client)</strong> → page 4. Ce n’est pas un mot de passe.</li>
     <li>Ne créez <strong>aucun</strong> secret client / certificat. Le CRM n’en veut pas.</li>
   </ol>
@@ -380,6 +381,7 @@
     <tr><td>Compte Microsoft personnel refusé</td><td>Au Connecter Microsoft, choisir le compte professionnel du cabinet, pas Outlook.com / Hotmail.</td></tr>
     <tr><td>Délai de connexion Microsoft dépassé</td><td>Fermer l’onglet, valider le code à 2 facteurs plus vite, réessayer.</td></tr>
     <tr><td>Provisionner : contexte SharePoint inaccessible (411)</td><td>Bug corrigé après la version 0.5.29. Ne pas insister : attendre la mise à jour.</td></tr>
+    <tr><td>Provisionner : contexte SharePoint inaccessible (401)</td><td>Droit Entra <span class="mono">AllSites.Manage</span> manquant, ou pas reconnecté après l’avoir ajouté. Puis Provisionner.</td></tr>
     <tr><td>Plus de bouton Connecter (écran mot de passe)</td><td>Entrez le mot de passe CRM. Si <em>Reconnecter le compte Microsoft</em> apparaît : cliquez, puis déverrouillez. Si <em>Accès équipe révoqué</em> : informatique (groupes Entra / site), pas ce bouton.</td></tr>
   </table>
   <p class="footer">Ne jamais ouvrir ni modifier CRM_Secrets (liste masquée, limitée aux deux groupes). Ne jamais mettre le dossier du CRM dans OneDrive.</p>

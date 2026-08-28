@@ -268,8 +268,13 @@ pub fn provision_team_workspace(
     }
     let secrets_list = secrets_list
         .ok_or_else(|| format!("Liste SharePoint introuvable : {LIST_CRM_SECRETS}"))?;
+    let rest_token = crate::workspace::sharepoint::exchange_sharepoint_rest_token(
+        app,
+        &client.site.hostname,
+    )?;
     client.harden_crm_secrets_list_blocking(
         &connection.access_token,
+        &rest_token,
         &site,
         &secrets_list,
         advisor_group_id,

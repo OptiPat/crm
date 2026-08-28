@@ -1,6 +1,8 @@
 use super::oauth_client::build_basic_client;
 use super::oauth_store::{EmailOAuthConnection, EmailOAuthStore, OAUTH_REDIRECT_URI};
-use crate::workspace::oauth::{microsoft_team_flow_provider, microsoft_team_oauth_scopes};
+use crate::workspace::oauth::{
+    microsoft_team_flow_provider, microsoft_team_oauth_scopes, sharepoint_rest_scope,
+};
 use oauth2::reqwest::http_client;
 use oauth2::{
     AuthorizationCode, CsrfToken, PkceCodeChallenge, RedirectUrl, RequestTokenError, Scope,
@@ -300,11 +302,16 @@ pub fn run_oauth_connect(
     );
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
-    let scopes: Vec<Scope> = cfg
+    let mut scopes: Vec<Scope> = cfg
         .scopes
         .iter()
         .map(|s| Scope::new((*s).to_string()))
         .collect();
+    if team_only {
+        if let Some(hostname) = team_sharepoint_hostname(app) {
+            scopes.push(Scope::new(sharepoint_rest_scope(&hostname)?));
+        }
+    }
     let mut auth = oauth_client
         .authorize_url(CsrfToken::new_random)
         .add_scopes(scopes)
@@ -381,6 +388,22 @@ pub fn run_oauth_connect(
     store.save(app)?;
 
     Ok(connection)
+}
+
+fn team_sharepoint_hostname(app: &AppHandle) -> Option<String> {
+    use crate::commands::DbState;
+    use tauri::Manager;
+    app.try_state::<DbState>().and_then(|state| {
+        state.lock().ok().and_then(|guard| {
+            guard.as_ref().and_then(|db| {
+                db.get_workspace_config()
+                    .ok()
+                    .and_then(|config| config.site_hostname)
+                    .map(|host| host.trim().to_string())
+                    .filter(|host| !host.is_empty())
+            })
+        })
+    })
 }
 
 fn is_microsoft_oauth_provider(oauth_provider: &str) -> bool {
