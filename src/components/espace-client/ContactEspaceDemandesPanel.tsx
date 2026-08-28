@@ -32,6 +32,7 @@ import {
 import {
   ESPACE_DEMANDE_STATUT,
   formatEspaceDemandeStatut,
+  formatEspaceImportSummaryParts,
   formatEspaceTimestamp,
 } from "@/lib/espace-client/espace-client-format";
 import { cn } from "@/lib/utils";
@@ -155,26 +156,9 @@ export function ContactEspaceDemandesPanel({
     setImporting(true);
     try {
       const result = await importEspaceDepots(contactId);
-      const parts: string[] = [];
+      const parts = formatEspaceImportSummaryParts(result);
       if (result.imported > 0) {
         notifyDocumentsChanged();
-        parts.push(`${result.imported} document(s) importé(s) dans la GED`);
-      }
-      if (result.scpiDeclarationsImported > 0) {
-        parts.push(
-          `${result.scpiDeclarationsImported} mise(s) à jour importée(s)`
-        );
-      }
-      if (result.avoirsImported > 0) {
-        parts.push(`${result.avoirsImported} avoir(s) déclaré(s) importé(s)`);
-      }
-      if (result.declareClientPromoted > 0) {
-        parts.push(
-          `${result.declareClientPromoted} déclaration(s) reprise(s) à côté`
-        );
-      }
-      if (result.avoirsRetires > 0) {
-        parts.push(`${result.avoirsRetires} avoir(s) retiré(s)`);
       }
       if (parts.length > 0) {
         toast.success(parts.join(" · "));
@@ -279,7 +263,7 @@ export function ContactEspaceDemandesPanel({
           ) : (
             <FileUp className="mr-1.5 h-3.5 w-3.5" />
           )}
-          Récupérer l'espace client
+          Importer saisies client
         </Button>
       </div>
 

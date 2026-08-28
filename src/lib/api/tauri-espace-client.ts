@@ -220,6 +220,33 @@ export async function importEspaceDepots(
   return result;
 }
 
+export interface ImportEspaceDepotsAllResult {
+  total: number;
+  reussis: number;
+  imported: number;
+  scpiDeclarationsImported: number;
+  avoirsImported: number;
+  avoirsRetires: number;
+  declareClientPromoted: number;
+  echecs: string[];
+}
+
+export async function importAllEspaceDepots(): Promise<ImportEspaceDepotsAllResult> {
+  const result = await invoke<ImportEspaceDepotsAllResult>(
+    "import_all_espace_depots_cmd"
+  );
+  notifyEspaceClientChanged();
+  if (
+    result.scpiDeclarationsImported > 0 ||
+    result.avoirsImported > 0 ||
+    result.avoirsRetires > 0 ||
+    result.declareClientPromoted > 0
+  ) {
+    notifyInvestissementsChanged();
+  }
+  return result;
+}
+
 export async function getEspaceAcces(
   contactId: number
 ): Promise<EspaceAcces | null> {

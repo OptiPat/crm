@@ -71,3 +71,30 @@ const CONNEXION_EVENT_LABELS: Record<string, string> = {
 export function formatEspaceConnexionEvent(event: string): string {
   return CONNEXION_EVENT_LABELS[event] ?? event;
 }
+
+/** Compteurs d'un import portail → CRM, pour les toasts fiche et Paramètres. */
+export function formatEspaceImportSummaryParts(result: {
+  imported: number;
+  scpiDeclarationsImported: number;
+  avoirsImported: number;
+  avoirsRetires: number;
+  declareClientPromoted: number;
+}): string[] {
+  const parts: string[] = [];
+  if (result.imported > 0) {
+    parts.push(`${result.imported} document(s) importé(s) dans la GED`);
+  }
+  if (result.scpiDeclarationsImported > 0) {
+    parts.push(`${result.scpiDeclarationsImported} mise(s) à jour importée(s)`);
+  }
+  if (result.avoirsImported > 0) {
+    parts.push(`${result.avoirsImported} avoir(s) déclaré(s) importé(s)`);
+  }
+  if (result.declareClientPromoted > 0) {
+    parts.push(`${result.declareClientPromoted} déclaration(s) reprise(s) à côté`);
+  }
+  if (result.avoirsRetires > 0) {
+    parts.push(`${result.avoirsRetires} avoir(s) retiré(s)`);
+  }
+  return parts;
+}

@@ -114,7 +114,15 @@ export const PARAMETRES_SEARCH_INDEX: ParametresSearchItem[] = [
   {
     id: "espace-client-portail",
     label: "Espace client — portail et clé de synchronisation",
-    keywords: ["espace client", "portail", "clé", "synchronisation", "url"],
+    keywords: [
+      "espace client",
+      "portail",
+      "clé",
+      "synchronisation",
+      "url",
+      "importer",
+      "saisies",
+    ],
     section: "espace-client",
   },
   {

@@ -464,24 +464,18 @@ pub fn cancel_espace_demande_cmd(
     Ok(demande)
 }
 
-#[tauri::command]
-pub fn import_espace_depots_cmd(
-    app: tauri::AppHandle,
-    db: State<'_, DbState>,
-    session: State<'_, UiSessionState>,
+fn import_espace_saisies_for_contact(
+    app: &tauri::AppHandle,
+    database: &Database,
     contact_id: i64,
 ) -> Result<ImportEspaceDepotsResult, String> {
-    require_ui_session(&session)?;
-    let guard = db.lock().map_err(|e| e.to_string())?;
-    let database = guard.as_ref().ok_or("Base non ouverte")?;
-    require_espace_client_active(database)?;
-    let mut result = import_espace_depots(&app, database, contact_id)?;
-    let scpi = import_espace_scpi_declarations(&app, database, contact_id)?;
+    let mut result = import_espace_depots(app, database, contact_id)?;
+    let scpi = import_espace_scpi_declarations(app, database, contact_id)?;
     // Retraits avant déclarations : si le client a retiré puis redéclaré le
     // même produit, on clôture d'abord l'ancienne ligne, puis on en crée une
     // nouvelle. L'inverse écraserait puis clôturerait la redéclaration.
-    let retraits = import_espace_avoir_retraits(&app, database, contact_id)?;
-    let avoirs = import_espace_avoir_declarations(&app, database, contact_id)?;
+    let retraits = import_espace_avoir_retraits(app, database, contact_id)?;
+    let avoirs = import_espace_avoir_declarations(app, database, contact_id)?;
     let promoted = database
         .promote_espace_declare_client_to_existant(contact_id)
         .map_err(|e| e.to_string())?;
@@ -500,22 +494,22 @@ pub fn import_espace_depots_cmd(
         // Photo d'abord, accusé de réception ensuite : le client doit continuer
         // à voir le montant qu'il a saisi tant que le portail n'a pas reçu la
         // valeur reprise par le CRM.
-        match try_push_contact_snapshot(&app, database, contact_id) {
+        match try_push_contact_snapshot(app, database, contact_id) {
             Ok(()) => {
                 result.errors.extend(ack_espace_scpi_declarations(
-                    &app,
+                    app,
                     database,
                     contact_id,
                     &scpi.a_accuser,
                 ));
                 result.errors.extend(ack_espace_avoir_declarations(
-                    &app,
+                    app,
                     database,
                     contact_id,
                     &avoirs.a_accuser,
                 ));
                 result.errors.extend(ack_espace_avoir_retraits(
-                    &app,
+                    app,
                     database,
                     contact_id,
                     &retraits.a_accuser,
@@ -527,6 +521,91 @@ pub fn import_espace_depots_cmd(
         }
     }
     Ok(result)
+}
+
+#[tauri::command]
+pub fn import_espace_depots_cmd(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+    contact_id: i64,
+) -> Result<ImportEspaceDepotsResult, String> {
+    require_ui_session(&session)?;
+    let guard = db.lock().map_err(|e| e.to_string())?;
+    let database = guard.as_ref().ok_or("Base non ouverte")?;
+    require_espace_client_active(database)?;
+    import_espace_saisies_for_contact(&app, database, contact_id)
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportEspaceDepotsAllResult {
+    pub total: usize,
+    pub reussis: usize,
+    pub imported: usize,
+    pub scpi_declarations_imported: usize,
+    pub avoirs_imported: usize,
+    pub avoirs_retires: usize,
+    pub declare_client_promoted: usize,
+    pub echecs: Vec<String>,
+}
+
+#[tauri::command]
+pub fn import_all_espace_depots_cmd(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    session: State<'_, UiSessionState>,
+) -> Result<ImportEspaceDepotsAllResult, String> {
+    require_ui_session(&session)?;
+    let contacts = {
+        let guard = db.lock().map_err(|e| e.to_string())?;
+        let database = guard.as_ref().ok_or("Base non ouverte")?;
+        require_espace_client_active(database)?;
+        database
+            .list_espace_contacts_actifs()
+            .map_err(|e| e.to_string())?
+    };
+
+    let mut reussis = 0usize;
+    let mut imported = 0usize;
+    let mut scpi_declarations_imported = 0usize;
+    let mut avoirs_imported = 0usize;
+    let mut avoirs_retires = 0usize;
+    let mut declare_client_promoted = 0usize;
+    let mut echecs = Vec::new();
+
+    for contact_id in &contacts {
+        let one = {
+            let guard = db.lock().map_err(|e| e.to_string())?;
+            let database = guard.as_ref().ok_or("Base non ouverte")?;
+            import_espace_saisies_for_contact(&app, database, *contact_id)
+        };
+        match one {
+            Ok(result) => {
+                reussis += 1;
+                imported += result.imported;
+                scpi_declarations_imported += result.scpi_declarations_imported;
+                avoirs_imported += result.avoirs_imported;
+                avoirs_retires += result.avoirs_retires;
+                declare_client_promoted += result.declare_client_promoted;
+                for error in result.errors {
+                    echecs.push(format!("contact {contact_id} : {error}"));
+                }
+            }
+            Err(error) => echecs.push(format!("contact {contact_id} : {error}")),
+        }
+    }
+
+    Ok(ImportEspaceDepotsAllResult {
+        total: contacts.len(),
+        reussis,
+        imported,
+        scpi_declarations_imported,
+        avoirs_imported,
+        avoirs_retires,
+        declare_client_promoted,
+        echecs,
+    })
 }
 
 #[tauri::command]
