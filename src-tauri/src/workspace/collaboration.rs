@@ -280,7 +280,14 @@ pub fn provision_team_workspace(
         advisor_group_id,
         secretary_group_id,
     )?;
-    fetch_or_create_team_cache_dek(&client, &connection.access_token, &site.id)?;
+    fetch_or_create_team_cache_dek(&client, &connection.access_token, &site.id).map_err(
+        |error| {
+            format!(
+                "Les listes existent mais la clé n'a pas pu être écrite dans CRM_Secrets. \
+                 Tony doit rester dans Propriétaires de cette liste. Détail : {error}"
+            )
+        },
+    )?;
     Ok(WorkspaceConfig {
         site_id: Some(site.id),
         site_name: Some(site.name),

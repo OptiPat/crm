@@ -90,33 +90,36 @@ fn restrict_secrets_via_sharepoint_rest(
         let (break_status, break_body) =
             sharepoint_rest_post(http, access_token, &digest, &break_url, None)?;
         if !rest_success(break_status) && !already_unique(break_status, &break_body) {
-            return Err(format!(
-                "Impossible de restreindre CRM_Secrets ({break_status}) : {}",
-                truncate_body(&break_body)
-            ));
+            if break_status == 403 {
+                eprintln!(
+                    "⚠️ Héritage CRM_Secrets : 403 (à casser à la main). {}",
+                    truncate_body(&break_body)
+                );
+            } else {
+                return Err(format!(
+                    "Impossible de restreindre CRM_Secrets ({break_status}) : {}",
+                    truncate_body(&break_body)
+                ));
+            }
         }
     }
-    let contribute_id = fetch_contribute_role_id(http, access_token, web_url)?;
-    for group_id in [advisor_group_id, secretary_group_id] {
-        let principal_id =
-            ensure_entra_group_principal(http, access_token, &digest, web_url, group_id)?;
-        let assign_url = format!(
-            "{web_url}/_api/web/lists({list_literal})/roleassignments/addroleassignment(principalid={principal_id},roleDefId={contribute_id})"
-        );
-        let (status, body) = sharepoint_rest_post(http, access_token, &digest, &assign_url, None)?;
-        if rest_success(status) || already_assigned(status, &body) {
-            continue;
+    match fetch_contribute_role_id(http, access_token, web_url) {
+        Ok(contribute_id) => {
+            for group_id in [advisor_group_id, secretary_group_id] {
+                try_grant_group_contribute(
+                    http,
+                    access_token,
+                    &digest,
+                    web_url,
+                    &list_literal,
+                    contribute_id,
+                    group_id,
+                );
+            }
         }
-        if status == 403 {
-            eprintln!(
-                "⚠️ Droit CRM_Secrets groupe {group_id} : 403 (déjà posé à la main, on continue)."
-            );
-            continue;
+        Err(error) => {
+            eprintln!("⚠️ Niveau Collaboration CRM_Secrets : {error}");
         }
-        return Err(format!(
-            "Impossible d'autoriser le groupe {group_id} sur CRM_Secrets ({status}) : {}",
-            truncate_body(&body)
-        ));
     }
     let hide_url = format!("{web_url}/_api/web/lists({list_literal})");
     let hide_payload = serde_json::json!({ "Hidden": true });
@@ -129,6 +132,41 @@ fn restrict_secrets_via_sharepoint_rest(
         );
     }
     Ok(())
+}
+
+fn try_grant_group_contribute(
+    http: &BlockingClient,
+    access_token: &str,
+    digest: &str,
+    web_url: &str,
+    list_literal: &str,
+    contribute_id: i64,
+    group_id: &str,
+) {
+    let principal_id = match ensure_entra_group_principal(http, access_token, digest, web_url, group_id)
+    {
+        Ok(id) => id,
+        Err(error) => {
+            eprintln!("⚠️ Groupe Entra {group_id} : {error}");
+            return;
+        }
+    };
+    let assign_url = format!(
+        "{web_url}/_api/web/lists({list_literal})/roleassignments/addroleassignment(principalid={principal_id},roleDefId={contribute_id})"
+    );
+    match sharepoint_rest_post(http, access_token, digest, &assign_url, None) {
+        Ok((status, body))
+            if rest_success(status) || already_assigned(status, &body) || status == 403 => {}
+        Ok((status, body)) => {
+            eprintln!(
+                "⚠️ Droit CRM_Secrets groupe {group_id} ({status}) : {}",
+                truncate_body(&body)
+            );
+        }
+        Err(error) => {
+            eprintln!("⚠️ Droit CRM_Secrets groupe {group_id} : {error}");
+        }
+    }
 }
 
 fn list_has_unique_role_assignments(
