@@ -152,7 +152,7 @@ describe("r1-document-checklist", () => {
       { salarie: true, chef_entreprise: false, retraite: false }
     );
     const sections = groupR1ItemsBySection(items);
-    expect(sections.map((s) => s.section)).toEqual(["Toujours", "Salarié"]);
+    expect(sections.map((s) => s.section)).toEqual(["Communes", "Salarié"]);
   });
 
   it("décrit la visibilité conditionnelle R1", () => {

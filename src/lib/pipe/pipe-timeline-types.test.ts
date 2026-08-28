@@ -23,11 +23,6 @@ describe("pipe-timeline-types", () => {
   });
 
   it("journal rapide affaire sans arbitrage ni réinvestissement", () => {
-    expect(PIPE_TIMELINE_QUICK_ADD_TYPES).toEqual([
-      "APPEL",
-      "RDV",
-      "NOTE",
-      "PROPOSITION",
-    ]);
+    expect(PIPE_TIMELINE_QUICK_ADD_TYPES).toEqual(["APPEL", "RDV", "NOTE"]);
   });
 });

@@ -39,9 +39,29 @@ import {
   shouldInjectR3ImmoChecklistEmailVars,
   templateUsesR3ImmoChecklistEmailVariables,
 } from "@/lib/pipe/pipe-r3-immo-checklist-email-vars";
+import { isPipeRdvCalendarSyncEligible } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { syncPipeRdvReminderSchedules } from "@/lib/pipe/pipe-rdv-reminder-schedule";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { toast } from "sonner";
+
+/** Mail de confirmation immédiat : uniquement si le créneau n'est pas encore commencé (comme Google Agenda). */
+export function isPipeRdvConfirmationEmailEligible(
+  startAtUnix: number,
+  nowMs = Date.now()
+): boolean {
+  return isPipeRdvCalendarSyncEligible(startAtUnix, nowMs);
+}
+
+/** Toujours resync les rappels (annule si trop tard) ; confirmation seulement si le RDV n'a pas commencé. */
+export function planPipeRdvTransactionalEmails(
+  startAtUnix: number,
+  nowMs = Date.now()
+): { resyncScheduledEmails: true; sendConfirmation: boolean } {
+  return {
+    resyncScheduledEmails: true,
+    sendConfirmation: isPipeRdvConfirmationEmailEligible(startAtUnix, nowMs),
+  };
+}
 
 export type PipeRdvConfirmationSendResult = {
   sent: number;
@@ -264,11 +284,7 @@ export async function maybeSendPipeRdvConfirmationEmail(options: {
   visio?: RdvVisioOptions;
   physicalAddress?: string | null;
 }): Promise<PipeRdvConfirmationSendResult> {
-  const template = await resolvePipeRdvTemplateForStage(options.rdvStage);
-  if (!template) {
-    return { sent: 0, errors: [] };
-  }
-
+  const { sendConfirmation } = planPipeRdvTransactionalEmails(options.startAtUnix);
   await resyncPipeRdvScheduledEmails({
     pipe: options.pipe,
     rdvStage: options.rdvStage,
@@ -280,6 +296,15 @@ export async function maybeSendPipeRdvConfirmationEmail(options: {
     visio: options.visio,
     physicalAddress: options.physicalAddress,
   });
+
+  if (!sendConfirmation) {
+    return { sent: 0, errors: [] };
+  }
+
+  const template = await resolvePipeRdvTemplateForStage(options.rdvStage);
+  if (!template) {
+    return { sent: 0, errors: [] };
+  }
 
   const emailStatus = await getEmailConnectionStatus();
   if (!emailStatus.connected) {

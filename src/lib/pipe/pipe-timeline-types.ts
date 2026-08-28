@@ -9,14 +9,10 @@ export const PIPE_TIMELINE_USER_TYPES = [
   "SOUSCRIPTION_PARTENAIRE",
 ] as const;
 
-/** Journal rapide affaire / action — hors Stellium et envoi partenaire (sections dédiées). */
-export const PIPE_TIMELINE_QUICK_ADD_TYPES = PIPE_TIMELINE_USER_TYPES.filter(
-  (t) =>
-    t !== "VERSEMENT_PARTENAIRE" &&
-    t !== "SOUSCRIPTION_PARTENAIRE" &&
-    t !== "ARBITRAGE" &&
-    t !== "REINVESTISSEMENT"
-);
+/** Journal rapide affaire / action — hors Stellium ; proposition remplacée par une tâche. */
+export const PIPE_TIMELINE_QUICK_ADD_TYPES = ["APPEL", "RDV", "NOTE"] as const satisfies readonly (
+  typeof PIPE_TIMELINE_USER_TYPES
+)[number][];
 
 export type PipeTimelineUserType = (typeof PIPE_TIMELINE_USER_TYPES)[number];
 

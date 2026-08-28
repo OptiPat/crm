@@ -1,7 +1,7 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Tache } from "@/lib/api/tauri-taches";
 
-export type TacheFormCreationContext = "alerte" | "contact" | "chain";
+export type TacheFormCreationContext = "alerte" | "contact" | "chain" | "pipe";
 
 export type TitlePresetContext = {
   firstPrenom: string | null;
@@ -104,6 +104,9 @@ export function resolveTacheFormContextBanner(input: {
   }
   if (input.creationContext === "chain") {
     return "Nouveau rappel de suivi pour le(s) contact(s) de la tâche d'origine.";
+  }
+  if (input.creationContext === "pipe") {
+    return "Depuis l'affaire — la tâche apparaîtra dans Tâches, avec échéance et rappel.";
   }
 
   const ids =

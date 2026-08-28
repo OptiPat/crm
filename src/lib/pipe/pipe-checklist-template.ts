@@ -12,7 +12,7 @@ export interface PipeChecklistTemplateItem {
   id: string;
   label: string;
   hint?: string;
-  /** Profils pour lesquels la ligne est visible (`base` = toujours). */
+  /** Profils pour lesquels la ligne est visible (`base` = pièces communes). */
   profiles: PipeChecklistProfileScope[];
   /** Affiche l'option « Pas de crédit » (prêts). */
   noCreditOption?: boolean;
@@ -39,7 +39,7 @@ export function formatR1EstimationRetraiteStepsText(
 export const R1_ESTIMATION_RETRAITE_HINT = formatR1EstimationRetraiteStepsText();
 
 export const PIPE_CHECKLIST_PROFILE_SCOPE_LABELS: Record<PipeChecklistProfileScope, string> = {
-  base: "Toujours",
+  base: "Communes",
   salarie: "Salarié",
   chef: "Chef d'entreprise",
   retraite: "Retraite",

@@ -50,6 +50,16 @@ describe("tache-form-presets", () => {
     ).toContain("alerte Suivi");
   });
 
+  it("bandeau contexte pipe", () => {
+    expect(
+      resolveTacheFormContextBanner({
+        creationContext: "pipe",
+        fixedContactId: 1,
+        contacts,
+      })
+    ).toContain("Depuis l'affaire");
+  });
+
   it("bandeau contexte contact", () => {
     expect(
       resolveTacheFormContextBanner({

@@ -419,7 +419,7 @@ export function PipeR3ImmoDocumentChecklist({
                 onCheckedChange={(v) => setMissingOnly(v === true)}
               />
               <Label htmlFor="r3-immo-missing-only" className="text-sm font-normal cursor-pointer">
-                Afficher seulement les manquantes
+                Afficher seulement les pièces manquantes
                 {missingCount > 0 ? (
                   <span className="text-muted-foreground"> ({missingCount})</span>
                 ) : null}

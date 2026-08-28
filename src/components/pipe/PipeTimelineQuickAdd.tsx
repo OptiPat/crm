@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, FileText, Phone, Send } from "lucide-react";
+import { Calendar, FileText, ListTodo, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   createEmptyTimelineAddState,
@@ -8,6 +8,7 @@ import {
   PipeTimelineAddForm,
   type PipeRdvSubmitPayload,
 } from "@/components/pipe/PipeTimelineAddForm";
+import { TacheForm } from "@/components/taches/TacheForm";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import {
@@ -21,22 +22,42 @@ import {
   PIPE_TIMELINE_TYPE_LABELS,
   type PipeTimelineUserType,
 } from "@/lib/pipe/pipe-timeline-types";
+import { toast } from "sonner";
 
 type PipeTimelineQuickAddType = (typeof PIPE_TIMELINE_QUICK_ADD_TYPES)[number];
-import { toast } from "sonner";
 
 const TYPE_ICONS: Record<PipeTimelineQuickAddType, typeof Phone> = {
   APPEL: Phone,
   RDV: Calendar,
   NOTE: FileText,
-  PROPOSITION: Send,
 };
+
+function pipeLinkedContactIds(
+  pipe: Pick<PipeRecord, "contact_id" | "secondary_contact_id">
+): number[] {
+  const ids = [pipe.contact_id];
+  if (
+    pipe.secondary_contact_id != null &&
+    pipe.secondary_contact_id > 0 &&
+    pipe.secondary_contact_id !== pipe.contact_id
+  ) {
+    ids.push(pipe.secondary_contact_id);
+  }
+  return ids.filter((id) => id > 0);
+}
 
 interface PipeTimelineQuickAddProps {
   timeline: ReturnType<typeof usePipeTimeline>;
   pipe?: Pick<
     PipeRecord,
-    "id" | "stage" | "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom" | "titre"
+    | "id"
+    | "stage"
+    | "pipe_type"
+    | "contact_id"
+    | "secondary_contact_id"
+    | "contact_prenom"
+    | "contact_nom"
+    | "titre"
   > | null;
   onAdded?: () => void;
 }
@@ -48,8 +69,13 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
   const [contenu, setContenu] = useState("");
   const [rdvPlanOption, setRdvPlanOption] = useState<PipeRdvPlanOption>("R1");
   const [saving, setSaving] = useState(false);
+  const [tacheFormOpen, setTacheFormOpen] = useState(false);
+  /** Figé à l'ouverture — ne suit pas un changement d'affaire pendant la saisie. */
+  const [tacheContactIds, setTacheContactIds] = useState<number[] | undefined>();
 
   const openAdd = (type: PipeTimelineUserType) => {
+    setTacheFormOpen(false);
+    setTacheContactIds(undefined);
     const state = createEmptyTimelineAddState(type);
     setAddingType(type);
     setOccurredAt(state.occurredAt);
@@ -62,6 +88,17 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
     setAddingType(null);
     setTitre("");
     setContenu("");
+  };
+
+  const openTacheForm = () => {
+    cancelAdd();
+    setTacheContactIds(pipe ? pipeLinkedContactIds(pipe) : undefined);
+    setTacheFormOpen(true);
+  };
+
+  const handleTacheFormOpenChange = (open: boolean) => {
+    setTacheFormOpen(open);
+    if (!open) setTacheContactIds(undefined);
   };
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -122,7 +159,7 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
       <div>
         <p className="text-sm font-medium">Journal rapide</p>
         <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-          Appel, note, proposition ou RDV commercial. Les envois chez Stellium se déclarent dans la
+          Appel, note, RDV commercial ou tâche. Les envois chez Stellium se déclarent dans la
           section ci-dessus.
         </p>
       </div>
@@ -144,6 +181,16 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
             </Button>
           );
         })}
+        <Button
+          type="button"
+          variant={tacheFormOpen ? "secondary" : "outline"}
+          size="sm"
+          className="h-8 gap-1 text-xs"
+          onClick={openTacheForm}
+        >
+          <ListTodo className="h-3.5 w-3.5" />
+          Tâche
+        </Button>
       </div>
 
       {addingType && (
@@ -165,6 +212,14 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
           onSubmit={(e) => void handleAdd(e)}
         />
       )}
+
+      <TacheForm
+        open={tacheFormOpen}
+        onOpenChange={handleTacheFormOpenChange}
+        creationContext="pipe"
+        fixedContactIds={tacheContactIds}
+        onSuccess={() => toast.success("Tâche créée")}
+      />
     </div>
   );
 }

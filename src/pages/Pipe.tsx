@@ -154,9 +154,23 @@ export function Pipe() {
     setDetailExpanded(true);
   }, []);
 
-  const collapseDetail = useCallback(() => {
+  const expandBoardDetailIfNeeded = useCallback(() => {
+    if (!pipeSectionIsListe(section)) {
+      setDetailExpanded(true);
+    }
+  }, [section]);
+
+  const backToBoard = useCallback(() => {
+    if (panelMode === "edit" && formIsDirtyRef.current && !confirmDiscardPipeFormEdits()) {
+      return;
+    }
+    setCreatePrefill(null);
+    setSelectedPipe(null);
+    setSelectedPlacementOperationId(null);
+    setPanelMode("empty");
     setDetailExpanded(false);
-  }, []);
+    detailExpandedBeforeFormRef.current = null;
+  }, [panelMode]);
 
   useEffect(() => {
     if (panelMode !== "edit") {
@@ -202,6 +216,7 @@ export function Pipe() {
     if (found) {
       setSelectedPipe(found);
       setPanelMode("view");
+      expandBoardDetailIfNeeded();
       clearPipeFocusId();
       return;
     }
@@ -209,11 +224,12 @@ export function Pipe() {
       const pipe = await getPipeById(pipeId);
       setSelectedPipe(pipe);
       setPanelMode("view");
+      expandBoardDetailIfNeeded();
       clearPipeFocusId();
     } catch {
       clearPipeFocusId();
     }
-  }, []);
+  }, [expandBoardDetailIfNeeded]);
 
   const syncSelectedPipeAfterLoad = useCallback(
     async (rows: PipeRecord[], generation: number) => {
@@ -475,6 +491,7 @@ export function Pipe() {
     setSelectedPlacementOperationId(null);
     setSelectedPipe(pipe);
     setPanelMode("view");
+    expandBoardDetailIfNeeded();
   };
 
   const openPlacementOperation = (row: PlacementOperationWithContact) => {
@@ -490,6 +507,7 @@ export function Pipe() {
     if (pipe) {
       setSelectedPipe(pipe);
       setPanelMode("view");
+      expandBoardDetailIfNeeded();
       return;
     }
     // Suivi archivé hors liste active : ouvrir quand même (acte Stellium encore ouvert).
@@ -498,6 +516,7 @@ export function Pipe() {
         const archivedOrMissing = await getPipeById(pipeId);
         setSelectedPipe(archivedOrMissing);
         setPanelMode("view");
+        expandBoardDetailIfNeeded();
       } catch {
         toast.warning("Suivi introuvable — actualisez la page.");
         setPanelMode("empty");
@@ -545,7 +564,7 @@ export function Pipe() {
       <PipeDetailLayoutToolbar
         expanded={detailExpanded}
         onExpand={expandDetail}
-        onBackToBoard={collapseDetail}
+        onBackToBoard={backToBoard}
       />
     </div>
   ) : null;
@@ -558,6 +577,9 @@ export function Pipe() {
     const wasCreate = panelMode === "create";
     setCreatePrefill(null);
     setSelectedPipe(pipe);
+    if (!pipeSectionIsListe(section)) {
+      detailExpandedBeforeFormRef.current = true;
+    }
     setPanelMode("view");
     void loadPipes();
     if (wasCreate) {
@@ -675,8 +697,7 @@ export function Pipe() {
           <Briefcase className="h-10 w-10 text-muted-foreground/50 mb-4" />
           <p className="text-sm font-medium">Sélectionnez une affaire dans le tableau</p>
           <p className="text-sm text-muted-foreground mt-2 max-w-sm">
-            Cliquez une carte (ex. colonne Prospection). Le panneau à droite affiche
-            l&apos;avancement ; en Prospection, prescripteur et source du lead.
+            Cliquez une carte pour ouvrir la fiche. « Retour au tableau » ramène au kanban.
           </p>
         </div>
       )}

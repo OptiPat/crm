@@ -56,7 +56,7 @@ export const PIPE_R3_IMMO_CHECKLIST_TEMPLATES_CHANGED_EVENT =
   "crm:pipe-r3-immo-checklist-templates-changed";
 
 export const R3_IMMO_VISIBILITY_RULE_LABELS: Record<R3ImmoVisibilityRule, string> = {
-  always: "Toujours",
+  always: "Communes",
   couple_or_enfants: "Couple ou enfants à charge",
   marie_or_pacse: "Marié(e) ou pacsé(e)",
   divorce: "Divorcé(e)",
