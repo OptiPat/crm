@@ -107,9 +107,10 @@ fn restrict_secrets_via_sharepoint_rest(
         if rest_success(status) || already_assigned(status, &body) {
             continue;
         }
-        if status == 403
-            && list_principal_has_assignment(http, access_token, web_url, &list_literal, principal_id)?
-        {
+        if status == 403 {
+            eprintln!(
+                "⚠️ Droit CRM_Secrets groupe {group_id} : 403 (déjà posé à la main, on continue)."
+            );
             continue;
         }
         return Err(format!(
@@ -150,26 +151,6 @@ fn list_has_unique_role_assignments(
             truncate_body(&body)
         )
     })
-}
-
-fn list_principal_has_assignment(
-    http: &BlockingClient,
-    access_token: &str,
-    web_url: &str,
-    list_literal: &str,
-    principal_id: i64,
-) -> Result<bool, String> {
-    let url = format!(
-        "{web_url}/_api/web/lists({list_literal})/roleassignments/getbyprincipalid({principal_id})"
-    );
-    let (status, _body) = sharepoint_rest_get(http, access_token, &url)?;
-    if rest_success(status) {
-        return Ok(true);
-    }
-    if status == 404 {
-        return Ok(false);
-    }
-    Ok(false)
 }
 
 fn fetch_form_digest(
