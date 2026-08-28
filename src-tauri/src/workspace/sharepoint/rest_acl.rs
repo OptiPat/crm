@@ -108,7 +108,7 @@ fn restrict_secrets_via_sharepoint_rest(
             continue;
         }
         if status == 403
-            && list_principal_has_assignment(http, access_token, web_url, list_literal, principal_id)?
+            && list_principal_has_assignment(http, access_token, web_url, &list_literal, principal_id)?
         {
             continue;
         }
