@@ -3166,7 +3166,7 @@ dependencies = [
 
 [[package]]
 name = "patrimoine-crm"
-version = "0.5.31"
+version = "0.5.32"
 dependencies = [
  "anyhow",
  "argon2",
