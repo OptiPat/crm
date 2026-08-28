@@ -1,8 +1,6 @@
 use super::oauth_client::build_basic_client;
 use super::oauth_store::{EmailOAuthConnection, EmailOAuthStore, OAUTH_REDIRECT_URI};
-use crate::workspace::oauth::{
-    microsoft_team_flow_provider, microsoft_team_oauth_scopes, sharepoint_rest_scope,
-};
+use crate::workspace::oauth::{microsoft_team_flow_provider, microsoft_team_oauth_scopes};
 use oauth2::reqwest::http_client;
 use oauth2::{
     AuthorizationCode, CsrfToken, PkceCodeChallenge, RedirectUrl, RequestTokenError, Scope,
@@ -302,16 +300,14 @@ pub fn run_oauth_connect(
     );
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
-    let mut scopes: Vec<Scope> = cfg
+    // Graph uniquement. Un 2ᵉ resource SharePoint (`AllSites.Manage`) sur cette
+    // URL provoque AADSTS28003 (scope vide à l'échange du code). Le jeton REST
+    // s'obtient ensuite via le refresh token (`exchange_sharepoint_rest_token`).
+    let scopes: Vec<Scope> = cfg
         .scopes
         .iter()
         .map(|s| Scope::new((*s).to_string()))
         .collect();
-    if team_only {
-        if let Some(hostname) = team_sharepoint_hostname(app) {
-            scopes.push(Scope::new(sharepoint_rest_scope(&hostname)?));
-        }
-    }
     let mut auth = oauth_client
         .authorize_url(CsrfToken::new_random)
         .add_scopes(scopes)
@@ -390,22 +386,6 @@ pub fn run_oauth_connect(
     Ok(connection)
 }
 
-fn team_sharepoint_hostname(app: &AppHandle) -> Option<String> {
-    use crate::commands::DbState;
-    use tauri::Manager;
-    app.try_state::<DbState>().and_then(|state| {
-        state.lock().ok().and_then(|guard| {
-            guard.as_ref().and_then(|db| {
-                db.get_workspace_config()
-                    .ok()
-                    .and_then(|config| config.site_hostname)
-                    .map(|host| host.trim().to_string())
-                    .filter(|host| !host.is_empty())
-            })
-        })
-    })
-}
-
 fn is_microsoft_oauth_provider(oauth_provider: &str) -> bool {
     oauth_provider == "microsoft"
         || oauth_provider == "microsoft_team"
@@ -435,7 +415,11 @@ fn oauth_exchange_error_hint(
         }
         "invalid_request" => {
             if microsoft {
-                " Vérifiez l'URI de redirection Azure (http://127.0.0.1:3847/callback, application de bureau) et les permissions Graph."
+                if description.contains("AADSTS28003") || description.contains("scope cannot be empty") {
+                    " Fermez l'onglet Microsoft et réessayez Connecter. Si ça revient, attendez la mise à jour CRM (ne mélangez pas Graph et SharePoint sur la même connexion)."
+                } else {
+                    " Vérifiez l'URI de redirection Azure (http://127.0.0.1:3847/callback, application de bureau) et les permissions Graph."
+                }
             } else {
                 ""
             }
@@ -529,6 +513,10 @@ mod tests {
             .scopes
             .iter()
             .any(|s| s.contains("Sites.ReadWrite.All")));
+        assert!(
+            !team.scopes.iter().any(|s| s.contains(".sharepoint.com")),
+            "AllSites.Manage ne doit pas être sur l'authorize (AADSTS28003)"
+        );
     }
 
     #[test]

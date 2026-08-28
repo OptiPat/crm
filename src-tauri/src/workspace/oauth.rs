@@ -29,8 +29,9 @@ pub fn sharepoint_rest_scope(hostname: &str) -> Result<String, String> {
 ///
 /// `Sites.Selected` ne donne aucun accès par lui-même : l'administrateur Microsoft 365
 /// doit ensuite accorder l'application au site CRM avec le rôle `write`.
-/// Le provisionnement de `CRM_Secrets` demande en plus `AllSites.Manage` (jeton SharePoint,
-/// hostname connu) — voir `sharepoint_rest_scope`.
+/// Le provisionnement de `CRM_Secrets` demande en plus `AllSites.Manage` via un
+/// échange refresh-token séparé (`sharepoint_rest_scope`) — pas sur l'URL d'autorisation
+/// (sinon AADSTS28003 : deux resources Graph + SharePoint).
 pub fn microsoft_team_oauth_scopes() -> &'static [&'static str] {
     &[
         "offline_access",
