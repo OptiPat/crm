@@ -9,6 +9,14 @@ pub fn entra_security_group_login(object_id: &str) -> String {
     format!("c:0t.c|tenant|{}", object_id.trim())
 }
 
+/// Groupe Microsoft 365 (Teams) — pas un groupe de sécurité.
+pub fn entra_m365_group_login(object_id: &str) -> String {
+    format!(
+        "c:0o.c|federateddirectoryclaimprovider|{}",
+        object_id.trim()
+    )
+}
+
 pub fn sharepoint_list_guid_literal(list_id: &str) -> String {
     let trimmed = list_id.trim().trim_matches('{').trim_matches('}');
     format!("guid'{trimmed}'")
@@ -156,12 +164,17 @@ fn fetch_form_digest(
     })
 }
 
+/// `SPRoleType.Contributor` (3) — indépendant de la langue (FR = « Collaboration »).
+fn contribute_role_definition_url(web_url: &str) -> String {
+    format!("{web_url}/_api/web/roledefinitions/getbytype(3)")
+}
+
 fn fetch_contribute_role_id(
     http: &BlockingClient,
     access_token: &str,
     web_url: &str,
 ) -> Result<i64, String> {
-    let url = format!("{web_url}/_api/web/roledefinitions/getbyname('Contribute')");
+    let url = contribute_role_definition_url(web_url);
     let response = http
         .get(&url)
         .bearer_auth(access_token)
@@ -172,12 +185,15 @@ fn fetch_contribute_role_id(
     let body = response.text().unwrap_or_default();
     if !rest_success(status) {
         return Err(format!(
-            "Rôle Contribute introuvable ({status}) : {}",
+            "Niveau d'autorisation Collaboration introuvable ({status}) : {}",
             truncate_body(&body)
         ));
     }
     json_find_i64(&body, "Id").ok_or_else(|| {
-        format!("Identifiant du rôle Contribute absent : {}", truncate_body(&body))
+        format!(
+            "Identifiant du niveau Collaboration absent : {}",
+            truncate_body(&body)
+        )
     })
 }
 
@@ -189,17 +205,28 @@ fn ensure_entra_group_principal(
     group_id: &str,
 ) -> Result<i64, String> {
     let url = format!("{web_url}/_api/web/ensureuser");
-    let payload = serde_json::json!({ "logonName": entra_security_group_login(group_id) });
-    let (status, body) = sharepoint_rest_post(http, access_token, digest, &url, Some(&payload))?;
-    if !rest_success(status) {
-        return Err(format!(
+    let logins = [
+        entra_security_group_login(group_id),
+        entra_m365_group_login(group_id),
+    ];
+    let mut last_error = String::new();
+    for logon_name in logins {
+        let payload = serde_json::json!({ "logonName": logon_name });
+        let (status, body) = sharepoint_rest_post(http, access_token, digest, &url, Some(&payload))?;
+        if rest_success(status) {
+            return json_find_i64(&body, "Id").ok_or_else(|| {
+                format!("Identifiant SharePoint du groupe absent : {}", truncate_body(&body))
+            });
+        }
+        last_error = format!(
             "Groupe Entra {group_id} introuvable sur le site ({status}) : {}",
             truncate_body(&body)
-        ));
+        );
+        if status != 400 && status != 404 {
+            return Err(last_error);
+        }
     }
-    json_find_i64(&body, "Id").ok_or_else(|| {
-        format!("Identifiant SharePoint du groupe absent : {}", truncate_body(&body))
-    })
+    Err(last_error)
 }
 
 fn sharepoint_rest_get(
@@ -381,9 +408,22 @@ mod tests {
             "c:0t.c|tenant|11111111-1111-1111-1111-111111111111"
         );
         assert_eq!(
+            entra_m365_group_login("1a09f18a-e8d2-4d3e-bbb4-eec1947554d7"),
+            "c:0o.c|federateddirectoryclaimprovider|1a09f18a-e8d2-4d3e-bbb4-eec1947554d7"
+        );
+        assert_eq!(
             sharepoint_list_guid_literal("{44ca0d29-33d3-47c9-8f12-eb0c46e3c7ad}"),
             "guid'44ca0d29-33d3-47c9-8f12-eb0c46e3c7ad'"
         );
+    }
+
+    #[test]
+    fn contribute_role_is_looked_up_by_type_not_english_name() {
+        assert_eq!(
+            contribute_role_definition_url("https://actingpeople.sharepoint.com/sites/CRMActingpeople"),
+            "https://actingpeople.sharepoint.com/sites/CRMActingpeople/_api/web/roledefinitions/getbytype(3)"
+        );
+        assert!(!contribute_role_definition_url("https://x").contains("getbyname"));
     }
 
     #[test]
