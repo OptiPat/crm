@@ -187,7 +187,7 @@ export function ParametresAppBrandingSection() {
   return (
     <SettingsPanel
       title="Identité de l'application"
-      description="Nom et logo affichés à la connexion, dans le menu, sur le bureau et dans le titre de la fenêtre."
+      description="Nom et logo affichés à la connexion, dans le menu, sur le bureau, dans le tiroir et dans le titre de la fenêtre."
       action={
         isDirty ? (
           <Button size="sm" disabled={saving} onClick={() => void handleSave()}>
@@ -228,17 +228,17 @@ export function ParametresAppBrandingSection() {
           <div className="flex-1 space-y-1">
             <p className="text-sm font-medium">Aperçu</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Enregistrer met à jour le raccourci du bureau et du menu Démarrer (pas seulement la
-              fenêtre ouverte). L&apos;icône épinglée dans la barre des tâches ne suit pas toujours :
-              détachez puis ré-épinglez depuis le nouveau raccourci. L&apos;installateur et le fichier
-              .exe restent « CRM W.Y.S ».
+              Enregistrer met à jour le raccourci du bureau, le menu Démarrer et l&apos;icône du
+              tiroir (icônes masquées). L&apos;icône épinglée dans la barre des tâches ne suit pas
+              toujours : détachez puis ré-épinglez depuis le nouveau raccourci. L&apos;installateur
+              et le fichier .exe restent « CRM W.Y.S ».
             </p>
           </div>
         </div>
 
         <SettingsRow
           label="Nom affiché"
-          hint="Connexion, menu, fenêtre et bureau"
+          hint="Connexion, menu, fenêtre, bureau et tiroir"
           htmlFor="app-display-name"
         >
           <Input
@@ -252,7 +252,7 @@ export function ParametresAppBrandingSection() {
           />
         </SettingsRow>
 
-        <SettingsRow label="Logo" hint="Connexion, menu et raccourcis bureau" htmlFor="app-logo-mode">
+        <SettingsRow label="Logo" hint="Connexion, menu, bureau et tiroir" htmlFor="app-logo-mode">
           <Select
             value={form.logoMode}
             onValueChange={(value) =>

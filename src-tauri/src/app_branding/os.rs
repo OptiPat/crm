@@ -75,7 +75,8 @@ fn apply_os_branding_locked(app: &AppHandle) -> Result<OsBrandingResult, String>
     };
 
     if is_os_state_unchanged(&state_path, &ico_path, &desired_state, logo_source.is_some()) {
-        let window_icon_applied = apply_icon_from_cache(app, logo_source.is_some(), &ico_path)?;
+        let window_icon_applied =
+            apply_icon_from_cache(app, logo_source.is_some(), &ico_path, &display_name)?;
         return Ok(OsBrandingResult {
             window_icon_applied,
             shortcuts_updated: 0,
@@ -86,9 +87,9 @@ fn apply_os_branding_locked(app: &AppHandle) -> Result<OsBrandingResult, String>
     let window_icon_applied = if let Some(source) = logo_source.as_ref() {
         let rgba = decode_and_downscale(source, MAX_SOURCE_PX)?;
         write_ico_from_rgba(&rgba, &ico_path)?;
-        set_main_window_icon_from_rgba(app, &rgba)?
+        set_main_window_icon_from_rgba(app, &rgba, &display_name)?
     } else {
-        reset_main_window_icon(app)?
+        reset_main_window_icon(app, &display_name)?
     };
 
     #[cfg(windows)]
@@ -208,12 +209,31 @@ fn apply_icon_from_cache(
     app: &AppHandle,
     has_logo: bool,
     ico_path: &Path,
+    display_name: &str,
 ) -> Result<bool, String> {
-    if has_logo && ico_path.is_file() {
-        set_main_window_icon_from_ico(app, ico_path)
+    let icon = if has_logo && ico_path.is_file() {
+        load_tauri_icon_from_ico(ico_path)?
     } else {
-        reset_main_window_icon(app)
+        app.default_window_icon()
+            .ok_or("Icône par défaut indisponible")?
+            .clone()
+            .to_owned()
+    };
+    apply_window_and_tray_icon(app, display_name, icon)
+}
+
+fn apply_window_and_tray_icon(
+    app: &AppHandle,
+    display_name: &str,
+    icon: tauri::image::Image<'static>,
+) -> Result<bool, String> {
+    if let Some(window) = app.get_webview_window("main") {
+        window
+            .set_icon(icon.clone())
+            .map_err(|e| format!("Impossible d'appliquer l'icône : {e}"))?;
     }
+    crate::app_runtime::apply_tray_branding(app, display_name, icon)?;
+    Ok(true)
 }
 
 fn decode_and_downscale(source: &Path, max_px: u32) -> Result<RgbaImage, String> {
@@ -237,26 +257,13 @@ fn decode_and_downscale(source: &Path, max_px: u32) -> Result<RgbaImage, String>
     ))
 }
 
-fn set_main_window_icon_from_rgba(app: &AppHandle, rgba: &RgbaImage) -> Result<bool, String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or("Fenêtre principale introuvable")?;
+fn set_main_window_icon_from_rgba(
+    app: &AppHandle,
+    rgba: &RgbaImage,
+    display_name: &str,
+) -> Result<bool, String> {
     let icon = rgba_to_window_icon(rgba, 32)?;
-    window
-        .set_icon(icon)
-        .map_err(|e| format!("Impossible d'appliquer l'icône : {e}"))?;
-    Ok(true)
-}
-
-fn set_main_window_icon_from_ico(app: &AppHandle, ico_path: &Path) -> Result<bool, String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or("Fenêtre principale introuvable")?;
-    let icon = load_tauri_icon_from_ico(ico_path)?;
-    window
-        .set_icon(icon)
-        .map_err(|e| format!("Impossible d'appliquer l'icône : {e}"))?;
-    Ok(true)
+    apply_window_and_tray_icon(app, display_name, icon)
 }
 
 fn load_tauri_icon_from_ico(ico_path: &Path) -> Result<tauri::image::Image<'static>, String> {
@@ -318,18 +325,13 @@ fn letterbox_rgba_to_square(rgba: &RgbaImage, size: u32) -> RgbaImage {
     canvas
 }
 
-fn reset_main_window_icon(app: &AppHandle) -> Result<bool, String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or("Fenêtre principale introuvable")?;
+fn reset_main_window_icon(app: &AppHandle, display_name: &str) -> Result<bool, String> {
     let icon = app
         .default_window_icon()
         .ok_or("Icône par défaut indisponible")?
-        .clone();
-    window
-        .set_icon(icon)
-        .map_err(|e| format!("Impossible de restaurer l'icône : {e}"))?;
-    Ok(true)
+        .clone()
+        .to_owned();
+    apply_window_and_tray_icon(app, display_name, icon)
 }
 
 fn write_ico_from_rgba(rgba: &RgbaImage, dest: &Path) -> Result<(), String> {

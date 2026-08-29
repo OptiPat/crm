@@ -14,6 +14,7 @@ pub use prefs::{
 };
 pub use shutdown::is_force_quit_requested;
 pub use tray::{
-    apply_startup_launch_prefs, focus_main_window, hide_main_window_if_minimized_arg, setup_tray,
+    apply_startup_launch_prefs, apply_tray_branding, focus_main_window,
+    hide_main_window_if_minimized_arg, setup_tray,
 };
 pub use worker::start_background_automation_worker;

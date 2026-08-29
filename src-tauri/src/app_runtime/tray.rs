@@ -9,6 +9,7 @@ use super::shutdown::request_force_quit;
 
 const MENU_OPEN_ID: &str = "tray-open";
 const MENU_QUIT_ID: &str = "tray-quit";
+pub const TRAY_ID: &str = "main";
 
 /// Émis côté frontend quand la fenêtre principale passe en arrière-plan (tray / --minimized).
 pub const MAIN_WINDOW_BACKGROUND_EVENT: &str = "main-window-background";
@@ -28,7 +29,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .clone();
 
     let app_handle = app.clone();
-    TrayIconBuilder::new()
+    TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .tooltip("CRM W.Y.S")
         .menu(&menu)
@@ -59,6 +60,50 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+fn tray_open_label(display_name: &str) -> String {
+    format!("Ouvrir {}", display_name.replace('&', "&&"))
+}
+
+/// Met à jour l'icône, l'infobulle et le libellé « Ouvrir » du tiroir.
+pub fn apply_tray_branding(
+    app: &AppHandle,
+    display_name: &str,
+    icon: tauri::image::Image<'static>,
+) -> Result<(), String> {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return Ok(());
+    };
+    tray.set_icon(Some(icon))
+        .map_err(|e| format!("Icône tiroir : {e}"))?;
+    tray.set_tooltip(Some(display_name))
+        .map_err(|e| format!("Infobulle tiroir : {e}"))?;
+
+    match build_tray_menu(app, display_name) {
+        Ok(menu) => {
+            if let Err(e) = tray.set_menu(Some(menu)) {
+                eprintln!("⚠️ Menu tiroir : {e}");
+            }
+        }
+        Err(e) => eprintln!("⚠️ Menu tiroir : {e}"),
+    }
+    Ok(())
+}
+
+fn build_tray_menu(
+    app: &AppHandle,
+    display_name: &str,
+) -> Result<Menu<tauri::Wry>, Box<dyn std::error::Error>> {
+    let open_i = MenuItem::with_id(
+        app,
+        MENU_OPEN_ID,
+        tray_open_label(display_name),
+        true,
+        None::<&str>,
+    )?;
+    let quit_i = MenuItem::with_id(app, MENU_QUIT_ID, "Quitter", true, None::<&str>)?;
+    Ok(Menu::with_items(app, &[&open_i, &quit_i])?)
 }
 
 pub fn focus_main_window(app: &AppHandle) {
@@ -134,4 +179,15 @@ pub fn save_prefs_and_sync(
     }
     sync_autostart_from_prefs(app, &prefs)?;
     Ok(prefs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tray_open_label;
+
+    #[test]
+    fn tray_open_label_escapes_ampersand_mnemonic() {
+        assert_eq!(tray_open_label("CRM W.Y.S"), "Ouvrir CRM W.Y.S");
+        assert_eq!(tray_open_label("A&B"), "Ouvrir A&&B");
+    }
 }
