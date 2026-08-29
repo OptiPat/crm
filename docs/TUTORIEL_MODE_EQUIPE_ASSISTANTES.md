@@ -3,10 +3,15 @@
 Ce guide décrit la configuration d'un conseiller et de deux assistantes, chacune avec son propre
 compte Microsoft 365 et sa propre installation du CRM.
 
+**Version CRM requise : 0.5.38 ou plus** (même numéro sur tous les postes). En dessous, ne pas
+lancer **Provisionner listes CRM** : des bugs connus bloquent la connexion Microsoft (0.5.34) ou
+arrêtent le provisionnement sur un 403 SharePoint (jusqu'à 0.5.37).
+
 ## Comment utiliser cette documentation
 
 Ce document est le guide technique complet destiné à l'administrateur Microsoft 365 et au
-conseiller. Deux supports courts l'accompagnent :
+conseiller. La feuille de route imprimable A4 est [`GUIDE_TONY_EQUIPE.html`](GUIDE_TONY_EQUIPE.html)
+(ouvrir dans le navigateur → Imprimer). Supports courts :
 
 - [`FICHE_CONFIGURATION_MODE_EQUIPE.md`](FICHE_CONFIGURATION_MODE_EQUIPE.md) : fiche à compléter
   avant l'installation ;
@@ -27,8 +32,8 @@ selon le tenant et la langue ; les chemins de navigation et les résultats atten
 
 ## 1. Répartition des tâches
 
-- **Administrateur Microsoft 365** : comptes, MFA, groupes Entra, application Entra, site
-  SharePoint, autorisation `Sites.Selected` et boîte partagée.
+- **Administrateur Microsoft 365** : comptes, MFA, groupes Entra, application Entra (`Sites.Selected`
+  + `AllSites.Manage`), site SharePoint, grant du site et boîte partagée.
 - **Conseiller** : sauvegarde, configuration du CRM, provisionnement SharePoint, migration puis
   activation de la synchronisation.
 - **Chaque assistante** : installation sur un poste vide, connexion avec son compte nominatif puis
@@ -38,7 +43,7 @@ Ne jamais utiliser le compte du conseiller sur le poste d'une assistante.
 
 ## 2. Préparer les trois postes
 
-1. Mettre à jour le CRM sur les trois postes avec la même version.
+1. Mettre à jour le CRM sur les trois postes avec la **même** version **0.5.38 ou plus**.
 2. Activer BitLocker sous Windows ou FileVault sous macOS.
 3. Vérifier que chaque personne possède une session Windows/macOS personnelle protégée.
 4. Conserver la base historique uniquement sur le poste du conseiller.
@@ -54,7 +59,10 @@ Dans le centre d'administration Microsoft 365 :
    - le conseiller ;
    - l'assistante 1 ;
    - l'assistante 2.
-2. Attribuer à chacun une licence donnant accès à SharePoint Online et Exchange Online.
+2. Attribuer à **chaque personne qui ouvre le CRM** une licence **Microsoft 365 Business Basic**
+   (ou Business Standard). Cela donne SharePoint Online et Exchange Online.
+   Ne pas utiliser Microsoft 365 Famille / Personal / « Premium » grand public, ni Power Automate
+   Free. La boîte partagée du cabinet (section 8) n'a **pas** besoin de licence supplémentaire.
 3. Activer la MFA avec les règles de sécurité ou l'accès conditionnel du tenant.
 4. Faire tester une connexion à `https://portal.office.com` par chaque personne.
 
@@ -64,14 +72,16 @@ Le CRM ne contrôle pas lui-même la MFA : elle doit être imposée par Microsof
 
 Dans **Microsoft Entra admin center → Identity → Groups → All groups** :
 
-1. Créer un groupe de sécurité `CRM - Conseillers`.
-2. Créer un groupe de sécurité `CRM - Assistantes`.
-3. Ouvrir chaque groupe et copier son **Object ID**.
-4. Ajouter uniquement le conseiller à `CRM - Conseillers`.
-5. Ajouter les deux assistantes à `CRM - Assistantes`.
-6. Vérifier qu'aucune personne n'appartient aux deux groupes.
+1. Créer un groupe `CRM - Conseillers` : type **sécurité** **ou** **Microsoft 365** (les deux
+   fonctionnent à partir de 0.5.36). Y mettre uniquement le conseiller. Noter le nom exact et
+   l'adresse e-mail du groupe s'il en a une.
+2. Créer un groupe `CRM - Assistantes` (même type). Y mettre uniquement les assistantes.
+3. Ouvrir chaque groupe et copier son **Object ID** (pas le nom d'affichage).
+4. Vérifier qu'aucune personne n'appartient aux deux groupes.
 
-Conserver les deux UUID : ils seront saisis sur les trois installations du CRM.
+Conserver les deux UUID : ils seront saisis sur les trois installations du CRM. Si le groupe a
+un autre nom (ex. « Groupe Conseiller »), coller quand même son Object ID : le CRM n'exige pas
+le libellé `CRM - Conseillers`.
 
 ## 5. Créer le site SharePoint
 
@@ -106,7 +116,11 @@ Dans **Microsoft Entra admin center → App registrations → New registration**
 7. Accorder le consentement administrateur au tenant.
 8. Dans **API permissions → SharePoint → Delegated permissions**, ajouter `AllSites.Manage`,
    puis accorder le consentement administrateur. Sans ce droit, Provisionner échoue en 401
-   sur `CRM_Secrets` (jeton Graph refusé par l'API REST SharePoint).
+   (`_api/contextinfo`). Après l'avoir ajouté, **Déconnecter** puis **Connecter Microsoft** dans
+   le CRM pour renouveler le jeton.
+   Ne **pas** ajouter `AllSites.FullControl` à cette application (inutile et hors du flux OAuth
+   actuel). Ne pas coller `AllSites.Manage` dans l'URL d'autorisation Graph : depuis 0.5.35 le
+   CRM l'obtient via un échange refresh-token (sinon AADSTS28003).
 9. Copier l'**Application (client) ID**.
 
 Le Client ID est une valeur publique de configuration. Ne jamais créer ni transmettre de secret
@@ -125,20 +139,27 @@ Avec Microsoft Graph Explorer, connecté comme administrateur SharePoint ou admi
 GET https://graph.microsoft.com/v1.0/sites/cabinet.sharepoint.com:/sites/crm-patrimoine
 ```
 
-Copier la propriété `id`, par exemple :
+Copier la propriété `id` (trois morceaux séparés par des virgules). **Ne pas coller les
+accolades `{ }`** : Graph Explorer les affiche parfois comme aide ; l'URL réelle n'en contient
+pas. Exemple :
 
 ```text
 cabinet.sharepoint.com,GUID-SITE,GUID-WEB
 ```
 
+Si Graph répond `site id is not valid` (400), retirer les accolades et réessayer.
+
 ### 7.2 Accorder temporairement le rôle `manage`
 
 L'administrateur qui exécute cette opération doit consentir `Sites.FullControl.All` dans Graph
-Explorer. Cette permission sert à administrer le grant ; elle ne doit pas être ajoutée à
-l'application CRM.
+Explorer (permission de la session Graph Explorer, **pas** de l'application CRM).
+
+Remplacer `ID-DU-SITE` par les trois morceaux **sans accolades**. Poster `"roles": ["manage"]`.
+Ne pas poster `"fullcontrol"` : à partir de 0.5.38, le CRM n'en a pas besoin pour Provisionner
+(un 403 sur le durcissement ACL n'arrête plus le flux).
 
 ```http
-POST https://graph.microsoft.com/v1.0/sites/{ID-DU-SITE}/permissions
+POST https://graph.microsoft.com/v1.0/sites/ID-DU-SITE/permissions
 Content-Type: application/json
 ```
 
@@ -157,7 +178,9 @@ Content-Type: application/json
 ```
 
 Conserver l'`id` de la permission retournée. Le rôle `manage` est nécessaire pendant la création
-des listes et de leurs colonnes.
+des listes et de leurs colonnes via Graph. Le durcissement des droits de liste (masquer
+`CRM_Secrets`, coller les groupes) est **best-effort** depuis 0.5.38 : un 403 SharePoint n'annule
+plus le provisionnement.
 
 ### 7.3 Réduire à `write` après le provisionnement
 
@@ -166,13 +189,13 @@ Après l'étape 11 de ce guide :
 1. Lister les permissions :
 
 ```http
-GET https://graph.microsoft.com/v1.0/sites/{ID-DU-SITE}/permissions
+GET https://graph.microsoft.com/v1.0/sites/ID-DU-SITE/permissions
 ```
 
 2. Supprimer le grant `manage` de l'application CRM :
 
 ```http
-DELETE https://graph.microsoft.com/v1.0/sites/{ID-DU-SITE}/permissions/{ID-PERMISSION}
+DELETE https://graph.microsoft.com/v1.0/sites/ID-DU-SITE/permissions/ID-PERMISSION
 ```
 
 3. Recréer le même grant avec `"roles": ["write"]`.
@@ -221,6 +244,7 @@ Transmettre cette fiche par un canal interne sécurisé aux deux assistantes.
 5. Cliquer sur **Enregistrer Client ID**.
 6. Cliquer sur **Connecter Microsoft**.
 7. Se connecter avec le compte nominatif du conseiller et valider la MFA.
+   Le bandeau beige « identité nominative » disparaît une fois connecté : ce n'est pas une erreur.
 8. Activer **Activer le mode équipe SharePoint**.
 9. Choisir **Conseiller** dans **Rôle sur cette installation**.
 10. Renseigner les groupes Entra, la boîte cabinet, le hostname et le chemin SharePoint.
@@ -237,9 +261,12 @@ Sur le poste du conseiller :
 2. Vérifier que le test affiche le site, le nombre de listes et les bibliothèques.
 3. Vérifier que **ID site Graph** et **Nom / espace d'équipe** sont remplis.
 4. Enregistrer à nouveau la configuration.
-5. Cliquer sur **Provisionner listes CRM**.
-6. Attendre le message confirmant le provisionnement.
-7. Dans SharePoint, vérifier la présence de :
+5. Cliquer sur **Provisionner listes CRM** (CRM **0.5.38** ou plus).
+6. Attendre le message confirmant le provisionnement. Un 403 sur le coller des groupes ou le
+   masquage de `CRM_Secrets` n'est plus bloquant : les listes et la clé de cache (DEK) sont
+   quand même créées. Si l'écriture de la clé échoue, le conseiller doit rester **propriétaire**
+   du site SharePoint (ne pas le retirer des propriétaires).
+7. Dans SharePoint, vérifier la présence des **sept** listes :
    - `CRM_Members` ;
    - `CRM_Presence` ;
    - `CRM_Locks` ;
@@ -251,9 +278,15 @@ Sur le poste du conseiller :
    **Ne pas ouvrir ni modifier `CRM_Secrets` dans l'interface SharePoint.** Cette liste contient
    la clé du cache local. Les assistantes n'ont besoin que d'un accès Graph en lecture ; seul
    le conseiller provisionne la liste. Une édition manuelle rend le cache local illisible.
+   Si un ajustement manuel des droits de liste est absolument nécessaire (cas rare), le rôle
+   français à coller sur les groupes Entra est **Collaboration** (équivalent de Contribute), pas
+   un niveau créé à la main en anglais.
 8. Vérifier également la bibliothèque native **Documents**.
 9. Demander à l'administrateur de remplacer le grant `manage` par `write`, comme expliqué en 7.3.
 10. Relancer **Tester SharePoint**.
+
+Sur le poste du conseiller, **ne pas** cliquer sur **Rejoindre sur ce poste** (réservé à un CRM
+vide). La suite est la section 12.
 
 ## 12. Migrer la base historique
 
@@ -270,7 +303,7 @@ Toujours sur le poste du conseiller :
    - intégrité SQLite OK ;
    - clés étrangères OK.
 8. Cliquer sur **Activer la synchronisation équipe**.
-9. Ne pas fermer le CRM pendant l'activation.
+9. Ne pas fermer le CRM pendant l'activation. Ne pas cliquer sur **Rejoindre sur ce poste**.
 10. Vérifier le message **Cache équipe actif** et l'absence de bannière d'erreur.
 
 La base historique reste conservée. Le cache équipe est séparé et scellé lorsqu'on verrouille ou
@@ -342,7 +375,7 @@ Ne basculer les données réelles qu'après réussite de tous ces contrôles.
 
 L'administrateur Microsoft 365 doit :
 
-1. retirer la personne du groupe `CRM - Assistantes` ;
+1. retirer la personne du groupe Entra assistantes ;
 2. retirer **Full Access** et **Send As** de la boîte partagée ;
 3. révoquer ses sessions Microsoft si le départ est immédiat ;
 4. retirer son accès au site SharePoint ;
@@ -372,12 +405,22 @@ déverrouillage propose **Restaurer le cache équipe**.
 
 - **Compte dans les deux groupes** : retirer l'utilisateur de l'un des groupes Entra.
 - **Compte dans aucun groupe** : corriger l'appartenance puis attendre la propagation Entra.
-- **Accès SharePoint refusé** : vérifier le consentement `Sites.Selected` et le grant du site.
-- **Provisionnement refusé** : remettre temporairement le rôle `manage`.
+- **Accès SharePoint refusé** : vérifier le consentement `Sites.Selected`, le grant du site
+  (`manage` pendant Provisionner, `write` ensuite) et `AllSites.Manage` + reconnexion Microsoft.
+- **Provisionnement 401 (contexte SharePoint inaccessible)** : `AllSites.Manage` manquant ou jeton
+  pas renouvelé. CRM 0.5.34 ou plus, puis Déconnecter / Connecter, puis Provisionner.
+- **Connecter Microsoft AADSTS28003 (scope vide)** : bug 0.5.34 uniquement. Installer 0.5.35+.
+- **Provisionnement 403 (CRM_Secrets / coller un groupe)** : CRM inférieur à 0.5.38. Mettre à
+  jour. À partir de 0.5.38, Provisionner continue et écrit la DEK.
+- **Graph Explorer 400 site id is not valid** : accolades `{ }` laissées dans l'URL.
+- **Écriture de la clé / cache impossible après Provisionner** : le conseiller doit rester
+  propriétaire du site SharePoint.
+- **Provisionnement refusé (création des listes)** : remettre temporairement le rôle `manage`.
 - **Envoi cabinet refusé** : vérifier `Mail.Send.Shared`, Full Access, Send As et attendre la
   propagation Exchange.
 - **Bouton Rejoindre indisponible** : vérifier connexion Microsoft, ID Graph et configuration
-  enregistrée.
+  enregistrée. Sur le poste conseiller, ce bouton n'est pas le bon : utiliser **Activer la
+  synchronisation équipe**.
 - **Jeton Microsoft expiré (MFA / mot de passe)** : à l'écran de verrouillage, **Reconnecter le
   compte Microsoft**, puis déverrouiller. Depuis Paramètres, **Connecter Microsoft** reste
   disponible en mode secrétaire.
@@ -394,15 +437,16 @@ déverrouillage propose **Restaurer le cache équipe**.
 - [ ] Deux groupes Entra distincts avec appartenances exclusives
 - [ ] Site SharePoint dédié et accessible aux trois personnes
 - [ ] Application publique Entra et redirect URI `127.0.0.1:3847`
-- [ ] Permissions Graph déléguées consenties
+- [ ] Permissions Graph déléguées consenties **et** `AllSites.Manage` (SharePoint)
 - [ ] Grant `Sites.Selected` limité au site, passé de `manage` à `write`
 - [ ] Boîte partagée avec Full Access et Send As
+- [ ] CRM **0.5.38** ou plus sur tous les postes
 
 ### Conseiller
 
 - [ ] Sauvegarde historique créée
 - [ ] Test SharePoint réussi
-- [ ] Six listes provisionnées
+- [ ] Sept listes provisionnées
 - [ ] Copie test envoyée
 - [ ] Restauration test validée
 - [ ] Synchronisation activée

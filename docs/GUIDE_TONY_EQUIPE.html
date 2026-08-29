@@ -110,7 +110,7 @@
 
 <section class="page">
   <h1>CRM en équipe — feuille de route</h1>
-  <p class="sub">Un seul document. Cochez dans l’ordre. Ne sautez aucune étape.</p>
+  <p class="sub">Un seul document. Cochez dans l’ordre. CRM <strong>0.5.38</strong> ou plus. Ne sautez aucune étape.</p>
 
   <div class="box ok">
     <strong>But.</strong> Tony et les assistantes voient les mêmes clients.
@@ -164,7 +164,7 @@
         <li>Assistante 2 — e-mail : <span class="line">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></li>
       </ul>
     </li>
-    <li>Chaque <em>personne qui ouvre le CRM</em> a une licence avec SharePoint et messagerie. La boîte d’envoi du cabinet (étape F) n’en a pas besoin.</li>
+    <li>Chaque <em>personne qui ouvre le CRM</em> a une licence <strong>Microsoft 365 Business Basic</strong> (ou Standard, comme Tony). Ça donne SharePoint + messagerie. <strong>Pas</strong> Famille / Personal / « Premium » grand public (Hotmail). <strong>Pas</strong> Power Automate Free. La boîte d’envoi du cabinet (étape F) n’a <strong>pas</strong> besoin de licence.</li>
     <li>Activer le code à 2 facteurs sur les 3 comptes.</li>
     <li>Chacun se connecte une fois sur <span class="mono">portal.office.com</span> et valide le code. <span class="chk">☐ fait</span></li>
   </ol>
@@ -172,9 +172,9 @@
   <h2><span class="who it">Informatique</span> B · Groupes Entra (les rôles)</h2>
   <p>Centre d’administration Microsoft Entra → Identité → Groupes → Tous les groupes</p>
   <ol class="steps">
-    <li>Créer un groupe de sécurité <strong>CRM - Conseillers</strong>. Y mettre <em>uniquement Tony</em>.</li>
+    <li>Créer un groupe <strong>CRM - Conseillers</strong> (sécurité <em>ou</em> Microsoft 365 : les deux marchent). Y mettre <em>uniquement</em> le conseiller. Noter le nom exact et l’e-mail du groupe s’il y en a un.</li>
     <li>Ouvrir le groupe → copier l’<strong>ID d’objet</strong> (un long numéro) → le coller page 4.</li>
-    <li>Créer un groupe de sécurité <strong>CRM - Assistantes</strong>. Y mettre <em>uniquement</em> les assistantes.</li>
+    <li>Créer un groupe <strong>CRM - Assistantes</strong> (même type). Y mettre <em>uniquement</em> les assistantes.</li>
     <li>Copier l’ID d’objet → le coller page 4.</li>
     <li>Vérifier : personne n’est dans les deux groupes. <span class="chk">☐ fait</span></li>
   </ol>
@@ -218,27 +218,27 @@
       </ul>
     </li>
     <li>Bouton <strong>Accorder le consentement administrateur</strong>. <span class="chk">☐ fait</span></li>
-    <li>Toujours dans Autorisations de l’API → <strong>SharePoint</strong> (Office 365 SharePoint Online) → Autorisations déléguées → ajouter <span class="mono">AllSites.Manage</span>. Accorder le consentement administrateur une 2ᵉ fois. Sans ça, Provisionner échoue (401 sur CRM_Secrets). <span class="chk">☐ fait</span></li>
+    <li>Toujours dans Autorisations de l’API → <strong>SharePoint</strong> (Office 365 SharePoint Online) → Autorisations déléguées → ajouter <span class="mono">AllSites.Manage</span>. Accorder le consentement administrateur une 2ᵉ fois. Sans ça, Provisionner échoue (401). <strong>Ne pas</strong> ajouter <span class="mono">AllSites.FullControl</span> sur cette appli. <span class="chk">☐ fait</span></li>
     <li>Copier l’<strong>ID d’application (client)</strong> → page 4. Ce n’est pas un mot de passe.</li>
     <li>Ne créez <strong>aucun</strong> secret client / certificat. Le CRM n’en veut pas.</li>
   </ol>
 
   <h2><span class="who it">Informatique</span> E · Autoriser l’appli sur le site</h2>
-  <p class="small">Sans ça, le bouton <em>Tester SharePoint</em> dans le CRM dit « accès refusé ». Ouvrir l’<strong>Explorateur Graph</strong> avec un compte administrateur SharePoint.</p>
+  <p class="small">Sans ça, le bouton <em>Tester SharePoint</em> dans le CRM dit « accès refusé ». Ouvrir l’<strong>Explorateur Graph</strong> avec un compte administrateur SharePoint. <strong>Ne pas coller les accolades <span class="mono">{ }</span></strong> : Graph Explorer les affiche comme aide, l’URL réelle n’en contient pas.</p>
   <ol class="steps">
     <li>Récupérer l’ID du site (remplacer le nom du cabinet et le chemin) :
 <pre>GET https://graph.microsoft.com/v1.0/sites/cabinet.sharepoint.com:/sites/crm-patrimoine</pre>
       Copier le champ <span class="mono">id</span> (3 morceaux séparés par des virgules) → page 4.
     </li>
-    <li>Donner le droit de <strong>gestion</strong> le temps que Tony crée les listes (coller l’ID d’application) :
-<pre>POST https://graph.microsoft.com/v1.0/sites/{ID-DU-SITE}/permissions
+    <li>Donner le droit de <strong>gestion</strong> le temps que Tony crée les listes. Remplacer <span class="mono">ID-DU-SITE</span> par les 3 morceaux (virgules), <em>sans accolades</em>, et coller l’ID d’application :
+<pre>POST https://graph.microsoft.com/v1.0/sites/ID-DU-SITE/permissions
 {
   "roles": ["manage"],
   "grantedToIdentities": [{
     "application": { "id": "CLIENT-ID-DU-CRM", "displayName": "Patrimoine CRM" }
   }]
 }</pre>
-      <span class="small">Laisser <span class="mono">manage</span> dans le texte technique ci-dessus (c’est le mot attendu par Microsoft).</span>
+      <span class="small">Laisser <span class="mono">manage</span> (pas <span class="mono">fullcontrol</span> : CRM 0.5.38 n’en a pas besoin). C’est le mot attendu par Microsoft.</span>
     </li>
     <li><strong>Après</strong> que Tony a cliqué <em>Provisionner listes CRM</em> : supprimer ce droit de gestion, recréer le même avec <span class="mono">"roles": ["write"]</span> (écriture). Relancer <em>Tester SharePoint</em>. <span class="chk">☐ après H</span></li>
   </ol>
@@ -285,15 +285,15 @@
 
 <section class="page">
   <h2><span class="who tony">Tony</span> H · Allumer l’équipe sur votre PC</h2>
-  <p>Fiche page 4 sous les yeux. Ne fermez pas le CRM pendant cette page.</p>
+  <p>CRM <strong>0.5.38</strong> ou plus (Paramètres → À propos). En dessous : installer, puis Déconnecter / Connecter Microsoft. Fiche page 4 sous les yeux. Ne fermez pas le CRM pendant cette page.</p>
   <ol class="steps">
     <li>Paramètres → Intégrations → <strong>Mode équipe SharePoint</strong>.</li>
     <li>Coller le Client ID → <span class="btn">Enregistrer Client ID</span>. <span class="chk">☐</span></li>
-    <li><span class="btn">Connecter Microsoft</span> → <strong>votre</strong> compte professionnel du cabinet (pas un compte Outlook.com / Hotmail, pas la boîte cabinet) → code à 2 facteurs. <span class="chk">☐</span></li>
+    <li><span class="btn">Connecter Microsoft</span> → <strong>votre</strong> compte professionnel du cabinet (pas un compte Outlook.com / Hotmail, pas la boîte cabinet) → code à 2 facteurs. Le bandeau beige « identité nominative » disparaît une fois connecté (ce n’était pas une erreur). <span class="chk">☐</span></li>
     <li>Passez l’interrupteur <strong>Activer le mode équipe SharePoint</strong> (à droite). Dans <strong>Rôle sur cette installation</strong>, choisissez <strong>Conseiller</strong>. Ce n’est pas le bouton <em>Activer la synchronisation équipe</em> (plus tard). <span class="chk">☐</span></li>
     <li>Coller les groupes, le nom d’hôte, le chemin, la boîte → <span class="btn">Enregistrer la configuration équipe</span>. <span class="chk">☐</span></li>
     <li><span class="btn">Tester SharePoint</span> → OK → <span class="btn">Enregistrer la configuration équipe</span> <em>encore une fois</em> (garde l’ID du site). <span class="chk">☐</span></li>
-    <li><span class="btn">Provisionner listes CRM</span> → attendre le OK. Cela crée aussi la clé de cache et masque <em>CRM_Secrets</em>. Si vous recliquez : le CRM ne recasse pas les droits déjà posés, et ne recrée pas de secret. N’ouvrez toujours pas <em>CRM_Secrets</em>. Ne rien créer dans SharePoint à la main. <span class="chk">☐</span></li>
+    <li><span class="btn">Provisionner listes CRM</span> → attendre le OK. CRM <strong>0.5.38</strong> ou plus. Cela crée les listes, écrit la clé de cache et masque <em>CRM_Secrets</em>. Un message 403 sur les droits de la liste n’arrête plus Provisionner : la clé s’écrit quand même. Ne rien créer dans SharePoint à la main. N’ouvrez pas <em>CRM_Secrets</em>. <span class="chk">☐</span></li>
     <li>Dire à l’informatique de passer le droit du site de <strong>gestion</strong> (<span class="mono">manage</span>) à <strong>écriture</strong> (<span class="mono">write</span>) (étape E.3), puis retester. <span class="chk">☐</span></li>
     <li><span class="btn">Copier la fiche pour une assistante</span> (après le 2ᵉ enregistrement, l’ID site est dedans — le bouton reste gris tant que l’ID est vide). Coller dans un e-mail interne ou imprimer. <span class="chk">☐</span></li>
     <li>Chez vous, <strong>ne cliquez pas</strong> sur <em>Rejoindre sur ce poste</em> (c’est pour un PC vide). Dans cet ordre :
@@ -362,7 +362,7 @@
     <tr><td>Travailler</td><td>Internet allumé. Comme d’habitude.</td></tr>
     <tr><td>Éteindre l’ordinateur</td><td>Attendre 20 secondes, ou verrouiller le CRM (cadenas), puis éteindre. Pas de croix juste après une saisie.</td></tr>
     <tr><td>« Hors connexion » / écran Microsoft</td><td>D’abord le Wi‑Fi. Entrez le <strong>mot de passe du CRM</strong>. Si le bandeau propose <em>Reconnecter le compte Microsoft</em> : cliquez, validez le code à 2 facteurs, puis déverrouillez encore. Si le CRM dit <em>Accès équipe révoqué</em> : ne forcez pas — prévenez Tony / l’informatique (ce n’est pas le bouton Reconnecter).</td></tr>
-    <tr><td>Une assistante part</td><td>L’informatique la retire du groupe <strong>CRM - Assistantes</strong> <em>et</em> du site SharePoint, tout de suite. Puis récupérer le PC. Rien à cliquer dans le CRM.</td></tr>
+    <tr><td>Une assistante part</td><td>L’informatique la retire du groupe Entra assistantes <em>et</em> du site SharePoint, tout de suite. Puis récupérer le PC. Rien à cliquer dans le CRM.</td></tr>
   </table>
   <div class="box ok">
     Après son départ elle ne peut plus ouvrir le CRM équipe, ni lire la copie sur son disque.
@@ -372,7 +372,7 @@
   <h2>En cas de blocage</h2>
   <table>
     <tr><th>Message / symptôme</th><th>Cause fréquente</th></tr>
-    <tr><td>Accès SharePoint refusé</td><td>Étape E pas faite, ou droit encore en gestion (<span class="mono">manage</span>) au lieu d’écriture (<span class="mono">write</span>).</td></tr>
+    <tr><td>Accès SharePoint refusé</td><td>Étape E pas faite. Pendant Provisionner, le droit reste en <span class="mono">manage</span> ; après H, le passer à <span class="mono">write</span>.</td></tr>
     <tr><td>N’appartient à aucun groupe</td><td>Mauvais compte, ou pas dans Conseillers / Assistantes.</td></tr>
     <tr><td>Appartient aux deux groupes</td><td>Retirer d’un des deux groupes Entra.</td></tr>
     <tr><td>Rejoindre grisé / ID site vide</td><td>Tony : Tester puis Enregistrer une 2ᵉ fois — le bouton Copier la fiche reste gris tant que l’ID est vide. Assistante : coller l’ID site <em>avant</em> Enregistrer. Si déjà enregistré sans ID : réinstaller le CRM (poste vide) et recoller toute la fiche.</td></tr>
@@ -381,7 +381,12 @@
     <tr><td>Compte Microsoft personnel refusé</td><td>Au Connecter Microsoft, choisir le compte professionnel du cabinet, pas Outlook.com / Hotmail.</td></tr>
     <tr><td>Délai de connexion Microsoft dépassé</td><td>Fermer l’onglet, valider le code à 2 facteurs plus vite, réessayer.</td></tr>
     <tr><td>Provisionner : contexte SharePoint inaccessible (411)</td><td>Bug corrigé après la version 0.5.29. Ne pas insister : attendre la mise à jour.</td></tr>
-    <tr><td>Provisionner : contexte SharePoint inaccessible (401)</td><td>Droit Entra <span class="mono">AllSites.Manage</span> manquant, ou pas reconnecté après l’avoir ajouté. Puis Provisionner.</td></tr>
+    <tr><td>Provisionner : contexte SharePoint inaccessible (401)</td><td>Droit Entra <span class="mono">AllSites.Manage</span> manquant, ou pas reconnecté après l’avoir ajouté. CRM 0.5.34 ou plus. Puis Provisionner.</td></tr>
+    <tr><td>Connecter Microsoft : <span class="mono">AADSTS28003</span> (scope vide)</td><td>Bug 0.5.34. Installer 0.5.35 ou plus, puis Déconnecter / Connecter.</td></tr>
+    <tr><td>Provisionner : 403 sur CRM_Secrets / coller un groupe</td><td>Normal côté appli (SharePoint refuse que le logiciel change les droits). CRM <strong>0.5.38</strong> : Provisionner continue et écrit la clé. En dessous : mettre à jour, ne pas insister.</td></tr>
+    <tr><td>Explorateur Graph : site id is not valid (400)</td><td>Accolades <span class="mono">{ }</span> laissées dans l’URL. Les enlever.</td></tr>
+    <tr><td>SharePoint ne trouve pas « CRM - Conseillers »</td><td>Le groupe a un autre nom. Coller l’Object ID (page 4) et, si SharePoint demande un nom, l’e-mail Entra du groupe — pas « … - Membres » du site.</td></tr>
+    <tr><td>Provisionner OK mais clé / cache impossible</td><td>Le conseiller doit rester <strong>propriétaire</strong> du site SharePoint. Ne pas retirer ce compte des propriétaires.</td></tr>
     <tr><td>Plus de bouton Connecter (écran mot de passe)</td><td>Entrez le mot de passe CRM. Si <em>Reconnecter le compte Microsoft</em> apparaît : cliquez, puis déverrouillez. Si <em>Accès équipe révoqué</em> : informatique (groupes Entra / site), pas ce bouton.</td></tr>
   </table>
   <p class="footer">Ne jamais ouvrir ni modifier CRM_Secrets (liste masquée, limitée aux deux groupes). Ne jamais mettre le dossier du CRM dans OneDrive.</p>

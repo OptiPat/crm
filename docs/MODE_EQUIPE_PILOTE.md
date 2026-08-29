@@ -12,8 +12,12 @@ ce pilote. Le mode individuel reste le fonctionnement par défaut.
 - l’application Entra configurée en client public avec PKCE ;
 - les permissions déléguées `Sites.Selected`, `GroupMember.Read.All` et
   `Mail.Send.Shared`, consenties par un administrateur ;
+- la permission SharePoint déléguée `AllSites.Manage`, consentie, **sans**
+  `AllSites.FullControl` sur l’application CRM ;
 - le rôle `manage` accordé explicitement à l’application sur le seul site CRM
-  pendant le provisionnement des listes, puis ramené à `write` en exploitation ;
+  pendant le provisionnement des listes, puis ramené à `write` en exploitation
+  (`fullcontrol` Graph n’est pas requis à partir de 0.5.38) ;
+- CRM **0.5.38** ou plus sur tous les postes ;
 - BitLocker activé sur Windows et FileVault activé sur macOS.
 
 La permission effective est l’intersection des droits de l’application sur le site

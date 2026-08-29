@@ -1,7 +1,8 @@
 # Fiche assistante — rejoindre le CRM partagé
 
 Cette procédure doit être exécutée séparément par chaque assistante, avec son propre compte
-Microsoft 365. Compter environ 15 à 30 minutes hors téléchargement initial.
+Microsoft 365. Compter environ 15 à 30 minutes hors téléchargement initial. CRM **0.5.38** ou
+plus, même version que le conseiller.
 
 ## Avant de commencer
 
@@ -19,7 +20,7 @@ Demander au conseiller :
 Vérifier :
 
 - [ ] Le conseiller a déjà activé la synchronisation équipe.
-- [ ] Le CRM installé est à la même version que celui du conseiller.
+- [ ] Le CRM installé est **0.5.38 ou plus**, à la même version que celui du conseiller.
 - [ ] Le CRM de ce poste est vide.
 - [ ] Internet fonctionne.
 - [ ] La connexion Microsoft 365 avec MFA fonctionne dans le navigateur.
@@ -67,7 +68,8 @@ Si le bouton **Connecter Microsoft** reste indisponible, contrôler le Client ID
 6. Accepter les autorisations déjà approuvées par l'administrateur.
 7. Revenir au CRM sans fermer l'application.
 
-Résultat attendu : le panneau affiche l'adresse Microsoft personnelle de l'assistante.
+Résultat attendu : le panneau affiche l'adresse Microsoft personnelle de l'assistante. Le bandeau
+beige « identité nominative » disparaît une fois connecté (ce n'est pas une erreur).
 
 **STOP** si l'adresse affichée est celle du conseiller, de la boîte cabinet ou d'une autre
 assistante : cliquer sur **Déconnecter** tant que l'action est disponible et recommencer avec le

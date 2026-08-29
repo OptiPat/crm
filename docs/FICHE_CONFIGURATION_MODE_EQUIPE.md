@@ -23,19 +23,25 @@ sont des identifiants techniques. Ne jamais y inscrire de mot de passe, token OA
 
 Contrôles :
 
-- [ ] Chaque personne dispose de son propre compte Microsoft 365.
+- [ ] Chaque personne dispose de son propre compte Microsoft 365 nominatif.
+- [ ] Chaque personne qui ouvre le CRM a une licence **Microsoft 365 Business Basic** (ou
+      Standard). Pas Famille / Personal / Power Automate Free.
 - [ ] La MFA est activée et testée sur les trois comptes.
-- [ ] Chaque compte possède SharePoint Online et Exchange Online.
 - [ ] BitLocker ou FileVault est activé sur les trois postes.
 - [ ] Les deux postes assistantes contiennent un CRM vide.
+- [ ] CRM **0.5.38** ou plus sur tous les postes.
 
 ## 2. Groupes Microsoft Entra
 
+Type : ☐ sécurité  ☐ Microsoft 365 (les deux marchent)
+
 - Groupe conseillers :
-  - nom : ______________________________________________
+  - nom exact : _________________________________________
+  - e-mail du groupe (si Microsoft 365) : _______________
   - Object ID : _________________________________________
 - Groupe assistantes :
-  - nom : ______________________________________________
+  - nom exact : _________________________________________
+  - e-mail du groupe (si Microsoft 365) : _______________
   - Object ID : _________________________________________
 
 Contrôles :
@@ -59,16 +65,18 @@ Permissions déléguées :
 - [ ] `offline_access`
 - [ ] `openid`
 - [ ] `email`
-- [ ] Consentement administrateur accordé
+- [ ] `AllSites.Manage` (SharePoint délégué, pas Graph)
+- [ ] Consentement administrateur accordé (Graph **et** SharePoint)
 - [ ] Flux client public / PKCE autorisé
 - [ ] Aucun secret client créé pour le CRM desktop
+- [ ] `AllSites.FullControl` **non** ajouté à l'application CRM
 
 ## 4. Site SharePoint
 
 - URL complète : _________________________________________
 - Hostname, sans `https://` : ____________________________
 - Chemin commençant par `/sites/` : ______________________
-- ID Graph du site : _____________________________________
+- ID Graph du site (sans accolades `{ }`) : ______________
 - Nom lisible du site : __________________________________
 
 Contrôles :
@@ -80,7 +88,7 @@ Contrôles :
 
 Après **Provisionner listes CRM** :
 
-- [ ] Les six listes `CRM_*` sont présentes.
+- [ ] Les **sept** listes `CRM_*` sont présentes.
 - [ ] La bibliothèque **Documents** est accessible.
 - [ ] Le grant `manage` a été supprimé.
 - [ ] Un nouveau grant limité à `write` a été créé.
@@ -101,7 +109,7 @@ Contrôles :
 
 ## 6. État du poste conseiller
 
-- Version CRM installée : ________________________________
+- Version CRM installée (0.5.38+) : _____________________
 - Date de la sauvegarde historique : _____________________
 - Emplacement vérifié de la sauvegarde : _________________
 

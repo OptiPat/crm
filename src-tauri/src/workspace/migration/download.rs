@@ -4,8 +4,7 @@ use super::sync_key::compute_sync_key;
 use super::upload::{payload_exceeds_sharepoint_limit, MAX_SHAREPOINT_PAYLOAD_JSON_BYTES};
 use crate::database::workspace_restore::{table_counts_for_snapshot_records, validate_snapshot_in_memory};
 use crate::database::workspace_sync::{
-    snapshot_checksum, SnapshotRecord, TableRecordCount, TeamMigrationSnapshot,
-    WORKSPACE_SYNC_SCHEMA_VERSION,
+    SnapshotRecord, TableRecordCount, TeamMigrationSnapshot, WORKSPACE_SYNC_SCHEMA_VERSION,
 };
 use crate::database::Database;
 use crate::workspace::collaboration::require_provisioned_team_workspace;
@@ -291,32 +290,37 @@ pub fn validate_team_remote_snapshot(
         None,
     )?;
 
-    let (snapshot, tombstone_count, parse_errors) = rebuild_snapshot_from_remote_items(&remote_items)?;
-    let mut report = validate_rebuilt_snapshot_in_memory(
+    let (snapshot, tombstone_count, parse_errors) =
+        rebuild_snapshot_from_remote_items(&remote_items)?;
+    Ok(validate_remote_snapshot_report(
         &snapshot,
         expected_checksum,
         tombstone_count,
         parse_errors,
-    );
+    ))
+}
 
-    if report.checksum_match && report.valid {
-        let recalculated = snapshot_checksum(&snapshot);
-        if recalculated != report.expected_checksum {
-            report.valid = false;
-            report.checksum_match = false;
-            report.errors.push(format!(
-                "Checksum recalculé divergent ({recalculated} vs {}).",
-                report.expected_checksum
-            ));
-        }
-    }
-
-    Ok(report)
+/// SharePoint ne stocke que les lignes présentes : le snapshot distant n'a donc
+/// pas les tables exportables à 0, contrairement à l'aperçu local. Le checksum
+/// se compare après normalisation (même forme que l'aperçu), pas sur le sparse.
+fn validate_remote_snapshot_report(
+    snapshot: &TeamMigrationSnapshot,
+    expected_checksum: &str,
+    tombstone_count: usize,
+    parse_errors: Vec<String>,
+) -> TeamMigrationValidateReport {
+    validate_rebuilt_snapshot_in_memory(
+        snapshot,
+        expected_checksum,
+        tombstone_count,
+        parse_errors,
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::workspace_sync::{build_team_migration_snapshot, snapshot_checksum};
     use crate::database::Database;
     use serde_json::json;
 
@@ -399,7 +403,7 @@ mod tests {
             )
             .unwrap();
         let source =
-            crate::database::workspace_sync::build_team_migration_snapshot(&db).unwrap();
+            build_team_migration_snapshot(&db).unwrap();
         let expected = snapshot_checksum(&source);
         let items = snapshot_to_crm_data_items(&source).unwrap();
         let (rebuilt, tombstones, errors) =
@@ -408,5 +412,35 @@ mod tests {
         assert!(errors.is_empty());
         let report = validate_rebuilt_snapshot_in_memory(&rebuilt, &expected, 0, errors);
         assert!(report.valid, "{:?}", report.errors);
+    }
+
+    #[test]
+    fn validation_accepts_remote_items_that_omit_empty_tables() {
+        let db = Database::open_in_memory_workspace_cache().unwrap();
+        db.connection()
+            .execute_batch(
+                "INSERT INTO foyers (nom, type_foyer) VALUES ('FOYER TEST', 'COUPLE');",
+            )
+            .unwrap();
+        let source =
+            build_team_migration_snapshot(&db).unwrap();
+        let expected = snapshot_checksum(&source);
+        assert!(
+            source.table_counts.values().any(|count| *count == 0),
+            "le filet suppose des tables exportables vides"
+        );
+        let items = snapshot_to_crm_data_items(&source).unwrap();
+        let (rebuilt, tombstones, errors) =
+            rebuild_snapshot_from_remote_items(&items).unwrap();
+        assert_eq!(tombstones, 0);
+        assert!(errors.is_empty());
+        assert_ne!(
+            snapshot_checksum(&rebuilt),
+            expected,
+            "un hash du snapshot sparse (sans tables à 0) ne doit pas servir de contrôle"
+        );
+        let report = validate_remote_snapshot_report(&rebuilt, &expected, 0, errors);
+        assert!(report.valid, "{:?}", report.errors);
+        assert!(report.checksum_match);
     }
 }

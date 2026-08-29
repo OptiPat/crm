@@ -28,8 +28,9 @@ Utiliser uniquement des identités et données fictives dans les scénarios ci-d
 - [ ] Conseiller dans le seul groupe conseillers.
 - [ ] Deux assistantes dans le seul groupe assistantes.
 - [ ] Les trois utilisateurs ouvrent le site SharePoint.
-- [ ] L'application possède `Sites.Selected`.
-- [ ] Le site accorde le rôle `write` à l'application CRM.
+- [ ] L'application possède `Sites.Selected` **et** `AllSites.Manage`.
+- [ ] Le site accorde le rôle `write` à l'application CRM (après provisionnement).
+- [ ] CRM **0.5.38** ou plus.
 - [ ] Les listes `CRM_Data`, `CRM_Sequences`, `CRM_Secrets`, `CRM_Locks`, `CRM_Presence`,
       `CRM_Audit` et `CRM_Members` existent.
 - [ ] La bibliothèque **Documents** existe.
