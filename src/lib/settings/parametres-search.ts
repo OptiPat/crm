@@ -162,6 +162,12 @@ export const PARAMETRES_SEARCH_INDEX: ParametresSearchItem[] = [
     section: "donnees",
   },
   {
+    id: "mise-a-jour",
+    label: "Mises à jour du logiciel",
+    keywords: ["mise à jour", "update", "version", "télécharger"],
+    section: "application",
+  },
+  {
     id: "mot-de-passe",
     label: "Changer le mot de passe",
     keywords: ["mot de passe", "password", "sécurité", "verrou", "accès"],
@@ -177,12 +183,6 @@ export const PARAMETRES_SEARCH_INDEX: ParametresSearchItem[] = [
     id: "verrouillage-automatique",
     label: "Verrouillage automatique",
     keywords: ["inactivité", "veille", "verrou", "timeout", "sécurité", "tray"],
-    section: "application",
-  },
-  {
-    id: "mise-a-jour",
-    label: "Mises à jour du logiciel",
-    keywords: ["mise à jour", "update", "version", "télécharger"],
     section: "application",
   },
   {

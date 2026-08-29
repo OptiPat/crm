@@ -838,10 +838,12 @@ export function TeamWorkspaceSettingsPanel() {
               ) : null}
             </div>
             {!syncActivated && joinBlockedReason ? (
-              <p className="text-xs text-amber-800 dark:text-amber-200">{joinBlockedReason}</p>
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-50">
+                {joinBlockedReason}
+              </p>
             ) : null}
             {!syncActivated && canManage ? (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-foreground">
                 Sur le PC de Tony (dossiers déjà là) : ne cliquez pas sur Rejoindre — utilisez
                 Provisionner puis la série migration. Rejoindre est pour un poste vide.
               </p>
@@ -872,11 +874,11 @@ export function TeamWorkspaceSettingsPanel() {
                   </div>
                 ) : null}
                 {migrationPreview.warnings.length > 0 ? (
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                  <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                    <p className="text-sm font-medium text-amber-950 dark:text-amber-50">
                       Avertissements
                     </p>
-                    <ul className="text-xs text-amber-900/90 dark:text-amber-100/90 list-disc pl-4 space-y-0.5">
+                    <ul className="list-disc space-y-1 pl-4 text-sm text-amber-950 dark:text-amber-50">
                       {migrationPreview.warnings.map((warning) => (
                         <li key={warning}>{warning}</li>
                       ))}
@@ -949,7 +951,7 @@ export function TeamWorkspaceSettingsPanel() {
                       <dd className="font-mono">{migrationUploadReport.failed}</dd>
                     </dl>
                     {migrationUploadReport.errors.length > 0 ? (
-                      <ul className="max-h-32 overflow-y-auto list-disc pl-4 space-y-0.5 text-amber-900/90 dark:text-amber-100/90">
+                      <ul className="max-h-40 overflow-y-auto break-words list-disc space-y-1 rounded-md border border-red-200 bg-red-50 p-3 pl-7 text-sm text-red-950 dark:border-red-800 dark:bg-red-950 dark:text-red-50">
                         {migrationUploadReport.errors.map((entry) => (
                           <li key={`${entry.syncKey}-${entry.message}`}>
                             {entry.tableName} / {entry.recordKey} — {entry.message}
@@ -992,7 +994,7 @@ export function TeamWorkspaceSettingsPanel() {
                       </dd>
                     </dl>
                     {migrationValidateReport.errors.length > 0 ? (
-                      <ul className="max-h-32 overflow-y-auto list-disc pl-4 space-y-0.5 text-amber-900/90 dark:text-amber-100/90">
+                      <ul className="max-h-40 overflow-y-auto break-words list-disc space-y-1 rounded-md border border-red-200 bg-red-50 p-3 pl-7 text-sm text-red-950 dark:border-red-800 dark:bg-red-950 dark:text-red-50">
                         {migrationValidateReport.errors.map((entry) => (
                           <li key={entry}>{entry}</li>
                         ))}
@@ -1017,7 +1019,7 @@ export function TeamWorkspaceSettingsPanel() {
                     ) : null}
                   </div>
                 ) : null}
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-foreground">
                   Cliquez les boutons dans l’ordre : Préparer, Envoyer, Valider, puis Activer.
                   Une fois l’équipe allumée, ces boutons disparaissent.
                 </p>
@@ -1100,13 +1102,13 @@ export function TeamWorkspaceSettingsPanel() {
               </div>
             ) : null}
             {!config.siteId?.trim() ? (
-              <p className="text-xs text-muted-foreground">
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-50">
                 {canManage
                   ? "Tester SharePoint, puis Enregistrer encore une fois pour garder l’ID site. Ensuite seulement : Copier la fiche."
                   : "ID site manquant : Rejoindre restera gris. Demandez à Tony une fiche avec l’ID site Graph, réinstallez le CRM (poste vide) et recoller toute la fiche avant Enregistrer."}
               </p>
             ) : (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-foreground">
                 Espace collaboratif provisionné (site Graph : {config.siteId}).
               </p>
             )}
@@ -1114,7 +1116,7 @@ export function TeamWorkspaceSettingsPanel() {
         ) : null}
 
         {!canManage && teamConfigured ? (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-foreground">
             Configuration verrouillée en mode secrétaire. Seul un conseiller peut modifier
             ou désactiver le mode équipe. Pour retirer une personne : l’informatique la sort
             du groupe Entra Assistantes et du site SharePoint — rien à cliquer ici.
@@ -1145,7 +1147,9 @@ export function TeamWorkspaceSettingsPanel() {
           ) : null}
         </div>
         {canManage && teamEnabled && ficheCopyBlockedReason ? (
-          <p className="text-xs text-amber-800 dark:text-amber-200">{ficheCopyBlockedReason}</p>
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-50">
+            {ficheCopyBlockedReason}
+          </p>
         ) : null}
       </div>
     </SettingsPanel>

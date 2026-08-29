@@ -10,7 +10,7 @@ import { useAppUpdate } from "@/components/system/app-update-context";
 import { ChangePasswordDialog } from "@/components/settings/ChangePasswordDialog";
 import { SystemAuthSettings } from "@/components/settings/SystemAuthSettings";
 import { AutoLockSettings } from "@/components/settings/AutoLockSettings";
-import { Bell, Download, Lock, Shield } from "lucide-react";
+import { Download, Lock, Shield } from "lucide-react";
 
 export function ParametresApplicationSection() {
   const { pendingUpdate } = useAppUpdate();
@@ -18,12 +18,6 @@ export function ParametresApplicationSection() {
 
   return (
     <div className="space-y-6">
-      <ParametresLicenseSection />
-
-      <ParametresAppBrandingSection />
-
-      <ParametresBackgroundSection />
-
       <SettingsPanel
         title="Mises à jour"
         description="Vérification au démarrage. Vos données restent sur cet ordinateur."
@@ -45,53 +39,40 @@ export function ParametresApplicationSection() {
         </div>
       </SettingsPanel>
 
+      <ParametresLicenseSection />
+
+      <ParametresAppBrandingSection />
+
+      <ParametresBackgroundSection />
+
       <SettingsPanel
         title="Sécurité locale"
         description="Protection de l'accès au CRM sur ce poste."
       >
-        <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-4">
-          <Shield className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-          <div className="space-y-3 flex-1">
-            <p className="text-sm text-muted-foreground">
-              L'accès à l'application est protégé par un mot de passe sur ce poste.
-              Vos données restent stockées localement sur cet ordinateur.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setChangePasswordOpen(true)}
-            >
-              <Lock className="h-4 w-4 mr-1.5" />
-              Changer le mot de passe
-            </Button>
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-4">
+            <Shield className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+            <div className="space-y-3 flex-1">
+              <p className="text-sm text-muted-foreground">
+                L'accès à l'application est protégé par un mot de passe sur ce poste.
+                Vos données restent stockées localement sur cet ordinateur.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setChangePasswordOpen(true)}
+              >
+                <Lock className="h-4 w-4 mr-1.5" />
+                Changer le mot de passe
+              </Button>
+            </div>
           </div>
+          <AutoLockSettings />
+          <SystemAuthSettings />
         </div>
-        <AutoLockSettings />
-        <SystemAuthSettings />
       </SettingsPanel>
 
       <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
-
-      <SettingsPanel title="Notifications" description="Rappels et alertes dans le CRM.">
-        <div className="flex items-start gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Bell className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <p className="text-sm text-foreground">
-              Les alertes actives sont centralisées dans{" "}
-              <span className="font-medium">Suivi → Alertes</span>.
-            </p>
-            <p className="text-sm text-muted-foreground mt-2">
-              La personnalisation fine des notifications (email desktop, sons, filtres) sera ajoutée
-              ultérieurement.
-            </p>
-            <Badge variant="outline" className="mt-3 font-normal">
-              À venir
-            </Badge>
-          </div>
-        </div>
-      </SettingsPanel>
     </div>
   );
 }

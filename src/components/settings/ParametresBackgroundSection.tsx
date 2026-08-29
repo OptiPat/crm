@@ -379,9 +379,8 @@ export function ParametresBackgroundSection() {
 
         <Button
           type="button"
-          variant="outline"
+          variant="destructive"
           size="sm"
-          className="text-destructive hover:text-destructive"
           onClick={() => {
             if (
               !window.confirm(
