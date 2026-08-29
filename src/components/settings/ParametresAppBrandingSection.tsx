@@ -157,7 +157,13 @@ export function ParametresAppBrandingSection() {
       setForm(next);
       setSavedSnapshot(formSnapshot(next));
       notifyAppBrandingChanged();
-      toast.success("Identité de l'application enregistrée");
+      if (saved.osError) {
+        toast.warning(
+          "Identité enregistrée, mais les raccourcis Windows n'ont pas pu être mis à jour. Réessayez ou redémarrez le CRM."
+        );
+      } else {
+        toast.success("Identité de l'application enregistrée");
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Enregistrement impossible";
@@ -181,7 +187,7 @@ export function ParametresAppBrandingSection() {
   return (
     <SettingsPanel
       title="Identité de l'application"
-      description="Nom et logo affichés à la connexion, dans le menu, la barre des tâches et le titre de la fenêtre."
+      description="Nom et logo affichés à la connexion, dans le menu, sur le bureau et dans le titre de la fenêtre."
       action={
         isDirty ? (
           <Button size="sm" disabled={saving} onClick={() => void handleSave()}>
@@ -222,17 +228,17 @@ export function ParametresAppBrandingSection() {
           <div className="flex-1 space-y-1">
             <p className="text-sm font-medium">Aperçu</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Le nom et le logo s&apos;appliquent aussi à la barre des tâches et, si un raccourci
-              « CRM W.Y.S » existe sur le bureau ou dans le menu Démarrer, à son icône. Réappliqué
-              automatiquement à chaque lancement (y compris après une mise à jour). Le nom de
-              l&apos;installateur et le fichier .exe restent « CRM W.Y.S ».
+              Enregistrer met à jour le raccourci du bureau et du menu Démarrer (pas seulement la
+              fenêtre ouverte). L&apos;icône épinglée dans la barre des tâches ne suit pas toujours :
+              détachez puis ré-épinglez depuis le nouveau raccourci. L&apos;installateur et le fichier
+              .exe restent « CRM W.Y.S ».
             </p>
           </div>
         </div>
 
         <SettingsRow
           label="Nom affiché"
-          hint="Écran de connexion, menu latéral, titre de la fenêtre"
+          hint="Connexion, menu, fenêtre et bureau"
           htmlFor="app-display-name"
         >
           <Input
@@ -246,7 +252,7 @@ export function ParametresAppBrandingSection() {
           />
         </SettingsRow>
 
-        <SettingsRow label="Logo" hint="Écran de connexion et menu latéral" htmlFor="app-logo-mode">
+        <SettingsRow label="Logo" hint="Connexion, menu et raccourcis bureau" htmlFor="app-logo-mode">
           <Select
             value={form.logoMode}
             onValueChange={(value) =>

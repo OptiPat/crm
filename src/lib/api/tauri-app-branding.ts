@@ -12,6 +12,8 @@ export interface AppBranding {
   logoMode: AppLogoMode;
   /** Chemin absolu sur disque ; null = logo embarqué par défaut. */
   logoPath: string | null;
+  shortcutsUpdated?: number;
+  osError?: string | null;
 }
 
 export async function getAppBranding(): Promise<AppBranding> {

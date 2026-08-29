@@ -3,17 +3,22 @@
 use super::AppBrandingManager;
 use image::{Rgba, RgbaImage};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
-#[cfg(windows)]
-use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
 use tauri::{AppHandle, Manager};
 
-const BRANDING_ICO_FILENAME: &str = "branding-window.ico";
 const OS_STATE_FILENAME: &str = "branding-os-state.json";
+/// Incrémente si le scan des raccourcis change — force une réapplication chez les installs existantes.
+const OS_BRANDING_LAYOUT: u32 = 3;
+static APPLY_OS_BRANDING_LOCK: Mutex<()> = Mutex::new(());
 /// Limite de decodage — evite OOM / freeze sur logos tres lourds (ex. PNG 4000+ px).
 const MAX_SOURCE_PX: u32 = 512;
+
+#[cfg(windows)]
+const UPDATE_SHORTCUTS_PS1: &str = include_str!("update_windows_shortcuts.ps1");
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,13 +28,22 @@ pub struct OsBrandingResult {
     pub skipped_unchanged: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct OsBrandingState {
     display_name: String,
     logo_fingerprint: Option<String>,
+    #[serde(default)]
+    layout_version: u32,
 }
 
 pub fn apply_os_branding(app: &AppHandle) -> Result<OsBrandingResult, String> {
+    let _guard = APPLY_OS_BRANDING_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    apply_os_branding_locked(app)
+}
+
+fn apply_os_branding_locked(app: &AppHandle) -> Result<OsBrandingResult, String> {
     let manager = AppBrandingManager::new(app)?;
     let config = manager.load();
     let display_name = manager.effective_display_name(&config);
@@ -43,17 +57,21 @@ pub fn apply_os_branding(app: &AppHandle) -> Result<OsBrandingResult, String> {
     let icons_dir = manager.app_data_dir.join("icons");
     fs::create_dir_all(&icons_dir)
         .map_err(|e| format!("Impossible de créer le dossier icons : {e}"))?;
-    let ico_path = icons_dir.join(BRANDING_ICO_FILENAME);
     let state_path = manager.app_data_dir.join(OS_STATE_FILENAME);
 
     let logo_source = manager.resolve_logo_path(&config);
     let logo_fingerprint = logo_source
         .as_ref()
         .and_then(|p| file_fingerprint(p.as_path()));
+    let ico_path = match logo_fingerprint.as_ref() {
+        Some(fp) => icons_dir.join(branding_ico_filename(fp)),
+        None => icons_dir.join("branding-window.ico"),
+    };
 
     let desired_state = OsBrandingState {
         display_name: display_name.clone(),
         logo_fingerprint: logo_fingerprint.clone(),
+        layout_version: OS_BRANDING_LAYOUT,
     };
 
     if is_os_state_unchanged(&state_path, &ico_path, &desired_state, logo_source.is_some()) {
@@ -70,17 +88,24 @@ pub fn apply_os_branding(app: &AppHandle) -> Result<OsBrandingResult, String> {
         write_ico_from_rgba(&rgba, &ico_path)?;
         set_main_window_icon_from_rgba(app, &rgba)?
     } else {
-        let _ = fs::remove_file(&ico_path);
         reset_main_window_icon(app)?
     };
 
     #[cfg(windows)]
     let shortcuts_updated =
-        update_windows_shortcuts(app, logo_source.as_deref(), &ico_path)?;
+        match update_windows_shortcuts(app, logo_source.as_deref(), &ico_path, &display_name) {
+            Ok(n) => n,
+            Err(e) => {
+                eprintln!("⚠️ branding OS raccourcis : {e}");
+                return Err(e);
+            }
+        };
 
     #[cfg(not(windows))]
     let shortcuts_updated = 0;
 
+    let keep_ico = logo_source.is_some().then_some(ico_path.as_path());
+    cleanup_old_branding_icos(&icons_dir, keep_ico);
     save_os_state(&state_path, &desired_state)?;
 
     Ok(OsBrandingResult {
@@ -88,6 +113,53 @@ pub fn apply_os_branding(app: &AppHandle) -> Result<OsBrandingResult, String> {
         shortcuts_updated,
         skipped_unchanged: false,
     })
+}
+
+fn strip_verbatim_prefix(path: &str) -> &str {
+    path.strip_prefix(r"\\?\").unwrap_or(path)
+}
+
+fn branding_ico_filename(fingerprint: &str) -> String {
+    let digest = Sha256::digest(fingerprint.as_bytes());
+    let short: String = digest.iter().take(8).map(|b| format!("{b:02x}")).collect();
+    format!("branding-window-{short}.ico")
+}
+
+fn sanitize_shortcut_stem(name: &str, fallback: &str) -> String {
+    let mapped: String = name
+        .chars()
+        .map(|c| match c {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '-',
+            c if c.is_control() => '-',
+            c => c,
+        })
+        .collect();
+    let trimmed = mapped.trim().trim_end_matches('.').trim();
+    let stem: String = trimmed.chars().take(80).collect();
+    if stem.is_empty() {
+        fallback.to_string()
+    } else {
+        stem
+    }
+}
+
+fn cleanup_old_branding_icos(icons_dir: &Path, keep: Option<&Path>) {
+    let Ok(entries) = fs::read_dir(icons_dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !name.starts_with("branding-window") || !name.ends_with(".ico") {
+            continue;
+        }
+        if keep.is_some_and(|kept| kept == path.as_path()) {
+            continue;
+        }
+        let _ = fs::remove_file(path);
+    }
 }
 
 fn file_fingerprint(path: &Path) -> Option<String> {
@@ -123,6 +195,7 @@ fn is_os_state_unchanged(
     };
     stored.display_name == desired.display_name
         && stored.logo_fingerprint == desired.logo_fingerprint
+        && stored.layout_version == OS_BRANDING_LAYOUT
 }
 
 fn save_os_state(path: &Path, state: &OsBrandingState) -> Result<(), String> {
@@ -282,10 +355,21 @@ fn write_ico_from_rgba(rgba: &RgbaImage, dest: &Path) -> Result<(), String> {
 }
 
 #[cfg(windows)]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ShortcutJob {
+    exe_path: String,
+    icon_location: String,
+    display_stem: String,
+    aumid: String,
+}
+
+#[cfg(windows)]
 fn update_windows_shortcuts(
     app: &AppHandle,
     logo_source: Option<&Path>,
     generated_ico: &Path,
+    display_name: &str,
 ) -> Result<u32, String> {
     use std::os::windows::process::CommandExt;
     use std::process::Command;
@@ -298,61 +382,65 @@ fn update_windows_shortcuts(
         .as_deref()
         .unwrap_or(super::DEFAULT_DISPLAY_NAME);
     let exe_path = std::env::current_exe().map_err(|e| format!("Exe introuvable : {e}"))?;
+    let exe_path = strip_verbatim_prefix(&exe_path.to_string_lossy()).to_string();
+    let icons_dir = generated_ico
+        .parent()
+        .ok_or("Dossier icônes introuvable")?;
 
     let icon_location = if logo_source.is_some() && generated_ico.is_file() {
-        generated_ico.to_string_lossy().into_owned()
+        format!("{},0", strip_verbatim_prefix(&generated_ico.to_string_lossy()))
     } else {
-        format!("{},0", exe_path.to_string_lossy())
+        format!("{exe_path},0")
     };
 
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(userprofile) = std::env::var("USERPROFILE") {
-        candidates.push(PathBuf::from(&userprofile).join("Desktop"));
+    let job = ShortcutJob {
+        exe_path,
+        icon_location,
+        display_stem: sanitize_shortcut_stem(display_name, product_name),
+        aumid: app.config().identifier.clone(),
+    };
+    let job_path = icons_dir.join("update-shortcuts-job.json");
+    let script_path = icons_dir.join("update-windows-shortcuts.ps1");
+    let job_json = serde_json::to_string(&job).map_err(|e| format!("Job raccourcis : {e}"))?;
+    fs::write(&job_path, job_json).map_err(|e| format!("Écriture job raccourcis : {e}"))?;
+    fs::write(&script_path, UPDATE_SHORTCUTS_PS1)
+        .map_err(|e| format!("Écriture script raccourcis : {e}"))?;
+
+    let powershell = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
+    let output = Command::new(if Path::new(powershell).is_file() {
+        powershell
+    } else {
+        "powershell"
+    })
+        .arg("-NoProfile")
+        .arg("-NonInteractive")
+        .arg("-ExecutionPolicy")
+        .arg("Bypass")
+        .arg("-File")
+        .arg(&script_path)
+        .arg("-JobPath")
+        .arg(&job_path)
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|e| format!("PowerShell raccourcis : {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        return Err(format!(
+            "Impossible de mettre à jour les raccourcis Windows : {}",
+            stderr.trim()
+        ));
     }
-    if let Ok(public) = std::env::var("PUBLIC") {
-        candidates.push(PathBuf::from(&public).join("Desktop"));
-    }
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        candidates.push(
-            PathBuf::from(&appdata)
-                .join("Microsoft")
-                .join("Windows")
-                .join("Start Menu")
-                .join("Programs"),
-        );
+    if !stderr.trim().is_empty() {
+        eprintln!("⚠️ Raccourcis Windows : {stderr}");
     }
 
-    let mut updated = 0u32;
-    for dir in candidates {
-        let lnk = dir.join(format!("{product_name}.lnk"));
-        if !lnk.is_file() {
-            continue;
-        }
-        let lnk_str = lnk.to_string_lossy().replace('\'', "''");
-        let icon_str = icon_location.replace('\'', "''");
-        let script = format!(
-            "$s = (New-Object -ComObject WScript.Shell).CreateShortcut('{lnk_str}'); \
-             $s.IconLocation = '{icon_str}'; $s.Save()"
-        );
-        let status = Command::new("powershell")
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                &script,
-            ])
-            .creation_flags(CREATE_NO_WINDOW)
-            .status()
-            .map_err(|e| format!("PowerShell raccourci : {e}"))?;
-        if status.success() {
-            updated += 1;
-        } else {
-            eprintln!("⚠️ Échec mise à jour raccourci : {}", lnk.display());
-        }
-    }
-
+    let updated = stdout
+        .lines()
+        .rev()
+        .find_map(|line| line.trim().parse::<u32>().ok())
+        .unwrap_or(0);
     Ok(updated)
 }
 
@@ -399,5 +487,40 @@ mod tests {
         assert_eq!(square.get_pixel(16, 0)[0], 255);
         assert_eq!(square.get_pixel(16, 31)[0], 255);
         assert_eq!(square.get_pixel(16, 16)[2], 255);
+    }
+
+    #[test]
+    fn sanitize_shortcut_stem_replaces_invalid_chars() {
+        assert_eq!(sanitize_shortcut_stem("Mon CRM", "CRM W.Y.S"), "Mon CRM");
+        assert_eq!(sanitize_shortcut_stem("A:B", "x"), "A-B");
+        assert_eq!(sanitize_shortcut_stem("  ...  ", "CRM W.Y.S"), "CRM W.Y.S");
+        assert_eq!(sanitize_shortcut_stem("CRM W.Y.S", "x"), "CRM W.Y.S");
+    }
+
+    #[test]
+    fn branding_ico_filename_is_stable_and_changes_with_fingerprint() {
+        let a = branding_ico_filename("path:10:1");
+        let b = branding_ico_filename("path:10:1");
+        assert_eq!(a, b);
+        assert!(a.starts_with("branding-window-"));
+        assert!(a.ends_with(".ico"));
+        assert_ne!(a, branding_ico_filename("path:10:2"));
+    }
+
+    #[test]
+    fn old_os_state_without_layout_is_stale() {
+        let stored: OsBrandingState =
+            serde_json::from_str(r#"{"display_name":"X","logo_fingerprint":null}"#).unwrap();
+        assert_eq!(stored.layout_version, 0);
+        assert_ne!(stored.layout_version, OS_BRANDING_LAYOUT);
+    }
+
+    #[test]
+    fn strip_verbatim_prefix_drops_extended_path() {
+        assert_eq!(
+            strip_verbatim_prefix(r"\\?\C:\Program Files\CRM W.Y.S\patrimoine-crm.exe"),
+            r"C:\Program Files\CRM W.Y.S\patrimoine-crm.exe"
+        );
+        assert_eq!(strip_verbatim_prefix(r"C:\app.exe"), r"C:\app.exe");
     }
 }
