@@ -34,7 +34,19 @@ fn field_bool(fields: &Value, name: &str) -> bool {
 
 fn field_u32(fields: &Value, name: &str) -> Option<u32> {
     match fields.get(name) {
-        Some(Value::Number(value)) => value.as_u64().and_then(|value| value.try_into().ok()),
+        Some(Value::Number(value)) => value
+            .as_u64()
+            .and_then(|value| u32::try_from(value).ok())
+            .or_else(|| {
+                value.as_f64().and_then(|number| {
+                    if number.is_finite() && number >= 0.0 && number.fract() == 0.0 {
+                        let rounded = number as u64;
+                        u32::try_from(rounded).ok()
+                    } else {
+                        None
+                    }
+                })
+            }),
         Some(Value::String(value)) => value.trim().parse().ok(),
         _ => None,
     }
@@ -123,6 +135,8 @@ pub fn prepare_pull_batch(
                 payload: None,
                 deleted: true,
             }
+        } else if field_string(&item.fields, "TableName").is_none() {
+            continue;
         } else {
             parse_live_delta_item(&item)?
         };
@@ -181,6 +195,34 @@ mod tests {
         let mut incompatible = live_item(payload);
         incompatible.fields["SchemaVersion"] = Value::from(999);
         assert!(parse_live_delta_item(&incompatible).is_err());
+
+        let mut graph_float = live_item(payload);
+        graph_float.fields["SchemaVersion"] = serde_json::json!(2.0);
+        assert!(parse_live_delta_item(&graph_float).is_ok());
+    }
+
+    #[test]
+    fn pull_skips_sharepoint_rows_without_table_name() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let payload = r#"{"id":{"kind":"integer","value":1}}"#;
+        let batch = prepare_pull_batch(
+            &db,
+            SharePointDeltaResult {
+                items: vec![
+                    ParsedSharePointDeltaItem {
+                        id: "1".into(),
+                        etag: Some("\"1\"".into()),
+                        fields: serde_json::json!({}),
+                        deleted: false,
+                    },
+                    live_item(payload),
+                ],
+                delta_link: "https://graph.microsoft.com/delta?token=2".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(batch.changes.len(), 1);
+        assert_eq!(batch.changes[0].remote_item_id, "sp-1");
     }
 
     #[test]
