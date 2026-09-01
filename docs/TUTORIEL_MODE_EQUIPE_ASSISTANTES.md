@@ -315,7 +315,7 @@ ferme le CRM.
 La feuille à leur imprimer est [`GUIDE_ASSISTANTE.html`](GUIDE_ASSISTANTE.html) (2 pages).
 Répéter ces étapes séparément sur chaque poste.
 
-1. Installer exactement la même version du CRM (**0.5.42**, en bas à gauche).
+1. Installer exactement la même version du CRM (**0.5.43**, en bas à gauche).
 2. Démarrer avec un CRM vide et créer le mot de passe de verrouillage local.
    Assistant : **Vos informations** → **Terminer**.
    (Connexion email et partenaires : plus tard, dans Paramètres.)

@@ -1,7 +1,7 @@
 # Fiche assistante — rejoindre le CRM partagé
 
-Un ordinateur = une personne = **son** compte Microsoft. CRM **0.5.42**, le même numéro que Tony
-(en bas à gauche : `Version 0.5.42`, ou badge `v0.5.42` en haut des Paramètres). 15 à 30 minutes.
+Un ordinateur = une personne = **son** compte Microsoft. CRM **0.5.43**, le même numéro que Tony
+(en bas à gauche : `Version 0.5.43`, ou badge `v0.5.43` en haut des Paramètres). 15 à 30 minutes.
 
 La version imprimable A4 est [`GUIDE_ASSISTANTE.html`](GUIDE_ASSISTANTE.html)
 (ouvrir dans le navigateur → Imprimer) et [`GUIDE_ASSISTANTE.pdf`](GUIDE_ASSISTANTE.pdf).
