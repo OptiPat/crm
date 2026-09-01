@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { filterParametresSearch } from "@/lib/settings/parametres-search";
+import { LICENSE_UI_VISIBLE } from "@/lib/licensing/license-ui";
 import { getSetupChecklist } from "@/lib/settings/parametres-completion";
 import { resolveSettingsSection } from "@/lib/settings/parametres-section-resolve";
 import {
@@ -88,6 +89,15 @@ describe("parametres-search", () => {
   it("place Stellium dans Emails & envois", () => {
     const stellium = filterParametresSearch("stellium").find((h) => h.id === "email-stellium");
     expect(stellium?.section).toBe("email-stellium");
+  });
+
+  it("masque la licence payante dans la recherche tant que l'UI est cachée", () => {
+    const hits = filterParametresSearch("licence");
+    if (LICENSE_UI_VISIBLE) {
+      expect(hits.some((h) => h.id === "licence")).toBe(true);
+    } else {
+      expect(hits.some((h) => h.id === "licence")).toBe(false);
+    }
   });
 
   it("cible les bonnes sections checklist email", () => {

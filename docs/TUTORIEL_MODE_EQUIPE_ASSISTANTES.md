@@ -15,8 +15,9 @@ conseiller. La feuille de route imprimable A4 est [`GUIDE_TONY_EQUIPE.html`](GUI
 
 - [`FICHE_CONFIGURATION_MODE_EQUIPE.md`](FICHE_CONFIGURATION_MODE_EQUIPE.md) : fiche à compléter
   avant l'installation ;
-- [`FICHE_BRANCHEMENT_ASSISTANTE.md`](FICHE_BRANCHEMENT_ASSISTANTE.md) : procédure à remettre à
-  chaque assistante ;
+- [`GUIDE_ASSISTANTE.html`](GUIDE_ASSISTANTE.html) / [`GUIDE_ASSISTANTE.pdf`](GUIDE_ASSISTANTE.pdf) :
+  feuille A4 (2 pages) à imprimer pour chaque assistante ;
+- [`FICHE_BRANCHEMENT_ASSISTANTE.md`](FICHE_BRANCHEMENT_ASSISTANTE.md) : même contenu, version texte ;
 - [`CHECKLIST_PILOTE_MODE_EQUIPE.md`](CHECKLIST_PILOTE_MODE_EQUIPE.md) : recette GO/STOP avant
   l'utilisation de données réelles.
 
@@ -311,19 +312,21 @@ ferme le CRM.
 
 ## 13. Brancher chaque assistante
 
-Répéter ces étapes séparément sur les deux postes.
+La feuille à leur imprimer est [`GUIDE_ASSISTANTE.html`](GUIDE_ASSISTANTE.html) (2 pages).
+Répéter ces étapes séparément sur chaque poste.
 
-1. Installer exactement la même version du CRM.
+1. Installer exactement la même version du CRM (**0.5.42**, en bas à gauche).
 2. Démarrer avec un CRM vide et créer le mot de passe de verrouillage local.
-   À l'assistant de premier lancement : **Passer** les partenaires, puis **Commencer à vide**
-   (pas Importer).
+   Assistant : **Vos informations** → **Terminer**.
+   (Connexion email et partenaires : plus tard, dans Paramètres.)
 3. Ouvrir **Paramètres → Intégrations → Mode équipe SharePoint**.
 4. Coller le Client ID puis cliquer sur **Enregistrer Client ID**.
 5. Cliquer sur **Connecter Microsoft**.
 6. Se connecter avec le compte nominatif de l'assistante et valider la MFA.
 7. Activer **Activer le mode équipe SharePoint**.
 8. Choisir **Secrétaire** dans **Rôle sur cette installation**.
-9. Saisir exactement les valeurs de la fiche de configuration, notamment l'ID Graph du site.
+9. Recopier **chaque ligne** de la fiche dans le champ correspondant (pas tout dans une case).
+   L'ID Graph du site est obligatoire malgré le libellé « optionnel ».
 10. Cliquer sur **Enregistrer la configuration équipe**.
 11. Vérifier que la configuration devient verrouillée pour ce rôle.
 12. Cliquer sur **Rejoindre sur ce poste**.

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { getLicenseStatus, type LicenseStatusView } from "@/lib/api/tauri-license";
+import { LICENSE_UI_VISIBLE } from "@/lib/licensing/license-ui";
 import { Button } from "@/components/ui/button";
 
 interface LicenseStatusBannerProps {
@@ -11,6 +12,7 @@ export function LicenseStatusBanner({ onOpenSettings }: LicenseStatusBannerProps
   const [status, setStatus] = useState<LicenseStatusView | null>(null);
 
   useEffect(() => {
+    if (!LICENSE_UI_VISIBLE) return;
     const load = () => {
       void getLicenseStatus()
         .then(setStatus)
@@ -20,6 +22,8 @@ export function LicenseStatusBanner({ onOpenSettings }: LicenseStatusBannerProps
     const timer = window.setInterval(load, 60_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  if (!LICENSE_UI_VISIBLE) return null;
 
   if (!status?.installation_id) return null;
 

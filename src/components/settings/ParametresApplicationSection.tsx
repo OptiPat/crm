@@ -5,6 +5,7 @@ import { SettingsPanel } from "@/components/settings/parametres-ui";
 import { ParametresAppBrandingSection } from "@/components/settings/ParametresAppBrandingSection";
 import { ParametresBackgroundSection } from "@/components/settings/ParametresBackgroundSection";
 import { ParametresLicenseSection } from "@/components/settings/ParametresLicenseSection";
+import { LICENSE_UI_VISIBLE } from "@/lib/licensing/license-ui";
 import { CheckForUpdatesButton } from "@/components/system/AppUpdateChecker";
 import { useAppUpdate } from "@/components/system/app-update-context";
 import { ChangePasswordDialog } from "@/components/settings/ChangePasswordDialog";
@@ -39,7 +40,7 @@ export function ParametresApplicationSection() {
         </div>
       </SettingsPanel>
 
-      <ParametresLicenseSection />
+      {LICENSE_UI_VISIBLE ? <ParametresLicenseSection /> : null}
 
       <ParametresAppBrandingSection />
 

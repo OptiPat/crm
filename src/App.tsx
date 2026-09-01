@@ -41,6 +41,7 @@ import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
 import { seedDefaultEmailTemplates } from "@/lib/api/tauri-templates-email";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import { needsLicenseActivation } from "@/lib/api/tauri-license";
+import { LICENSE_UI_VISIBLE } from "@/lib/licensing/license-ui";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { runBackgroundAutomationAfterUnlock, waitForBackgroundAutomationCycleIdle } from "@/lib/background/background-automation-runner";
 import { useBackgroundAutomationListener } from "@/hooks/useBackgroundAutomationListener";
@@ -132,7 +133,7 @@ function AppInner() {
         if (!sessionUnlocked) return;
         setIsAuthenticated(true);
         void runBackgroundAutomationAfterUnlock();
-        const needsLicense = await needsLicenseActivation();
+        const needsLicense = LICENSE_UI_VISIBLE && (await needsLicenseActivation());
         if (needsLicense) {
           setShowLicense(true);
           setShowWizard(false);
@@ -148,7 +149,7 @@ function AppInner() {
   }, [isFirstLaunch]);
 
   const syncPostUnlockState = async () => {
-    const needsLicense = await needsLicenseActivation();
+    const needsLicense = LICENSE_UI_VISIBLE && (await needsLicenseActivation());
     if (needsLicense) {
       setShowLicense(true);
       setShowWizard(false);
@@ -368,8 +369,8 @@ function AppInner() {
     return <UnlockScreen onUnlocked={handleUnlocked} initialNotice={unlockNotice} initialReason={unlockReason} />;
   }
 
-  // Afficher l'écran d'activation licence si nécessaire
-  if (showLicense) {
+  // Afficher l'écran d'activation licence si nécessaire (masqué tant que LICENSE_UI_VISIBLE est false)
+  if (LICENSE_UI_VISIBLE && showLicense) {
     return <LicenseActivation onComplete={() => void handleLicenseComplete()} />;
   }
 

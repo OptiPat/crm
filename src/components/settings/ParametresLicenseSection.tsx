@@ -12,6 +12,7 @@ import {
 } from "@/lib/api/tauri-license";
 import { KeyRound, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { LICENSE_UI_VISIBLE } from "@/lib/licensing/license-ui";
 
 function formatDate(ts: number | null): string {
   if (!ts) return "—";
@@ -57,8 +58,11 @@ export function ParametresLicenseSection() {
   };
 
   useEffect(() => {
+    if (!LICENSE_UI_VISIBLE) return;
     void load();
   }, []);
+
+  if (!LICENSE_UI_VISIBLE) return null;
 
   const handleActivate = async () => {
     if (!status?.client_email) {

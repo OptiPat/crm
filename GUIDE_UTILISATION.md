@@ -78,7 +78,7 @@
 ---
 
 #### 3. Connexion email (OAuth) et envoi
-**Accès** : Paramètres → **Emails & envois → Connexion** (ou étape 2 du wizard de première configuration)
+**Accès** : Paramètres → **Emails & envois → Connexion**
 
 **Fonctionnalités** :
 - ✅ **Google (Gmail)** — connexion OAuth (Gmail API pour l’envoi, lecture pour les réponses campagne)

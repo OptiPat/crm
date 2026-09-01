@@ -15,7 +15,7 @@ pub fn is_write_allowed(db: &Database) -> bool {
                 return false;
             }
             let now = chrono::Utc::now().timestamp();
-            state.refresh_validity(now);
+            state.apply_runtime_access(now, super::LICENSE_UI_VISIBLE);
             state.is_valid_at(now)
         }
         Err(_) => false,

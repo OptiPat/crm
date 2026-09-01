@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>CRM équipe — fiche assistante</title>
+  <style>
+    @page { size: A4; margin: 12mm 13mm 13mm 13mm; }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      font-family: "Segoe UI", Calibri, Arial, sans-serif;
+      color: #1a1a1a;
+      font-size: 13px;
+      line-height: 1.34;
+    }
+    h1 { font-size: 21px; margin: 0 0 4px; }
+    h2 {
+      font-size: 15.5px;
+      margin: 8px 0 5px;
+      padding-bottom: 2px;
+      border-bottom: 3px solid #7b2d5a;
+      color: #7b2d5a;
+    }
+    p { margin: 0 0 5px; }
+    .sub { color: #444; font-size: 12.5px; margin-bottom: 7px; }
+    .page { page-break-after: always; }
+    .page:last-child { page-break-after: auto; }
+    .box {
+      border: 1px solid #ccc;
+      border-radius: 7px;
+      padding: 7px 9px;
+      margin: 5px 0;
+    }
+    .ok { background: #eef7ee; border-color: #8fbf8f; }
+    .warn { background: #fff6e5; border-color: #e0b85c; }
+    .stop { background: #fdecec; border-color: #d98989; }
+    ol.steps { padding-left: 20px; margin: 2px 0 5px; }
+    ol.steps li { margin: 3px 0; }
+    ol.steps > li > ol { margin: 2px 0; padding-left: 16px; }
+    .btn {
+      display: inline-block;
+      background: #7b2d5a;
+      color: #fff;
+      padding: 0 6px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+    .chk { font-family: "Segoe UI", Arial, sans-serif; }
+    table { width: 100%; border-collapse: collapse; margin: 4px 0 6px; }
+    td, th { border: 1px solid #ccc; padding: 3px 6px; text-align: left; vertical-align: top; }
+    th { background: #7b2d5a; color: #fff; font-weight: 600; }
+    .small { font-size: 11.5px; color: #444; }
+    ul { margin: 2px 0 4px; padding-left: 18px; }
+    .footer { margin-top: 5px; font-size: 11px; color: #666; }
+  </style>
+</head>
+<body>
+
+<section class="page">
+  <h1>Rejoindre le CRM équipe</h1>
+  <p class="sub">Pour une assistante. Un ordinateur = une personne = <strong>son</strong> compte.
+    CRM <strong>0.5.42</strong> (comme Tony : en bas à gauche, ou badge <em>v0.5.42</em> en haut des Paramètres). 15 à 30 minutes.</p>
+
+  <div class="box ok">
+    <strong>Tony vous envoie</strong> le fichier d’installation, et une fiche (plusieurs lignes).
+    Pas de mot de passe, pas de fichier .db. Il n’y a <strong>pas</strong> une seule case « coller tout » : chaque ligne va dans un champ.
+  </div>
+
+  <div class="box stop">
+    <strong>Ne cliquez pas</strong> sur Provisionner, Préparer la migration, Envoyer, Valider, Activer, Tester SharePoint, Copier la fiche.
+    Ces boutons peuvent encore s’afficher : c’est normal tant que vous n’avez pas enregistré en Secrétaire. Ignorez-les.
+    Chez vous, le bouton qui compte est <strong>Rejoindre sur ce poste</strong>.
+  </div>
+
+  <h2>Avant</h2>
+  <ul>
+    <li>Tony a déjà <em>Cache équipe actif</em> chez lui. <span class="chk">☐</span></li>
+    <li>Internet. Votre e-mail professionnel s’ouvre (code à 2 facteurs). <span class="chk">☐</span></li>
+    <li>Le disque de ce PC est chiffré (BitLocker ou FileVault — Tony / informatique). <span class="chk">☐</span></li>
+  </ul>
+
+  <h2>1 · Installer à vide</h2>
+  <ol class="steps">
+    <li>Windows : lancer le <span class="small">.exe</span> (si Windows bloque : Informations complémentaires → Exécuter quand même).
+      Mac : ouvrir le <span class="small">.dmg</span>, glisser dans Applications, lancer <em>depuis Applications</em> (si macOS refuse : clic droit → Ouvrir). <span class="chk">☐</span></li>
+    <li>Écran <strong>Créer un mot de passe</strong> : au moins 8 caractères, deux fois. C’est pour <em>cet</em> ordinateur, pas Microsoft. <span class="chk">☐</span></li>
+    <li>Assistant : écran <strong>Vos informations</strong> (prénom, nom, cabinet) → <strong>Terminer</strong>.
+      Connexion email et partenaires : plus tard, dans Paramètres. Microsoft : étape 2.
+      <span class="chk">☐</span>
+    </li>
+  </ol>
+  <p class="small">Aucun fichier copié depuis un autre PC. Pas de dossier CRM dans OneDrive. Pas Hotmail, pas le compte de Tony, pas la boîte office@.</p>
+
+  <h2>2 · Connecter Microsoft</h2>
+  <ol class="steps">
+    <li>À gauche : <strong>Paramètres</strong> (roue). Dans Paramètres, colonne de gauche, groupe Automatisations → <strong>Intégrations</strong>. Le bloc <strong>Mode équipe SharePoint</strong> est en haut (ignorez Telegram et OneDrive). <span class="chk">☐</span></li>
+    <li>1<sup>re</sup> ligne de la fiche Tony → champ <strong>Client ID Azure</strong> → <span class="btn">Enregistrer Client ID</span>. <span class="chk">☐</span></li>
+    <li><span class="btn">Connecter Microsoft</span> → un navigateur s’ouvre : <strong>votre</strong> e-mail du cabinet, mot de passe, code à 2 facteurs. Si Microsoft demande d’autoriser l’application : <strong>Accepter</strong>. Revenez au CRM. Laissez le CRM ouvert. <span class="chk">☐</span></li>
+  </ol>
+  <div class="box warn">
+    Bandeau beige « identité nominative » : normal, il part une fois connecté. L’adresse affichée doit être la vôtre. Sinon : Déconnecter, recommencer.
+  </div>
+  <p class="footer">Verso : interrupteur, recopie ligne par ligne, Rejoindre, essai.</p>
+</section>
+
+<section class="page">
+  <h2>3 · Recopier la fiche, puis Rejoindre</h2>
+  <ol class="steps">
+    <li>Interrupteur <strong>Activer le mode équipe SharePoint</strong> : ON. Dans <strong>Rôle sur cette installation</strong> : <strong>Secrétaire</strong> (le menu propose Conseiller par défaut — changez-le <em>avant</em> d’enregistrer). <span class="chk">☐</span></li>
+    <li>Recopiez <strong>chaque ligne</strong> dans le champ ci-dessous. Ne collez pas tout le bloc dans une seule case. <span class="chk">☐</span></li>
+  </ol>
+  <table>
+    <tr><th>Ligne de la fiche Tony</th><th>Champ à l’écran</th></tr>
+    <tr><td>Client ID Azure</td><td>Déjà fait en haut (étape 2)</td></tr>
+    <tr><td>Object ID groupe Conseillers</td><td>Groupe Entra — conseillers</td></tr>
+    <tr><td>Object ID groupe Assistantes</td><td>Groupe Entra — secrétaires</td></tr>
+    <tr><td>Hostname SharePoint</td><td>Hostname SharePoint</td></tr>
+    <tr><td>Chemin du site</td><td>Chemin du site</td></tr>
+    <tr><td>ID site Graph</td><td>ID site Graph — <strong>obligatoire</strong> malgré « optionnel »</td></tr>
+    <tr><td>Nom du site</td><td>Nom / espace d’équipe</td></tr>
+    <tr><td>Boîte e-mail cabinet</td><td>Boîte cabinet Microsoft 365</td></tr>
+  </table>
+  <ol class="steps" start="3">
+    <li><span class="btn">Enregistrer la configuration équipe</span>. Après ça, les champs se verrouillent : impossible de corriger un oubli. <span class="chk">☐</span></li>
+    <li>Les boutons Provisionner / migration doivent avoir disparu. S’ils sont encore là : vous avez enregistré en Conseiller — <strong>arrêtez</strong>, prévenez Tony, ne cliquez rien. <span class="chk">☐</span></li>
+    <li><span class="btn">Rejoindre sur ce poste</span> → OK. Internet allumé, CRM ouvert, quelques minutes possibles. Ne pas éteindre. <span class="chk">☐</span></li>
+    <li>Message vert <em>Espace équipe rejoint</em> (ou <em>Cache équipe actif</em>). À gauche : <strong>Contacts</strong>. Les fiches du cabinet doivent apparaître. Liste vide alors que Tony en a : 30 secondes, ou fermer / rouvrir. <span class="chk">☐</span></li>
+  </ol>
+
+  <h2>4 · Essai 5 minutes (avec Tony, internet)</h2>
+  <ol class="steps">
+    <li>Vous créez un contact <strong>TEST Equipe</strong>.</li>
+    <li>Chez Tony : il apparaît en moins de 20 secondes. <span class="chk">☐</span></li>
+    <li>Les deux ouvrent la même fiche : une seule peut modifier. <span class="chk">☐</span></li>
+    <li>Chez vous : pas de bouton Exporter / copie de secours. Normal. <span class="chk">☐</span></li>
+  </ol>
+
+  <h2>Tous les jours</h2>
+  <p>Internet allumé. Mot de passe CRM pour ouvrir. Avant d’éteindre : 20 secondes, ou cadenas.
+    Bandeau orange : d’abord le Wi‑Fi. Si <em>Reconnecter le compte Microsoft</em> : cliquez, code à 2 facteurs, puis déverrouillez encore.
+    Si <em>Accès équipe révoqué</em> : prévenir Tony, ne pas forcer.</p>
+
+  <h2>Si ça bloque</h2>
+  <table>
+    <tr><th>Vous voyez</th><th>Que faire</th></tr>
+    <tr><td>Rejoindre grisé</td><td>Lire le bandeau jaune. Souvent ID site oublié. Si déjà enregistré : <strong>ne réinstallez pas toute seule</strong> (le CRM garde les réglages) — prévenez Tony.</td></tr>
+    <tr><td>« Ce poste contient déjà des données CRM »</td><td>Arrêter, prévenir Tony. Ne rien supprimer sur le disque.</td></tr>
+    <tr><td>Mauvais e-mail / Microsoft refuse</td><td>Déconnecter, votre compte. Si ça refuse encore : licence ou mot de passe — Tony / informatique.</td></tr>
+    <tr><td>N’appartient à aucun groupe</td><td>Vous mettre dans le groupe Assistantes <em>seulement</em> (pas les deux).</td></tr>
+    <tr><td>Autre message rouge</td><td>Copier le texte exact, l’envoyer à Tony.</td></tr>
+  </table>
+  <p class="footer">Pas de CRM dans OneDrive. Pas le compte de Tony sur cet ordinateur. Pas de Provisionner / migration / Activer « pour voir ».</p>
+</section>
+
+</body>
+</html>

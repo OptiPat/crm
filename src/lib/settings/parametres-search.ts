@@ -1,5 +1,6 @@
 import type { SettingsSectionId } from "@/lib/settings/parametres-completion";
 import type { ParametresExternalSection } from "@/lib/settings/parametres-nav";
+import { LICENSE_UI_VISIBLE } from "@/lib/licensing/license-ui";
 
 export type ParametresSearchItem = {
   id: string;
@@ -233,6 +234,7 @@ export function filterParametresSearch(query: string): ParametresSearchItem[] {
   if (!q) return [];
 
   return PARAMETRES_SEARCH_INDEX.filter((item) => {
+    if (!LICENSE_UI_VISIBLE && item.id === "licence") return false;
     const haystack = normalizeSearchQuery([item.label, ...item.keywords].join(" "));
     return haystack.includes(q) || item.keywords.some((kw) => normalizeSearchQuery(kw).includes(q));
   });

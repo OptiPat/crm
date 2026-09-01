@@ -10,7 +10,10 @@ pub use commands::{
     start_license_trial_cmd,
 };
 pub use gate::{install_authorizer, refresh_write_gate, set_workspace_write_allowed};
-pub use state::{LicenseState, LicenseStatus, LicenseStatusView, LICENSE_LEGACY_MIGRATED_KEY, LICENSE_STATE_KEY};
+pub use state::{
+    LicenseState, LicenseStatus, LicenseStatusView, LICENSE_LEGACY_MIGRATED_KEY, LICENSE_STATE_KEY,
+    LICENSE_UI_VISIBLE,
+};
 
 use crate::database::Database;
 use gate::bypass_authorizer;
@@ -149,23 +152,6 @@ fn spawn_registry_sync(app: tauri::AppHandle, state: LicenseState, event: String
     });
 }
 
-fn migrate_open_access_if_needed(state: &mut LicenseState) {
-    if !TRIAL_OPEN_ACCESS {
-        return;
-    }
-    if state.legacy {
-        state.expires_at = None;
-        if state.status == LicenseStatus::Expired {
-            state.status = LicenseStatus::Legacy;
-            state.license_type = Some("legacy".to_string());
-        }
-        return;
-    }
-    if state.status == LicenseStatus::Trial && state.expires_at.is_some() {
-        state.expires_at = None;
-    }
-}
-
 fn sync_registry_if_pending(
     app: &tauri::AppHandle,
     db: &Database,
@@ -210,12 +196,10 @@ pub fn get_status(db: &Database) -> Result<state::LicenseStatusView, String> {
     let configured = is_registry_configured();
     let view = match load_state(db)? {
         Some(mut state) => {
-            let had_open_access_expiry = (state.legacy || state.status == LicenseStatus::Trial)
-                && state.expires_at.is_some();
-            migrate_open_access_if_needed(&mut state);
-            let before = state.status;
-            state.refresh_validity(now);
-            if state.status != before || had_open_access_expiry {
+            let before_status = state.status;
+            let before_expiry = state.expires_at;
+            state.apply_runtime_access(now, LICENSE_UI_VISIBLE);
+            if state.status != before_status || state.expires_at != before_expiry {
                 persist_and_refresh_gate(db, &state)?;
             } else {
                 refresh_write_gate(db);
@@ -252,9 +236,10 @@ pub fn get_status(db: &Database) -> Result<state::LicenseStatusView, String> {
 
 pub fn needs_activation_screen(db: &Database) -> Result<bool, String> {
     let view = get_status(db)?;
-    Ok(view.needs_activation)
+    Ok(LICENSE_UI_VISIBLE && view.needs_activation)
 }
 
+#[allow(unreachable_code)] // `LICENSE_UI_VISIBLE` est une const ; l'autre branche reste pour la réactiver.
 pub fn ensure_on_database_open(
     app: &tauri::AppHandle,
     db: &Database,
@@ -264,8 +249,7 @@ pub fn ensure_on_database_open(
     let installed_at = installed_at.unwrap_or(now);
 
     if let Some(mut state) = load_state(db)? {
-        migrate_open_access_if_needed(&mut state);
-        state.refresh_validity(now);
+        state.apply_runtime_access(now, LICENSE_UI_VISIBLE);
         persist_and_refresh_gate(db, &state)?;
         if state.legacy {
             let marker = bypass_authorizer(|| {
@@ -280,6 +264,11 @@ pub fn ensure_on_database_open(
             }
         }
         let _ = sync_registry_if_pending(app, db, &state, now)?;
+        return Ok(());
+    }
+
+    if !LICENSE_UI_VISIBLE {
+        seed_silent_open_access_trial(db, installed_at)?;
         return Ok(());
     }
 
@@ -331,6 +320,50 @@ pub fn ensure_on_database_open(
     Ok(())
 }
 
+fn seed_silent_open_access_trial(db: &Database, installed_at: i64) -> Result<(), String> {
+    let now = now_ts();
+    let state = LicenseState {
+        installation_id: new_installation_id(),
+        status: LicenseStatus::Trial,
+        license_type: Some("trial".to_string()),
+        license_key_masked: None,
+        client_email: None,
+        client_name: None,
+        cabinet: None,
+        activated_at: now,
+        expires_at: None,
+        installed_at,
+        legacy: false,
+        registry_synced: false,
+        last_heartbeat_at: None,
+        trial_restart_count: 0,
+        state_integrity: None,
+    };
+    persist_and_refresh_gate(db, &state)
+}
+
+fn reject_start_trial_if_already_licensed(
+    prev: &LicenseState,
+    now: i64,
+    allow_restart: bool,
+) -> Result<(), String> {
+    if prev.is_silent_trial(now) {
+        return Ok(());
+    }
+    if !allow_restart && prev.is_valid_at(now) {
+        return Err("Une licence active est déjà enregistrée.".to_string());
+    }
+    if allow_restart {
+        if prev.trial_restart_count >= MAX_TRIAL_RESTARTS {
+            return Err("Nombre maximum de relances d'essai atteint.".to_string());
+        }
+        if prev.is_valid_at(now) {
+            return Err("L'essai ne peut être relancé qu'après expiration.".to_string());
+        }
+    }
+    Ok(())
+}
+
 pub fn start_trial(
     app: &tauri::AppHandle,
     db: &Database,
@@ -346,17 +379,7 @@ pub fn start_trial(
 
     let existing = load_state(db)?;
     if let Some(ref prev) = existing {
-        if !allow_restart && prev.is_valid_at(now) {
-            return Err("Une licence active est déjà enregistrée.".to_string());
-        }
-        if allow_restart {
-            if prev.trial_restart_count >= MAX_TRIAL_RESTARTS {
-                return Err("Nombre maximum de relances d'essai atteint.".to_string());
-            }
-            if prev.is_valid_at(now) {
-                return Err("L'essai ne peut être relancé qu'après expiration.".to_string());
-            }
-        }
+        reject_start_trial_if_already_licensed(prev, now, allow_restart)?;
     }
 
     let mut state = existing.unwrap_or(LicenseState {
@@ -377,7 +400,7 @@ pub fn start_trial(
         state_integrity: None,
     });
 
-    if allow_restart {
+    if allow_restart && !state.is_silent_trial(now) {
         state.trial_restart_count += 1;
     }
 
@@ -498,4 +521,75 @@ pub(crate) fn seed_in_memory_test_license(db: &Database) {
         }
     });
     refresh_write_gate(db);
+}
+
+#[cfg(test)]
+mod policy_tests {
+    use super::*;
+    use crate::database::Database;
+
+    fn silent_trial() -> LicenseState {
+        LicenseState {
+            installation_id: "id".into(),
+            status: LicenseStatus::Trial,
+            license_type: Some("trial".into()),
+            license_key_masked: None,
+            client_email: None,
+            client_name: None,
+            cabinet: None,
+            activated_at: 0,
+            expires_at: None,
+            installed_at: 0,
+            legacy: false,
+            registry_synced: false,
+            last_heartbeat_at: None,
+            trial_restart_count: 0,
+            state_integrity: None,
+        }
+    }
+
+    #[test]
+    fn silent_trial_can_receive_email() {
+        assert!(reject_start_trial_if_already_licensed(&silent_trial(), 1_000, false).is_ok());
+    }
+
+    #[test]
+    fn licensed_trial_blocks_new_trial() {
+        let mut state = silent_trial();
+        state.client_email = Some("a@example.com".into());
+        let err = reject_start_trial_if_already_licensed(&state, 1_000, false).unwrap_err();
+        assert_eq!(err, "Une licence active est déjà enregistrée.");
+    }
+
+    #[test]
+    fn expired_license_write_gate_follows_ui_visibility() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let mut state = LicenseState {
+            installation_id: "expired".into(),
+            status: LicenseStatus::Expired,
+            license_type: Some("expired".into()),
+            license_key_masked: None,
+            client_email: Some("a@example.com".into()),
+            client_name: None,
+            cabinet: None,
+            activated_at: 0,
+            expires_at: Some(1),
+            installed_at: 0,
+            legacy: false,
+            registry_synced: true,
+            last_heartbeat_at: None,
+            trial_restart_count: 0,
+            state_integrity: None,
+        };
+        attach_state_integrity(&mut state);
+        bypass_authorizer(|| {
+            db.set_setting(LICENSE_STATE_KEY, &serde_json::to_string(&state).unwrap())
+                .unwrap();
+        });
+        if LICENSE_UI_VISIBLE {
+            assert!(!gate::is_write_allowed(&db));
+        } else {
+            assert!(gate::is_write_allowed(&db));
+        }
+    }
 }
