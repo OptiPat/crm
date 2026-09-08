@@ -1,5 +1,6 @@
 import {
   detectCristallianceSupportsSheetLayout,
+  isCristallianceFlatHeaderRow,
   type CristallianceSupportsSheetLayout,
 } from "./cristalliance-supports-layout";
 
@@ -41,6 +42,15 @@ function optionalNumber(value: unknown): number | null {
     typeof value === "number"
       ? value
       : Number(String(value).trim().replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Frais : nombre (1.6) ou texte export plat (« 1,6% »). */
+export function parseCristallianceFeePercent(value: unknown): number | null {
+  if (value === "" || value == null) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const text = String(value).trim().replace(/\s/g, "").replace("%", "").replace(",", ".");
+  const n = Number(text);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -116,14 +126,15 @@ function parseRowWithLayout(
     vol_1an: normalizeCristalliancePerfPercent(cellValue(row, layout.vol1anIndex)),
     sharpe_ratio: optionalNumber(cellValue(row, layout.sharpeIndex)),
     perf_annual: parseAnnualPerformances(row, layout),
-    frais_gestion: optionalNumber(cellValue(row, layout.fraisGestionIndex)),
+    frais_gestion: parseCristallianceFeePercent(cellValue(row, layout.fraisGestionIndex)),
     sfdr: optionalString(cellValue(row, layout.sfdrIndex)),
   };
 }
 
 /**
- * Parse la feuille « Supports » d'un export Cristalliance / contrat AV.
- * Ligne 1 = en-têtes, ligne 2 = sous-en-têtes perf, données à partir de la ligne 3.
+ * Parse la feuille Supports / Catalogue d'un export Cristalliance.
+ * Ancien : ligne 1 = groupes, ligne 2 = sous-en-têtes, données dès la ligne 3.
+ * Plat 2026 : titre optionnel, puis libellés complets, données à la ligne suivante.
  * Les colonnes annuelles (2019, 2020, …) sont détectées dynamiquement.
  */
 export function parseCristallianceSupportsSheetRows(
@@ -132,9 +143,10 @@ export function parseCristallianceSupportsSheetRows(
   const headerRow = rawRows[0] ?? [];
   const subHeaderRow = rawRows[1] ?? [];
   const layout = detectCristallianceSupportsSheetLayout(headerRow, subHeaderRow);
+  const dataStart = isCristallianceFlatHeaderRow(headerRow) ? 1 : 2;
   const out: CristallianceSupportsImportRow[] = [];
 
-  for (const row of rawRows.slice(2)) {
+  for (const row of rawRows.slice(dataStart)) {
     const parsed = parseRowWithLayout(row, layout);
     if (parsed) out.push(parsed);
   }

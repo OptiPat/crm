@@ -17,15 +17,14 @@ import {
   summarizeCristallianceSupportsImport,
   type CristallianceSupportsImportRow,
 } from "@/lib/fund-watchlist/cristalliance-supports-import";
+import { pickCristallianceSupportsSheetName } from "@/lib/fund-watchlist/cristalliance-supports-layout";
 
 type Step = "pick" | "preview";
 
 function readSupportsWorkbook(file: File): Promise<CristallianceSupportsImportRow[]> {
   return file.arrayBuffer().then((data) => {
     const workbook = XLSX.read(data, { type: "array", cellDates: false });
-    const sheetName =
-      workbook.SheetNames.find((name) => name.toLowerCase() === "supports") ??
-      workbook.SheetNames[0];
+    const sheetName = pickCristallianceSupportsSheetName(workbook.SheetNames);
     if (!sheetName) return [];
     const rawRows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName]!, {
       header: 1,
@@ -70,7 +69,7 @@ export function FundWatchlistImportDialog({
     try {
       const parsed = await readSupportsWorkbook(file);
       if (parsed.length === 0) {
-        toast.error("Aucun fonds reconnu (vérifiez la feuille Supports et la colonne ISIN).");
+        toast.error("Aucun fonds reconnu (vérifiez la feuille Supports / Catalogue et la colonne ISIN).");
         return;
       }
       setFileName(file.name);
@@ -106,8 +105,8 @@ export function FundWatchlistImportDialog({
         <DialogHeader>
           <DialogTitle>Importer les supports contrat</DialogTitle>
           <DialogDescription>
-            Fichier Excel Cristalliance (.xls / .xlsx) — feuille Supports, colonnes ISIN et
-            unité de compte.
+            Fichier Excel Cristalliance (.xls / .xlsx) — feuille Supports ou Catalogue,
+            colonnes ISIN et unité de compte.
           </DialogDescription>
         </DialogHeader>
 
