@@ -734,6 +734,7 @@ impl Database {
         self.migrate_templates_email_tutoiement_template_id()?;
         self.migrate_contacts_registre()?;
         self.migrate_contact_etiquettes_email_suivi()?;
+        self.migrate_newsletter_never_await_reply()?;
         self.migrate_contact_etiquette_auto_exclusions()?;
         self.migrate_investissements_lookup_indexes()?;
         self.migrate_segments_and_rule_engine()?;
@@ -2235,6 +2236,39 @@ impl Database {
         )?;
         self.conn.execute(
             "UPDATE etiquettes SET is_default = 1 WHERE lower(trim(nom)) = 'newsletter'",
+            [],
+        )?;
+        Ok(())
+    }
+
+    /// Newsletters déjà envoyées : hors poll Gmail « en attente de réponse ».
+    fn migrate_newsletter_never_await_reply(&self) -> Result<()> {
+        if !self.table_has_column("contact_etiquettes", "email_suivi_ignore")? {
+            return Ok(());
+        }
+        self.conn.execute(
+            "UPDATE templates_email
+             SET variables = json_set(
+               CASE
+                 WHEN variables IS NULL OR trim(variables) = '' THEN '{}'
+                 WHEN json_valid(variables) THEN variables
+                 ELSE '{}'
+               END,
+               '$.email_suivi_reponse.attendre_reponse',
+               json('false')
+             )
+             WHERE categorie = 'NEWSLETTER'",
+            [],
+        )?;
+        self.conn.execute(
+            "UPDATE contact_etiquettes
+             SET email_suivi_ignore = 1
+             WHERE email_envoye = 1
+               AND etiquette_id IN (
+                 SELECT e.id FROM etiquettes e
+                 INNER JOIN templates_email t ON e.email_template_id = t.id
+                 WHERE t.categorie = 'NEWSLETTER'
+               )",
             [],
         )?;
         Ok(())

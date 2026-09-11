@@ -10,6 +10,9 @@ fn email_queue_row_is_template(queue_row_kind: Option<&str>) -> bool {
     queue_row_kind == Some("template")
 }
 
+/// Aligné files Suivi « Envoyés » / « À relancer » : une newsletter n'attend jamais de réponse.
+const TEMPLATE_NOT_NEWSLETTER_SQL: &str = "COALESCE(t.categorie, '') != 'NEWSLETTER'";
+
 impl Database {
     pub fn get_etiquette_email_queue(
         &self,
@@ -159,7 +162,7 @@ impl Database {
                    AND ce.email_date_envoi IS NOT NULL
                    AND ce.email_reponse_at IS NULL
                    AND COALESCE(ce.email_suivi_ignore, 0) = 0
-                   AND COALESCE(t.categorie, '') != 'NEWSLETTER'
+                   AND {TEMPLATE_NOT_NEWSLETTER_SQL}
                    AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
                    AND c.email IS NOT NULL
                    AND TRIM(c.email) != ''
@@ -191,7 +194,7 @@ impl Database {
                    AND ce.email_date_envoi IS NOT NULL
                    AND ce.email_reponse_at IS NULL
                    AND COALESCE(ce.email_suivi_ignore, 0) = 0
-                   AND COALESCE(t.categorie, '') != 'NEWSLETTER'
+                   AND {TEMPLATE_NOT_NEWSLETTER_SQL}
                    AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
                    AND COALESCE(json_extract(t.variables, '$.email_relance.enabled'), 1) = 1
                    AND c.email IS NOT NULL
@@ -619,6 +622,20 @@ impl Database {
                     contact_etiquette_id
                 )));
             }
+
+            // Newsletter : rester hors suivi de réponse (comme à la préparation).
+            self.conn.execute(
+                "UPDATE contact_etiquettes SET email_suivi_ignore = 1
+                 WHERE id = ?1
+                   AND EXISTS (
+                     SELECT 1
+                     FROM etiquettes e
+                     LEFT JOIN templates_email t ON e.email_template_id = t.id
+                     WHERE e.id = contact_etiquettes.etiquette_id
+                       AND COALESCE(t.categorie, '') = 'NEWSLETTER'
+                   )",
+                params![contact_etiquette_id],
+            )?;
 
             // Corps/sujet sur contact_etiquettes ; le journal lit get_exchange_history_timeline.
             if is_relance != 0 {
@@ -1129,6 +1146,7 @@ impl Database {
                   AND ce.email_date_envoi IS NOT NULL
                   AND ce.email_reponse_at IS NULL
                   AND COALESCE(ce.email_suivi_ignore, 0) = 0
+                  AND {TEMPLATE_NOT_NEWSLETTER_SQL}
                   AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
                   AND c.email IS NOT NULL AND TRIM(c.email) != ''
                 UNION ALL
@@ -1141,6 +1159,7 @@ impl Database {
                   AND cte.email_date_envoi IS NOT NULL
                   AND cte.email_reponse_at IS NULL
                   AND COALESCE(cte.email_suivi_ignore, 0) = 0
+                  AND {TEMPLATE_NOT_NEWSLETTER_SQL}
                   AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
                   AND c.email IS NOT NULL AND TRIM(c.email) != ''
              )
@@ -1413,5 +1432,99 @@ impl Database {
             }
         }
         Ok(repaired)
+    }
+}
+
+#[cfg(test)]
+mod pending_response_check_tests {
+    use crate::database::models::{NewContact, NewEtiquette, NewTemplateEmail};
+    use crate::database::Database;
+
+    fn sample_contact(prenom: &str) -> NewContact {
+        NewContact {
+            nom: "Dupont".into(),
+            prenom: prenom.into(),
+            email: Some(format!("{}@example.com", prenom.to_lowercase())),
+            ..Default::default()
+        }
+    }
+
+    fn sample_etiquette(nom: &str, template_id: i64) -> NewEtiquette {
+        NewEtiquette {
+            nom: nom.into(),
+            couleur: None,
+            icone: None,
+            description: None,
+            priorite: Some(0),
+            auto_condition_type: None,
+            auto_condition_config: None,
+            auto_categories: None,
+            email_template_id: Some(template_id),
+            email_delai_jours: Some(0),
+            email_envoi_prevu: Some(1_700_000_000),
+            email_envoi_heure: None,
+            email_envoi_jours_semaine: None,
+            email_actif: Some(true),
+            is_default: Some(false),
+            actif: Some(true),
+            segment_id: None,
+            rendement_cible: None,
+        }
+    }
+
+    fn send_campaign(db: &Database, categorie: &str, variables: Option<&str>) {
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Campagne".into(),
+                sujet: "Sujet".into(),
+                corps: "Corps".into(),
+                categorie: categorie.into(),
+                variables: variables.map(|s| s.into()),
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let etiqu = db
+            .create_etiquette(sample_etiquette("Campagne", tpl.id))
+            .unwrap();
+        let contact = db.create_contact(sample_contact("Jean")).unwrap();
+        let liaison = db
+            .attribuer_etiquette(contact.id.unwrap(), etiqu.id, Some("MANUEL".into()), None)
+            .unwrap();
+        db.mark_etiquette_email_sent(
+            liaison.id,
+            Some("mid"),
+            Some("tid"),
+            Some("Sujet"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn newsletter_sent_is_not_pending_response_check() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        send_campaign(&db, "NEWSLETTER", Some(r#"{"newsletter_html":"<p>Hi</p>"}"#));
+        let pending = db.list_campaigns_pending_response_check().unwrap();
+        assert!(
+            pending.is_empty(),
+            "newsletter exclue du poll Gmail même sans attendre_reponse:false ({pending:?})"
+        );
+        assert!(
+            db.get_etiquette_email_queue("sent").unwrap().is_empty(),
+            "newsletter absente de la file Envoyés / en attente"
+        );
+    }
+
+    #[test]
+    fn regular_campaign_sent_is_pending_response_check() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        send_campaign(&db, "SUIVI", None);
+        let pending = db.list_campaigns_pending_response_check().unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(db.get_etiquette_email_queue("sent").unwrap().len(), 1);
     }
 }

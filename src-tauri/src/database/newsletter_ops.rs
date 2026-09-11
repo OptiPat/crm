@@ -9,6 +9,16 @@ use crate::newsletter::db::{
 };
 use rusqlite::{params, OptionalExtension, Result};
 
+/// Newsletter = envoi one-way : jamais de suivi de réponse / relance auto.
+fn newsletter_template_variables(html_meta: &str) -> String {
+    let mut value = serde_json::from_str::<serde_json::Value>(html_meta)
+        .ok()
+        .filter(|v| v.is_object())
+        .unwrap_or_else(|| serde_json::json!({}));
+    value["email_suivi_reponse"] = serde_json::json!({ "attendre_reponse": false });
+    value.to_string()
+}
+
 impl Database {
     fn load_contacts_for_newsletter_audience(&self) -> Result<Vec<ContactAudienceRow>> {
         let mut stmt = self.conn.prepare(
@@ -264,7 +274,7 @@ impl Database {
             sujet: subject.into(),
             corps: plain_body.into(),
             categorie: "NEWSLETTER".into(),
-            variables: Some(html_meta.into()),
+            variables: Some(newsletter_template_variables(html_meta)),
             agenda_link_id: None,
             relance_template_id: None,
             tutoiement_template_id: None,
@@ -1262,5 +1272,45 @@ mod tests {
             )
             .unwrap();
         assert_eq!(status, "prepared");
+    }
+
+    #[test]
+    fn upsert_newsletter_template_disables_reply_followup() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let etiquette = db
+            .create_etiquette(NewEtiquette {
+                nom: "Newsletter".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: None,
+                email_delai_jours: None,
+                email_envoi_prevu: None,
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+                actif: Some(true),
+                segment_id: None,
+                rendement_cible: None,
+            })
+            .unwrap();
+        let template_id = db
+            .upsert_newsletter_template(
+                etiquette.id,
+                "Objet",
+                "Corps",
+                r#"{"newsletter_html":"<p>Hi</p>"}"#,
+            )
+            .unwrap();
+        let tpl = db.get_template_email_by_id(template_id).unwrap();
+        let vars: serde_json::Value =
+            serde_json::from_str(tpl.variables.as_deref().unwrap()).unwrap();
+        assert_eq!(vars["newsletter_html"], "<p>Hi</p>");
+        assert_eq!(vars["email_suivi_reponse"]["attendre_reponse"], false);
     }
 }

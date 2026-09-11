@@ -88,6 +88,13 @@ vi.mock("@/lib/api/tauri-box-placement", () => ({
   getPlacementOperation: vi.fn(async (id: number) => baseOperation({ id })),
 }));
 
+const scheduleRetryMock = vi.fn();
+
+vi.mock("@/lib/placement/placement-conforme-retry", () => ({
+  schedulePlacementConformeRetryAfterError: (...args: unknown[]) => scheduleRetryMock(...args),
+  placementConformeSendErrorUserMessage: (raw: string) => raw,
+}));
+
 vi.mock("@/lib/placement/placement-journal", () => ({
   journalPlacementClientEmailSent: (...args: unknown[]) => journalMock(...args),
 }));
@@ -176,7 +183,12 @@ describe("maybeSendPlacementConformeEmailForOperation", () => {
       { quiet: true }
     );
 
-    expect(outcome).toEqual({ outcome: "error", emailsSent: 1 });
+    expect(outcome).toEqual({
+      outcome: "error",
+      emailsSent: 1,
+      errorMessage:
+        "1/2 email(s) envoyé(s) — relance possible après correction. Marie LEGRAND : pas d'email valide",
+    });
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
     expect(releaseMock).toHaveBeenCalledWith(145);
     expect(journalMock).not.toHaveBeenCalled();
@@ -200,6 +212,27 @@ describe("maybeSendPlacementConformeEmailForOperation", () => {
 
     expect(outcome).toEqual({ outcome: "sent", emailsSent: 1 });
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("planifie une relance si Gmail renvoie un quota 403", async () => {
+    getPipeByIdMock.mockResolvedValue({
+      id: 50,
+      contact_id: 72,
+      secondary_contact_id: null,
+    });
+    sendEmailMock.mockRejectedValue(
+      new Error(
+        'Gmail API: {"error":{"code":403,"reason":"rateLimitExceeded","message":"Quota exceeded"}}'
+      )
+    );
+
+    const outcome = await maybeSendPlacementConformeEmailForOperation(
+      baseOperation({ pipe_id: 50 }),
+      { quiet: true }
+    );
+
+    expect(outcome.outcome).toBe("error");
+    expect(scheduleRetryMock).toHaveBeenCalledWith(145, expect.stringContaining("403"));
   });
 });
 

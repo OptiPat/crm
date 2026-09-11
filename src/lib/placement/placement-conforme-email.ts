@@ -30,6 +30,10 @@ import {
   coContactFieldsForRecipient,
   pipeRdvRegistreForContact,
 } from "@/lib/pipe/pipe-rdv-email-vars";
+import {
+  placementConformeSendErrorUserMessage,
+  schedulePlacementConformeRetryAfterError,
+} from "@/lib/placement/placement-conforme-retry";
 import { toast } from "sonner";
 
 export type PlacementConformeSendResult = {
@@ -45,6 +49,7 @@ export type PlacementConformeSendResult = {
 export type PlacementConformeOperationOutcome = {
   outcome: "sent" | "skipped" | "error";
   emailsSent: number;
+  errorMessage?: string;
 };
 
 function isValidRecipientEmail(email?: string | null): boolean {
@@ -211,9 +216,11 @@ export async function maybeSendPlacementConformeEmailForOperation(
             ? `${sentCount}/${recipientIds.length} email(s) envoyé(s) — relance possible après correction. ${errors[0] ?? ""}`.trim()
             : (errors[0] ?? "Envoi partiel");
         if (!options?.quiet) {
-          toast.warning(`Email Box Placement : ${partialMsg}`);
+          toast.warning(
+            `Email Box Placement : ${placementConformeSendErrorUserMessage(partialMsg)}`
+          );
         }
-        return { outcome: "error", emailsSent: sentCount };
+        return { outcome: "error", emailsSent: sentCount, errorMessage: partialMsg };
       }
 
       const updated = await getPlacementOperation(operation.id);
@@ -236,9 +243,10 @@ export async function maybeSendPlacementConformeEmailForOperation(
       }).catch(() => undefined);
     }
     if (!options?.quiet) {
-      toast.warning(`Email Box Placement : ${msg}`);
+      toast.warning(`Email Box Placement : ${placementConformeSendErrorUserMessage(msg)}`);
     }
-    return { outcome: "error", emailsSent: sentCount };
+    schedulePlacementConformeRetryAfterError(operation.id, msg);
+    return { outcome: "error", emailsSent: sentCount, errorMessage: msg };
   }
 }
 
