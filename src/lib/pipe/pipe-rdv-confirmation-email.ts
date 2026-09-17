@@ -42,6 +42,16 @@ import {
 import { isPipeRdvCalendarSyncEligible } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { syncPipeRdvReminderSchedules } from "@/lib/pipe/pipe-rdv-reminder-schedule";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+import {
+  humanizeTransientEmailSendError,
+} from "@/lib/emails/transient-send-error";
+import {
+  cancelPipeRdvConfirmationRetry,
+  firstTransientConfirmationError,
+  pipeRdvConfirmationRetryContactIds,
+  schedulePipeRdvConfirmationRetryAfterError,
+  type PipeRdvConfirmationFailure,
+} from "@/lib/pipe/pipe-rdv-confirmation-retry";
 import { toast } from "sonner";
 
 /** Mail de confirmation immédiat : uniquement si le créneau n'est pas encore commencé (comme Google Agenda). */
@@ -262,8 +272,7 @@ export async function resyncPipeRdvScheduledEmails(options: {
   }
 }
 
-/** Envoie le modèle Pipe RDV pour l'étape (création et replanification) + planifie le rappel. */
-export async function maybeSendPipeRdvConfirmationEmail(options: {
+export type PipeRdvConfirmationSendOptions = {
   pipe: Pick<
     PipeRecord,
     | "id"
@@ -283,7 +292,15 @@ export async function maybeSendPipeRdvConfirmationEmail(options: {
   eventLocation?: string | null;
   visio?: RdvVisioOptions;
   physicalAddress?: string | null;
-}): Promise<PipeRdvConfirmationSendResult> {
+  /** Relance : uniquement ces destinataires (échecs quota), pour ne pas renvoyer aux autres. */
+  onlyContactIds?: number[];
+  quiet?: boolean;
+};
+
+/** Envoie le modèle Pipe RDV pour l'étape (création et replanification) + planifie le rappel. */
+export async function maybeSendPipeRdvConfirmationEmail(
+  options: PipeRdvConfirmationSendOptions
+): Promise<PipeRdvConfirmationSendResult> {
   const { sendConfirmation } = planPipeRdvTransactionalEmails(options.startAtUnix);
   await resyncPipeRdvScheduledEmails({
     pipe: options.pipe,
@@ -308,16 +325,20 @@ export async function maybeSendPipeRdvConfirmationEmail(options: {
 
   const emailStatus = await getEmailConnectionStatus();
   if (!emailStatus.connected) {
-    toast.warning(
-      "Email RDV Pipe non envoyé — connectez Gmail ou Outlook dans Paramètres."
-    );
+    if (!options.quiet) {
+      toast.warning(
+        "Email RDV Pipe non envoyé — connectez Gmail ou Outlook dans Paramètres."
+      );
+    }
     return { sent: 0, errors: ["Connexion email absente"] };
   }
 
   const contactIds = [options.pipe.contact_id, options.pipe.secondary_contact_id].filter(
     (id): id is number => id != null && id > 0
   );
-  const uniqueIds = [...new Set(contactIds)];
+  const uniqueIds = [...new Set(contactIds)].filter(
+    (id) => !options.onlyContactIds?.length || options.onlyContactIds.includes(id)
+  );
 
   let principal: TemplateEmail;
   let tutoiement: TemplateEmail | null;
@@ -325,12 +346,15 @@ export async function maybeSendPipeRdvConfirmationEmail(options: {
     ({ principal, tutoiement } = await loadPipeRdvTemplatePair(template.id));
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    toast.warning(`Email RDV Pipe : modèle introuvable (${msg})`);
+    if (!options.quiet) {
+      toast.warning(`Email RDV Pipe : modèle introuvable (${msg})`);
+    }
     return { sent: 0, errors: [msg] };
   }
 
   let sent = 0;
   const errors: string[] = [];
+  const failures: PipeRdvConfirmationFailure[] = [];
 
   for (const contactId of uniqueIds) {
     let contact: Contact;
@@ -340,7 +364,9 @@ export async function maybeSendPipeRdvConfirmationEmail(options: {
       continue;
     }
     if (!isValidRecipientEmail(contact.email)) {
-      errors.push(`${contact.prenom} ${contact.nom} : pas d'email valide`);
+      const message = `${contact.prenom} ${contact.nom} : pas d'email valide`;
+      errors.push(message);
+      failures.push({ contactId, message });
       continue;
     }
     try {
@@ -361,7 +387,9 @@ export async function maybeSendPipeRdvConfirmationEmail(options: {
       sent += 1;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      errors.push(`${contact.prenom} ${contact.nom} : ${msg}`);
+      const message = `${contact.prenom} ${contact.nom} : ${msg}`;
+      errors.push(message);
+      failures.push({ contactId, message });
       await logEmailSendError({
         contactId: contact.id,
         templateNom: principal.nom,
@@ -371,14 +399,33 @@ export async function maybeSendPipeRdvConfirmationEmail(options: {
     }
   }
 
-  if (sent > 0) {
-    toast.success(
-      sent === 1
-        ? "Email de confirmation RDV envoyé"
-        : `${sent} emails de confirmation RDV envoyés`
+  const retryIds = pipeRdvConfirmationRetryContactIds(failures);
+  const transientMsg = firstTransientConfirmationError(failures);
+  if (retryIds.length > 0 && transientMsg) {
+    schedulePipeRdvConfirmationRetryAfterError(
+      { ...options, onlyContactIds: retryIds },
+      transientMsg
     );
-  } else if (errors.length > 0) {
-    toast.warning(`Confirmation RDV non envoyée : ${errors[0]}`);
+    if (!options.quiet) {
+      toast.warning(
+        sent > 0
+          ? `${sent} confirmation(s) envoyée(s) — Gmail saturé pour le reste, nouvel essai dans 1 min.`
+          : `Confirmation RDV non envoyée : ${humanizeTransientEmailSendError(transientMsg)}`
+      );
+    }
+  } else {
+    cancelPipeRdvConfirmationRetry(options.pipeTimelineEntryId);
+    if (sent > 0) {
+      if (!options.quiet) {
+        toast.success(
+          sent === 1
+            ? "Email de confirmation RDV envoyé"
+            : `${sent} emails de confirmation RDV envoyés`
+        );
+      }
+    } else if (errors.length > 0 && !options.quiet) {
+      toast.warning(`Confirmation RDV non envoyée : ${errors[0]}`);
+    }
   }
 
   return { sent, errors };

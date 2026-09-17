@@ -12,6 +12,9 @@ fn email_queue_row_is_template(queue_row_kind: Option<&str>) -> bool {
 
 /// Aligné files Suivi « Envoyés » / « À relancer » : une newsletter n'attend jamais de réponse.
 const TEMPLATE_NOT_NEWSLETTER_SQL: &str = "COALESCE(t.categorie, '') != 'NEWSLETTER'";
+/// Plafond par cycle : `threads.get` + `messages.get` par campagne épuisent le quota Gmail 6000/min.
+/// `ORDER BY RANDOM()` pour ne pas bloquer les plus anciennes derrière les 20 plus récentes.
+const PENDING_RESPONSE_CHECK_LIMIT: i64 = 20;
 
 impl Database {
     pub fn get_etiquette_email_queue(
@@ -1163,8 +1166,8 @@ impl Database {
                   AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
                   AND c.email IS NOT NULL AND TRIM(c.email) != ''
              )
-             ORDER BY email_date_envoi DESC
-             LIMIT 200"
+             ORDER BY RANDOM()
+             LIMIT {PENDING_RESPONSE_CHECK_LIMIT}"
         );
         let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map([], |row| {
@@ -1472,10 +1475,16 @@ mod pending_response_check_tests {
         }
     }
 
-    fn send_campaign(db: &Database, categorie: &str, variables: Option<&str>) {
+    fn send_campaign_named(
+        db: &Database,
+        nom: &str,
+        prenom: &str,
+        categorie: &str,
+        variables: Option<&str>,
+    ) {
         let tpl = db
             .create_template_email(NewTemplateEmail {
-                nom: "Campagne".into(),
+                nom: nom.into(),
                 sujet: "Sujet".into(),
                 corps: "Corps".into(),
                 categorie: categorie.into(),
@@ -1486,9 +1495,9 @@ mod pending_response_check_tests {
             })
             .unwrap();
         let etiqu = db
-            .create_etiquette(sample_etiquette("Campagne", tpl.id))
+            .create_etiquette(sample_etiquette(nom, tpl.id))
             .unwrap();
-        let contact = db.create_contact(sample_contact("Jean")).unwrap();
+        let contact = db.create_contact(sample_contact(prenom)).unwrap();
         let liaison = db
             .attribuer_etiquette(contact.id.unwrap(), etiqu.id, Some("MANUEL".into()), None)
             .unwrap();
@@ -1502,6 +1511,10 @@ mod pending_response_check_tests {
             None,
         )
         .unwrap();
+    }
+
+    fn send_campaign(db: &Database, categorie: &str, variables: Option<&str>) {
+        send_campaign_named(db, "Campagne", "Jean", categorie, variables);
     }
 
     #[test]
@@ -1526,5 +1539,20 @@ mod pending_response_check_tests {
         let pending = db.list_campaigns_pending_response_check().unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(db.get_etiquette_email_queue("sent").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn pending_response_check_is_capped() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        for i in 0..25 {
+            send_campaign_named(
+                &db,
+                &format!("Campagne {i}"),
+                &format!("Jean{i}"),
+                "SUIVI",
+                None,
+            );
+        }
+        assert_eq!(db.list_campaigns_pending_response_check().unwrap().len(), 20);
     }
 }

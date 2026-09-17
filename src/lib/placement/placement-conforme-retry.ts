@@ -3,6 +3,10 @@ import {
   getPlacementOperation,
   notifyPlacementOperationsChanged,
 } from "@/lib/api/tauri-box-placement";
+import {
+  humanizeTransientEmailSendError,
+  isTransientEmailSendError,
+} from "@/lib/emails/transient-send-error";
 
 export const PLACEMENT_CONFORME_RETRY_DELAY_MS = 60_000;
 export const PLACEMENT_CONFORME_MAX_AUTO_RETRIES = 3;
@@ -10,28 +14,8 @@ export const PLACEMENT_CONFORME_MAX_AUTO_RETRIES = 3;
 const pendingTimers = new Map<number, ReturnType<typeof setTimeout>>();
 const scheduledAttempts = new Map<number, number>();
 
-/** Quota / rate-limit Gmail ou Graph — un nouvel essai une minute plus tard a du sens. */
-export function isPlacementConformeTransientSendError(message: string): boolean {
-  const lower = message.toLowerCase();
-  return (
-    lower.includes("ratelimitexceeded") ||
-    lower.includes("rate_limit_exceeded") ||
-    lower.includes("rate limit") ||
-    lower.includes("quota exceeded") ||
-    lower.includes("usagelimits") ||
-    lower.includes("too many requests") ||
-    lower.includes("429") ||
-    (lower.includes("403") &&
-      (lower.includes("quota") || lower.includes("rate") || lower.includes("limit")))
-  );
-}
-
-export function placementConformeSendErrorUserMessage(raw: string): string {
-  if (isPlacementConformeTransientSendError(raw)) {
-    return "Gmail saturé (quota minute) — nouvel essai automatique dans 1 min.";
-  }
-  return raw;
-}
+export const isPlacementConformeTransientSendError = isTransientEmailSendError;
+export const placementConformeSendErrorUserMessage = humanizeTransientEmailSendError;
 
 export function resetPlacementConformeRetryStateForTests(): void {
   clearPlacementConformeRetryTimersForTests();

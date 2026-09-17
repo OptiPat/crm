@@ -36,6 +36,25 @@ pub fn calendar_access_error(status: reqwest::StatusCode, body: &str) -> String 
     )
 }
 
+/// Marqueur interne : le poll campagnes s'arrête pour laisser de la quota aux envois.
+pub const GMAIL_RATE_LIMITED_MSG: &str = "GMAIL_RATE_LIMITED";
+
+pub fn is_google_rate_limited(status: reqwest::StatusCode, body: &str) -> bool {
+    status.as_u16() == 429
+        || body.contains("RATE_LIMIT_EXCEEDED")
+        || body.contains("rateLimitExceeded")
+        || body.contains("Quota exceeded")
+        || body.contains("RESOURCE_EXHAUSTED")
+}
+
+pub fn gmail_rate_limited_error() -> String {
+    GMAIL_RATE_LIMITED_MSG.to_string()
+}
+
+pub fn is_gmail_rate_limited_error(err: &str) -> bool {
+    err.contains(GMAIL_RATE_LIMITED_MSG)
+}
+
 pub fn missing_calendar_scopes(scopes: &[&str]) -> Option<String> {
     let has_read = scopes.iter().any(|s| s.contains("calendar.readonly"));
     let has_events = scopes.iter().any(|s| s.contains("calendar.events"));
@@ -64,5 +83,18 @@ mod tests {
         let body = r#"{"error":{"errors":[{"reason":"insufficientPermissions"}]}}"#;
         let msg = calendar_access_error(reqwest::StatusCode::FORBIDDEN, body);
         assert!(msg.contains("Reconnecter Google"));
+    }
+
+    #[test]
+    fn detects_gmail_query_cost_quota() {
+        let body = r#"{"error":{"code":403,"message":"Quota exceeded for quota metric 'Total Query Cost'","errors":[{"reason":"rateLimitExceeded"}],"details":[{"reason":"RATE_LIMIT_EXCEEDED"}]}}"#;
+        assert!(is_google_rate_limited(
+            reqwest::StatusCode::FORBIDDEN,
+            body
+        ));
+        assert!(!is_google_rate_limited(
+            reqwest::StatusCode::FORBIDDEN,
+            r#"{"error":{"errors":[{"reason":"insufficientPermissions"}]}}"#
+        ));
     }
 }

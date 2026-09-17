@@ -1,6 +1,9 @@
 //! Détection automatique : réponses Gmail/Outlook et RDV Google Agenda.
 
-use super::google_api_errors::calendar_access_error;
+use super::google_api_errors::{
+    calendar_access_error, gmail_rate_limited_error, is_gmail_rate_limited_error,
+    is_google_rate_limited,
+};
 use super::oauth_send::{
     refresh_connection_if_needed, resolve_google_calendar_access_token,
 };
@@ -45,6 +48,8 @@ struct GmailMessageRef {
     _thread_id: Option<String>,
     #[serde(rename = "internalDate", default, deserialize_with = "deserialize_optional_internal_date")]
     internal_date: Option<String>,
+    #[serde(default)]
+    payload: Option<GmailPayload>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -156,6 +161,45 @@ fn is_reply_from_contact(from_header: &str, contact_email: &str) -> bool {
     email_matches(from_header, contact_email)
 }
 
+fn gmail_message_from_header(msg: &GmailMessageRef) -> Option<String> {
+    msg.payload.as_ref()?.headers.as_ref()?.iter().find_map(|h| {
+        if h.name.eq_ignore_ascii_case("from") {
+            Some(h.value.clone())
+        } else {
+            None
+        }
+    })
+}
+
+/// `Some` si From + date suffisent ; `None` s'il faut un `messages.get`.
+fn thread_message_reply_from_metadata(
+    msg: &GmailMessageRef,
+    contact_email: &str,
+    sent_unix: i64,
+) -> Option<bool> {
+    let after_sent = msg
+        .internal_date
+        .as_deref()
+        .and_then(parse_internal_date_ms)
+        .map(|ms| ms > sent_unix * 1000)
+        .unwrap_or(true);
+    if !after_sent {
+        return Some(false);
+    }
+    Some(is_reply_from_contact(
+        &gmail_message_from_header(msg)?,
+        contact_email,
+    ))
+}
+
+fn reject_if_gmail_rate_limited(status: reqwest::StatusCode, body: &str) -> Result<(), String> {
+    if is_google_rate_limited(status, body) {
+        Err(gmail_rate_limited_error())
+    } else {
+        Ok(())
+    }
+}
+
 fn parse_internal_date_ms(internal_date: &str) -> Option<i64> {
     internal_date.parse::<i64>().ok()
 }
@@ -265,8 +309,11 @@ pub fn gmail_fetch_message_body_and_subject(
         .bearer_auth(token)
         .send()
         .map_err(|e| e.to_string())?;
-    if !res.status().is_success() {
-        return Err(format!("Gmail message: {}", res.text().unwrap_or_default()));
+    let status = res.status();
+    if !status.is_success() {
+        let body = res.text().unwrap_or_default();
+        reject_if_gmail_rate_limited(status, &body)?;
+        return Err(format!("Gmail message: {body}"));
     }
     let msg: GmailMessageFull = res.json().map_err(|e| e.to_string())?;
     let subject = msg
@@ -316,7 +363,10 @@ fn message_from_contact(
         .bearer_auth(token)
         .send()
         .map_err(|e| e.to_string())?;
-    if !res.status().is_success() {
+    let status = res.status();
+    if !status.is_success() {
+        let body = res.text().unwrap_or_default();
+        reject_if_gmail_rate_limited(status, &body)?;
         return Ok(false);
     }
     let meta: GmailMessageMeta = res.json().map_err(|e| e.to_string())?;
@@ -383,26 +433,33 @@ fn gmail_find_reply_in_thread(
             "https://gmail.googleapis.com/gmail/v1/users/me/threads/{}",
             thread_id
         ))
-        .query(&[("format", "minimal")])
+        .query(&[("format", "metadata"), ("metadataHeaders", "From")])
         .bearer_auth(token)
         .send()
         .map_err(|e| e.to_string())?;
-    if !res.status().is_success() {
+    let status = res.status();
+    if !status.is_success() {
+        let body = res.text().unwrap_or_default();
+        reject_if_gmail_rate_limited(status, &body)?;
         return Ok(None);
     }
     let thread: GmailThread = res.json().map_err(|e| e.to_string())?;
     if let Some(messages) = thread.messages {
         for msg in messages {
-            let after_sent = msg
-                .internal_date
-                .as_deref()
-                .and_then(parse_internal_date_ms)
-                .map(|ms| ms > item.email_date_envoi * 1000)
-                .unwrap_or(true);
-            if after_sent
-                && message_from_contact(client, token, &msg.id, contact, item.email_date_envoi)?
-            {
-                return Ok(Some(msg.id));
+            match thread_message_reply_from_metadata(&msg, contact, item.email_date_envoi) {
+                Some(true) => return Ok(Some(msg.id.clone())),
+                Some(false) => continue,
+                None => {
+                    if message_from_contact(
+                        client,
+                        token,
+                        &msg.id,
+                        contact,
+                        item.email_date_envoi,
+                    )? {
+                        return Ok(Some(msg.id));
+                    }
+                }
             }
         }
     }
@@ -462,7 +519,10 @@ fn gmail_find_reply_message_id(
         .bearer_auth(token)
         .send()
         .map_err(|e| e.to_string())?;
-    if !res.status().is_success() {
+    let status = res.status();
+    if !status.is_success() {
+        let body = res.text().unwrap_or_default();
+        reject_if_gmail_rate_limited(status, &body)?;
         return Ok(None);
     }
     let list: GmailMessageList = res.json().map_err(|e| e.to_string())?;
@@ -729,6 +789,13 @@ pub fn sync_email_campaign_responses(
                 Err(_) => {}
             },
             Ok(None) => {}
+            Err(e) if is_gmail_rate_limited_error(&e) => {
+                result.errors.push(
+                    "Gmail saturé (quota minute) — sync réponses reportée au prochain cycle."
+                        .into(),
+                );
+                break;
+            }
             Err(e) if result.errors.len() < 3 => {
                 let label = if mail_conn.provider == "microsoft" {
                     "Outlook"
@@ -804,6 +871,38 @@ mod tests {
         let json = r#"{"id":"x","internalDate":1700000000000}"#;
         let msg: GmailMessageRef = serde_json::from_str(json).expect("msg");
         assert_eq!(msg.internal_date.as_deref(), Some("1700000000000"));
+    }
+
+    #[test]
+    fn thread_metadata_detects_reply_from_without_extra_get() {
+        let json = r#"{
+            "id": "reply1",
+            "internalDate": "1700000001000",
+            "payload": { "headers": [{ "name": "From", "value": "Jean DUPONT <jean@example.com>" }] }
+        }"#;
+        let msg: GmailMessageRef = serde_json::from_str(json).expect("msg");
+        assert_eq!(
+            thread_message_reply_from_metadata(&msg, "jean@example.com", 1_700_000_000),
+            Some(true)
+        );
+        assert_eq!(
+            thread_message_reply_from_metadata(&msg, "other@example.com", 1_700_000_000),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn thread_metadata_skips_original_outbound() {
+        let json = r#"{
+            "id": "out1",
+            "internalDate": "1700000000000",
+            "payload": { "headers": [{ "name": "From", "value": "cgp@example.com" }] }
+        }"#;
+        let msg: GmailMessageRef = serde_json::from_str(json).expect("msg");
+        assert_eq!(
+            thread_message_reply_from_metadata(&msg, "jean@example.com", 1_700_000_000),
+            Some(false)
+        );
     }
 
     #[test]
