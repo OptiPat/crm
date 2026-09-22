@@ -88,6 +88,21 @@
   z-index: -1;
 }
 
+/** Capture du PDF Mac : opacity 0 produirait un fichier vide. */
+html.cif-pdf-capture #cif-print-portal {
+  opacity: 1;
+  left: -120vw;
+  z-index: 0;
+}
+
+/* Même traitement que @media print : la capture Mac ne passe pas par le média print. */
+html.cif-pdf-capture #cif-print-portal mark {
+  background: transparent !important;
+  background-color: transparent !important;
+  padding: 0 !important;
+  color: inherit !important;
+}
+
 /** Rendu hors écran — inutilisé en mode impression. */
 .cif-pdf-render-root {
   display: none;

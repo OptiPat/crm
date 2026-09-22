@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
+import { writeDownloadsFileBytes } from "@/lib/api/tauri-arbitrage-fiche";
+import { openDocumentFile } from "@/lib/api/tauri-system";
 import {
   buildCifPdfFilename,
   buildCifPdfFilenameStem,
 } from "@/lib/souscription-cif/cif-pdf-filename";
-import { waitForCifPrintDialogClose } from "@/lib/souscription-cif/cif-print-dialog";
+import { renderCifPortalPdf } from "@/lib/souscription-cif/cif-pdf-download";
+import {
+  isMacPrintPlatform,
+  waitForCifPrintDialogClose,
+} from "@/lib/souscription-cif/cif-print-dialog";
 import type { CifPrintDocument } from "@/lib/souscription-cif/cif-print-export";
 
 const CIF_PRINT_HTML_CLASS = "cif-printing";
@@ -78,28 +84,52 @@ export function useCifPrintExport() {
     };
   }, []);
 
-  const runPrintJob = useCallback(async (documents: CifPrintDocument[], clientName: string) => {
-    const previousTitle = document.title;
-    const printTitle = documents[0]
-      ? buildCifPdfFilenameStem(documents[0].label, clientName)
-      : previousTitle;
+  const runPrintJob = useCallback(
+    async (documents: CifPrintDocument[], clientName: string, filename: string) => {
+      const previousTitle = document.title;
+      const printTitle = documents[0]
+        ? buildCifPdfFilenameStem(documents[0].label, clientName)
+        : previousTitle;
 
-    flushSync(() => setPrintBundle(documents));
-    document.title = printTitle;
-    document.documentElement.classList.add(CIF_PRINT_HTML_CLASS);
-    await waitForNextFrame();
-    await waitForCifPagedReady();
-    await waitForNextFrame();
-    let completed = false;
-    try {
-      completed = await waitForCifPrintDialogClose();
-    } finally {
-      document.title = previousTitle;
-      clearPrintState(setPrintBundle);
+      flushSync(() => setPrintBundle(documents));
+      document.title = printTitle;
+      document.documentElement.classList.add(CIF_PRINT_HTML_CLASS);
       await waitForNextFrame();
-    }
-    return completed;
-  }, []);
+      await waitForCifPagedReady();
+      await waitForNextFrame();
+
+      if (isMacPrintPlatform(navigator)) {
+        showPrintHint(`Téléchargement de ${filename}…`);
+        try {
+          const portal = document.getElementById("cif-print-portal");
+          if (!portal) throw new Error("Document introuvable.");
+          const bytes = await renderCifPortalPdf(portal);
+          const savedPath = await writeDownloadsFileBytes(filename, bytes);
+          try {
+            await openDocumentFile(savedPath);
+          } catch {
+            /* le PDF est déjà dans Téléchargements */
+          }
+          return true;
+        } finally {
+          document.title = previousTitle;
+          clearPrintState(setPrintBundle);
+          await waitForNextFrame();
+        }
+      }
+
+      let completed = false;
+      try {
+        completed = await waitForCifPrintDialogClose();
+      } finally {
+        document.title = previousTitle;
+        clearPrintState(setPrintBundle);
+        await waitForNextFrame();
+      }
+      return completed;
+    },
+    []
+  );
 
   const printDocuments = useCallback(
     async (documents: CifPrintDocument[], clientDisplayName: string) => {
@@ -108,33 +138,42 @@ export function useCifPrintExport() {
       printingRef.current = true;
       setIsPrinting(true);
       const clientName = clientDisplayName.trim() || "Client";
+      const macPrint = isMacPrintPlatform(navigator);
 
       try {
         if (documents.length === 1) {
           const doc = documents[0]!;
           const filename = buildCifPdfFilename(doc.label, clientName);
-          showPrintHint(
-            `Choisissez « Enregistrer au format PDF » — nom proposé : ${filename}. Annuler ferme la fenêtre.`
-          );
-          await runPrintJob(documents, clientName);
+          if (!macPrint) {
+            showPrintHint(
+              `Choisissez « Enregistrer au format PDF » — nom proposé : ${filename}. Annuler ferme la fenêtre.`
+            );
+          }
+          await runPrintJob(documents, clientName, filename);
+          if (macPrint) toast.success(`${filename} enregistré dans Téléchargements.`);
           return;
         }
 
-        showPrintHint(
-          `${documents.length} fenêtres à la suite — annuler une fenêtre arrête tout l'export.`
-        );
+        if (!macPrint) {
+          showPrintHint(
+            `${documents.length} fenêtres à la suite — annuler une fenêtre arrête tout l'export.`
+          );
+        }
 
         for (let i = 0; i < documents.length; i++) {
           const doc = documents[i]!;
           const filename = buildCifPdfFilename(doc.label, clientName);
-          showPrintHint(
-            `Document ${i + 1}/${documents.length} — enregistrez : ${filename} (Annuler = tout arrêter)`
-          );
-          const completed = await runPrintJob([doc], clientName);
+          if (!macPrint) {
+            showPrintHint(
+              `Document ${i + 1}/${documents.length} — enregistrez : ${filename} (Annuler = tout arrêter)`
+            );
+          }
+          const completed = await runPrintJob([doc], clientName, filename);
           if (!completed) {
             toast.info("Export interrompu — les documents suivants ne seront pas proposés.");
             break;
           }
+          if (macPrint) toast.success(`${filename} enregistré dans Téléchargements.`);
         }
       } catch (error) {
         console.error("Erreur export PDF CIF:", error);

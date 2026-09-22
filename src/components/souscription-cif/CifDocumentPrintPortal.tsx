@@ -100,6 +100,7 @@ function CifPagedPrintDocument({
           const fallback = source.cloneNode(true) as HTMLElement;
           fallback.removeAttribute("hidden");
           fallback.removeAttribute("aria-hidden");
+          fallback.classList.add("cif-print-fallback");
           target.innerHTML = "";
           target.appendChild(fallback);
         }
