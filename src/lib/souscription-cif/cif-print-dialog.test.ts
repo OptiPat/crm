@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  MAC_CONTINUE_ARM_MS,
-  MAC_PRINT_DUPLICATE_MS,
   MAC_PRINT_OPEN_GRACE_MS,
   MAC_PRINT_WATCHDOG_MS,
   PRINT_DIALOG_SAFETY_MS,
   initialPrintDialogState,
   isMacPrintPlatform,
-  macContinueClickCounts,
   reducePrintDialog,
   waitForCifPrintDialogClose,
   type CifPrintDialogWindow,
@@ -88,13 +85,14 @@ describe("reducePrintDialog", () => {
     expect(state.completed).toBeNull();
   });
 
-  it("enchaîne la fermeture même si elle arrive avant la grâce, quand l'ouverture est déjà passée", () => {
+  it("un afterprint avant la grâce ne démonte pas le document", () => {
     const state = applyAll([
       { type: "afterprint" },
       { type: "print-returned", elapsedMs: 6, mac: true },
-      { type: "mac-afterprint", elapsedSinceReturnMs: MAC_PRINT_DUPLICATE_MS },
+      { type: "mac-afterprint", elapsedSinceReturnMs: MAC_PRINT_OPEN_GRACE_MS - 1 },
     ]);
-    expect(state.completed).toBe(true);
+    expect(state.phase).toBe("waiting-mac");
+    expect(state.completed).toBeNull();
   });
 
   it("un print macOS lent ne considère pas la boîte comme déjà fermée", () => {
@@ -115,11 +113,6 @@ describe("reducePrintDialog", () => {
       elapsedSinceReturnMs: MAC_PRINT_OPEN_GRACE_MS,
     });
     expect(closed.completed).toBe(true);
-  });
-
-  it("« J'ai enregistré » ne compte pas dans les premières 800 ms", () => {
-    expect(macContinueClickCounts(MAC_CONTINUE_ARM_MS - 1)).toBe(false);
-    expect(macContinueClickCounts(MAC_CONTINUE_ARM_MS)).toBe(true);
   });
 });
 
@@ -238,11 +231,7 @@ describe("waitForCifPrintDialogClose", () => {
     await Promise.resolve();
     expect(completed).toBeUndefined();
 
-    host.emit("focus");
-    await Promise.resolve();
-    expect(completed).toBeUndefined();
-
-    host.clock += MAC_PRINT_DUPLICATE_MS;
+    host.clock += MAC_PRINT_OPEN_GRACE_MS;
     host.emit("afterprint");
     await pending;
     expect(completed).toBe(true);
@@ -266,19 +255,17 @@ describe("waitForCifPrintDialogClose", () => {
     expect(completed).toBe(true);
   });
 
-  it("« J'ai enregistré » enchaîne quand aucun afterprint de fermeture n'arrive", async () => {
+  it("sur Mac, print() part tout de suite, comme sur Windows", async () => {
+    let printCount = 0;
     const host = createFakeWindow(true, () => {
-      host.emit("afterprint");
-      host.clock += 4;
+      printCount += 1;
+      host.clock += 5;
     });
-    let continueExport: (() => void) | undefined;
-    const pending = waitForCifPrintDialogClose(host, () => host.clock, (fn) => {
-      continueExport = fn;
-    });
+    const pending = waitForCifPrintDialogClose(host, () => host.clock);
+    expect(printCount).toBe(1);
 
-    await Promise.resolve();
-    expect(continueExport).toBeTypeOf("function");
-    continueExport?.();
+    host.clock = 2_000;
+    host.emit("afterprint");
     await expect(pending).resolves.toBe(true);
   });
 
@@ -313,6 +300,6 @@ describe("waitForCifPrintDialogClose", () => {
     });
     const pending = waitForCifPrintDialogClose(host, () => host.clock);
     host.flushUntil(host.clock + MAC_PRINT_WATCHDOG_MS);
-    await expect(pending).resolves.toBe(true);
+    await expect(pending).resolves.toBe(false);
   });
 });

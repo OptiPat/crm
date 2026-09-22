@@ -16,22 +16,13 @@ export const PRINT_BLOCKING_MS = 100;
 export const PRINT_DIALOG_SAFETY_MS = 5_000;
 
 /**
- * Sur macOS, le premier `afterprint` dans ce délai après le retour de `print()`
- * correspond à l'ouverture du panneau, pas à sa fermeture.
+ * Doublon ignoré : avant ce délai, un `afterprint` est l'ouverture du panneau,
+ * pas sa fermeture. Le document reste monté le temps de choisir « Enregistrer au format PDF ».
  */
 export const MAC_PRINT_OPEN_GRACE_MS = 700;
 
-/**
- * Doublon d'`afterprint` collé au retour, quand l'ouverture a déjà été vue
- * pendant `print()`. En dessous, ce n'est pas une fermeture.
- */
-export const MAC_PRINT_DUPLICATE_MS = 100;
-
 /** Débloque l'UI si aucun signal de fermeture n'arrive (macOS). */
 export const MAC_PRINT_WATCHDOG_MS = 10 * 60_000;
-
-/** Ignore un clic « J'ai enregistré » dans cet intervalle après l'ouverture. */
-export const MAC_CONTINUE_ARM_MS = 800;
 
 export function isMacPrintPlatform(nav: {
   userAgent?: string;
@@ -69,14 +60,9 @@ export type PrintDialogEvent =
   | { type: "afterprint" }
   | { type: "print-returned"; elapsedMs: number; mac: boolean }
   | { type: "mac-afterprint"; elapsedSinceReturnMs: number }
-  | { type: "manual-continue" }
   | { type: "safety-afterprint" }
   | { type: "safety-timeout" }
   | { type: "watchdog" };
-
-export function macContinueClickCounts(elapsedSinceArmMs: number): boolean {
-  return elapsedSinceArmMs >= MAC_CONTINUE_ARM_MS;
-}
 
 export function reducePrintDialog(
   state: PrintDialogState,
@@ -116,17 +102,11 @@ export function reducePrintDialog(
   if (event.type === "mac-afterprint") {
     const macAfterPrints = state.macAfterPrints + 1;
     const counted = { ...state, macAfterPrints };
-    if (state.afterPrintDuringCall) {
-      if (event.elapsedSinceReturnMs < MAC_PRINT_DUPLICATE_MS) return counted;
-      return { ...counted, phase: "done", completed: true };
-    }
-    if (macAfterPrints === 1 && event.elapsedSinceReturnMs < MAC_PRINT_OPEN_GRACE_MS) {
-      return counted;
-    }
+    if (event.elapsedSinceReturnMs < MAC_PRINT_OPEN_GRACE_MS) return counted;
     return { ...counted, phase: "done", completed: true };
   }
-  if (event.type === "manual-continue" || event.type === "watchdog") {
-    return { ...state, phase: "done", completed: true };
+  if (event.type === "watchdog") {
+    return { ...state, phase: "done", completed: false };
   }
   return state;
 }
@@ -147,8 +127,7 @@ export type CifPrintDialogWindow = {
 
 export function waitForCifPrintDialogClose(
   win: CifPrintDialogWindow = window,
-  now: () => number = () => performance.now(),
-  registerContinue?: (continueExport: () => void) => void
+  now: () => number = () => performance.now()
 ): Promise<boolean> {
   const mac = isMacPrintPlatform(win.navigator);
 
@@ -168,7 +147,6 @@ export function waitForCifPrintDialogClose(
       mql.removeEventListener("change", onMedia);
       win.clearTimeout(safetyTimer);
       win.clearTimeout(watchdogTimer);
-      registerContinue?.(() => {});
     };
 
     const apply = (event: PrintDialogEvent) => {
@@ -188,36 +166,43 @@ export function waitForCifPrintDialogClose(
       apply({ type: "mac-afterprint", elapsedSinceReturnMs: now() - returnedAt });
     const onSafetyAfterPrint = () => apply({ type: "safety-afterprint" });
 
-    if (mql.matches) apply({ type: "media-print" });
-    win.addEventListener("afterprint", onAfterDuringCall);
-    mql.addEventListener("change", onMedia);
-    safetyTimer = win.setTimeout(() => apply({ type: "safety-timeout" }), PRINT_DIALOG_SAFETY_MS);
+    let printStarted = false;
 
-    const startedAt = now();
-    let elapsedMs = 0;
-    try {
-      win.print();
-      elapsedMs = now() - startedAt;
-    } catch (error) {
-      settled = true;
-      cleanup();
-      reject(error instanceof Error ? error : new Error("Impression impossible"));
-      return;
-    }
-    returnedAt = now();
+    const runPrint = () => {
+      if (settled || printStarted) return;
+      printStarted = true;
+      if (mql.matches) apply({ type: "media-print" });
+      win.addEventListener("afterprint", onAfterDuringCall);
+      mql.addEventListener("change", onMedia);
+      safetyTimer = win.setTimeout(() => apply({ type: "safety-timeout" }), PRINT_DIALOG_SAFETY_MS);
 
-    win.removeEventListener("afterprint", onAfterDuringCall);
-    apply({ type: "print-returned", elapsedMs, mac });
-    if (settled) return;
+      const startedAt = now();
+      let elapsedMs = 0;
+      try {
+        win.print();
+        elapsedMs = now() - startedAt;
+      } catch (error) {
+        settled = true;
+        cleanup();
+        reject(error instanceof Error ? error : new Error("Impression impossible"));
+        return;
+      }
+      returnedAt = now();
 
-    if (state.phase === "waiting-mac") {
-      win.clearTimeout(safetyTimer);
-      win.addEventListener("afterprint", onMacAfterPrint);
-      registerContinue?.(() => apply({ type: "manual-continue" }));
-      watchdogTimer = win.setTimeout(() => apply({ type: "watchdog" }), MAC_PRINT_WATCHDOG_MS);
-      return;
-    }
+      win.removeEventListener("afterprint", onAfterDuringCall);
+      apply({ type: "print-returned", elapsedMs, mac });
+      if (settled) return;
 
-    win.addEventListener("afterprint", onSafetyAfterPrint);
+      if (state.phase === "waiting-mac") {
+        win.clearTimeout(safetyTimer);
+        win.addEventListener("afterprint", onMacAfterPrint);
+        watchdogTimer = win.setTimeout(() => apply({ type: "watchdog" }), MAC_PRINT_WATCHDOG_MS);
+        return;
+      }
+
+      win.addEventListener("afterprint", onSafetyAfterPrint);
+    };
+
+    runPrint();
   });
 }
