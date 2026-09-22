@@ -5,14 +5,18 @@ import {
   buildCifPdfFilename,
   buildCifPdfFilenameStem,
 } from "@/lib/souscription-cif/cif-pdf-filename";
+import {
+  isMacPrintPlatform,
+  macContinueClickCounts,
+  waitForCifPrintDialogClose,
+} from "@/lib/souscription-cif/cif-print-dialog";
 import type { CifPrintDocument } from "@/lib/souscription-cif/cif-print-export";
 
 const CIF_PRINT_HTML_CLASS = "cif-printing";
 const CIF_PRINT_TOAST_ID = "cif-print-export";
-/** Filet si afterprint / retour focus ne se déclenchent pas (ex. annulation WebView2). */
-const PRINT_DIALOG_SAFETY_MS = 5_000;
-/** Seuil au-delà duquel window.print() est considéré bloquant (boîte déjà fermée au retour). */
-const PRINT_BLOCKING_MS = 100;
+const MAC_CONTINUE_LABEL = "J'ai enregistré";
+
+type ArmedContinue = { id: number; armedAt: number; run: () => void };
 
 function clearPrintState(setBundle: (value: CifPrintDocument[] | null) => void) {
   document.documentElement.classList.remove(CIF_PRINT_HTML_CLASS);
@@ -61,46 +65,12 @@ function waitForCifPagedReady(): Promise<void> {
   });
 }
 
-/**
- * Attend la fermeture de la boîte d'impression.
- * @returns true si l'utilisateur a probablement enregistré, false si annulation (heuristique media print).
- */
-function waitForPrintDialogClose(): Promise<boolean> {
-  return new Promise((resolve) => {
-    let settled = false;
-    let sawPrintMedia = false;
-    const mql = window.matchMedia("print");
-
-    if (mql.matches) sawPrintMedia = true;
-
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      window.removeEventListener("afterprint", finish);
-      mql.removeEventListener("change", onMediaChange);
-      window.clearTimeout(safetyTimer);
-      resolve(sawPrintMedia);
-    };
-
-    const onMediaChange = () => {
-      if (mql.matches) sawPrintMedia = true;
-    };
-
-    window.addEventListener("afterprint", finish);
-    mql.addEventListener("change", onMediaChange);
-    const safetyTimer = window.setTimeout(finish, PRINT_DIALOG_SAFETY_MS);
-
-    const startedAt = performance.now();
-    window.print();
-
-    if (performance.now() - startedAt > PRINT_BLOCKING_MS) {
-      finish();
-    }
+function showPrintHint(message: string, onContinue?: () => void) {
+  toast.info(message, {
+    id: CIF_PRINT_TOAST_ID,
+    duration: Infinity,
+    ...(onContinue ? { action: { label: MAC_CONTINUE_LABEL, onClick: onContinue } } : {}),
   });
-}
-
-function showPrintHint(message: string) {
-  toast.info(message, { id: CIF_PRINT_TOAST_ID, duration: Infinity });
 }
 
 function dismissPrintHint() {
@@ -111,6 +81,23 @@ export function useCifPrintExport() {
   const [printBundle, setPrintBundle] = useState<CifPrintDocument[] | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const printingRef = useRef(false);
+  const continueRef = useRef<ArmedContinue | null>(null);
+  const continueIdRef = useRef(0);
+
+  const registerContinue = useCallback((continueExport: () => void) => {
+    const id = continueIdRef.current + 1;
+    continueIdRef.current = id;
+    continueRef.current = { id, armedAt: performance.now(), run: continueExport };
+  }, []);
+
+  const onMacContinue = useCallback(() => {
+    const armed = continueRef.current;
+    if (!armed) return;
+    if (!macContinueClickCounts(performance.now() - armed.armedAt)) return;
+    if (continueRef.current !== armed) return;
+    continueRef.current = null;
+    armed.run();
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -133,14 +120,14 @@ export function useCifPrintExport() {
     await waitForNextFrame();
     let completed = false;
     try {
-      completed = await waitForPrintDialogClose();
+      completed = await waitForCifPrintDialogClose(window, () => performance.now(), registerContinue);
     } finally {
       document.title = previousTitle;
       clearPrintState(setPrintBundle);
       await waitForNextFrame();
     }
     return completed;
-  }, []);
+  }, [registerContinue]);
 
   const printDocuments = useCallback(
     async (documents: CifPrintDocument[], clientDisplayName: string) => {
@@ -149,27 +136,35 @@ export function useCifPrintExport() {
       printingRef.current = true;
       setIsPrinting(true);
       const clientName = clientDisplayName.trim() || "Client";
+      const macPrint = isMacPrintPlatform(navigator);
 
       try {
         if (documents.length === 1) {
           const doc = documents[0]!;
           const filename = buildCifPdfFilename(doc.label, clientName);
           showPrintHint(
-            `Choisissez « Enregistrer au format PDF » — nom proposé : ${filename}. Annuler ferme la fenêtre.`
+            `Choisissez « Enregistrer au format PDF » — nom proposé : ${filename}. Annuler ferme la fenêtre.`,
+            macPrint ? onMacContinue : undefined
           );
           await runPrintJob(documents, clientName);
           return;
         }
 
         showPrintHint(
-          `${documents.length} fenêtres à la suite — annuler une fenêtre arrête tout l'export.`
+          macPrint
+            ? `${documents.length} fenêtres à la suite — fermez chaque fenêtre pour passer à la suivante.`
+            : `${documents.length} fenêtres à la suite — annuler une fenêtre arrête tout l'export.`,
+          macPrint ? onMacContinue : undefined
         );
 
         for (let i = 0; i < documents.length; i++) {
           const doc = documents[i]!;
           const filename = buildCifPdfFilename(doc.label, clientName);
           showPrintHint(
-            `Document ${i + 1}/${documents.length} — enregistrez : ${filename} (Annuler = tout arrêter)`
+            macPrint
+              ? `Document ${i + 1}/${documents.length} — enregistrez : ${filename}. Fermez la fenêtre, ou « ${MAC_CONTINUE_LABEL} ».`
+              : `Document ${i + 1}/${documents.length} — enregistrez : ${filename} (Annuler = tout arrêter)`,
+            macPrint ? onMacContinue : undefined
           );
           const completed = await runPrintJob([doc], clientName);
           if (!completed) {
@@ -182,12 +177,13 @@ export function useCifPrintExport() {
         toast.error("Échec du téléchargement PDF. Réessayez.");
         clearPrintState(setPrintBundle);
       } finally {
+        continueRef.current = null;
         dismissPrintHint();
         printingRef.current = false;
         setIsPrinting(false);
       }
     },
-    [runPrintJob]
+    [onMacContinue, runPrintJob]
   );
 
   return { printBundle, printDocuments, isPrinting };
