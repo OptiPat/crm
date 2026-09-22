@@ -57,31 +57,65 @@ function rgbFromCssColor(fn: string, ctx: CanvasRenderingContext2D | null): stri
   }
 }
 
-/** Réécrit les feuilles du clone avant qu'html2canvas ne lise les couleurs. */
-export function sanitizeClonedDocumentColors(doc: Document): void {
+const HAS_MODERN_COLOR =
+  /oklch\(|oklab\(|color-mix\(|light-dark\(|(?<![\w-])(?:lab|lch|color)\(/i;
+
+/** Pose en style inline toute valeur calculée que html2canvas ne sait pas lire. */
+export function inlineModernColors(root: HTMLElement): void {
+  const ctx = root.ownerDocument.createElement("canvas").getContext("2d");
+  const view = root.ownerDocument.defaultView;
+  if (!view) return;
+  const nodes = [root, ...root.querySelectorAll<HTMLElement>("*")];
+  for (const node of nodes) {
+    const computed = view.getComputedStyle(node);
+    const props: string[] = [];
+    for (let index = 0; index < computed.length; index++) props.push(computed.item(index));
+    for (const prop of props) {
+      const value = computed.getPropertyValue(prop);
+      if (!value || !HAS_MODERN_COLOR.test(value)) continue;
+      node.style.setProperty(
+        prop,
+        replaceModernColorFunctions(value, (fn) => rgbFromCssColor(fn, ctx)),
+        "important"
+      );
+    }
+  }
+}
+
+/** Réécrit le CSS brut et désactive les feuilles liées qui contiennent encore oklch. */
+export function neutralizeModernColorSheets(doc: Document): void {
   const ctx = doc.createElement("canvas").getContext("2d");
   const toRgb = (fn: string) => rgbFromCssColor(fn, ctx);
+  const rewrite = (css: string) => replaceModernColorFunctions(css, toRgb);
+
+  doc.querySelectorAll("style").forEach((style) => {
+    const text = style.textContent;
+    if (!text || !HAS_MODERN_COLOR.test(text)) return;
+    style.textContent = rewrite(text);
+  });
+
+  doc.querySelectorAll<HTMLElement>("[style]").forEach((element) => {
+    const style = element.getAttribute("style");
+    if (!style || !HAS_MODERN_COLOR.test(style)) return;
+    element.setAttribute("style", rewrite(style));
+  });
+
   for (const sheet of [...doc.styleSheets]) {
+    const owner = sheet.ownerNode;
+    if (owner instanceof HTMLElement && owner.dataset.cifColorSafe === "true") continue;
     let css = "";
     try {
       css = [...sheet.cssRules].map((rule) => rule.cssText).join("\n");
     } catch {
       continue;
     }
-    if (!COLOR_FN.test(css)) continue;
-    COLOR_FN.lastIndex = 0;
+    if (!HAS_MODERN_COLOR.test(css)) continue;
     const style = doc.createElement("style");
-    style.textContent = replaceModernColorFunctions(css, toRgb);
+    style.dataset.cifColorSafe = "true";
+    style.textContent = rewrite(css);
     sheet.disabled = true;
     doc.head?.appendChild(style);
   }
-}
-function canvasColor(value: string, ctx: CanvasRenderingContext2D): string | null {
-  if (!value || value === "transparent") return null;
-  if (!/okl|color\(/i.test(value)) return null;
-  ctx.fillStyle = "#000000";
-  ctx.fillStyle = value;
-  return ctx.fillStyle;
 }
 
 /** Même rendu que l'impression Windows : pas de surlignage ambre des variables manquantes. */
@@ -93,28 +127,6 @@ function clearMissingVariableMarks(root: HTMLElement): void {
     mark.style.padding = "0";
     mark.style.color = "inherit";
   });
-}
-
-function inlineUnsupportedColors(root: HTMLElement): void {
-  const ctx = root.ownerDocument.createElement("canvas").getContext("2d");
-  if (!ctx) return;
-  const props = [
-    "color",
-    "background-color",
-    "border-top-color",
-    "border-right-color",
-    "border-bottom-color",
-    "border-left-color",
-  ] as const;
-  const nodes = [root, ...root.querySelectorAll<HTMLElement>("*")];
-  for (const node of nodes) {
-    const computed = node.ownerDocument.defaultView?.getComputedStyle(node);
-    if (!computed) continue;
-    for (const prop of props) {
-      const next = canvasColor(computed.getPropertyValue(prop), ctx);
-      if (next) node.style.setProperty(prop, next);
-    }
-  }
 }
 
 function appendCanvasPages(doc: jsPDF, canvas: HTMLCanvasElement, isFirst: { value: boolean }): void {
@@ -167,10 +179,10 @@ export async function renderCifPortalPdf(root: HTMLElement): Promise<Uint8Array>
         logging: false,
         useCORS: true,
         onclone: (clonedDocument, clonedElement) => {
-          sanitizeClonedDocumentColors(clonedDocument);
+          neutralizeModernColorSheets(clonedDocument);
           if (!(clonedElement instanceof HTMLElement)) return;
           clearMissingVariableMarks(clonedElement);
-          inlineUnsupportedColors(clonedElement);
+          inlineModernColors(clonedElement);
         },
       });
       appendCanvasPages(doc, canvas, isFirst);

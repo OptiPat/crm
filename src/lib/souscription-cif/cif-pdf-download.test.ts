@@ -19,7 +19,20 @@ describe("listCifPdfPageElements", () => {
 });
 
 describe("replaceModernColorFunctions", () => {
-  it("remplace oklch et color-mix, y compris imbriqués", () => {
+  it("remplace le CSS Tailwind compilé, variables et color-mix en oklab", () => {
+    const css = [
+      "@theme { --color-amber-200: oklch(0.92 0.05 85); }",
+      "@supports (color: color-mix(in lab, red, red)) {",
+      ".bg { background: color-mix(in oklab, var(--border) 30%, transparent); }",
+      "}",
+    ].join(" ");
+    const out = replaceModernColorFunctions(css, () => "#aabbcc");
+    expect(out.includes("oklch")).toBe(false);
+    expect(out.includes("color-mix")).toBe(false);
+    expect(out.includes("#aabbcc")).toBe(true);
+  });
+
+  it("remplace oklch et color-mix imbriqués", () => {
     const css = "a{color:oklch(0.5 0.1 20)} b{background:color-mix(in oklch, oklch(0.2 0.1 10), white)}";
     const out = replaceModernColorFunctions(css, () => "#112233");
     expect(out).toBe("a{color:#112233} b{background:#112233}");
