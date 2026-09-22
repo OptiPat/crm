@@ -18,6 +18,64 @@ export function listCifPdfPageElements(root: ParentNode): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(CIF_PDF_PAGE_SELECTOR));
 }
 
+const COLOR_FN = /(?<![\w-])(?:oklch|oklab|color-mix|light-dark|lab|lch|color)\(/gi;
+
+/** Remplace oklch / color-mix (Tailwind 4) : html2canvas 1.4 plante dessus. */
+export function replaceModernColorFunctions(
+  css: string,
+  toRgb: (fn: string) => string
+): string {
+  COLOR_FN.lastIndex = 0;
+  let result = "";
+  let last = 0;
+  for (const match of css.matchAll(COLOR_FN)) {
+    const start = match.index ?? 0;
+    if (start < last) continue;
+    let depth = 1;
+    let cursor = start + match[0].length;
+    while (cursor < css.length && depth > 0) {
+      if (css[cursor] === "(") depth += 1;
+      else if (css[cursor] === ")") depth -= 1;
+      cursor += 1;
+    }
+    result += css.slice(last, start) + toRgb(css.slice(start, cursor));
+    last = cursor;
+  }
+  return result + css.slice(last);
+}
+
+function rgbFromCssColor(fn: string, ctx: CanvasRenderingContext2D | null): string {
+  if (!ctx) return "#000000";
+  try {
+    ctx.fillStyle = "#000000";
+    ctx.fillStyle = fn;
+    const out = String(ctx.fillStyle);
+    if (/okl|\blab\(|\blch\(|color-mix|light-dark|\bcolor\(/i.test(out)) return "#000000";
+    return out;
+  } catch {
+    return "#000000";
+  }
+}
+
+/** Réécrit les feuilles du clone avant qu'html2canvas ne lise les couleurs. */
+export function sanitizeClonedDocumentColors(doc: Document): void {
+  const ctx = doc.createElement("canvas").getContext("2d");
+  const toRgb = (fn: string) => rgbFromCssColor(fn, ctx);
+  for (const sheet of [...doc.styleSheets]) {
+    let css = "";
+    try {
+      css = [...sheet.cssRules].map((rule) => rule.cssText).join("\n");
+    } catch {
+      continue;
+    }
+    if (!COLOR_FN.test(css)) continue;
+    COLOR_FN.lastIndex = 0;
+    const style = doc.createElement("style");
+    style.textContent = replaceModernColorFunctions(css, toRgb);
+    sheet.disabled = true;
+    doc.head?.appendChild(style);
+  }
+}
 function canvasColor(value: string, ctx: CanvasRenderingContext2D): string | null {
   if (!value || value === "transparent") return null;
   if (!/okl|color\(/i.test(value)) return null;
@@ -108,7 +166,8 @@ export async function renderCifPortalPdf(root: HTMLElement): Promise<Uint8Array>
         backgroundColor: "#ffffff",
         logging: false,
         useCORS: true,
-        onclone: (_clonedDocument, clonedElement) => {
+        onclone: (clonedDocument, clonedElement) => {
+          sanitizeClonedDocumentColors(clonedDocument);
           if (!(clonedElement instanceof HTMLElement)) return;
           clearMissingVariableMarks(clonedElement);
           inlineUnsupportedColors(clonedElement);

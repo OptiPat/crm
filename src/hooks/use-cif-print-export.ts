@@ -177,7 +177,11 @@ export function useCifPrintExport() {
         }
       } catch (error) {
         console.error("Erreur export PDF CIF:", error);
-        toast.error("Échec du téléchargement PDF. Réessayez.");
+        toast.error(
+          error instanceof Error && error.message
+            ? `Échec du téléchargement PDF. ${error.message}`
+            : "Échec du téléchargement PDF. Réessayez."
+        );
         clearPrintState(setPrintBundle);
       } finally {
         dismissPrintHint();

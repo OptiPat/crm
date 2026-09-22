@@ -4,6 +4,7 @@ import {
   CIF_PDF_PAGE_SELECTOR,
   listCifPdfPageElements,
   renderCifPortalPdf,
+  replaceModernColorFunctions,
 } from "@/lib/souscription-cif/cif-pdf-download";
 
 describe("listCifPdfPageElements", () => {
@@ -17,6 +18,14 @@ describe("listCifPdfPageElements", () => {
   });
 });
 
+describe("replaceModernColorFunctions", () => {
+  it("remplace oklch et color-mix, y compris imbriqués", () => {
+    const css = "a{color:oklch(0.5 0.1 20)} b{background:color-mix(in oklch, oklch(0.2 0.1 10), white)}";
+    const out = replaceModernColorFunctions(css, () => "#112233");
+    expect(out).toBe("a{color:#112233} b{background:#112233}");
+    expect(out.includes("oklch")).toBe(false);
+  });
+});
 describe("a4SliceCount", () => {
   it("garde une page A4 et découpe un flux plus long", () => {
     expect(a4SliceCount(210, 297)).toBe(1);
