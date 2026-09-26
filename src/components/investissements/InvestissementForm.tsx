@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { ContactNotesLog } from "@/components/contacts/ContactNotesLog";
 import {
   Dialog,
   DialogContent,
@@ -158,7 +158,7 @@ import {
   detectDemembrementKind,
   parseDemembrementDuree,
   parseModeDetention,
-  stripStructuredDemembrementFromNotes,
+  stripInvestissementMachineNotes,
   upsertDemembrementDureeInNotes,
   upsertModeDetentionInNotes,
   yearsBetweenDateInputs,
@@ -237,7 +237,7 @@ function InvestissementFormSectionNav({
 }) {
   return (
     <nav
-      aria-label="Sections du formulaire placement"
+      aria-label="Sections du formulaire investissement"
       className={cn(
         "flex flex-wrap gap-1 border-b border-border/80 bg-card pb-2",
         className
@@ -589,7 +589,7 @@ export function InvestissementForm({
         setFrequenceVersement(investissement.frequence_versement || "");
         setReinvestissementDividendes(investissement.reinvestissement_dividendes);
         setPourcentageReinvestissement(investissement.notes?.match(/Réinv\. (\d+)%/)?.[1] || "100");
-        setNotes(stripStructuredDemembrementFromNotes(investissement.notes || ""));
+        setNotes(stripInvestissementMachineNotes(investissement.notes || ""));
         setOrigine(investissement.origine);
         setLiveEncours({
           actuel: investissement.encours_actuel,
@@ -938,22 +938,22 @@ export function InvestissementForm({
       return `Modifier — ${label}`;
     }
     if (defaultContact) {
-      return `Nouveau placement — ${defaultContact.prenom} ${defaultContact.nom}`;
+      return `Nouvel investissement — ${defaultContact.prenom} ${defaultContact.nom}`;
     }
     if (defaultFoyerId) {
       const foyer = foyers.find((f) => f.id === defaultFoyerId);
-      return foyer ? `Nouveau placement — ${foyer.nom}` : "Nouveau placement";
+      return foyer ? `Nouvel investissement — ${foyer.nom}` : "Nouvel investissement";
     }
     return "Nouvel investissement";
   }, [investissement, nomProduit, typeProduit, defaultContact, defaultFoyerId, foyers]);
 
   const formDescription = isEdit
     ? ownerContact
-      ? `Placement de ${ownerContact.prenom} ${ownerContact.nom}.`
-      : "Modifiez les informations du placement."
+      ? `Investissement de ${ownerContact.prenom} ${ownerContact.nom}.`
+      : "Modifiez les informations de l'investissement."
     : lockedContactContext && defaultContact
-      ? `Placement pour ${defaultContact.prenom} ${defaultContact.nom}.`
-      : "Ajoutez un placement pour un client ou un foyer.";
+      ? `Investissement pour ${defaultContact.prenom} ${defaultContact.nom}.`
+      : "Ajoutez un investissement pour un client ou un foyer.";
 
   const formFooter = (
     <>
@@ -1045,7 +1045,7 @@ export function InvestissementForm({
           )}
 
           <div className="space-y-2">
-            <Label>Origine du placement</Label>
+            <Label>Origine de l&apos;investissement</Label>
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
@@ -1762,17 +1762,7 @@ export function InvestissementForm({
       <Separator />
 
       <InvestissementFormSection sectionKey="notes">
-          {/* Notes */}
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea
-              id="notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Notes complémentaires..."
-              rows={3}
-            />
-          </div>
+        <ContactNotesLog notes={notes} onChange={setNotes} />
       </InvestissementFormSection>
     </>
   );

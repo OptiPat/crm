@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ContactNotesLog } from "@/components/contacts/ContactNotesLog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -69,7 +70,6 @@ import {
   stopWheelPropagation,
   useLockAppMainScroll,
 } from "@/lib/ui/nested-sheet-scroll";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { ContactPersonSearch } from "./ContactPersonSearch";
 import {
   formatSriWithDefinition,
@@ -376,7 +376,6 @@ export function ContactForm({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [dirty, setDirty] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
-  const [showAddress, setShowAddress] = useState(false);
   const [addressFromFoyer, setAddressFromFoyer] = useState(false);
   const foyerAddressAppliedRef = useRef(false);
   const [investissementChoice, setInvestissementChoice] =
@@ -440,7 +439,6 @@ export function ContactForm({
     initialSnapshot.current = serializeFormSnapshot(data);
     setDirty(false);
     setFieldErrors({});
-    setShowAddress(!!(data.adresse || data.code_postal || data.ville || data.pays));
     setAddressFromFoyer(false);
     setInvestissementChoice({ addAfterCreate: false });
     foyerAddressAppliedRef.current = false;
@@ -519,9 +517,6 @@ export function ContactForm({
 
   useEffect(() => {
     if (!open || !initialSectionId) return;
-    if (initialSectionId === CONTACT_FORM_SECTIONS.coordonnees) {
-      setShowAddress(true);
-    }
     const timer = window.setTimeout(() => {
       document
         .getElementById(initialSectionId)
@@ -540,7 +535,6 @@ export function ContactForm({
     foyerAddressAppliedRef.current = true;
     setFormData(result.formData);
     initialSnapshot.current = serializeFormSnapshot(result.formData);
-    setShowAddress(true);
     setAddressFromFoyer(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- remplissage ponctuel si adresse vide + foyer connu
   }, [
@@ -841,6 +835,50 @@ export function ContactForm({
       <FormSection sectionKey="identite">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
+            <Label htmlFor="registre">Proximité</Label>
+            <Select
+              value={formData.registre === "TU" ? "TU" : "VOUS"}
+              onValueChange={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  registre: value as "TU" | "VOUS",
+                }))
+              }
+            >
+              <SelectTrigger id="registre">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="VOUS">Vouvoiement</SelectItem>
+                <SelectItem value="TU">Tutoiement</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="civilite">Civilité</Label>
+            <Select
+              value={formData.civilite || SELECT_NONE}
+              onValueChange={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  civilite: value === SELECT_NONE ? undefined : (value as Civilite),
+                }))
+              }
+            >
+              <SelectTrigger id="civilite">
+                <SelectValue placeholder="Non renseigné" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SELECT_NONE}>Non renseigné</SelectItem>
+                <SelectItem value="M">Monsieur</SelectItem>
+                <SelectItem value="MME">Madame</SelectItem>
+                <SelectItem value="AUTRE">Autre</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
             <Label htmlFor="nom">Nom *</Label>
             <Input
               id="nom"
@@ -869,27 +907,25 @@ export function ContactForm({
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="civilite">Civilité</Label>
-            <Select
-              value={formData.civilite || SELECT_NONE}
-              onValueChange={(value) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  civilite: value === SELECT_NONE ? undefined : (value as Civilite),
-                }))
-              }
-            >
-              <SelectTrigger id="civilite">
-                <SelectValue placeholder="Non renseigné" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={SELECT_NONE}>Non renseigné</SelectItem>
-                <SelectItem value="M">Monsieur</SelectItem>
-                <SelectItem value="MME">Madame</SelectItem>
-                <SelectItem value="AUTRE">Autre</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label htmlFor="date_naissance">Date de naissance</Label>
+            <Input
+              id="date_naissance"
+              type="date"
+              value={formData.date_naissance || ""}
+              onChange={(e) => setFormData((prev) => ({ ...prev, date_naissance: e.target.value }))}
+            />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="lieu_naissance">Lieu de naissance</Label>
+            <Input
+              id="lieu_naissance"
+              value={formData.lieu_naissance || ""}
+              onChange={(e) => setFormData((prev) => ({ ...prev, lieu_naissance: e.target.value }))}
+              placeholder="Ex. Montpellier"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="situation_familiale">Situation familiale</Label>
             <Select
@@ -918,37 +954,17 @@ export function ContactForm({
               </SelectContent>
             </Select>
           </div>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="date_naissance">Date de naissance</Label>
+            <Label htmlFor="regime_matrimonial">Régime matrimonial</Label>
             <Input
-              id="date_naissance"
-              type="date"
-              value={formData.date_naissance || ""}
-              onChange={(e) => setFormData((prev) => ({ ...prev, date_naissance: e.target.value }))}
+              id="regime_matrimonial"
+              value={formData.regime_matrimonial || ""}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, regime_matrimonial: e.target.value }))
+              }
+              placeholder="Ex. Communauté réduite aux acquêts"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="lieu_naissance">Lieu de naissance</Label>
-            <Input
-              id="lieu_naissance"
-              value={formData.lieu_naissance || ""}
-              onChange={(e) => setFormData((prev) => ({ ...prev, lieu_naissance: e.target.value }))}
-              placeholder="Ex. Montpellier"
-            />
-          </div>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="regime_matrimonial">Régime matrimonial</Label>
-          <Input
-            id="regime_matrimonial"
-            value={formData.regime_matrimonial || ""}
-            onChange={(e) =>
-              setFormData((prev) => ({ ...prev, regime_matrimonial: e.target.value }))
-            }
-            placeholder="Ex. Communauté réduite aux acquêts"
-          />
         </div>
       </FormSection>
 
@@ -992,21 +1008,40 @@ export function ContactForm({
           </div>
         </div>
 
-        <button
-          type="button"
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-          onClick={() => setShowAddress((v) => !v)}
-        >
-          {showAddress ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          Adresse et localisation
-        </button>
-        {showAddress && (
-          <div className="space-y-4 pl-1">
-            {addressFromFoyer && (
-              <p className="text-xs text-muted-foreground rounded-md border border-sky-200 bg-sky-50/80 px-3 py-2">
-                Adresse reprise d&apos;un autre membre du même foyer.
-              </p>
-            )}
+        <div className="space-y-4">
+          {addressFromFoyer && (
+            <p className="text-xs text-muted-foreground rounded-md border border-sky-200 bg-sky-50/80 px-3 py-2">
+              Adresse reprise d&apos;un autre membre du même foyer.
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="statut_occupation_logement">Statut d&apos;occupation du logement</Label>
+              <Select
+                value={formData.statut_occupation_logement || SELECT_NONE}
+                onValueChange={(value) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    statut_occupation_logement:
+                      value === SELECT_NONE ? undefined : (value as StatutOccupationLogement),
+                  }))
+                }
+              >
+                <SelectTrigger id="statut_occupation_logement">
+                  <SelectValue placeholder="Non renseigné" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SELECT_NONE}>Non renseigné</SelectItem>
+                  {(Object.keys(STATUT_OCCUPATION_LOGEMENT_LABELS) as StatutOccupationLogement[]).map(
+                    (key) => (
+                      <SelectItem key={key} value={key}>
+                        {STATUT_OCCUPATION_LOGEMENT_LABELS[key]}
+                      </SelectItem>
+                    )
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="adresse">Adresse</Label>
               <Input
@@ -1015,72 +1050,49 @@ export function ContactForm({
                 onChange={(e) => setFormData((prev) => ({ ...prev, adresse: e.target.value }))}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="code_postal">Code postal</Label>
-                <Input
-                  id="code_postal"
-                  value={formData.code_postal || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, code_postal: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ville">Ville</Label>
-                <Input
-                  id="ville"
-                  value={formData.ville || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, ville: e.target.value }))}
-                />
-              </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="code_postal">Code postal</Label>
+              <Input
+                id="code_postal"
+                value={formData.code_postal || ""}
+                onChange={(e) => setFormData((prev) => ({ ...prev, code_postal: e.target.value }))}
+              />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pays">Pays</Label>
+              <Label htmlFor="ville">Ville</Label>
               <Input
-                id="pays"
-                value={formData.pays || ""}
-                onChange={(e) => setFormData((prev) => ({ ...prev, pays: e.target.value }))}
-                placeholder="France"
+                id="ville"
+                value={formData.ville || ""}
+                onChange={(e) => setFormData((prev) => ({ ...prev, ville: e.target.value }))}
               />
             </div>
           </div>
-        )}
-        <div className="space-y-2">
-          <Label htmlFor="registre">Registre (emails)</Label>
-          <Select
-            value={formData.registre === "TU" ? "TU" : "VOUS"}
-            onValueChange={(value) =>
-              setFormData((prev) => ({
-                ...prev,
-                registre: value as "TU" | "VOUS",
-              }))
-            }
-          >
-            <SelectTrigger id="registre">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="VOUS">Vouvoiement</SelectItem>
-              <SelectItem value="TU">Tutoiement</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            Choix du modèle lié (tu) lors des campagnes email.
-          </p>
+          <div className="space-y-2">
+            <Label htmlFor="pays">Pays</Label>
+            <Input
+              id="pays"
+              value={formData.pays || ""}
+              onChange={(e) => setFormData((prev) => ({ ...prev, pays: e.target.value }))}
+              placeholder="France"
+            />
+          </div>
         </div>
       </FormSection>
 
       <Separator />
 
       <FormSection sectionKey="viePro">
-        <div className="space-y-2">
-          <Label htmlFor="profession">Profession</Label>
-          <Input
-            id="profession"
-            value={formData.profession || ""}
-            onChange={(e) => setFormData((prev) => ({ ...prev, profession: e.target.value }))}
-          />
-        </div>
         <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="profession">Profession</Label>
+            <Input
+              id="profession"
+              value={formData.profession || ""}
+              onChange={(e) => setFormData((prev) => ({ ...prev, profession: e.target.value }))}
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="revenus_annuels">Revenus annuels (€)</Label>
             <Input
@@ -1097,40 +1109,8 @@ export function ContactForm({
               }
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="charges_emprunts">Charges d&apos;emprunts (€/an)</Label>
-            <Input
-              id="charges_emprunts"
-              type="number"
-              min={0}
-              step={1}
-              value={formData.charges_emprunts ?? ""}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  charges_emprunts: e.target.value ? parseFloat(e.target.value) : undefined,
-                }))
-              }
-            />
-          </div>
           {isEdit && (foyerContext.foyer || !contact?.foyer_id) && (
             <>
-              <div className="space-y-2">
-                <Label htmlFor="foyer_tranche_imposition">
-                  TMI{foyerContext.foyer ? " (foyer)" : ""}
-                </Label>
-                <Input
-                  id="foyer_tranche_imposition"
-                  value={foyerFiscal.tranche_imposition ?? ""}
-                  placeholder="Ex : 30 %"
-                  onChange={(e) =>
-                    setFoyerFiscal((prev) => ({
-                      ...prev,
-                      tranche_imposition: e.target.value || undefined,
-                    }))
-                  }
-                />
-              </div>
               <div className="space-y-2">
                 <Label htmlFor="foyer_nombre_parts">
                   Nombre de parts fiscales{foyerContext.foyer ? " (foyer)" : ""}
@@ -1172,6 +1152,22 @@ export function ContactForm({
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="foyer_tranche_imposition">
+                  TMI{foyerContext.foyer ? " (foyer)" : ""}
+                </Label>
+                <Input
+                  id="foyer_tranche_imposition"
+                  value={foyerFiscal.tranche_imposition ?? ""}
+                  placeholder="Ex : 30 %"
+                  onChange={(e) =>
+                    setFoyerFiscal((prev) => ({
+                      ...prev,
+                      tranche_imposition: e.target.value || undefined,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="foyer_ir_net">
                   IR net à payer (€){foyerContext.foyer ? " — foyer" : ""}
                 </Label>
@@ -1194,31 +1190,20 @@ export function ContactForm({
             </>
           )}
           <div className="space-y-2">
-            <Label htmlFor="statut_occupation_logement">Statut d&apos;occupation du logement</Label>
-            <Select
-              value={formData.statut_occupation_logement || SELECT_NONE}
-              onValueChange={(value) =>
+            <Label htmlFor="charges_emprunts">Charges d&apos;emprunts (€/an)</Label>
+            <Input
+              id="charges_emprunts"
+              type="number"
+              min={0}
+              step={1}
+              value={formData.charges_emprunts ?? ""}
+              onChange={(e) =>
                 setFormData((prev) => ({
                   ...prev,
-                  statut_occupation_logement:
-                    value === SELECT_NONE ? undefined : (value as StatutOccupationLogement),
+                  charges_emprunts: e.target.value ? parseFloat(e.target.value) : undefined,
                 }))
               }
-            >
-              <SelectTrigger id="statut_occupation_logement">
-                <SelectValue placeholder="Non renseigné" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={SELECT_NONE}>Non renseigné</SelectItem>
-                {(Object.keys(STATUT_OCCUPATION_LOGEMENT_LABELS) as StatutOccupationLogement[]).map(
-                  (key) => (
-                    <SelectItem key={key} value={key}>
-                      {STATUT_OCCUPATION_LOGEMENT_LABELS[key]}
-                    </SelectItem>
-                  )
-                )}
-              </SelectContent>
-            </Select>
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="epargne_precaution_souhaitee">
@@ -1585,11 +1570,9 @@ export function ContactForm({
       <Separator />
 
       <FormSection sectionKey="notes">
-        <Textarea
-          id="notes"
-          value={formData.notes || ""}
-          onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
-          rows={3}
+        <ContactNotesLog
+          notes={formData.notes}
+          onChange={(nextNotes) => setFormData((prev) => ({ ...prev, notes: nextNotes }))}
         />
       </FormSection>
 

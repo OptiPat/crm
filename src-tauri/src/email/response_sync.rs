@@ -230,6 +230,12 @@ fn header_from_part(part: &GmailPart, name: &str) -> Option<String> {
 struct GmailMessageFull {
     #[serde(default)]
     snippet: Option<String>,
+    #[serde(
+        rename = "internalDate",
+        default,
+        deserialize_with = "deserialize_optional_internal_date"
+    )]
+    internal_date: Option<String>,
     payload: Option<GmailPart>,
 }
 
@@ -295,11 +301,18 @@ fn extract_text_from_part(part: &GmailPart, plain: &mut Option<String>, html: &m
     }
 }
 
-pub fn gmail_fetch_message_body_and_subject(
+pub struct GmailMessageText {
+    pub body: String,
+    pub subject: Option<String>,
+    /// `internalDate` Gmail, en secondes. Horloge locale si absent.
+    pub received_at_sec: i64,
+}
+
+pub fn gmail_fetch_message_text(
     client: &reqwest::blocking::Client,
     token: &str,
     message_id: &str,
-) -> Result<(String, Option<String>), String> {
+) -> Result<GmailMessageText, String> {
     let res = client
         .get(format!(
             "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}",
@@ -313,7 +326,8 @@ pub fn gmail_fetch_message_body_and_subject(
     if !status.is_success() {
         let body = res.text().unwrap_or_default();
         reject_if_gmail_rate_limited(status, &body)?;
-        return Err(format!("Gmail message: {body}"));
+        let snippet: String = body.chars().take(180).collect();
+        return Err(format!("Gmail message: {snippet}"));
     }
     let msg: GmailMessageFull = res.json().map_err(|e| e.to_string())?;
     let subject = msg
@@ -330,13 +344,31 @@ pub fn gmail_fetch_message_body_and_subject(
         .or(msg.snippet.clone())
         .unwrap_or_default();
     let text = normalize_email_body_text(&raw);
-    if text.is_empty() {
-        return Ok((
-            msg.snippet.unwrap_or_default().trim().to_string(),
-            subject,
-        ));
-    }
-    Ok((text, subject))
+    let body = if text.is_empty() {
+        msg.snippet.unwrap_or_default().trim().to_string()
+    } else {
+        text
+    };
+    let received_at_sec = msg
+        .internal_date
+        .as_deref()
+        .and_then(|value| value.parse::<i64>().ok())
+        .map(|ms| ms / 1000)
+        .unwrap_or_else(|| chrono::Utc::now().timestamp());
+    Ok(GmailMessageText {
+        body,
+        subject,
+        received_at_sec,
+    })
+}
+
+pub fn gmail_fetch_message_body_and_subject(
+    client: &reqwest::blocking::Client,
+    token: &str,
+    message_id: &str,
+) -> Result<(String, Option<String>), String> {
+    let message = gmail_fetch_message_text(client, token, message_id)?;
+    Ok((message.body, message.subject))
 }
 
 pub fn gmail_fetch_message_body(
@@ -871,6 +903,16 @@ mod tests {
         let json = r#"{"id":"x","internalDate":1700000000000}"#;
         let msg: GmailMessageRef = serde_json::from_str(json).expect("msg");
         assert_eq!(msg.internal_date.as_deref(), Some("1700000000000"));
+    }
+
+    #[test]
+    fn parses_full_message_internal_date_as_number_or_string() {
+        let numeric = r#"{"internalDate":1700000000000,"snippet":"bonjour"}"#;
+        let as_number: GmailMessageFull = serde_json::from_str(numeric).expect("nombre");
+        assert_eq!(as_number.internal_date.as_deref(), Some("1700000000000"));
+        let text = r#"{"internalDate":"1700000000000","snippet":"bonjour"}"#;
+        let as_text: GmailMessageFull = serde_json::from_str(text).expect("texte");
+        assert_eq!(as_text.internal_date.as_deref(), Some("1700000000000"));
     }
 
     #[test]

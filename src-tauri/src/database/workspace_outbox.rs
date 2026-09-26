@@ -415,6 +415,23 @@ impl Database {
         Ok(())
     }
 
+    /// Pose le bail en ligne si le cache équipe est déjà initialisé.
+    /// Ne fait rien sur une base sans table de sync (premier schéma).
+    pub fn workspace_sync_mark_online_if_ready(&self) -> Result<()> {
+        let ready: bool = self.conn.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM sqlite_master
+                WHERE type = 'table' AND name = 'workspace_sync_state'
+             )",
+            [],
+            |row| row.get(0),
+        )?;
+        if ready {
+            self.workspace_sync_mark_online()?;
+        }
+        Ok(())
+    }
+
     #[cfg(test)]
     pub fn workspace_sync_set_apply_origin(&self, origin: &str) -> Result<()> {
         if origin != "local" && origin != "remote" {
@@ -764,6 +781,23 @@ mod tests {
             .unwrap_err();
         assert!(error.to_string().contains("Mode équipe hors connexion"));
 
+        db.workspace_sync_mark_online().unwrap();
+        db.workspace_sync_install_id_block("contacts", 1, 100, "seq-contacts", "\"1\"")
+            .unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO contacts (nom, prenom, categorie)
+                 VALUES ('BERNARD', 'Luc', 'CLIENT')",
+                [],
+            )
+            .unwrap();
+
+        db.connection()
+            .execute(
+                "UPDATE workspace_sync_state SET value = '1' WHERE key = 'last_online_at'",
+                [],
+            )
+            .unwrap();
         db.workspace_sync_set_apply_origin("remote").unwrap();
         db.connection()
             .execute(

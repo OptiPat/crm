@@ -3,7 +3,7 @@
 use super::contact_gmail_sync::{list_message_ids, with_db};
 use super::oauth_send::refresh_connection_if_needed;
 use super::oauth_store::EmailOAuthStore;
-use super::response_sync::gmail_fetch_message_body_and_subject;
+use super::response_sync::gmail_fetch_message_text;
 use super::response_sync_outlook::outlook_fetch_message_body_and_subject;
 use crate::commands::DbState;
 use crate::database::placement_operations::{
@@ -18,6 +18,8 @@ use tauri::AppHandle;
 const GMAIL_FROM: &str = "no-reply@stellium.fr";
 const GMAIL_QUERY_RECENCY_DAYS: u32 = 120;
 const SCAN_MAX_MESSAGE_IDS: usize = 100;
+/// Un `messages.get` coûte 20 unités. 6 000 / minute / compte : on reste loin du plafond.
+const GMAIL_GETS_PER_SCAN: usize = 40;
 const BOX_SCAN_STATE_KEY: &str = "box_placement_scan_v1";
 static BOX_SCAN_LOCK: Mutex<()> = Mutex::new(());
 
@@ -37,6 +39,10 @@ struct BoxPlacementScanState {
     /// Messages à retenter explicitement, indépendamment du filigrane de liste.
     #[serde(default, alias = "retryMessageIds")]
     retry_message_ids: Vec<String>,
+    /// Messages déjà lus mais non appliqués (pas de contact, pas de placement).
+    /// Relus après les mails jamais ouverts, pour ne pas bloquer la file.
+    #[serde(default, alias = "deferredMessageIds")]
+    deferred_message_ids: Vec<String>,
     /// Provider du dernier scan, pour ne jamais rejouer un ID Gmail dans Graph (ou inversement).
     #[serde(default, alias = "scanProvider")]
     scan_provider: Option<String>,
@@ -49,10 +55,12 @@ fn next_box_scan_state(
     list_exhausted: bool,
     resume_page_token: Option<String>,
     mut retry_message_ids: Vec<String>,
+    deferred_message_ids: Vec<String>,
     now_unix: i64,
 ) -> BoxPlacementScanState {
     retry_message_ids.sort();
     retry_message_ids.dedup();
+    let deferred_message_ids = dedup_ids(deferred_message_ids);
     if !list_exhausted {
         return BoxPlacementScanState {
             last_scan_at: previous.last_scan_at,
@@ -60,6 +68,7 @@ fn next_box_scan_state(
             list_page_token: resume_page_token,
             list_provider: Some(provider.to_string()),
             retry_message_ids,
+            deferred_message_ids,
             scan_provider: Some(provider.to_string()),
         };
     }
@@ -69,8 +78,59 @@ fn next_box_scan_state(
         list_page_token: None,
         list_provider: None,
         retry_message_ids,
+        deferred_message_ids,
         scan_provider: Some(provider.to_string()),
     }
+}
+
+fn dedup_ids(mut ids: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    ids.retain(|id| seen.insert(id.clone()));
+    ids
+}
+
+/// Mails jamais ouverts d'abord, puis ceux déjà lus mais non appliqués.
+fn order_box_message_ids(ids: Vec<String>, deferred: &[String]) -> Vec<String> {
+    let deferred_set: HashSet<&str> = deferred.iter().map(|id| id.as_str()).collect();
+    let mut fresh = Vec::new();
+    let mut deferred_present = HashSet::new();
+    let mut seen = HashSet::new();
+    for id in ids {
+        if !seen.insert(id.clone()) {
+            continue;
+        }
+        if deferred_set.contains(id.as_str()) {
+            deferred_present.insert(id);
+        } else {
+            fresh.push(id);
+        }
+    }
+    for id in deferred {
+        if deferred_present.remove(id) {
+            fresh.push(id.clone());
+        }
+    }
+    fresh
+}
+
+/// Les mails relus et toujours non appliqués passent en fin de file.
+fn rotate_deferred_ids(
+    previous: &[String],
+    unapplied_fetched: &[String],
+    resolved: &HashSet<String>,
+) -> Vec<String> {
+    let unapplied: HashSet<&str> = unapplied_fetched.iter().map(|id| id.as_str()).collect();
+    let mut next: Vec<String> = previous
+        .iter()
+        .filter(|id| !resolved.contains(*id) && !unapplied.contains(id.as_str()))
+        .cloned()
+        .collect();
+    for id in unapplied_fetched {
+        if !resolved.contains(id) {
+            next.push(id.clone());
+        }
+    }
+    dedup_ids(next)
 }
 
 fn box_scan_cursor(state: &BoxPlacementScanState, provider: &str) -> Option<String> {
@@ -136,12 +196,6 @@ pub struct BoxPlacementScanResult {
     pub skipped_ambiguous_placements: u32,
     /// Opérations passées en CONFORME lors de ce scan (candidats email client).
     pub new_conforme_ids: Vec<i64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GmailMessageInternalDate {
-    #[serde(rename = "internalDate", default)]
-    internal_date: Option<String>,
 }
 
 fn normalize_text(value: &str) -> String {
@@ -302,38 +356,6 @@ fn save_box_scan_state(
     let json = serde_json::to_string(state).map_err(|e| e.to_string())?;
     db.set_setting(BOX_SCAN_STATE_KEY, &json)
         .map_err(|e| e.to_string())
-}
-
-fn parse_internal_date_sec(internal_date: &str) -> i64 {
-    internal_date
-        .parse::<i64>()
-        .ok()
-        .map(|ms| ms / 1000)
-        .unwrap_or_else(|| chrono::Utc::now().timestamp())
-}
-
-fn gmail_fetch_message_received_at(
-    client: &reqwest::blocking::Client,
-    token: &str,
-    message_id: &str,
-) -> Result<i64, String> {
-    let url = format!(
-        "https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}?format=metadata"
-    );
-    let res = client
-        .get(&url)
-        .bearer_auth(token)
-        .send()
-        .map_err(|e| e.to_string())?;
-    if !res.status().is_success() {
-        return Err(format!("Gmail message: {}", res.text().unwrap_or_default()));
-    }
-    let meta: GmailMessageInternalDate = res.json().map_err(|e| e.to_string())?;
-    Ok(meta
-        .internal_date
-        .as_deref()
-        .map(parse_internal_date_sec)
-        .unwrap_or_else(|| chrono::Utc::now().timestamp()))
 }
 
 fn box_placement_recency_cutoff_unix() -> i64 {
@@ -504,12 +526,11 @@ fn fetch_box_placement_message(
             received_at,
         });
     }
-    let received_at = gmail_fetch_message_received_at(client, token, message_id)?;
-    let (body, subject_opt) = gmail_fetch_message_body_and_subject(client, token, message_id)?;
+    let message = gmail_fetch_message_text(client, token, message_id)?;
     Ok(FetchedBoxPlacementMessage {
-        subject: subject_opt.unwrap_or_default(),
-        body,
-        received_at,
+        subject: message.subject.unwrap_or_default(),
+        body: message.body,
+        received_at: message.received_at_sec,
     })
 }
 
@@ -590,6 +611,21 @@ pub fn scan_box_placement_emails(
             all_ids.push(message_id.clone());
         }
     }
+    let provider_changed = scan_state
+        .scan_provider
+        .as_deref()
+        .is_some_and(|previous| previous != provider);
+    let deferred_prev = if provider_changed {
+        Vec::new()
+    } else {
+        scan_state.deferred_message_ids.clone()
+    };
+    for message_id in &deferred_prev {
+        if seen_ids.insert(message_id.clone()) {
+            all_ids.push(message_id.clone());
+        }
+    }
+    all_ids = order_box_message_ids(all_ids, &deferred_prev);
     let scanned = all_ids.len() as u32;
     let mut updated = 0u32;
     let created = 0u32;
@@ -609,6 +645,8 @@ pub fn scan_box_placement_emails(
     let mut skipped_ambiguous_contacts = 0u32;
     let mut skipped_ambiguous_placements = 0u32;
     let mut new_conforme_ids: Vec<i64> = Vec::new();
+    let mut resolved_ids = existing_ids.clone();
+    let mut unapplied_fetched: Vec<String> = Vec::new();
     let mut retry_message_ids: HashSet<String> = retry_ids_for_provider.into_iter().collect();
     for message_id in &existing_ids {
         retry_message_ids.remove(message_id);
@@ -616,9 +654,25 @@ pub fn scan_box_placement_emails(
 
     // Les appels réseau restent hors du verrou SQLite pour ne pas bloquer l'UI.
     let mut fetched_messages: Vec<(String, FetchedBoxPlacementMessage)> = Vec::new();
+    let mut rate_limited = false;
+    let mut gmail_gets = 0usize;
     for message_id in all_ids {
         if existing_ids.contains(&message_id) {
             continue;
+        }
+        if rate_limited || (provider == "google" && gmail_gets >= GMAIL_GETS_PER_SCAN) {
+            if !rate_limited {
+                eprintln!(
+                    "Box Placement : {GMAIL_GETS_PER_SCAN} mails lus, pause pour ne pas saturer Gmail. Suite au prochain passage."
+                );
+            }
+            rate_limited = true;
+            retry_message_ids.insert(message_id);
+            skipped += 1;
+            continue;
+        }
+        if provider == "google" {
+            gmail_gets += 1;
         }
         std::thread::sleep(std::time::Duration::from_millis(
             super::contact_gmail_sync::METADATA_DELAY_MS,
@@ -627,6 +681,16 @@ pub fn scan_box_placement_emails(
             Ok(fetched) => {
                 retry_message_ids.remove(&message_id);
                 fetched_messages.push((message_id, fetched));
+            }
+            Err(error)
+                if super::google_api_errors::is_gmail_rate_limited_error(&error) =>
+            {
+                eprintln!(
+                    "Box Placement : Gmail saturé (quota minute). Scan repris au prochain passage."
+                );
+                rate_limited = true;
+                retry_message_ids.insert(message_id);
+                skipped += 1;
             }
             Err(error) => {
                 eprintln!("Box Placement fetch {message_id}: {error}");
@@ -643,7 +707,8 @@ pub fn scan_box_placement_emails(
             let received_at = fetched.received_at;
             let Some(parsed) = parse_box_placement_email(&subject, &body) else {
                 skipped += 1;
-                retry_message_ids.insert(message_id);
+                retry_message_ids.remove(&message_id);
+                unapplied_fetched.push(message_id);
                 continue;
             };
 
@@ -652,7 +717,8 @@ pub fn scan_box_placement_emails(
                 .map_err(|e| e.to_string())?;
             let Some(contact_id) = contact_id else {
                 skipped += 1;
-                retry_message_ids.insert(message_id);
+                retry_message_ids.remove(&message_id);
+                unapplied_fetched.push(message_id);
                 if db
                     .find_contact_by_name(&parsed.contact_nom, &parsed.contact_prenom)
                     .map_err(|e| e.to_string())?
@@ -688,7 +754,8 @@ pub fn scan_box_placement_emails(
 
             let Some(_matched_op) = matched else {
                 skipped += 1;
-                retry_message_ids.insert(message_id);
+                retry_message_ids.remove(&message_id);
+                unapplied_fetched.push(message_id);
                 let open_count = db
                     .count_open_placements_for_email_match(
                         contact_id,
@@ -720,9 +787,11 @@ pub fn scan_box_placement_emails(
             if !changed {
                 skipped += 1;
                 retry_message_ids.remove(&message_id);
+                resolved_ids.insert(message_id);
                 continue;
             }
             retry_message_ids.remove(&message_id);
+            resolved_ids.insert(message_id.clone());
             updated += 1;
             if status == STATUS_CONFORME && placement_operation_eligible_for_client_email(&_op) {
                 new_conforme_ids.push(_op.id);
@@ -732,12 +801,14 @@ pub fn scan_box_placement_emails(
         new_conforme_ids.sort_unstable();
         new_conforme_ids.dedup();
 
+        let next_deferred = rotate_deferred_ids(&deferred_prev, &unapplied_fetched, &resolved_ids);
         let next_state = next_box_scan_state(
             &scan_state,
             &provider,
-            list_exhausted,
+            list_exhausted && !rate_limited,
             resume_page_token,
             retry_message_ids.into_iter().collect(),
+            next_deferred,
             scan_started_at,
         );
         save_box_scan_state(db, &next_state)?;
@@ -798,7 +869,7 @@ mod tests {
     #[test]
     fn box_retry_ids_survive_when_list_is_exhausted() {
         let prev = BoxPlacementScanState::default();
-        let next = next_box_scan_state(&prev, "google", true, None, vec!["msg-retry".into()], 1000);
+        let next = next_box_scan_state(&prev, "google", true, None, vec!["msg-retry".into()], vec![], 1000);
         assert_eq!(next.last_scan_at, Some(1000));
         assert!(next.pending_retryable);
         assert!(next.list_page_token.is_none());
@@ -814,6 +885,7 @@ mod tests {
             false,
             Some("page-2".into()),
             vec!["msg-retry".into()],
+            vec![],
             1000,
         );
         assert_eq!(next.last_scan_at, None);
@@ -826,7 +898,7 @@ mod tests {
     #[test]
     fn box_watermark_holds_when_gmail_list_not_exhausted() {
         let prev = BoxPlacementScanState::default();
-        let next = next_box_scan_state(&prev, "google", false, Some("page-2".into()), vec![], 1000);
+        let next = next_box_scan_state(&prev, "google", false, Some("page-2".into()), vec![], vec![], 1000);
         assert_eq!(next.last_scan_at, None);
         assert!(!next.pending_retryable);
         assert_eq!(next.list_page_token.as_deref(), Some("page-2"));
@@ -839,7 +911,7 @@ mod tests {
             list_page_token: Some("page-2".into()),
             ..Default::default()
         };
-        let next = next_box_scan_state(&prev, "google", true, None, vec![], 3000);
+        let next = next_box_scan_state(&prev, "google", true, None, vec![], vec![], 3000);
         assert_eq!(next.last_scan_at, Some(3000));
         assert!(!next.pending_retryable);
         assert!(next.list_page_token.is_none());
@@ -879,5 +951,36 @@ mod tests {
         assert!(last_scan_at.is_none());
         assert!(cursor.is_none());
         assert!(retries.is_empty());
+    }
+
+    #[test]
+    fn fresh_box_ids_are_fetched_before_deferred_ones() {
+        let ordered = order_box_message_ids(
+            vec!["old-a".into(), "new-b".into(), "old-c".into()],
+            &["old-a".into(), "old-c".into()],
+        );
+        assert_eq!(
+            ordered,
+            vec!["new-b".to_string(), "old-a".to_string(), "old-c".to_string()]
+        );
+    }
+
+    #[test]
+    fn deferred_ids_rotate_after_a_failed_reread() {
+        let resolved = HashSet::new();
+        let next = rotate_deferred_ids(
+            &["a".into(), "b".into(), "c".into(), "d".into()],
+            &["a".into(), "b".into()],
+            &resolved,
+        );
+        assert_eq!(
+            next,
+            vec![
+                "c".to_string(),
+                "d".to_string(),
+                "a".to_string(),
+                "b".to_string()
+            ]
+        );
     }
 }

@@ -13,7 +13,8 @@ import {
   MapPin,
   Phone,
 } from "lucide-react";
-import { type Contact as ContactRecord } from "@/lib/api/tauri-contacts";
+import { updateContact, type Contact as ContactRecord } from "@/lib/api/tauri-contacts";
+import { ContactNotesLog } from "@/components/contacts/ContactNotesLog";
 import { type Foyer } from "@/lib/api/tauri-foyers";
 import { openExternalUrl } from "@/lib/api/tauri-system";
 import { resolveContactFiscal, type FiscalFields } from "@/lib/foyers/foyer-fiscal-sync";
@@ -31,6 +32,7 @@ import {
 } from "@/lib/contacts/google-contact-sync-ui";
 import { ContactDetailSyntheseParrainageCard } from "@/components/contacts/ContactDetailSyntheseParrainageCard";
 import {
+  contactToUpdatePayload,
   formatCiviliteLabel,
   formatSituationLabel,
   formatStatutSuiviLabel,
@@ -39,7 +41,6 @@ import {
   isClientActif,
   isFilleulReseauInscrit,
   isFilleulStatut,
-  stripDateInscriptionFromNotes,
 } from "@/lib/contacts/contact-form-utils";
 import {
   CONTACT_FORM_SECTIONS,
@@ -96,7 +97,8 @@ function hasIdentiteContent(contact: ContactRecord): boolean {
     contact.situation_familiale ||
     contact.regime_matrimonial ||
     contact.date_naissance ||
-    contact.lieu_naissance
+    contact.lieu_naissance ||
+    contact.registre?.trim().toUpperCase() === "TU"
   );
 }
 
@@ -227,6 +229,7 @@ export function ContactDetailSyntheseTab({
   onEditSection,
 }: ContactDetailSyntheseTabProps) {
   const [syncingGoogle, setSyncingGoogle] = useState(false);
+  const [addingNote, setAddingNote] = useState(false);
   const showGoogleSync = contact.id != null && canSyncContactToGoogle(contact);
 
   // Fiscalité affichée : foyer prime champ par champ, sinon copie contact.
@@ -238,7 +241,6 @@ export function ContactDetailSyntheseTab({
   // filleul, y compris prospect/suspect — on doit pouvoir noter une invitation JD/PO et sa date
   // avant même que la personne soit officiellement inscrite au réseau (FILLEUL).
   const filleulReseauSigne = isFilleulStatut(contact.filleul_categorie);
-  const notesDisplay = stripDateInscriptionFromNotes(contact.notes);
   const showRolesCard =
     clientLabel ||
     filleulLabel ||
@@ -279,22 +281,14 @@ export function ContactDetailSyntheseTab({
             onEditSection={onEditSection}
           />
           <CardContent className="space-y-3">
+            <div>
+              <span className="text-muted-foreground text-sm">Proximité : </span>
+              {contact.registre === "TU" ? "Tutoiement" : "Vouvoiement"}
+            </div>
             {contact.civilite && (
               <div>
                 <span className="text-muted-foreground text-sm">Civilité : </span>
                 {formatCiviliteLabel(contact.civilite)}
-              </div>
-            )}
-            {contact.situation_familiale && (
-              <div>
-                <span className="text-muted-foreground text-sm">Situation familiale : </span>
-                {formatSituationLabel(contact.situation_familiale)}
-              </div>
-            )}
-            {contact.regime_matrimonial && (
-              <div>
-                <span className="text-muted-foreground text-sm">Régime matrimonial : </span>
-                {contact.regime_matrimonial}
               </div>
             )}
             {contact.date_naissance && (
@@ -310,6 +304,18 @@ export function ContactDetailSyntheseTab({
               <div>
                 <span className="text-muted-foreground text-sm">Lieu de naissance : </span>
                 {contact.lieu_naissance}
+              </div>
+            )}
+            {contact.situation_familiale && (
+              <div>
+                <span className="text-muted-foreground text-sm">Situation familiale : </span>
+                {formatSituationLabel(contact.situation_familiale)}
+              </div>
+            )}
+            {contact.regime_matrimonial && (
+              <div>
+                <span className="text-muted-foreground text-sm">Régime matrimonial : </span>
+                {contact.regime_matrimonial}
               </div>
             )}
           </CardContent>
@@ -387,10 +393,6 @@ export function ContactDetailSyntheseTab({
           ) : (
             <p className="text-sm text-muted-foreground italic">Adresse non renseignée</p>
           )}
-          <div>
-            <span className="text-muted-foreground text-sm">Registre (emails) : </span>
-            {contact.registre === "TU" ? "Tutoiement" : "Vouvoiement"}
-          </div>
         </CardContent>
       </Card>
 
@@ -415,6 +417,46 @@ export function ContactDetailSyntheseTab({
                   currency: "EUR",
                   maximumFractionDigits: 0,
                 }).format(contact.revenus_annuels)}
+              </div>
+            )}
+            {fiscal.nombre_parts_fiscales != null && (
+              <div>
+                <span className="text-muted-foreground text-sm">
+                  Nombre de parts fiscales{foyer ? " (foyer)" : ""} :{" "}
+                </span>
+                {fiscal.nombre_parts_fiscales}
+              </div>
+            )}
+            {fiscal.revenu_fiscal_reference != null && fiscal.revenu_fiscal_reference > 0 && (
+              <div>
+                <span className="text-muted-foreground text-sm">
+                  Revenu brut global{foyer ? " (foyer)" : ""} :{" "}
+                </span>
+                {new Intl.NumberFormat("fr-FR", {
+                  style: "currency",
+                  currency: "EUR",
+                  maximumFractionDigits: 0,
+                }).format(fiscal.revenu_fiscal_reference)}
+              </div>
+            )}
+            {fiscal.tranche_imposition && (
+              <div>
+                <span className="text-muted-foreground text-sm">
+                  TMI{foyer ? " (foyer)" : ""} :{" "}
+                </span>
+                {fiscal.tranche_imposition}
+              </div>
+            )}
+            {fiscal.ir_net_a_payer != null && fiscal.ir_net_a_payer > 0 && (
+              <div>
+                <span className="text-muted-foreground text-sm">
+                  IR net à payer{foyer ? " (foyer)" : ""} :{" "}
+                </span>
+                {new Intl.NumberFormat("fr-FR", {
+                  style: "currency",
+                  currency: "EUR",
+                  maximumFractionDigits: 0,
+                }).format(fiscal.ir_net_a_payer)}
               </div>
             )}
             {contact.charges_emprunts != null && contact.charges_emprunts > 0 && (
@@ -455,52 +497,6 @@ export function ContactDetailSyntheseTab({
                   <p className="mt-1 text-xs text-muted-foreground">
                     {getSriDefinition(contact.profil_risque_sri)}
                   </p>
-                )}
-              </div>
-            )}
-            {hasFiscalDisplayContent(fiscal) && (
-              <div className="space-y-1 border-t pt-3">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Fiscalité{foyer ? " (foyer)" : ""}
-                </p>
-                {fiscal.tranche_imposition && (
-                  <div>
-                    <span className="text-muted-foreground text-sm">TMI : </span>
-                    {fiscal.tranche_imposition}
-                  </div>
-                )}
-                {fiscal.revenu_fiscal_reference != null &&
-                  fiscal.revenu_fiscal_reference > 0 && (
-                    <div>
-                      <span className="text-muted-foreground text-sm">
-                        Revenu brut global :{" "}
-                      </span>
-                      {new Intl.NumberFormat("fr-FR", {
-                        style: "currency",
-                        currency: "EUR",
-                        maximumFractionDigits: 0,
-                      }).format(fiscal.revenu_fiscal_reference)}
-                    </div>
-                  )}
-                {fiscal.nombre_parts_fiscales != null && (
-                  <div>
-                    <span className="text-muted-foreground text-sm">
-                      Nombre de parts fiscales :{" "}
-                    </span>
-                    {fiscal.nombre_parts_fiscales}
-                  </div>
-                )}
-                {fiscal.ir_net_a_payer != null && fiscal.ir_net_a_payer > 0 && (
-                  <div>
-                    <span className="text-muted-foreground text-sm">
-                      IR net à payer :{" "}
-                    </span>
-                    {new Intl.NumberFormat("fr-FR", {
-                      style: "currency",
-                      currency: "EUR",
-                      maximumFractionDigits: 0,
-                    }).format(fiscal.ir_net_a_payer)}
-                  </div>
                 )}
               </div>
             )}
@@ -674,13 +670,28 @@ export function ContactDetailSyntheseTab({
           onEditSection={onEditSection}
         />
         <CardContent>
-          {notesDisplay ? (
-            <pre className="whitespace-pre-wrap text-sm text-muted-foreground font-sans">
-              {notesDisplay}
-            </pre>
-          ) : (
-            <p className="text-sm text-muted-foreground italic">Aucune note pour ce contact</p>
-          )}
+          <ContactNotesLog
+            notes={contact.notes}
+            busy={addingNote}
+            onChange={async (nextNotes) => {
+              if (contact.id == null) return;
+              setAddingNote(true);
+              try {
+                await updateContact(
+                  contact.id,
+                  contactToUpdatePayload(contact, { notes: nextNotes })
+                );
+                onContactUpdated?.();
+              } catch (error: unknown) {
+                toast.error(
+                  error instanceof Error ? error.message : "Impossible d'enregistrer la note"
+                );
+                throw error;
+              } finally {
+                setAddingNote(false);
+              }
+            }}
+          />
         </CardContent>
       </Card>
 

@@ -88,7 +88,7 @@ export function ContactRegistreToggle({
         disabled && "opacity-60 pointer-events-none",
         className
       )}
-      title="Registre des emails (campagnes et relances)"
+      title="Proximité : vouvoiement ou tutoiement"
     >
       {loading ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin mx-1.5 text-muted-foreground" />

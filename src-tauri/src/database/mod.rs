@@ -214,6 +214,10 @@ impl Database {
         let conn = crate::workspace::cache_seal::open_team_cache_connection(app_handle)
             .map_err(rusqlite::Error::InvalidParameterName)?;
         let db = Database { conn };
+        // La clé vient d'être lue sur SharePoint (prepare_team_cache_open). Sans ce
+        // tampon, toute écriture d'ouverture échoue : le bail « en ligne » du cache
+        // a plus de 45 s dès que le CRM a été fermé.
+        db.workspace_sync_mark_online_if_ready()?;
         db.init_tables().map_err(|e| {
             eprintln!("❌ Échec init_tables / migration cache équipe : {e}");
             e

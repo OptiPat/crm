@@ -454,7 +454,7 @@ export function ContactPatrimoinePanel({
               <p className="text-sm font-medium">Aucun investissement enregistré</p>
               <p className="text-xs text-muted-foreground mt-1 mb-4 max-w-md mx-auto">
                 Importez un RIO ou relevé patrimonial pour préremplir la fiche et le patrimoine,
-                ou saisissez un placement manuellement.
+                ou saisissez un investissement manuellement.
               </p>
               <div className="flex flex-wrap justify-center gap-2">
                 {onImportDocument && (
@@ -471,7 +471,7 @@ export function ContactPatrimoinePanel({
                 )}
                 <Button type="button" size="sm" className="gap-1" onClick={onAdd}>
                   <Plus className="h-4 w-4" />
-                  Ajouter un placement
+                  Ajouter un investissement
                 </Button>
               </div>
             </div>
@@ -479,7 +479,7 @@ export function ContactPatrimoinePanel({
             <>
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
                 <p className="text-sm font-medium text-foreground">
-                  <span className="tabular-nums">{filtered.length}</span> placement
+                  <span className="tabular-nums">{filtered.length}</span> investissement
                   {filtered.length > 1 ? "s" : ""} affiché{filtered.length > 1 ? "s" : ""}
                   {hasActiveFilters && (
                     <span className="text-muted-foreground font-normal">
@@ -513,10 +513,10 @@ export function ContactPatrimoinePanel({
               {filtered.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-amber-200/80 bg-amber-50/40 px-4 py-8 text-center space-y-3">
                   <p className="text-sm font-medium text-foreground">
-                    Aucun placement ne correspond à ces filtres
+                    Aucun investissement ne correspond à ces filtres
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {investissements.length} placement
+                    {investissements.length} investissement
                     {investissements.length > 1 ? "s" : ""} enregistré
                     {investissements.length > 1 ? "s" : ""} au total — cliquez sur
                     les cartes du haut ou réinitialisez.

@@ -6,6 +6,7 @@ import {
   parseDemembrementDuree,
   parseModeDetention,
   stripDemembrementDureeFromNotes,
+  stripInvestissementMachineNotes,
   stripStructuredDemembrementFromNotes,
   upsertDemembrementDureeInNotes,
   upsertModeDetentionInNotes,
@@ -98,5 +99,13 @@ describe("investissement-demembrement", () => {
         "Mode de détention: NP\nDurée: 8 ans\nCommentaire"
       )
     ).toBe("Commentaire");
+  });
+
+  it("retire les lignes techniques et garde le journal", () => {
+    expect(
+      stripInvestissementMachineNotes(
+        "Réinv. 100%\n[26/09/2026 19:35]\nAppel client\n\nDurée: 8 ans\nMode de détention: Usufruit"
+      )
+    ).toBe("[26/09/2026 19:35]\nAppel client");
   });
 });

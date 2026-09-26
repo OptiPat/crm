@@ -78,9 +78,25 @@ export function stripDemembrementDureeFromNotes(notes: string): string {
     .trim();
 }
 
+const REINVESTISSEMENT_LINE_RE = /^Réinv\.\s*\d+\s*%\s*$/i;
+
+/** Retire la ligne « Réinv. 100 % » ajoutée à l'enregistrement. */
+export function stripReinvestissementFromNotes(notes: string): string {
+  return notes
+    .split("\n")
+    .filter((line) => !REINVESTISSEMENT_LINE_RE.test(line.trim()))
+    .join("\n")
+    .trim();
+}
+
 /** Retire les lignes structurées démembrement (durée + mode) des notes libres. */
 export function stripStructuredDemembrementFromNotes(notes: string): string {
   return stripModeDetentionFromNotes(stripDemembrementDureeFromNotes(notes));
+}
+
+/** Notes saisies par l'utilisateur, sans les lignes techniques du formulaire. */
+export function stripInvestissementMachineNotes(notes: string): string {
+  return stripReinvestissementFromNotes(stripStructuredDemembrementFromNotes(notes));
 }
 
 export function upsertModeDetentionInNotes(
