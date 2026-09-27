@@ -300,9 +300,19 @@ pub fn validate_team_remote_snapshot(
     ))
 }
 
-/// SharePoint ne stocke que les lignes présentes : le snapshot distant n'a donc
-/// pas les tables exportables à 0, contrairement à l'aperçu local. Le checksum
-/// se compare après normalisation (même forme que l'aperçu), pas sur le sparse.
+/// SharePoint ne stocke que les lignes présentes. Le contrôle se fait après avoir
+/// remis les tables vides à 0, comme l'aperçu local. Un hash du snapshot sparse
+/// diverge toujours et bloque « Reconstruire le cache ».
+pub fn checksum_for_remote_rebuild(snapshot: &TeamMigrationSnapshot) -> Result<String, String> {
+    use crate::database::workspace_sync::snapshot_checksum;
+
+    let mut normalized = snapshot.clone();
+    let db = Database::open_in_memory_workspace_cache()
+        .map_err(|error| format!("Base mémoire workspace : {error}"))?;
+    normalized.table_counts =
+        table_counts_for_snapshot_records(db.connection(), &normalized.records)?;
+    Ok(snapshot_checksum(&normalized))
+}
 fn validate_remote_snapshot_report(
     snapshot: &TeamMigrationSnapshot,
     expected_checksum: &str,
@@ -442,5 +452,13 @@ mod tests {
         let report = validate_remote_snapshot_report(&rebuilt, &expected, 0, errors);
         assert!(report.valid, "{:?}", report.errors);
         assert!(report.checksum_match);
+        let rebuild_checksum = checksum_for_remote_rebuild(&rebuilt).unwrap();
+        let rebuild_report =
+            validate_rebuilt_snapshot_in_memory(&rebuilt, &rebuild_checksum, 0, Vec::new());
+        assert!(
+            rebuild_report.valid,
+            "reconstruire doit accepter le snapshot sparse : {:?}",
+            rebuild_report.errors
+        );
     }
 }

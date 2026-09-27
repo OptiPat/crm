@@ -11,8 +11,9 @@ use plan::{
 };
 pub use sync_key::{compute_mutation_id, compute_payload_checksum, compute_sync_key};
 pub use download::{
-    rebuild_snapshot_from_remote_items, validate_rebuilt_snapshot_in_memory,
-    validate_team_remote_snapshot, TeamMigrationValidateReport,
+    checksum_for_remote_rebuild, rebuild_snapshot_from_remote_items,
+    validate_rebuilt_snapshot_in_memory, validate_team_remote_snapshot,
+    TeamMigrationValidateReport,
 };
 pub(crate) use download::remote_item_record_identity;
 #[cfg(test)]

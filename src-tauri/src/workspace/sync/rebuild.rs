@@ -5,7 +5,6 @@ use crate::database::workspace::WorkspaceConfig;
 use crate::database::workspace_restore::{
     restore_snapshot_into_database, table_counts_for_snapshot_records,
 };
-use crate::database::workspace_sync::snapshot_checksum;
 use crate::database::Database;
 use crate::workspace::cache::{
     save_workspace_cache_manifest, team_cache_database_path, team_cache_sealed_path,
@@ -21,7 +20,7 @@ use crate::workspace::team_access::{
     classify_team_authority_error, should_lock_open_session_on_denial,
 };
 use crate::workspace::migration::{
-    rebuild_snapshot_from_remote_items, remote_item_record_identity,
+    checksum_for_remote_rebuild, rebuild_snapshot_from_remote_items, remote_item_record_identity,
     validate_rebuilt_snapshot_in_memory,
 };
 use crate::workspace::sharepoint::{
@@ -103,7 +102,7 @@ fn prepare_rebuilt_cache(
         .collect::<Result<Vec<_>, String>>()?;
     let (mut snapshot, tombstone_count, parse_errors) =
         rebuild_snapshot_from_remote_items(&remote_items)?;
-    let expected_checksum = snapshot_checksum(&snapshot);
+    let expected_checksum = checksum_for_remote_rebuild(&snapshot)?;
     let validation = validate_rebuilt_snapshot_in_memory(
         &snapshot,
         &expected_checksum,
