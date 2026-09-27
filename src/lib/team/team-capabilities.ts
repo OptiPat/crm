@@ -110,6 +110,9 @@ export interface TeamSyncOnceReport {
   conflicts: number;
   pending: number;
   deltaLinkUpdated: boolean;
+  /** Créations refusées par SharePoint ce cycle (lignes réessayées ensuite). */
+  failed?: number;
+  lastError?: string | null;
 }
 
 export interface TeamSyncConflict {

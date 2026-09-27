@@ -621,12 +621,14 @@ impl Database {
         Ok(())
     }
 
+    /// File en attente. Les lignes déjà refusées par SharePoint passent après les
+    /// fraîches : un lot de refus ne doit pas bloquer tout le reste indéfiniment.
     pub fn workspace_sync_list_pending(&self) -> Result<Vec<WorkspaceSyncQueueItem>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, revision, table_name, record_key, operation, payload_json, enqueued_at
              FROM workspace_sync_queue
              WHERE synced_at IS NULL
-             ORDER BY enqueued_at ASC, id ASC",
+             ORDER BY (error_message IS NOT NULL) ASC, enqueued_at ASC, id ASC",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(WorkspaceSyncQueueItem {
@@ -640,6 +642,22 @@ impl Database {
             })
         })?;
         rows.collect()
+    }
+
+    /// Mémorise le refus SharePoint sur la ligne en attente (visible, réessayée).
+    pub fn workspace_sync_record_push_error(
+        &self,
+        queue_id: i64,
+        revision: i64,
+        message: &str,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE workspace_sync_queue
+             SET error_message = ?3
+             WHERE id = ?1 AND revision = ?2 AND synced_at IS NULL",
+            params![queue_id, revision, message],
+        )?;
+        Ok(())
     }
 
     pub fn workspace_sync_upsert_remote_mapping(

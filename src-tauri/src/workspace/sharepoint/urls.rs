@@ -110,6 +110,31 @@ impl SharePointGraphUrls {
         )
     }
 
+    /// Point d'entrée `$batch` : jusqu'à 20 sous-requêtes par appel HTTP.
+    pub fn batch(&self) -> String {
+        format!("{}/$batch", self.base())
+    }
+
+    /// Les sous-requêtes `$batch` prennent une URL relative à la racine de version.
+    pub fn relative_list_items(&self, site_id: &str, list_id: &str) -> String {
+        format!("/sites/{site_id}/lists/{list_id}/items?expand=fields")
+    }
+
+    pub fn relative_list_items_filtered(&self, site_id: &str, list_id: &str, filter: &str) -> String {
+        format!(
+            "/sites/{site_id}/lists/{list_id}/items?expand=fields&$filter={}",
+            encode_odata_filter(filter)
+        )
+    }
+
+    pub fn relative_list_item(&self, site_id: &str, list_id: &str, item_id: &str) -> String {
+        format!("/sites/{site_id}/lists/{list_id}/items/{item_id}?expand=fields")
+    }
+
+    pub fn relative_list_item_fields(&self, site_id: &str, list_id: &str, item_id: &str) -> String {
+        format!("/sites/{site_id}/lists/{list_id}/items/{item_id}/fields")
+    }
+
     pub fn site_drives(&self, site_id: &str) -> String {
         format!("{}/sites/{site_id}/drives", self.base())
     }

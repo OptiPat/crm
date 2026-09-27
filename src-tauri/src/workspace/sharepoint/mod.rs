@@ -8,13 +8,15 @@ mod urls;
 pub(crate) mod test_server;
 
 pub use client::{
-    map_graph_http_error, ParsedDriveItem, ParsedSharePointDeltaItem, ParsedSharePointDrive,
-    ParsedSharePointListItem, SharePointConnectionTestResult, SharePointDeltaResult,
-    SharePointGraphClient, SharePointSiteRef,
+    map_graph_http_error, GraphBatchRequest, GraphBatchResponse, ParsedDriveItem,
+    ParsedSharePointDeltaItem, ParsedSharePointDrive, ParsedSharePointListItem,
+    SharePointConnectionTestResult, SharePointDeltaResult, SharePointGraphClient,
+    SharePointSiteRef, GRAPH_BATCH_MAX_REQUESTS,
 };
 #[cfg(test)]
 pub use client::GraphEntityVersion;
 pub use conflict::{GraphWriteConflict, GraphWriteOutcome};
+pub(crate) use conflict::parse_http_write_result;
 #[cfg(test)]
 pub use conflict::PreconditionFailedDetails;
 pub use schema::{

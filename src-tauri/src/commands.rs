@@ -36,13 +36,20 @@ use tauri::{AppHandle, Manager, State};
 pub type DbState = Mutex<Option<Database>>;
 
 #[tauri::command]
-pub fn get_all_contacts(db: State<'_, DbState>) -> Result<Vec<Contact>, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+pub async fn get_all_contacts(app: AppHandle) -> Result<Vec<Contact>, String> {
+    // Hors du fil principal : avec des milliers de fiches, la lecture jointe
+    // gèle l'affichage (sablier macOS) si elle tourne sur le thread UI.
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app.state::<DbState>();
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
-    database
-        .get_all_contacts()
-        .map_err(|e| format!("Failed to get contacts: {}", e))
+        database
+            .get_all_contacts()
+            .map_err(|e| format!("Failed to get contacts: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Lecture des contacts interrompue: {}", e))?
 }
 
 #[tauri::command]
@@ -67,12 +74,25 @@ pub struct CreateContactResult {
 }
 
 #[tauri::command]
-pub fn create_contact(
+pub async fn create_contact(
     app: AppHandle,
-    db: State<'_, DbState>,
     new_contact: NewContact,
     skip_post_save_hooks: Option<bool>,
 ) -> Result<CreateContactResult, String> {
+    // Les imports enchaînent des milliers d'appels : chacun quitte le fil principal.
+    tauri::async_runtime::spawn_blocking(move || {
+        create_contact_blocking(&app, new_contact, skip_post_save_hooks)
+    })
+    .await
+    .map_err(|e| format!("Création du contact interrompue: {}", e))?
+}
+
+fn create_contact_blocking(
+    app: &AppHandle,
+    new_contact: NewContact,
+    skip_post_save_hooks: Option<bool>,
+) -> Result<CreateContactResult, String> {
+    let db = app.state::<DbState>();
     let (contact, contact_id, categorie, skip_hooks) = {
         let db_guard = db.lock().unwrap();
         let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -99,7 +119,7 @@ pub fn create_contact(
             );
         }
         if !skip_hooks {
-            crate::email::google_contacts::sync_contact_after_save(&app, &db, id);
+            crate::email::google_contacts::sync_contact_after_save(app, &db, id);
         }
         let db_guard = db.lock().unwrap();
         let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -118,9 +138,8 @@ pub fn create_contact(
 }
 
 #[tauri::command]
-pub fn create_contacts_bulk(
+pub async fn create_contacts_bulk(
     app: AppHandle,
-    db: State<'_, DbState>,
     new_contacts: Vec<NewContact>,
     skip_post_save_hooks: Option<bool>,
 ) -> Result<Vec<Contact>, String> {
@@ -130,6 +149,16 @@ pub fn create_contacts_bulk(
                 .into(),
         );
     }
+    tauri::async_runtime::spawn_blocking(move || create_contacts_bulk_blocking(app, new_contacts))
+        .await
+        .map_err(|e| format!("Import des contacts interrompu: {}", e))?
+}
+
+fn create_contacts_bulk_blocking(
+    app: AppHandle,
+    new_contacts: Vec<NewContact>,
+) -> Result<Vec<Contact>, String> {
+    let db = app.state::<DbState>();
     let contacts = {
         let db_guard = db.lock().unwrap();
         let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -146,7 +175,7 @@ pub fn create_contacts_bulk(
         .filter_map(|c| c.id)
         .collect();
     crate::client_onedrive::background::spawn_onedrive_auto_create_batch_background(
-        app,
+        app.clone(),
         contact_ids,
     );
 
@@ -194,13 +223,26 @@ pub fn cleanup_orphaned_data(db: State<'_, DbState>) -> Result<(usize, usize), S
 }
 
 #[tauri::command]
-pub fn update_contact(
+pub async fn update_contact(
     app: AppHandle,
-    db: State<'_, DbState>,
     id: i64,
     contact: serde_json::Value,
     skip_post_save_hooks: Option<bool>,
 ) -> Result<Contact, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        update_contact_blocking(&app, id, contact, skip_post_save_hooks)
+    })
+    .await
+    .map_err(|e| format!("Mise à jour du contact interrompue: {}", e))?
+}
+
+fn update_contact_blocking(
+    app: &AppHandle,
+    id: i64,
+    contact: serde_json::Value,
+    skip_post_save_hooks: Option<bool>,
+) -> Result<Contact, String> {
+    let db = app.state::<DbState>();
     let field_presence =
         contact
             .as_object()
@@ -227,7 +269,7 @@ pub fn update_contact(
     if !skip_post_save_hooks.unwrap_or(false) {
         let _ = database.check_auto_etiquettes_for_contact(id);
         drop(db_guard);
-        crate::email::google_contacts::sync_contact_after_save(&app, &db, id);
+        crate::email::google_contacts::sync_contact_after_save(app, &db, id);
     } else {
         drop(db_guard);
     }
@@ -252,11 +294,22 @@ pub struct ContactFiscalPayload {
 }
 
 #[tauri::command]
-pub fn update_contact_fiscal(
-    db: State<'_, DbState>,
+pub async fn update_contact_fiscal(
+    app: AppHandle,
     id: i64,
     fiscal: ContactFiscalPayload,
 ) -> Result<Contact, String> {
+    tauri::async_runtime::spawn_blocking(move || update_contact_fiscal_blocking(&app, id, fiscal))
+        .await
+        .map_err(|e| format!("Mise à jour fiscale interrompue: {}", e))?
+}
+
+fn update_contact_fiscal_blocking(
+    app: &AppHandle,
+    id: i64,
+    fiscal: ContactFiscalPayload,
+) -> Result<Contact, String> {
+    let db = app.state::<DbState>();
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database

@@ -6,9 +6,9 @@ use crate::workspace::migration::{
     compute_mutation_id, compute_payload_checksum, compute_sync_key,
     MAX_SHAREPOINT_PAYLOAD_JSON_BYTES,
 };
-use crate::workspace::sharepoint::{
-    GraphWriteOutcome, SharePointGraphClient,
-};
+#[cfg(test)]
+use crate::workspace::sharepoint::GraphWriteOutcome;
+use crate::workspace::sharepoint::SharePointGraphClient;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -38,30 +38,37 @@ pub enum RemotePushResult {
     },
 }
 
+#[cfg(test)]
 pub fn next_pending_push(db: &Database) -> Result<Option<PendingPushPlan>, String> {
+    Ok(next_pending_pushes(db, 1)?.pop())
+}
+
+/// Jusqu'à `limit` modifications en attente, hors lignes en conflit ouvert.
+/// Une ligne = une entrée (index unique sur la file non acquittée).
+pub fn next_pending_pushes(db: &Database, limit: usize) -> Result<Vec<PendingPushPlan>, String> {
     let queue_items = db
         .workspace_sync_list_pending()
         .map_err(|error| error.to_string())?;
-    let mut queue_item = None;
+    let mut plans = Vec::with_capacity(limit.min(queue_items.len()));
     for candidate in queue_items {
-        if !db
+        if plans.len() >= limit {
+            break;
+        }
+        if db
             .workspace_sync_has_open_conflict(&candidate.table_name, &candidate.record_key)
             .map_err(|error| error.to_string())?
         {
-            queue_item = Some(candidate);
-            break;
+            continue;
         }
+        let remote_mapping = db
+            .workspace_sync_get_remote_mapping(&candidate.table_name, &candidate.record_key)
+            .map_err(|error| error.to_string())?;
+        plans.push(PendingPushPlan {
+            queue_item: candidate,
+            remote_mapping,
+        });
     }
-    let Some(queue_item) = queue_item else {
-        return Ok(None);
-    };
-    let remote_mapping = db
-        .workspace_sync_get_remote_mapping(&queue_item.table_name, &queue_item.record_key)
-        .map_err(|error| error.to_string())?;
-    Ok(Some(PendingPushPlan {
-        queue_item,
-        remote_mapping,
-    }))
+    Ok(plans)
 }
 
 pub fn build_crm_data_mutation_fields(
@@ -95,6 +102,9 @@ pub fn build_crm_data_mutation_fields(
     }))
 }
 
+/// Chemin unitaire de référence (une ligne, un appel) ; le cycle réel passe par
+/// `push_batch`. Conservé pour les tests de conflit ETag.
+#[cfg(test)]
 pub fn execute_remote_push(
     client: &SharePointGraphClient,
     access_token: &str,
@@ -235,22 +245,11 @@ pub fn complete_remote_push(
     }
 }
 
-pub fn ensure_remote_mutation_audit(
-    client: &SharePointGraphClient,
-    access_token: &str,
-    site_id: &str,
-    audit_list_id: &str,
-    actor_id: &str,
-    created_at: &str,
-    item: &WorkspaceSyncQueueItem,
-) -> Result<(), String> {
+/// Champs CRM_Audit d'une mutation acquittée (envoyés en lot après le push).
+pub fn mutation_audit_fields(item: &WorkspaceSyncQueueItem, actor_id: &str, created_at: &str) -> Value {
     let sync_key = compute_sync_key(&item.table_name, &item.record_key);
     let mutation_id = compute_mutation_id(&sync_key, item.revision);
-    ensure_remote_audit_entry(
-        client,
-        access_token,
-        site_id,
-        audit_list_id,
+    audit_entry_fields(
         &mutation_id,
         &item.table_name,
         &item.record_key,
@@ -263,6 +262,26 @@ pub fn ensure_remote_mutation_audit(
         &format!("Synchronisation CRM — révision {}", item.revision),
         created_at,
     )
+}
+
+fn audit_entry_fields(
+    mutation_id: &str,
+    entity_type: &str,
+    entity_id: &str,
+    actor_id: &str,
+    action: &str,
+    detail: &str,
+    created_at: &str,
+) -> Value {
+    json!({
+        "MutationId": mutation_id,
+        "EntityType": entity_type,
+        "EntityId": entity_id,
+        "ActorId": actor_id,
+        "Action": action,
+        "Detail": detail,
+        "CreatedAt": created_at,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -295,15 +314,15 @@ pub fn ensure_remote_audit_entry(
             ));
         }
     }
-    let fields = json!({
-        "MutationId": mutation_id,
-        "EntityType": entity_type,
-        "EntityId": entity_id,
-        "ActorId": actor_id,
-        "Action": action,
-        "Detail": detail,
-        "CreatedAt": created_at,
-    });
+    let fields = audit_entry_fields(
+        mutation_id,
+        entity_type,
+        entity_id,
+        actor_id,
+        action,
+        detail,
+        created_at,
+    );
     match client.create_list_item_blocking(
         access_token,
         site_id,

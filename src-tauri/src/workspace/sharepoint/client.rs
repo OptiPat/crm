@@ -98,6 +98,71 @@ pub struct SharePointConnectionTestResult {
     pub drive_count: u32,
 }
 
+/// Nombre maximal de sous-requêtes qu'accepte Microsoft Graph dans un `$batch`.
+pub const GRAPH_BATCH_MAX_REQUESTS: usize = 20;
+
+/// Sous-requête d'un lot `$batch`. `url` est relative à la racine de version.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GraphBatchRequest {
+    pub id: String,
+    pub method: &'static str,
+    pub url: String,
+    pub if_match: Option<String>,
+    pub body: Option<Value>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GraphBatchResponse {
+    pub id: String,
+    pub status: u16,
+    pub body: Value,
+}
+
+fn batch_request_json(request: &GraphBatchRequest) -> Value {
+    let mut headers = serde_json::Map::new();
+    if request.body.is_some() {
+        headers.insert("Content-Type".into(), Value::String("application/json".into()));
+    }
+    if let Some(etag) = request.if_match.as_deref() {
+        headers.insert("If-Match".into(), Value::String(etag.to_string()));
+    }
+    let mut value = serde_json::json!({
+        "id": request.id,
+        "method": request.method,
+        "url": request.url,
+    });
+    if !headers.is_empty() {
+        value["headers"] = Value::Object(headers);
+    }
+    if let Some(body) = request.body.as_ref() {
+        value["body"] = body.clone();
+    }
+    value
+}
+
+pub fn parse_batch_responses(json: &str) -> Result<Vec<GraphBatchResponse>, String> {
+    let value: Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    let responses = value
+        .get("responses")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "Réponse $batch Graph sans tableau responses".to_string())?;
+    responses
+        .iter()
+        .map(|response| {
+            let status = response
+                .get("status")
+                .and_then(Value::as_u64)
+                .and_then(|status| u16::try_from(status).ok())
+                .ok_or_else(|| "Sous-réponse $batch sans status".to_string())?;
+            Ok(GraphBatchResponse {
+                id: required_string(response, "id")?,
+                status,
+                body: response.get("body").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone)]
 pub struct SharePointGraphClient {
     pub site: SharePointSiteRef,
@@ -658,6 +723,38 @@ impl SharePointGraphClient {
         }
     }
 
+    /// Exécute jusqu'à 20 sous-requêtes en un appel HTTP. Un 429 global est
+    /// réessayé ; un 429 sur une sous-requête est rendu tel quel à l'appelant.
+    pub fn batch_blocking(
+        &self,
+        access_token: &str,
+        requests: &[GraphBatchRequest],
+    ) -> Result<Vec<GraphBatchResponse>, String> {
+        if requests.is_empty() {
+            return Ok(Vec::new());
+        }
+        if requests.len() > GRAPH_BATCH_MAX_REQUESTS {
+            return Err(format!(
+                "Lot Graph trop grand : {} sous-requêtes (max {GRAPH_BATCH_MAX_REQUESTS}).",
+                requests.len()
+            ));
+        }
+        let payload = serde_json::json!({
+            "requests": requests.iter().map(batch_request_json).collect::<Vec<_>>(),
+        });
+        let (status, body) = graph_post_with_retry(
+            self.http_client(),
+            &self.urls().batch(),
+            access_token,
+            &payload,
+            "Lot Microsoft Graph",
+        )?;
+        if status != 200 {
+            return Err(map_graph_http_error(status, &body));
+        }
+        parse_batch_responses(&body)
+    }
+
     pub fn create_list_item_blocking(
         &self,
         access_token: &str,
@@ -1159,6 +1256,73 @@ mod tests {
             hostname: "contoso.sharepoint.com".into(),
             site_path: "/sites/crm-team".into(),
         })
+    }
+
+    #[test]
+    fn batch_request_json_carries_headers_and_body_only_when_needed() {
+        let get = GraphBatchRequest {
+            id: "1".into(),
+            method: "GET",
+            url: "/sites/s/lists/l/items?expand=fields".into(),
+            if_match: None,
+            body: None,
+        };
+        let json = batch_request_json(&get);
+        assert_eq!(json["method"], "GET");
+        assert!(json.get("headers").is_none());
+        assert!(json.get("body").is_none());
+
+        let patch = GraphBatchRequest {
+            id: "2".into(),
+            method: "PATCH",
+            url: "/sites/s/lists/l/items/9/fields".into(),
+            if_match: Some("\"3\"".into()),
+            body: Some(serde_json::json!({ "Title": "x" })),
+        };
+        let json = batch_request_json(&patch);
+        assert_eq!(json["headers"]["If-Match"], "\"3\"");
+        assert_eq!(json["headers"]["Content-Type"], "application/json");
+        assert_eq!(json["body"]["Title"], "x");
+    }
+
+    #[test]
+    fn batch_blocking_posts_one_request_and_parses_each_response() {
+        let server = ScriptedGraphServer::spawn(vec![ScriptedResponse::json(
+            200,
+            r#"{"responses":[
+                {"id":"0","status":201,"headers":{},"body":{"id":"11","@odata.etag":"\"1\"","fields":{}}},
+                {"id":"1","status":429,"headers":{"Retry-After":"5"},"body":{"error":{"code":"tooManyRequests"}}}
+            ]}"#,
+        )]);
+        let client = client().with_graph_host(server.base_url.clone());
+        let responses = client
+            .batch_blocking(
+                "token",
+                &[
+                    GraphBatchRequest {
+                        id: "0".into(),
+                        method: "POST",
+                        url: "/sites/s/lists/l/items".into(),
+                        if_match: None,
+                        body: Some(serde_json::json!({ "fields": {} })),
+                    },
+                    GraphBatchRequest {
+                        id: "1".into(),
+                        method: "POST",
+                        url: "/sites/s/lists/l/items".into(),
+                        if_match: None,
+                        body: Some(serde_json::json!({ "fields": {} })),
+                    },
+                ],
+            )
+            .unwrap();
+        assert_eq!(responses.len(), 2);
+        assert_eq!(responses[0].status, 201);
+        assert_eq!(responses[0].body["id"], "11");
+        assert_eq!(responses[1].status, 429);
+        let requests = server.finish();
+        assert_eq!(requests.len(), 1, "un seul appel HTTP pour tout le lot");
+        assert!(requests[0].starts_with("POST /v1.0/$batch"));
     }
 
     #[test]

@@ -3,9 +3,10 @@ use super::blob::{
     seed_missing_document_blobs,
 };
 use super::pull::{apply_pull_batch, prepare_pull_batch};
-use super::push::{
-    complete_remote_push, ensure_remote_audit_entry, ensure_remote_mutation_audit,
-    execute_remote_push, next_pending_push, RemotePushResult,
+use super::push::next_pending_pushes;
+use super::push_batch::{
+    ensure_no_open_transaction, push_pending_batch, with_db, BatchPushContext,
+    IMPORT_IN_PROGRESS_MESSAGE,
 };
 use crate::auth::session::{require_ui_session, UiSessionState};
 use crate::commands::DbState;
@@ -26,11 +27,10 @@ use crate::workspace::identity::require_fresh_sensitive_team_authority;
 use crate::workspace::team_access::{
     classify_team_authority_error, should_lock_open_session_on_denial,
 };
-use crate::workspace::migration::{
-    compute_mutation_id, compute_sync_key, validate_team_remote_snapshot,
-};
+use crate::workspace::migration::validate_team_remote_snapshot;
 use crate::workspace::sharepoint::{
-    SharePointGraphClient, LIST_CRM_AUDIT, LIST_CRM_DATA, LIST_CRM_SEQUENCES,
+    SharePointGraphClient, GRAPH_BATCH_MAX_REQUESTS, LIST_CRM_AUDIT, LIST_CRM_DATA,
+    LIST_CRM_SEQUENCES,
 };
 use crate::workspace::sync::sequence::reserve_remote_id_block;
 use chrono::Utc;
@@ -197,6 +197,11 @@ pub struct TeamSyncOnceReport {
     pub conflicts: usize,
     pub pending: usize,
     pub delta_link_updated: bool,
+    /// Créations refusées par SharePoint pendant ce cycle (réessayées plus tard).
+    #[serde(default)]
+    pub failed: usize,
+    #[serde(default)]
+    pub last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -463,7 +468,42 @@ pub async fn team_sync_once_cmd(app_handle: AppHandle) -> Result<TeamSyncOnceRep
         .map_err(|error| format!("Synchronisation équipe interrompue : {error}"))?
 }
 
+/// Un import local peut ouvrir une transaction à tout moment du cycle. Dans ce
+/// cas le cycle s'arrête sans bandeau d'erreur : rien n'est perdu, le delta n'a
+/// pas avancé et les envois déjà partis seront acquittés par l'écho du pull.
 fn team_sync_once(app_handle: &AppHandle) -> Result<TeamSyncOnceReport, String> {
+    // Delta déjà appliqué avant l'interruption : l'UI doit quand même se rafraîchir.
+    let mut applied_pull: Option<usize> = None;
+    match team_sync_once_inner(app_handle, &mut applied_pull) {
+        Err(error) if error == IMPORT_IN_PROGRESS_MESSAGE => {
+            let db = app_handle.state::<DbState>();
+            let guard = db
+                .lock()
+                .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
+            let database = guard.as_ref().ok_or("Base non initialisée")?;
+            Ok(TeamSyncOnceReport {
+                pulled: applied_pull.unwrap_or(0),
+                pushed: 0,
+                conflicts: database
+                    .workspace_sync_open_conflict_count()
+                    .map_err(|error| error.to_string())?,
+                pending: database
+                    .workspace_sync_list_pending()
+                    .map_err(|error| error.to_string())?
+                    .len(),
+                delta_link_updated: applied_pull.is_some(),
+                failed: 0,
+                last_error: None,
+            })
+        }
+        other => other,
+    }
+}
+
+fn team_sync_once_inner(
+    app_handle: &AppHandle,
+    applied_pull: &mut Option<usize>,
+) -> Result<TeamSyncOnceReport, String> {
     let db = app_handle.state::<DbState>();
     let session = app_handle.state::<UiSessionState>();
     require_ui_session(&session)?;
@@ -482,6 +522,7 @@ fn team_sync_once(app_handle: &AppHandle) -> Result<TeamSyncOnceReport, String> 
                 "La synchronisation continue n'est pas encore activée pour ce cache équipe.".into(),
             );
         }
+        ensure_no_open_transaction(database)?;
         (
             workspace_config_from_db(database)?,
             database
@@ -534,11 +575,7 @@ fn team_sync_once(app_handle: &AppHandle) -> Result<TeamSyncOnceReport, String> 
         previous_delta_link.as_deref(),
     )?;
     let pulled = remote_delta.items.len();
-    {
-        let guard = db
-            .lock()
-            .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
-        let database = guard.as_ref().ok_or("Base non initialisée")?;
+    with_db(db.inner(), |database| {
         let batch = prepare_pull_batch(database, remote_delta)?;
         apply_pull_batch(database, &batch)?;
         database
@@ -548,135 +585,64 @@ fn team_sync_once(app_handle: &AppHandle) -> Result<TeamSyncOnceReport, String> 
         if echoes > 0 {
             println!("✅ Sync équipe : {echoes} conflit(s) identique(s) fermé(s) automatiquement");
         }
-    }
+        Ok(())
+    })?;
+    *applied_pull = Some(pulled);
 
+    // Envoi par lots de 20 (`$batch`) : 3 appels HTTP par lot au lieu de 4 par ligne.
     let mut pushed = 0;
     let mut conflicts = 0;
-    for _ in 0..MAX_PUSHES_PER_CYCLE {
-        let plan = {
-            let guard = db
-                .lock()
-                .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
-            let database = guard.as_ref().ok_or("Base non initialisée")?;
-            next_pending_push(database)?
-        };
-        let Some(plan) = plan else {
+    let mut failed = 0;
+    let mut last_error: Option<String> = None;
+    let push_context = BatchPushContext {
+        client: &client,
+        access_token: &access_token,
+        site_id,
+        data_list_id: &list.id,
+        audit_list_id: &audit_list.id,
+        actor_id: &actor_id,
+    };
+    let mut budget = MAX_PUSHES_PER_CYCLE;
+    while budget > 0 {
+        let plans = with_db(db.inner(), |database| {
+            next_pending_pushes(database, GRAPH_BATCH_MAX_REQUESTS.min(budget))
+        })?;
+        if plans.is_empty() {
             break;
-        };
-        let result = execute_remote_push(
-            &client,
-            &access_token,
-            site_id,
-            &list.id,
-            &actor_id,
+        }
+        budget -= plans.len();
+        let outcome = push_pending_batch(
+            db.inner(),
+            &push_context,
+            plans,
             &Utc::now().to_rfc3339(),
-            &plan,
         )?;
-        match &result {
-            RemotePushResult::Applied { .. } => {
-                // Acquitter localement d'abord : si l'audit échoue (quota Graph),
-                // la ligne ne doit pas revenir en conflit contre elle-même.
-                {
-                    let guard = db
-                        .lock()
-                        .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
-                    let database = guard.as_ref().ok_or("Base non initialisée")?;
-                    if complete_remote_push(database, &plan, &result)? {
-                        pushed += 1;
-                    }
-                }
-                if let Err(error) = ensure_remote_mutation_audit(
-                    &client,
-                    &access_token,
-                    site_id,
-                    &audit_list.id,
-                    &actor_id,
-                    &Utc::now().to_rfc3339(),
-                    &plan.queue_item,
-                ) {
-                    eprintln!(
-                        "⚠️ Audit SharePoint non écrit pour {} / {} : {error}",
-                        plan.queue_item.table_name, plan.queue_item.record_key
-                    );
-                }
-            }
-            RemotePushResult::Conflict {
-                remote_item_id,
-                remote_payload_json,
-                remote_etag,
-                remote_deleted,
-                ..
-            } => {
-                let conflict_key = format!(
-                    "{}:{}",
-                    plan.queue_item.table_name, plan.queue_item.record_key
-                );
-                let mutation_id = compute_mutation_id(
-                    &compute_sync_key("sync_conflict", &conflict_key),
-                    plan.queue_item.revision,
-                );
-                ensure_remote_audit_entry(
-                    &client,
-                    &access_token,
-                    site_id,
-                    &audit_list.id,
-                    &mutation_id,
-                    &plan.queue_item.table_name,
-                    &plan.queue_item.record_key,
-                    &actor_id,
-                    "conflict",
-                    &format!(
-                        "Conflit de synchronisation — révision {}",
-                        plan.queue_item.revision
-                    ),
-                    &Utc::now().to_rfc3339(),
-                )?;
-                let guard = db
-                    .lock()
-                    .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
-                let database = guard.as_ref().ok_or("Base non initialisée")?;
-                database.workspace_sync_record_push_conflict(
-                    &plan.queue_item.table_name,
-                    &plan.queue_item.record_key,
-                    remote_item_id,
-                    remote_payload_json.as_deref(),
-                    remote_etag.as_deref(),
-                    *remote_deleted,
-                )?;
-                conflicts += 1;
-                break;
-            }
+        pushed += outcome.pushed;
+        conflicts += outcome.conflicts;
+        failed += outcome.failed;
+        if outcome.last_error.is_some() {
+            last_error = outcome.last_error;
+        }
+        // Quota Graph, ou lot sans progrès : on laisse le reste au cycle suivant.
+        if outcome.throttled || (outcome.pushed == 0 && outcome.conflicts == 0) {
+            break;
         }
     }
 
-    {
-        let guard = db
-            .lock()
-            .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
-        let database = guard.as_ref().ok_or("Base non initialisée")?;
-        seed_missing_document_blobs(database)?;
-    }
+    with_db(db.inner(), seed_missing_document_blobs)?;
     for _ in 0..MAX_BLOBS_PER_CYCLE {
-        let plan = {
-            let guard = db
-                .lock()
-                .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
-            let database = guard.as_ref().ok_or("Base non initialisée")?;
-            next_pending_blob(database)?
-        };
+        let plan = with_db(db.inner(), next_pending_blob)?;
         let Some(plan) = plan else {
             break;
         };
         let result = match execute_remote_blob(&client, &access_token, site_id, &plan) {
             Ok(result) => result,
             Err(error) => {
-                let guard = db
-                    .lock()
-                    .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
-                let database = guard.as_ref().ok_or("Base non initialisée")?;
-                database
-                    .workspace_blob_record_error(plan.queue.id, plan.queue.revision, &error)
-                    .map_err(|db_error| db_error.to_string())?;
+                with_db(db.inner(), |database| {
+                    database
+                        .workspace_blob_record_error(plan.queue.id, plan.queue.revision, &error)
+                        .map_err(|db_error| db_error.to_string())
+                })?;
                 return Err(error);
             }
         };
@@ -689,22 +655,14 @@ fn team_sync_once(app_handle: &AppHandle) -> Result<TeamSyncOnceReport, String> 
             &Utc::now().to_rfc3339(),
             &plan,
         )?;
-        let guard = db
-            .lock()
-            .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
-        let database = guard.as_ref().ok_or("Base non initialisée")?;
-        complete_remote_blob(database, &plan, &result)?;
+        with_db(db.inner(), |database| complete_remote_blob(database, &plan, &result))?;
     }
 
-    let (pending, stored_conflicts) = {
-        let guard = db
-            .lock()
-            .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
-        let database = guard.as_ref().ok_or("Base non initialisée")?;
+    let (pending, stored_conflicts) = with_db(db.inner(), |database| {
         database
             .workspace_sync_mark_online()
             .map_err(|error| error.to_string())?;
-        (
+        Ok((
             database
                 .workspace_sync_list_pending()
                 .map_err(|error| error.to_string())?
@@ -715,14 +673,16 @@ fn team_sync_once(app_handle: &AppHandle) -> Result<TeamSyncOnceReport, String> 
             database
                 .workspace_sync_open_conflict_count()
                 .map_err(|error| error.to_string())?,
-        )
-    };
+        ))
+    })?;
     Ok(TeamSyncOnceReport {
         pulled,
         pushed,
         conflicts: conflicts + stored_conflicts,
         pending,
         delta_link_updated: true,
+        failed,
+        last_error,
     })
 }
 

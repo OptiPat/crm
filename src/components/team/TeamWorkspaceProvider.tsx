@@ -21,6 +21,7 @@ import {
   resolveTeamCapabilities,
   type TeamCapabilities,
 } from "@/lib/team/team-capabilities";
+import { teamSyncReportMessage } from "@/lib/team/team-sync-status";
 
 type TeamWorkspaceContextValue = {
   config: WorkspaceConfig;
@@ -121,11 +122,7 @@ export function TeamWorkspaceProvider({
       try {
         const report = await syncTeamWorkspaceOnce();
         if (cancelled) return;
-        setSyncError(
-          report.conflicts > 0
-            ? `${report.conflicts} conflit(s) de synchronisation à résoudre.`
-            : null
-        );
+        setSyncError(teamSyncReportMessage(report));
         if (report.pulled > 0) {
           notifySharedCrmDataChanged();
         }
