@@ -36,7 +36,7 @@ use crate::workspace::sync::sequence::reserve_remote_id_block;
 use chrono::Utc;
 use serde::Serialize;
 use std::path::Path;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 const MAX_PUSHES_PER_CYCLE: usize = 100;
 const MAX_BLOBS_PER_CYCLE: usize = 10;
@@ -454,12 +454,18 @@ pub fn bootstrap_team_sync_cmd(
     })
 }
 
+/// Commande asynchrone : les appels Graph (jusqu'à 100 envois par cycle) ne
+/// doivent jamais bloquer le fil principal, sinon macOS affiche le sablier.
 #[tauri::command]
-pub fn team_sync_once_cmd(
-    app_handle: AppHandle,
-    db: State<'_, DbState>,
-    session: State<'_, UiSessionState>,
-) -> Result<TeamSyncOnceReport, String> {
+pub async fn team_sync_once_cmd(app_handle: AppHandle) -> Result<TeamSyncOnceReport, String> {
+    tauri::async_runtime::spawn_blocking(move || team_sync_once(&app_handle))
+        .await
+        .map_err(|error| format!("Synchronisation équipe interrompue : {error}"))?
+}
+
+fn team_sync_once(app_handle: &AppHandle) -> Result<TeamSyncOnceReport, String> {
+    let db = app_handle.state::<DbState>();
+    let session = app_handle.state::<UiSessionState>();
     require_ui_session(&session)?;
     let (config, previous_delta_link) = {
         let guard = db
@@ -483,13 +489,13 @@ pub fn team_sync_once_cmd(
                 .map_err(|error| error.to_string())?,
         )
     };
-    validate_workspace_enrollment(&app_handle, &config)?;
-    let authority = match require_fresh_sensitive_team_authority(&app_handle, &config) {
+    validate_workspace_enrollment(app_handle, &config)?;
+    let authority = match require_fresh_sensitive_team_authority(app_handle, &config) {
         Ok(authority) => authority,
         Err(error) => {
             if should_lock_open_session_on_denial(classify_team_authority_error(&error)) {
                 return Err(crate::auth::commands::lock_ui_after_team_access_denied(
-                    &app_handle,
+                    app_handle,
                     db.inner(),
                     session.inner(),
                     &error,
@@ -503,7 +509,7 @@ pub fn team_sync_once_cmd(
         .as_ref()
         .map(|identity| identity.microsoft_oid.clone())
         .ok_or_else(|| "Identité Microsoft équipe indisponible.".to_string())?;
-    let connection = resolve_microsoft_team_connection(&app_handle)?
+    let connection = resolve_microsoft_team_connection(app_handle)?
         .ok_or_else(|| "Connexion Microsoft équipe absente.".to_string())?;
     let access_token = connection.access_token;
     let site_ref = resolve_sharepoint_site_ref(&config)?;
@@ -538,6 +544,10 @@ pub fn team_sync_once_cmd(
         database
             .workspace_sync_mark_online()
             .map_err(|error| error.to_string())?;
+        let echoes = database.workspace_sync_auto_resolve_identical_conflicts()?;
+        if echoes > 0 {
+            println!("✅ Sync équipe : {echoes} conflit(s) identique(s) fermé(s) automatiquement");
+        }
     }
 
     let mut pushed = 0;
@@ -564,7 +574,18 @@ pub fn team_sync_once_cmd(
         )?;
         match &result {
             RemotePushResult::Applied { .. } => {
-                ensure_remote_mutation_audit(
+                // Acquitter localement d'abord : si l'audit échoue (quota Graph),
+                // la ligne ne doit pas revenir en conflit contre elle-même.
+                {
+                    let guard = db
+                        .lock()
+                        .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
+                    let database = guard.as_ref().ok_or("Base non initialisée")?;
+                    if complete_remote_push(database, &plan, &result)? {
+                        pushed += 1;
+                    }
+                }
+                if let Err(error) = ensure_remote_mutation_audit(
                     &client,
                     &access_token,
                     site_id,
@@ -572,13 +593,11 @@ pub fn team_sync_once_cmd(
                     &actor_id,
                     &Utc::now().to_rfc3339(),
                     &plan.queue_item,
-                )?;
-                let guard = db
-                    .lock()
-                    .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
-                let database = guard.as_ref().ok_or("Base non initialisée")?;
-                if complete_remote_push(database, &plan, &result)? {
-                    pushed += 1;
+                ) {
+                    eprintln!(
+                        "⚠️ Audit SharePoint non écrit pour {} / {} : {error}",
+                        plan.queue_item.table_name, plan.queue_item.record_key
+                    );
                 }
             }
             RemotePushResult::Conflict {

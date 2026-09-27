@@ -250,6 +250,62 @@ fn has_pending_local_change(
     Ok(count > 0)
 }
 
+fn payloads_are_identical(local_json: Option<&str>, remote: Option<&Map<String, Value>>) -> bool {
+    let (Some(local_json), Some(remote)) = (local_json, remote) else {
+        return false;
+    };
+    serde_json::from_str::<Value>(local_json)
+        .map(|local| local == Value::Object(remote.clone()))
+        .unwrap_or(false)
+}
+
+/// Une modification locale envoyée à SharePoint mais jamais acquittée (coupure,
+/// quota Graph) revient par le delta avec le même contenu : ce n'est pas un conflit.
+fn pending_local_change_is_echo(
+    conn: &Connection,
+    change: &WorkspaceRemoteDeltaChange,
+) -> rusqlite::Result<bool> {
+    if change.deleted {
+        return Ok(false);
+    }
+    let local_payload: Option<String> = conn
+        .query_row(
+            "SELECT payload_json FROM workspace_sync_queue
+             WHERE table_name = ?1 AND record_key = ?2 AND synced_at IS NULL
+               AND operation = 'upsert'",
+            params![change.table_name, change.record_key],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
+    Ok(payloads_are_identical(
+        local_payload.as_deref(),
+        change.payload.as_ref(),
+    ))
+}
+
+/// Acquitte la file locale et ferme tout conflit ouvert sur la ligne : local et
+/// distant sont désormais identiques, il n'y a plus rien à arbitrer.
+fn acknowledge_pending_local_change(
+    conn: &Connection,
+    table_name: &str,
+    record_key: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE workspace_sync_queue
+         SET synced_at = unixepoch(), error_message = NULL
+         WHERE table_name = ?1 AND record_key = ?2 AND synced_at IS NULL",
+        params![table_name, record_key],
+    )?;
+    conn.execute(
+        "UPDATE workspace_conflicts
+         SET status = 'resolved_accept_remote', resolved_at = unixepoch()
+         WHERE table_name = ?1 AND record_key = ?2 AND status = 'open'",
+        params![table_name, record_key],
+    )?;
+    Ok(())
+}
+
 fn persist_remote_mapping(
     conn: &Connection,
     change: &WorkspaceRemoteDeltaChange,
@@ -493,6 +549,56 @@ impl Database {
         tx.commit().map_err(|error| error.to_string())
     }
 
+    /// Ferme les conflits dont les deux versions sont identiques (écho d'un envoi
+    /// non acquitté). La comparaison porte sur la version locale **en attente**,
+    /// pas sur le snapshot figé : une retouche faite depuis reste un vrai conflit.
+    /// Retourne le nombre de conflits fermés.
+    pub fn workspace_sync_auto_resolve_identical_conflicts(&self) -> Result<usize, String> {
+        let candidates: Vec<(i64, String, String, Option<String>)> = {
+            let mut stmt = self
+                .conn
+                .prepare(
+                    "SELECT c.id, c.table_name, c.record_key, c.remote_payload_json
+                     FROM workspace_conflicts c
+                     WHERE c.status = 'open' AND c.remote_deleted = 0
+                     ORDER BY c.id",
+                )
+                .map_err(|error| error.to_string())?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                })
+                .map_err(|error| error.to_string())?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(|error| error.to_string())?
+        };
+        let mut resolved = 0;
+        for (conflict_id, table_name, record_key, remote_json) in candidates {
+            let remote = remote_json
+                .as_deref()
+                .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+                .and_then(|value| value.as_object().cloned());
+            let pending_local: Option<String> = self
+                .conn
+                .query_row(
+                    "SELECT payload_json FROM workspace_sync_queue
+                     WHERE table_name = ?1 AND record_key = ?2 AND synced_at IS NULL
+                       AND operation = 'upsert'",
+                    params![table_name, record_key],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|error| error.to_string())?
+                .flatten();
+            if !payloads_are_identical(pending_local.as_deref(), remote.as_ref()) {
+                continue;
+            }
+            self.workspace_sync_resolve_conflict_accept_remote(conflict_id)?;
+            resolved += 1;
+        }
+        Ok(resolved)
+    }
+
     pub fn workspace_sync_apply_remote_delta(
         &self,
         changes: &[WorkspaceRemoteDeltaChange],
@@ -555,6 +661,12 @@ impl Database {
             if has_pending_local_change(&tx, &change.table_name, &change.record_key)
                 .map_err(|error| error.to_string())?
             {
+                if pending_local_change_is_echo(&tx, change).map_err(|error| error.to_string())? {
+                    acknowledge_pending_local_change(&tx, &change.table_name, &change.record_key)
+                        .map_err(|error| error.to_string())?;
+                    persist_remote_mapping(&tx, change).map_err(|error| error.to_string())?;
+                    continue;
+                }
                 record_conflict(&tx, change).map_err(|error| error.to_string())?;
                 persist_remote_mapping(&tx, change).map_err(|error| error.to_string())?;
                 continue;
@@ -698,6 +810,123 @@ mod tests {
             .unwrap();
         assert_eq!(resolved_name, "DISTANT");
         assert!(db.workspace_sync_list_pending().unwrap().is_empty());
+    }
+
+    #[test]
+    fn echo_of_an_unacknowledged_push_is_acknowledged_not_conflicted() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO contacts (id, nom, prenom, categorie)
+                 VALUES (1, 'DUPONT', 'Jean', 'CLIENT')",
+                [],
+            )
+            .unwrap();
+        let change = contact_change("DUPONT", "\"2\"");
+        let local_payload = serde_json::to_string(change.payload.as_ref().unwrap()).unwrap();
+        db.workspace_sync_enqueue(
+            "contacts",
+            r#"[{"column":"id","kind":"integer","value":1}]"#,
+            "upsert",
+            Some(&local_payload),
+        )
+        .unwrap();
+        // Un conflit déjà ouvert sur cette ligne doit se fermer avec l'écho.
+        db.connection()
+            .execute(
+                "INSERT INTO workspace_conflicts
+                    (table_name, record_key, local_payload_json, remote_payload_json,
+                     remote_etag, remote_item_id, remote_deleted)
+                 VALUES ('contacts', ?1, ?2, ?3, '\"1\"', 'sp-1', 0)",
+                params![
+                    change.record_key,
+                    local_payload,
+                    r#"{"nom":{"kind":"text","value":"ANCIEN"}}"#
+                ],
+            )
+            .unwrap();
+
+        db.workspace_sync_apply_remote_delta(&[change], "https://graph.microsoft.com/delta?token=2")
+            .unwrap();
+
+        let conflicts: i64 = db
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM workspace_conflicts WHERE status = 'open'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(conflicts, 0);
+        assert!(db.workspace_sync_list_pending().unwrap().is_empty());
+        let mapping = db
+            .workspace_sync_get_remote_mapping(
+                "contacts",
+                r#"[{"column":"id","kind":"integer","value":1}]"#,
+            )
+            .unwrap()
+            .expect("mapping distant");
+        assert_eq!(mapping.remote_item_id.as_deref(), Some("sp-1"));
+    }
+
+    #[test]
+    fn identical_open_conflicts_are_closed_automatically() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO contacts (id, nom, prenom, categorie)
+                 VALUES (1, 'DUPONT', 'Jean', 'CLIENT')",
+                [],
+            )
+            .unwrap();
+        let change = contact_change("DUPONT", "\"2\"");
+        let payload_json = serde_json::to_string(change.payload.as_ref().unwrap()).unwrap();
+        // Écho : la version en attente est identique au distant.
+        db.workspace_sync_enqueue("contacts", &change.record_key, "upsert", Some(&payload_json))
+            .unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO workspace_conflicts
+                    (table_name, record_key, local_payload_json, remote_payload_json,
+                     remote_etag, remote_item_id, remote_deleted)
+                 VALUES ('contacts', ?1, ?2, ?2, '\"2\"', 'sp-1', 0)",
+                params![change.record_key, payload_json],
+            )
+            .unwrap();
+        // Vrai conflit : le snapshot figé était identique, mais l'utilisateur a
+        // retouché la fiche depuis. On ne doit pas écraser cette retouche.
+        let record_key_2 = r#"[{"column":"id","kind":"integer","value":2}]"#;
+        db.workspace_sync_enqueue(
+            "contacts",
+            record_key_2,
+            "upsert",
+            Some(r#"{"nom":{"kind":"text","value":"RETOUCHE"}}"#),
+        )
+        .unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO workspace_conflicts
+                    (table_name, record_key, local_payload_json, remote_payload_json,
+                     remote_etag, remote_item_id, remote_deleted)
+                 VALUES ('contacts', ?1, ?2, ?2, '\"3\"', 'sp-2', 0)",
+                params![record_key_2, r#"{"nom":{"kind":"text","value":"A"}}"#],
+            )
+            .unwrap();
+
+        let resolved = db.workspace_sync_auto_resolve_identical_conflicts().unwrap();
+        assert_eq!(resolved, 1);
+        let remaining: i64 = db
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM workspace_conflicts WHERE status = 'open'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 1);
+        let pending = db.workspace_sync_list_pending().unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].record_key, record_key_2);
     }
 
     #[test]

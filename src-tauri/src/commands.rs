@@ -1610,14 +1610,20 @@ pub fn count_alertes_traitees_depuis(db: State<'_, DbState>, since_ts: i64) -> R
         .map_err(|e| format!("Failed to count treated alertes: {}", e))
 }
 
+/// Asynchrone : parcourt tous les contacts × segments, trop long pour le fil principal.
 #[tauri::command]
-pub fn generer_alertes_automatiques(db: State<'_, DbState>) -> Result<usize, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+pub async fn generer_alertes_automatiques(app_handle: AppHandle) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app_handle.state::<DbState>();
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
-    database
-        .generer_alertes_automatiques()
-        .map_err(|e| format!("Failed to generate alertes: {}", e))
+        database
+            .generer_alertes_automatiques()
+            .map_err(|e| format!("Failed to generate alertes: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Génération des alertes interrompue: {}", e))?
 }
 
 // ========== DASHBOARD ==========
