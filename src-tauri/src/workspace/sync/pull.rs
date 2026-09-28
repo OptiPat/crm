@@ -107,6 +107,7 @@ fn parse_live_delta_item(
         record_key,
         payload,
         deleted,
+        updated_by: field_string(&item.fields, "UpdatedBy"),
     })
 }
 
@@ -134,6 +135,7 @@ pub fn prepare_pull_batch(
                 record_key: mapping.record_key,
                 payload: None,
                 deleted: true,
+                updated_by: None,
             }
         } else if field_string(&item.fields, "TableName").is_none() {
             continue;
@@ -156,6 +158,20 @@ pub fn prepare_pull_batch(
 
 pub fn apply_pull_batch(db: &Database, batch: &PreparedPullBatch) -> Result<(), String> {
     db.workspace_sync_apply_remote_delta(&batch.changes, &batch.delta_link)
+}
+
+/// Variante du cycle continu : l'identité locale permet de reconnaître nos
+/// propres écritures qui reviennent par le delta.
+pub fn apply_pull_batch_for_actor(
+    db: &Database,
+    batch: &PreparedPullBatch,
+    local_actor_id: &str,
+) -> Result<(), String> {
+    db.workspace_sync_apply_remote_delta_for_actor(
+        &batch.changes,
+        &batch.delta_link,
+        Some(local_actor_id),
+    )
 }
 
 #[cfg(test)]

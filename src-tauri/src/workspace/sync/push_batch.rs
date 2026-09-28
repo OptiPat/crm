@@ -80,6 +80,75 @@ fn response_index(response: &GraphBatchResponse) -> Option<usize> {
     response.id.parse().ok()
 }
 
+/// L'élément SharePoint a été écrit par cette identité Microsoft.
+fn written_by_actor(fields: &Value, actor_id: &str) -> bool {
+    fields
+        .get("UpdatedBy")
+        .and_then(Value::as_str)
+        .is_some_and(|remote| !remote.trim().is_empty() && remote.eq_ignore_ascii_case(actor_id.trim()))
+}
+
+/// Relit jusqu'à `limit` conflits ouverts sur SharePoint. Ceux dont la version
+/// distante est la nôtre (même identité) se ferment en « conserver ma version » :
+/// la ligne locale, plus récente, repart au prochain cycle avec le bon ETag.
+/// Retourne le nombre de conflits fermés.
+pub fn resolve_own_conflicts(
+    db: &DbState,
+    ctx: &BatchPushContext<'_>,
+    limit: usize,
+) -> Result<usize, String> {
+    let targets = with_db(db, |database| {
+        database.workspace_sync_list_open_conflict_targets(limit)
+    })?;
+    let urls = ctx.client.urls();
+    let mut resolved = 0;
+    for chunk in targets.chunks(GRAPH_BATCH_MAX_REQUESTS) {
+        let requests: Vec<GraphBatchRequest> = chunk
+            .iter()
+            .enumerate()
+            .filter_map(|(index, target)| {
+                target.remote_item_id.as_deref().map(|item_id| GraphBatchRequest {
+                    id: index.to_string(),
+                    method: "GET",
+                    url: urls.relative_list_item(ctx.site_id, ctx.data_list_id, item_id),
+                    if_match: None,
+                    body: None,
+                })
+            })
+            .collect();
+        if requests.is_empty() {
+            continue;
+        }
+        for response in ctx.client.batch_blocking(ctx.access_token, &requests)? {
+            if response.status != 200 {
+                continue;
+            }
+            let Some(target) = response_index(&response).and_then(|index| chunk.get(index)) else {
+                continue;
+            };
+            let Ok(item) =
+                SharePointGraphClient::parse_list_item_response(&response.body.to_string())
+            else {
+                continue;
+            };
+            if !written_by_actor(&item.fields, ctx.actor_id) {
+                continue;
+            }
+            with_db(db, |database| {
+                database.workspace_sync_resolve_own_conflict(
+                    target.conflict_id,
+                    &target.table_name,
+                    &target.record_key,
+                    &item.id,
+                    &item.etag,
+                )
+            })?;
+            resolved += 1;
+        }
+    }
+    Ok(resolved)
+}
+
 /// 412 (If-Match), 409, 404 ou `resourceModified` : la version distante a bougé.
 /// Tout autre refus est passager ou métier, pas un conflit à arbitrer.
 fn is_version_conflict(response: &GraphBatchResponse) -> bool {
@@ -479,6 +548,21 @@ fn push_pending_batch_inner(
             continue;
         }
         let item = &plan.plan.queue_item;
+        if written_by_actor(&remote.fields, ctx.actor_id) {
+            // Notre révision antérieure : on retient le bon ETag, la version locale
+            // (plus récente) repart au prochain cycle. Ce n'est pas un conflit.
+            with_db(db, |database| {
+                database
+                    .workspace_sync_upsert_remote_mapping(
+                        &item.table_name,
+                        &item.record_key,
+                        &remote.id,
+                        &remote.etag,
+                    )
+                    .map_err(|error| error.to_string())
+            })?;
+            continue;
+        }
         with_db(db, |database| {
             database.workspace_sync_record_push_conflict(
                 &item.table_name,
@@ -605,6 +689,68 @@ mod tests {
         .expect("mapping distant");
         assert_eq!(mapping.remote_item_id.as_deref(), Some("sp-2"));
         assert_eq!(server.finish().len(), 3);
+    }
+
+    #[test]
+    fn stored_conflicts_written_by_this_actor_close_as_keep_local() {
+        // Deux conflits ouverts : sp-1 écrit par nous (à fermer), sp-2 par Violette (à garder).
+        let server = ScriptedGraphServer::spawn(vec![ScriptedResponse::json(
+            200,
+            r#"{"responses":[
+                {"id":"0","status":200,"body":{"id":"sp-1","@odata.etag":"\"7\"","fields":{"UpdatedBy":"actor-1"}}},
+                {"id":"1","status":200,"body":{"id":"sp-2","@odata.etag":"\"3\"","fields":{"UpdatedBy":"actor-violette"}}}
+            ]}"#,
+        )]);
+        let client = SharePointGraphClient::new(SharePointSiteRef {
+            hostname: "contoso.sharepoint.com".into(),
+            site_path: "/sites/crm".into(),
+        })
+        .with_graph_host(server.base_url.clone());
+        let db = pending_db(2);
+        with_db(&db, |database| {
+            for (key, item) in [(1, "sp-1"), (2, "sp-2")] {
+                database
+                    .connection()
+                    .execute(
+                        "INSERT INTO workspace_conflicts
+                            (table_name, record_key, local_payload_json, remote_payload_json,
+                             remote_etag, remote_item_id, remote_deleted)
+                         VALUES ('contacts', ?1, '{}', '{}', '\"1\"', ?2, 0)",
+                        rusqlite::params![
+                            format!(r#"[{{"column":"id","kind":"integer","value":{key}}}]"#),
+                            item
+                        ],
+                    )
+                    .map_err(|error| error.to_string())?;
+            }
+            Ok(())
+        })
+        .unwrap();
+
+        let resolved = resolve_own_conflicts(&db, &ctx(&client), 100).unwrap();
+        assert_eq!(resolved, 1);
+        let (open, mapping_etag) = with_db(&db, |database| {
+            let open: i64 = database
+                .connection()
+                .query_row(
+                    "SELECT COUNT(*) FROM workspace_conflicts WHERE status = 'open'",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(|error| error.to_string())?;
+            let mapping = database
+                .workspace_sync_get_remote_mapping(
+                    "contacts",
+                    r#"[{"column":"id","kind":"integer","value":1}]"#,
+                )
+                .map_err(|error| error.to_string())?;
+            Ok((open, mapping.and_then(|m| m.remote_etag)))
+        })
+        .unwrap();
+        assert_eq!(open, 1, "le conflit de Violette reste à arbitrer");
+        assert_eq!(mapping_etag.as_deref(), Some("\"7\""), "ETag frais pour le prochain PATCH");
+        assert_eq!(pending_count(&db), 2, "les versions locales restent à envoyer");
+        assert_eq!(server.finish().len(), 1);
     }
 
     #[test]

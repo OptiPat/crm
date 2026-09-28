@@ -2,11 +2,11 @@ use super::blob::{
     complete_remote_blob, ensure_remote_blob_audit, execute_remote_blob, next_pending_blob,
     seed_missing_document_blobs,
 };
-use super::pull::{apply_pull_batch, prepare_pull_batch};
+use super::pull::{apply_pull_batch, apply_pull_batch_for_actor, prepare_pull_batch};
 use super::push::next_pending_pushes;
 use super::push_batch::{
-    ensure_no_open_transaction, push_pending_batch, with_db, BatchPushContext,
-    IMPORT_IN_PROGRESS_MESSAGE,
+    ensure_no_open_transaction, push_pending_batch, resolve_own_conflicts, with_db,
+    BatchPushContext, IMPORT_IN_PROGRESS_MESSAGE,
 };
 use crate::auth::session::{require_ui_session, UiSessionState};
 use crate::commands::DbState;
@@ -577,7 +577,7 @@ fn team_sync_once_inner(
     let pulled = remote_delta.items.len();
     with_db(db.inner(), |database| {
         let batch = prepare_pull_batch(database, remote_delta)?;
-        apply_pull_batch(database, &batch)?;
+        apply_pull_batch_for_actor(database, &batch, &actor_id)?;
         database
             .workspace_sync_mark_online()
             .map_err(|error| error.to_string())?;
@@ -589,11 +589,6 @@ fn team_sync_once_inner(
     })?;
     *applied_pull = Some(pulled);
 
-    // Envoi par lots de 20 (`$batch`) : 3 appels HTTP par lot au lieu de 4 par ligne.
-    let mut pushed = 0;
-    let mut conflicts = 0;
-    let mut failed = 0;
-    let mut last_error: Option<String> = None;
     let push_context = BatchPushContext {
         client: &client,
         access_token: &access_token,
@@ -602,6 +597,19 @@ fn team_sync_once_inner(
         audit_list_id: &audit_list.id,
         actor_id: &actor_id,
     };
+
+    // Conflits ouverts dont la version distante est en fait la nôtre : fermés
+    // par paquets de 100 par cycle, sans intervention.
+    let own_conflicts = resolve_own_conflicts(db.inner(), &push_context, MAX_PUSHES_PER_CYCLE)?;
+    if own_conflicts > 0 {
+        println!("✅ Sync équipe : {own_conflicts} conflit(s) sur nos propres écritures fermé(s)");
+    }
+
+    // Envoi par lots de 20 (`$batch`) : 3 appels HTTP par lot au lieu de 4 par ligne.
+    let mut pushed = 0;
+    let mut conflicts = 0;
+    let mut failed = 0;
+    let mut last_error: Option<String> = None;
     let mut budget = MAX_PUSHES_PER_CYCLE;
     while budget > 0 {
         let plans = with_db(db.inner(), |database| {

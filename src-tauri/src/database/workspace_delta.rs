@@ -16,6 +16,17 @@ pub struct WorkspaceRemoteDeltaChange {
     pub record_key: String,
     pub payload: Option<Map<String, Value>>,
     pub deleted: bool,
+    /// Identité Microsoft (`UpdatedBy`) qui a écrit l'élément côté SharePoint.
+    #[serde(default)]
+    pub updated_by: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenConflictTarget {
+    pub conflict_id: i64,
+    pub table_name: String,
+    pub record_key: String,
+    pub remote_item_id: Option<String>,
 }
 
 #[derive(Debug)]
@@ -284,6 +295,32 @@ fn pending_local_change_is_echo(
     ))
 }
 
+/// L'élément distant a été écrit par ce poste (même identité Microsoft).
+pub fn is_own_remote_write(change: &WorkspaceRemoteDeltaChange, local_actor_id: Option<&str>) -> bool {
+    match (change.updated_by.as_deref(), local_actor_id) {
+        (Some(remote), Some(local)) => {
+            !change.deleted && !remote.trim().is_empty() && remote.eq_ignore_ascii_case(local.trim())
+        }
+        _ => false,
+    }
+}
+
+/// Ferme en « conserver ma version » les conflits ouverts d'une ligne dont la
+/// version distante est en fait la nôtre : la file locale reste à envoyer.
+fn close_open_conflicts_keep_local(
+    conn: &Connection,
+    table_name: &str,
+    record_key: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE workspace_conflicts
+         SET status = 'resolved_keep_local', resolved_at = unixepoch()
+         WHERE table_name = ?1 AND record_key = ?2 AND status = 'open'",
+        params![table_name, record_key],
+    )?;
+    Ok(())
+}
+
 /// Acquitte la file locale et ferme tout conflit ouvert sur la ligne : local et
 /// distant sont désormais identiques, il n'y a plus rien à arbitrer.
 fn acknowledge_pending_local_change(
@@ -501,6 +538,7 @@ impl Database {
             record_key: record_key.clone(),
             payload,
             deleted: remote_deleted,
+            updated_by: None,
         };
         let columns = table_columns(&tx, &table_name)?;
         tx.execute(
@@ -547,6 +585,58 @@ impl Database {
         )
         .map_err(|error| error.to_string())?;
         tx.commit().map_err(|error| error.to_string())
+    }
+
+    /// Conflits ouverts avec l'élément SharePoint à relire (id du conflit, sinon
+    /// celui du mapping). Sert à reconnaître nos propres écritures après coup.
+    pub fn workspace_sync_list_open_conflict_targets(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<OpenConflictTarget>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT c.id, c.table_name, c.record_key,
+                        COALESCE(c.remote_item_id, r.remote_item_id)
+                 FROM workspace_conflicts c
+                 LEFT JOIN workspace_remote_records r
+                   ON r.table_name = c.table_name AND r.record_key = c.record_key
+                 WHERE c.status = 'open' AND c.remote_deleted = 0
+                 ORDER BY c.id
+                 LIMIT ?1",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok(OpenConflictTarget {
+                    conflict_id: row.get(0)?,
+                    table_name: row.get(1)?,
+                    record_key: row.get(2)?,
+                    remote_item_id: row.get(3)?,
+                })
+            })
+            .map_err(|error| error.to_string())?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|error| error.to_string())
+    }
+
+    /// Ferme un conflit dont la version distante est en fait la nôtre : on garde
+    /// la version locale en attente et on retient l'ETag distant pour le PATCH.
+    pub fn workspace_sync_resolve_own_conflict(
+        &self,
+        conflict_id: i64,
+        table_name: &str,
+        record_key: &str,
+        remote_item_id: &str,
+        remote_etag: &str,
+    ) -> Result<(), String> {
+        match self.workspace_sync_resolve_conflict_keep_local(conflict_id) {
+            Ok(()) => {}
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(()),
+            Err(error) => return Err(error.to_string()),
+        }
+        self.workspace_sync_upsert_remote_mapping(table_name, record_key, remote_item_id, remote_etag)
+            .map_err(|error| error.to_string())
     }
 
     /// Ferme les conflits dont les deux versions sont identiques (écho d'un envoi
@@ -603,6 +693,21 @@ impl Database {
         &self,
         changes: &[WorkspaceRemoteDeltaChange],
         delta_link: &str,
+    ) -> Result<(), String> {
+        self.workspace_sync_apply_remote_delta_for_actor(changes, delta_link, None)
+    }
+
+    /// Applique le delta en connaissant l'identité Microsoft de ce poste : une
+    /// ligne distante écrite par ce même compte est une écriture antérieure de
+    /// ce poste (envoi non acquitté), jamais un conflit — la version locale en
+    /// attente est plus récente et sera renvoyée avec le bon ETag.
+    ///
+    /// Limite assumée : une même personne sur deux postes partage cette identité.
+    pub fn workspace_sync_apply_remote_delta_for_actor(
+        &self,
+        changes: &[WorkspaceRemoteDeltaChange],
+        delta_link: &str,
+        local_actor_id: Option<&str>,
     ) -> Result<(), String> {
         if delta_link.trim().is_empty() {
             return Err("DeltaLink SharePoint vide.".into());
@@ -665,6 +770,14 @@ impl Database {
                     acknowledge_pending_local_change(&tx, &change.table_name, &change.record_key)
                         .map_err(|error| error.to_string())?;
                     persist_remote_mapping(&tx, change).map_err(|error| error.to_string())?;
+                    continue;
+                }
+                if is_own_remote_write(change, local_actor_id) {
+                    // Notre propre révision antérieure : on retient l'ETag pour le
+                    // prochain envoi et on garde la version locale, plus récente.
+                    persist_remote_mapping(&tx, change).map_err(|error| error.to_string())?;
+                    close_open_conflicts_keep_local(&tx, &change.table_name, &change.record_key)
+                        .map_err(|error| error.to_string())?;
                     continue;
                 }
                 record_conflict(&tx, change).map_err(|error| error.to_string())?;
@@ -731,6 +844,7 @@ mod tests {
                 .clone(),
             ),
             deleted: false,
+            updated_by: None,
         }
     }
 
@@ -870,6 +984,90 @@ mod tests {
     }
 
     #[test]
+    fn own_earlier_write_returning_with_a_newer_local_revision_is_not_a_conflict() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO contacts (id, nom, prenom, categorie)
+                 VALUES (1, 'DUPONT', 'Jean', 'CLIENT')",
+                [],
+            )
+            .unwrap();
+        // Révision 2 locale : contenu différent de ce qui est parti en révision 1.
+        db.workspace_sync_enqueue(
+            "contacts",
+            r#"[{"column":"id","kind":"integer","value":1}]"#,
+            "upsert",
+            Some(r#"{"nom":{"kind":"text","value":"DUPONT-REV2"}}"#),
+        )
+        .unwrap();
+        // Un conflit déjà ouvert (ancienne version du CRM) sur la même ligne.
+        db.connection()
+            .execute(
+                "INSERT INTO workspace_conflicts
+                    (table_name, record_key, local_payload_json, remote_payload_json,
+                     remote_etag, remote_item_id, remote_deleted)
+                 VALUES ('contacts', ?1, '{}', '{}', '\"1\"', 'sp-1', 0)",
+                params![r#"[{"column":"id","kind":"integer","value":1}]"#],
+            )
+            .unwrap();
+        let mut echo = contact_change("DUPONT", "\"1\"");
+        echo.updated_by = Some("actor-tony".into());
+
+        db.workspace_sync_apply_remote_delta_for_actor(
+            &[echo],
+            "https://graph.microsoft.com/delta?token=2",
+            Some("actor-tony"),
+        )
+        .unwrap();
+
+        // Pas de nouveau conflit, l'ancien est fermé, la ligne locale n'a pas bougé.
+        let open: i64 = db
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM workspace_conflicts WHERE status = 'open'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(open, 0);
+        let name: String = db
+            .connection()
+            .query_row("SELECT nom FROM contacts WHERE id = 1", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(name, "DUPONT");
+        // La révision 2 reste à envoyer, avec l'ETag distant mémorisé pour le PATCH.
+        assert_eq!(db.workspace_sync_list_pending().unwrap().len(), 1);
+        let mapping = db
+            .workspace_sync_get_remote_mapping(
+                "contacts",
+                r#"[{"column":"id","kind":"integer","value":1}]"#,
+            )
+            .unwrap()
+            .expect("mapping distant");
+        assert_eq!(mapping.remote_etag.as_deref(), Some("\"1\""));
+
+        // Écrit par quelqu'un d'autre : reste un vrai conflit.
+        let mut other = contact_change("DISTANT", "\"5\"");
+        other.updated_by = Some("actor-violette".into());
+        db.workspace_sync_apply_remote_delta_for_actor(
+            &[other],
+            "https://graph.microsoft.com/delta?token=3",
+            Some("actor-tony"),
+        )
+        .unwrap();
+        let open: i64 = db
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM workspace_conflicts WHERE status = 'open'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(open, 1);
+    }
+
+    #[test]
     fn identical_open_conflicts_are_closed_automatically() {
         let db = Database::open_in_memory_for_tests().unwrap();
         db.connection()
@@ -981,6 +1179,7 @@ mod tests {
             record_key: record_key.into(),
             payload: None,
             deleted: true,
+            updated_by: None,
         };
         db.workspace_sync_apply_remote_delta(
             &[deletion],

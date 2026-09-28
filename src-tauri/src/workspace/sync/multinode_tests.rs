@@ -29,6 +29,7 @@ fn remote_change(payload: Map<String, Value>, etag: &str) -> WorkspaceRemoteDelt
         record_key: RECORD_KEY.into(),
         payload: Some(payload),
         deleted: false,
+        updated_by: None,
     }
 }
 
