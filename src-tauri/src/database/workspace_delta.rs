@@ -277,7 +277,15 @@ fn pending_local_change_is_echo(
     change: &WorkspaceRemoteDeltaChange,
 ) -> rusqlite::Result<bool> {
     if change.deleted {
-        return Ok(false);
+        // Suppression locale en attente et tombstone distant : même intention.
+        let pending_delete: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM workspace_sync_queue
+             WHERE table_name = ?1 AND record_key = ?2 AND synced_at IS NULL
+               AND operation = 'delete'",
+            params![change.table_name, change.record_key],
+            |row| row.get(0),
+        )?;
+        return Ok(pending_delete > 0);
     }
     let local_payload: Option<String> = conn
         .query_row(
@@ -981,6 +989,44 @@ mod tests {
             .unwrap()
             .expect("mapping distant");
         assert_eq!(mapping.remote_item_id.as_deref(), Some("sp-1"));
+    }
+
+    #[test]
+    fn pending_local_delete_and_remote_tombstone_agree_without_conflict() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let record_key = r#"[{"column":"id","kind":"integer","value":1}]"#;
+        db.workspace_sync_upsert_remote_mapping("contacts", record_key, "sp-1", "\"1\"")
+            .unwrap();
+        // La ligne locale est déjà supprimée ; la suppression attend son acquittement.
+        db.workspace_sync_enqueue("contacts", record_key, "delete", None)
+            .unwrap();
+        let tombstone = WorkspaceRemoteDeltaChange {
+            remote_item_id: "sp-1".into(),
+            remote_etag: Some("\"2\"".into()),
+            table_name: "contacts".into(),
+            record_key: record_key.into(),
+            payload: None,
+            deleted: true,
+            updated_by: None,
+        };
+
+        db.workspace_sync_apply_remote_delta(&[tombstone], "https://graph.microsoft.com/delta?token=9")
+            .unwrap();
+
+        let open: i64 = db
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM workspace_conflicts WHERE status = 'open'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(open, 0);
+        assert!(db.workspace_sync_list_pending().unwrap().is_empty());
+        assert!(db
+            .workspace_sync_get_remote_mapping("contacts", record_key)
+            .unwrap()
+            .is_none());
     }
 
     #[test]
