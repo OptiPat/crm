@@ -39,13 +39,32 @@ export function cleanStelliumActifLabel(category: string, nom: string): string {
   if (foldActifLabel(last) === foldActifLabel(category) || hasFamily) {
     return last;
   }
+  // « PER - Swisslife », « AV - UFF » : le premier segment répète le type.
+  const head = foldActifLabel(parts[0]);
+  const sigle = categorySigle(category);
+  if (head === foldActifLabel(category) || (sigle != null && head === sigle)) {
+    return parts.slice(1).join(" - ");
+  }
   return nom.trim();
+}
+
+function categorySigle(category: string): string | undefined {
+  const folded = foldActifLabel(category);
+  if (folded.includes("assurance vie")) return "av";
+  if (folded === "per" || folded === "perp" || folded === "pea" || folded === "scpi") return folded;
+  if (folded.includes("livret")) return "la";
+  if (folded === "ldd" || folded === "ldds") return "ldd";
+  if (folded.includes("residence principale")) return "rp";
+  return undefined;
 }
 
 /** Mappe une catégorie d'actif Stellium vers le type_produit CRM. */
 export function mapActifCategoryToProductType(category: string): string | null {
   const lower = category.toLowerCase();
   if (lower.includes("assurance vie")) return "ASSURANCE_VIE";
+  if (lower.includes("autre") && (lower.includes("épargne") || lower.includes("epargne"))) {
+    return "AUTRE";
+  }
   if (lower.includes("compte courant")) return "EPARGNE_BANCAIRE";
   if (lower.includes("compte sur livret") || lower === "csl") return "CSL";
   if (lower.includes("livret")) return "LIVRET_A";
@@ -67,6 +86,7 @@ export function mapActifCategoryToProductType(category: string): string | null {
   if (lower === "perp") return "PERP";
   if (lower === "pea") return "PEA";
   if (lower.includes("compte titres")) return "COMPTE_TITRE";
+  if (lower.includes("sci") || lower.includes("sarl de famille")) return "PARTS_SOCIETE";
   if (lower === "scpi") return "SCPI";
   return null;
 }
@@ -91,14 +111,14 @@ export function appendContratFinancier(
     data.contratsFinanciers = [];
   }
 
-  // Vrai doublon (même ligne relue) = type + nom + montant identiques. On ne
-  // déduplique PAS sur le seul couple type/nom : les deux conjoints peuvent
-  // détenir un contrat homonyme (ex. « Livret A - LA » des deux membres).
+  // Vrai doublon (même ligne relue) = type + nom + montant + détenteur.
+  // Deux conjoints peuvent détenir le même livret, y compris pour le même montant.
   const isDuplicate = data.contratsFinanciers.some(
     (c) =>
       c.type === type &&
       c.nom.toLowerCase() === label.toLowerCase() &&
-      c.montant === montant
+      c.montant === montant &&
+      (c.rioOwnerHint ?? "") === (rioOwnerHint ?? "")
   );
   if (isDuplicate) return;
 

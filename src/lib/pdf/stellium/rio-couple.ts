@@ -24,7 +24,7 @@ export interface CoupleInvestisseurs {
 }
 
 const ACTIF_CATEGORIES =
-  `Assurance vie|Compte courant|Compte sur livret|Livret A|LDD|LDDS|PEL|CEL|PERECO|PERCOL|PERCO|PERO|PEE|PEI|PEG|PER|PERP|PEA|Compte titres|SCPI|${STELLIUM_IMMO_ACTIF_PREFIXES}`;
+  `Assurance vie|Autre épargne|Compte courant|Compte sur livret|Livret A|Livret(?:\\s+[A-Za-zÀ-ÿ]+)?|LDD|LDDS|PEL|CEL|PERECO|PERCOL|PERCO|PERO|PEE|PEI|PEG|PER|PERP|PEA|Compte titres(?:\\s*\\(CTO\\))?|SCI ou SARL de famille|SCPI|${STELLIUM_IMMO_ACTIF_PREFIXES}`;
 
 export function detectCoupleRio(header: string): CoupleInvestisseurs | null {
   const match = header.match(
@@ -96,10 +96,41 @@ function firstFieldLine(value: string | undefined): string | undefined {
   return line;
 }
 
+/** « Directeur … depuis le 09/09/2014 » → l'intitulé, sans la date d'entrée. */
+export function cleanProfession(value: string | undefined): string | undefined {
+  const line = firstFieldLine(value);
+  if (!line) return undefined;
+  const cleaned = line.replace(/\s+depuis le\s+\d{2}\/\d{2}\/\d{4}\s*$/i, "").trim();
+  return cleaned || undefined;
+}
+
 /**
  * Colonne de gauche remontée au-dessus du libellé « Né(e) le » :
  * la ligne orpheline est l'investisseur 1, la valeur sur le libellé est l'investisseur 2.
  */
+/**
+ * Valeurs au-dessus du libellé, suite de la première colonne en dessous :
+ * « Directeur … depuis \t Chargé … » puis « Profession … » puis « le 09/09/2014 ».
+ */
+function extractShiftedCoupleProfessions(
+  professionnel: string
+): [string | undefined, string | undefined] | null {
+  const match = professionnel.match(
+    /(?:^|\n)([^\n]*\t[^\n]+)\n[ \t]*Profession \(ou derni[eè]re profession\)[ \t]*\n([^\n]+)/i
+  );
+  if (!match) return null;
+  const columns = match[1]
+    .split("\t")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0 && part !== "-");
+  if (columns.length < 2) return null;
+  const continuation = match[2].trim();
+  if (continuation && !/^(?:secteur|nom de la société|origine)\b/i.test(continuation)) {
+    columns[0] = `${columns[0]} ${continuation}`.replace(/\s+/g, " ").trim();
+  }
+  return [columns[0], columns[1]];
+}
+
 function extractShiftedCoupleBirths(identite: string): {
   person1: ReturnType<typeof parseNaissance>;
   person2: ReturnType<typeof parseNaissance>;
@@ -275,6 +306,7 @@ function buildCoupleIdentity(
     "Téléphone mobile",
   ]);
   const [tel1, tel2] = extractPair(coordonnees, "Téléphone mobile", [
+    "Téléphone secondaire",
     "Autre téléphone",
     "Adresse postale",
   ]);
@@ -284,11 +316,13 @@ function buildCoupleIdentity(
   const paysFiscal = parsePaysResidenceFiscale(coordonnees);
   const statutsOccupation = parseStatutOccupationLogement(coordonnees);
 
-  const [profession1, profession2] = extractPair(
-    professionnel,
-    "Profession (ou dernière profession)",
-    ["Secteur d'activité", "Nom de la société", "Origine des revenus"]
-  );
+  const shiftedProfessions = extractShiftedCoupleProfessions(professionnel);
+  const [profession1, profession2] = shiftedProfessions ??
+    extractPair(professionnel, "Profession (ou dernière profession)", [
+      "Secteur d'activité",
+      "Nom de la société",
+      "Origine des revenus",
+    ]);
   const [employeur1, employeur2] = extractPair(professionnel, "Nom de la société", [
     "Employeur",
     "Origine des revenus",
@@ -310,14 +344,14 @@ function buildCoupleIdentity(
       cleanedNaissance1.naissance.lieuNaissance,
     nationalite: nationalite1,
     email: email1,
-    telephone: tel1,
-    telephoneMobile: tel1,
+    telephone: firstFieldLine(tel1),
+    telephoneMobile: firstFieldLine(tel1),
     adresse: adresse1?.adresse,
     codePostal: adresse1?.codePostal,
     ville: adresse1?.ville,
     pays: paysFiscal[0] ?? "France",
     statutOccupationLogement: mapRioStatutOccupationLogement(statutsOccupation[0]),
-    profession: firstFieldLine(profession1),
+    profession: cleanProfession(profession1),
     employeur: employeur1 && employeur1 !== "-" ? employeur1 : undefined,
   };
 
@@ -336,9 +370,9 @@ function buildCoupleIdentity(
       cleanedNaissance2.naissance.lieuNaissance,
     nationalite: nationalite2,
     email: email2,
-    telephone: tel2,
+    telephone: firstFieldLine(tel2),
     statutOccupationLogement: mapRioStatutOccupationLogement(statutsOccupation[1]),
-    profession: firstFieldLine(profession2),
+    profession: cleanProfession(profession2),
     employeur: employeur2 && employeur2 !== "-" ? employeur2 : undefined,
   };
 
@@ -360,7 +394,7 @@ export function normalizeSituationFamiliale(raw: string | undefined): string | u
 export function parseCoupleEnfants(relationsSection: string): ExtractedData["enfants"] {
   const enfants: NonNullable<ExtractedData["enfants"]> = [];
   const pattern =
-    /\b([A-ZÀ-Ü][a-zà-üéèê'-]+)\s+([A-ZÀ-Ü][A-ZÀ-Ü'-]+)\s+(\d{2}\/\d{2}\/\d{4})(?:\s*\([^)]*\))?\s+Commun\b/g;
+    /\b([A-ZÀ-Ü][a-zà-üéèê'-]+)\s+([A-ZÀ-Ü][A-ZÀ-Ü'-]+)\s+(\d{2}\/\d{2}\/\d{4})(?:\s*\([^)]*\))?\s+(?:Commun|[A-ZÀ-Ü][A-Za-zÀ-üéèê'-]+\s+[A-ZÀ-Ü][A-ZÀ-Ü'-]+)\b/g;
 
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(relationsSection)) !== null) {
@@ -377,7 +411,7 @@ export function parseCoupleEnfants(relationsSection: string): ExtractedData["enf
 function parseTrailingAmounts(tail: string): (number | undefined)[] {
   const amounts: (number | undefined)[] = [];
   // « - » seul est une colonne vide (souvent « \t-\t12 000 € »), pas un tiret de libellé.
-  const pattern = /(?:(-)(?=\s+\d)|\d[\d\s,]*\s*€)/g;
+  const pattern = /(?:(-)(?=[ \t]+\d)|\d[\d\s,]*\s*€)/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(tail)) !== null) {
     if (match[1]) {
@@ -440,6 +474,25 @@ export function inferCoupleLineOwner(
 
 const ACTIF_LINE_START = new RegExp(`^(?:${ACTIF_CATEGORIES})\\b`, "i");
 
+/** « Assurance vie - Premium » recolle le nom quand la ligne précédente finit par « - ». */
+function wrappedProductNameSuffix(line: string, previous: string): string | null {
+  if (!/[-–—]\s*$/.test(previous)) return null;
+  const current = line.match(new RegExp(`^(${ACTIF_CATEGORIES})\\s*[-–—]\\s*(.+)$`, "i"));
+  const prev = previous.match(new RegExp(`^(${ACTIF_CATEGORIES})\\b`, "i"));
+  if (!current || !prev) return null;
+  if (foldActifLabel(current[1]) !== foldActifLabel(prev[1])) return null;
+  const suffix = current[2].trim();
+  return suffix || null;
+}
+
+function foldActifLabel(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
 /** Recolle un libellé d'actif coupé après les montants (« … Immobilier de » + « jouissance - … »). */
 function stitchWrappedActifLines(block: string): string {
   const lines = block.split(/\r?\n/);
@@ -454,12 +507,19 @@ function stitchWrappedActifLines(block: string): string {
     if (!line) continue;
     const hasEuro = /€/.test(line);
     const isNewRow = hasEuro || (ACTIF_LINE_START.test(line) && /[-–—]/.test(line));
-    if (!hasEuro && !isHeader(line) && !isNewRow && stitched.length > 0) {
+    if (!hasEuro && !isHeader(line) && stitched.length > 0) {
       let idx = stitched.length - 1;
       while (idx >= 0 && !ACTIF_LINE_START.test(stitched[idx])) idx -= 1;
       if (idx >= 0) {
-        stitched[idx] = `${stitched[idx].trim()} ${line}`.replace(/[ \t]+/g, " ");
-        continue;
+        const nameSuffix = wrappedProductNameSuffix(line, stitched[idx]);
+        if (nameSuffix) {
+          stitched[idx] = `${stitched[idx].trim()} ${nameSuffix}`.replace(/[ \t]+/g, " ");
+          continue;
+        }
+        if (!isNewRow) {
+          stitched[idx] = `${stitched[idx].trim()} ${line}`.replace(/[ \t]+/g, " ");
+          continue;
+        }
       }
     }
     stitched.push(line);
@@ -556,7 +616,7 @@ export function parseCouplePatrimoine(
   const biens: BienImmobilier[] = [];
 
   const linePattern = new RegExp(
-    `(${ACTIF_CATEGORIES})\\s*[-–—]\\s*(.+?)\\s+((?:(?:-\\s+(?=\\d)|\\d[\\d\\s,]*\\s*€)\\s*)+)`,
+    `(${ACTIF_CATEGORIES})\\s*[-–—]\\s*(.+?)\\s+((?:(?:-(?=[ \\t]+\\d)|\\d[\\d\\s,]*\\s*€)\\s*)+)`,
     "gi"
   );
 
@@ -570,6 +630,10 @@ export function parseCouplePatrimoine(
     if (!montant || montant <= 0) continue;
 
     if (isStelliumImmoActifCategory(category)) {
+      if (/^scpi\b/i.test(nom)) {
+        registerFinancialActifLine(data, "SCPI", nom, montant, ownerHint);
+        continue;
+      }
       const type = mapImmoType(category);
       biens.push({
         id: uniqueBienId(`${category} - ${nom}`, biens),
@@ -595,7 +659,7 @@ export function parseCouplePatrimoine(
   }
 
   const bankPattern = new RegExp(
-    `(Compte courant|Compte sur livret|Livret A|LDD|LDDS|PEL|CEL)\\s*(?:[-–—]\\s*(.+?)\\s+)?((?:(?:-\\s+(?=\\d)|\\d[\\d\\s,]*\\s*€)\\s*)+)`,
+    `(Compte courant|Compte sur livret|Livret A|LDD|LDDS|PEL|CEL)\\s*(?:[-–—]\\s*(.+?)\\s+)?((?:(?:-(?=[ \\t]+\\d)|\\d[\\d\\s,]*\\s*€)\\s*)+)`,
     "gi"
   );
   while ((match = bankPattern.exec(actifsBlock)) !== null) {

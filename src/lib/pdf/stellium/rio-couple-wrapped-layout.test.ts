@@ -20,7 +20,7 @@ Coordonnées
 Lea BERNARD	Luc NOM2
 Adresse e-mail	lea.bernard@example.com	luc.legrand@example.com
 Téléphone mobile	+33600000011	+33600000012
-Autre téléphone	-	-
+Téléphone secondaire	-	-
 4 impasse des Lilas	4 impasse des Lilas
 Adresse postale
 38000 Grenoble - France	38000 Grenoble - France
@@ -52,6 +52,7 @@ LMNP Chambery
 Livret A - Épargne bancaire - Livret A	6000 €	-	6000 €
 Livret A - Épargne bancaire - Livret A	-	13000 €	13000 €
 LDD - Épargne bancaire - LDD	-	6000 €	6000 €
+Autre épargne - Epargne BNP	24000 €	-	24000 €
 Assurance vie - Assurance vie BNP	3784 €	-	3784 €
 Assurance vie - Assurance vie	-	1000 €	1000 €
 PER - Épargne retraite et salariale - PER	4040 €	-	4040 €
@@ -82,6 +83,8 @@ describe("RIO couple — colonnes décalées 2026", () => {
   });
 
   it("borne la profession et lit le statut propriétaire", () => {
+    expect(data.telephone).toBe("+33600000011");
+    expect(data.conjoint?.telephone).toBe("+33600000012");
     expect(data.profession).toBe("Kiné");
     expect(data.conjoint?.profession).toBe("Kiné");
     expect(data.statutOccupationLogement).toBe("PROPRIETAIRE");
@@ -115,6 +118,7 @@ describe("RIO couple — colonnes décalées 2026", () => {
       { type: "LIVRET_A", nom: "Livret A", montant: 6000, owner: "person1" },
       { type: "LIVRET_A", nom: "Livret A", montant: 13000, owner: "person2" },
       { type: "LDDS", nom: "LDD", montant: 6000, owner: "person2" },
+      { type: "AUTRE", nom: "Epargne BNP", montant: 24000, owner: "person1" },
       { type: "ASSURANCE_VIE", nom: "Assurance vie BNP", montant: 3784, owner: "person1" },
       { type: "ASSURANCE_VIE", nom: "Assurance vie", montant: 1000, owner: "person2" },
       { type: "PER", nom: "PER", montant: 4040, owner: "person1" },

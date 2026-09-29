@@ -11,6 +11,7 @@ import {
   parseCoupleIdentite,
   parseCouplePatrimoine,
   parseCoupleRevenusCharges,
+  cleanProfession,
 } from "./rio-couple";
 import { enrichBiensImmobiliersWithCredits } from "./immo-credits";
 import {
@@ -19,7 +20,11 @@ import {
   mapStelliumImmoSchemeLabel,
   STELLIUM_IMMO_ACTIF_PREFIXES,
 } from "./immo-scheme-label";
-import { registerFinancialActifLine, hasEpargneBancaireDetail } from "./financial-contracts";
+import {
+  cleanStelliumActifLabel,
+  registerFinancialActifLine,
+  hasEpargneBancaireDetail,
+} from "./financial-contracts";
 import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
 import { applyFiscaliteToExtractedData, parseStelliumFiscalite } from "./fiscalite";
 import { parseEpargnePrecaution } from "./rio-epargne-precaution";
@@ -87,7 +92,7 @@ function parseActifLines(patrimoineSection: string): ParsedActifLine[] {
   // de l'immobilier locatif « Classique ».
   const patternWithDash =
     new RegExp(
-      `(Assurance vie|Compte courant|Compte sur livret|Livret(?:\\s+[A-Za-zÀ-ÿ]+)?|LDD|LDDS|PEL|CEL|PERECO|PERCOL|PERCO|PERO|PEE|PEI|PEG|PER|PERP|PEA|Compte titres|SCPI|${STELLIUM_IMMO_ACTIF_PREFIXES})\\s*[-–—]\\s*(.+?)\\s+([\\d\\s,]+)\\s*€`,
+      `(Assurance vie|Autre épargne|Compte courant|Compte sur livret|Livret(?:\\s+[A-Za-zÀ-ÿ]+)?|LDD|LDDS|PEL|CEL|PERECO|PERCOL|PERCO|PERO|PEE|PEI|PEG|PER|PERP|PEA|Compte titres(?:\\s*\\(CTO\\))?|SCI ou SARL de famille|SCPI|${STELLIUM_IMMO_ACTIF_PREFIXES})\\s*[-–—]\\s*(.+?)\\s+([\\d\\s,]+)\\s*€`,
       "gi",
     );
 
@@ -137,7 +142,8 @@ function parsePatrimoine(patrimoineSection: string, data: ExtractedData): void {
   for (const line of actifLines) {
     if (isStelliumImmoActifCategory(line.category)) {
       const type = mapImmoType(line.category);
-      const baseId = `immo-${slugify(`${line.category} - ${line.nom}`)}`;
+      const nom = cleanStelliumActifLabel(line.category, line.nom);
+      const baseId = `immo-${slugify(`${line.category} - ${nom}`)}`;
       let id = baseId;
       let suffix = 2;
       while (biens.some((b) => b.id === id)) {
@@ -146,7 +152,7 @@ function parsePatrimoine(patrimoineSection: string, data: ExtractedData): void {
       const bien: BienImmobilier = {
         id,
         type,
-        nom: line.nom,
+        nom,
         valeur: line.montant,
       };
       biens.push(bien);
@@ -576,10 +582,12 @@ function parseStelliumRioSolo(
     data.nombrePersonnesCharge = parseInt(enfantsCharge[1], 10);
   }
 
-  data.profession = extractFieldValue(
-    professionnel,
-    ["Profession (ou dernière profession)", "Profession"],
-    ["Secteur d'activité", "Nom de la société", "Origine des revenus"]
+  data.profession = cleanProfession(
+    extractFieldValue(professionnel, ["Profession (ou dernière profession)", "Profession"], [
+      "Secteur d'activité",
+      "Nom de la société",
+      "Origine des revenus",
+    ])
   );
   data.employeur = extractFieldValue(professionnel, ["Nom de la société", "Employeur"], [
     "Origine des revenus",

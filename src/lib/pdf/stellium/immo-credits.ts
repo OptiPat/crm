@@ -258,6 +258,13 @@ export function parseStelliumPassifsMortgageCredits(text: string): StelliumMortg
   return credits;
 }
 
+/** « Crédit immobilier » sans dispositif (Pinel, LMNP…) = prêt de la résidence principale. */
+function isGenericHousingCredit(label: string): boolean {
+  const normalized = normalizeNom(label);
+  if (!normalized.includes("credit") || !normalized.includes("immobilier")) return false;
+  return !/lmnp|lmp|pinel|scpi|denormandie|malraux|robien|jeanbrun|besson/.test(normalized);
+}
+
 function namesMatch(a: string, b: string): boolean {
   const na = normalizeNom(a);
   const nb = normalizeNom(b);
@@ -329,7 +336,7 @@ function findBienForCredit(
     if (words.some((w) => namesMatch(w, label))) return bien;
   }
 
-  if (normalizeNom(credit.productType) === "rp") {
+  if (normalizeNom(credit.productType) === "rp" || isGenericHousingCredit(label)) {
     const rpBiens = candidates.filter((b) => {
       const t = (b.type ?? "").toUpperCase();
       return t === "RESIDENCE_PRINCIPALE" || t === "RP";

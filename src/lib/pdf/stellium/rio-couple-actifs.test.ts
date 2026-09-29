@@ -76,3 +76,53 @@ describe("RIO couple — noms d'actifs propres + ids uniques", () => {
     expect(withHint.length).toBeGreaterThan(0);
   });
 });
+
+describe("RIO couple — livret classique, LDD homonyme, SCPI usufruit", () => {
+  const section = [
+    "Désignation\tLea BERNARD\tLuc LEGRAND\tTotal",
+    "Immobilier locatif\t95550 €\t0 €\t95550 €",
+    "Classique - SCPI usufruit\t95550 €\t-\t95550 €",
+    "Épargne bancaire\t22000 €\t12000 €\t34000 €",
+    "Livret classique - CERISE\t10000 €\t-\t10000 €",
+    "LDD - LDD\t12000 €\t-\t12000 €",
+    "LDD - LDD\t-\t12000 €\t12000 €",
+    "TOTAL\t117550 €\t12000 €\t129550 €",
+  ].join("\n");
+
+  const data: ExtractedData = { typeDocument: "RIO", raw: "" };
+  parseCouplePatrimoine(section, data);
+
+  it("classe le livret CERISE en livret, pas en locatif", () => {
+    expect(data.biensImmobiliers?.some((b) => b.nom === "CERISE")).toBeFalsy();
+    expect(data.contratsFinanciers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "LIVRET_A",
+          nom: "CERISE",
+          montant: 10000,
+          rioOwnerHint: "person1",
+        }),
+      ])
+    );
+  });
+
+  it("garde les deux LDD de même montant", () => {
+    const ldds = data.contratsFinanciers?.filter((c) => c.type === "LDDS") ?? [];
+    expect(ldds).toHaveLength(2);
+    expect(ldds.map((c) => c.rioOwnerHint).sort()).toEqual(["person1", "person2"]);
+  });
+
+  it("classe la SCPI en usufruit en SCPI", () => {
+    expect(data.biensImmobiliers?.some((b) => /usufruit/i.test(b.nom))).toBeFalsy();
+    expect(data.contratsFinanciers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "SCPI",
+          nom: "SCPI usufruit",
+          montant: 95550,
+          rioOwnerHint: "person1",
+        }),
+      ])
+    );
+  });
+});

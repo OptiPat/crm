@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hasPatrimoineToTri } from "@/lib/documents/rio-patrimoine-flow";
-import { mapActifCategoryToProductType } from "./financial-contracts";
+import { cleanStelliumActifLabel, mapActifCategoryToProductType } from "./financial-contracts";
 import { parseStelliumRio } from "./rio-parser";
 
 /** RIO solo anonymisé : fil d'Ariane 2026 + champs qui débordent sur la ligne suivante. */
@@ -82,6 +82,24 @@ describe("RIO solo — fil d'Ariane actifs et champs bornés", () => {
     );
     expect(data.contratsFinanciers).toHaveLength(3);
     expect(hasPatrimoineToTri(data)).toBe(true);
+  });
+});
+
+describe("cleanStelliumActifLabel — sigle répété", () => {
+  it("garde le nom utile après AV ou PER", () => {
+    expect(cleanStelliumActifLabel("Assurance vie", "AV - UFF")).toBe("UFF");
+    expect(cleanStelliumActifLabel("Assurance vie", "AV - Carrefour")).toBe("Carrefour");
+    expect(cleanStelliumActifLabel("Assurance vie", "Cristalliance Evoluvie")).toBe(
+      "Cristalliance Evoluvie"
+    );
+    expect(cleanStelliumActifLabel("PER", "PER - Swisslife")).toBe("Swisslife");
+    expect(cleanStelliumActifLabel("PER", "Pertinence Retraite")).toBe("Pertinence Retraite");
+    expect(
+      cleanStelliumActifLabel(
+        "Résidence principale",
+        "Immobilier de jouissance - Résidence principale"
+      )
+    ).toBe("Résidence principale");
   });
 });
 

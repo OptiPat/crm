@@ -124,6 +124,35 @@ describe("immo-credits — deux prêts, chaque tête sur sa ligne", () => {
   });
 });
 
+describe("immo-credits — crédit immobilier générique sur une RP au nom court", () => {
+  it("rattache échéance et CRD à l'unique résidence principale", () => {
+    const text = [
+      "Passifs",
+      "Désignation\tEmprunteur\tEchéance par an\tCRD   Date d'échéance",
+      "Crédits immobilier\t32156 €\t371000 €",
+      "Crédit immobilier - Amortissable -",
+      "32156 €\t371000 €\t18/08/2041",
+      "Crédits immobilier - Crédit immobilier\tMarie DUPONT",
+      "TOTAL\t32156 €\t371000 €",
+      "Revenus et charges",
+    ].join("\n");
+    const biens: BienImmobilier[] = [
+      {
+        id: "rp",
+        type: "RESIDENCE_PRINCIPALE",
+        nom: "Résidence principale",
+        valeur: 365000,
+      },
+    ];
+    enrichBiensImmobiliersWithCredits(text, biens);
+    expect(biens[0]).toMatchObject({
+      echeanceAnnuelle: 32156,
+      creditCRD: 371000,
+      dateFinCredit: "18/08/2041",
+    });
+  });
+});
+
 describe("immo-credits — crédit couple à emprunteurs scindés (layout TOME)", () => {
   it("rattache l'échéance/mensualité à l'unique RP via le libellé « Crédit achat RP »", () => {
     // Désignation reportée sur une ligne séparée + crédit scindé entre conjoints :
