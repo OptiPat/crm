@@ -1,5 +1,6 @@
 mod commands;
 mod gate;
+mod identity;
 mod keys;
 mod registry;
 mod registry_sync;
@@ -11,8 +12,8 @@ pub use commands::{
 };
 pub use gate::{install_authorizer, refresh_write_gate, set_workspace_write_allowed};
 pub use state::{
-    LicenseState, LicenseStatus, LicenseStatusView, LICENSE_LEGACY_MIGRATED_KEY, LICENSE_STATE_KEY,
-    LICENSE_UI_VISIBLE,
+    LicenseState, LicenseStatus, LicenseStatusView, LICENSE_IDENTITY_RESYNC_KEY,
+    LICENSE_LEGACY_MIGRATED_KEY, LICENSE_STATE_KEY, LICENSE_UI_VISIBLE,
 };
 
 use crate::database::Database;
@@ -20,7 +21,7 @@ use gate::bypass_authorizer;
 use keys::{attach_state_integrity, signing_secret, validate_license_key, verify_state_integrity};
 use rand::Rng;
 use registry::{is_registry_configured, os_label, post_registry_event, RegistryPayload};
-use registry_sync::{try_sync_and_apply};
+use registry_sync::try_sync_and_apply;
 use state::{mask_license_key, MAX_TRIAL_RESTARTS, TRIAL_DAYS, TRIAL_OPEN_ACCESS};
 use std::thread;
 
@@ -93,12 +94,15 @@ fn registry_license_type(state: &LicenseState) -> String {
     if state.status == LicenseStatus::Expired {
         return "expired".to_string();
     }
-    state.license_type.clone().unwrap_or_else(|| match state.status {
-        LicenseStatus::Legacy => "legacy".to_string(),
-        LicenseStatus::Trial => "trial".to_string(),
-        LicenseStatus::Active => "active".to_string(),
-        LicenseStatus::Expired => "expired".to_string(),
-    })
+    state
+        .license_type
+        .clone()
+        .unwrap_or_else(|| match state.status {
+            LicenseStatus::Legacy => "legacy".to_string(),
+            LicenseStatus::Trial => "trial".to_string(),
+            LicenseStatus::Active => "active".to_string(),
+            LicenseStatus::Expired => "expired".to_string(),
+        })
 }
 
 pub(crate) fn sync_registry_event(
@@ -141,14 +145,14 @@ pub(crate) fn sync_registry_event(
     }
 }
 
-fn spawn_registry_sync(app: tauri::AppHandle, state: LicenseState, event: String, license_key: Option<String>) {
+fn spawn_registry_sync(
+    app: tauri::AppHandle,
+    state: LicenseState,
+    event: String,
+    license_key: Option<String>,
+) {
     thread::spawn(move || {
-        sync_registry_event(
-            &app,
-            &state,
-            &event,
-            license_key.as_deref(),
-        );
+        sync_registry_event(&app, &state, &event, license_key.as_deref());
     });
 }
 
@@ -181,12 +185,7 @@ fn sync_registry_if_pending(
         eprintln!(
             "⚠️ Registre licences : envoi impossible (vérifiez LICENSE_REGISTRY_* à la compilation et le token Apps Script)."
         );
-        spawn_registry_sync(
-            app.clone(),
-            state.clone(),
-            event.to_string(),
-            None,
-        );
+        spawn_registry_sync(app.clone(), state.clone(), event.to_string(), None);
         Ok(state.clone())
     }
 }
@@ -250,6 +249,13 @@ pub fn ensure_on_database_open(
 
     if let Some(mut state) = load_state(db)? {
         state.apply_runtime_access(now, LICENSE_UI_VISIBLE);
+        let cgp = db.get_cgp_config().unwrap_or_default();
+        let identity_changed = identity::apply_profile_to_registry_identity(&mut state, &cgp);
+        let force_resync = identity_resync_pending(db)?;
+        let has_identity = identity::has_registry_identity(&state);
+        if has_identity && (identity_changed || force_resync) {
+            state.registry_synced = false;
+        }
         persist_and_refresh_gate(db, &state)?;
         if state.legacy {
             let marker = bypass_authorizer(|| {
@@ -263,7 +269,10 @@ pub fn ensure_on_database_open(
                 })?;
             }
         }
-        let _ = sync_registry_if_pending(app, db, &state, now)?;
+        let updated = sync_registry_if_pending(app, db, &state, now)?;
+        if force_resync && has_identity && (updated.registry_synced || !is_registry_configured()) {
+            mark_identity_resync_done(db)?;
+        }
         return Ok(());
     }
 
@@ -318,6 +327,39 @@ pub fn ensure_on_database_open(
     })?;
     let _ = sync_registry_if_pending(app, db, &state, now)?;
     Ok(())
+}
+
+fn identity_resync_pending(db: &Database) -> Result<bool, String> {
+    let marker = bypass_authorizer(|| {
+        db.get_setting(LICENSE_IDENTITY_RESYNC_KEY)
+            .map_err(|e| format!("Lecture resync identité : {e}"))
+    })?;
+    Ok(marker.is_none())
+}
+
+fn mark_identity_resync_done(db: &Database) -> Result<(), String> {
+    bypass_authorizer(|| {
+        db.set_setting(LICENSE_IDENTITY_RESYNC_KEY, "1")
+            .map_err(|e| format!("Marqueur resync identité : {e}"))
+    })
+}
+
+/// Recopie l'identité du profil vers la licence et ping le Sheet si elle a changé.
+pub fn publish_profile_identity(app: &tauri::AppHandle, db: &Database) {
+    let Ok(cgp) = db.get_cgp_config() else {
+        return;
+    };
+    let Ok(Some(mut state)) = load_state(db) else {
+        return;
+    };
+    if !identity::apply_profile_to_registry_identity(&mut state, &cgp) {
+        return;
+    }
+    state.registry_synced = false;
+    if persist_and_refresh_gate(db, &state).is_err() {
+        return;
+    }
+    spawn_registry_sync(app.clone(), state, "profile_update".to_string(), None);
 }
 
 fn seed_silent_open_access_trial(db: &Database, installed_at: i64) -> Result<(), String> {
@@ -405,8 +447,12 @@ pub fn start_trial(
     }
 
     state.client_email = Some(email);
-    state.client_name = client_name.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    state.cabinet = cabinet.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    state.client_name = client_name
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    state.cabinet = cabinet
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
     state.status = LicenseStatus::Trial;
     state.license_type = Some("trial".to_string());
     state.license_key_masked = None;
@@ -471,8 +517,12 @@ pub fn activate_license(
     });
 
     state.client_email = Some(email);
-    state.client_name = client_name.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    state.cabinet = cabinet.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    state.client_name = client_name
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    state.cabinet = cabinet
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
     state.status = LicenseStatus::Active;
     state.license_type = Some(validated.license_type);
     state.license_key_masked = Some(mask_license_key(&license_key));
@@ -483,12 +533,16 @@ pub fn activate_license(
 
     persist_and_refresh_gate(db, &state)?;
     let key_trimmed = license_key.trim().to_string();
-    let (updated, synced) =
-        try_sync_and_apply(app, &state, "activate", Some(&key_trimmed), now);
+    let (updated, synced) = try_sync_and_apply(app, &state, "activate", Some(&key_trimmed), now);
     if synced {
         persist_and_refresh_gate(db, &updated)?;
     } else {
-        spawn_registry_sync(app.clone(), state, "activate".to_string(), Some(key_trimmed));
+        spawn_registry_sync(
+            app.clone(),
+            state,
+            "activate".to_string(),
+            Some(key_trimmed),
+        );
     }
     get_status(db)
 }

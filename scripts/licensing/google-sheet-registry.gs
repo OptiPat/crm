@@ -37,8 +37,10 @@ function doPost(e) {
       return jsonResponse({ ok: false, error: "missing installation_id" }, 400);
     }
 
-    const row = buildRow_(body);
     const rowIndex = findRowByInstallationId_(sheet, installationId);
+    const previous =
+      rowIndex > 0 ? sheet.getRange(rowIndex, 1, 1, HEADERS.length).getValues()[0] : null;
+    const row = buildRow_(body, previous);
     if (rowIndex > 0) {
       sheet.getRange(rowIndex, 1, 1, HEADERS.length).setValues([row]);
     } else {
@@ -56,11 +58,32 @@ function ensureSheet_() {
   let sheet = ss.getSheetByName("installations");
   if (!sheet) {
     sheet = ss.insertSheet("installations");
-    sheet.appendRow(HEADERS);
-  } else if (sheet.getLastRow() === 0) {
-    sheet.appendRow(HEADERS);
   }
+  ensureIdentityColumns_(sheet);
   return sheet;
+}
+
+/** Si une correction a retiré email / nom / cabinet, les réinsère après installation_id. */
+function ensureIdentityColumns_(sheet) {
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(HEADERS);
+    return;
+  }
+  const width = Math.max(sheet.getLastColumn(), 1);
+  const header = sheet
+    .getRange(1, 1, 1, width)
+    .getValues()[0]
+    .map(function (value) {
+      return String(value || "").trim();
+    });
+  const identityMissing =
+    header.indexOf("client_email") === -1 &&
+    header.indexOf("client_name") === -1 &&
+    header.indexOf("cabinet") === -1;
+  if (identityMissing && header[0] === "installation_id" && header[1] === "license_type") {
+    sheet.insertColumnsAfter(1, 3);
+    sheet.getRange(1, 2, 1, 3).setValues([["client_email", "client_name", "cabinet"]]);
+  }
 }
 
 function findRowByInstallationId_(sheet, installationId) {
@@ -73,15 +96,23 @@ function findRowByInstallationId_(sheet, installationId) {
   return -1;
 }
 
-function buildRow_(body) {
+function keepText_(incoming, previous) {
+  const value = incoming == null ? "" : String(incoming).trim();
+  if (value) return value;
+  if (previous == null || previous === "") return "";
+  return String(previous);
+}
+
+function buildRow_(body, previous) {
+  const prev = previous || [];
   const now = new Date().toISOString();
   return [
-    body.installation_id || "",
-    body.client_email || "",
-    body.client_name || "",
-    body.cabinet || "",
-    body.license_type || "",
-    body.license_key || "",
+    body.installation_id || prev[0] || "",
+    keepText_(body.client_email, prev[1]),
+    keepText_(body.client_name, prev[2]),
+    keepText_(body.cabinet, prev[3]),
+    body.license_type || prev[4] || "",
+    keepText_(body.license_key, prev[5]),
     deriveStatus_(body),
     formatTs_(body.activated_at),
     formatTs_(body.expires_at),

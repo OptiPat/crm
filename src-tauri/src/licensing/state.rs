@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 
 pub const LICENSE_STATE_KEY: &str = "license_state";
 pub const LICENSE_LEGACY_MIGRATED_KEY: &str = "license_legacy_migrated";
+/// Un envoi registre forcé après coup, pour réécrire email / nom / cabinet s'ils ont été vidés.
+pub const LICENSE_IDENTITY_RESYNC_KEY: &str = "license_registry_identity_resync_v1";
 pub const TRIAL_DAYS: i64 = 30;
 /// V1 sans facturation : essai sans date d'expiration (passer à `false` quand la facturation est active).
 pub const TRIAL_OPEN_ACCESS: bool = true;
@@ -66,18 +68,12 @@ impl LicenseState {
     pub fn is_valid_at(&self, now: i64) -> bool {
         match self.status {
             LicenseStatus::Expired => false,
-            LicenseStatus::Active => self
-                .expires_at
-                .map(|exp| now <= exp)
-                .unwrap_or(true),
+            LicenseStatus::Active => self.expires_at.map(|exp| now <= exp).unwrap_or(true),
             LicenseStatus::Trial => self
                 .expires_at
                 .map(|exp| now <= exp)
                 .unwrap_or(super::TRIAL_OPEN_ACCESS),
-            LicenseStatus::Legacy => self
-                .expires_at
-                .map(|exp| now <= exp)
-                .unwrap_or(true),
+            LicenseStatus::Legacy => self.expires_at.map(|exp| now <= exp).unwrap_or(true),
         }
     }
 
@@ -141,12 +137,7 @@ impl LicenseState {
     pub fn is_silent_trial(&self, now: i64) -> bool {
         self.status == LicenseStatus::Trial
             && self.is_valid_at(now)
-            && self
-                .client_email
-                .as_deref()
-                .unwrap_or("")
-                .trim()
-                .is_empty()
+            && self.client_email.as_deref().unwrap_or("").trim().is_empty()
     }
 
     /// Quand l'UI licence est masquée, une installation expirée ou sans date

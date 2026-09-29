@@ -13,20 +13,19 @@ use crate::database::{
         DashboardStats, Document, EmailSendLogEntry, Etiquette, EtiquetteAction,
         EtiquettePipelineBoard, EtiquetteWithCount, ExchangeHistoryEntry, Famille, Foyer,
         Interaction, InteractionWithContact, Investissement, InvestissementRevenuPercu,
-        InvestissementValorisation,
-        InvestissementVersement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
-        NewCustomFieldDef, NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInteraction,
-        NewInvestissement, NewInvestissementValorisation, NewInvestissementVersement,
-        NewPartenaire, NewPipe, NewPipeTimelineEntry, NewParrainagePipe, NewSegment, NewTache, NewTemplateEmail,
-        NomProduitSuggestion, ParrainageFunnelCounts, ParrainagePipe, ParrainagePipeTimelineEntry,
-        Partenaire, Pipe, PipeContactTimelineEntry, PipeR1DocumentChecklist,
-        PipeR1MissingDocsSummary, PipeR3DocumentChecklist, PipeR3ImmoDocumentChecklist,
-        PipeR3MissingDocsSummary, PipeTimelineEntry, PipelineStats, ProductStats, Segment,
-        SegmentWithCount, SetTacheStatutResult, Setting, Tache, TemplateEmail, TemplateEmailAction,
-        TemplateSouscriptionBackfillResult,
-        UpdateCustomFieldDef, UpdatePipe, UpdateParrainagePipe, UpdatePipeR1DocumentChecklistInput,
-        UpdatePipeR3DocumentChecklistInput, UpdatePipeR3ImmoDocumentChecklistInput,
-        UpdatePipeTimelineEntry, YearlyActivityStats,
+        InvestissementValorisation, InvestissementVersement, InvestissementWithDetails,
+        MonthlyStats, NewAlerte, NewContact, NewCustomFieldDef, NewDocument, NewEtiquette,
+        NewFamille, NewFoyer, NewInteraction, NewInvestissement, NewInvestissementValorisation,
+        NewInvestissementVersement, NewParrainagePipe, NewPartenaire, NewPipe,
+        NewPipeTimelineEntry, NewSegment, NewTache, NewTemplateEmail, NomProduitSuggestion,
+        ParrainageFunnelCounts, ParrainagePipe, ParrainagePipeTimelineEntry, Partenaire, Pipe,
+        PipeContactTimelineEntry, PipeR1DocumentChecklist, PipeR1MissingDocsSummary,
+        PipeR3DocumentChecklist, PipeR3ImmoDocumentChecklist, PipeR3MissingDocsSummary,
+        PipeTimelineEntry, PipelineStats, ProductStats, Segment, SegmentWithCount,
+        SetTacheStatutResult, Setting, Tache, TemplateEmail, TemplateEmailAction,
+        TemplateSouscriptionBackfillResult, UpdateCustomFieldDef, UpdateParrainagePipe, UpdatePipe,
+        UpdatePipeR1DocumentChecklistInput, UpdatePipeR3DocumentChecklistInput,
+        UpdatePipeR3ImmoDocumentChecklistInput, UpdatePipeTimelineEntry, YearlyActivityStats,
     },
     Database,
 };
@@ -720,7 +719,10 @@ pub fn list_parrainage_pipes(
 }
 
 #[tauri::command]
-pub fn get_parrainage_pipe_by_id(db: State<'_, DbState>, id: i64) -> Result<ParrainagePipe, String> {
+pub fn get_parrainage_pipe_by_id(
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<ParrainagePipe, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
@@ -3587,6 +3589,7 @@ fn is_protected_generic_setting_key(key: &str) -> bool {
         crate::database::workspace::WORKSPACE_CONFIG_SETTING_KEY
             | crate::licensing::LICENSE_STATE_KEY
             | crate::licensing::LICENSE_LEGACY_MIGRATED_KEY
+            | crate::licensing::LICENSE_IDENTITY_RESYNC_KEY
             | crate::espace_client::SYNC_SECRET_SETTING_KEY
     )
 }
@@ -3603,6 +3606,9 @@ mod generic_setting_guard_tests {
         ));
         assert!(is_protected_generic_setting_key(
             crate::licensing::LICENSE_LEGACY_MIGRATED_KEY
+        ));
+        assert!(is_protected_generic_setting_key(
+            crate::licensing::LICENSE_IDENTITY_RESYNC_KEY
         ));
         assert!(!is_protected_generic_setting_key(
             "pipe.r1_checklist_item_labels"
@@ -3693,6 +3699,7 @@ pub fn get_cgp_config(db: State<'_, DbState>) -> Result<CgpConfig, String> {
 
 #[tauri::command]
 pub fn save_cgp_config(
+    app: AppHandle,
     db: State<'_, DbState>,
     session: State<'_, UiSessionState>,
     config: CgpConfig,
@@ -3703,7 +3710,9 @@ pub fn save_cgp_config(
 
     database
         .save_cgp_config(&config)
-        .map_err(|e| format!("Failed to save CGP config: {}", e))
+        .map_err(|e| format!("Failed to save CGP config: {}", e))?;
+    crate::licensing::publish_profile_identity(&app, database);
+    Ok(())
 }
 
 #[tauri::command]
@@ -3746,11 +3755,7 @@ fn acquire_team_import_lock(
         return Ok(None);
     }
     let response = crate::workspace::collaboration::team_acquire_lock_with_ttl(
-        app,
-        &config,
-        "import",
-        "contacts",
-        900,
+        app, &config, "import", "contacts", 900,
     )?;
     if !response.acquired {
         return Err(format!(
@@ -3765,17 +3770,10 @@ fn acquire_team_import_lock(
     Ok(Some(config.clone()))
 }
 
-fn release_team_import_lock(
-    app: &AppHandle,
-    config: &crate::database::workspace::WorkspaceConfig,
-) {
+fn release_team_import_lock(app: &AppHandle, config: &crate::database::workspace::WorkspaceConfig) {
     if config.mode.is_team() {
-        let _ = crate::workspace::collaboration::team_release_lock(
-            app,
-            &config,
-            "import",
-            "contacts",
-        );
+        let _ =
+            crate::workspace::collaboration::team_release_lock(app, &config, "import", "contacts");
     }
 }
 
@@ -4360,7 +4358,12 @@ pub fn list_closed_filleul_volume_exercice_labels(
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
         .list_closed_filleul_volume_exercice_labels()
-        .map_err(|e| format!("Failed to list closed filleul volume exercice labels: {}", e))
+        .map_err(|e| {
+            format!(
+                "Failed to list closed filleul volume exercice labels: {}",
+                e
+            )
+        })
 }
 
 #[tauri::command]
