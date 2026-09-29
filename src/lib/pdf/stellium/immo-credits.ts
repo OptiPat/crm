@@ -202,10 +202,51 @@ function parseDesignationTail(tail: string): { productType: string; propertyName
   return { productType: "", propertyName: cleaned };
 }
 
+function productTypeFromSplitLabel(label: string): string {
+  if (/lmnp/i.test(label)) return "LMNP";
+  if (/pinel/i.test(label)) return "Pinel";
+  if (/\brp\b|r[ée]sidence principale|cr[ée]dit immobilier/i.test(label)) return "RP";
+  return label.trim();
+}
+
+/**
+ * Deux têtes sur le même prêt : les parts sont sur deux lignes, le libellé du
+ * bien est entre les deux (« Crédit immobilier » / « LMNP »). On additionne.
+ */
+function parseSplitHeadMortgages(block: string): StelliumMortgageCredit[] {
+  const flat = block.replace(/\t+/g, " ").replace(/[ ]{2,}/g, " ");
+  const pattern =
+    /([A-ZÀ-Ü][a-zà-üéèê'-]+)\s+(\d[\d\s]*)\s*€\s+(\d[\d\s]*)\s*€\s+Cr[ée]dit immobilier\s*[-–—]\s*Amortissable\s*[-–—]\s+[A-ZÀ-Ü][A-ZÀ-Ü' -]*?\s+(\d{2}\/\d{2}\/\d{4})\s+Cr[ée]dits immobilier\s*[-–—]\s+(.+?)\s+([A-ZÀ-Ü][a-zà-üéèê'-]+)\s+(\d[\d\s]*)\s*€\s+(\d[\d\s]*)\s*€/gi;
+
+  const credits: StelliumMortgageCredit[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(flat)) !== null) {
+    const echeance1 = parseEuroAmount(match[2]);
+    const crd1 = parseEuroAmount(match[3]);
+    const echeance2 = parseEuroAmount(match[7]);
+    const crd2 = parseEuroAmount(match[8]);
+    if (!echeance1 || !crd1 || !echeance2 || !crd2) continue;
+    const propertyName = match[5].trim();
+    const productType = productTypeFromSplitLabel(propertyName);
+    credits.push({
+      designation: propertyName,
+      productType,
+      propertyName,
+      echeanceAnnuelle: echeance1 + echeance2,
+      crd: crd1 + crd2,
+      dateFinCredit: match[4],
+    });
+  }
+  return credits;
+}
+
 /** Lit les lignes crédit immo de l'onglet Passifs Stellium. */
 export function parseStelliumPassifsMortgageCredits(text: string): StelliumMortgageCredit[] {
   const block = extractPassifsBlock(text);
   if (!block) return [];
+
+  const splitHeads = parseSplitHeadMortgages(block);
+  if (splitHeads.length > 0) return splitHeads;
 
   const credits: StelliumMortgageCredit[] = [];
   for (const row of extractCreditRows(block)) {

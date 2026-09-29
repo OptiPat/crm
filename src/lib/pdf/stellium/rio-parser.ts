@@ -87,7 +87,7 @@ function parseActifLines(patrimoineSection: string): ParsedActifLine[] {
   // de l'immobilier locatif « Classique ».
   const patternWithDash =
     new RegExp(
-      `(Assurance vie|Compte courant|Compte sur livret|Livret(?:\\s+[A-Za-zÀ-ÿ]+)?|LDD|LDDS|PEL|CEL|PER|PERP|PEA|Compte titres|SCPI|${STELLIUM_IMMO_ACTIF_PREFIXES})\\s*[-–—]\\s*(.+?)\\s+([\\d\\s,]+)\\s*€`,
+      `(Assurance vie|Compte courant|Compte sur livret|Livret(?:\\s+[A-Za-zÀ-ÿ]+)?|LDD|LDDS|PEL|CEL|PERECO|PERCOL|PERCO|PERO|PEE|PEI|PEG|PER|PERP|PEA|Compte titres|SCPI|${STELLIUM_IMMO_ACTIF_PREFIXES})\\s*[-–—]\\s*(.+?)\\s+([\\d\\s,]+)\\s*€`,
       "gi",
     );
 
@@ -328,8 +328,9 @@ function findRioObjectifRowAnchors(body: string): RioObjectifRowAnchor[] {
 }
 
 function parseRioObjectifsTableBody(tableBody: string): string[] {
-  const stopIdx = tableBody.search(/\bEpargne de pr[eé]caution\b/i);
-  const body = stopIdx >= 0 ? tableBody.slice(0, stopIdx) : tableBody;
+  const withoutFooters = tableBody.replace(/Recueil d'informations\s+-[^\n]*/gi, " ");
+  const stopIdx = withoutFooters.search(/\bEpargne de pr[eé]caution\b/i);
+  const body = stopIdx >= 0 ? withoutFooters.slice(0, stopIdx) : withoutFooters;
   const anchors = findRioObjectifRowAnchors(body);
   if (anchors.length === 0) return [];
 
@@ -509,7 +510,10 @@ function parseStelliumRioSolo(
     );
     if (naissanceMatch) {
       data.dateNaissance = naissanceMatch[1];
-      data.lieuNaissance = naissanceMatch[2].trim();
+      data.lieuNaissance = naissanceMatch[2]
+        .replace(/\s*\(\s*\)/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
     }
   }
 
@@ -523,6 +527,7 @@ function parseStelliumRioSolo(
     "Adresse postale",
   ]);
   data.telephone = extractFieldValue(coordonnees, ["Téléphone mobile"], [
+    "Téléphone secondaire",
     "Autre téléphone",
     "Adresse postale",
   ]);
@@ -547,6 +552,7 @@ function parseStelliumRioSolo(
   }
 
   const regime = extractFieldValue(relations, ["Régime"], [
+    "Avantage matrimonial",
     "Nombre d'enfants",
     "Enfants",
     "Même foyer fiscal",
@@ -573,7 +579,7 @@ function parseStelliumRioSolo(
   data.profession = extractFieldValue(
     professionnel,
     ["Profession (ou dernière profession)", "Profession"],
-    ["Nom de la société", "Origine des revenus"]
+    ["Secteur d'activité", "Nom de la société", "Origine des revenus"]
   );
   data.employeur = extractFieldValue(professionnel, ["Nom de la société", "Employeur"], [
     "Origine des revenus",
@@ -653,6 +659,7 @@ function parseStelliumRioCouple(
   }
 
   const regime = extractFieldValue(relations, ["Régime"], [
+    "Avantage matrimonial",
     "Nombre d'enfants",
     "Enfants",
     "Même foyer fiscal",

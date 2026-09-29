@@ -74,6 +74,56 @@ describe("immo-credits — Dupont solo 2026", () => {
   });
 });
 
+describe("immo-credits — deux prêts, chaque tête sur sa ligne", () => {
+  it("additionne les parts et rattache RP et LMNP", () => {
+    const text = [
+      "Passifs",
+      "Désignation\tEmprunteur\tEchéance par an\tCRD   Date d'échéance",
+      "Crédits immobilier\t30005 €\t439645 €",
+      "Luc\t9579 €\t156523 €",
+      "Crédit immobilier - Amortissable -",
+      "BERNARD\t06/01/2050",
+      "Crédits immobilier - Crédit immobilier",
+      "Lea\t9579 €\t156523 €",
+      "NOM2",
+      "Luc\t5424 €\t63300 €",
+      "Crédit immobilier - Amortissable -",
+      "BERNARD\t05/11/2039",
+      "Crédits immobilier - LMNP",
+      "Lea\t5424 €\t63300 €",
+      "NOM2",
+      "TOTAL\t30005 €\t439645 €",
+      "Revenus et charges",
+    ].join("\n");
+
+    const biens: BienImmobilier[] = [
+      {
+        id: "rp",
+        type: "RESIDENCE_PRINCIPALE",
+        nom: "Résidence principale",
+        valeur: 440000,
+      },
+      {
+        id: "lmnp",
+        type: "LMNP",
+        nom: "LMNP Chambery",
+        valeur: 190000,
+      },
+    ];
+    enrichBiensImmobiliersWithCredits(text, biens);
+    expect(biens[0]).toMatchObject({
+      echeanceAnnuelle: 19158,
+      creditCRD: 313046,
+      dateFinCredit: "06/01/2050",
+    });
+    expect(biens[1]).toMatchObject({
+      echeanceAnnuelle: 10848,
+      creditCRD: 126600,
+      dateFinCredit: "05/11/2039",
+    });
+  });
+});
+
 describe("immo-credits — crédit couple à emprunteurs scindés (layout TOME)", () => {
   it("rattache l'échéance/mensualité à l'unique RP via le libellé « Crédit achat RP »", () => {
     // Désignation reportée sur une ligne séparée + crédit scindé entre conjoints :

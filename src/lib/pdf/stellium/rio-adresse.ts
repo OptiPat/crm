@@ -156,10 +156,10 @@ export function parsePaysResidenceFiscale(coordonnees: string): string[] {
  */
 export function parseStatutOccupationLogement(coordonnees: string): string[] {
   const match = coordonnees.match(
-    /Statut d'occupation du\s+logement\s*:?\s*([\s\S]+?)(?=\s*Relations\b|$)/i
+    /Statut d'occupation du(?:\s+logement)?\s*:?\s*([\s\S]+?)(?=\s*Relations\b|$)/i
   );
   if (!match) return [];
-  return splitCoordonneesColumns(match[1]);
+  return splitCoordonneesColumns(match[1]).filter((value) => !/^logement$/i.test(value));
 }
 
 function splitCoordonneesColumns(raw: string): string[] {

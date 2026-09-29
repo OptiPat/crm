@@ -4,7 +4,7 @@ import type { BienImmobilier } from "../types";
 
 /** Préfixes d'actifs immo reconnus dans les regex Stellium (RIO actifs / passifs). */
 export const STELLIUM_IMMO_ACTIF_PREFIXES =
-  "Résidence principale|Résidence secondaire|Classique|Pinel|LMNP|LMP|Denormandie|Malraux|Jeanbrun|Besson|Scellier|Robien|Méhaignerie|Mehaignerie|Périssol|Perissol|Duflot|Borloo|Monument Historique|D[eé]ficit Foncier";
+  "Résidence principale|Résidence secondaire|LMNP(?:\\s+Classique)?|LMP|Classique|Pinel|Denormandie|Malraux|Jeanbrun|Besson|Scellier|Robien|Méhaignerie|Mehaignerie|Périssol|Perissol|Duflot|Borloo|Monument Historique|D[eé]ficit Foncier";
 
 /** Types produit dans les libellés de crédit immobilier (passifs RIO). */
 export const STELLIUM_IMMO_CREDIT_PRODUCT_TYPES =

@@ -11,7 +11,8 @@ import type { RioCoupleApplyResult } from "@/lib/contacts/rio-couple-apply";
 import type { RioSoloApplyResult } from "@/lib/contacts/rio-solo-apply";
 import {
   buildRioPatrimoineDocument,
-  hasPatrimoineToTri,
+  buildSkippedEpargneInvestissements,
+  shouldOpenRioPatrimoineStep,
 } from "@/lib/documents/rio-patrimoine-flow";
 import { applyRioFinancialFields } from "@/lib/contacts/rio-financial-apply";
 import { createInvestissementValorisation } from "@/lib/api/tauri-investissement-valorisations";
@@ -116,7 +117,10 @@ export function useRioPatrimoineFlow(options: {
         documentFilePath = document.chemin_fichier;
       }
 
-      if (hasPatrimoineToTri(data) && result.finalContactId) {
+      if (
+        shouldOpenRioPatrimoineStep(data, result.hasExistingInvestments) &&
+        result.finalContactId
+      ) {
         onClosePreview();
         const patrimoineState = {
           contactId: result.finalContactId,
@@ -156,7 +160,21 @@ export function useRioPatrimoineFlow(options: {
         return;
       }
 
-      toast.success(result.successMessage + " Document enregistré avec succès.");
+      const autoEpargne = buildSkippedEpargneInvestissements(data, {
+        contactId: result.finalContactId,
+        foyerId: resolveFoyerIdFromResult(result),
+        coupleMemberIds,
+      });
+      for (const inv of autoEpargne) {
+        await createInvestissement(inv);
+      }
+      const epargneNote =
+        autoEpargne.length > 0
+          ? ` ${autoEpargne.length} épargne${autoEpargne.length > 1 ? "s" : ""} bancaire${autoEpargne.length > 1 ? "s" : ""} enregistrée${autoEpargne.length > 1 ? "s" : ""} « à côté ».`
+          : "";
+      toast.success(
+        result.successMessage + " Document enregistré avec succès." + epargneNote
+      );
       onClosePreview();
       onClearExtractedData();
       options.onSuccess();

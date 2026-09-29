@@ -88,8 +88,10 @@ export function extractFieldValue(
 
     const match = block.match(pattern);
     if (match?.[1]) {
-      const value = match[1].trim();
-      if (value && value !== "-") return value;
+      // Une valeur Stellium tient sur une ligne. Le layout PDF peut coller
+      // le libellé suivant (« Téléphone secondaire », « Secteur d'activité »…).
+      const value = match[1].split(/\r?\n/)[0]?.trim() ?? "";
+      if (value && value !== "-" && value !== "–") return value;
     }
   }
   return undefined;

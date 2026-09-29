@@ -56,6 +56,8 @@ import { RioImportStepper } from "./RioImportStepper";
 import { RioPreviewSummaryBar } from "./RioPreviewSummaryBar";
 import { RioImportGuardBanner } from "./RioImportGuardBanner";
 import { RioPatrimoineOverview } from "./RioPatrimoineOverview";
+import { RioCoupleConjointFields } from "./RioCoupleConjointFields";
+import { RioOwnerMark } from "./RioOwnerMark";
 import {
   assessRioPreviewTabStatus,
   formatPatrimoineCoherenceMessage,
@@ -655,6 +657,18 @@ export function ExtractedDataPreviewAdvanced({
                     />
                   </div>
                 )}
+
+                {formData.isCouple && formData.conjoint && (
+                  <RioCoupleConjointFields
+                    conjoint={formData.conjoint}
+                    onChange={(patch) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        conjoint: { ...prev.conjoint!, ...patch },
+                      }))
+                    }
+                  />
+                )}
               </div>
             </PreviewSection>
           )}
@@ -680,15 +694,29 @@ export function ExtractedDataPreviewAdvanced({
                 {formData.situationFamiliale !== undefined && (
                   <div className="space-y-2">
                     <Label>Situation familiale</Label>
-                    <Input
+                    <Select
                       value={formData.situationFamiliale || ""}
-                      onChange={(e) =>
+                      onValueChange={(value) =>
                         setFormData({
                           ...formData,
-                          situationFamiliale: e.target.value,
+                          situationFamiliale: value,
                         })
                       }
-                    />
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="CELIBATAIRE">Célibataire</SelectItem>
+                        <SelectItem value="MARIE">Marié(e)</SelectItem>
+                        <SelectItem value="PACSE">Pacsé(e)</SelectItem>
+                        <SelectItem value="UNION_LIBRE">Union libre</SelectItem>
+                        <SelectItem value="DIVORCE">Divorcé(e)</SelectItem>
+                        <SelectItem value="SEPARE">Dissolution de PACS</SelectItem>
+                        <SelectItem value="VEUF">Veuf(ve)</SelectItem>
+                        <SelectItem value="AUTRE">Autre</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
 
@@ -1133,9 +1161,18 @@ export function ExtractedDataPreviewAdvanced({
                     {formData.biensImmobiliers.map((bien) => (
                       <div key={bien.id} className="md:col-span-2 p-3 border rounded-lg space-y-3">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-medium truncate">
-                            {bien.nom || "Bien immobilier"}
-                          </p>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {bien.nom || "Bien immobilier"}
+                            </p>
+                            <RioOwnerMark
+                              data={formData}
+                              hint={bien.rioOwnerHint}
+                              onChange={(rioOwnerHint) =>
+                                updateBienImmobilier(bien.id, { rioOwnerHint })
+                              }
+                            />
+                          </div>
                           <Button
                             type="button"
                             variant="ghost"
@@ -1307,9 +1344,18 @@ export function ExtractedDataPreviewAdvanced({
                     {formData.contratsFinanciers.map((contrat) => (
                       <div key={contrat.id} className="md:col-span-2 p-3 border rounded-lg space-y-3">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-medium truncate">
-                            {contrat.nom || "Contrat financier"}
-                          </p>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {contrat.nom || "Contrat financier"}
+                            </p>
+                            <RioOwnerMark
+                              data={formData}
+                              hint={contrat.rioOwnerHint}
+                              onChange={(rioOwnerHint) =>
+                                updateContratFinancier(contrat.id, { rioOwnerHint })
+                              }
+                            />
+                          </div>
                           <Button
                             type="button"
                             variant="ghost"

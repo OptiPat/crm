@@ -26,7 +26,10 @@ import { toast } from "sonner";
 import { useRioCoupleImport } from "@/hooks/useRioCoupleImport";
 import { useRioSoloImport } from "@/hooks/useRioSoloImport";
 import { useRioPatrimoineFlow } from "@/hooks/useRioPatrimoineFlow";
-import { hasPatrimoineToTri } from "@/lib/documents/rio-patrimoine-flow";
+import {
+  hasPatrimoineToTri,
+  shouldOpenRioPatrimoineStep,
+} from "@/lib/documents/rio-patrimoine-flow";
 import { applyQpiImport } from "@/lib/contacts/apply-qpi-import";
 import { resolveExistingContactForRio } from "@/lib/contacts/rio-solo-apply";
 import { PROFIL_RISQUE_SRI_FIELD_LABEL } from "@/lib/contacts/investisseur-sri";
@@ -446,7 +449,9 @@ export function RioImportWizard({
 
       const result = await applySoloRioData(data, importOpts);
       if (result) {
-        if (!hasPatrimoineToTri(data)) {
+        if (shouldOpenRioPatrimoineStep(data, result.hasExistingInvestments)) {
+          await finishRioImport(data, result);
+        } else {
           await finishImportFlow({
             data,
             result,
@@ -457,8 +462,6 @@ export function RioImportWizard({
             onResetUpload: resetWizard,
           });
           resetWizard();
-        } else {
-          await finishRioImport(data, result);
         }
       }
     } catch (error) {

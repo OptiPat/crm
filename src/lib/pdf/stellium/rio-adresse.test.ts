@@ -172,6 +172,15 @@ describe("parseStatutOccupationLogement", () => {
     ]);
   });
 
+  it("libellé coupé, valeurs avant le mot logement", () => {
+    const coordonnees =
+      "Statut d'occupation du\nPropriétaire\tPropriétaire\nlogement\nRelations\n";
+    expect(parseStatutOccupationLogement(coordonnees)).toEqual([
+      "Propriétaire",
+      "Propriétaire",
+    ]);
+  });
+
   it("absent → tableau vide", () => {
     expect(parseStatutOccupationLogement("Téléphone mobile\t+33600000001\n")).toEqual(
       []

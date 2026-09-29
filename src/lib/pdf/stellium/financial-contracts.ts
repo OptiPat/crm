@@ -10,6 +10,38 @@ function slugify(value: string): string {
     .replace(/^-|-$/g, "");
 }
 
+function foldActifLabel(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+/**
+ * Fil d'Ariane Stellium 2026 « Produit - Famille - Produit » → libellé court.
+ * « Compte courant - Épargne bancaire - Compte courant » devient « Compte courant ».
+ * Un nom déjà court (« CC », « Cristalliance Avenir ») est conservé.
+ */
+export function cleanStelliumActifLabel(category: string, nom: string): string {
+  const parts = nom
+    .split(/\s*[-–—]\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return category.trim();
+  if (parts.length === 1) return parts[0];
+  const last = parts[parts.length - 1];
+  const family =
+    /^(epargne|immobilier|financier|retraite|placements)/;
+  const hasFamily = parts
+    .slice(0, -1)
+    .some((part) => family.test(foldActifLabel(part)));
+  if (foldActifLabel(last) === foldActifLabel(category) || hasFamily) {
+    return last;
+  }
+  return nom.trim();
+}
+
 /** Mappe une catégorie d'actif Stellium vers le type_produit CRM. */
 export function mapActifCategoryToProductType(category: string): string | null {
   const lower = category.toLowerCase();
@@ -20,6 +52,17 @@ export function mapActifCategoryToProductType(category: string): string | null {
   if (lower.includes("ldd") || lower.includes("ldds")) return "LDDS";
   if (lower === "pel") return "PEL";
   if (lower === "cel") return "CEL";
+  if (
+    lower === "pee" ||
+    lower === "pei" ||
+    lower === "peg" ||
+    lower === "perco" ||
+    lower === "percol" ||
+    lower === "pereco" ||
+    lower === "pero"
+  ) {
+    return "EPARGNE_SALARIALE";
+  }
   if (lower === "per") return "PER";
   if (lower === "perp") return "PERP";
   if (lower === "pea") return "PEA";
@@ -42,7 +85,7 @@ export function appendContratFinancier(
   const type = mapActifCategoryToProductType(category);
   if (!type || montant <= 0) return;
 
-  const label = nom.trim() || category.trim();
+  const label = cleanStelliumActifLabel(category, nom.trim() || category.trim());
 
   if (!data.contratsFinanciers) {
     data.contratsFinanciers = [];

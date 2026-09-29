@@ -1,6 +1,7 @@
 import { Building2, Home, PiggyBank } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
 import { formatEuroCompact } from "@/lib/documents/rio-import-preview";
+import { rioOwnerDisplayLabel } from "@/lib/documents/rio-owner-label";
 import { formatNomProduit } from "@/lib/investissements/investissement-display";
 
 interface RioPatrimoineOverviewProps {
@@ -60,6 +61,11 @@ export function RioPatrimoineOverview({ data }: RioPatrimoineOverviewProps) {
                   <Building2 className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
                   <span className="font-medium">{bien.nom}</span>
                   <span className="text-muted-foreground">({immoTypeLabel(bien.type)})</span>
+                  {rioOwnerDisplayLabel(data, bien.rioOwnerHint) && (
+                    <span className="text-xs bg-muted px-2 py-0.5 rounded">
+                      {rioOwnerDisplayLabel(data, bien.rioOwnerHint)}
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
                   {bien.valeur != null && bien.valeur > 0 && (
@@ -96,6 +102,11 @@ export function RioPatrimoineOverview({ data }: RioPatrimoineOverviewProps) {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{contrat.nom}</span>
                     <span className="text-muted-foreground">({formatNomProduit(contrat.type)})</span>
+                    {rioOwnerDisplayLabel(data, contrat.rioOwnerHint) && (
+                      <span className="text-xs bg-muted px-2 py-0.5 rounded">
+                        {rioOwnerDisplayLabel(data, contrat.rioOwnerHint)}
+                      </span>
+                    )}
                     {origine && (
                       <span className="text-xs bg-muted px-2 py-0.5 rounded">{origine}</span>
                     )}

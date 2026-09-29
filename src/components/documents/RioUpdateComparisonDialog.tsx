@@ -186,6 +186,7 @@ const PRODUCT_TYPES = [
   { value: "PEA", label: "PEA" },
   { value: "COMPTE_TITRE", label: "Compte-titres" },
   { value: "PERP", label: "PERP" },
+  { value: "EPARGNE_SALARIALE", label: "Épargne Salariale" },
   { value: "AUTRE", label: "Autre" },
 ];
 
