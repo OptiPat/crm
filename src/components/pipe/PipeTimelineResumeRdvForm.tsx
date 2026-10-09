@@ -62,6 +62,7 @@ export function PipeTimelineResumeRdvForm({
         physicalAddress: payload.physicalAddress,
         r1Profile: payload.r1Profile,
         r3ImmoDraft: payload.r3ImmoDraft,
+        sendConfirmationEmail: payload.sendConfirmationEmail,
       });
       toastAfterRdvSave(rdvStage, result, "RDV replanifié");
       onSuccess?.();

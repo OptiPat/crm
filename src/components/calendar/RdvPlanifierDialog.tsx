@@ -40,6 +40,7 @@ import {
 } from "@/lib/calendar/rdv-planifier";
 import { useRdvVisioLocation } from "@/hooks/useRdvVisioLocation";
 import { PipeAffaireRdvPlanSelect } from "@/components/pipe/PipeAffaireRdvPlanSelect";
+import { PipeR2ConfirmationEmailToggle } from "@/components/pipe/PipeR2ConfirmationEmailToggle";
 import { usePipeR1RdvProfilePlanning } from "@/hooks/usePipeR1RdvProfilePlanning";
 import { PipeR1RdvDocumentsFields } from "@/components/pipe/PipeR1RdvDocumentsFields";
 import { PipeR3RdvDocumentsFields } from "@/components/pipe/PipeR3RdvDocumentsFields";
@@ -70,6 +71,7 @@ import {
   isSuiviPipe,
 } from "@/lib/pipe/pipe-suivi";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { usePipeR2ConfirmationOptOut } from "@/hooks/usePipeR2ConfirmationOptOut";
 import { toast } from "sonner";
 
 export type RdvPlanifierContext =
@@ -257,6 +259,11 @@ export function RdvPlanifierDialog({
   }, [context, pipes, selectedPipe]);
 
   const isSuiviPipeContext = pipeForPlanify != null && isSuiviPipe(pipeForPlanify);
+  const confirmationOptOut = usePipeR2ConfirmationOptOut(
+    pipeForPlanify?.id,
+    rdvPlanOption,
+    open && pipeForPlanify != null && !isSuiviPipeContext
+  );
   const showR1DocumentsFields =
     pipeForPlanify != null && !isSuiviPipeContext && rdvStage === "R1";
   const showR3DocumentsFields =
@@ -402,6 +409,7 @@ export function RdvPlanifierDialog({
           visio,
           physicalAddress,
           calendarTitle: title.trim() || null,
+          sendConfirmationEmail: confirmationOptOut.sendConfirmationEmail,
         });
         toastPipeRdvOutcome(
           "RDV enregistré dans le Pipe.",
@@ -521,6 +529,13 @@ export function RdvPlanifierDialog({
                   onValueChange={handlePlanOptionChange}
                 />
               </div>
+            ) : null}
+            {confirmationOptOut.offer ? (
+              <PipeR2ConfirmationEmailToggle
+                checked={confirmationOptOut.sendConfirmationEmail}
+                disabled={submitting}
+                onCheckedChange={confirmationOptOut.setSendConfirmationEmail}
+              />
             ) : null}
           </RdvPlanifierSection>
 

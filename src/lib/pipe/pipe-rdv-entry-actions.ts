@@ -113,6 +113,7 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
   physicalAddress?: string | null;
   r1Profile?: R1ChecklistProfile;
   r3ImmoDraft?: R3ImmoRdvPlanningDraft;
+  sendConfirmationEmail?: boolean;
 }): Promise<PipeRdvStageSaveResult | null> {
   const planOption =
     options.rdvPlanOption ??
@@ -180,6 +181,7 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
       endAtUnix,
       visio: options.visio,
       physicalAddress: options.physicalAddress,
+      sendConfirmationEmail: options.sendConfirmationEmail,
     });
   }
 

@@ -62,14 +62,20 @@ export function isPipeRdvConfirmationEmailEligible(
   return isPipeRdvCalendarSyncEligible(startAtUnix, nowMs);
 }
 
-/** Toujours resync les rappels (annule si trop tard) ; confirmation seulement si le RDV n'a pas commencé. */
+/**
+ * Toujours resync les rappels (annule si trop tard).
+ * Confirmation seulement si le RDV n'a pas commencé et que l'envoi n'est pas désactivé
+ * (2e R2 : l'invitation Agenda part quand même).
+ */
 export function planPipeRdvTransactionalEmails(
   startAtUnix: number,
-  nowMs = Date.now()
+  nowMs = Date.now(),
+  sendConfirmationEmail = true
 ): { resyncScheduledEmails: true; sendConfirmation: boolean } {
   return {
     resyncScheduledEmails: true,
-    sendConfirmation: isPipeRdvConfirmationEmailEligible(startAtUnix, nowMs),
+    sendConfirmation:
+      sendConfirmationEmail && isPipeRdvConfirmationEmailEligible(startAtUnix, nowMs),
   };
 }
 
@@ -295,13 +301,19 @@ export type PipeRdvConfirmationSendOptions = {
   /** Relance : uniquement ces destinataires (échecs quota), pour ne pas renvoyer aux autres. */
   onlyContactIds?: number[];
   quiet?: boolean;
+  /** false : pas de mail de confirmation immédiat. Rappels et invitation Agenda inchangés. */
+  sendConfirmationEmail?: boolean;
 };
 
 /** Envoie le modèle Pipe RDV pour l'étape (création et replanification) + planifie le rappel. */
 export async function maybeSendPipeRdvConfirmationEmail(
   options: PipeRdvConfirmationSendOptions
 ): Promise<PipeRdvConfirmationSendResult> {
-  const { sendConfirmation } = planPipeRdvTransactionalEmails(options.startAtUnix);
+  const { sendConfirmation } = planPipeRdvTransactionalEmails(
+    options.startAtUnix,
+    Date.now(),
+    options.sendConfirmationEmail !== false
+  );
   await resyncPipeRdvScheduledEmails({
     pipe: options.pipe,
     rdvStage: options.rdvStage,

@@ -33,4 +33,12 @@ describe("planPipeRdvTransactionalEmails", () => {
       sendConfirmation: true,
     });
   });
+
+  it("garde les rappels mais saute la confirmation si l'envoi est désactivé", () => {
+    const now = 1_700_000_000_000;
+    expect(planPipeRdvTransactionalEmails(1_700_000_001, now, false)).toEqual({
+      resyncScheduledEmails: true,
+      sendConfirmation: false,
+    });
+  });
 });

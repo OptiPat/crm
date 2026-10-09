@@ -33,6 +33,8 @@ import {
   rdvStageFromPlanOption,
   type PipeRdvPlanOption,
 } from "@/lib/pipe/pipe-rdv-plan-option";
+import { PipeR2ConfirmationEmailToggle } from "@/components/pipe/PipeR2ConfirmationEmailToggle";
+import { usePipeR2ConfirmationOptOut } from "@/hooks/usePipeR2ConfirmationOptOut";
 import { toast } from "sonner";
 import { TeamLockBanner } from "@/components/team/TeamLockBanner";
 import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
@@ -46,6 +48,7 @@ export interface PipeRdvSubmitPayload {
   physicalAddress: string | null;
   r1Profile?: R1ChecklistProfile;
   r3ImmoDraft?: R3ImmoRdvPlanningDraft;
+  sendConfirmationEmail?: boolean;
 }
 
 interface PipeTimelineAddFormProps {
@@ -131,6 +134,11 @@ export function PipeTimelineAddForm({
   const rdvConflictDurationMinutes = rdvDurationMinutesFromPreset(
     defaultRdvDurationPresetForPlanOption(rdvPlanOption)
   );
+  const confirmationOptOut = usePipeR2ConfirmationOptOut(
+    pipe?.id,
+    rdvPlanOption,
+    showAffaireRdvStage && onRdvSubmit != null && pipe != null && pipe.id > 0
+  );
   const { templates: checklistTemplates } = usePipeChecklistTemplates();
   const { profile: r1Profile, setProfile: setR1Profile, profileReady: r1ProfileReady } =
     usePipeR1RdvProfilePlanning({
@@ -181,6 +189,7 @@ export function PipeTimelineAddForm({
             physicalAddress: rdvLocation.getPhysicalAddress(),
             r1Profile: rdvStage === "R1" ? r1Profile : undefined,
             r3ImmoDraft: isR3ImmoRdvPlanOption(rdvPlanOption) ? r3ImmoDraft : undefined,
+            sendConfirmationEmail: confirmationOptOut.sendConfirmationEmail,
           });
         } catch (err) {
           toast.error(String(err));
@@ -243,6 +252,13 @@ export function PipeTimelineAddForm({
           est déjà passée).
         </p>
       )}
+      {confirmationOptOut.offer ? (
+        <PipeR2ConfirmationEmailToggle
+          checked={confirmationOptOut.sendConfirmationEmail}
+          disabled={saving}
+          onCheckedChange={confirmationOptOut.setSendConfirmationEmail}
+        />
+      ) : null}
       {showR1DocumentsFields && (
         <PipeR1RdvDocumentsFields
           profile={r1Profile}

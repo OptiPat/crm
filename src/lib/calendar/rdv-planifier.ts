@@ -52,6 +52,7 @@ export async function sendPipeRdvConfirmationAfterCalendar(options: {
   endAtUnix: number;
   visio?: RdvVisioOptions;
   physicalAddress?: string | null;
+  sendConfirmationEmail?: boolean;
 }): Promise<void> {
   await maybeSendPipeRdvConfirmationEmail({
     pipe: options.pipe,
@@ -64,6 +65,7 @@ export async function sendPipeRdvConfirmationAfterCalendar(options: {
     eventLocation: options.calendar?.synced ? options.calendar.eventLocation : undefined,
     visio: options.visio,
     physicalAddress: options.physicalAddress,
+    sendConfirmationEmail: options.sendConfirmationEmail,
   });
 }
 
@@ -184,6 +186,8 @@ export async function planifyPipeRdv(options: {
   visio?: RdvVisioOptions;
   physicalAddress?: string | null;
   calendarTitle?: string | null;
+  /** false : 2e R2 sans mail de confirmation. L'invitation Google Agenda est créée quand même. */
+  sendConfirmationEmail?: boolean;
 }): Promise<{ calendar?: PipeRdvCalendarSyncResult }> {
   const planOption =
     options.rdvPlanOption ?? defaultPlanOptionForRdvStage(options.rdvStage);
@@ -233,6 +237,7 @@ export async function planifyPipeRdv(options: {
     endAtUnix: options.endAtUnix,
     visio: options.visio,
     physicalAddress: options.physicalAddress,
+    sendConfirmationEmail: options.sendConfirmationEmail,
   });
 
   return { calendar };
