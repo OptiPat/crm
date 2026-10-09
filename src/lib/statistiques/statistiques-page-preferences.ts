@@ -27,7 +27,6 @@ export type StatistiquesPanelId =
   | "client_above_panier_moyen"
   | "client_scpi_reinvest"
   | "client_vp_coverage"
-  | "filleul_org_diagnostic"
   | "filleul_org_objectif_table"
   | "filleul_org_manager"
   | "filleul_org_volume"
@@ -115,7 +114,6 @@ export const STATISTIQUES_PANELS_BY_SECTION: Record<
     "prescripteur_filleul",
     "prescripteur_conversion_filleul",
     "filleul_org_exercice_summary",
-    "filleul_org_diagnostic",
     "filleul_org_objectif_table",
     "filleul_org_manager",
     "filleul_org_volume",

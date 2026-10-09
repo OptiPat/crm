@@ -70,11 +70,6 @@ import {
   filleulHabilitationDurationBenchmarkStatusLabel,
 } from "@/lib/statistiques/statistiques-benchmark-settings";
 import { useStatistiquesBenchmarkSettings } from "@/hooks/useStatistiquesBenchmarkSettings";
-import {
-  computeOrganisationDiagnostic,
-  sortOrganisationDiagnosticBySeverity,
-} from "@/lib/statistiques/organisation-diagnostic";
-import { OrganisationDiagnosticPanel } from "./OrganisationDiagnosticPanel";
 import { OrganisationObjectifTablePanel } from "./OrganisationObjectifTablePanel";
 import { computeOrganisationObjectifObservedStats } from "@/lib/statistiques/organisation-objectif-observed-stats";
 import {
@@ -1972,75 +1967,6 @@ export function ContactFilleulOrganisationPanel({
   );
 
   const diagnosticBenchmarkSettings = useStatistiquesBenchmarkSettings();
-  const previousExerciceLabelForDiagnostic = previousExerciceLabelForObjectif;
-  const previousNetGrowthStatsForDiagnostic = useMemo(
-    () =>
-      previousExerciceLabelForDiagnostic
-        ? computeFilleulNetGrowthExerciceStats(
-            contactsForStats,
-            previousExerciceLabelForDiagnostic,
-            parraineurStatsOptions
-          )
-        : null,
-    [contactsForStats, previousExerciceLabelForDiagnostic, parraineurStatsOptions]
-  );
-  const previousAttritionStatsForDiagnostic = useMemo(
-    () =>
-      previousExerciceLabelForDiagnostic
-        ? computeFilleulAttritionExerciceStats(
-            contactsForStats,
-            previousExerciceLabelForDiagnostic,
-            parraineurStatsOptions
-          )
-        : null,
-    [contactsForStats, previousExerciceLabelForDiagnostic, parraineurStatsOptions]
-  );
-  const diagnosticEntries = useMemo(
-    () =>
-      sortOrganisationDiagnosticBySeverity(
-        computeOrganisationDiagnostic({
-          benchmarkSettings: diagnosticBenchmarkSettings,
-          averageVolume: volumeStatsUnavailable ? null : volumeStats.averageVolume,
-          activeRatePercent:
-            !volumeStatsUnavailable && volumeStats.totalEligible > 0 ? volumeStats.activePercent : null,
-          sponsorRatePercent:
-            parraineurExerciceStats.totalCount > 0 ? parraineurExerciceStats.parraineurPercent : null,
-          parrainagesPerParraineur:
-            parrainagePerParraineurExerciceStats.parraineurCount > 0
-              ? parrainagePerParraineurExerciceStats.averagePerParraineur
-              : null,
-          netGrowthPercent: filleulNetGrowthExerciceStats.growthPercent,
-          previousNetGrowthPercent: previousNetGrowthStatsForDiagnostic?.growthPercent ?? null,
-          vaaDurationMonths: vaaDurationExerciceStats.averageMonths,
-          habilitationDurationMonths: habilitationDurationExerciceStats.averageMonths,
-          managerRatePercent: managerStats.totalCount > 0 ? managerStats.managerPercent : null,
-          attritionPercent:
-            filleulAttritionExerciceStats.totalCount > 0
-              ? filleulAttritionExerciceStats.attritionPercent
-              : null,
-          previousAttritionPercent:
-            previousAttritionStatsForDiagnostic && previousAttritionStatsForDiagnostic.totalCount > 0
-              ? previousAttritionStatsForDiagnostic.attritionPercent
-              : null,
-          parrainageDurationMonths: parrainageDurationExerciceStats.averageMonths,
-        })
-      ),
-    [
-      diagnosticBenchmarkSettings,
-      volumeStatsUnavailable,
-      volumeStats,
-      parraineurExerciceStats,
-      parrainagePerParraineurExerciceStats,
-      filleulNetGrowthExerciceStats,
-      previousNetGrowthStatsForDiagnostic,
-      vaaDurationExerciceStats,
-      habilitationDurationExerciceStats,
-      managerStats,
-      filleulAttritionExerciceStats,
-      previousAttritionStatsForDiagnostic,
-      parrainageDurationExerciceStats,
-    ]
-  );
 
   const objectifObservedStats = useMemo(
     () =>
@@ -2578,9 +2504,6 @@ export function ContactFilleulOrganisationPanel({
             observedStats={objectifObservedStats}
             benchmarkSettings={diagnosticBenchmarkSettings}
           />
-        </div>
-        <div className="lg:col-span-2">
-          <OrganisationDiagnosticPanel loading={exerciceKpisLoading} entries={diagnosticEntries} />
         </div>
         <ContactGeographyPanel onNavigate={onNavigate} lens="filleul" />
         <ContactAgePanel onNavigate={onNavigate} lens="filleul" />
