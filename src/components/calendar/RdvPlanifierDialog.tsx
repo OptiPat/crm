@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Dialog,
   DialogContent,
@@ -70,6 +70,7 @@ import {
   formatPipeSuiviRdvGoogleCalendarTitle,
   isSuiviPipe,
 } from "@/lib/pipe/pipe-suivi";
+import { rdvPlanifierFormSessionKey } from "@/lib/calendar/rdv-planifier-form-session";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { usePipeR2ConfirmationOptOut } from "@/hooks/usePipeR2ConfirmationOptOut";
 import { toast } from "sonner";
@@ -172,6 +173,11 @@ export function RdvPlanifierDialog({
     open
   );
   const { reset: resetRdvLocation } = rdvLocation;
+  const resetRdvLocationRef = useRef(resetRdvLocation);
+  resetRdvLocationRef.current = resetRdvLocation;
+  const contextRef = useRef(context);
+  contextRef.current = context;
+  const formSessionKey = rdvPlanifierFormSessionKey(context);
 
   const fixedContact =
     context.kind === "linked"
@@ -194,14 +200,15 @@ export function RdvPlanifierDialog({
 
   useEffect(() => {
     if (!open) return;
+    const current = contextRef.current;
     const startVal =
       defaultStartUnix != null
         ? unixToDatetimeLocalInput(defaultStartUnix)
         : defaultStartValue();
     const initialPlanOption =
-      context.kind === "pipe"
-        ? (context.rdvPlanOption ??
-            (context.rdvStage ? defaultPlanOptionForRdvStage(context.rdvStage) : "R1"))
+      current.kind === "pipe"
+        ? (current.rdvPlanOption ??
+            (current.rdvStage ? defaultPlanOptionForRdvStage(current.rdvStage) : "R1"))
         : "R1";
     const preset = defaultRdvDurationPresetForPlanOption(initialPlanOption);
     setDurationPreset(preset);
@@ -212,23 +219,25 @@ export function RdvPlanifierDialog({
         : syncEndFromStartAndDuration(startVal, rdvDurationMinutesFromPreset(preset))
     );
     setRdvPlanOption(initialPlanOption);
-    setContenu(context.kind === "pipe" ? (context.contenu ?? "") : "");
+    setContenu(current.kind === "pipe" ? (current.contenu ?? "") : "");
     setTitleEdited(false);
-    void resetRdvLocation();
-    if (context.kind === "pipe") {
-      setContactId(context.pipe.contact_id);
-      setPipeId(context.pipe.id);
+    void resetRdvLocationRef.current();
+    if (current.kind === "pipe") {
+      setContactId(current.pipe.contact_id);
+      setPipeId(current.pipe.id);
       setTitle("");
-    } else if (context.kind === "linked") {
-      setContactId(context.contactId);
+    } else if (current.kind === "linked") {
+      setContactId(current.contactId);
       setPipeId(null);
-      setTitle(context.defaultTitle ?? `RDV — ${context.contactLabel}`);
+      setTitle(current.defaultTitle ?? `RDV — ${current.contactLabel}`);
     } else {
       setContactId(0);
       setPipeId(null);
       setTitle("");
     }
-  }, [open, context, defaultStartUnix, defaultEndUnix, resetRdvLocation]);
+    // formSessionKey : même affaire + même type. Un simple re-render du Pipe
+    // recrée `context` et remettait la date du jour pendant la saisie.
+  }, [open, formSessionKey, defaultStartUnix, defaultEndUnix]);
 
   const contactAffaires = useMemo(
     () =>
