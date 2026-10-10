@@ -30,7 +30,7 @@ export function StatCard({
   return (
     <Card
       className={cn(
-        "@container overflow-hidden border-border/70 bg-card/80 shadow-sm transition-all duration-200",
+        "@container min-w-0 overflow-hidden border-border/70 bg-card/80 shadow-sm transition-all duration-200",
         interactive &&
           "hover:shadow-md hover:border-primary/30 hover:bg-card cursor-pointer group focus-visible:ring-2 focus-visible:ring-primary/40",
         highlight && "ring-2 ring-amber-200/90 border-amber-200/70 bg-amber-50/30"

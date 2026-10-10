@@ -26,7 +26,7 @@ export function Layout({ children, currentPage, onPageChange, onLogout }: Layout
       <div className="min-h-screen bg-background flex">
         <Sidebar currentPage={currentPage} onPageChange={onPageChange} />
 
-        <div className="flex-1 flex flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
           <Header
             onLogout={onLogout}
             currentPage={currentPage}

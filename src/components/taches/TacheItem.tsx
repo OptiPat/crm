@@ -72,7 +72,7 @@ export function TacheItem({
   const showActions = !compact;
 
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
+    <div className="flex min-w-0 items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
       {bulkMode && !done && onBulkSelect ? (
         <Checkbox
           checked={bulkSelected}
@@ -90,7 +90,7 @@ export function TacheItem({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className={cn("text-sm", done && "text-muted-foreground line-through")}>
+        <span className={cn("break-words text-sm", done && "text-muted-foreground line-through")}>
           {tache.titre}
         </span>
 
@@ -156,7 +156,7 @@ export function TacheItem({
       </div>
 
       {showActions && (
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
           {!done && onSendToPipe && isFicheConseilTask(tache) && contacts.length > 0 ? (
             <SendToPipeButton
               disabled={sendToPipeBusy || ficheConseilDisabled}

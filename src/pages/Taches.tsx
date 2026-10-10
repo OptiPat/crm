@@ -331,7 +331,7 @@ export function Taches({ onNavigate }: TachesProps) {
   };
 
   return (
-    <div className="space-y-4 max-w-[1200px]">
+    <div className="w-full min-w-0 max-w-[1200px] space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-serif font-bold text-primary">
