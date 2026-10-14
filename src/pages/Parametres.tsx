@@ -67,6 +67,7 @@ const EMPTY_CGP_CONFIG: CgpConfig = {
   cif_anacofi_numero: "",
   cif_orias: "",
   cif_pied_de_page: "",
+  default_visio_link: "",
 };
 
 const SECTIONS_WITH_SAVE: SettingsSectionId[] = ["profil", "email-signature", "suivi"];
@@ -108,6 +109,7 @@ function normalizeCgpConfig(config: CgpConfig): CgpConfig {
     cif_anacofi_numero: config.cif_anacofi_numero ?? "",
     cif_orias: config.cif_orias ?? "",
     cif_pied_de_page: config.cif_pied_de_page ?? "",
+    default_visio_link: config.default_visio_link ?? "",
   };
 }
 

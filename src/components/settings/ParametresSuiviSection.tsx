@@ -32,7 +32,10 @@ export function ParametresSuiviSection({ cgpConfig, onConfigChange }: Parametres
             automatiquement dans Google Agenda.
           </p>
           <Input
-            type="url"
+            type="text"
+            inputMode="url"
+            spellCheck={false}
+            autoComplete="off"
             value={cgpConfig.default_visio_link ?? ""}
             onChange={(e) =>
               onConfigChange({ default_visio_link: e.target.value.trim() || null })
