@@ -159,6 +159,8 @@ mod tests {
             relance_canal: Some("whatsapp".into()),
             relance_canal_at: Some(now),
             relance_canal_message: Some("Bonjour Jean, ".into()),
+            relance_email_sent_at: None,
+            relance_email_skipped_at: None,
         };
 
         let followup = filter_queue_by_relance_schedule(vec![item.clone()], "followup", now, 5);

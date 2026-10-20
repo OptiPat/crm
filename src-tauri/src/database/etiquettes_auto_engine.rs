@@ -646,6 +646,21 @@ impl Database {
         if contact.statut_suivi == "EN_PAUSE" || contact.statut_suivi == "ARCHIVE" {
             let assignment_info =
                 self.lookup_assignment(contact_id, etiquette.id, assignments.as_deref());
+            // Envoi déjà parti, relance préparée, ou envoi ignoré / retiré : la ligne est gardée.
+            // Sinon, à la réactivation, le 1er mail repartirait ou l'envoi ignoré reviendrait.
+            if let Some((assignment_id, _)) = assignment_info.as_ref() {
+                let keep: i64 = self.conn.query_row(
+                    "SELECT COUNT(*) FROM contact_etiquettes
+                     WHERE id = ?1 AND (email_date_envoi IS NOT NULL OR COALESCE(email_envoye, 0) = 1
+                       OR COALESCE(email_relance_active, 0) = 1
+                       OR COALESCE(email_suivi_ignore, 0) = 1 OR COALESCE(email_annule, 0) = 1)",
+                    params![assignment_id],
+                    |row| row.get(0),
+                )?;
+                if keep > 0 {
+                    return Ok(0);
+                }
+            }
             return self.apply_auto_etiquette_decision(
                 contact_id,
                 etiquette.id,

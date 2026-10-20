@@ -10,6 +10,25 @@ use super::Database;
 use rusqlite::{params, OptionalExtension, Result};
 
 const TEMPLATE_QUEUE_COLOR: &str = "#6366F1";
+/// Début (minuit local) de l'occurrence en cours d'une période « mois_debut → mois_fin ».
+/// Ex. octobre–novembre en novembre 2026 → 1er octobre 2026 ; novembre–février en janvier 2027
+/// → 1er novembre 2026.
+fn current_period_start(condition_config: Option<&str>, now: i64) -> Option<i64> {
+    use chrono::{Datelike, Local, TimeZone};
+    let cfg: serde_json::Value = serde_json::from_str(condition_config?).ok()?;
+    let mois_debut = cfg.get("mois_debut")?.as_i64()?;
+    if !(1..=12).contains(&mois_debut) {
+        return None;
+    }
+    let today = Local.timestamp_opt(now, 0).single()?;
+    let year = if i64::from(today.month()) >= mois_debut {
+        today.year()
+    } else {
+        today.year() - 1
+    };
+    let start = chrono::NaiveDate::from_ymd_opt(year, mois_debut as u32, 1)?.and_hms_opt(0, 0, 0)?;
+    Local.from_local_datetime(&start).earliest().map(|d| d.timestamp())
+}
 
 /// Relance activée sur le modèle (clé absente = activée sauf campagne éphémère).
 const TEMPLATE_RELANCE_ENABLED_SQL: &str = "COALESCE(
@@ -154,7 +173,8 @@ impl Database {
                 "UPDATE contact_template_envois SET
                     trigger_event_at = ?1,
                     email_date_prevue = CASE
-                        WHEN email_envoye = 0 AND COALESCE(email_annule, 0) = 0 THEN ?2
+                        WHEN email_envoye = 0 AND COALESCE(email_annule, 0) = 0
+                             AND COALESCE(email_relance_active, 0) = 0 THEN ?2
                         ELSE email_date_prevue
                     END
                  WHERE id = ?3",
@@ -173,6 +193,8 @@ impl Database {
     }
 
     /// Hors éligibilité (hors période, mauvaise catégorie…) : efface la campagne modèle périodique pour la saison suivante.
+    /// Ligne envoyée encore suivie (sans réponse, non ignorée) : gardée jusqu'à sa clôture ;
+    /// elle laisse place au nouveau cycle au retour de la période l'année suivante.
     fn clear_periodic_template_envoi(
         &self,
         contact_id: i64,
@@ -180,8 +202,31 @@ impl Database {
     ) -> Result<()> {
         self.conn.execute(
             "DELETE FROM contact_template_envois
-             WHERE contact_id = ?1 AND template_id = ?2 AND investissement_id IS NULL",
+             WHERE contact_id = ?1 AND template_id = ?2 AND investissement_id IS NULL
+               AND (
+                 (email_date_envoi IS NULL AND COALESCE(email_relance_active, 0) = 0
+                  AND COALESCE(email_envoye, 0) = 0)
+                 OR email_reponse_at IS NOT NULL
+                 OR COALESCE(email_suivi_ignore, 0) = 1
+               )",
             params![contact_id, template_id],
+        )?;
+        Ok(())
+    }
+
+    /// Période revenue : l'envoi d'une occurrence précédente de la période (archivé par le
+    /// déclencheur) laisse place à un nouvel envoi. Jamais dans la même occurrence.
+    fn start_new_periodic_cycle(
+        &self,
+        contact_id: i64,
+        template_id: i64,
+        period_start: i64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM contact_template_envois
+             WHERE contact_id = ?1 AND template_id = ?2 AND investissement_id IS NULL
+               AND email_date_envoi IS NOT NULL AND email_date_envoi < ?3",
+            params![contact_id, template_id, period_start],
         )?;
         Ok(())
     }
@@ -200,8 +245,10 @@ impl Database {
                AND COALESCE(email_relance_active, 0) = 0",
             params![contact_id, template_id],
         )?;
+        // Relance préparée : seule la relance est ignorée, l'envoi parti reste suivi.
         self.conn.execute(
-            "UPDATE contact_template_envois SET email_annule = 1
+            "UPDATE contact_template_envois SET email_envoye = 1, email_relance_active = 0,
+                    email_date_prevue = NULL, relance_email_skipped_at = unixepoch()
              WHERE contact_id = ?1 AND template_id = ?2
                AND email_envoye = 0 AND COALESCE(email_relance_active, 0) = 1",
             params![contact_id, template_id],
@@ -221,9 +268,10 @@ impl Database {
                    AND COALESCE(email_relance_active, 0) = 0",
                 params![contact_id, template_id],
             )?;
-            // Relance préparée : annulée, l'historique du 1er envoi est conservé.
+            // Relance préparée : seule la relance est ignorée, l'envoi parti reste suivi.
             total += self.conn.execute(
-                "UPDATE contact_template_envois SET email_annule = 1
+                "UPDATE contact_template_envois SET email_envoye = 1, email_relance_active = 0,
+                        email_date_prevue = NULL, relance_email_skipped_at = unixepoch()
                  WHERE contact_id = ?1 AND template_id = ?2
                    AND email_envoye = 0 AND COALESCE(email_relance_active, 0) = 1",
                 params![contact_id, template_id],
@@ -301,6 +349,11 @@ impl Database {
                 self.clear_periodic_template_envoi(contact_id, template_id)?;
             }
             return Ok(false);
+        }
+        if template_trigger_resets_outside_period(condition_type) {
+            if let Some(start) = current_period_start(trigger.resolved_condition_config().as_deref(), now) {
+                self.start_new_periodic_cycle(contact_id, template_id, start)?;
+            }
         }
 
         // Déjà envoyé, ou relance préparée (email_envoye repassé à 0) : ne pas replanifier.
@@ -686,11 +739,28 @@ impl Database {
         let sujet = email_subject.unwrap_or("");
         let body_stored = email_body.filter(|s| !s.trim().is_empty());
 
-        let updated = self.conn.execute(
+        let is_relance: i64 = self.conn.query_row(
+            "SELECT COALESCE(email_relance_active, 0) FROM contact_template_envois
+             WHERE id = ?1 AND email_envoye = 0",
+            params![row_id],
+            |row| row.get(0),
+        ).optional()?.unwrap_or(0);
+        self.conn.execute("BEGIN IMMEDIATE", [])?;
+        if is_relance != 0 {
+            // La relance remplace la 1re émission sur la ligne : la copier d'abord (historique).
+            if let Err(e) = self.archive_send_before_relance(true, row_id) {
+                let _ = self.conn.execute("ROLLBACK", []);
+                return Err(e);
+            }
+        }
+
+        let updated = match self.conn.execute(
             "UPDATE contact_template_envois SET
                 email_envoye = 1, email_date_envoi = ?1,
                 email_reponse_at = NULL, email_reponse_type = NULL,
                 email_reponse_body = NULL, email_reponse_gmail_message_id = NULL,
+                relance_email_sent_at = CASE WHEN COALESCE(email_relance_active, 0) = 1
+                  THEN ?1 ELSE relance_email_sent_at END,
                 email_suivi_ignore = 0, email_relance_active = 0,
                 email_gmail_message_id = ?3, email_gmail_thread_id = ?4,
                 email_sent_subject = ?5, email_sent_body = ?6, email_sent_template_nom = ?7
@@ -704,12 +774,23 @@ impl Database {
                 body_stored,
                 template_nom.as_str(),
             ],
-        )?;
+        ) {
+            Ok(n) => n,
+            Err(e) => {
+                let _ = self.conn.execute("ROLLBACK", []);
+                return Err(e);
+            }
+        };
         if updated == 0 {
+            let _ = self.conn.execute("ROLLBACK", []);
             return Err(rusqlite::Error::InvalidParameterName(format!(
                 "envoi modèle introuvable ou déjà envoyé: {}",
                 row_id
             )));
+        }
+        if let Err(e) = self.conn.execute("COMMIT", []) {
+            let _ = self.conn.execute("ROLLBACK", []);
+            return Err(e);
         }
 
         let contenu = format!(
@@ -777,7 +858,7 @@ impl Database {
                         cte.relance_canal, cte.relance_canal_at, cte.relance_canal_message
                  FROM contact_template_envois cte
                  {template_joins}
-                 WHERE {TRIGGER_FILTER}
+                 WHERE ({TRIGGER_FILTER} OR COALESCE(cte.email_relance_active, 0) = 1)
                    AND cte.email_envoye = 0
                    AND COALESCE(cte.email_annule, 0) = 0
                    AND COALESCE(cte.email_suivi_ignore, 0) = 0
@@ -882,12 +963,12 @@ impl Database {
                             cte.email_gmail_message_id,
                             cte.email_gmail_thread_id,
                             cte.email_sent_subject,
-                            cte.relance_canal, cte.relance_canal_at, cte.relance_canal_message
+                            cte.relance_canal, cte.relance_canal_at, cte.relance_canal_message,
+                            cte.relance_email_sent_at, cte.relance_email_skipped_at
                      FROM contact_template_envois cte
                      INNER JOIN templates_email t ON cte.template_id = t.id
                      INNER JOIN contacts c ON cte.contact_id = c.id
-                     WHERE {TRIGGER_FILTER}
-                       AND cte.email_envoye = 1
+                     WHERE cte.email_envoye = 1
                        AND cte.email_date_envoi IS NOT NULL
                        AND cte.email_reponse_at IS NULL
                        AND COALESCE(cte.email_suivi_ignore, 0) = 0
@@ -933,6 +1014,8 @@ impl Database {
                 relance_canal: row.get(25).ok(),
                 relance_canal_at: row.get(26).ok(),
                 relance_canal_message: row.get(27).ok(),
+                relance_email_sent_at: row.get::<_, Option<i64>>(28).ok().flatten(),
+                relance_email_skipped_at: row.get::<_, Option<i64>>(29).ok().flatten(),
             })
         };
 
@@ -963,13 +1046,13 @@ impl Database {
                 "UPDATE contact_template_envois SET
                 email_envoye = 0,
                 email_date_prevue = ?1,
-                email_reponse_at = NULL,
-                email_reponse_type = NULL,
                 email_suivi_ignore = 0,
-                email_relance_active = 1,
-                email_gmail_message_id = NULL,
-                email_gmail_thread_id = NULL
+                email_relance_active = 1
              WHERE id = ?2 AND email_envoye = 1
+               AND email_reponse_at IS NULL
+               AND relance_email_sent_at IS NULL
+               AND relance_email_skipped_at IS NULL
+               AND COALESCE(email_suivi_ignore, 0) = 0
                AND (relance_canal IS NULL OR TRIM(relance_canal) = '')
                AND EXISTS (
                  SELECT 1 FROM templates_email t
@@ -1039,8 +1122,11 @@ impl Database {
         let mark_result = (|| -> Result<()> {
             let updated = self.conn.execute(
                 "UPDATE contact_template_envois SET email_reponse_at = ?1, email_reponse_type = ?2,
-                 email_reponse_body = ?4, email_reponse_gmail_message_id = ?5
-                 WHERE id = ?3 AND email_envoye = 1 AND email_reponse_at IS NULL",
+                 email_reponse_body = ?4, email_reponse_gmail_message_id = ?5,
+                 email_envoye = 1, email_relance_active = 0, email_annule = 0
+                 WHERE id = ?3 AND email_reponse_at IS NULL
+                   AND (email_envoye = 1
+                        OR (COALESCE(email_relance_active, 0) = 1 AND email_date_envoi IS NOT NULL))",
                 params![
                     now,
                     response_type,
@@ -1089,4 +1175,30 @@ impl Database {
         }
     }
 
+}
+
+#[cfg(test)]
+mod period_tests {
+    use super::current_period_start;
+    use chrono::{Local, TimeZone};
+
+    fn ts(y: i32, m: u32, d: u32) -> i64 {
+        Local.with_ymd_and_hms(y, m, d, 12, 0, 0).single().unwrap().timestamp()
+    }
+
+    #[test]
+    fn current_period_start_handles_long_and_wrapping_periods() {
+        // Janvier–décembre : en novembre 2026, l'occurrence a commencé le 1er janvier 2026
+        // (un envoi de janvier 2026 n'est donc PAS renvoyé dans la même saison).
+        let start = current_period_start(Some(r#"{"mois_debut":1,"mois_fin":12}"#), ts(2026, 11, 6)).unwrap();
+        assert!(start <= ts(2026, 1, 1) && start > ts(2025, 12, 30));
+        assert!(ts(2026, 1, 10) >= start);
+        // Novembre–février : en janvier 2027, l'occurrence a commencé le 1er novembre 2026.
+        let start = current_period_start(Some(r#"{"mois_debut":11,"mois_fin":2}"#), ts(2027, 1, 15)).unwrap();
+        assert!(start <= ts(2026, 11, 1) && start > ts(2026, 10, 30));
+        // Octobre–novembre : un envoi d'octobre 2025 précède l'occurrence d'octobre 2026.
+        let start = current_period_start(Some(r#"{"mois_debut":10,"mois_fin":11}"#), ts(2026, 10, 20)).unwrap();
+        assert!(ts(2025, 10, 19) < start);
+        assert!(current_period_start(None, ts(2026, 1, 1)).is_none());
+    }
 }

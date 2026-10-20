@@ -254,12 +254,18 @@ fn count_exportable_tables(conn: &Connection) -> Result<BTreeMap<String, usize>>
 
 fn clear_exportable_table_rows(conn: &Connection) -> Result<(), String> {
     let cache = SchemaCache::build(conn).map_err(|error| format!("Cache schéma : {error}"))?;
+    // Remplacement en masse : ni archivage des envois ni purge de l'archive locale.
+    super::Database::set_email_archive_suspended(conn, true);
+    let mut result = Ok(());
     for table in cache.tables.keys() {
         let sql = format!("DELETE FROM \"{table}\"");
-        conn.execute(&sql, [])
-            .map_err(|error| format!("Vidage table « {table} » : {error}"))?;
+        if let Err(error) = conn.execute(&sql, []) {
+            result = Err(format!("Vidage table « {table} » : {error}"));
+            break;
+        }
     }
-    Ok(())
+    super::Database::set_email_archive_suspended(conn, false);
+    result
 }
 
 /// Comptages exportables alignés sur l'export local (tables vides incluses).

@@ -16,6 +16,7 @@ pub mod custom_fields;
 pub mod dashboard_stats;
 pub mod documents;
 pub mod email_schedule;
+pub mod email_envoi_archive;
 pub mod email_send_log;
 pub mod ephemeral_email_campaigns;
 pub mod etiquette_actions;
@@ -801,6 +802,8 @@ impl Database {
         self.migrate_fiche_conseil_redaction_presets_table()?;
         self.migrate_espace_client()?;
         self.migrate_espace_echeance()?;
+        // Après toutes les colonnes campagne : déclencheurs d'archivage des envois.
+        self.migrate_email_envoi_archive()?;
 
         Ok(())
     }

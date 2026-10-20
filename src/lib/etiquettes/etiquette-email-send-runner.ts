@@ -1,4 +1,5 @@
 import {
+  checkCampaignResponseBeforeSend,
   markEtiquetteEmailSent,
   type EtiquetteEmailQueueItem,
 } from "@/lib/api/tauri-etiquettes";
@@ -167,6 +168,22 @@ export function startIndividualEtiquetteEmailSend(input: {
 
   void (async () => {
     try {
+      if (item.email_is_relance) {
+        // Relance : le client a-t-il répondu depuis la préparation ? (contrôle impossible = on envoie)
+        const check = await checkCampaignResponseBeforeSend(
+          item.contact_etiquette_id,
+          item.queue_row_kind
+        ).catch(() => "ok" as const);
+        if (check !== "ok") {
+          toast.info(
+            check === "replied"
+              ? `${name} a répondu entre-temps : relance non envoyée.`
+              : `Relance de ${name} plus à envoyer (déjà traitée ou annulée) : non envoyée.`
+          );
+          notifyRelationChanged(item.contact_id);
+          return;
+        }
+      }
       const sent = await sendEmail({
         to_email: item.contact_email!,
         to_name: name,
@@ -291,7 +308,9 @@ export async function startEtiquetteBatchSend(input: {
     });
 
     notifyRelationChanged(undefined, {
-      skipQueueReload: true,
+      // Relances sautées (réponse reçue) : recharger la file pour les retirer de « Prêts ».
+      skipQueueReload:
+        result.skippedReplied.length === 0 && result.skippedNotPending.length === 0,
       skipEtiquettesChanged: true,
     });
     if (result.sent > 0) {
@@ -302,6 +321,8 @@ export async function startEtiquetteBatchSend(input: {
       toast.info(
         `Envoi interrompu — ${result.sent} envoyé${result.sent > 1 ? "s" : ""}, ${result.errors.length} erreur${result.errors.length > 1 ? "s" : ""}. Les emails déjà partis ne peuvent pas être rappelés.`
       );
+    } else if (result.errors.length === 0 && result.sent === 0) {
+      // Tout a été sauté (réponses reçues) : seul le message ci-dessous s'affiche.
     } else if (result.errors.length === 0) {
       toast.success(
         `${result.sent} email${result.sent > 1 ? "s" : ""} envoyé${result.sent > 1 ? "s" : ""}`
@@ -314,6 +335,16 @@ export async function startEtiquetteBatchSend(input: {
       toast.error(`Échec : ${result.errors.length} erreur${result.errors.length > 1 ? "s" : ""}`);
     }
 
+    if (result.skippedNotPending.length > 0) {
+      toast.info(
+        `Relance plus à envoyer (déjà traitée ou annulée) : ${result.skippedNotPending.join(", ")}.`
+      );
+    }
+    if (result.skippedReplied.length > 0) {
+      toast.info(
+        `Relance non envoyée (réponse reçue entre-temps) : ${result.skippedReplied.join(", ")}.`
+      );
+    }
     if (result.markFailures.length > 0) {
       toast.warning(
         `Envoyé mais non enregistré dans le CRM : ${result.markFailures.join(", ")}. Ne renvoyez pas sans vérifier la fiche.`,

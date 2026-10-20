@@ -928,6 +928,12 @@ pub struct EtiquetteEmailQueueItem {
     pub relance_canal_at: Option<i64>,
     #[serde(default)]
     pub relance_canal_message: Option<String>,
+    /// Relance email déjà envoyée (D1 : ensuite, seule la relance WhatsApp/SMS reste possible).
+    #[serde(default)]
+    pub relance_email_sent_at: Option<i64>,
+    /// Relance email ignorée (✕) : plus de relance email, WhatsApp/SMS toujours possible.
+    #[serde(default)]
+    pub relance_email_skipped_at: Option<i64>,
 }
 
 /// Snapshot des files d'envoi (1 appel IPC au lieu de 6).
@@ -989,6 +995,8 @@ pub struct PendingCampaignResponseCheck {
     /// Message Gmail de l'envoi campagne — permet de retrouver le fil si thread_id absent.
     pub email_gmail_message_id: Option<String>,
     pub queue_row_kind: String,
+    /// Ligne déjà relancée : fil du 1er envoi (archivé) et sa date, à surveiller aussi.
+    pub first_send_thread: Option<(String, i64)>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

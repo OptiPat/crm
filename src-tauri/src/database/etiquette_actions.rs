@@ -98,7 +98,10 @@ impl super::Database {
         let row = self
             .conn
             .query_row(
-                "SELECT email_date_prevue, email_envoye, email_date_envoi
+                "SELECT email_date_prevue,
+                        (email_envoye = 1 OR (COALESCE(email_relance_active, 0) = 1
+                                              AND email_date_envoi IS NOT NULL)),
+                        email_date_envoi
                  FROM contact_etiquettes
                  WHERE contact_id = ?1 AND etiquette_id = ?2",
                 params![contact_id, etiquette_id],

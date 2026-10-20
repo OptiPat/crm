@@ -27,6 +27,12 @@ pub struct EmailCampaignSyncResult {
     pub mail_detected: u32,
     pub rdv_detected: u32,
     pub errors: Vec<String>,
+    /// D2b : relances passées seules dans « Prêts » pendant cette synchro.
+    #[serde(default)]
+    pub relance_prepared: u32,
+    /// Lignes dont le contrôle mail a abouti sans réponse (seules éligibles à la relance auto).
+    #[serde(skip)]
+    pub mail_checked_without_reply: Vec<(i64, String)>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -508,7 +514,10 @@ fn gmail_find_reply_in_thread(
     if !status.is_success() {
         let body = res.text().unwrap_or_default();
         reject_if_gmail_rate_limited(status, &body)?;
-        return Ok(None);
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        return Err(format!("Gmail HTTP {status}"));
     }
     let thread: GmailThread = res.json().map_err(|e| e.to_string())?;
     if let Some(messages) = thread.messages {
@@ -590,7 +599,10 @@ fn gmail_find_reply_message_id(
     if !status.is_success() {
         let body = res.text().unwrap_or_default();
         reject_if_gmail_rate_limited(status, &body)?;
-        return Ok(None);
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        return Err(format!("Gmail HTTP {status}"));
     }
     let list: GmailMessageList = res.json().map_err(|e| e.to_string())?;
     if let Some(messages) = list.messages {
@@ -609,12 +621,33 @@ fn gmail_find_reply_message_id(
     Ok(None)
 }
 
+/// Ligne relancée : même contrôle sur le fil et la date du 1er envoi (archivé).
+pub(crate) fn first_send_check_item(
+    item: &PendingCampaignResponseCheck,
+) -> Option<PendingCampaignResponseCheck> {
+    let (thread, sent_at) = item.first_send_thread.as_ref()?;
+    Some(PendingCampaignResponseCheck {
+        email_gmail_thread_id: Some(thread.clone()),
+        email_gmail_message_id: None,
+        email_date_envoi: *sent_at,
+        first_send_thread: None,
+        ..item.clone()
+    })
+}
+
 pub fn gmail_find_contact_reply(
     client: &reqwest::blocking::Client,
     token: &str,
     item: &PendingCampaignResponseCheck,
 ) -> Result<Option<GmailReplyFound>, String> {
-    let Some(message_id) = gmail_find_reply_message_id(client, token, item)? else {
+    let found = match gmail_find_reply_message_id(client, token, item)? {
+        Some(id) => Some(id),
+        None => match first_send_check_item(item) {
+            Some(first) => gmail_find_reply_message_id(client, token, &first)?,
+            None => None,
+        },
+    };
+    let Some(message_id) = found else {
         return Ok(None);
     };
     let (body_text, subject) =
@@ -781,6 +814,7 @@ pub fn resolve_campaign_rdv_start(
         email_gmail_thread_id: None,
         email_gmail_message_id: None,
         queue_row_kind: "etiquette".into(),
+        first_send_thread: None,
     };
     find_calendar_rdv_start(&client, &token, &item)
 }
@@ -805,7 +839,10 @@ pub fn sync_email_campaign_responses(
         );
     };
     refresh_connection_if_needed(app, &mut mail_conn)?;
-    let calendar_token = resolve_google_calendar_access_token(app)?;
+    let (calendar_token, calendar_error) = match resolve_google_calendar_access_token(app) {
+        Ok(token) => (token, None),
+        Err(e) => (None, Some(e)),
+    };
 
     let client = reqwest::blocking::Client::new();
     let mut result = EmailCampaignSyncResult {
@@ -813,9 +850,18 @@ pub fn sync_email_campaign_responses(
         mail_detected: 0,
         rdv_detected: 0,
         errors: vec![],
+        relance_prepared: 0,
+        mail_checked_without_reply: vec![],
     };
 
+    if let Some(ref e) = calendar_error {
+        result.errors.push(format!("Agenda : {e}"));
+    }
+
+    // Agenda connecté mais illisible : pas de relance automatique (un RDV pris ne serait pas vu).
+    let calendar_unavailable = calendar_error.is_some();
     for item in pending {
+        let mut calendar_ok = !calendar_unavailable;
         if let Some(ref cal_token) = calendar_token {
             match find_calendar_rdv_start(&client, cal_token, &item) {
                 Ok(Some(rdv_at)) => {
@@ -835,8 +881,12 @@ pub fn sync_email_campaign_responses(
                     continue;
                 }
                 Ok(None) => {}
-                Err(e) if result.errors.len() < 5 => result.errors.push(e),
-                Err(_) => {}
+                Err(e) => {
+                    calendar_ok = false;
+                    if result.errors.len() < 5 {
+                        result.errors.push(e);
+                    }
+                }
             }
         }
 
@@ -867,6 +917,9 @@ pub fn sync_email_campaign_responses(
                 Err(e) if result.errors.len() < 5 => result.errors.push(e),
                 Err(_) => {}
             },
+            Ok(None) if calendar_ok => result
+                .mail_checked_without_reply
+                .push((item.contact_etiquette_id, item.queue_row_kind.clone())),
             Ok(None) => {}
             Err(e) if is_gmail_rate_limited_error(&e) => {
                 result.errors.push(
@@ -905,6 +958,7 @@ mod tests {
             email_gmail_thread_id: Some("thr1".into()),
             email_gmail_message_id: None,
             queue_row_kind: "etiquette".into(),
+            first_send_thread: None,
         };
         assert!(gmail_reply_has_thread_scope(&with_thread));
 
@@ -915,6 +969,7 @@ mod tests {
             email_gmail_thread_id: None,
             email_gmail_message_id: Some("msg1".into()),
             queue_row_kind: "etiquette".into(),
+            first_send_thread: None,
         };
         assert!(gmail_reply_has_thread_scope(&with_msg));
 
@@ -925,6 +980,7 @@ mod tests {
             email_gmail_thread_id: None,
             email_gmail_message_id: None,
             queue_row_kind: "etiquette".into(),
+            first_send_thread: None,
         };
         assert!(!gmail_reply_has_thread_scope(&legacy));
     }

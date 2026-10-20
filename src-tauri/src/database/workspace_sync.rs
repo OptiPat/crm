@@ -51,6 +51,9 @@ const TABLE_POLICIES: &[(&str, WorkspaceTablePolicy)] = &[
         WorkspaceTablePolicy::LocalOnly,
     ),
     ("email_send_log", WorkspaceTablePolicy::Shared),
+    // Archive des envois campagne : historique local (hors synchro équipe pour l'instant).
+    ("email_envoi_archive", WorkspaceTablePolicy::LocalOnly),
+    ("email_archive_control", WorkspaceTablePolicy::LocalOnly),
     ("calendar_events", WorkspaceTablePolicy::Derived),
     ("contact_gmail_messages", WorkspaceTablePolicy::Derived),
     ("contact_mail_sync_state", WorkspaceTablePolicy::LocalOnly),
@@ -134,7 +137,9 @@ pub fn local_snapshot_blocks_team_join(snapshot: &TeamMigrationSnapshot) -> bool
 }
 
 pub fn clear_team_join_seed_tables(conn: &Connection) -> Result<()> {
-    conn.execute_batch(
+    // Remplacement en masse par les données de l'équipe : pas d'archivage des envois locaux.
+    super::Database::set_email_archive_suspended(conn, true);
+    let result = conn.execute_batch(
         "PRAGMA foreign_keys = OFF;
          DELETE FROM template_email_actions;
          DELETE FROM templates_email;
@@ -148,8 +153,9 @@ pub fn clear_team_join_seed_tables(conn: &Connection) -> Result<()> {
          DELETE FROM fiche_conseil_redaction_presets;
          DELETE FROM partenaires;
          PRAGMA foreign_keys = ON;",
-    )?;
-    Ok(())
+    );
+    super::Database::set_email_archive_suspended(conn, false);
+    result
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

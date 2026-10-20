@@ -66,10 +66,14 @@ impl Database {
         (etiquette.email_envoi_prevu, None)
     }
 
-    /// Retire les attributions automatiques d'une étiquette (désactivation). Conserve les tags MANUEL.
+    /// Retire les attributions automatiques d'une étiquette (désactivation). Conserve les tags MANUEL
+    /// et les envois déjà partis (relance préparée comprise) : ils restent suivis jusqu'à leur clôture.
     pub fn remove_auto_assignments_for_etiquette(&self, etiquette_id: i64) -> Result<usize> {
         let n = self.conn.execute(
-            "DELETE FROM contact_etiquettes WHERE etiquette_id = ?1 AND UPPER(TRIM(attribue_par)) != 'MANUEL'",
+            "DELETE FROM contact_etiquettes
+             WHERE etiquette_id = ?1 AND UPPER(TRIM(attribue_par)) != 'MANUEL'
+               AND email_date_envoi IS NULL AND COALESCE(email_relance_active, 0) = 0
+               AND COALESCE(email_envoye, 0) = 0",
             params![etiquette_id],
         )?;
         Ok(n)
@@ -160,7 +164,8 @@ impl Database {
             "UPDATE contact_etiquettes SET email_date_prevue = ?1
              WHERE etiquette_id = ?2 AND email_envoye = 0
                AND COALESCE(email_annule, 0) = 0
-               AND COALESCE(email_suivi_ignore, 0) = 0",
+               AND COALESCE(email_suivi_ignore, 0) = 0
+               AND COALESCE(email_relance_active, 0) = 0",
             params![prevue, etiquette_id],
         )?;
         if updated > 0 {

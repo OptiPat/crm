@@ -116,7 +116,7 @@ export function ExchangeHistoryDetailPanel({
               Fiche contact
             </Button>
           )}
-          {(isEmail || isMessaging) && onNavigateSuiviEnvois && (
+          {(isEmail || isMessaging) && onNavigateSuiviEnvois && entry.contact_etiquette_id != null && (
             <Button
               type="button"
               variant="outline"
@@ -214,7 +214,9 @@ export function ExchangeHistoryDetailPanel({
               </section>
             ) : (
               <p className="text-sm text-muted-foreground italic border-t border-dashed border-border/60 pt-4">
-                Pas encore de réponse enregistrée pour cet envoi.
+                {entry.contact_etiquette_id == null
+                  ? "Envoi archivé : une réponse éventuelle apparaît sur l'envoi le plus récent de cette campagne (relance)."
+                  : "Pas encore de réponse enregistrée pour cet envoi."}
               </p>
             )}
 

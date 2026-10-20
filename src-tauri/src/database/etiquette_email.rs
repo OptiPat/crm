@@ -15,6 +15,10 @@ const TEMPLATE_NOT_NEWSLETTER_SQL: &str = "COALESCE(t.categorie, '') != 'NEWSLET
 /// Plafond par cycle : `threads.get` + `messages.get` par campagne épuisent le quota Gmail 6000/min.
 /// `ORDER BY RANDOM()` pour ne pas bloquer les plus anciennes derrière les 20 plus récentes.
 const PENDING_RESPONSE_CHECK_LIMIT: i64 = 20;
+/// D2b : au-delà de 14 jours après l'échéance, pas de relance automatique (relance manuelle possible).
+const AUTO_RELANCE_MAX_OVERDUE_SECS: i64 = 14 * 86_400;
+/// D2b : nombre de relances contrôlées puis préparées par cycle (quota Gmail).
+const AUTO_RELANCE_MAX_PER_CYCLE: usize = 20;
 
 impl Database {
     pub fn get_etiquette_email_queue(
@@ -56,7 +60,7 @@ impl Database {
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
                  {template_joins_full}
-                 WHERE e.actif = 1 AND e.email_actif = 1
+                 WHERE (e.actif = 1 AND e.email_actif = 1 OR COALESCE(ce.email_relance_active, 0) = 1)
                    AND ce.email_envoye = 0
                    AND COALESCE(ce.email_annule, 0) = 0
                    AND COALESCE(ce.email_suivi_ignore, 0) = 0
@@ -125,7 +129,7 @@ impl Database {
                  INNER JOIN contacts c ON ce.contact_id = c.id
                  LEFT JOIN templates_email t ON e.email_template_id = t.id
                  LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
-                 WHERE e.actif = 1 AND e.email_actif = 1
+                 WHERE (e.actif = 1 AND e.email_actif = 1 OR COALESCE(ce.email_relance_active, 0) = 1)
                    AND ce.email_envoye = 0
                    AND COALESCE(ce.email_annule, 0) = 0
                    AND COALESCE(ce.email_suivi_ignore, 0) = 0
@@ -155,13 +159,13 @@ impl Database {
                         ce.email_gmail_thread_id,
                         ce.email_sent_subject,
                         COALESCE(e.rendement_cible, ''),
-                        ce.relance_canal, ce.relance_canal_at, ce.relance_canal_message
+                        ce.relance_canal, ce.relance_canal_at, ce.relance_canal_message,
+                        ce.relance_email_sent_at, ce.relance_email_skipped_at
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
                  {template_joins_full}
-                 WHERE e.actif = 1 AND e.email_actif = 1
-                   AND ce.email_envoye = 1
+                 WHERE ce.email_envoye = 1
                    AND ce.email_date_envoi IS NOT NULL
                    AND ce.email_reponse_at IS NULL
                    AND COALESCE(ce.email_suivi_ignore, 0) = 0
@@ -187,13 +191,13 @@ impl Database {
                         ce.email_gmail_thread_id,
                         ce.email_sent_subject,
                         COALESCE(e.rendement_cible, ''),
-                        ce.relance_canal, ce.relance_canal_at, ce.relance_canal_message
+                        ce.relance_canal, ce.relance_canal_at, ce.relance_canal_message,
+                        ce.relance_email_sent_at, ce.relance_email_skipped_at
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
                  LEFT JOIN templates_email t ON e.email_template_id = t.id
-                 WHERE e.actif = 1 AND e.email_actif = 1
-                   AND ce.email_envoye = 1
+                 WHERE ce.email_envoye = 1
                    AND ce.email_date_envoi IS NOT NULL
                    AND ce.email_reponse_at IS NULL
                    AND COALESCE(ce.email_suivi_ignore, 0) = 0
@@ -202,8 +206,7 @@ impl Database {
                    AND COALESCE(json_extract(t.variables, '$.email_relance.enabled'), 1) = 1
                    AND c.email IS NOT NULL
                    AND TRIM(c.email) != ''
-                 ORDER BY ce.email_date_envoi ASC, c.nom, c.prenom
-                 LIMIT 200"
+                 ORDER BY ce.email_date_envoi ASC, c.nom, c.prenom"
                 )
             }
             "cancelled" => {
@@ -275,6 +278,8 @@ impl Database {
                 relance_canal: row.get(27).ok(),
                 relance_canal_at: row.get(28).ok(),
                 relance_canal_message: row.get(29).ok(),
+                relance_email_sent_at: row.get::<_, Option<i64>>(30).ok().flatten(),
+                relance_email_skipped_at: row.get::<_, Option<i64>>(31).ok().flatten(),
             })
         };
 
@@ -603,6 +608,10 @@ impl Database {
         self.conn.execute("BEGIN IMMEDIATE", [])?;
 
         let mark_result = (|| -> Result<()> {
+            if is_relance != 0 {
+                // La relance remplace la 1re émission sur la ligne : la copier d'abord (historique).
+                self.archive_send_before_relance(false, contact_etiquette_id)?;
+            }
             let sujet = email_subject
                 .filter(|s| !s.trim().is_empty())
                 .unwrap_or(template_sujet.as_str());
@@ -613,6 +622,8 @@ impl Database {
                 "UPDATE contact_etiquettes SET email_envoye = 1, email_date_envoi = ?1,
                  email_reponse_at = NULL, email_reponse_type = NULL, email_reponse_body = NULL,
                  email_reponse_gmail_message_id = NULL, email_suivi_ignore = 0,
+                 relance_email_sent_at = CASE WHEN COALESCE(email_relance_active, 0) = 1
+                   THEN ?1 ELSE relance_email_sent_at END,
                  email_relance_active = 0,
                  email_gmail_message_id = ?3, email_gmail_thread_id = ?4,
                  email_sent_subject = ?5, email_sent_body = ?6, email_sent_template_nom = ?7
@@ -773,7 +784,8 @@ impl Database {
                     "SELECT c.email, cte.email_date_envoi
                      FROM contact_template_envois cte
                      INNER JOIN contacts c ON c.id = cte.contact_id
-                     WHERE cte.id = ?1 AND cte.email_envoye = 1 AND cte.email_date_envoi IS NOT NULL
+                     WHERE cte.id = ?1 AND cte.email_date_envoi IS NOT NULL
+                       AND (cte.email_envoye = 1 OR COALESCE(cte.email_relance_active, 0) = 1)
                        AND c.email IS NOT NULL AND TRIM(c.email) != ''",
                     params![row_id],
                     |row| Ok((row.get(0)?, row.get(1)?)),
@@ -785,7 +797,8 @@ impl Database {
             "SELECT c.email, ce.email_date_envoi
              FROM contact_etiquettes ce
              INNER JOIN contacts c ON c.id = ce.contact_id
-             WHERE ce.id = ?1 AND ce.email_envoye = 1 AND ce.email_date_envoi IS NOT NULL
+             WHERE ce.id = ?1 AND ce.email_date_envoi IS NOT NULL
+               AND (ce.email_envoye = 1 OR COALESCE(ce.email_relance_active, 0) = 1)
                AND c.email IS NOT NULL AND TRIM(c.email) != ''",
             params![row_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
@@ -833,8 +846,11 @@ impl Database {
         let mark_result = (|| -> Result<()> {
             let updated = self.conn.execute(
                 "UPDATE contact_etiquettes SET email_reponse_at = ?1, email_reponse_type = ?2,
-                 email_reponse_body = ?4, email_reponse_gmail_message_id = ?5
-                 WHERE id = ?3 AND email_envoye = 1 AND email_reponse_at IS NULL",
+                 email_reponse_body = ?4, email_reponse_gmail_message_id = ?5,
+                 email_envoye = 1, email_relance_active = 0, email_annule = 0
+                 WHERE id = ?3 AND email_reponse_at IS NULL
+                   AND (email_envoye = 1
+                        OR (COALESCE(email_relance_active, 0) = 1 AND email_date_envoi IS NOT NULL))",
                 params![
                     now,
                     response_type,
@@ -949,7 +965,9 @@ impl Database {
     ) -> Result<()> {
         if email_queue_row_is_template(queue_row_kind) {
             let updated = self.conn.execute(
-                "UPDATE contact_template_envois SET email_suivi_ignore = 1 WHERE id = ?1",
+                "UPDATE contact_template_envois SET email_suivi_ignore = 1,
+                    email_envoye = CASE WHEN COALESCE(email_relance_active, 0) = 1 AND email_date_envoi IS NOT NULL THEN 1 ELSE email_envoye END,
+                    email_relance_active = 0 WHERE id = ?1",
                 params![row_id],
             )?;
             if updated == 0 {
@@ -961,7 +979,9 @@ impl Database {
             return Ok(());
         }
         let updated = self.conn.execute(
-            "UPDATE contact_etiquettes SET email_suivi_ignore = 1 WHERE id = ?1",
+            "UPDATE contact_etiquettes SET email_suivi_ignore = 1,
+                    email_envoye = CASE WHEN COALESCE(email_relance_active, 0) = 1 AND email_date_envoi IS NOT NULL THEN 1 ELSE email_envoye END,
+                    email_relance_active = 0 WHERE id = ?1",
             params![row_id],
         )?;
         if updated == 0 {
@@ -1112,6 +1132,29 @@ impl Database {
         row_id: i64,
         queue_row_kind: Option<&str>,
     ) -> Result<()> {
+        // Relance email préparée : « Ignorer » ne vise que la relance, pas la campagne.
+        // La ligne redevient « envoyée » (le WhatsApp reste possible) et D2b ne la reprépare plus.
+        let table = if email_queue_row_is_template(queue_row_kind) {
+            "contact_template_envois"
+        } else {
+            "contact_etiquettes"
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let reverted = self.conn.execute(
+            &format!(
+                "UPDATE {table} SET email_envoye = 1, email_relance_active = 0,
+                    email_date_prevue = NULL, relance_email_skipped_at = ?2
+                 WHERE id = ?1 AND email_envoye = 0 AND COALESCE(email_relance_active, 0) = 1
+                   AND email_date_envoi IS NOT NULL"
+            ),
+            params![row_id, now],
+        )?;
+        if reverted > 0 {
+            return Ok(());
+        }
         if email_queue_row_is_template(queue_row_kind) {
             let updated = self.conn.execute(
                 "UPDATE contact_template_envois SET email_annule = 1
@@ -1144,16 +1187,14 @@ impl Database {
     pub fn list_campaigns_pending_response_check(
         &self,
     ) -> Result<Vec<super::models::PendingCampaignResponseCheck>> {
-        use super::template_email_queue::TEMPLATE_ENVOI_QUEUE_FILTER;
         let sql = format!(
             "SELECT id, email, email_date_envoi, email_gmail_thread_id, email_gmail_message_id, queue_row_kind FROM (
                 SELECT ce.id, c.email, ce.email_date_envoi, ce.email_gmail_thread_id, ce.email_gmail_message_id, 'etiquette' AS queue_row_kind
                 FROM contact_etiquettes ce
                 INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                 INNER JOIN contacts c ON ce.contact_id = c.id
-                INNER JOIN templates_email t ON e.email_template_id = t.id
-                WHERE e.actif = 1 AND e.email_actif = 1
-                  AND ce.email_envoye = 1
+                LEFT JOIN templates_email t ON e.email_template_id = t.id
+                WHERE (ce.email_envoye = 1 OR COALESCE(ce.email_relance_active, 0) = 1)
                   AND ce.email_date_envoi IS NOT NULL
                   AND ce.email_reponse_at IS NULL
                   AND COALESCE(ce.email_suivi_ignore, 0) = 0
@@ -1165,8 +1206,7 @@ impl Database {
                 FROM contact_template_envois cte
                 INNER JOIN templates_email t ON cte.template_id = t.id
                 INNER JOIN contacts c ON cte.contact_id = c.id
-                WHERE {TEMPLATE_ENVOI_QUEUE_FILTER}
-                  AND cte.email_envoye = 1
+                WHERE (cte.email_envoye = 1 OR COALESCE(cte.email_relance_active, 0) = 1)
                   AND cte.email_date_envoi IS NOT NULL
                   AND cte.email_reponse_at IS NULL
                   AND COALESCE(cte.email_suivi_ignore, 0) = 0
@@ -1186,9 +1226,163 @@ impl Database {
                 email_gmail_thread_id: row.get(3)?,
                 email_gmail_message_id: row.get(4)?,
                 queue_row_kind: row.get(5)?,
+                first_send_thread: None,
             })
         })?;
-        rows.collect()
+        let mut items = rows.collect::<Result<Vec<_>>>()?;
+        for item in &mut items {
+            item.first_send_thread = self.archived_first_thread(
+                email_queue_row_is_template(Some(item.queue_row_kind.as_str())),
+                item.contact_etiquette_id,
+            )?;
+        }
+        Ok(items)
+    }
+
+    /// D2b : envois dont le délai de relance est écoulé sans réponse, relance email pas encore
+    /// faite ni WhatsApp. Ils passent seuls dans « Prêts » après un contrôle des réponses.
+    pub fn due_auto_relance_rows(&self) -> Result<Vec<(i64, String)>> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let mut due: Vec<(i64, i64, String)> = self
+            .get_etiquette_email_queue("followup")?
+            .into_iter()
+            .filter(|i| {
+                i.relance_email_sent_at.is_none()
+                    && i.relance_email_skipped_at.is_none()
+                    && !i.template_sujet.trim().is_empty()
+                    && i.email_reponse_at.is_none()
+                    && i.relance_canal.as_deref().map(str::trim).unwrap_or("").is_empty()
+            })
+            .filter_map(|i| {
+                let sent = i.email_date_envoi?;
+                // Contact vu, appelé ou noté depuis l'envoi : décision manuelle (« À relancer »).
+                if i.contact_date_dernier_contact.is_some_and(|d| d > sent) {
+                    return None;
+                }
+                if self
+                    .auto_relance_blocked_for_contact(i.contact_id, sent)
+                    .unwrap_or(true)
+                {
+                    return None;
+                }
+                let due_at = super::template_email_relance::resolve_relance_due_at(
+                    i.template_variables.as_deref(),
+                    sent,
+                    DEFAULT_RELANCE_DELAI_JOURS,
+                );
+                // Échéance passée depuis trop longtemps : relance manuelle (« À relancer »),
+                // pas d'envoi en masse d'anciennes campagnes au premier lancement.
+                (now - due_at <= AUTO_RELANCE_MAX_OVERDUE_SECS)
+                    .then_some((due_at, i.contact_etiquette_id, i.queue_row_kind))
+            })
+            .collect();
+        due.sort_by_key(|(due_at, _, _)| std::cmp::Reverse(*due_at));
+        due.truncate(AUTO_RELANCE_MAX_PER_CYCLE);
+        Ok(due.into_iter().map(|(_, id, kind)| (id, kind)).collect())
+    }
+
+    /// Pas de relance automatique : contact en pause / archivé, ou échange saisi sur la fiche
+    /// (appel, RDV, note…) après l'envoi. Les traces automatiques de campagne ne comptent pas.
+    fn auto_relance_blocked_for_contact(&self, contact_id: i64, sent_at: i64) -> Result<bool> {
+        let n: i64 = self.conn.query_row(
+            "SELECT
+               (SELECT COUNT(*) FROM contacts
+                WHERE id = ?1 AND COALESCE(statut_suivi, '') IN ('EN_PAUSE', 'ARCHIVE'))
+             + (SELECT COUNT(*) FROM interactions
+                WHERE contact_id = ?1 AND date_interaction > ?2
+                  AND COALESCE(contenu, '') NOT LIKE 'Campagne «%'
+                  AND COALESCE(contenu, '') NOT LIKE 'Modèle «%'
+                  AND COALESCE(contenu, '') NOT LIKE 'Retour enregistré%'
+                  AND COALESCE(sujet, '') NOT LIKE '%— campagne «%')",
+            params![contact_id, sent_at],
+            |row| row.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
+    /// Relance email préparée et toujours en attente d'envoi (contrôle avant envoi).
+    pub fn campaign_row_is_prepared_relance(
+        &self,
+        row_id: i64,
+        queue_row_kind: Option<&str>,
+    ) -> Result<bool> {
+        let table = if email_queue_row_is_template(queue_row_kind) {
+            "contact_template_envois"
+        } else {
+            "contact_etiquettes"
+        };
+        let n: i64 = self.conn.query_row(
+            &format!(
+                "SELECT COUNT(*) FROM {table}
+                 WHERE id = ?1 AND email_envoye = 0 AND COALESCE(email_relance_active, 0) = 1
+                   AND email_reponse_at IS NULL AND COALESCE(email_annule, 0) = 0"
+            ),
+            params![row_id],
+            |row| row.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
+    /// Contrôle des réponses pour une ligne précise (avant relance auto ou avant l'envoi d'une relance).
+    pub fn pending_response_check_for_row(
+        &self,
+        row_id: i64,
+        queue_row_kind: Option<&str>,
+    ) -> Result<Option<super::models::PendingCampaignResponseCheck>> {
+        let is_template = email_queue_row_is_template(queue_row_kind);
+        let table = if is_template { "contact_template_envois" } else { "contact_etiquettes" };
+        let kind = if is_template { "template" } else { "etiquette" };
+        let found = self
+            .conn
+            .query_row(
+                &format!(
+                    "SELECT x.id, c.email, x.email_date_envoi, x.email_gmail_thread_id,
+                            x.email_gmail_message_id
+                     FROM {table} x
+                     INNER JOIN contacts c ON c.id = x.contact_id
+                     WHERE x.id = ?1
+                       AND (x.email_envoye = 1 OR COALESCE(x.email_relance_active, 0) = 1)
+                       AND x.email_date_envoi IS NOT NULL
+                       AND x.email_reponse_at IS NULL
+                       AND c.email IS NOT NULL AND TRIM(c.email) != ''"
+                ),
+                params![row_id],
+                |row| {
+                    Ok(super::models::PendingCampaignResponseCheck {
+                        contact_etiquette_id: row.get(0)?,
+                        contact_email: row.get(1)?,
+                        email_date_envoi: row.get(2)?,
+                        email_gmail_thread_id: row.get(3)?,
+                        email_gmail_message_id: row.get(4)?,
+                        queue_row_kind: kind.to_string(),
+                        first_send_thread: None,
+                    })
+                },
+            )
+            .optional()?;
+        let Some(mut item) = found else {
+            return Ok(None);
+        };
+        item.first_send_thread = self.archived_first_thread(is_template, row_id)?;
+        Ok(Some(item))
+    }
+
+    /// Réponse déjà enregistrée sur la ligne (après un contrôle).
+    pub fn campaign_row_has_response(&self, row_id: i64, queue_row_kind: Option<&str>) -> Result<bool> {
+        let table = if email_queue_row_is_template(queue_row_kind) {
+            "contact_template_envois"
+        } else {
+            "contact_etiquettes"
+        };
+        let n: i64 = self.conn.query_row(
+            &format!("SELECT COUNT(*) FROM {table} WHERE id = ?1 AND email_reponse_at IS NOT NULL"),
+            params![row_id],
+            |row| row.get(0),
+        )?;
+        Ok(n > 0)
     }
 
     /// Remet l'envoi en file « Prêts » pour une relance manuelle.
@@ -1212,18 +1406,19 @@ impl Database {
             "UPDATE contact_etiquettes SET
                 email_envoye = 0,
                 email_date_prevue = ?1,
-                email_reponse_at = NULL,
-                email_reponse_type = NULL,
                 email_suivi_ignore = 0,
-                email_relance_active = 1,
-                email_gmail_message_id = NULL,
-                email_gmail_thread_id = NULL
+                email_relance_active = 1
              WHERE id = ?2 AND email_envoye = 1
+               AND email_reponse_at IS NULL
+               AND relance_email_sent_at IS NULL
+               AND relance_email_skipped_at IS NULL
+               AND COALESCE(email_suivi_ignore, 0) = 0
                AND (relance_canal IS NULL OR TRIM(relance_canal) = '')
                AND EXISTS (
                  SELECT 1 FROM etiquettes e
                  LEFT JOIN templates_email t ON e.email_template_id = t.id
                  WHERE e.id = contact_etiquettes.etiquette_id
+                   AND e.email_template_id IS NOT NULL
                    AND COALESCE(json_extract(t.variables, '$.email_relance.enabled'), 1) = 1
                )",
             params![now, contact_etiquette_id],

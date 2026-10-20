@@ -4521,21 +4521,451 @@ mod database_integration_tests {
             .unwrap();
         assert_eq!(prevue, now - 60, "la relance préparée reste dans Prêts après enregistrement");
 
-        // Exclure le contact : la relance est annulée, la ligne (historique) est conservée.
+        // Exclure le contact : seule la relance est ignorée, l'envoi parti reste suivi.
         db.update_template_email(tpl.id, &new_tpl(vars(&cid.to_string())))
             .unwrap();
-        let (count, annule, date_envoi): (i64, i64, Option<i64>) = db
+        let (count, envoye, annule, skipped, date_envoi): (i64, i64, i64, Option<i64>, Option<i64>) = db
             .conn
             .query_row(
-                "SELECT COUNT(*), MAX(COALESCE(email_annule, 0)), MAX(email_date_envoi)
+                "SELECT COUNT(*), MAX(email_envoye), MAX(COALESCE(email_annule, 0)),
+                        MAX(relance_email_skipped_at), MAX(email_date_envoi)
                  FROM contact_template_envois WHERE contact_id = ?1",
                 params![cid],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
             )
             .unwrap();
         assert_eq!(count, 1, "l'envoi déjà parti n'est pas supprimé");
-        assert_eq!(annule, 1, "la relance est annulée");
+        assert_eq!((envoye, annule), (1, 0), "toujours suivi, pas annulé");
+        assert!(skipped.is_some(), "relance email ignorée");
         assert_eq!(date_envoi, Some(first_sent));
+    }
+
+    /// Modèle sans réglage (relance active, attente de réponse) + contact + 1er envoi il y a `days` jours.
+    fn lot2_sent_template_row(db: &Database, email: &str, days: i64) -> (i64, i64, i64) {
+        use crate::database::models::{NewContact, NewTemplateEmail};
+        let now = chrono::Utc::now().timestamp();
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: format!("Lot2 {email}"),
+                sujet: "Premier objet".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let cid = db
+            .create_contact(NewContact {
+                email: Some(email.into()),
+                ..sample_contact("Lot", "Deux")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+        let sent_at = now - days * 86_400;
+        db.connection()
+            .execute(
+                "INSERT INTO contact_template_envois (contact_id, template_id, trigger_event_at,
+                    email_envoye, email_date_envoi, email_sent_subject, email_sent_body,
+                    email_gmail_thread_id, email_gmail_message_id, email_sent_template_nom)
+                 VALUES (?1, ?2, ?3, 1, ?3, 'Premier objet', 'Premier corps', 'thr-first', 'msg-first', 'Lot2')",
+                rusqlite::params![cid, tpl.id, sent_at],
+            )
+            .unwrap();
+        let row_id = db.connection().last_insert_rowid();
+        (tpl.id, cid, row_id)
+    }
+
+    #[test]
+    fn lot2_relance_keeps_first_send_and_allows_only_one_email_relance() {
+        let db = test_db();
+        let (_tid, cid, row) = lot2_sent_template_row(&db, "lot2.cycle@example.com", 10);
+
+        // D2b : délai écoulé sans réponse → ligne due pour la relance auto.
+        let due = db.due_auto_relance_rows().unwrap();
+        assert!(due.iter().any(|(id, k)| *id == row && k == "template"));
+
+        db.prepare_email_campaign_relance(row, Some("template")).unwrap();
+        // Le fil du 1er envoi est conservé pendant que la relance attend dans « Prêts ».
+        let check = db
+            .pending_response_check_for_row(row, Some("template"))
+            .unwrap()
+            .expect("relance préparée contrôlable");
+        assert_eq!(check.email_gmail_thread_id.as_deref(), Some("thr-first"));
+
+        db.mark_template_email_sent(
+            row,
+            Some("msg-relance"),
+            Some("thr-relance"),
+            Some("Objet relance"),
+            Some("Corps relance"),
+            None,
+            None,
+        )
+        .unwrap();
+
+        let (subject, relance_at): (String, Option<i64>) = db
+            .conn
+            .query_row(
+                "SELECT email_sent_subject, relance_email_sent_at FROM contact_template_envois WHERE id = ?1",
+                params![row],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(subject, "Objet relance");
+        assert!(relance_at.is_some(), "relance email notée");
+
+        // 1er envoi archivé, avec son fil (détection des réponses au 1er mail).
+        let first = db.archived_first_thread(true, row).unwrap();
+        assert_eq!(first.map(|(t, _)| t).as_deref(), Some("thr-first"));
+        let check = db
+            .pending_response_check_for_row(row, Some("template"))
+            .unwrap()
+            .expect("ligne relancée contrôlable");
+        assert_eq!(check.email_gmail_thread_id.as_deref(), Some("thr-relance"));
+        assert_eq!(
+            check.first_send_thread.map(|(t, _)| t).as_deref(),
+            Some("thr-first")
+        );
+
+        // Historique : le 1er mail ET la relance.
+        let timeline = db.get_exchange_history_timeline_for_contact(cid, None).unwrap();
+        let subjects: Vec<String> = timeline
+            .iter()
+            .filter(|e| e.entry_kind == "email_campagne")
+            .filter_map(|e| e.sent_subject.clone())
+            .collect();
+        assert!(subjects.iter().any(|s| s == "Premier objet"), "{subjects:?}");
+        assert!(subjects.iter().any(|s| s == "Objet relance"), "{subjects:?}");
+
+        // D1 : pas de 2e relance email.
+        assert!(db.prepare_email_campaign_relance(row, Some("template")).is_err());
+        assert!(!db
+            .due_auto_relance_rows()
+            .unwrap()
+            .iter()
+            .any(|(id, k)| *id == row && k == "template"));
+    }
+
+    #[test]
+    fn lot2_reply_while_relance_is_prepared_cancels_it() {
+        let db = test_db();
+        let (_tid, _cid, row) = lot2_sent_template_row(&db, "lot2.reply@example.com", 10);
+        db.prepare_email_campaign_relance(row, Some("template")).unwrap();
+        db.mark_email_campaign_response(row, "mail", Some("Merci"), None, None, None, Some("template"))
+            .unwrap();
+        let (envoye, relance_active, reponse): (i64, i64, Option<i64>) = db
+            .conn
+            .query_row(
+                "SELECT email_envoye, COALESCE(email_relance_active, 0), email_reponse_at
+                 FROM contact_template_envois WHERE id = ?1",
+                params![row],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!((envoye, relance_active), (1, 0), "la relance quitte « Prêts »");
+        assert!(reponse.is_some());
+        assert!(
+            db.get_etiquette_email_queue("ready")
+                .unwrap()
+                .iter()
+                .all(|i| !(i.contact_etiquette_id == row && i.queue_row_kind == "template")),
+            "plus de relance à envoyer"
+        );
+    }
+
+    #[test]
+    fn lot2_deleted_template_keeps_its_sends_in_history() {
+        let db = test_db();
+        let (tid, cid, _row) = lot2_sent_template_row(&db, "lot2.delete@example.com", 3);
+        db.delete_template_email(tid).unwrap();
+        let timeline = db.get_exchange_history_timeline_for_contact(cid, None).unwrap();
+        let entry = timeline
+            .iter()
+            .find(|e| e.entry_kind == "email_campagne" && e.sent_subject.as_deref() == Some("Premier objet"))
+            .expect("envoi toujours visible après suppression du modèle");
+        assert!(entry.contact_etiquette_id.is_none(), "archive en lecture seule");
+        assert!(entry.etiquette_nom.as_deref().unwrap_or("").contains("Lot2"));
+    }
+
+    #[test]
+    fn lot2_disabled_trigger_keeps_sent_rows_followed() {
+        let db = test_db();
+        // Modèle avec déclencheur désactivé : l'envoi déjà parti reste dans « Envoyés » (D6).
+        let (tid, _cid, row) = lot2_sent_template_row(&db, "lot2.d6@example.com", 1);
+        db.connection()
+            .execute(
+                r#"UPDATE templates_email SET variables = '{"email_trigger":{"enabled":false}}' WHERE id = ?1"#,
+                params![tid],
+            )
+            .unwrap();
+        let sent = db.get_etiquette_email_queue("sent").unwrap();
+        assert!(sent
+            .iter()
+            .any(|i| i.contact_etiquette_id == row && i.queue_row_kind == "template"));
+        let pending = db.list_campaigns_pending_response_check().unwrap();
+        assert!(pending
+            .iter()
+            .any(|p| p.contact_etiquette_id == row && p.queue_row_kind == "template"));
+    }
+
+    #[test]
+    fn lot2_removed_auto_etiquette_keeps_send_in_history() {
+        use crate::database::models::NewContact;
+        let db = test_db();
+        let cid = db
+            .create_contact(NewContact {
+                email: Some("lot2.auto@example.com".into()),
+                ..sample_contact("Auto", "Retrait")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+        let etiquette_id: i64 = db
+            .conn
+            .query_row("SELECT id FROM etiquettes ORDER BY id LIMIT 1", [], |r| r.get(0))
+            .unwrap_or_else(|_| {
+                db.conn
+                    .execute(
+                        "INSERT INTO etiquettes (nom, couleur, actif) VALUES ('Lot2 tag', '#000', 1)",
+                        [],
+                    )
+                    .unwrap();
+                db.conn.last_insert_rowid()
+            });
+        db.connection()
+            .execute(
+                "INSERT INTO contact_etiquettes (contact_id, etiquette_id, attribue_par, email_envoye,
+                    email_date_envoi, email_sent_subject)
+                 VALUES (?1, ?2, 'AUTO', 1, 1700000000, 'Objet étiquette')",
+                params![cid, etiquette_id],
+            )
+            .unwrap();
+        db.connection()
+            .execute(
+                "DELETE FROM contact_etiquettes WHERE contact_id = ?1",
+                params![cid],
+            )
+            .unwrap();
+        let timeline = db.get_exchange_history_timeline_for_contact(cid, None).unwrap();
+        assert!(timeline
+            .iter()
+            .any(|e| e.sent_subject.as_deref() == Some("Objet étiquette")));
+    }
+
+    #[test]
+    fn lot2_etiquette_relance_cycle_keeps_first_send() {
+        use crate::database::models::{NewContact, NewEtiquette, NewTemplateEmail};
+        let db = test_db();
+        let now = chrono::Utc::now().timestamp();
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Cycle étiquette".into(),
+                sujet: "Sujet campagne".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let etiq = db
+            .create_etiquette(NewEtiquette {
+                nom: "Lot2 étiquette".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: Some(tpl.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(now - 60),
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(true),
+                is_default: Some(false),
+                actif: None,
+                segment_id: None,
+                rendement_cible: None,
+            })
+            .unwrap();
+        let cid = db
+            .create_contact(NewContact {
+                email: Some("lot2.etiq@example.com".into()),
+                ..sample_contact("Etiq", "Cycle")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+        db.attribuer_etiquette(cid, etiq.id, Some("MANUEL".into()), None).unwrap();
+        let ce = db
+            .get_etiquette_email_queue("ready")
+            .unwrap()
+            .into_iter()
+            .find(|q| q.contact_id == cid)
+            .expect("en file prête")
+            .contact_etiquette_id;
+        db.mark_etiquette_email_sent(ce, Some("m1"), Some("thr-e1"), Some("Objet 1"), Some("Corps 1"), None, None)
+            .unwrap();
+        // Délai écoulé.
+        db.connection()
+            .execute(
+                "UPDATE contact_etiquettes SET email_date_envoi = ?1 WHERE id = ?2",
+                rusqlite::params![now - 10 * 86_400, ce],
+            )
+            .unwrap();
+        assert!(db.due_auto_relance_rows().unwrap().iter().any(|(id, k)| *id == ce && k == "etiquette"));
+        db.prepare_email_campaign_relance(ce, Some("etiquette")).unwrap();
+        let ready = db.get_etiquette_email_queue("ready").unwrap();
+        let item = ready.iter().find(|q| q.contact_etiquette_id == ce && q.queue_row_kind == "etiquette");
+        assert!(item.is_some_and(|i| i.email_is_relance), "relance visible dans Prêts");
+
+        db.mark_etiquette_email_sent(ce, Some("m2"), Some("thr-e2"), Some("Objet relance"), Some("Corps 2"), None, None)
+            .unwrap();
+        assert_eq!(
+            db.archived_first_thread(false, ce).unwrap().map(|(t, _)| t).as_deref(),
+            Some("thr-e1")
+        );
+        let timeline = db.get_exchange_history_timeline_for_contact(cid, None).unwrap();
+        let subjects: Vec<String> = timeline.iter().filter_map(|e| e.sent_subject.clone()).collect();
+        assert!(subjects.iter().any(|s| s == "Objet 1"), "{subjects:?}");
+        assert!(subjects.iter().any(|s| s == "Objet relance"), "{subjects:?}");
+        assert!(db.prepare_email_campaign_relance(ce, Some("etiquette")).is_err(), "une seule relance email");
+    }
+
+    #[test]
+    fn lot2_ignoring_a_prepared_relance_keeps_the_campaign_followed() {
+        let db = test_db();
+        let (_tid, _cid, row) = lot2_sent_template_row(&db, "lot2.skip@example.com", 10);
+        db.prepare_email_campaign_relance(row, Some("template")).unwrap();
+        db.cancel_pending_email_campaign(row, Some("template")).unwrap();
+        let (envoye, annule, skipped): (i64, i64, Option<i64>) = db
+            .conn
+            .query_row(
+                "SELECT email_envoye, COALESCE(email_annule, 0), relance_email_skipped_at
+                 FROM contact_template_envois WHERE id = ?1",
+                params![row],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!((envoye, annule), (1, 0), "campagne toujours suivie, pas annulée");
+        assert!(skipped.is_some());
+        assert!(db.prepare_email_campaign_relance(row, Some("template")).is_err());
+        assert!(!db.due_auto_relance_rows().unwrap().iter().any(|(id, _)| *id == row));
+        // WhatsApp toujours possible.
+        db.mark_email_campaign_messaging_relance(row, "whatsapp", None, Some("template"))
+            .unwrap();
+    }
+
+    #[test]
+    fn lot2_prepared_relance_stays_visible_when_trigger_disabled() {
+        let db = test_db();
+        let (tid, _cid, row) = lot2_sent_template_row(&db, "lot2.visible@example.com", 10);
+        db.connection()
+            .execute(
+                r#"UPDATE templates_email SET variables = '{"email_trigger":{"enabled":false}}' WHERE id = ?1"#,
+                params![tid],
+            )
+            .unwrap();
+        db.prepare_email_campaign_relance(row, Some("template")).unwrap();
+        assert!(db
+            .get_etiquette_email_queue("ready")
+            .unwrap()
+            .iter()
+            .any(|i| i.contact_etiquette_id == row && i.queue_row_kind == "template" && i.email_is_relance));
+        assert!(db.campaign_row_is_prepared_relance(row, Some("template")).unwrap());
+    }
+
+    #[test]
+    fn lot2_old_overdue_sends_are_not_auto_relanced() {
+        let db = test_db();
+        // Délai 5 j : échéance il y a 35 j (> 14 j) → relance manuelle seulement.
+        let (_tid, _cid, row) = lot2_sent_template_row(&db, "lot2.old@example.com", 40);
+        assert!(!db.due_auto_relance_rows().unwrap().iter().any(|(id, _)| *id == row));
+        assert!(db.prepare_email_campaign_relance(row, Some("template")).is_ok(), "manuel toujours possible");
+    }
+
+    #[test]
+    fn lot2_no_auto_relance_for_paused_contact_or_after_noted_exchange() {
+        let db = test_db();
+        let (_t1, c1, row1) = lot2_sent_template_row(&db, "lot2.pause.auto@example.com", 7);
+        let (_t2, c2, row2) = lot2_sent_template_row(&db, "lot2.note.auto@example.com", 7);
+        let (_t3, _c3, row3) = lot2_sent_template_row(&db, "lot2.ok.auto@example.com", 7);
+        db.connection()
+            .execute("UPDATE contacts SET statut_suivi = 'EN_PAUSE' WHERE id = ?1", params![c1])
+            .unwrap();
+        // Appel noté sur la fiche après l'envoi.
+        db.connection()
+            .execute(
+                "INSERT INTO interactions (contact_id, type_interaction, sujet, contenu, date_interaction)
+                 VALUES (?1, 'APPEL', 'Appel', 'Client rappelé', unixepoch() - 86400)",
+                params![c2],
+            )
+            .unwrap();
+        let due = db.due_auto_relance_rows().unwrap();
+        assert!(!due.iter().any(|(id, _)| *id == row1), "contact en pause : pas de relance auto");
+        assert!(!due.iter().any(|(id, _)| *id == row2), "échange noté : décision manuelle");
+        assert!(due.iter().any(|(id, _)| *id == row3), "cas normal : relance auto");
+    }
+
+    #[test]
+    fn lot2_date_replacement_is_archived() {
+        let db = test_db();
+        let (_tid, cid, row) = lot2_sent_template_row(&db, "lot2.replace@example.com", 30);
+        // Mise à jour qui écrase l'envoi (ex. nouvelle édition, synchro d'un collègue).
+        db.connection()
+            .execute(
+                "UPDATE contact_template_envois SET email_date_envoi = unixepoch(),
+                    email_sent_subject = 'Nouvel objet' WHERE id = ?1",
+                params![row],
+            )
+            .unwrap();
+        let timeline = db.get_exchange_history_timeline_for_contact(cid, None).unwrap();
+        let subjects: Vec<String> = timeline.iter().filter_map(|e| e.sent_subject.clone()).collect();
+        assert!(subjects.iter().any(|s| s == "Premier objet"), "{subjects:?}");
+        assert!(subjects.iter().any(|s| s == "Nouvel objet"), "{subjects:?}");
+    }
+
+    #[test]
+    fn lot2_deleting_relance_template_skips_prepared_relance() {
+        use crate::database::models::NewTemplateEmail;
+        let db = test_db();
+        let (tid, _cid, row) = lot2_sent_template_row(&db, "lot2.reltpl@example.com", 10);
+        let rel = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Relance — lot2".into(),
+                sujet: "Objet relance".into(),
+                corps: "Corps relance".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        db.connection()
+            .execute(
+                "UPDATE templates_email SET relance_template_id = ?1 WHERE id = ?2",
+                params![rel.id, tid],
+            )
+            .unwrap();
+        db.prepare_email_campaign_relance(row, Some("template")).unwrap();
+        db.delete_template_email(rel.id).unwrap();
+        let (envoye, skipped): (i64, Option<i64>) = db
+            .conn
+            .query_row(
+                "SELECT email_envoye, relance_email_skipped_at FROM contact_template_envois WHERE id = ?1",
+                params![row],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(envoye, 1, "la relance ne repart pas avec le texte du 1er mail");
+        assert!(skipped.is_some());
     }
 
     #[test]
@@ -4584,7 +5014,7 @@ mod database_integration_tests {
                 "INSERT INTO contact_template_envois (
                     contact_id, template_id, trigger_event_at, email_date_prevue, email_envoye, email_date_envoi
                  ) VALUES (?1, ?2, ?3, ?4, 1, ?5)",
-                rusqlite::params![cid, tpl.id, now - 86_400, now - 86_400, now - 86_400],
+                rusqlite::params![cid, tpl.id, now - 400 * 86_400, now - 400 * 86_400, now - 400 * 86_400],
             )
             .unwrap();
 
@@ -4599,8 +5029,8 @@ mod database_integration_tests {
             )
             .unwrap();
         assert_eq!(
-            count_after_reset, 0,
-            "hors période configurée, la campagne envoyée doit être effacée"
+            count_after_reset, 1,
+            "hors période : un envoi encore en attente de réponse reste suivi"
         );
 
         // Période incluant le mois courant → nouvelle proposition d'envoi.
@@ -4627,6 +5057,173 @@ mod database_integration_tests {
             )
             .unwrap();
         assert_eq!(pending, 1, "dans la période, un nouvel envoi doit être proposé");
+        let archived: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM email_envoi_archive WHERE contact_id = ?1 AND template_id = ?2",
+                params![cid, tpl.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(archived, 1, "l'envoi de la saison passée reste dans l'historique");
+    }
+
+    #[test]
+    fn lot2_deactivated_auto_etiquette_keeps_sent_rows_followed() {
+        use crate::database::models::{NewContact, NewEtiquette, NewTemplateEmail};
+        let db = test_db();
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Désactivation".into(),
+                sujet: "S".into(),
+                corps: "C".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let mk = |actif: Option<bool>| NewEtiquette {
+            nom: "Lot2 désactivée".into(),
+            couleur: None,
+            icone: None,
+            description: None,
+            priorite: Some(0),
+            auto_condition_type: None,
+            auto_condition_config: None,
+            auto_categories: None,
+            email_template_id: Some(tpl.id),
+            email_delai_jours: Some(0),
+            email_envoi_prevu: None,
+            email_envoi_heure: Some("09:00".into()),
+            email_envoi_jours_semaine: None,
+            email_actif: Some(true),
+            is_default: Some(false),
+            actif,
+            segment_id: None,
+            rendement_cible: None,
+        };
+        let etiq = db.create_etiquette(mk(None)).unwrap();
+        let cid = db
+            .create_contact(NewContact {
+                email: Some("lot2.deact@example.com".into()),
+                ..sample_contact("Deact", "Ivee")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+        let now = chrono::Utc::now().timestamp();
+        // Envoi AUTO parti il y a 2 jours + une attribution AUTO jamais partie (autre contact).
+        db.connection()
+            .execute(
+                "INSERT INTO contact_etiquettes (contact_id, etiquette_id, attribue_par, email_envoye, email_date_envoi)
+                 VALUES (?1, ?2, 'AUTO', 1, ?3)",
+                rusqlite::params![cid, etiq.id, now - 2 * 86_400],
+            )
+            .unwrap();
+        db.update_etiquette(etiq.id, &mk(Some(false))).unwrap();
+        let sent: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiq.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(sent, 1, "envoi parti : toujours suivi après désactivation");
+        assert!(db
+            .list_campaigns_pending_response_check()
+            .unwrap()
+            .iter()
+            .any(|p| p.queue_row_kind == "etiquette"));
+    }
+
+    #[test]
+    fn lot2_paused_contact_keeps_sent_auto_campaign() {
+        use crate::database::models::NewContact;
+        let db = test_db();
+        db.ensure_default_segments_and_alerte_links().unwrap();
+        db.ensure_default_etiquettes().unwrap();
+        let etiq = db
+            .get_all_etiquettes()
+            .unwrap()
+            .into_iter()
+            .find(|e| e.nom.trim().eq_ignore_ascii_case("Suivi > 1 an"))
+            .expect("étiquette Suivi > 1 an");
+        let old_iso = chrono::DateTime::from_timestamp(chrono::Utc::now().timestamp() - 400 * 86_400, 0)
+            .unwrap()
+            .to_rfc3339();
+        let cid = db
+            .create_contact(NewContact {
+                date_dernier_contact: Some(old_iso),
+                email: Some("lot2.pause@example.com".into()),
+                ..sample_contact("Pause", "Contact")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+        db.check_and_apply_auto_etiquettes().unwrap();
+        db.connection()
+            .execute(
+                "UPDATE contact_etiquettes SET email_envoye = 1, email_date_envoi = unixepoch() - 86400
+                 WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiq.id],
+            )
+            .unwrap();
+        db.connection()
+            .execute("UPDATE contacts SET statut_suivi = 'EN_PAUSE' WHERE id = ?1", params![cid])
+            .unwrap();
+        db.check_auto_etiquettes_for_contact(cid).unwrap();
+        let (n, envoye): (i64, i64) = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*), COALESCE(MAX(email_envoye), 0) FROM contact_etiquettes
+                 WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiq.id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!((n, envoye), (1, 1), "pause : l'envoi parti est gardé (pas de renvoi à la réactivation)");
+    }
+
+    #[test]
+    fn lot2_deleting_template_returns_prepared_etiquette_relance_to_followup() {
+        let db = test_db();
+        let (tid, _cid, _row) = lot2_sent_template_row(&db, "lot2.tpldel@example.com", 1);
+        // Étiquette qui utilise le modèle, avec une relance préparée.
+        db.connection()
+            .execute(
+                "INSERT INTO etiquettes (nom, couleur, actif, email_actif, email_template_id)
+                 VALUES ('Lot2 tpl del', '#000', 1, 1, ?1)",
+                params![tid],
+            )
+            .unwrap();
+        let eid = db.connection().last_insert_rowid();
+        let cid: i64 = db
+            .conn
+            .query_row("SELECT contact_id FROM contact_template_envois LIMIT 1", [], |r| r.get(0))
+            .unwrap();
+        db.connection()
+            .execute(
+                "INSERT INTO contact_etiquettes (contact_id, etiquette_id, attribue_par, email_envoye,
+                    email_date_envoi, email_relance_active)
+                 VALUES (?1, ?2, 'MANUEL', 0, unixepoch() - 864000, 1)",
+                params![cid, eid],
+            )
+            .unwrap();
+        db.delete_template_email(tid).unwrap();
+        let (envoye, relance, skipped): (i64, i64, Option<i64>) = db
+            .conn
+            .query_row(
+                "SELECT email_envoye, COALESCE(email_relance_active, 0), relance_email_skipped_at
+                 FROM contact_etiquettes WHERE etiquette_id = ?1",
+                params![eid],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!((envoye, relance), (1, 0));
+        assert!(skipped.is_some());
     }
 
     #[test]

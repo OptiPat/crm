@@ -112,6 +112,14 @@ export function EnvoisQueueHelp() {
           si le modèle a <strong>Attendre une réponse client</strong> coché (onglet Relance du
           modèle). Bienvenue / reco : décocher → envoi visible sur la fiche, pas dans ce suivi.
         </p>
+        <p>
+          <strong className="text-foreground">Relances</strong> — Délai écoulé sans réponse : la
+          relance arrive seule dans <strong>Prêts</strong> (badge Relance), après vérification des
+          réponses ; rien ne part sans votre validation. Une seule relance email par envoi, puis SMS
+          ou WhatsApp depuis <strong>À relancer</strong>. ✕ sur une relance : seule la relance est
+          ignorée, le contact reste dans À relancer. Pas de relance automatique si le contact est en
+          pause / archivé ou si un échange a été noté sur sa fiche après l&apos;envoi.
+        </p>
       </div>
     </details>
   );

@@ -7,7 +7,7 @@ import {
 /** Clé stable : une ligne par campagne (`contact_etiquette`), pas par contact. */
 export function exchangeEntryKey(entry: ExchangeHistoryEntry): string {
   if (isMessagingRelanceEntry(entry)) {
-    return `messaging-${entry.contact_etiquette_id ?? 0}-${entry.relance_canal_at ?? entry.sort_date}`;
+    return `messaging-${entry.contact_etiquette_id ?? `c${entry.contact_id}`}-${entry.relance_canal_at ?? entry.sort_date}`;
   }
   if (isEmailCampaignEntry(entry)) {
     if (entry.contact_etiquette_id != null && entry.contact_etiquette_id > 0) {

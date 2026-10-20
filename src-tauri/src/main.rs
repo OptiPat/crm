@@ -385,6 +385,7 @@ fn main() {
             mark_pipe_rdv_reminder_schedule_sent,
             mark_calendar_rdv_effectue,
             sync_email_campaign_responses,
+            check_campaign_response_before_send,
             mark_email_campaign_response,
             mark_email_campaign_messaging_relance,
             dismiss_email_campaign_followup,

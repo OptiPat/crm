@@ -291,7 +291,14 @@ pub fn outlook_find_contact_reply(
     token: &str,
     item: &PendingCampaignResponseCheck,
 ) -> Result<Option<OutlookReplyFound>, String> {
-    let Some(message_id) = outlook_find_reply_message_id(client, token, item)? else {
+    let found = match outlook_find_reply_message_id(client, token, item)? {
+        Some(id) => Some(id),
+        None => match super::response_sync::first_send_check_item(item) {
+            Some(first) => outlook_find_reply_message_id(client, token, &first)?,
+            None => None,
+        },
+    };
+    let Some(message_id) = found else {
         return Ok(None);
     };
     let (body_text, subject) =
@@ -322,6 +329,7 @@ mod tests {
             email_gmail_thread_id: Some("conv1".into()),
             email_gmail_message_id: None,
             queue_row_kind: "etiquette".into(),
+            first_send_thread: None,
         };
         assert!(gmail_reply_has_thread_scope(&with_thread));
     }

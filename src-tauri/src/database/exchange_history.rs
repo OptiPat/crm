@@ -132,6 +132,8 @@ impl Database {
                  WHERE contact_id = ?1 AND email_envoye = 1 AND email_date_envoi = ?2)
               + (SELECT COUNT(*) FROM contact_template_envois
                  WHERE contact_id = ?1 AND email_envoye = 1 AND email_date_envoi = ?2)
+              + (SELECT COUNT(*) FROM email_envoi_archive
+                 WHERE contact_id = ?1 AND email_date_envoi = ?2)
              )",
             params![contact_id, date_interaction],
             |row| row.get(0),
@@ -367,6 +369,29 @@ impl Database {
                 Self::messaging_relance_entry_from_row(row, "template")
             })?;
             for row in cte_rows {
+                entries.push(row?);
+            }
+        }
+
+        if self.table_has_column("email_envoi_archive", "relance_canal")? {
+            let mut archive_stmt = self.conn.prepare(
+                "SELECT a.id, a.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                        a.campaign_nom,
+                        a.relance_canal, a.relance_canal_at, a.relance_canal_message,
+                        a.email_date_envoi, a.source
+                 FROM email_envoi_archive a
+                 INNER JOIN contacts c ON a.contact_id = c.id
+                 WHERE a.relance_canal IS NOT NULL AND TRIM(a.relance_canal) != ''
+                   AND a.relance_canal_at IS NOT NULL
+                   AND (?1 IS NULL OR a.contact_id = ?1)",
+            )?;
+            let archive_rows = archive_stmt.query_map(params![only_contact_id], |row| {
+                let source: String = row.get(11)?;
+                let mut entry = Self::messaging_relance_entry_from_row(row, &source)?;
+                entry.contact_etiquette_id = None;
+                Ok(entry)
+            })?;
+            for row in archive_rows {
                 entries.push(row?);
             }
         }
@@ -671,6 +696,33 @@ impl Database {
             })?;
         for row in template_email_rows {
             Self::merge_or_push_exchange_campaign_entry(&mut entries, row?);
+        }
+
+        // Envois archivés (ligne supprimée ou 1re émission remplacée par une relance) :
+        // lecture seule, fusionnés avec la ligne vivante si même contact et même date.
+        if self.table_has_column("email_envoi_archive", "campaign_nom")? {
+            let mut archive_stmt = self.conn.prepare(
+                "SELECT a.id, a.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                        a.campaign_nom || CASE WHEN a.reason = 'relance'
+                          THEN ' · 1er envoi (relancé)' ELSE '' END,
+                        a.email_date_envoi, a.sent_subject, a.sent_body,
+                        '', '', NULL,
+                        a.reponse_at, a.reponse_type,
+                        a.sent_template_nom, a.gmail_message_id, a.gmail_thread_id,
+                        a.reponse_body, a.reponse_gmail_message_id, a.source
+                 FROM email_envoi_archive a
+                 INNER JOIN contacts c ON c.id = a.contact_id
+                 WHERE (?1 IS NULL OR a.contact_id = ?1)",
+            )?;
+            let archive_rows = archive_stmt.query_map(params![only_contact_id], |row| {
+                let source: String = row.get(20)?;
+                let mut entry = Self::exchange_history_email_from_row(row, true, &source)?;
+                entry.contact_etiquette_id = None;
+                Ok(entry)
+            })?;
+            for row in archive_rows {
+                Self::merge_or_push_exchange_campaign_entry(&mut entries, row?);
+            }
         }
 
         let mut orphan_stmt = self.conn.prepare(

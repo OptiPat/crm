@@ -222,11 +222,15 @@ async function runRelationJob(surface: AutomationSurface): Promise<void> {
       result.rdv_campaign_detected > 0 ||
       result.calendar_accepted > 0 ||
       result.calendar_declined > 0 ||
-      result.calendar_cancelled > 0;
+      result.calendar_cancelled > 0 ||
+      result.relance_prepared > 0;
     if (changed && tray) {
       const parts: string[] = [];
       if (result.mail_detected > 0) {
         parts.push(`${result.mail_detected} réponse(s) mail`);
+      }
+      if (result.relance_prepared > 0) {
+        parts.push(`${result.relance_prepared} relance(s) prête(s) à envoyer`);
       }
       if (result.rdv_campaign_detected > 0) {
         parts.push(`${result.rdv_campaign_detected} RDV campagne`);
@@ -247,6 +251,7 @@ async function runRelationJob(surface: AutomationSurface): Promise<void> {
           tray: true,
           nav: resolveRelationSyncNavTarget({
             mail_detected: result.mail_detected,
+            relance_prepared: result.relance_prepared,
             rdv_campaign_detected: result.rdv_campaign_detected,
             calendar_accepted: result.calendar_accepted,
             calendar_declined: result.calendar_declined,

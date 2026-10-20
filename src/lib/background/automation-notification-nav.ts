@@ -76,6 +76,8 @@ export function resolveTrayDigestNavTarget(
 
 export type RelationSyncChangeFlags = {
   mail_detected: number;
+  /** Relances passées seules dans « Prêts à envoyer ». */
+  relance_prepared?: number;
   rdv_campaign_detected: number;
   calendar_accepted: number;
   calendar_declined: number;
@@ -92,6 +94,9 @@ export function resolveRelationSyncNavTarget(
     flags.calendar_cancelled > 0
   ) {
     return { page: "agenda" };
+  }
+  if ((flags.relance_prepared ?? 0) > 0) {
+    return { page: "suivi", tab: "envois", envoisSubTab: "ready" };
   }
   if (flags.mail_detected > 0) {
     return { page: "suivi", tab: "envois", envoisSubTab: "followup" };

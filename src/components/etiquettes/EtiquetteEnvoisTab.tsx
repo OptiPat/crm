@@ -228,6 +228,9 @@ export function EtiquetteEnvoisTab({
       if (r.calendar_accepted > 0) {
         parts.push(`${r.calendar_accepted} RDV confirmé(s)`);
       }
+      if (r.relance_prepared > 0) {
+        parts.push(`${r.relance_prepared} relance(s) prête(s) à envoyer`);
+      }
       if (parts.length > 0) {
         toast.success(`Détection : ${parts.join(", ")}`);
       }
@@ -552,6 +555,9 @@ export function EtiquetteEnvoisTab({
       return (
         selectedIds.has(key) &&
         isTemplateEmailRelanceEnabledForQueue(i.template_variables) &&
+        Boolean(i.template_sujet?.trim()) &&
+        !i.relance_email_sent_at &&
+        !i.relance_email_skipped_at &&
         !hasCampaignMessagingRelanceSent(i) &&
         messagingRelancePending?.rowKey !== key
       );
@@ -577,10 +583,13 @@ export function EtiquetteEnvoisTab({
       );
       setBulkConfirm(null);
       setSelectedIds(new Set());
+      const relanceCount = bulkConfirm.items.filter((i) => i.email_is_relance).length;
       if (failed === 0) {
         toast.success(
           bulkConfirm.action === "cancel"
-            ? `${succeeded} envoi${succeeded > 1 ? "s" : ""} retiré${succeeded > 1 ? "s" : ""} de la file`
+            ? relanceCount > 0
+              ? `${succeeded - relanceCount} envoi(s) retiré(s) de la file, ${relanceCount} relance(s) ignorée(s) (restent dans À relancer)`
+              : `${succeeded} envoi${succeeded > 1 ? "s" : ""} retiré${succeeded > 1 ? "s" : ""} de la file`
             : bulkConfirm.action === "dismiss"
               ? `${succeeded} envoi${succeeded > 1 ? "s" : ""} retiré${succeeded > 1 ? "s" : ""} définitivement`
               : `Suivi ignoré pour ${succeeded} envoi${succeeded > 1 ? "s" : ""}`
@@ -648,7 +657,11 @@ export function EtiquetteEnvoisTab({
         item.queue_row_kind ?? "etiquette"
       );
       setCancelConfirmItem(null);
-      toast.success("Envoi retiré de la file");
+      toast.success(
+        item.email_is_relance
+          ? "Relance email ignorée — le contact reste dans À relancer"
+          : "Envoi retiré de la file"
+      );
       await loadQueue({ silent: true });
       onQueueChanged?.();
     } catch (e) {
@@ -906,7 +919,9 @@ export function EtiquetteEnvoisTab({
                 )}
                 <p className="text-xs text-muted-foreground">
                   {options.mode === "sent" || options.mode === "followup"
-                    ? `Envoyé le ${formatEtiquetteSendDatetime(item.email_date_envoi)}`
+                    ? item.relance_email_sent_at
+                      ? `Relance email envoyée le ${formatEtiquetteSendDatetime(item.email_date_envoi)}`
+                      : `Envoyé le ${formatEtiquetteSendDatetime(item.email_date_envoi)}`
                     : `Prévu le ${formatEtiquetteSendDatetime(item.email_date_prevue)}`}
                 </p>
                 {(options.mode === "followup" ||
@@ -957,7 +972,9 @@ export function EtiquetteEnvoisTab({
                 )}
                 {options.mode === "followup" && (
                   <p className="text-xs text-amber-800">
-                    Aucun retour enregistré — relance email, SMS ou WhatsApp.
+                    {item.relance_email_sent_at || item.relance_email_skipped_at
+                      ? "Aucun retour enregistré — relance SMS ou WhatsApp."
+                      : "Aucun retour enregistré — relance email, SMS ou WhatsApp."}
                   </p>
                 )}
                 {hasCampaignMessagingRelanceSent(item) && (
@@ -1039,7 +1056,17 @@ export function EtiquetteEnvoisTab({
                   <>
                     {options.mode === "followup" &&
                       canOfferMessagingRelance &&
-                      (isTemplateEmailRelanceEnabledForQueue(item.template_variables) ? (
+                      (item.relance_email_sent_at ? (
+                        <span className="text-xs text-muted-foreground self-center">
+                          Relance email envoyée le{" "}
+                          {formatEtiquetteSendDatetime(item.relance_email_sent_at)}
+                        </span>
+                      ) : item.relance_email_skipped_at ? (
+                        <span className="text-xs text-muted-foreground self-center">
+                          Relance email ignorée
+                        </span>
+                      ) : item.template_sujet?.trim() &&
+                        isTemplateEmailRelanceEnabledForQueue(item.template_variables) ? (
                         <Button
                           size="sm"
                           disabled={relancing}
@@ -1626,10 +1653,17 @@ export function EtiquetteEnvoisTab({
                       {renderEtiquetteEmailPreview(cancelConfirmItem, cgpConfig).subject}
                     </p>
                   )}
-                <p>
-                  Le contact passera dans l&apos;onglet <strong>Retirés</strong>. Vous pourrez le
-                  remettre en file ou le retirer définitivement de cette liste.
-                </p>
+                {cancelConfirmItem?.email_is_relance ? (
+                  <p>
+                    La relance email ne sera plus proposée. Le contact reste suivi dans{" "}
+                    <strong>À relancer</strong> (relance SMS ou WhatsApp possible).
+                  </p>
+                ) : (
+                  <p>
+                    Le contact passera dans l&apos;onglet <strong>Retirés</strong>. Vous pourrez le
+                    remettre en file ou le retirer définitivement de cette liste.
+                  </p>
+                )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1643,7 +1677,11 @@ export function EtiquetteEnvoisTab({
                 void handleCancelPendingConfirmed();
               }}
             >
-              {cancelling ? "Retrait…" : "Mettre dans Retirés"}
+              {cancelling
+                ? "Retrait…"
+                : cancelConfirmItem?.email_is_relance
+                  ? "Ignorer la relance"
+                  : "Mettre dans Retirés"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1673,6 +1711,8 @@ export function EtiquetteEnvoisTab({
                   <p>
                     Les contacts passeront dans l&apos;onglet <strong>Retirés</strong>. Vous
                     pourrez les remettre en file un par un ou en masse plus tard.
+                    {bulkConfirm.items.some((i) => i.email_is_relance) &&
+                      " Pour les relances, seule la relance email est ignorée : le contact reste suivi dans À relancer."}
                   </p>
                 )}
                 {bulkConfirm?.action === "dismiss" && (

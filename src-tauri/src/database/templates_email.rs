@@ -152,7 +152,33 @@ impl super::Database {
     }
 
     /// Supprime un modèle auxiliaire (tu / relance) sans contrôle éphémère.
+    /// Modèle de RELANCE supprimé : les relances préparées qui l'utilisaient repartiraient avec le
+    /// texte du 1er mail. Elles sont ignorées (l'envoi parti reste suivi, WhatsApp possible).
+    /// À appeler AVANT de retirer le lien `relance_template_id` des modèles parents.
+    fn skip_prepared_relances_using_template(&self, relance_template_id: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE contact_template_envois SET email_envoye = 1, email_relance_active = 0,
+                email_date_prevue = NULL, relance_email_skipped_at = unixepoch()
+             WHERE email_envoye = 0 AND COALESCE(email_relance_active, 0) = 1
+               AND template_id IN (SELECT id FROM templates_email WHERE relance_template_id = ?1)",
+            params![relance_template_id],
+        )?;
+        self.conn.execute(
+            "UPDATE contact_etiquettes SET email_envoye = 1, email_relance_active = 0,
+                email_date_prevue = NULL, relance_email_skipped_at = unixepoch()
+             WHERE email_envoye = 0 AND COALESCE(email_relance_active, 0) = 1
+               AND etiquette_id IN (
+                 SELECT e.id FROM etiquettes e
+                 INNER JOIN templates_email t ON t.id = e.email_template_id
+                 WHERE t.relance_template_id = ?1
+               )",
+            params![relance_template_id],
+        )?;
+        Ok(())
+    }
+
     pub(crate) fn delete_auxiliary_template_email(&self, id: i64) -> Result<()> {
+        self.skip_prepared_relances_using_template(id)?;
         self.conn.execute(
             "UPDATE templates_email SET relance_template_id = NULL WHERE relance_template_id = ?1",
             params![id],
@@ -192,6 +218,7 @@ impl super::Database {
             }
             self.delete_ephemeral_linked_templates(&tpl)?;
         }
+        self.skip_prepared_relances_using_template(id)?;
         self.conn.execute(
             "UPDATE templates_email SET relance_template_id = NULL WHERE relance_template_id = ?1",
             params![id],

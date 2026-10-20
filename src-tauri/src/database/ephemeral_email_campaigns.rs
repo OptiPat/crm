@@ -681,11 +681,13 @@ impl Database {
                 match existing {
                     Some((_row_id, sent, _cancelled)) if sent != 0 => {}
                     Some((row_id, _, _)) => {
-                        self.conn.execute(
-                            "UPDATE contact_template_envois SET email_date_prevue = ?1 WHERE id = ?2",
+                        let n = self.conn.execute(
+                            "UPDATE contact_template_envois SET email_date_prevue = ?1
+                             WHERE id = ?2 AND COALESCE(email_relance_active, 0) = 0
+                               AND email_date_envoi IS NULL",
                             params![email_date_prevue, row_id],
                         )?;
-                        contacts_queued += 1;
+                        contacts_queued += n as u64;
                     }
                     None => {
                         self.conn.execute(
@@ -713,8 +715,17 @@ impl Database {
             for row in pending {
                 let (row_id, contact_id) = row?;
                 if !eligible_ids.contains(&contact_id) {
+                    // Jamais parti : supprimé. Relance préparée : seule la relance est ignorée.
                     self.conn.execute(
-                        "DELETE FROM contact_template_envois WHERE id = ?1",
+                        "DELETE FROM contact_template_envois
+                         WHERE id = ?1 AND email_date_envoi IS NULL
+                           AND COALESCE(email_relance_active, 0) = 0",
+                        params![row_id],
+                    )?;
+                    self.conn.execute(
+                        "UPDATE contact_template_envois SET email_envoye = 1, email_relance_active = 0,
+                            email_date_prevue = NULL, relance_email_skipped_at = unixepoch()
+                         WHERE id = ?1 AND email_envoye = 0 AND COALESCE(email_relance_active, 0) = 1",
                         params![row_id],
                     )?;
                     contacts_cancelled += 1;
@@ -763,13 +774,24 @@ impl Database {
     }
 
     fn cancel_ephemeral_pending_envois(&self, template_id: i64, batch_key: &str) -> Result<usize> {
-        self.conn.execute(
+        let deleted = self.conn.execute(
             "DELETE FROM contact_template_envois
              WHERE template_id = ?1
                AND COALESCE(campaign_batch_key, '') = ?2
-               AND email_envoye = 0",
+               AND email_envoye = 0 AND email_date_envoi IS NULL
+               AND COALESCE(email_relance_active, 0) = 0",
             params![template_id, batch_key],
-        )
+        )?;
+        // Relances préparées : l'envoi parti reste suivi, seule la relance est ignorée.
+        let reverted = self.conn.execute(
+            "UPDATE contact_template_envois SET email_envoye = 1, email_relance_active = 0,
+                email_date_prevue = NULL, relance_email_skipped_at = unixepoch()
+             WHERE template_id = ?1
+               AND COALESCE(campaign_batch_key, '') = ?2
+               AND email_envoye = 0 AND COALESCE(email_relance_active, 0) = 1",
+            params![template_id, batch_key],
+        )?;
+        Ok(deleted + reverted)
     }
 
     /// Variantes tu / relance créées pour une campagne éphémère (modèles auxiliaires).

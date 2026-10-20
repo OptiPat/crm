@@ -3168,15 +3168,36 @@ pub async fn sync_email_campaign_responses(
     let app = app_handle.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let db_state = app.state::<DbState>();
-        let pending = {
+        let (pending, due) = {
             let db_guard = db_state.inner().lock().unwrap();
             let database = db_guard.as_ref().ok_or("Database not initialized")?;
-            database
+            // D2b : les relances dues sont contrôlées en priorité, juste avant de passer en « Prêts ».
+            let due = database.due_auto_relance_rows().map_err(|e| e.to_string())?;
+            let mut pending = Vec::new();
+            for (row_id, kind) in &due {
+                if let Some(item) = database
+                    .pending_response_check_for_row(*row_id, Some(kind.as_str()))
+                    .map_err(|e| e.to_string())?
+                {
+                    pending.push(item);
+                }
+            }
+            for item in database
                 .list_campaigns_pending_response_check()
                 .map_err(|e| e.to_string())?
+            {
+                let already = pending.iter().any(|p| {
+                    p.contact_etiquette_id == item.contact_etiquette_id
+                        && p.queue_row_kind == item.queue_row_kind
+                });
+                if !already {
+                    pending.push(item);
+                }
+            }
+            (pending, due)
         };
 
-        crate::email::response_sync::sync_email_campaign_responses(
+        let result = crate::email::response_sync::sync_email_campaign_responses(
             &app,
             pending,
             |contact_etiquette_id,
@@ -3200,10 +3221,97 @@ pub async fn sync_email_campaign_responses(
                     )
                     .map_err(|e| e.to_string())
             },
-        )
+        )?;
+
+        // Contrôle fait : chaque relance due dont le contrôle mail a abouti sans réponse arrive
+        // seule dans « Prêts ». Une erreur sur une ligne ne bloque que cette ligne.
+        let mut result = result;
+        {
+            let db_guard = db_state.inner().lock().unwrap();
+            let database = db_guard.as_ref().ok_or("Database not initialized")?;
+            for (row_id, kind) in due {
+                let checked = result
+                    .mail_checked_without_reply
+                    .iter()
+                    .any(|(id, k)| *id == row_id && *k == kind);
+                if !checked
+                    || database
+                        .campaign_row_has_response(row_id, Some(kind.as_str()))
+                        .unwrap_or(true)
+                {
+                    continue;
+                }
+                match database.prepare_email_campaign_relance(row_id, Some(kind.as_str())) {
+                    Ok(()) => result.relance_prepared += 1,
+                    Err(e) => eprintln!("Relance auto non préparée (ligne {row_id}) : {e}"),
+                }
+            }
+        }
+        Ok(result)
     })
     .await
     .map_err(|e| format!("Sync interrompu: {}", e))?
+}
+
+/// Avant l'envoi d'une relance : « ok » (envoyer), « replied » (réponse reçue) ou
+/// « not_pending » (relance plus à envoyer : ignorée, déjà envoyée, annulée).
+/// Si le contrôle est impossible (pas de connexion, quota), l'envoi reste possible.
+#[tauri::command]
+pub async fn check_campaign_response_before_send(
+    app_handle: tauri::AppHandle,
+    contact_etiquette_id: i64,
+    queue_row_kind: Option<String>,
+) -> Result<String, String> {
+    let app = app_handle.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db_state = app.state::<DbState>();
+        let kind = queue_row_kind.clone();
+        let item = {
+            let db_guard = db_state.inner().lock().unwrap();
+            let database = db_guard.as_ref().ok_or("Database not initialized")?;
+            // Plus une relance en attente (ignorée, déjà envoyée, réponse) : ne pas envoyer.
+            if !database
+                .campaign_row_is_prepared_relance(contact_etiquette_id, kind.as_deref())
+                .map_err(|e| e.to_string())?
+            {
+                return Ok("not_pending".into());
+            }
+            database
+                .pending_response_check_for_row(contact_etiquette_id, kind.as_deref())
+                .map_err(|e| e.to_string())?
+        };
+        let Some(item) = item else {
+            // Plus contrôlable (réponse arrivée, déjà envoyée, annulée) : ne pas envoyer.
+            return Ok("not_pending".into());
+        };
+        let _ = crate::email::response_sync::sync_email_campaign_responses(
+            &app,
+            vec![item],
+            |row_id, response_type, body, gmail_msg, subject, rdv_at, row_kind| {
+                let db_guard = db_state.inner().lock().unwrap();
+                let database = db_guard.as_ref().ok_or("Database not initialized")?;
+                database
+                    .mark_email_campaign_response(
+                        row_id,
+                        response_type,
+                        body,
+                        gmail_msg,
+                        subject,
+                        rdv_at,
+                        Some(row_kind),
+                    )
+                    .map_err(|e| e.to_string())
+            },
+        );
+        let db_guard = db_state.inner().lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        let replied = database
+            .campaign_row_has_response(contact_etiquette_id, kind.as_deref())
+            .map_err(|e| e.to_string())?;
+        Ok(if replied { "replied".into() } else { "ok".into() })
+    })
+    .await
+    .map_err(|e| format!("Contrôle interrompu: {}", e))?
 }
 
 #[tauri::command]

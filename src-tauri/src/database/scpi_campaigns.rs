@@ -1428,7 +1428,7 @@ impl Database {
         let existing: Option<(i64, i64)> = self
             .conn
             .query_row(
-                "SELECT id, email_envoye FROM contact_template_envois
+                "SELECT id, (email_envoye = 1 OR COALESCE(email_relance_active, 0) = 1 OR email_date_envoi IS NOT NULL) FROM contact_template_envois
                  WHERE contact_id = ?1 AND template_id = ?2 AND investissement_id IS NULL
                    AND COALESCE(campaign_batch_key, '') = ?3",
                 params![contact_id, template_id, batch_key],

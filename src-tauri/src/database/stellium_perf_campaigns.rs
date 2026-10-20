@@ -1305,7 +1305,7 @@ impl Database {
         let existing: Option<(i64, i64, String)> = self
             .conn
             .query_row(
-                "SELECT id, email_envoye, COALESCE(campaign_batch_key, '')
+                "SELECT id, (email_envoye = 1 OR COALESCE(email_relance_active, 0) = 1 OR email_date_envoi IS NOT NULL), COALESCE(campaign_batch_key, '')
                  FROM contact_template_envois
                  WHERE contact_id = ?1 AND template_id = ?2 AND investissement_id IS NULL
                    AND (
@@ -1371,7 +1371,8 @@ impl Database {
         self.conn.execute(
             "DELETE FROM contact_template_envois
              WHERE contact_id = ?1 AND template_id = ?2 AND investissement_id IS NULL
-               AND email_envoye = 0
+               AND email_envoye = 0 AND email_date_envoi IS NULL
+               AND COALESCE(email_relance_active, 0) = 0
                AND COALESCE(campaign_batch_key, '') LIKE ?3 || '-%'
                AND COALESCE(campaign_batch_key, '') != ?4",
             params![recipient_id, template_id, batch_base, keep_batch_key],

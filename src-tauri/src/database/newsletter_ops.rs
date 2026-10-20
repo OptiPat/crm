@@ -335,6 +335,8 @@ impl Database {
                         email_reponse_gmail_message_id = NULL,
                         email_suivi_ignore = 1,
                         email_relance_active = 0,
+                        relance_email_sent_at = NULL,
+                        relance_email_skipped_at = NULL,
                         email_annule = 0,
                         email_gmail_message_id = NULL,
                         email_gmail_thread_id = NULL,
@@ -761,6 +763,8 @@ impl Database {
             relance_canal: None,
             relance_canal_at: None,
             relance_canal_message: None,
+            relance_email_sent_at: None,
+            relance_email_skipped_at: None,
         })
     }
 

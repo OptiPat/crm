@@ -121,15 +121,18 @@ impl Database {
              VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(contact_id, etiquette_id) DO UPDATE SET
                 attribue_par = CASE
-                    WHEN contact_etiquettes.email_envoye = 0 THEN excluded.attribue_par
+                    WHEN contact_etiquettes.email_envoye = 0
+                         AND COALESCE(contact_etiquettes.email_relance_active, 0) = 0 THEN excluded.attribue_par
                     ELSE contact_etiquettes.attribue_par
                 END,
                 date_attribution = CASE
-                    WHEN contact_etiquettes.email_envoye = 0 THEN unixepoch()
+                    WHEN contact_etiquettes.email_envoye = 0
+                         AND COALESCE(contact_etiquettes.email_relance_active, 0) = 0 THEN unixepoch()
                     ELSE contact_etiquettes.date_attribution
                 END,
                 email_date_prevue = CASE
-                    WHEN contact_etiquettes.email_envoye = 0 THEN excluded.email_date_prevue
+                    WHEN contact_etiquettes.email_envoye = 0
+                         AND COALESCE(contact_etiquettes.email_relance_active, 0) = 0 THEN excluded.email_date_prevue
                     ELSE contact_etiquettes.email_date_prevue
                 END",
             params![contact_id, etiquette_id, &attribue_par, email_date_prevue],

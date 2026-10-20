@@ -306,6 +306,11 @@ impl Database {
         // 5. Supprimer le contact
         self.conn
             .execute("DELETE FROM contacts WHERE id = ?1", params![id])?;
+        // Envois archivés du contact (copiés par la cascade) : supprimés avec la fiche.
+        self.conn.execute(
+            "DELETE FROM email_envoi_archive WHERE contact_id = ?1",
+            params![id],
+        )?;
 
         // 6. Si le contact avait un foyer, vérifier s'il reste des membres
         if let Some(fid) = foyer_id {

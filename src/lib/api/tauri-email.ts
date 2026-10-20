@@ -36,6 +36,8 @@ export interface EmailCampaignSyncResult {
   mail_detected: number;
   rdv_detected: number;
   errors: string[];
+  /** D2b : relances passées seules dans « Prêts » pendant la synchro. */
+  relance_prepared?: number;
 }
 
 export async function syncEmailCampaignResponses(): Promise<EmailCampaignSyncResult> {

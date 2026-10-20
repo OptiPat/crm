@@ -140,15 +140,19 @@ Pas de blocs `{{#tu}}` dans un seul corps : **deux modèles liés** (principal =
 
 Implémentation : `src-tauri/src/database/template_formality_sql.rs`, helpers `src/lib/emails/template-email-formality.ts`. Les modèles enfants (tu et relances liées) sont masqués dans la bibliothèque (`template-library.ts`).
 
-Après envoi depuis **Suivi → Envois**, si aucun retour n’est enregistré une fois le délai (et le créneau horaire le cas échéant) atteint, l’onglet **À relancer** propose :
+Après envoi depuis **Suivi → Envois**, si aucun retour n’est enregistré une fois le délai (et le créneau horaire le cas échéant) atteint :
 
-- **Relancer** : remet le contact dans **Prêts à envoyer** avec le **template de relance** lié au modèle initial (**Templates** → modèle → onglet **Relance**). Sans lien configuré, le même modèle est réutilisé.
+- **Relance automatique** : à la synchro des réponses (fond ou **Vérifier réponses**), le CRM contrôle d’abord Gmail / Outlook pour ces envois puis, sans réponse, met la relance **seule dans Prêts à envoyer** (badge « Relance ») avec le **template de relance** lié (sans lien : même modèle). Uniquement pour les échéances des **14 derniers jours** (au-delà : bouton **Relancer** manuel) et 20 par cycle. Seules les lignes dont le contrôle a abouti sont préparées : une erreur sur un contact ne bloque que ce contact ; si l’Agenda Google connecté est illisible, aucune relance automatique (un RDV pris ne serait pas vu). Pas de relance automatique non plus pour un contact **en pause / archivé** ou si un échange (appel, RDV, note) ou une date de dernier contact a été saisi sur la fiche **après l’envoi** : la ligne reste dans **À relancer** pour décision manuelle.
+- **Une seule relance email** par envoi. Elle part avec son propre objet (nouveau fil) ; le fil du 1er mail reste surveillé. Avant l’envoi, le CRM revérifie : si le client a répondu entre-temps (ou si la relance a été ignorée), elle n’est pas envoyée. Si ce contrôle est impossible (pas de connexion, quota Gmail), l’envoi reste possible.
+- Le **1er mail reste dans l’historique** (archivé au moment de la relance).
+- ✕ sur une relance dans **Prêts** : ignore **la relance** (« Relance email ignorée »), la campagne reste suivie dans **À relancer**.
+- Après la relance email (nouveau délai), **À relancer** affiche « Relance email envoyée le … » et propose **WhatsApp / SMS**. La ligne reste visible tant que vous ne la retirez pas.
 - **Icône mail / calendrier** : marquer réponse par email ou RDV pris,
 - **Ignorer** : ne plus proposer de relance pour cet envoi.
 
 Indice : si la **date de dernier contact** sur la fiche est postérieure à l’envoi, un bandeau bleu signale un contact possible — à confirmer manuellement.
 
-**Journal des échanges campagne** (envoi + réponse) : données sur `contact_etiquettes` (`email_sent_template_nom`, `email_reponse_body`, etc.), affichées dans **Historique des échanges** et sur la fiche contact (**Relation client**), avec le **nom du template** (pas le corps de l’envoi) et la **réponse client complète** quand elle est importée ou synchronisée depuis Gmail. Les anciennes traces texte dans `interactions` (« Campagne … — email envoyé », relance…) ne sont plus affichées en double sur la fiche : le fil unifié les remplace.
+**Journal des échanges campagne** (envoi + réponse) : données sur `contact_etiquettes`, `contact_template_envois` et l’archive `email_envoi_archive` (`email_sent_template_nom`, `email_reponse_body`, etc.). **Un email parti n’est jamais effacé** : modèle ou étiquette supprimés, étiquette auto retirée, fin de période — l’envoi est archivé et reste visible (lecture seule). Contact en pause : les envois partis ou ignorés restent en place (pas de renvoi à la réactivation). Modèle périodique : un envoi encore en attente de réponse reste suivi après la période ; à l’occurrence suivante de la période (pas avant), un nouvel envoi le remplace (l’ancien reste dans l’historique). La newsletter garde aussi l’historique de chaque édition (archivée quand une nouvelle édition réutilise la ligne). Les données sont affichées dans **Historique des échanges** et sur la fiche contact (**Relation client**), avec le **nom du template** (pas le corps de l’envoi) et la **réponse client complète** quand elle est importée ou synchronisée depuis Gmail. Les anciennes traces texte dans `interactions` (« Campagne … — email envoyé », relance…) ne sont plus affichées en double sur la fiche : le fil unifié les remplace.
 
 Les **échanges manuels** (appel, RDV, note saisie à la main) restent des lignes `interactions` éditables dans **Relation client**. Pour **répondre** à un email campagne, utiliser **Historique des échanges** (bouton depuis la fiche : « Répondre dans Historique »).
 
@@ -167,9 +171,9 @@ Nécessite **Google connecté** avec les droits Gmail (lecture) et **Google Cale
 | **Gmail** | Réponse du client dans le fil de discussion (thread enregistré à l’envoi) ou message `from:client` après la date d’envoi |
 | **Agenda** | Événement sur l’agenda principal avec le client (adresse exacte) en participant, **ajouté à l’agenda après l’envoi** — un RDV déjà planifié avant l’envoi ne vaut pas réponse |
 
-Déclenchement : à l’**actualisation** de la file, ou bouton **Vérifier réponses** (Suivi → Envois). Les contacts détectés sont marqués « répondu » (mail ou RDV) et sortent de **À relancer**.
+Déclenchement : à l’**actualisation** de la file, ou bouton **Vérifier réponses** (Suivi → Envois). Les contacts détectés sont marqués « répondu » (mail ou RDV) et sortent de **À relancer**. La même synchro prépare les relances dues (voir ci-dessus). Après une relance, le fil du 1er mail et celui de la relance sont tous deux contrôlés.
 
-Limite : envois **avant** cette version sans thread Gmail enregistré — la recherche par expéditeur compense en partie. Microsoft : pas de sync auto Gmail (marquage manuel).
+Limite : envois **avant** cette version sans thread Gmail enregistré — la recherche par expéditeur compense en partie. Microsoft (Outlook) : détection des réponses mail par conversation ; la détection RDV passe par l’Agenda Google s’il est connecté.
 
 ---
 
@@ -182,7 +186,7 @@ Limite : envois **avant** cette version sans thread Gmail enregistré — la rec
 
 Prérequis pour voir des lignes dans **Suivi → Envois** :
 
-1. Campagne email **activée** sur l’étiquette + template choisi.
+1. Campagne email **activée** sur l’étiquette + template choisi (pour **Prêts / Planifiés** ; les envois déjà partis restent dans **Envoyés / À relancer** et suivis même si l’étiquette ou le déclencheur est désactivé).
 2. Pour les étiquettes auto : lancer **Recalculer les règles** (contacts tagués + dates recalculées).
 3. OAuth connecté ; envoi manuel depuis l’onglet **Prêts**.
 

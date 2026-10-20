@@ -1,4 +1,5 @@
 import {
+  checkCampaignResponseBeforeSend,
   markEtiquetteEmailSent,
   type EtiquetteEmailQueueItem,
 } from "@/lib/api/tauri-etiquettes";
@@ -19,6 +20,10 @@ export interface EtiquetteBatchSendProgress {
   errors: string[];
   /** Emails partis mais non enregistrés en CRM (ne pas renvoyer) : hors `errors`, hors compteur d'échecs. */
   markFailures: string[];
+  /** Relances non envoyées : le client a répondu entre-temps (contrôle juste avant l'envoi). */
+  skippedReplied: string[];
+  /** Relances non envoyées : plus à envoyer (ignorée, déjà envoyée ou annulée entre-temps). */
+  skippedNotPending: string[];
   batchId: string;
   /** Dernier envoi réussi (refresh incrémental UI). */
   lastSent?: {
@@ -53,6 +58,8 @@ export async function sendEtiquetteBatch(input: {
     total: input.items.length,
     errors: [],
     markFailures: [],
+    skippedReplied: [],
+    skippedNotPending: [],
     batchId,
   };
   input.onProgress?.(progress);
@@ -84,6 +91,23 @@ export async function sendEtiquetteBatch(input: {
       progress.currentContactEtiquetteId = undefined;
       input.onProgress?.({ ...progress });
       continue;
+    }
+
+    if (item.email_is_relance) {
+      // Relance : le client a-t-il répondu depuis la préparation ? (contrôle impossible = on envoie)
+      const check = await checkCampaignResponseBeforeSend(
+        item.contact_etiquette_id,
+        item.queue_row_kind
+      ).catch(() => "ok" as const);
+      if (check !== "ok") {
+        if (check === "replied") progress.skippedReplied.push(name);
+        else progress.skippedNotPending.push(name);
+        progress.total = Math.max(0, progress.total - 1);
+        progress.lastProcessedItem = item;
+        progress.currentContactEtiquetteId = undefined;
+        input.onProgress?.({ ...progress });
+        continue;
+      }
     }
 
     try {
@@ -150,7 +174,7 @@ export async function sendEtiquetteBatch(input: {
     input.onProgress?.({ ...progress });
 
     const done = progress.sent + progress.errors.length;
-    if (done < input.items.length && (input.sendDelayMs ?? 300) > 0) {
+    if (done < progress.total && (input.sendDelayMs ?? 300) > 0) {
       await sleep(input.sendDelayMs ?? 300);
     }
   }

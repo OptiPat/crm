@@ -136,6 +136,10 @@ export interface EtiquetteEmailQueueItem {
   relance_canal?: string | null;
   relance_canal_at?: number | null;
   relance_canal_message?: string | null;
+  /** Relance email déjà envoyée : ensuite seule la relance WhatsApp/SMS reste proposée (D1). */
+  relance_email_sent_at?: number | null;
+  /** Relance email ignorée (✕ dans « Prêts ») : WhatsApp/SMS toujours possible. */
+  relance_email_skipped_at?: number | null;
 }
 
 export type EtiquetteEmailQueueStatus =
@@ -516,6 +520,20 @@ export async function dismissCancelledPendingEmailCampaign(
   queueRowKind?: string | null
 ): Promise<void> {
   return invoke<void>("dismiss_cancelled_pending_email_campaign", {
+    contactEtiquetteId,
+    queueRowKind: queueRowKind ?? "etiquette",
+  });
+}
+
+/** Avant l'envoi d'une relance : « ok » (envoyer), « replied » (réponse reçue entre-temps) ou
+ * « not_pending » (relance plus à envoyer : ignorée, déjà envoyée, annulée). */
+export type RelanceSendCheck = "ok" | "replied" | "not_pending";
+
+export async function checkCampaignResponseBeforeSend(
+  contactEtiquetteId: number,
+  queueRowKind?: string | null
+): Promise<RelanceSendCheck> {
+  return invoke<RelanceSendCheck>("check_campaign_response_before_send", {
     contactEtiquetteId,
     queueRowKind: queueRowKind ?? "etiquette",
   });
