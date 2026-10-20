@@ -3427,6 +3427,47 @@ pub fn dismiss_cancelled_pending_email_campaign(
 }
 
 #[tauri::command]
+pub fn list_template_send_days(
+    db: State<'_, DbState>,
+    template_id: i64,
+) -> Result<Vec<crate::database::template_email_correction::TemplateSendDay>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .list_template_send_days(template_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_template_correction_targets(
+    db: State<'_, DbState>,
+    template_id: i64,
+    day: String,
+) -> Result<Vec<crate::database::template_email_correction::TemplateCorrectionTarget>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .list_template_correction_targets(template_id, &day)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn record_template_correction_sent(
+    db: State<'_, DbState>,
+    contact_id: i64,
+    queue_row_kind: String,
+    row_id: i64,
+    subject: String,
+    body: String,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .record_template_correction_sent(contact_id, &queue_row_kind, row_id, &subject, &body)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn prepare_email_campaign_relance(
     db: State<'_, DbState>,
     contact_etiquette_id: i64,

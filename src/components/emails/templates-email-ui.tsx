@@ -35,23 +35,7 @@ import { parseTemplateEmailAttachments } from "@/lib/emails/template-email-attac
 import type { EmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { requestOpenParametres } from "@/lib/navigation/app-navigation";
-import {
-  ArrowRight,
-  AlertTriangle,
-  CalendarClock,
-  CheckCircle2,
-  ChevronDown,
-  Copy,
-  Mail,
-  MessageCircle,
-  Paperclip,
-  Pencil,
-  RefreshCw,
-  Tag,
-  Trash2,
-  X,
-  Zap,
-} from "lucide-react";
+import { ArrowRight, AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, Copy, Mail, MessageCircle, Paperclip, Pencil, RefreshCw, Tag, Trash2, X, Zap, Reply } from "lucide-react";
 import { PARAMETRES_PATH } from "@/lib/settings/parametres-labels";
 
 /** Statut boîte mail discret (barre d’actions Modèles email). */
@@ -677,10 +661,13 @@ export function TemplateListRow({
 export function TemplatePreviewActions({
   onEdit,
   onDuplicate,
+  onSendCorrection,
   children,
 }: {
   onEdit: () => void;
   onDuplicate: () => void;
+  /** Correctif d'un envoi déjà parti (ex. mauvais lien), en réponse dans chaque conversation. */
+  onSendCorrection?: () => void;
   children: ReactNode;
 }) {
   return (
@@ -694,6 +681,19 @@ export function TemplatePreviewActions({
           <Copy className="h-4 w-4" />
           Dupliquer
         </Button>
+        {onSendCorrection && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={onSendCorrection}
+            title="Répondre à tous les destinataires d'un envoi (ex. corriger un lien)"
+          >
+            <Reply className="h-4 w-4" />
+            Envoyer un correctif
+          </Button>
+        )}
       </div>
       {children}
     </div>

@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Plus, Search, Sparkles, Tag, Zap, RefreshCw, Inbox, ChevronDown } from "lucide-react";
+import { TemplateEmailCorrectionDialog } from "@/components/emails/TemplateEmailCorrectionDialog";
 import { StatCard } from "@/components/dashboard/StatCard";
 import {
   getAllTemplatesEmail,
@@ -236,6 +237,8 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
   }, [libraryTemplates, searchQuery, categoryFilter, activationFilter, linkCountByTemplate]);
 
   const previewTemplate = templates.find((t) => t.id === previewId) ?? null;
+  const [correctionTemplateId, setCorrectionTemplateId] = useState<number | null>(null);
+  const correctionTemplate = templates.find((t) => t.id === correctionTemplateId) ?? null;
 
   const previewDuplicateWarning = previewTemplate
     ? souscriptionDuplicateByTemplateId.get(previewTemplate.id)
@@ -689,6 +692,7 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
               <TemplatePreviewActions
                 onEdit={() => handleEdit(previewTemplate)}
                 onDuplicate={() => void handleDuplicate(previewTemplate)}
+                onSendCorrection={() => setCorrectionTemplateId(previewTemplate.id)}
               >
                 <TemplatePreviewActivationStatus
                   template={previewTemplate}
@@ -805,6 +809,15 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {correctionTemplate && (
+        <TemplateEmailCorrectionDialog
+          template={correctionTemplate}
+          open
+          onOpenChange={(open) => {
+            if (!open) setCorrectionTemplateId(null);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ pub mod documents;
 pub mod email_schedule;
 pub mod email_envoi_archive;
 pub mod email_send_log;
+pub mod template_email_correction;
 pub mod ephemeral_email_campaigns;
 pub mod etiquette_actions;
 pub mod etiquette_assignments;
