@@ -4969,6 +4969,21 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn lot2_whatsapp_first_then_manual_email_relance_is_allowed() {
+        let db = test_db();
+        let (_tid, _cid, row) = lot2_sent_template_row(&db, "lot2.order@example.com", 10);
+        db.mark_email_campaign_messaging_relance(row, "whatsapp", None, Some("template"))
+            .unwrap();
+        // Ordre libre : pas de relance automatique (choix déjà fait), mais email manuel possible.
+        assert!(!db.due_auto_relance_rows().unwrap().iter().any(|(id, _)| *id == row));
+        db.prepare_email_campaign_relance(row, Some("template")).unwrap();
+        db.mark_template_email_sent(row, Some("m2"), Some("t2"), Some("Relance"), None, None, None)
+            .unwrap();
+        // Une seule relance email au total.
+        assert!(db.prepare_email_campaign_relance(row, Some("template")).is_err());
+    }
+
+    #[test]
     fn template_periode_annee_trigger_reschedules_after_period_reset() {
         use crate::database::models::{NewContact, NewTemplateEmail};
 

@@ -147,6 +147,7 @@ Après envoi depuis **Suivi → Envois**, si aucun retour n’est enregistré un
 - Le **1er mail reste dans l’historique** (archivé au moment de la relance).
 - ✕ sur une relance dans **Prêts** : ignore **la relance** (« Relance email ignorée »), la campagne reste suivie dans **À relancer**.
 - Après la relance email (nouveau délai), **À relancer** affiche « Relance email envoyée le … » et propose **WhatsApp / SMS**. La ligne reste visible tant que vous ne la retirez pas.
+- **Ordre libre** : vous pouvez aussi faire le SMS / WhatsApp d’abord ; la relance email reste alors proposée (« Relancer par email » dans **Envoyés**), mais n’est plus préparée automatiquement. Une relance email et un SMS / WhatsApp au maximum par envoi.
 - **Icône mail / calendrier** : marquer réponse par email ou RDV pris,
 - **Ignorer** : ne plus proposer de relance pour cet envoi.
 

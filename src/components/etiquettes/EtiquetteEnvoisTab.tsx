@@ -1054,6 +1054,23 @@ export function EtiquetteEnvoisTab({
                 )}
                 {(options.mode === "sent" || options.mode === "followup") && (
                   <>
+                    {options.mode === "sent" &&
+                      hasCampaignMessagingRelanceSent(item) &&
+                      !item.relance_email_sent_at &&
+                      !item.relance_email_skipped_at &&
+                      Boolean(item.template_sujet?.trim()) &&
+                      isTemplateEmailRelanceEnabledForQueue(item.template_variables) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={relancing}
+                          title="Relance email (en plus du SMS / WhatsApp déjà fait)"
+                          onClick={() => void handlePrepareRelance([item])}
+                        >
+                          <RotateCcw className="h-4 w-4 mr-1" />
+                          Relancer par email
+                        </Button>
+                      )}
                     {options.mode === "followup" &&
                       canOfferMessagingRelance &&
                       (item.relance_email_sent_at ? (

@@ -1413,7 +1413,6 @@ impl Database {
                AND relance_email_sent_at IS NULL
                AND relance_email_skipped_at IS NULL
                AND COALESCE(email_suivi_ignore, 0) = 0
-               AND (relance_canal IS NULL OR TRIM(relance_canal) = '')
                AND EXISTS (
                  SELECT 1 FROM etiquettes e
                  LEFT JOIN templates_email t ON e.email_template_id = t.id
