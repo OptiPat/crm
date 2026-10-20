@@ -17,6 +17,8 @@ export interface EtiquetteBatchSendProgress {
   /** Dernière ligne traitée (succès ou erreur). */
   lastProcessedItem?: EtiquetteEmailQueueItem;
   errors: string[];
+  /** Emails partis mais non enregistrés en CRM (ne pas renvoyer) : hors `errors`, hors compteur d'échecs. */
+  markFailures: string[];
   batchId: string;
   /** Dernier envoi réussi (refresh incrémental UI). */
   lastSent?: {
@@ -50,6 +52,7 @@ export async function sendEtiquetteBatch(input: {
     sent: 0,
     total: input.items.length,
     errors: [],
+    markFailures: [],
     batchId,
   };
   input.onProgress?.(progress);
@@ -60,6 +63,7 @@ export async function sendEtiquetteBatch(input: {
     progress.currentName = name;
     progress.currentContactEtiquetteId = item.contact_etiquette_id;
     progress.lastProcessedItem = undefined;
+    progress.lastSent = undefined;
     input.onProgress?.({ ...progress });
 
     if (!item.contact_email?.trim()) {
@@ -92,16 +96,31 @@ export async function sendEtiquetteBatch(input: {
         body_html: preview.body_html ?? undefined,
         attachments: buildSendEmailAttachmentsFromTemplate(item.template_variables),
       });
-      await markEtiquetteEmailSent(
-        item.contact_etiquette_id,
-        sent.gmail_message_id,
-        sent.gmail_thread_id,
-        preview.subject,
-        preview.body,
-        item.queue_row_kind ?? "etiquette",
-        batchId,
-        "batch"
-      );
+      const mark = () =>
+        markEtiquetteEmailSent(
+          item.contact_etiquette_id,
+          sent.gmail_message_id,
+          sent.gmail_thread_id,
+          preview.subject,
+          preview.body,
+          item.queue_row_kind ?? "etiquette",
+          batchId,
+          "batch"
+        );
+      try {
+        await mark();
+      } catch (e) {
+        // Email déjà parti : jamais compté en échec d'envoi (sinon renvoi = doublon).
+        // Un 2e essai couvre un verrou SQLite passager.
+        console.error(e);
+        await sleep(1000);
+        try {
+          await mark();
+        } catch (e2) {
+          console.error(e2);
+          progress.markFailures.push(name);
+        }
+      }
       progress.sent += 1;
       progress.lastSent = {
         item,

@@ -114,8 +114,8 @@ La signature est ajoutée en fin de chaque message dans la file d’envoi (aper�
 
 | Réglage | Où | Défaut |
 |---------|-----|--------|
-| Activer la relance | **Templates** → modèle → onglet **Relance** | Activé si un template de relance est lié |
-| Délai sans retour | Idem — **Quand proposer la relance ?** | 7 jours (5 j si non renseigné sur d’anciens modèles) |
+| Activer la relance | **Templates** → modèle → onglet **Relance** | Activée (sauf campagne éphémère et newsletter) tant que le modèle n’a pas de réglage enregistré |
+| Délai sans retour | Idem — **Quand proposer la relance ?** | 5 jours |
 | Heure / jour d’envoi | Idem — heure + jour(s) après le délai | — |
 | Corps du 2ᵉ email | Idem — **Template de relance** | Même modèle que le 1er envoi si non lié |
 
@@ -152,9 +152,9 @@ Indice : si la **date de dernier contact** sur la fiche est postérieure à l’
 
 Les **échanges manuels** (appel, RDV, note saisie à la main) restent des lignes `interactions` éditables dans **Relation client**. Pour **répondre** à un email campagne, utiliser **Historique des échanges** (bouton depuis la fiche : « Répondre dans Historique »).
 
-**Dernier contact** (fiche client) : mis à jour **automatiquement** seulement si la réponse campagne est un **RDV** (bouton calendrier, ou détection Agenda Google). Une **réponse par email** enregistre le fil et sort le contact de « À relancer », mais **ne modifie pas** la date de dernier contact ni les alertes suivi client — à mettre à jour **manuellement** après un vrai échange (RDV, appel noté, champ sur la fiche).
+**Dernier contact** (fiche client) : mis à jour **automatiquement** seulement si la réponse campagne est un **RDV** (bouton calendrier, ou détection Agenda Google). La date n’est jamais placée dans le futur : un RDV à venir enregistre la date du jour, et une date plus récente déjà saisie n’est pas écrasée. Une **réponse par email** enregistre le fil et sort le contact de « À relancer », mais **ne modifie pas** la date de dernier contact ni les alertes suivi client — à mettre à jour **manuellement** après un vrai échange (RDV, appel noté, champ sur la fiche).
 
-Les étiquettes auto (ex. **Suivi > 1 an**) suivent `date_dernier_contact` : elles restent tant que vous n’avez pas saisi la date de votre dernier RDV / contact réel. **Déclaration IR** dépend de la période fiscale, pas du dernier contact.
+Les étiquettes auto (ex. **Suivi > 1 an**) suivent `date_dernier_contact` : elles restent tant que vous n’avez pas saisi la date de votre dernier RDV / contact réel. Une campagne déjà envoyée n’est **jamais reproposée immédiatement** (même après un RDV) : elle revient à la **prochaine échéance**, quand la règle cesse puis redevient vraie (nouvelle attribution automatique) ou à la période suivante. Une attribution manuelle envoyée n’est pas reproposée. **Déclaration IR** dépend de la période fiscale, pas du dernier contact.
 
 L’interface se rafraîchit sans action manuelle (Suivi, Envois, fiche ouverte).
 
@@ -165,7 +165,7 @@ Nécessite **Google connecté** avec les droits Gmail (lecture) et **Google Cale
 | Source | Détection |
 |--------|-----------|
 | **Gmail** | Réponse du client dans le fil de discussion (thread enregistré à l’envoi) ou message `from:client` après la date d’envoi |
-| **Agenda** | Événement sur l’agenda principal avec le client en participant, après l’envoi |
+| **Agenda** | Événement sur l’agenda principal avec le client (adresse exacte) en participant, **ajouté à l’agenda après l’envoi** — un RDV déjà planifié avant l’envoi ne vaut pas réponse |
 
 Déclenchement : à l’**actualisation** de la file, ou bouton **Vérifier réponses** (Suivi → Envois). Les contacts détectés sont marqués « répondu » (mail ou RDV) et sortent de **À relancer**.
 
@@ -201,7 +201,7 @@ Les deux modes sont exclusifs : enregistrer l’un efface l’autre côté base.
 
 Les séquences post-souscription (J+1, J+45, etc.) peuvent donc rester sur le **déclencheur du modèle** sans créer d’étiquette par mail.
 
-**Modifier le déclencheur** (délai, heure, jours) : à l’enregistrement du modèle, les lignes déjà planifiées et **non envoyées** recalculent leur date (`contact_template_envois`). Sinon, rouvrir l’investissement et enregistrer (même date de souscription) fait le même recalcul.
+**Modifier le déclencheur** (délai, heure, jours) : à l’enregistrement du modèle, les lignes déjà planifiées et **non envoyées** recalculent leur date depuis leur **éligibilité d’origine** (`contact_template_envois.trigger_event_at`) — un recalcul ne repousse jamais un envoi déjà prêt. Les relances préparées ne sont pas touchées. **Désactiver** le déclencheur supprime les envois pas encore partis. Sinon, rouvrir l’investissement et enregistrer (même date de souscription) fait le même recalcul.
 
 **Attendre une réponse client** (modèle → onglet Relance) : si décoché, l’envoi reste tracé (fiche contact / interactions) mais n’alimente pas le bandeau « En attente de réponse » ni la relance automatique.
 

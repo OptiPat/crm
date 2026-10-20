@@ -3,8 +3,10 @@ import { appendEmailSignature } from "@/lib/emails/email-signature";
 import {
   buildTemplateSendBodies,
   canonicalizeTemplateCorpsHtml,
+  escapeTemplateVariablesForHtml,
   getTemplateCorpsHtml,
   prepareTemplateHtmlForSend,
+  sanitizeEmailHeaderValue,
 } from "@/lib/emails/template-email-html";
 import { buildVariablesFromContact } from "@/lib/emails/template-email-meta";
 import {
@@ -79,7 +81,7 @@ export function renderEtiquetteEmailPreview(
     buildTemplateVariables(item, cgp),
     item.contact_registre
   );
-  const subject = replaceTemplateVariables(item.template_sujet, vars);
+  const subject = sanitizeEmailHeaderValue(replaceTemplateVariables(item.template_sujet, vars));
   const plainTemplate = stelliumRepair
     ? repairStelliumTemplateForRegistre(item.template_corps, item.contact_registre)
     : item.template_corps;
@@ -91,7 +93,10 @@ export function renderEtiquetteEmailPreview(
   if (isNewsletterTemplate(item.template_categorie)) {
     const meta = parseNewsletterTemplateMeta(item.template_variables);
     if (meta?.newsletter_html) {
-      let html = applyVariablesToNewsletterHtml(meta.newsletter_html, vars);
+      let html = applyVariablesToNewsletterHtml(
+        meta.newsletter_html,
+        escapeTemplateVariablesForHtml(vars)
+      );
       html = injectNewsletterSignatureHtml(html, cgp?.email_signature_html);
       return { subject, body, body_html: html };
     }

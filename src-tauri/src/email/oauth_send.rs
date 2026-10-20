@@ -12,12 +12,74 @@ use oauth2::reqwest::http_client;
 use oauth2::{RefreshToken, TokenResponse};
 use tauri::{AppHandle, Manager};
 
+/// Valeur d'en-tête sur une ligne : CR/LF et caractères de contrôle remplacés (anti-injection).
+pub(crate) fn sanitize_header_value(value: &str) -> String {
+    let cleaned: String = value
+        .chars()
+        .map(|c| {
+            if c.is_control() || c == '\u{2028}' || c == '\u{2029}' {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect();
+    cleaned.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Adresse email seule : espaces et contrôles retirés.
+fn sanitize_address(value: &str) -> String {
+    value
+        .chars()
+        .filter(|c| !c.is_control() && !c.is_whitespace())
+        .collect()
+}
+
+/// Destinataire valide : une seule adresse, sans séparateur ni espace.
+pub(crate) fn validate_recipient_email(email: &str) -> Result<(), String> {
+    let e = email.trim();
+    let invalid = || format!("Adresse email du destinataire invalide : « {e} ».");
+    const FORBIDDEN: &str = ",;<>\"()[]\\";
+    if e.is_empty()
+        || e
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || FORBIDDEN.contains(c))
+    {
+        return Err(invalid());
+    }
+    let mut parts = e.split('@');
+    let (local, domain) = match (parts.next(), parts.next(), parts.next()) {
+        (Some(l), Some(d), None) => (l, d),
+        _ => return Err(invalid()),
+    };
+    if local.is_empty() || !domain.contains('.') || domain.starts_with('.') || domain.ends_with('.')
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
 fn encode_mime_utf8_word(value: &str) -> String {
+    let value = sanitize_header_value(value);
     if value.is_ascii() {
-        return value.to_string();
+        return value;
     }
     let b64 = base64::engine::general_purpose::STANDARD.encode(value.as_bytes());
     format!("=?UTF-8?B?{}?=", b64)
+}
+
+/// Nom affiché : encodé si non-ASCII, entre guillemets si caractères spéciaux (« Dupont, Jean »).
+fn encode_display_name(name: &str) -> String {
+    let name = sanitize_header_value(name);
+    if !name.is_ascii() {
+        return encode_mime_utf8_word(&name);
+    }
+    const SPECIALS: &str = "()<>[]:;@\\,.\"";
+    if name.chars().any(|c| SPECIALS.contains(c)) {
+        let escaped = name.replace('\\', "\\\\").replace('"', "\\\"");
+        return format!("\"{escaped}\"");
+    }
+    name
 }
 
 fn encode_mime_subject(subject: &str) -> String {
@@ -165,13 +227,15 @@ fn format_addresses(
     to_email: &str,
     to_name: Option<&str>,
 ) -> (String, String) {
-    let from = match from_name {
-        Some(n) if !n.is_empty() => format!("{} <{}>", encode_mime_utf8_word(n), from_email),
-        _ => from_email.to_string(),
+    let from_email = sanitize_address(from_email);
+    let to_email = sanitize_address(to_email);
+    let from = match from_name.map(sanitize_header_value) {
+        Some(n) if !n.is_empty() => format!("{} <{}>", encode_display_name(&n), from_email),
+        _ => from_email,
     };
-    let to = match to_name {
-        Some(n) if !n.is_empty() => format!("{} <{}>", encode_mime_utf8_word(n), to_email),
-        _ => to_email.to_string(),
+    let to = match to_name.map(sanitize_header_value) {
+        Some(n) if !n.is_empty() => format!("{} <{}>", encode_display_name(&n), to_email),
+        _ => to_email,
     };
     (from, to)
 }
@@ -290,12 +354,11 @@ fn append_reply_headers(base: &str, reply: Option<&GmailThreadReply>) -> String 
     };
     let mut extra = String::new();
     if let Some(ref mid) = reply.in_reply_to_message_id {
-        if !mid.trim().is_empty() {
-            let token = if mid.contains('@') {
-                mid.clone()
-            } else {
-                format!("<{}>", mid.trim())
-            };
+        // Id venu du front : sans espace ni CR/LF (anti-injection), toujours entre <>.
+        let cleaned = sanitize_address(mid);
+        let inner = cleaned.trim_start_matches('<').trim_end_matches('>');
+        if !inner.is_empty() && !inner.contains(['<', '>']) {
+            let token = format!("<{inner}>");
             extra.push_str(&format!("In-Reply-To: {}\r\n", token));
             extra.push_str(&format!("References: {}\r\n", token));
         }
@@ -304,7 +367,9 @@ fn append_reply_headers(base: &str, reply: Option<&GmailThreadReply>) -> String 
         return base.to_string();
     }
     if let Some(pos) = base.find("\r\n\r\n") {
-        format!("{}{}{}", &base[..pos], extra, &base[pos..])
+        // Après le CRLF du dernier en-tête (sinon « …8bitIn-Reply-To: »).
+        let split = pos + 2;
+        format!("{}{}{}", &base[..split], extra, &base[split..])
     } else {
         format!("{}{}", base, extra)
     }
@@ -462,6 +527,11 @@ pub fn send_with_resolved_identity(
                 .into(),
         );
     }
+
+    validate_recipient_email(to_email)?;
+    let to_email = to_email.trim();
+    let subject_clean = sanitize_header_value(subject);
+    let subject = subject_clean.as_str();
 
     let from_name = cgp_sender_display_name(&load_cgp_config(app));
 
@@ -700,6 +770,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn headers_strip_crlf_and_quote_special_names() {
+        let raw = build_rfc2822(
+            "cgp@example.com",
+            Some("Cabinet"),
+            "jean@example.com",
+            Some("Dupont, Jean"),
+            "Objet\r\nBcc: tiers@example.com",
+            "Corps",
+            None,
+            None,
+            &[],
+        );
+        assert!(raw.contains("To: \"Dupont, Jean\" <jean@example.com>"));
+        assert!(raw.contains("Subject: Objet Bcc: tiers@example.com\r\n"));
+        assert!(!raw.contains("\r\nBcc:"));
+    }
+
+    #[test]
+    fn recipient_validation_rejects_lists_and_garbage() {
+        assert!(validate_recipient_email("jean@example.com").is_ok());
+        assert!(validate_recipient_email(" jean@example.com ").is_ok());
+        assert!(validate_recipient_email("a@x.fr; b@y.fr").is_err());
+        assert!(validate_recipient_email("a@x.fr,b@y.fr").is_err());
+        assert!(validate_recipient_email("pas-un-email").is_err());
+        assert!(validate_recipient_email("a@b@c.fr").is_err());
+        assert!(validate_recipient_email("a@localhost").is_err());
+    }
+
+    #[test]
     fn to_header_encodes_non_ascii_display_name() {
         let raw = build_rfc2822(
             "cgp@example.com",
@@ -754,6 +853,21 @@ mod tests {
         assert!(!raw.contains("crm_boundary"));
         assert!(raw.contains("In-Reply-To:"));
         assert!(raw.contains("<p>top</p>"));
+        assert!(raw.contains("8bit\r\nIn-Reply-To: <abc123>\r\nReferences: <abc123>\r\n\r\n"));
+    }
+
+    #[test]
+    fn reply_message_id_cannot_inject_headers() {
+        let raw = append_reply_headers(
+            "From: a@b.fr\r\nSubject: S\r\n\r\nCorps",
+            Some(&GmailThreadReply {
+                thread_id: None,
+                in_reply_to_message_id: Some("x@y\r\nBcc: tiers@z.fr".into()),
+            }),
+        );
+        assert!(!raw.contains("\r\nBcc:"));
+        assert!(raw.starts_with("From: a@b.fr\r\nSubject: S\r\nIn-Reply-To: <"));
+        assert!(raw.ends_with("\r\n\r\nCorps"));
     }
 
     #[test]

@@ -62,6 +62,7 @@ import { openExternalUrl } from "@/lib/api/tauri-system";
 import { ParametresNewsletterSection } from "@/components/settings/ParametresNewsletterSection";
 import { appendEmailSignature, buildSendEmailBodies } from "@/lib/emails/email-signature";
 import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
+import { escapeTemplateVariablesForHtml } from "@/lib/emails/template-email-html";
 import {
   buildNewsletterHtml,
   buildNewsletterHtmlOptions,
@@ -703,7 +704,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         cgp?.email_signature
       );
       const htmlBuilt = buildNewsletterHtml(currentDraft, htmlOptions);
-      let html = replaceTemplateVariables(htmlBuilt, vars);
+      let html = replaceTemplateVariables(htmlBuilt, escapeTemplateVariablesForHtml(vars));
       html = injectNewsletterSignatureHtml(html, cgp?.email_signature_html);
       const fallback = buildSendEmailBodies(bodyPlain, cgp);
       await sendEmail({

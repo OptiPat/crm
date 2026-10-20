@@ -139,6 +139,7 @@ import {
 } from "@/lib/emails/email-envoi-schedule";
 import {
   parseTemplateEmailSuiviReponse,
+  TEMPLATE_EMAIL_SUIVI_REPONSE_KEY,
   setTemplateEmailSuiviReponseInMeta,
 } from "@/lib/emails/template-email-suivi-reponse";
 import { getAllEtiquettes, type Etiquette } from "@/lib/api/tauri-etiquettes";
@@ -243,7 +244,7 @@ export function TemplateEmailForm({
     sujet: "",
     corpsHtml: "",
     attendreReponse: true,
-    delaiJours: DEFAULT_TEMPLATE_EMAIL_RELANCE.delai_jours ?? 7,
+    delaiJours: DEFAULT_TEMPLATE_EMAIL_RELANCE.delai_jours ?? DEFAULT_EMAIL_RELANCE_FALLBACK_DELAI_JOURS,
     envoiHeure: DEFAULT_TEMPLATE_EMAIL_RELANCE.envoi_heure ?? "18:30",
     envoiJours: null,
   });
@@ -343,6 +344,8 @@ export function TemplateEmailForm({
   const [attachments, setAttachments] = useState<TemplateEmailAttachmentMeta[]>([]);
   const baselineAttachmentsRef = useRef<TemplateEmailAttachmentMeta[]>([]);
   const hydrateActionRequestRef = useRef(0);
+  /** Version d'hydratation : une réponse tardive d'un autre modèle est ignorée. */
+  const hydrateRequestRef = useRef(0);
   const tutoiementAttachmentsState = useTemplateChildAttachments();
   const relanceAttachmentsState = useTemplateChildAttachments();
   const relanceTuAttachmentsState = useTemplateChildAttachments();
@@ -362,6 +365,8 @@ export function TemplateEmailForm({
   });
 
   const hydrateFromTemplate = useCallback((source: TemplateEmail) => {
+    const hydrateId = ++hydrateRequestRef.current;
+    const isStale = () => hydrateId !== hydrateRequestRef.current;
     setFormData({
       nom: source.nom,
       sujet: source.sujet,
@@ -390,6 +395,7 @@ export function TemplateEmailForm({
     if (hasTu && source.tutoiement_template_id) {
       void getTemplateEmailById(source.tutoiement_template_id)
         .then((tu) => {
+          if (isStale()) return;
           const tuHtml = getTemplateCorpsHtml(tu.variables);
           setTutoiementVariables(tu.variables);
           tutoiementAttachmentsState.hydrate(tu.variables);
@@ -404,19 +410,32 @@ export function TemplateEmailForm({
     const meta = parseTemplateEmailMeta(source.variables);
     const hasDedicated = source.relance_template_id != null;
     const relanceCfg = parseTemplateEmailRelance(source.variables);
-    const relanceEnabled = TEMPLATE_EMAIL_RELANCE_KEY in meta
+    const hasRelanceMeta = TEMPLATE_EMAIL_RELANCE_KEY in meta;
+    // Clé absente = même règle que le Rust (relance active sauf campagne éphémère),
+    // sinon un simple « Enregistrer » coupait la relance des modèles par défaut.
+    const relanceEnabled = hasRelanceMeta
       ? relanceCfg.enabled
-      : hasDedicated;
+      : (hasDedicated || !isEphemeralTemplate(source.variables)) &&
+        source.categorie !== "NEWSLETTER";
     setRelanceDraft({
       enabled: relanceEnabled,
       useSameMessage: !hasDedicated,
       sujet: "",
       corpsHtml: "",
-      attendreReponse: parseTemplateEmailSuiviReponse(source.variables).attendre_reponse,
-      delaiJours: relanceCfg.delai_jours ?? DEFAULT_TEMPLATE_EMAIL_RELANCE.delai_jours ?? 7,
-      envoiHeure: relanceCfg.envoi_heure ?? DEFAULT_TEMPLATE_EMAIL_RELANCE.envoi_heure ?? "18:30",
+      // Clé absente : même défaut que le Rust (oui, sauf campagne éphémère).
+      attendreReponse:
+        TEMPLATE_EMAIL_SUIVI_REPONSE_KEY in meta
+          ? parseTemplateEmailSuiviReponse(source.variables).attendre_reponse
+          : !isEphemeralTemplate(source.variables),
+      delaiJours: relanceCfg.delai_jours ?? DEFAULT_EMAIL_RELANCE_FALLBACK_DELAI_JOURS,
+      // Pas d'heure enregistrée = pas de créneau côté Rust : ne pas en inventer une.
+      envoiHeure: hasRelanceMeta ? relanceCfg.envoi_heure ?? "" : "",
       envoiJours: relanceJoursFromConfig(relanceCfg.envoi_jours_semaine),
     });
+    // Le formulaire reste monté d'un modèle à l'autre : repartir d'une relance tu vierge,
+    // sinon l'id et le texte du modèle précédent seraient réécrits à l'enregistrement.
+    setRelanceTuTemplateId(null);
+    setRelanceTuDraft({ enabled: false, sujet: "", corpsHtml: "" });
     if (!hasDedicated) {
       relanceAttachmentsState.reset();
       relanceTuAttachmentsState.reset();
@@ -424,6 +443,7 @@ export function TemplateEmailForm({
     if (hasDedicated && source.relance_template_id) {
       void getTemplateEmailById(source.relance_template_id)
         .then((rel) => {
+          if (isStale()) return;
           const relHtml = getTemplateCorpsHtml(rel.variables);
           setRelanceDraft((prev) => ({
             ...prev,
@@ -436,6 +456,7 @@ export function TemplateEmailForm({
           if (relTuId != null) {
             void getTemplateEmailById(relTuId)
               .then((relTu) => {
+                if (isStale()) return;
                 const relTuHtml = getTemplateCorpsHtml(relTu.variables);
                 setRelanceTuDraft({
                   enabled: true,
@@ -486,6 +507,7 @@ export function TemplateEmailForm({
     if (pipeReminder.reminder_template_id) {
       void getTemplateEmailById(pipeReminder.reminder_template_id)
         .then((rem) => {
+          if (isStale()) return;
           const remHtml = getTemplateCorpsHtml(rem.variables);
           setPipeRdvDraft((prev) => ({
             ...prev,
@@ -498,6 +520,7 @@ export function TemplateEmailForm({
           if (remTuId != null) {
             void getTemplateEmailById(remTuId)
               .then((remTu) => {
+                if (isStale()) return;
                 const remTuHtml = getTemplateCorpsHtml(remTu.variables);
                 setPipeRdvDraft((prev) => ({
                   ...prev,
@@ -516,6 +539,7 @@ export function TemplateEmailForm({
     if (pipeFollowUp.follow_up_template_id) {
       void getTemplateEmailById(pipeFollowUp.follow_up_template_id)
         .then((followUp) => {
+          if (isStale()) return;
           const followUpHtml = getTemplateCorpsHtml(followUp.variables);
           setPipeRdvDraft((prev) => ({
             ...prev,
@@ -528,6 +552,7 @@ export function TemplateEmailForm({
           if (followUpTuId != null) {
             void getTemplateEmailById(followUpTuId)
               .then((followUpTu) => {
+                if (isStale()) return;
                 const followUpTuHtml = getTemplateCorpsHtml(followUpTu.variables);
                 setPipeRdvDraft((prev) => ({
                   ...prev,
@@ -610,7 +635,7 @@ export function TemplateEmailForm({
       sujet: "",
       corpsHtml: "",
       attendreReponse: !ephemeralDefaults,
-      delaiJours: DEFAULT_TEMPLATE_EMAIL_RELANCE.delai_jours ?? 7,
+      delaiJours: DEFAULT_TEMPLATE_EMAIL_RELANCE.delai_jours ?? DEFAULT_EMAIL_RELANCE_FALLBACK_DELAI_JOURS,
       envoiHeure: DEFAULT_TEMPLATE_EMAIL_RELANCE.envoi_heure ?? "18:30",
       envoiJours: null,
     });
@@ -1539,7 +1564,7 @@ export function TemplateEmailForm({
           : null,
       });
       variables = setTemplateEmailSuiviReponseInMeta(variables, {
-        attendre_reponse: relanceEnabled ? relanceDraft.attendreReponse : false,
+        attendre_reponse: relanceDraft.attendreReponse,
       });
       if (!isEphemeralMode) {
         variables = setTemplateEmailPipeRdvTriggerInMeta(variables, {

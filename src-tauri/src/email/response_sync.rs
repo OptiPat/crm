@@ -121,6 +121,7 @@ struct CalendarEvent {
     status: Option<String>,
     summary: Option<String>,
     description: Option<String>,
+    created: Option<String>,
 }
 
 const CALENDAR_RDV_MAX_PAGES: u32 = 4;
@@ -149,12 +150,46 @@ fn gmail_after_date(sent_unix: i64) -> String {
     dt.format("%Y/%m/%d").to_string()
 }
 
-pub(crate) fn email_matches(address_header: &str, contact_email: &str) -> bool {
+fn is_email_local_char(c: char) -> bool {
+    // Caractères admis dans une partie locale (RFC 5322) : `brien@` ≠ `o'brien@`.
+    c.is_alphanumeric() || ".!#$%&'*+-/=?^_`{|}~".contains(c)
+}
+
+/// `contact` apparaît dans `text` comme adresse complète (pas `ann@x.fr` dans `joann@x.fr`).
+pub(crate) fn text_contains_email(text: &str, contact_email: &str) -> bool {
     let contact = contact_email.trim().to_lowercase();
     if contact.is_empty() {
         return false;
     }
-    address_header.to_lowercase().contains(&contact)
+    let haystack = text.to_lowercase();
+    let mut from = 0;
+    while let Some(pos) = haystack[from..].find(&contact) {
+        let start = from + pos;
+        let end = start + contact.len();
+        let before_ok = haystack[..start]
+            .chars()
+            .next_back()
+            .map(|c| !is_email_local_char(c))
+            .unwrap_or(true);
+        // Après l'adresse : fin, séparateur, ou point final de phrase (pas `x.fr.com`).
+        let mut rest = haystack[end..].chars();
+        let after_ok = match rest.next() {
+            None => true,
+            Some(c) if c.is_alphanumeric() || matches!(c, '-' | '_') => false,
+            Some('.') => rest.next().map(|n| !n.is_alphanumeric()).unwrap_or(true),
+            Some(_) => true,
+        };
+        if before_ok && after_ok {
+            return true;
+        }
+        from = end;
+    }
+    false
+}
+
+/// En-tête From/To (`"Nom" <a@b.fr>, c@d.fr`) : comparaison exacte de chaque adresse.
+pub(crate) fn email_matches(address_header: &str, contact_email: &str) -> bool {
+    text_contains_email(address_header, contact_email)
 }
 
 fn is_reply_from_contact(from_header: &str, contact_email: &str) -> bool {
@@ -616,7 +651,7 @@ fn event_includes_contact(event: &CalendarEvent, contact_email: &str) -> bool {
     if event
         .summary
         .as_deref()
-        .map(|s| s.to_lowercase().contains(&contact))
+        .map(|s| text_contains_email(s, &contact))
         .unwrap_or(false)
     {
         return true;
@@ -624,7 +659,7 @@ fn event_includes_contact(event: &CalendarEvent, contact_email: &str) -> bool {
     event
         .description
         .as_deref()
-        .map(|s| s.to_lowercase().contains(&contact))
+        .map(|s| text_contains_email(s, &contact))
         .unwrap_or(false)
 }
 
@@ -650,11 +685,23 @@ fn event_start_after(event: &CalendarEvent, sent_unix: i64) -> bool {
         .unwrap_or(false)
 }
 
+/// RDV ajouté à l'agenda après l'envoi (un RDV déjà planifié n'est pas une réponse).
+fn event_created_after(event: &CalendarEvent, sent_unix: i64) -> bool {
+    event
+        .created
+        .as_deref()
+        .and_then(|c| chrono::DateTime::parse_from_rfc3339(c).ok())
+        .map(|c| c.timestamp() >= sent_unix)
+        .unwrap_or(false)
+}
+
 fn calendar_event_matches_rdv(event: &CalendarEvent, contact: &str, sent_unix: i64) -> bool {
     if event.status.as_deref() == Some("cancelled") {
         return false;
     }
-    event_includes_contact(event, contact) && event_start_after(event, sent_unix)
+    event_includes_contact(event, contact)
+        && event_start_after(event, sent_unix)
+        && event_created_after(event, sent_unix)
 }
 
 /// Date de début du prochain RDV Agenda client après l'envoi campagne (unix s).
@@ -964,7 +1011,8 @@ mod tests {
             r#"{
                 "start": { "dateTime": "2026-06-11T12:00:00Z" },
                 "attendees": [ { "email": "client@example.com" } ],
-                "status": "confirmed"
+                "status": "confirmed",
+                "created": "2024-01-01T00:00:00Z"
             }"#,
         )
         .expect("event");
@@ -982,7 +1030,8 @@ mod tests {
             r#"{
                 "start": { "dateTime": "2026-06-11T12:00:00Z" },
                 "description": "Invité : client@example.com",
-                "status": "confirmed"
+                "status": "confirmed",
+                "created": "2024-01-01T00:00:00Z"
             }"#,
         )
         .expect("event");
@@ -991,6 +1040,33 @@ mod tests {
             "client@example.com",
             sent
         ));
+    }
+
+    #[test]
+    fn calendar_event_planned_before_send_is_not_a_reply() {
+        let sent = 1_700_000_000_i64;
+        let event: CalendarEvent = serde_json::from_str(
+            r#"{
+                "start": { "dateTime": "2026-06-11T12:00:00Z" },
+                "attendees": [ { "email": "client@example.com" } ],
+                "status": "confirmed",
+                "created": "2023-09-10T09:00:00Z"
+            }"#,
+        )
+        .expect("event");
+        assert!(!calendar_event_matches_rdv(&event, "client@example.com", sent));
+    }
+
+    #[test]
+    fn email_matches_whole_address_only() {
+        assert!(email_matches("\"Ann\" <ann@x.fr>", "ann@x.fr"));
+        assert!(email_matches("ANN@X.FR", "ann@x.fr"));
+        assert!(email_matches("bob@y.fr, ann@x.fr", "ann@x.fr"));
+        assert!(!email_matches("joann@x.fr", "ann@x.fr"));
+        assert!(!email_matches("marie.ann@x.fr", "ann@x.fr"));
+        assert!(!email_matches("ann@x.fr.com", "ann@x.fr"));
+        assert!(text_contains_email("Invité : ann@x.fr.", "ann@x.fr"));
+        assert!(!text_contains_email("Invité : joann@x.fr", "ann@x.fr"));
     }
 
     #[test]

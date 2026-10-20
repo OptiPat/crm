@@ -6,6 +6,15 @@ import {
 } from "./email-signature";
 
 describe("email-signature", () => {
+  it("HTML : pas de « -- » parasite au-dessus de la signature importée", () => {
+    const html = buildEmailHtmlBody("Bonjour\n\n--\nJean CGP", {
+      email_signature: "Jean CGP",
+      email_signature_html: "<p>Jean CGP</p>",
+    } as never);
+    expect(html).not.toContain("--");
+    expect(html).toContain("<p>Jean CGP</p>");
+  });
+
   it("décode &#39;", () => {
     expect(decodeHtmlEntities("l&#39;Orias")).toBe("l'Orias");
   });

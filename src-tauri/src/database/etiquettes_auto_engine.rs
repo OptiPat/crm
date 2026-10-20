@@ -559,19 +559,23 @@ impl Database {
                     // recalcul auto — l'utilisateur choisit « Remettre en file » ou ✕ définitif.
                     if email_envoye == 0 && email_annule != 0 {
                         return Ok(newly_assigned);
-                    } else if email_envoye != 0 {
-                        let _ = self.try_reopen_sent_campaign_if_still_eligible(
-                            assignment_id,
-                            etiquette_id,
-                        );
-                    } else if let Ok(etiquette) = self.get_etiquette_by_id(etiquette_id) {
+                    }
+                    if email_envoye != 0 {
+                        // Déjà envoyée : jamais de réouverture immédiate (même après RDV).
+                        // Attribution AUTO : la prochaine échéance arrive quand la règle cesse
+                        // (retrait) puis redevient vraie (nouvelle attribution). Une attribution
+                        // MANUEL envoyée n'est pas reproposée automatiquement.
+                        return Ok(newly_assigned);
+                    }
+                    if let Ok(etiquette) = self.get_etiquette_by_id(etiquette_id) {
                         if etiquette.email_actif {
                             let prevue =
                                 resolve_email_date_prevue_for_contact(&etiquette, date_attr);
                             let _ = self.conn.execute(
                                 "UPDATE contact_etiquettes SET email_date_prevue = ?1
                                  WHERE id = ?2 AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0
-                                   AND COALESCE(email_suivi_ignore, 0) = 0",
+                                   AND COALESCE(email_suivi_ignore, 0) = 0
+                                   AND COALESCE(email_relance_active, 0) = 0",
                                 params![prevue, assignment_id],
                             );
                         }

@@ -121,7 +121,11 @@ fn truncate_for_user(text: &str, max: usize) -> String {
     if t.len() <= max {
         t.to_string()
     } else {
-        format!("{}…", &t[..max])
+        let mut end = max;
+        while !t.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}…", &t[..end])
     }
 }
 

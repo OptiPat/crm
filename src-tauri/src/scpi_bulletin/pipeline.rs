@@ -123,6 +123,12 @@ pub fn prepare_processed_scpi_bulletin_batch(
     batch: ProcessedScpiBulletinBatch,
 ) -> Result<PrepareScpiCampaignResult, String> {
     let total = batch.bulletins.len() as u32;
+    if !super::nom_produit::periode_has_year(&batch.periode) {
+        return Err(
+            "Période introuvable (trimestre + année). Renommez les PDF, ex. « Comète T2 2026.pdf », puis relancez."
+                .into(),
+        );
+    }
 
     emit_progress(
         app,

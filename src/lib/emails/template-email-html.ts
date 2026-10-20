@@ -55,10 +55,6 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Échappement HTML pour variables injectées dans un gabarit (envoi production). */
-export function escapeHtmlText(text: string): string {
-  return escapeHtml(text);
-}
 
 /** Neutralise retours ligne / séparateurs Unicode (injection en-têtes MIME dans le sujet). */
 export function sanitizeEmailHeaderValue(text: string): string {
@@ -647,11 +643,28 @@ const PERF_HTML_SLOT_KEYS = [
   "perf_detail_html_tu",
 ] as const;
 
+/** Variables dont la valeur est déjà du HTML (convention de nommage `…_html` / `…_html_tu`). */
+export function isHtmlTemplateVariableKey(key: string): boolean {
+  return /_html(_tu)?$/.test(key);
+}
+
+/** Échappe les valeurs texte avant injection dans un corps HTML (nom « Dupont <SCI> », « < 5 % »…). */
+export function escapeTemplateVariablesForHtml(
+  vars: Record<string, string>
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(vars)) {
+    out[key] = isHtmlTemplateVariableKey(key) ? value : escapeHtml(String(value ?? ""));
+  }
+  return out;
+}
+
 /** Remplace les variables, normalise le gabarit, puis injecte le HTML bulletin/perf sans le tronquer. */
 export function prepareTemplateHtmlForSend(
   corpsHtml: string,
-  vars: Record<string, string>
+  rawVars: Record<string, string>
 ): string {
+  const vars = escapeTemplateVariablesForHtml(rawVars);
   const bulletinHtml = vars.bulletin_resume_html ?? "";
   const slotVars: Record<string, string> = {
     ...vars,

@@ -4387,6 +4387,158 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn template_trigger_recalc_keeps_original_eligibility_and_prepared_relance() {
+        use crate::database::models::{NewContact, NewTemplateEmail};
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let (_, current_month) = crate::database::Database::auto_etiquette_now_and_month();
+        let trigger_vars = format!(
+            r#"{{"email_trigger":{{"enabled":true,"condition_type":"PERIODE_ANNEE","condition_config":"{{\"mois_debut\":{current_month},\"mois_fin\":{current_month}}}","categories":["CLIENT"],"delai_jours":3}}}}"#
+        );
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Ancrage test".into(),
+                sujet: "Sujet".into(),
+                corps: "Corps".into(),
+                categorie: "FISCALITE".into(),
+                variables: Some(trigger_vars),
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let cid = db
+            .create_contact(NewContact {
+                email: Some("ancrage@example.com".into()),
+                ..sample_contact("Ancrage", "Paul")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let eligible = now - 10 * 86_400;
+        db.connection()
+            .execute(
+                "INSERT INTO contact_template_envois (contact_id, template_id, trigger_event_at, email_date_prevue)
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![cid, tpl.id, eligible, eligible + 3 * 86_400],
+            )
+            .unwrap();
+
+        db.sync_template_email_triggers_for_contact(cid).unwrap();
+
+        let (anchor, prevue): (i64, i64) = db
+            .conn
+            .query_row(
+                "SELECT trigger_event_at, email_date_prevue FROM contact_template_envois
+                 WHERE contact_id = ?1 AND template_id = ?2",
+                params![cid, tpl.id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(anchor, eligible, "le recalcul ne doit pas déplacer l'éligibilité");
+        assert_eq!(prevue, eligible + 3 * 86_400, "la date prévue reste celle d'origine");
+
+        // Relance préparée (email_envoye repassé à 0) : pas de replanification.
+        db.connection()
+            .execute(
+                "UPDATE contact_template_envois SET email_relance_active = 1, email_date_envoi = ?1,
+                    email_date_prevue = ?2 WHERE contact_id = ?3",
+                rusqlite::params![eligible + 3 * 86_400, now - 60, cid],
+            )
+            .unwrap();
+        db.sync_template_email_triggers_for_contact(cid).unwrap();
+        let prevue_relance: i64 = db
+            .conn
+            .query_row(
+                "SELECT email_date_prevue FROM contact_template_envois WHERE contact_id = ?1",
+                params![cid],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(prevue_relance, now - 60, "la relance préparée reste dans Prêts");
+    }
+
+    #[test]
+    fn template_save_and_exclusion_keep_prepared_relance_history() {
+        use crate::database::models::{NewContact, NewTemplateEmail};
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let (_, current_month) = crate::database::Database::auto_etiquette_now_and_month();
+        let vars = |excluded: &str| {
+            format!(
+                r#"{{"email_trigger":{{"enabled":true,"condition_type":"PERIODE_ANNEE","condition_config":"{{\"mois_debut\":{current_month},\"mois_fin\":{current_month}}}","categories":["CLIENT"],"delai_jours":3,"excluded_contact_ids":[{excluded}]}}}}"#
+            )
+        };
+        let new_tpl = |v: String| NewTemplateEmail {
+            nom: "Relance historique".into(),
+            sujet: "Sujet".into(),
+            corps: "Corps".into(),
+            categorie: "FISCALITE".into(),
+            variables: Some(v),
+            agenda_link_id: None,
+            relance_template_id: None,
+            tutoiement_template_id: None,
+        };
+        let tpl = db.create_template_email(new_tpl(vars(""))).unwrap();
+        let cid = db
+            .create_contact(NewContact {
+                email: Some("relance.hist@example.com".into()),
+                ..sample_contact("Histo", "Lea")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        // 1er envoi parti il y a 10 j, relance préparée (dans « Prêts »).
+        let first_sent = now - 10 * 86_400;
+        db.connection()
+            .execute(
+                "INSERT INTO contact_template_envois (contact_id, template_id, trigger_event_at,
+                    email_date_prevue, email_envoye, email_date_envoi, email_relance_active)
+                 VALUES (?1, ?2, ?3, ?4, 0, ?3, 1)",
+                rusqlite::params![cid, tpl.id, first_sent, now - 60],
+            )
+            .unwrap();
+
+        // Enregistrer le modèle (resync + sync) ne replanifie pas la relance.
+        db.update_template_email(tpl.id, &new_tpl(vars(""))).unwrap();
+        let prevue: i64 = db
+            .conn
+            .query_row(
+                "SELECT email_date_prevue FROM contact_template_envois WHERE contact_id = ?1",
+                params![cid],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(prevue, now - 60, "la relance préparée reste dans Prêts après enregistrement");
+
+        // Exclure le contact : la relance est annulée, la ligne (historique) est conservée.
+        db.update_template_email(tpl.id, &new_tpl(vars(&cid.to_string())))
+            .unwrap();
+        let (count, annule, date_envoi): (i64, i64, Option<i64>) = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*), MAX(COALESCE(email_annule, 0)), MAX(email_date_envoi)
+                 FROM contact_template_envois WHERE contact_id = ?1",
+                params![cid],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(count, 1, "l'envoi déjà parti n'est pas supprimé");
+        assert_eq!(annule, 1, "la relance est annulée");
+        assert_eq!(date_envoi, Some(first_sent));
+    }
+
+    #[test]
     fn template_periode_annee_trigger_reschedules_after_period_reset() {
         use crate::database::models::{NewContact, NewTemplateEmail};
 
@@ -4793,10 +4945,14 @@ mod database_integration_tests {
         let rdv_at = now + 86400 * 10;
         db.mark_email_campaign_response(ce_rdv, "rdv", None, None, None, Some(rdv_at), None)
             .unwrap();
-        assert_eq!(
-            db.get_contact_by_id(cid_rdv).unwrap().date_dernier_contact,
-            Some(rdv_at),
-            "RDV pris enregistre la date du rendez-vous comme dernier contact"
+        let dernier = db
+            .get_contact_by_id(cid_rdv)
+            .unwrap()
+            .date_dernier_contact
+            .expect("RDV pris : dernier contact renseigné");
+        assert!(
+            dernier <= rdv_at && dernier >= now - 5 && dernier <= now + 5,
+            "RDV futur : dernier contact borné à aujourd'hui, jamais dans le futur"
         );
         assert!(
             db.get_alertes_for_contact(cid_rdv).unwrap().is_empty(),

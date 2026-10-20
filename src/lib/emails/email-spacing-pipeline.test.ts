@@ -169,4 +169,12 @@ valider la stratégie ;`;
     expect(out).toContain("<ul");
     expect(countBlankLines(out)).toBe(0);
   });
+  it("échappe les valeurs texte mais pas les variables *_html", () => {
+    const html = prepareTemplateHtmlForSend("<div>{{nom}} {{liste_documents_r1_html}}</div>", {
+      nom: "Dupont <SCI> & fils",
+      liste_documents_r1_html: "<ul><li>RIB</li></ul>",
+    });
+    expect(html).toContain("Dupont &lt;SCI&gt; &amp; fils");
+    expect(html).toContain("<ul><li>RIB</li></ul>");
+  });
 });

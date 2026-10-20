@@ -1,5 +1,5 @@
 import type { PlacementOperation } from "@/lib/api/tauri-box-placement";
-import { escapeHtmlText, sanitizeEmailHeaderValue } from "@/lib/emails/template-email-html";
+import { sanitizeEmailHeaderValue } from "@/lib/emails/template-email-html";
 import { placementOperationTypeLabel } from "@/lib/placement/placement-operations-ui";
 import { formatPlacementStelliumClientLabel } from "@/lib/placement/placement-stellium-client-labels";
 import { formatStelliumProductForDisplay } from "@/lib/placement/stellium-box-placement-products";
@@ -34,7 +34,7 @@ export function buildPlacementConformeEmailExtraVariables(
   };
 }
 
-/** Variables pour envoi : champs issus du mail Stellium échappés (corps HTML). */
+/** Variables pour envoi : champs issus du mail Stellium sur une ligne (l'échappement HTML est fait au rendu du corps). */
 export function buildPlacementConformeEmailExtraVariablesForSend(
   operation: Pick<
     PlacementOperation,
@@ -44,8 +44,8 @@ export function buildPlacementConformeEmailExtraVariablesForSend(
   const base = buildPlacementConformeEmailExtraVariables(operation);
   return {
     ...base,
-    produit: escapeHtmlText(sanitizeEmailHeaderValue(base.produit)),
-    libelle_stellium: escapeHtmlText(sanitizeEmailHeaderValue(base.libelle_stellium)),
-    libelle_client: escapeHtmlText(sanitizeEmailHeaderValue(base.libelle_client)),
+    produit: sanitizeEmailHeaderValue(base.produit),
+    libelle_stellium: sanitizeEmailHeaderValue(base.libelle_stellium),
+    libelle_client: sanitizeEmailHeaderValue(base.libelle_client),
   };
 }

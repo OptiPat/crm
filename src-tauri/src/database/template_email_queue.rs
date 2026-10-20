@@ -7,7 +7,7 @@ use super::template_email_trigger::{
     template_trigger_resets_outside_period, TemplateEmailTriggerConfig,
 };
 use super::Database;
-use rusqlite::{params, Result};
+use rusqlite::{params, OptionalExtension, Result};
 
 const TEMPLATE_QUEUE_COLOR: &str = "#6366F1";
 
@@ -186,7 +186,8 @@ impl Database {
         Ok(())
     }
 
-    /// Envois modèle non envoyés (toutes lignes investissement comprises).
+    /// Envois modèle jamais partis (toutes lignes investissement comprises).
+    /// Une relance préparée (1er mail déjà parti) est annulée, pas supprimée : l'historique reste.
     fn clear_pending_template_envois_for_contact_template(
         &self,
         contact_id: i64,
@@ -194,7 +195,15 @@ impl Database {
     ) -> Result<()> {
         self.conn.execute(
             "DELETE FROM contact_template_envois
-             WHERE contact_id = ?1 AND template_id = ?2 AND email_envoye = 0",
+             WHERE contact_id = ?1 AND template_id = ?2
+               AND email_envoye = 0 AND email_date_envoi IS NULL
+               AND COALESCE(email_relance_active, 0) = 0",
+            params![contact_id, template_id],
+        )?;
+        self.conn.execute(
+            "UPDATE contact_template_envois SET email_annule = 1
+             WHERE contact_id = ?1 AND template_id = ?2
+               AND email_envoye = 0 AND COALESCE(email_relance_active, 0) = 1",
             params![contact_id, template_id],
         )?;
         Ok(())
@@ -207,7 +216,16 @@ impl Database {
         for contact_id in &trigger.excluded_contact_ids {
             total += self.conn.execute(
                 "DELETE FROM contact_template_envois
-                 WHERE contact_id = ?1 AND template_id = ?2 AND email_envoye = 0",
+                 WHERE contact_id = ?1 AND template_id = ?2
+                   AND email_envoye = 0 AND email_date_envoi IS NULL
+                   AND COALESCE(email_relance_active, 0) = 0",
+                params![contact_id, template_id],
+            )?;
+            // Relance préparée : annulée, l'historique du 1er envoi est conservé.
+            total += self.conn.execute(
+                "UPDATE contact_template_envois SET email_annule = 1
+                 WHERE contact_id = ?1 AND template_id = ?2
+                   AND email_envoye = 0 AND COALESCE(email_relance_active, 0) = 1",
                 params![contact_id, template_id],
             )?;
         }
@@ -285,9 +303,12 @@ impl Database {
             return Ok(false);
         }
 
+        // Déjà envoyé, ou relance préparée (email_envoye repassé à 0) : ne pas replanifier.
         let sent: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM contact_template_envois
-             WHERE contact_id = ?1 AND template_id = ?2 AND email_envoye = 1",
+             WHERE contact_id = ?1 AND template_id = ?2 AND investissement_id IS NULL
+               AND (email_envoye = 1 OR COALESCE(email_relance_active, 0) = 1
+                    OR email_date_envoi IS NOT NULL)",
             params![contact_id, template_id],
             |row| row.get(0),
         )?;
@@ -295,13 +316,27 @@ impl Database {
             return Ok(false);
         }
 
+        // Ligne déjà en file : garder l'éligibilité d'origine (sinon le délai J+N et le
+        // créneau repartent de « maintenant » à chaque recalcul).
+        let existing_anchor: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT trigger_event_at FROM contact_template_envois
+                 WHERE contact_id = ?1 AND template_id = ?2 AND investissement_id IS NULL
+                   AND trigger_event_at IS NOT NULL AND trigger_event_at > 0",
+                params![contact_id, template_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let eligible_at = existing_anchor.unwrap_or(now);
+
         let sched = etiquette_schedule_from_trigger(trigger);
-        let email_date_prevue = resolve_email_date_prevue_for_contact(&sched, now);
+        let email_date_prevue = resolve_email_date_prevue_for_contact(&sched, eligible_at);
         self.upsert_contact_template_envoi(
             contact_id,
             template_id,
             None,
-            now,
+            eligible_at,
             email_date_prevue,
             false,
         )
@@ -311,6 +346,19 @@ impl Database {
     pub fn sync_template_email_trigger_for_all_contacts(&self, template_id: i64) -> Result<usize> {
         let tpl = self.get_template_email_by_id(template_id)?;
         let trigger = parse_template_email_trigger(tpl.variables.as_deref());
+        if !trigger.is_active() {
+            // D6 : déclencheur désactivé = les envois pas encore partis sont arrêtés
+            // (sinon, réactivé plus tard, tout arriverait d'un coup dans « Prêts »).
+            // Les campagnes éphémères (lot `campaign_batch_key`) ont leur propre file.
+            self.conn.execute(
+                "DELETE FROM contact_template_envois
+                 WHERE template_id = ?1 AND email_envoye = 0 AND email_date_envoi IS NULL
+                   AND COALESCE(email_relance_active, 0) = 0
+                   AND COALESCE(campaign_batch_key, '') = ''",
+                params![template_id],
+            )?;
+            return Ok(0);
+        }
         let (now, current_month) = Self::auto_etiquette_now_and_month();
         let org_self_id = self.resolve_organisation_self_contact_id()?;
 
@@ -590,7 +638,8 @@ impl Database {
         let mut stmt = self.conn.prepare(
             "SELECT id, COALESCE(trigger_event_at, 0)
              FROM contact_template_envois
-             WHERE template_id = ?1 AND email_envoye = 0",
+             WHERE template_id = ?1 AND email_envoye = 0
+               AND email_date_envoi IS NULL AND COALESCE(email_relance_active, 0) = 0",
         )?;
         let rows: Vec<(i64, i64)> = stmt
             .query_map(params![template_id], |row| Ok((row.get(0)?, row.get(1)?)))?
@@ -601,7 +650,8 @@ impl Database {
             let email_date_prevue = resolve_email_date_prevue_for_contact(&sched, eligible_at);
             let n = self.conn.execute(
                 "UPDATE contact_template_envois SET email_date_prevue = ?1
-                 WHERE id = ?2 AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0",
+                 WHERE id = ?2 AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0
+                   AND COALESCE(email_relance_active, 0) = 0",
                 params![email_date_prevue, row_id],
             )?;
             updated += n;

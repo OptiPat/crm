@@ -314,6 +314,13 @@ export async function startEtiquetteBatchSend(input: {
       toast.error(`Échec : ${result.errors.length} erreur${result.errors.length > 1 ? "s" : ""}`);
     }
 
+    if (result.markFailures.length > 0) {
+      toast.warning(
+        `Envoyé mais non enregistré dans le CRM : ${result.markFailures.join(", ")}. Ne renvoyez pas sans vérifier la fiche.`,
+        { duration: 20_000 }
+      );
+    }
+
     input.onDone?.();
     return result;
   } finally {

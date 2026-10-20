@@ -18,7 +18,7 @@ export interface TemplateEmailRelanceConfig {
 
 export const DEFAULT_TEMPLATE_EMAIL_RELANCE: TemplateEmailRelanceConfig = {
   enabled: false,
-  delai_jours: 7,
+  delai_jours: 5,
   envoi_heure: "18:30",
   envoi_jours_semaine: null,
 };
@@ -44,7 +44,8 @@ export function parseTemplateEmailRelance(
   const meta = parseTemplateEmailMeta(variables);
   const raw = meta[TEMPLATE_EMAIL_RELANCE_KEY];
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { ...DEFAULT_TEMPLATE_EMAIL_RELANCE, enabled: false };
+    // Rien d'enregistré : pas de créneau (comme le Rust) ; délai = repli 5 j.
+    return { ...DEFAULT_TEMPLATE_EMAIL_RELANCE, enabled: false, envoi_heure: null };
   }
   const o = raw as Record<string, unknown>;
   return {

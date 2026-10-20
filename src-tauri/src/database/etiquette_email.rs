@@ -402,19 +402,27 @@ impl Database {
     }
 
     pub(crate) fn touch_contact_last_contact(&self, contact_id: i64, ts: i64) -> Result<()> {
+        // Un RDV futur ne doit pas mettre la date de dernier contact dans le futur.
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(ts);
+        let ts = ts.min(now);
         let contact = self.get_contact_by_id(contact_id)?;
         let client = Self::is_client_actif(&contact.categorie);
         let filleul = Self::is_filleul_statut(contact.filleul_categorie.as_deref());
 
         if client {
             self.conn.execute(
-                "UPDATE contacts SET date_dernier_contact = ?1, updated_at = ?1 WHERE id = ?2",
+                "UPDATE contacts SET date_dernier_contact = MAX(COALESCE(date_dernier_contact, 0), ?1),
+                    updated_at = ?1 WHERE id = ?2",
                 params![ts, contact_id],
             )?;
         }
         if filleul {
             self.conn.execute(
-                "UPDATE contacts SET date_dernier_contact_filleul = ?1, updated_at = ?1 WHERE id = ?2",
+                "UPDATE contacts SET date_dernier_contact_filleul = MAX(COALESCE(date_dernier_contact_filleul, 0), ?1),
+                    updated_at = ?1 WHERE id = ?2",
                 params![ts, contact_id],
             )?;
         }
@@ -1183,104 +1191,6 @@ impl Database {
         rows.collect()
     }
 
-    /// Réouvre une campagne déjà envoyée si le contact correspond encore à la règle auto
-    /// et n'est plus dans la fenêtre d'attente de réponse (évite un doublon immédiat).
-    pub(crate) fn try_reopen_sent_campaign_if_still_eligible(
-        &self,
-        assignment_id: i64,
-        etiquette_id: i64,
-    ) -> Result<bool> {
-        let etiquette = self.get_etiquette_by_id(etiquette_id)?;
-        if !etiquette.email_actif {
-            return Ok(false);
-        }
-
-        let (
-            email_envoye,
-            date_attribution,
-            _email_date_envoi,
-            email_reponse_at,
-            email_reponse_type,
-            email_suivi_ignore,
-            email_annule,
-            template_variables,
-        ): (
-            i64,
-            i64,
-            Option<i64>,
-            Option<i64>,
-            Option<String>,
-            i64,
-            i64,
-            Option<String>,
-        ) = self
-            .conn
-            .query_row(
-                "SELECT ce.email_envoye, ce.date_attribution, ce.email_date_envoi, ce.email_reponse_at,
-                        ce.email_reponse_type,
-                        COALESCE(ce.email_suivi_ignore, 0), COALESCE(ce.email_annule, 0), t.variables
-                 FROM contact_etiquettes ce
-                 INNER JOIN etiquettes e ON ce.etiquette_id = e.id
-                 LEFT JOIN templates_email t ON e.email_template_id = t.id
-                 WHERE ce.id = ?1",
-                params![assignment_id],
-                |row| {
-                    Ok((
-                        row.get(0)?,
-                        row.get(1)?,
-                        row.get(2)?,
-                        row.get(3)?,
-                        row.get(4)?,
-                        row.get(5)?,
-                        row.get(6)?,
-                        row.get(7)?,
-                    ))
-                },
-            )?;
-
-        if email_envoye == 0 || email_annule != 0 {
-            return Ok(false);
-        }
-
-        // Réouverture volontaire : RDV (dernier contact mis à jour) ou modèle sans attente de retour.
-        // Réponse mail/autre = campagne terminée — pas de nouveau bilan automatique (relance = manuel).
-        // Sans réponse : la file « À relancer » gère le délai dépassé.
-        let should_reopen = if email_reponse_at.is_some() {
-            email_reponse_type.as_deref() == Some("rdv")
-        } else if email_suivi_ignore != 0 {
-            false
-        } else {
-            let attendre_reponse = template_variables
-                .as_deref()
-                .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
-                .and_then(|meta| meta.get("email_suivi_reponse")?.get("attendre_reponse")?.as_i64())
-                .unwrap_or(1)
-                != 0;
-            !attendre_reponse
-        };
-
-        if !should_reopen {
-            return Ok(false);
-        }
-
-        let prevue = resolve_email_date_prevue_for_contact(&etiquette, date_attribution);
-        let updated = self.conn.execute(
-            "UPDATE contact_etiquettes SET
-                email_envoye = 0,
-                email_date_prevue = ?1,
-                email_date_envoi = NULL,
-                email_reponse_at = NULL,
-                email_reponse_type = NULL,
-                email_suivi_ignore = 0,
-                email_relance_active = 0,
-                email_gmail_message_id = NULL,
-                email_gmail_thread_id = NULL
-             WHERE id = ?2 AND email_envoye = 1 AND COALESCE(email_annule, 0) = 0",
-            params![prevue, assignment_id],
-        )?;
-        Ok(updated > 0)
-    }
-
     /// Remet l'envoi en file « Prêts » pour une relance manuelle.
     pub fn prepare_email_campaign_relance(
         &self,
@@ -1328,7 +1238,8 @@ impl Database {
     }
 
     /// Campagnes déjà envoyées (journal) mais repassées en « Prêts » par erreur de recalcul auto.
-    /// Exclut les réouvertures volontaires (réponse enregistrée, modèle sans attente de retour).
+    /// Exclut les lignes avec réponse enregistrée et les modèles sans attente de retour
+    /// (héritage de l'ancienne réouverture volontaire, supprimée : voir décision D3).
     fn misplaced_sent_campaign_rows(
         &self,
     ) -> Result<Vec<(i64, i64, Option<String>, Option<String>)>> {

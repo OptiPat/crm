@@ -125,8 +125,23 @@ pub fn guess_periode(file_name: &str, summary: &str) -> String {
     "Trimestre".to_string()
 }
 
+/// Période exploitable : trimestre + année (sinon deux bulletins différents partagent la clé « Trimestre »).
+pub fn periode_has_year(periode: &str) -> bool {
+    periode
+        .as_bytes()
+        .windows(4)
+        .any(|w| w.iter().all(u8::is_ascii_digit))
+}
+
 /// Période de campagne : majorité des guesses fichiers (évite un 1er PDF mal parsé).
 pub fn choose_campaign_periode(guesses: &[String]) -> String {
+    // Voter parmi les périodes avec année ; « Trimestre » seulement si aucune n'en a.
+    let with_year: Vec<String> = guesses
+        .iter()
+        .filter(|g| periode_has_year(g))
+        .cloned()
+        .collect();
+    let guesses: &[String] = if with_year.is_empty() { guesses } else { &with_year };
     if guesses.is_empty() {
         return "Trimestre".into();
     }
@@ -181,14 +196,47 @@ fn parse_t_period(text: &str) -> Option<String> {
 fn parse_trimestre_period(text: &str) -> Option<String> {
     let lower = text.to_lowercase();
     let idx = lower.find("trimestre")?;
-    let slice = &text[idx.saturating_sub(24)..];
-    let quarter = slice.chars().find(|c| matches!(c, '1' | '2' | '3' | '4'))?;
+    // Indice calculé sur `lower` : découper `lower` (pas `text`) sur une frontière de caractère,
+    // sinon un accent avant « trimestre » fait paniquer (panic = abort → fermeture du CRM).
+    let mut start = idx.saturating_sub(24);
+    while !lower.is_char_boundary(start) {
+        start -= 1;
+    }
+    let slice = &lower[start..];
+    // Trimestre : ordinal juste avant « trimestre » (« 3ème », « troisième », « 1er »).
+    // Ne pas prendre un chiffre de l'année (« troisième trimestre 2026 » ≠ T2).
+    let before = &lower[start..idx];
+    // Sinon « trimestre 3 2025 » : chiffre isolé juste après (jamais l'année).
+    let after_digit = lower[idx + "trimestre".len()..]
+        .split(|c: char| !c.is_alphanumeric())
+        .find(|w| !w.is_empty())
+        .filter(|w| w.len() == 1)
+        .and_then(|w| w.chars().next())
+        .filter(|c| matches!(c, '1' | '2' | '3' | '4'));
+    let quarter = quarter_from_ordinal(before).or(after_digit)?;
     let year = find_four_digit_year(slice)?;
     Some(format!("T{quarter} {year}"))
 }
 
+fn quarter_from_ordinal(before: &str) -> Option<char> {
+    const WORDS: [(&str, char); 5] = [
+        ("premier", '1'),
+        ("deuxième", '2'),
+        ("second", '2'),
+        ("troisième", '3'),
+        ("quatrième", '4'),
+    ];
+    let last_word = before.split_whitespace().last()?;
+    if let Some((_, q)) = WORDS.iter().find(|(w, _)| last_word.starts_with(w)) {
+        return Some(*q);
+    }
+    let first = last_word.chars().next()?;
+    matches!(first, '1' | '2' | '3' | '4').then_some(first)
+}
+
 fn find_four_digit_year(text: &str) -> Option<String> {
-    for word in text.split_whitespace() {
+    // Découpe sur tout non-chiffre : « 2026.pdf », « trimestre_2_2026 ».
+    for word in text.split(|c: char| !c.is_ascii_digit()) {
         if word.len() == 4
             && word.starts_with("20")
             && word.chars().all(|c| c.is_ascii_digit())
@@ -264,6 +312,16 @@ mod tests {
     #[test]
     fn guess_periode_does_not_default_year_to_t1() {
         assert_eq!(guess_periode("bulletin 2026.pdf", ""), "Trimestre");
+        assert!(!periode_has_year("Trimestre"));
+        assert!(periode_has_year("T2 2026"));
+        assert_eq!(
+            choose_campaign_periode(&["Trimestre".into(), "Trimestre".into(), "T2 2026".into()]),
+            "T2 2026"
+        );
+        assert_eq!(guess_periode("x.pdf", "Bilan du troisième trimestre 2026"), "T3 2026");
+        assert_eq!(guess_periode("x.pdf", "Bilan du premier trimestre 2026"), "T1 2026");
+        assert_eq!(guess_periode("x.pdf", "Au 2ème trimestre 2026"), "T2 2026");
+        assert_eq!(guess_periode("Comète 1er trimestre 2026.pdf", ""), "T1 2026");
     }
 
     #[test]
@@ -307,5 +365,13 @@ mod tests {
             align_nom_produit_with_portfolio("Epargne Pierre Europe", &nested),
             "Epargne Pierre Europe"
         );
+    }
+
+    #[test]
+    fn trimestre_period_with_accents_does_not_panic() {
+        let text = "Au cours du deuxième et dernier élément du 2ème trimestre 2026, la SCPI…";
+        let _ = guess_periode("bulletin.pdf", text);
+        let accents = "ééééééééééééééééééééé trimestre 3 2025";
+        assert_eq!(guess_periode("x.pdf", accents), "T3 2025");
     }
 }

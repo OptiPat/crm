@@ -91,7 +91,8 @@ impl Database {
             self.conn.execute(
                 "UPDATE contact_etiquettes SET email_date_prevue = ?1
                  WHERE etiquette_id = ?2 AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0
-                   AND COALESCE(email_suivi_ignore, 0) = 0",
+                   AND COALESCE(email_suivi_ignore, 0) = 0
+                   AND COALESCE(email_relance_active, 0) = 0",
                 params![fixed, etiquette_id],
             )?;
             return Ok(());
@@ -100,7 +101,8 @@ impl Database {
         let mut stmt = self.conn.prepare(
             "SELECT id, date_attribution FROM contact_etiquettes
              WHERE etiquette_id = ?1 AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0
-               AND COALESCE(email_suivi_ignore, 0) = 0",
+               AND COALESCE(email_suivi_ignore, 0) = 0
+               AND COALESCE(email_relance_active, 0) = 0",
         )?;
         let rows: Vec<(i64, i64)> = stmt
             .query_map(params![etiquette_id], |row| Ok((row.get(0)?, row.get(1)?)))?

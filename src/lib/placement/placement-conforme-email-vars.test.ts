@@ -3,6 +3,7 @@ import {
   buildPlacementConformeEmailExtraVariables,
   buildPlacementConformeEmailExtraVariablesForSend,
 } from "@/lib/placement/placement-conforme-email-vars";
+import { prepareTemplateHtmlForSend } from "@/lib/emails/template-email-html";
 
 describe("placement-conforme-email-vars", () => {
   it("build extra variables", () => {
@@ -19,15 +20,20 @@ describe("placement-conforme-email-vars", () => {
     expect(vars.date_operation.length).toBeGreaterThan(5);
   });
 
-  it("échappe les champs Stellium pour l'envoi HTML", () => {
+  it("garde les champs Stellium bruts (objet lisible) et les échappe au rendu HTML", () => {
     const vars = buildPlacementConformeEmailExtraVariablesForSend({
       operation_type: "ARBITRAGE",
-      product_label: "<script>alert(1)</script>",
+      product_label: "Origin & Co\r\n<script>alert(1)</script>",
       stellium_label: "Arbitrage <b>libre</b>",
       email_received_at: null,
     });
-    expect(vars.produit).toBe("&lt;script&gt;alert(1)&lt;/script&gt;");
-    expect(vars.libelle_stellium).toBe("Arbitrage &lt;b&gt;libre&lt;/b&gt;");
+    expect(vars.produit).not.toMatch(/[\r\n]/);
+    expect(vars.produit).toContain("Origin & Co");
+    const html = prepareTemplateHtmlForSend("<div>{{produit}} — {{libelle_stellium}}</div>", vars);
+    expect(html).toContain("Origin &amp; Co");
+    expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).toContain("Arbitrage &lt;b&gt;libre&lt;/b&gt;");
+    expect(html).not.toContain("<script>");
   });
 
   it("affiche le produit sans ALPSI/CIF dans le mail client", () => {

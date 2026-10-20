@@ -113,10 +113,11 @@ export function buildEmailHtmlBody(
   const msg = messagePlain.trimEnd();
   const plainSig = decodeHtmlEntities(cgp?.email_signature?.trim() ?? "");
   let message = msg;
-  if (plainSig && message.endsWith(plainSig)) {
-    message = message.slice(0, -plainSig.length).trimEnd();
-  } else if (plainSig && message.endsWith(`--\n${plainSig}`)) {
+  // Tester d'abord « --\nsig » (forme d'appendEmailSignature), sinon le « -- » reste au-dessus.
+  if (plainSig && message.endsWith(`--\n${plainSig}`)) {
     message = message.slice(0, -(plainSig.length + 3)).trimEnd();
+  } else if (plainSig && message.endsWith(plainSig)) {
+    message = message.slice(0, -plainSig.length).trimEnd();
   }
   return `${plainToHtmlParagraphs(message)}<br><br>${htmlSig}`;
 }

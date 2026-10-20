@@ -831,11 +831,14 @@ fn fix_glued_year_subsection(line: &str) -> String {
         for num in 1..=4 {
             let needle = format!("{num}. {title}");
             if let Some(pos) = result.find(&needle) {
-                if pos >= 4 {
-                    let before = &result[pos - 4..pos];
-                    if before.chars().all(|c| c.is_ascii_digit()) {
-                        result.insert(pos, '\n');
-                    }
+                // `get` : renvoie None si pos - 4 tombe au milieu d'un caractère (« Activité : 2. »),
+                // au lieu de paniquer (panic = abort → fermeture du CRM).
+                let glued_year = pos >= 4
+                    && result
+                        .get(pos - 4..pos)
+                        .is_some_and(|b| b.chars().all(|c| c.is_ascii_digit()));
+                if glued_year {
+                    result.insert(pos, '\n');
                 }
             }
         }
@@ -1691,6 +1694,19 @@ mod tests {
     use super::*;
     use crate::database::models::{NewContact, NewInvestissement};
     use crate::database::Database;
+
+    #[test]
+    fn glued_year_subsection_does_not_panic_on_accents() {
+        // pos - 4 tombe au milieu de « é » : ne doit pas paniquer, ni insérer de saut.
+        assert_eq!(
+            fix_glued_year_subsection("Activité : 2. Ce trimestre"),
+            "Activité : 2. Ce trimestre"
+        );
+        assert_eq!(
+            fix_glued_year_subsection("Bilan 20262. Ce trimestre"),
+            "Bilan 2026\n2. Ce trimestre"
+        );
+    }
 
     fn mem_db() -> Database {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
