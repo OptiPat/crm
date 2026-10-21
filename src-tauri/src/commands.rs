@@ -3249,30 +3249,46 @@ pub async fn sync_email_campaign_responses(
         }
 
         // Lien « Se désinscrire » de la newsletter : nouvel email, hors du fil suivi ci-dessus.
+        // Une recherche par jour suffit (choix du conseiller) : pas à chaque synchro.
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
         let known = {
             let db_guard = db_state.inner().lock().unwrap();
             let database = db_guard.as_ref().ok_or("Database not initialized")?;
-            database
-                .known_newsletter_unsubscribe_message_ids()
-                .unwrap_or_default()
-        };
-        match crate::email::response_sync::fetch_newsletter_unsubscribe_requests(&app, &known) {
-            Ok(requests) if !requests.is_empty() => {
-                let rows: Vec<(String, String, i64)> = requests
-                    .into_iter()
-                    .map(|r| (r.message_id, r.from_header, r.received_at))
-                    .collect();
-                let db_guard = db_state.inner().lock().unwrap();
-                let database = db_guard.as_ref().ok_or("Database not initialized")?;
-                match database.apply_newsletter_unsubscribe_requests(&rows) {
-                    Ok(n) => result.newsletter_unsubscribed = n,
-                    Err(e) => eprintln!("Désinscriptions newsletter non appliquées : {e}"),
-                }
+            if database.newsletter_unsubscribe_scan_due(now) {
+                Some(
+                    database
+                        .known_newsletter_unsubscribe_message_ids()
+                        .unwrap_or_default(),
+                )
+            } else {
+                None
             }
-            Ok(_) => {}
-            Err(e) => result
-                .errors
-                .push(format!("Désinscriptions newsletter non vérifiées : {e}")),
+        };
+        if let Some(known) = known {
+            match crate::email::response_sync::fetch_newsletter_unsubscribe_requests(&app, &known) {
+                Ok(requests) => {
+                    let rows: Vec<(String, String, i64)> = requests
+                        .into_iter()
+                        .map(|r| (r.message_id, r.from_header, r.received_at))
+                        .collect();
+                    let db_guard = db_state.inner().lock().unwrap();
+                    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+                    match database.apply_newsletter_unsubscribe_requests(&rows) {
+                        Ok(n) => {
+                            result.newsletter_unsubscribed = n;
+                            database.mark_newsletter_unsubscribe_scanned(now);
+                        }
+                        Err(e) => eprintln!("Désinscriptions newsletter non appliquées : {e}"),
+                    }
+                }
+                // Échec : réessayé à la synchro suivante (pas d'attente d'un jour).
+                Err(e) => result
+                    .errors
+                    .push(format!("Désinscriptions newsletter non vérifiées : {e}")),
+            }
         }
         Ok(result)
     })

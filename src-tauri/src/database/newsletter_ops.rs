@@ -19,6 +19,8 @@ fn newsletter_template_variables(html_meta: &str) -> String {
     value.to_string()
 }
 
+const NEWSLETTER_UNSUBSCRIBE_SCAN_KEY: &str = "newsletter_unsubscribe_scan_at";
+
 /// Adresse de l'expéditeur (`"Nom" <a@b.fr>` → `a@b.fr`) : le nom affiché est ignoré,
 /// pour ne pas désinscrire une adresse qui n'y figure qu'en texte.
 fn sender_address(from_header: &str) -> Option<String> {
@@ -276,6 +278,26 @@ impl Database {
             )?;
         }
         Ok(())
+    }
+
+    /// Recherche des emails de désinscription : une fois par jour (24 h depuis la dernière
+    /// recherche réussie).
+    pub fn newsletter_unsubscribe_scan_due(&self, now: i64) -> bool {
+        let last = self
+            .get_setting(NEWSLETTER_UNSUBSCRIBE_SCAN_KEY)
+            .ok()
+            .flatten()
+            .and_then(|v| v.parse::<i64>().ok());
+        match last {
+            Some(at) => now - at >= 86_400 || at > now,
+            None => true,
+        }
+    }
+
+    pub fn mark_newsletter_unsubscribe_scanned(&self, now: i64) {
+        if let Err(e) = self.set_setting(NEWSLETTER_UNSUBSCRIBE_SCAN_KEY, &now.to_string()) {
+            eprintln!("Date de recherche des désinscriptions non enregistrée : {e}");
+        }
     }
 
     /// Messages de désinscription déjà traités (la synchro ne les relit pas).
@@ -2106,6 +2128,19 @@ mod tests {
         prepare_edition(&db, etiquette_id, "Juillet", "<p>Jl</p>", 1_700_000_030);
         let summary = db.finish_newsletter_edition_send(juin, 1_700_000_040, false).unwrap();
         assert_eq!(summary.status, "cancelled");
+    }
+
+    #[test]
+    fn unsubscribe_scan_runs_once_a_day() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let now = 1_700_000_000i64;
+        assert!(db.newsletter_unsubscribe_scan_due(now), "jamais faite : due");
+        db.mark_newsletter_unsubscribe_scanned(now);
+        assert!(!db.newsletter_unsubscribe_scan_due(now + 15 * 60));
+        assert!(!db.newsletter_unsubscribe_scan_due(now + 86_399));
+        assert!(db.newsletter_unsubscribe_scan_due(now + 86_400));
+        // Horloge reculée : on ne reste pas bloqué.
+        assert!(db.newsletter_unsubscribe_scan_due(now - 3_600));
     }
 
     #[test]
