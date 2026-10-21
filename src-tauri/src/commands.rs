@@ -3247,6 +3247,33 @@ pub async fn sync_email_campaign_responses(
                 }
             }
         }
+
+        // Lien « Se désinscrire » de la newsletter : nouvel email, hors du fil suivi ci-dessus.
+        let known = {
+            let db_guard = db_state.inner().lock().unwrap();
+            let database = db_guard.as_ref().ok_or("Database not initialized")?;
+            database
+                .known_newsletter_unsubscribe_message_ids()
+                .unwrap_or_default()
+        };
+        match crate::email::response_sync::fetch_newsletter_unsubscribe_requests(&app, &known) {
+            Ok(requests) if !requests.is_empty() => {
+                let rows: Vec<(String, String, i64)> = requests
+                    .into_iter()
+                    .map(|r| (r.message_id, r.from_header, r.received_at))
+                    .collect();
+                let db_guard = db_state.inner().lock().unwrap();
+                let database = db_guard.as_ref().ok_or("Database not initialized")?;
+                match database.apply_newsletter_unsubscribe_requests(&rows) {
+                    Ok(n) => result.newsletter_unsubscribed = n,
+                    Err(e) => eprintln!("Désinscriptions newsletter non appliquées : {e}"),
+                }
+            }
+            Ok(_) => {}
+            Err(e) => result
+                .errors
+                .push(format!("Désinscriptions newsletter non vérifiées : {e}")),
+        }
         Ok(result)
     })
     .await

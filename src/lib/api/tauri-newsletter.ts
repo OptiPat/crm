@@ -108,6 +108,8 @@ export interface NewsletterEditionDetail {
   brevoTemplateId?: number | null;
   brevoPushedAt?: number | null;
   contentJson?: string | null;
+  /** Mise en page envoyée (JSON `newsletter_html`). */
+  htmlMeta?: string | null;
 }
 
 export interface LastNewsletterEditionDuplicate {
@@ -396,6 +398,31 @@ export async function cancelNewsletterPreparation(input: {
   return result;
 }
 
+/** Date de désinscription newsletter du contact (null = inscrit). */
+export async function getContactNewsletterUnsubscribedAt(
+  contactId: number
+): Promise<number | null> {
+  return invoke<number | null>("get_contact_newsletter_unsubscribed_at", { contactId });
+}
+
+export async function setContactNewsletterUnsubscribed(
+  contactId: number,
+  unsubscribed: boolean
+): Promise<void> {
+  return invoke<void>("set_contact_newsletter_unsubscribed", { contactId, unsubscribed });
+}
+
+/** Enregistre les corrections faites après « Préparer » : l'envoi part avec cette version. */
+export async function saveNewsletterEditionContent(input: {
+  editionId: number;
+  subject: string;
+  plainBody: string;
+  contentJson: string;
+  htmlMeta: string;
+}): Promise<void> {
+  return invoke<void>("save_newsletter_edition_content", { input });
+}
+
 export async function getNewsletterSendQueue(
   editionId: number
 ): Promise<EtiquetteEmailQueueItem[]> {
@@ -462,18 +489,11 @@ export async function testBrevoConnection(): Promise<string> {
 export async function pushNewsletterEditionToBrevo(input: {
   editionId: number;
   templateId?: number | null;
-  /** Contenu actuel du compositeur — prioritaire sur l'édition en base. */
-  subject?: string;
-  plainBody?: string;
-  contentJson?: string;
 }): Promise<PushNewsletterEditionToBrevoResult> {
   return invoke<PushNewsletterEditionToBrevoResult>("push_newsletter_edition_to_brevo", {
     input: {
       editionId: input.editionId,
       templateId: input.templateId ?? null,
-      subject: input.subject ?? null,
-      plainBody: input.plainBody ?? null,
-      contentJson: input.contentJson ?? null,
     },
   });
 }

@@ -36,6 +36,7 @@ import {
   listNewsletterEditions,
   prepareNewsletterEdition,
   pushNewsletterEditionToBrevo,
+  saveNewsletterEditionContent,
   type BrevoTemplateSummary,
   type NewsletterEditionDetail,
   type NewsletterEditionSummary,
@@ -60,21 +61,21 @@ import { sendEmail } from "@/lib/api/tauri-email";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { openExternalUrl } from "@/lib/api/tauri-system";
 import { ParametresNewsletterSection } from "@/components/settings/ParametresNewsletterSection";
-import { appendEmailSignature, buildSendEmailBodies } from "@/lib/emails/email-signature";
-import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
-import { escapeTemplateVariablesForHtml } from "@/lib/emails/template-email-html";
 import {
   buildNewsletterHtml,
   buildNewsletterHtmlOptions,
   buildNewsletterPlainBody,
-  buildNewsletterPlainBodyForExport,
   draftFromStructuredContent,
   mergeNewsletterDraftFromPlain,
   formatNewsletterEditionLabel,
-  injectNewsletterSignatureHtml,
   serializeNewsletterTemplateMeta,
 } from "@/lib/newsletter/newsletter-html";
 import { buildNewsletterTemplateVariables } from "@/lib/newsletter/newsletter-template-variables";
+import { buildNewsletterTestQueueItem } from "@/lib/newsletter/newsletter-test-send";
+import { renderEtiquetteEmailPreview } from "@/lib/etiquettes/etiquette-email-preview";
+import { TemplateEmailCorrectionDialog } from "@/components/emails/TemplateEmailCorrectionDialog";
+import { getTemplateEmailById, type TemplateEmail } from "@/lib/api/tauri-templates-email";
+import { getEtiquetteById } from "@/lib/api/tauri-etiquettes";
 import {
   NEWSLETTER_STRUCTURE_PRESETS,
   structureInstructionsForPreset,
@@ -250,9 +251,13 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
   const [brevoCampaignListUrl, setBrevoCampaignListUrl] = useState<string | null>(null);
   const [brevoCampaignName, setBrevoCampaignName] = useState<string | null>(null);
   const [composerEditionId, setComposerEditionId] = useState<number | null>(
-    restoredDraft?.composerEditionId ?? restoredDraft?.activeEditionId ?? null
+    // Pas de repli sur l'édition active : un brouillon détaché ne doit jamais s'y relier.
+    restoredDraft?.composerEditionId ?? null
   );
+  // Vrai seulement après une modification faite à la main (pas un simple rechargement).
+  const [composerDirty, setComposerDirty] = useState(restoredDraft?.composerDirty ?? false);
   const [generateWhilePreparedConfirmOpen, setGenerateWhilePreparedConfirmOpen] = useState(false);
+  const [correctionTemplate, setCorrectionTemplate] = useState<TemplateEmail | null>(null);
   const [brevoRepushConfirmOpen, setBrevoRepushConfirmOpen] = useState(false);
   const [activeEditionBrevoCampaignId, setActiveEditionBrevoCampaignId] = useState<number | null>(
     null
@@ -337,7 +342,15 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
   }, []);
 
   const handleCopyBrevoText = useCallback(async () => {
-    const text = plainBody.trim();
+    // Campagne préparée : le texte de l'édition (même version que l'objet poussé vers Brevo).
+    let text = plainBody.trim();
+    if (activeEditionId != null) {
+      try {
+        text = (await getNewsletterEditionDetail(activeEditionId)).plainBody.trim();
+      } catch {
+        // édition illisible : on garde le texte du compositeur
+      }
+    }
     if (!text) {
       toast.error("Aucun texte à copier");
       return;
@@ -348,7 +361,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     } catch {
       toast.error("Copie impossible depuis le navigateur");
     }
-  }, [plainBody]);
+  }, [plainBody, activeEditionId]);
 
   const applyPreparedEditionSnapshot = useCallback((detail: NewsletterEditionDetail) => {
     setPreparedEditionQueuedCount(detail.queuedCount);
@@ -394,6 +407,10 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     const editions = await listNewsletterEditions(15);
     const resumableEditions = editions.filter(isResumableNewsletterEdition);
     const resumable = resumableEditions[0] ?? null;
+    // Brouillon restauré lié à une édition qui n'est plus enviable : il redevient libre.
+    setComposerEditionId((prev) =>
+      prev != null && !resumableEditions.some((edition) => edition.id === prev) ? null : prev
+    );
     const currentActiveId = activeEditionIdRef.current;
     const storedStillSendable =
       currentActiveId != null &&
@@ -449,7 +466,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       setBrevoTemplates(templates);
     } catch (e) {
       setBrevoTemplates([]);
-      toast.error(e instanceof Error ? e.message : "Impossible de charger les templates Brevo");
+      toast.error(e instanceof Error ? e.message : String(e) || "Impossible de charger les templates Brevo");
     } finally {
       setLoadingBrevoTemplates(false);
     }
@@ -511,8 +528,14 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       .catch(() => {});
   }, [tab]);
 
+  // Chargement terminé (logo trouvé ou non) : un logo illisible ne bloque pas l'envoi.
+  const [logoReady, setLogoReady] = useState(false);
   useEffect(() => {
-    void loadCgpLogoDataUrl(cgp?.logo_path).then(setLogoDataUrl);
+    setLogoReady(false);
+    void loadCgpLogoDataUrl(cgp?.logo_path)
+      .then(setLogoDataUrl)
+      .catch(() => setLogoDataUrl(null))
+      .finally(() => setLogoReady(true));
   }, [cgp?.logo_path]);
 
   const currentDraft = useMemo((): GeneratedNewsletterContent => {
@@ -559,6 +582,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       activeEditionId,
       preparedQueueCount,
       composerEditionId,
+      composerDirty,
     });
   }, [
     tab,
@@ -576,6 +600,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     activeEditionId,
     preparedQueueCount,
     composerEditionId,
+    composerDirty,
   ]);
 
   useEffect(() => {
@@ -591,6 +616,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       setContent(c);
       setSubject(c.subject);
       setPlainBody(buildNewsletterPlainBody(c));
+      setComposerDirty(true);
       setEditMode("sections");
       refreshPreviewHtml(c);
     },
@@ -632,6 +658,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       };
       setContent(withDefaults);
       setSubject(withDefaults.subject);
+      setComposerDirty(true);
       const plain = buildNewsletterPlainBody(withDefaults);
       setPlainBody(plain);
       setEditMode("sections");
@@ -646,7 +673,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       }
       toast.success("Newsletter générée — discutez avec l'IA pour affiner");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur de génération IA");
+      toast.error(e instanceof Error ? e.message : String(e) || "Erreur de génération IA");
     } finally {
       setGenerating(false);
     }
@@ -654,11 +681,13 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
 
   const handlePlainBodyChange = (value: string) => {
     setPlainBody(value);
+    setComposerDirty(true);
     setEditMode("plain");
   };
 
   const handleSectionDraftChange = (next: GeneratedNewsletterContent) => {
     setContent(next);
+    setComposerDirty(true);
     setPlainBody(buildNewsletterPlainBody(next));
     setEditMode("sections");
   };
@@ -667,15 +696,66 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     setLoadingPreparedReview(true);
     setPreparedReviewOpen(true);
     try {
+      if (editionId === activeEditionId) {
+        const saved = await saveComposerToActiveEdition().catch((e: unknown) => {
+          toast.warning(
+            `Modifications non enregistrées : ${e instanceof Error ? e.message : String(e)}`
+          );
+          return null;
+        });
+        if (saved === "locked") toast.warning(LOCKED_EDITION_WARNING);
+      }
       const detail = await getNewsletterEditionDetail(editionId);
       setPreparedEditionDetail(detail);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Impossible de charger l'édition");
+      toast.error(e instanceof Error ? e.message : String(e) || "Impossible de charger l'édition");
       setPreparedReviewOpen(false);
     } finally {
       setLoadingPreparedReview(false);
     }
   };
+
+  /**
+   * Corrections faites après « Préparer » : enregistrées sur l'édition, pour que l'envoi
+   * (et une reprise plus tard) parte avec la dernière version affichée.
+   */
+  const saveComposerToActiveEdition = async (): Promise<
+    "none" | "unchanged" | "saved" | "locked"
+  > => {
+    if (activeEditionId == null || composerEditionId !== activeEditionId) return "none";
+    // Rien modifié à la main : le HTML figé à la préparation reste celui envoyé.
+    if (!composerDirty) return "unchanged";
+    const detail = await getNewsletterEditionDetail(activeEditionId);
+    // Déjà envoyée à une partie des contacts : la suite garde la même version.
+    if (detail.sentCount > 0) {
+      setComposerDirty(false);
+      return "locked";
+    }
+    if (!subject.trim() || !plainBody.trim()) {
+      throw new Error("Objet et contenu de la newsletter obligatoires");
+    }
+    if (!cgp) {
+      throw new Error("Profil conseiller indisponible — rechargez la page avant d'envoyer");
+    }
+    if (!logoReady) {
+      throw new Error("Logo en cours de chargement — réessayez dans un instant");
+    }
+    await saveNewsletterEditionContent({
+      editionId: activeEditionId,
+      subject: subject.trim(),
+      plainBody: plainBody.trim(),
+      contentJson: JSON.stringify(currentDraft),
+      htmlMeta: serializeNewsletterTemplateMeta(
+        // Libellé de l'édition (mois de préparation), pas la date du jour.
+        buildNewsletterHtml(currentDraft, { ...htmlOptions, editionLabel: detail.editionLabel })
+      ),
+    });
+    setComposerDirty(false);
+    return "saved";
+  };
+
+  const LOCKED_EDITION_WARNING =
+    "Cette édition est déjà partie chez une partie des contacts : la suite est envoyée avec la même version (vos modifications ne sont pas appliquées).";
 
   const handleSendTest = async () => {
     const to = cgp?.email?.trim();
@@ -693,30 +773,55 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     }
     setSendingTest(true);
     try {
-      const vars = buildNewsletterTemplateVariables(cgp, {
-        prenom: cgp?.prenom,
-        nom: cgp?.nom,
-        email: cgp?.email,
+      // Même rendu que l'envoi réel ; la version testée est enregistrée sur l'édition préparée.
+      const saved = await saveComposerToActiveEdition().catch((e: unknown) => {
+        toast.warning(
+          `Modifications non enregistrées sur l'édition : ${e instanceof Error ? e.message : String(e)}`
+        );
+        return null;
       });
-      const subj = replaceTemplateVariables(subject.trim(), vars);
-      const bodyPlain = appendEmailSignature(
-        replaceTemplateVariables(buildNewsletterPlainBodyForExport(currentDraft).trim(), vars),
-        cgp?.email_signature
+      if (saved === "locked") toast.warning(LOCKED_EDITION_WARNING);
+      // Campagne préparée affichée : le test part avec la version enregistrée sur l'édition
+      // (exactement ce que reçoivent les contacts), sinon avec le brouillon du compositeur.
+      const stored =
+        saved != null && saved !== "none" && activeEditionId != null ?
+          await getNewsletterEditionDetail(activeEditionId)
+        : null;
+      const preview = renderEtiquetteEmailPreview(
+        buildNewsletterTestQueueItem(
+          stored?.htmlMeta ?
+            {
+              subject: stored.subject,
+              plainBody: stored.plainBody,
+              htmlMeta: stored.htmlMeta,
+              cgp,
+            }
+          : {
+              subject,
+              plainBody,
+              htmlMeta: serializeNewsletterTemplateMeta(
+                buildNewsletterHtml(currentDraft, htmlOptions)
+              ),
+              cgp,
+            }
+        ),
+        cgp
       );
-      const htmlBuilt = buildNewsletterHtml(currentDraft, htmlOptions);
-      let html = replaceTemplateVariables(htmlBuilt, escapeTemplateVariablesForHtml(vars));
-      html = injectNewsletterSignatureHtml(html, cgp?.email_signature_html);
-      const fallback = buildSendEmailBodies(bodyPlain, cgp);
       await sendEmail({
         to_email: to,
         to_name: `${cgp?.prenom ?? ""} ${cgp?.nom ?? ""}`.trim(),
-        subject: subj,
-        body: bodyPlain,
-        body_html: html || fallback.body_html,
+        subject: preview.subject,
+        body: preview.body,
+        body_html: preview.body_html ?? undefined,
+        list_unsubscribe_email: to,
       });
-      toast.success(`Aperçu envoyé à ${to}`);
+      toast.success(
+        saved === "saved" ?
+          `Aperçu envoyé à ${to} — version enregistrée sur la campagne préparée`
+        : `Aperçu envoyé à ${to}`
+      );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Envoi test impossible");
+      toast.error(e instanceof Error ? e.message : String(e) || "Envoi test impossible");
     } finally {
       setSendingTest(false);
     }
@@ -729,6 +834,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       setContent(restore.content);
       setSubject(restore.subject);
       setPlainBody(restore.plainBody);
+      setComposerDirty(false);
       setEditMode(restore.editMode);
       setAudienceFilters(restore.audienceFilters);
       setChatHistory([]);
@@ -767,7 +873,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       setComposerEditionId(null);
       toast.success(`Édition « ${last.editionLabel} » dupliquée — adaptez puis préparez`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Duplication impossible");
+      toast.error(e instanceof Error ? e.message : String(e) || "Duplication impossible");
     } finally {
       setDuplicating(false);
     }
@@ -802,7 +908,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         } retiré${result.cancelledQueueCount !== 1 ? "s" : ""} de la file)`
       );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Annulation impossible");
+      toast.error(e instanceof Error ? e.message : String(e) || "Annulation impossible");
     } finally {
       setCancellingPreparation(false);
     }
@@ -842,6 +948,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       setPreparedEditionQueuedCount(result.queued);
       setActiveEditionId(result.editionId);
       setComposerEditionId(result.editionId);
+      setComposerDirty(false);
       setHistoryExpandEditionId(result.editionId);
       setHistoryRefreshKey((k) => k + 1);
       await loadPreparedEditionSnapshot(result.editionId);
@@ -857,7 +964,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
           " — corrigez le contenu ci-dessous si besoin, puis envoyez ou poussez vers Brevo"
       );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Préparation campagne impossible");
+      toast.error(e instanceof Error ? e.message : String(e) || "Préparation campagne impossible");
     } finally {
       setPreparing(false);
     }
@@ -873,8 +980,17 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       return;
     }
     setSendConfirmOpen(false);
-    batchAbortRef.current = new AbortController();
+    // Occupé dès l'enregistrement : pas de 2e envoi lancé pendant ce temps.
     setBatchSending(true);
+    try {
+      const saved = await saveComposerToActiveEdition();
+      if (saved === "locked") toast.warning(LOCKED_EDITION_WARNING);
+    } catch (e) {
+      setBatchSending(false);
+      toast.error(e instanceof Error ? e.message : String(e) || "Enregistrement du contenu impossible");
+      return;
+    }
+    batchAbortRef.current = new AbortController();
     setBatchProgress({ sent: 0, total: preparedQueueCount });
     const endActivity = beginBackgroundActivity("newsletter-send");
     try {
@@ -890,6 +1006,9 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       setPreparedQueueCount(remaining > 0 ? remaining : null);
       if (remaining === 0) {
         setActiveEditionId(null);
+        // Édition servie : le compositeur redevient un brouillon libre (prochaine édition).
+        setComposerEditionId(null);
+        setComposerDirty(false);
       }
       setHistoryRefreshKey((k) => k + 1);
       if (batchAbortRef.current.signal.aborted) {
@@ -902,7 +1021,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         toast.success(`${result.sent} email${result.sent !== 1 ? "s" : ""} envoyé${result.sent !== 1 ? "s" : ""}`);
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Envoi groupé impossible");
+      toast.error(e instanceof Error ? e.message : String(e) || "Envoi groupé impossible");
     } finally {
       setBatchSending(false);
       setBatchProgress(null);
@@ -928,19 +1047,19 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       toast.error("Choisissez un template Brevo (Paramètres ou ci-dessous)");
       return;
     }
-    const hasLiveComposerContent = Boolean(subject.trim() || content || plainBody.trim());
+    // Le compositeur ne vaut que s'il affiche cette édition (pas un autre brouillon).
+    const hasLiveComposerContent =
+      composerEditionId === activeEditionId && Boolean(subject.trim() && plainBody.trim());
     setBrevoPushing(true);
     try {
+      if (hasLiveComposerContent) {
+        const saved = await saveComposerToActiveEdition();
+        if (saved === "locked") toast.warning(LOCKED_EDITION_WARNING);
+      }
       const result = await pushNewsletterEditionToBrevo({
         editionId: activeEditionId,
+        // Contenu de l'édition tel qu'enregistré ci-dessus (même version que l'envoi Gmail).
         templateId,
-        ...(hasLiveComposerContent ?
-          {
-            subject: subject.trim(),
-            plainBody: plainBody.trim(),
-            contentJson: JSON.stringify(currentDraft),
-          }
-        : {}),
       });
       setBrevoCampaignListUrl(result.campaignListUrl);
       setBrevoCampaignName(result.campaignName);
@@ -984,6 +1103,25 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     void runPushToBrevo();
   };
 
+  /** Correctif (bon lien, oubli) aux destinataires d'un envoi : le modèle Newsletter n'est
+   * plus dans la bibliothèque des modèles, l'accès se fait ici. */
+  const openNewsletterCorrection = async () => {
+    if (!etiquetteInfo) {
+      toast.error("Étiquette Newsletter introuvable");
+      return;
+    }
+    try {
+      const etiquette = await getEtiquetteById(etiquetteInfo.id);
+      if (etiquette.email_template_id == null) {
+        toast.error("Aucune newsletter envoyée pour l'instant");
+        return;
+      }
+      setCorrectionTemplate(await getTemplateEmailById(etiquette.email_template_id));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e) || "Correctif indisponible");
+    }
+  };
+
   const handleResumeSend = async (edition: NewsletterEditionSummary) => {
     if (!etiquetteInfo) {
       toast.error("Étiquette Newsletter introuvable");
@@ -1005,7 +1143,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         `${ready} email${ready !== 1 ? "s" : ""} prêt${ready !== 1 ? "s" : ""} — utilisez « Envoyer la campagne » ci-dessus`
       );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Impossible de relancer l'envoi");
+      toast.error(e instanceof Error ? e.message : String(e) || "Impossible de relancer l'envoi");
     } finally {
       setResumingEditionId(null);
     }
@@ -1207,7 +1345,10 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                     <Input
                       id="nl-subject"
                       value={subject}
-                      onChange={(e) => setSubject(e.target.value)}
+                      onChange={(e) => {
+                        setSubject(e.target.value);
+                        setComposerDirty(true);
+                      }}
                     />
                   </div>
                   <Tabs
@@ -1264,7 +1405,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                     : null}
                     <Button
                       type="button"
-                      disabled={preparing}
+                      disabled={preparing || batchSending}
                       onClick={() => void handlePrepareCampaign()}
                     >
                       {preparing ?
@@ -1317,6 +1458,17 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
             />
           )}
 
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void openNewsletterCorrection()}
+            >
+              Envoyer un correctif
+            </Button>
+          </div>
+
           <NewsletterHistoryPanel
             refreshKey={historyRefreshKey}
             initialExpandedEditionId={historyExpandEditionId}
@@ -1324,6 +1476,15 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
             onResumeSend={(edition) => void handleResumeSend(edition)}
             resumingEditionId={resumingEditionId}
           />
+          {correctionTemplate && (
+            <TemplateEmailCorrectionDialog
+              template={correctionTemplate}
+              open
+              onOpenChange={(open) => {
+                if (!open) setCorrectionTemplate(null);
+              }}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="settings" className="mt-4 space-y-4">
@@ -1410,9 +1571,9 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
             <AlertDialogTitle>Générer une nouvelle newsletter ?</AlertDialogTitle>
             <AlertDialogDescription>
               Une campagne est déjà préparée ({preparedEditionQueuedCount ?? 0} destinataire
-              {(preparedEditionQueuedCount ?? 0) !== 1 ? "s" : ""}). La nouvelle génération ne met pas à
-              jour la file Gmail — recliquez sur « Préparer la campagne » pour cela. Le push Brevo
-              reprendra toujours le contenu affiché dans le compositeur ci-dessous.
+              {(preparedEditionQueuedCount ?? 0) !== 1 ? "s" : ""}). Le contenu généré remplacera
+              celui de cette campagne : l'envoi Gmail et le push Brevo partiront avec la nouvelle
+              version (sauf si l'envoi a déjà commencé : la suite garde alors la version d'origine).
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

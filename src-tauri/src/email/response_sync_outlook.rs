@@ -315,6 +315,54 @@ pub fn outlook_find_contact_reply(
     }))
 }
 
+/// Emails « Désinscription newsletter » reçus (lien mailto du pied de newsletter).
+pub fn outlook_list_newsletter_unsubscribe_requests(
+    client: &reqwest::blocking::Client,
+    token: &str,
+    own_email: &str,
+    lookback_days: i64,
+    known: &std::collections::HashSet<String>,
+) -> Result<Vec<super::response_sync::NewsletterUnsubscribeRequest>, String> {
+    // Boîte de réception seulement (pas les éléments envoyés), objet exact du lien mailto.
+    let res = client
+        .get("https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages")
+        .header("ConsistencyLevel", "eventual")
+        .query(&[
+            ("$search", "\"subject:désinscription newsletter\""),
+            ("$top", "50"),
+            ("$select", "id,subject,from,receivedDateTime,sentDateTime"),
+        ])
+        .bearer_auth(token)
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("Outlook HTTP {}", res.status()));
+    }
+    let list: GraphMessageList = res.json().map_err(|e| e.to_string())?;
+    let since = chrono::Utc::now().timestamp() - lookback_days * 86_400;
+    Ok(list
+        .value
+        .into_iter()
+        .filter(|msg| !known.contains(&msg.id))
+        .filter(|msg| is_newsletter_unsubscribe_request(msg.subject.as_deref(), None))
+        .filter_map(|msg| {
+            let received_at = message_datetime(&msg).unwrap_or(0);
+            let from_header = from_address(&msg);
+            if received_at < since
+                || from_header.trim().is_empty()
+                || from_header.trim().eq_ignore_ascii_case(own_email.trim())
+            {
+                return None;
+            }
+            Some(super::response_sync::NewsletterUnsubscribeRequest {
+                message_id: msg.id,
+                from_header,
+                received_at,
+            })
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

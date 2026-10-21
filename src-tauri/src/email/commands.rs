@@ -33,6 +33,9 @@ pub struct SendEmailInput {
     /// Pièces jointes du modèle email (mêmes fichiers pour tous les destinataires).
     #[serde(default)]
     pub attachments: Vec<SendEmailAttachmentInput>,
+    /// Newsletter : adresse du lien de désinscription (en-tête List-Unsubscribe).
+    #[serde(default)]
+    pub list_unsubscribe_email: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -141,6 +144,7 @@ pub async fn send_email(
             &resolved_attachments,
             email_data.sender_email.as_deref(),
             email_data.audit_contact_id,
+            email_data.list_unsubscribe_email.as_deref(),
         )?;
         Ok(SendEmailResult {
             gmail_message_id: sent.gmail_message_id,

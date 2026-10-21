@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TemplateEmail } from "@/lib/api/tauri-templates-email";
 import {
   filterLibraryTemplates,
+  isManagedNewsletterTemplate,
   isOrphanEphemeralTuTemplate,
   isPipeRdvChildTemplate,
   isRelanceChildTemplate,
@@ -136,5 +137,22 @@ describe("template-library", () => {
     expect(filterLibraryTemplates([draft, prepared, archived, permanent]).map((t) => t.id)).toEqual([
       10, 11, 13,
     ]);
+  });
+
+  it("modèle Newsletter géré : seul celui qui porte le HTML d'édition", () => {
+    expect(
+      isManagedNewsletterTemplate(
+        base(1, { categorie: "NEWSLETTER", variables: '{"newsletter_html":"<p>x</p>"}' })
+      )
+    ).toBe(true);
+    // Performance Stellium : catégorie NEWSLETTER mais modèle de campagne classique.
+    expect(
+      isManagedNewsletterTemplate(
+        base(2, { categorie: "NEWSLETTER", variables: '{"corps_html":"<p>x</p>"}' })
+      )
+    ).toBe(false);
+    expect(
+      isManagedNewsletterTemplate(base(3, { categorie: "AUTRE", variables: '{"newsletter_html":""}' }))
+    ).toBe(false);
   });
 });

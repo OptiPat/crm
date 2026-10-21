@@ -15,6 +15,8 @@ export interface SendEmailInput {
   audit_contact_id?: number | null;
   /** Pièces jointes du modèle (mêmes fichiers pour tous les destinataires). */
   attachments?: SendEmailAttachmentInput[];
+  /** Newsletter : adresse du lien de désinscription (en-tête List-Unsubscribe). */
+  list_unsubscribe_email?: string | null;
 }
 
 export interface SendEmailAttachmentInput {
@@ -38,6 +40,8 @@ export interface EmailCampaignSyncResult {
   errors: string[];
   /** D2b : relances passées seules dans « Prêts » pendant la synchro. */
   relance_prepared?: number;
+  /** Contacts désinscrits de la newsletter par email « Désinscription newsletter ». */
+  newsletter_unsubscribed?: number;
 }
 
 export async function syncEmailCampaignResponses(): Promise<EmailCampaignSyncResult> {

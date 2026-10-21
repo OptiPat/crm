@@ -8,6 +8,22 @@ import {
   parseTemplateEmailPipeRdvReminder,
 } from "@/lib/emails/template-email-pipe-rdv";
 
+/**
+ * Modèle « Newsletter » réécrit à chaque préparation (porte le HTML de l'édition) — géré
+ * depuis la page Newsletter. Les autres modèles de catégorie NEWSLETTER restent visibles.
+ */
+export function isManagedNewsletterTemplate(
+  template: Pick<TemplateEmail, "categorie" | "variables">
+): boolean {
+  if (template.categorie !== "NEWSLETTER" || !template.variables?.trim()) return false;
+  try {
+    const parsed = JSON.parse(template.variables) as Record<string, unknown>;
+    return parsed != null && typeof parsed === "object" && "newsletter_html" in parsed;
+  } catch {
+    return false;
+  }
+}
+
 /** Modèle enfant référencé par `relance_template_id` d’un autre — géré dans l’onglet Relance du parent. */
 export function isRelanceChildTemplate(
   templateId: number,

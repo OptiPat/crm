@@ -30,6 +30,9 @@ pub struct EmailCampaignSyncResult {
     /// D2b : relances passées seules dans « Prêts » pendant cette synchro.
     #[serde(default)]
     pub relance_prepared: u32,
+    /// Contacts désinscrits de la newsletter par email reçu pendant cette synchro.
+    #[serde(default)]
+    pub newsletter_unsubscribed: u32,
     /// Lignes dont le contrôle mail a abouti sans réponse (seules éligibles à la relance auto).
     #[serde(skip)]
     pub mail_checked_without_reply: Vec<(i64, String)>,
@@ -851,6 +854,7 @@ pub fn sync_email_campaign_responses(
         rdv_detected: 0,
         errors: vec![],
         relance_prepared: 0,
+        newsletter_unsubscribed: 0,
         mail_checked_without_reply: vec![],
     };
 
@@ -943,6 +947,128 @@ pub fn sync_email_campaign_responses(
     }
 
     Ok(result)
+}
+
+/// Email « Désinscription newsletter » reçu (lien mailto du pied de newsletter :
+/// nouveau message, hors du fil de la newsletter).
+#[derive(Debug, Clone)]
+pub struct NewsletterUnsubscribeRequest {
+    pub message_id: String,
+    pub from_header: String,
+    pub received_at: i64,
+}
+
+/// Fenêtre de recherche : chaque message n'est traité qu'une fois (table de suivi en base).
+const NEWSLETTER_UNSUBSCRIBE_LOOKBACK_DAYS: i64 = 30;
+
+fn gmail_list_newsletter_unsubscribe_requests(
+    client: &reqwest::blocking::Client,
+    token: &str,
+    known: &std::collections::HashSet<String>,
+) -> Result<Vec<NewsletterUnsubscribeRequest>, String> {
+    let q = format!(
+        "-from:me newer_than:{NEWSLETTER_UNSUBSCRIBE_LOOKBACK_DAYS}d \
+         (subject:\"Désinscription newsletter\" OR subject:\"Desinscription newsletter\")"
+    );
+    let res = client
+        .get("https://gmail.googleapis.com/gmail/v1/users/me/messages")
+        .query(&[("q", q.as_str()), ("maxResults", "50")])
+        .bearer_auth(token)
+        .send()
+        .map_err(|e| e.to_string())?;
+    let status = res.status();
+    if !status.is_success() {
+        let body = res.text().unwrap_or_default();
+        reject_if_gmail_rate_limited(status, &body)?;
+        return Err(format!("Gmail HTTP {status}"));
+    }
+    let list: GmailMessageList = res.json().map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for msg in list.messages.unwrap_or_default() {
+        if known.contains(&msg.id) {
+            continue;
+        }
+        let res = client
+            .get(format!(
+                "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}",
+                msg.id
+            ))
+            .query(&[
+                ("format", "metadata"),
+                ("metadataHeaders", "From"),
+                ("metadataHeaders", "Subject"),
+            ])
+            .bearer_auth(token)
+            .send()
+            .map_err(|e| e.to_string())?;
+        let status = res.status();
+        if !status.is_success() {
+            let body = res.text().unwrap_or_default();
+            reject_if_gmail_rate_limited(status, &body)?;
+            continue;
+        }
+        // Un message illisible ne bloque pas les autres.
+        let Ok(meta) = res.json::<GmailMessageMeta>() else {
+            continue;
+        };
+        let header = |name: &str| {
+            meta.payload
+                .as_ref()
+                .and_then(|p| p.headers.as_ref())
+                .and_then(|headers| {
+                    headers
+                        .iter()
+                        .find(|h| h.name.eq_ignore_ascii_case(name))
+                        .map(|h| h.value.clone())
+                })
+        };
+        let subject = header("Subject");
+        // La recherche Gmail est large : on garde la règle exacte du lien mailto.
+        if !is_newsletter_unsubscribe_request(subject.as_deref(), None) {
+            continue;
+        }
+        let Some(from_header) = header("From") else {
+            continue;
+        };
+        let received_at = meta
+            .internal_date
+            .as_deref()
+            .and_then(parse_internal_date_ms)
+            .map(|ms| ms / 1000)
+            .unwrap_or(0);
+        out.push(NewsletterUnsubscribeRequest {
+            message_id: msg.id,
+            from_header,
+            received_at,
+        });
+    }
+    Ok(out)
+}
+
+/// Demandes de désinscription reçues récemment dans la boîte connectée.
+pub fn fetch_newsletter_unsubscribe_requests(
+    app: &AppHandle,
+    known: &std::collections::HashSet<String>,
+) -> Result<Vec<NewsletterUnsubscribeRequest>, String> {
+    let store = EmailOAuthStore::load(app)?;
+    let Some(mut mail_conn) = store.connection.clone() else {
+        return Ok(vec![]);
+    };
+    refresh_connection_if_needed(app, &mut mail_conn)?;
+    let client = reqwest::blocking::Client::new();
+    match mail_conn.provider.as_str() {
+        "google" => {
+            gmail_list_newsletter_unsubscribe_requests(&client, &mail_conn.access_token, known)
+        }
+        "microsoft" => super::response_sync_outlook::outlook_list_newsletter_unsubscribe_requests(
+            &client,
+            &mail_conn.access_token,
+            &mail_conn.email,
+            NEWSLETTER_UNSUBSCRIBE_LOOKBACK_DAYS,
+            known,
+        ),
+        _ => Ok(vec![]),
+    }
 }
 
 #[cfg(test)]

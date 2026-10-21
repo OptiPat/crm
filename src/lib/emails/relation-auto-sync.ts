@@ -10,6 +10,7 @@ export interface RelationAutoSyncResult {
   mail_detected: number;
   rdv_campaign_detected: number;
   relance_prepared: number;
+  newsletter_unsubscribed: number;
   calendar_accepted: number;
   calendar_declined: number;
   calendar_cancelled: number;
@@ -32,6 +33,7 @@ export async function runRelationAutoSync(): Promise<RelationAutoSyncResult> {
       mail_detected: 0,
       rdv_campaign_detected: 0,
       relance_prepared: 0,
+      newsletter_unsubscribed: 0,
       calendar_accepted: 0,
       calendar_declined: 0,
       calendar_cancelled: 0,
@@ -43,6 +45,7 @@ export async function runRelationAutoSync(): Promise<RelationAutoSyncResult> {
   let mailDetected = 0;
   let rdvCampaignDetected = 0;
   let relancePrepared = 0;
+  let newsletterUnsubscribed = 0;
   let calendarAccepted = 0;
   let calendarDeclined = 0;
   let calendarCancelled = 0;
@@ -53,6 +56,7 @@ export async function runRelationAutoSync(): Promise<RelationAutoSyncResult> {
       mailDetected = email.mail_detected;
       rdvCampaignDetected = email.rdv_detected;
       relancePrepared = email.relance_prepared ?? 0;
+      newsletterUnsubscribed = email.newsletter_unsubscribed ?? 0;
       errors.push(...email.errors);
     }
   } catch (e) {
@@ -82,7 +86,7 @@ export async function runRelationAutoSync(): Promise<RelationAutoSyncResult> {
   if (changed) {
     notifyRelationChanged();
   }
-  if (calendarCancelled > 0) {
+  if (calendarCancelled > 0 || newsletterUnsubscribed > 0) {
     notifyContactsChanged();
     notifyPipeChanged();
   }
@@ -92,6 +96,7 @@ export async function runRelationAutoSync(): Promise<RelationAutoSyncResult> {
     mail_detected: mailDetected,
     rdv_campaign_detected: rdvCampaignDetected,
     relance_prepared: relancePrepared,
+    newsletter_unsubscribed: newsletterUnsubscribed,
     calendar_accepted: calendarAccepted,
     calendar_declined: calendarDeclined,
     calendar_cancelled: calendarCancelled,

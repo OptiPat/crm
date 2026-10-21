@@ -566,6 +566,18 @@ pub fn prepare_newsletter_edition(
         .map_err(|e| e.to_string())?
         .as_secs() as i64;
 
+    if input.subject.trim().is_empty() || input.plain_body.trim().is_empty() {
+        return Err("Objet et contenu de la newsletter obligatoires".into());
+    }
+    // Sans mise en page, l'envoi partirait en texte brut, sans pied ni lien de désinscription.
+    let has_html = serde_json::from_str::<serde_json::Value>(input.html_meta.trim())
+        .ok()
+        .and_then(|v| v.get("newsletter_html").and_then(|h| h.as_str()).map(|h| !h.trim().is_empty()))
+        .unwrap_or(false);
+    if !has_html {
+        return Err("Mise en page de la newsletter manquante — rechargez la page puis réessayez".into());
+    }
+
     let settings_filters = NewsletterStore::load(&app)?.default_audience_filters;
     let filters = settings_filters.merged_with(&input.filters);
 
@@ -641,6 +653,62 @@ pub fn prepare_newsletter_edition(
         edition_id,
         template_id,
     })
+}
+
+#[tauri::command]
+pub fn get_contact_newsletter_unsubscribed_at(
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<Option<i64>, String> {
+    let db_guard = db.lock().map_err(|e| format!("Erreur accès base: {}", e))?;
+    let database = db_guard.as_ref().ok_or("Base de données non initialisée")?;
+    database
+        .get_contact_newsletter_unsubscribed_at(contact_id)
+        .map_err(|e| format!("Contact introuvable: {}", e))
+}
+
+#[tauri::command]
+pub fn set_contact_newsletter_unsubscribed(
+    db: State<'_, DbState>,
+    contact_id: i64,
+    unsubscribed: bool,
+) -> Result<(), String> {
+    let db_guard = db.lock().map_err(|e| format!("Erreur accès base: {}", e))?;
+    let database = db_guard.as_ref().ok_or("Base de données non initialisée")?;
+    database
+        .set_contact_newsletter_unsubscribed(contact_id, unsubscribed)
+        .map_err(|e| format!("Désinscription newsletter: {}", e))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveNewsletterEditionContentInput {
+    pub edition_id: i64,
+    pub subject: String,
+    pub plain_body: String,
+    pub content_json: String,
+    pub html_meta: String,
+}
+
+#[tauri::command]
+pub fn save_newsletter_edition_content(
+    db: State<'_, DbState>,
+    input: SaveNewsletterEditionContentInput,
+) -> Result<(), String> {
+    let db_guard = db.lock().map_err(|e| format!("Erreur accès base: {}", e))?;
+    let database = db_guard.as_ref().ok_or("Base de données non initialisée")?;
+    database
+        .save_newsletter_edition_content(
+            input.edition_id,
+            &input.subject,
+            &input.plain_body,
+            &input.content_json,
+            &input.html_meta,
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::InvalidParameterName(msg) => msg,
+            other => format!("Enregistrement édition: {}", other),
+        })
 }
 
 #[tauri::command]
@@ -807,10 +875,23 @@ pub fn test_brevo_connection(
 pub struct PushNewsletterEditionToBrevoInput {
     pub edition_id: i64,
     pub template_id: Option<i64>,
-    /// Contenu affiché dans le compositeur au moment du push (prioritaire sur l'édition en base).
-    pub subject: Option<String>,
-    pub plain_body: Option<String>,
-    pub content_json: Option<String>,
+}
+
+/// Destinataires Brevo : ni déjà servis par Gmail, ni désinscrits depuis la préparation.
+fn brevo_push_recipients(
+    recipients: Vec<crate::newsletter::db::NewsletterEditionRecipient>,
+    unsubscribed: &std::collections::HashSet<i64>,
+) -> Vec<BrevoRecipient> {
+    recipients
+        .into_iter()
+        .filter(|r| r.sent_at.is_none() && !unsubscribed.contains(&r.contact_id))
+        .filter(|r| !r.email.trim().is_empty())
+        .map(|r| BrevoRecipient {
+            email: r.email.trim().to_string(),
+            prenom: r.prenom,
+            nom: r.nom,
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -859,50 +940,17 @@ pub fn push_newsletter_edition_to_brevo(
             ));
         }
 
-        let content_json = input
+        // Contenu de l'édition tel qu'enregistré (save_newsletter_edition_content) : même
+        // version que l'envoi Gmail.
+        let content_json = detail
             .content_json
             .as_deref()
             .filter(|s| !s.trim().is_empty())
             .map(|s| s.to_string())
-            .or_else(|| {
-                detail
-                    .content_json
-                    .as_deref()
-                    .filter(|s| !s.trim().is_empty())
-                    .map(|s| s.to_string())
-            })
             .ok_or_else(|| {
                 "Contenu de l'édition introuvable — préparez à nouveau la campagne.".to_string()
             })?;
-
-        let subject = input
-            .subject
-            .as_deref()
-            .filter(|s| !s.trim().is_empty())
-            .unwrap_or(detail.subject.as_str())
-            .trim()
-            .to_string();
-
-        if input.content_json.is_some() || input.subject.is_some() || input.plain_body.is_some() {
-            let plain_body = input
-                .plain_body
-                .as_deref()
-                .filter(|s| !s.trim().is_empty())
-                .unwrap_or(detail.plain_body.as_str())
-                .trim()
-                .to_string();
-            database
-                .update_newsletter_edition_content(
-                    input.edition_id,
-                    &subject,
-                    &plain_body,
-                    &content_json,
-                )
-                .map_err(|_| {
-                    "Impossible de mettre à jour le contenu — l'édition n'est plus au statut « préparée »."
-                        .to_string()
-                })?;
-        }
+        let subject = detail.subject.trim().to_string();
 
         let preheader = serde_json::from_str::<serde_json::Value>(&content_json)
             .ok()
@@ -916,16 +964,14 @@ pub fn push_newsletter_edition_to_brevo(
 
         let prepared_recipient_count = detail.queued_count;
 
-        let recipients: Vec<BrevoRecipient> = detail
-            .recipients
+        // Pas de doublon avec Gmail (déjà servis) ni d'envoi à un désinscrit depuis la préparation.
+        let unsubscribed: std::collections::HashSet<i64> = database
+            .list_newsletter_unsubscribed()
+            .map_err(|e| format!("Liste désinscriptions: {}", e))?
             .into_iter()
-            .filter(|r| !r.email.trim().is_empty())
-            .map(|r| BrevoRecipient {
-                email: r.email.trim().to_string(),
-                prenom: r.prenom,
-                nom: r.nom,
-            })
+            .map(|c| c.contact_id)
             .collect();
+        let recipients = brevo_push_recipients(detail.recipients, &unsubscribed);
 
         (PushBrevoCampaignInput {
             edition_id: input.edition_id,
@@ -1130,4 +1176,38 @@ fn truncate(s: &str, max: usize) -> String {
         return s.to_string();
     }
     format!("{}…", &s[..max])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::newsletter::db::NewsletterEditionRecipient;
+
+    fn recipient(contact_id: i64, email: &str, sent_at: Option<i64>) -> NewsletterEditionRecipient {
+        NewsletterEditionRecipient {
+            contact_id,
+            contact_etiquette_id: contact_id * 10,
+            nom: "Nom".into(),
+            prenom: "Prénom".into(),
+            email: email.into(),
+            sent_at,
+            error_message: None,
+        }
+    }
+
+    #[test]
+    fn brevo_push_skips_sent_and_unsubscribed_recipients() {
+        let unsubscribed: std::collections::HashSet<i64> = [3].into_iter().collect();
+        let out = brevo_push_recipients(
+            vec![
+                recipient(1, " a@x.fr ", None),
+                recipient(2, "b@x.fr", Some(1_700_000_000)),
+                recipient(3, "c@x.fr", None),
+                recipient(4, " ", None),
+            ],
+            &unsubscribed,
+        );
+        let emails: Vec<&str> = out.iter().map(|r| r.email.as_str()).collect();
+        assert_eq!(emails, vec!["a@x.fr"]);
+    }
 }

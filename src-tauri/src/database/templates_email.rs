@@ -209,6 +209,27 @@ impl super::Database {
 
     pub fn delete_template_email(&self, id: i64) -> Result<()> {
         let tpl = self.get_template_email_by_id(id)?;
+        // Modèle géré par la page Newsletter (HTML de l'édition) — pas les autres modèles
+        // de catégorie NEWSLETTER (ex. Performance Stellium).
+        let is_managed_newsletter = tpl.categorie == "NEWSLETTER"
+            && tpl
+                .variables
+                .as_deref()
+                .and_then(|v| serde_json::from_str::<serde_json::Value>(v).ok())
+                .is_some_and(|v| v.get("newsletter_html").is_some());
+        // Seulement s'il sert encore (étiquette Newsletter) : un ancien modèle orphelin reste supprimable.
+        let in_use = is_managed_newsletter
+            && self.conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM etiquettes WHERE email_template_id = ?1)",
+                params![id],
+                |row| row.get::<_, bool>(0),
+            )?;
+        if in_use {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Le modèle Newsletter est géré par la page Newsletter — il ne peut pas être supprimé"
+                    .into(),
+            ));
+        }
         if let Some(cfg) = self.parse_ephemeral_campaign_config(tpl.variables.as_deref()) {
             if cfg.status != "archived" {
                 return Err(rusqlite::Error::InvalidParameterName(

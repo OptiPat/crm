@@ -2229,7 +2229,40 @@ impl Database {
             )?;
             println!("✅ Migration: colonne brevo_pushed_at sur newsletter_editions");
         }
+        if !self.table_has_column("newsletter_editions", "html_meta")? {
+            // Tout ou rien : un arrêt après l'ALTER ne doit pas sauter la reprise des données.
+            self.conn.execute("BEGIN IMMEDIATE", [])?;
+            let result = self.migrate_newsletter_edition_html_meta();
+            match result {
+                Ok(()) => self.conn.execute("COMMIT", [])?,
+                Err(e) => {
+                    let _ = self.conn.execute("ROLLBACK", []);
+                    return Err(e);
+                }
+            };
+            println!("✅ Migration: contenu HTML par édition newsletter");
+        }
+        // Demandes « Désinscription newsletter » déjà traitées : une réinscription manuelle
+        // n'est pas annulée par le même email au cycle suivant.
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS newsletter_unsubscribe_requests (
+                message_id TEXT PRIMARY KEY,
+                from_header TEXT NOT NULL,
+                contact_id INTEGER,
+                received_at INTEGER,
+                processed_at INTEGER NOT NULL
+            )",
+            [],
+        )?;
         Ok(())
+    }
+
+    fn migrate_newsletter_edition_html_meta(&self) -> Result<()> {
+        self.conn.execute(
+            "ALTER TABLE newsletter_editions ADD COLUMN html_meta TEXT",
+            [],
+        )?;
+        self.backfill_newsletter_edition_html_meta()
     }
 
     fn migrate_protect_newsletter_etiquette(&self) -> Result<()> {

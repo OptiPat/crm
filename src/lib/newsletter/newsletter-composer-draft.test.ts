@@ -57,6 +57,7 @@ describe("newsletter-composer-draft", () => {
       activeEditionId: 7,
       preparedQueueCount: 12,
       composerEditionId: 7,
+      composerDirty: false,
     });
     const loaded = loadNewsletterComposerDraft();
     expect(loaded?.theme).toBe("Assurance emprunteur");
@@ -85,6 +86,7 @@ describe("newsletter-composer-draft", () => {
       activeEditionId: null,
       preparedQueueCount: null,
       composerEditionId: null,
+      composerDirty: false,
     });
     expect(loadNewsletterComposerDraft()?.theme).toBe("x");
     saveNewsletterComposerDraft({
@@ -103,6 +105,7 @@ describe("newsletter-composer-draft", () => {
       activeEditionId: null,
       preparedQueueCount: null,
       composerEditionId: null,
+      composerDirty: false,
     });
     expect(loadNewsletterComposerDraft()).toBeNull();
     clearNewsletterComposerDraft();

@@ -25,6 +25,8 @@ export function newsletterEditionStatusLabel(edition: NewsletterEditionSummary):
       return "Partielle";
     case "cancelled":
       return "Annulée";
+    case "superseded":
+      return "Remplacée";
     default:
       return edition.status;
   }

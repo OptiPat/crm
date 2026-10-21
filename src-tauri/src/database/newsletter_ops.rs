@@ -19,6 +19,18 @@ fn newsletter_template_variables(html_meta: &str) -> String {
     value.to_string()
 }
 
+/// Adresse de l'expéditeur (`"Nom" <a@b.fr>` → `a@b.fr`) : le nom affiché est ignoré,
+/// pour ne pas désinscrire une adresse qui n'y figure qu'en texte.
+fn sender_address(from_header: &str) -> Option<String> {
+    let header = from_header.trim();
+    let addr = match (header.rfind('<'), header.rfind('>')) {
+        (Some(start), Some(end)) if start < end => &header[start + 1..end],
+        _ => header,
+    };
+    let addr = addr.trim();
+    (addr.contains('@') && !addr.contains(char::is_whitespace)).then(|| addr.to_lowercase())
+}
+
 impl Database {
     fn load_contacts_for_newsletter_audience(&self) -> Result<Vec<ContactAudienceRow>> {
         let mut stmt = self.conn.prepare(
@@ -191,19 +203,143 @@ impl Database {
             params![now, source, contact_id],
         )?;
 
+        // Éditions en attente : le contact n'est plus à servir (sinon l'édition ne se termine
+        // jamais : envoyés < préparés en boucle).
+        let pending_editions: Vec<i64> = self
+            .conn
+            .prepare(
+                "SELECT DISTINCT ne.id FROM newsletter_editions ne
+                 INNER JOIN newsletter_edition_recipients ner ON ner.edition_id = ne.id
+                 WHERE ner.contact_id = ?1 AND ner.sent_at IS NULL
+                   AND (
+                     ne.status IN ('prepared', 'partial', 'sending')
+                     OR (ne.status = 'completed' AND ne.sent_count < ne.queued_count)
+                   )",
+            )?
+            .query_map(params![contact_id], |row| row.get(0))?
+            .collect::<Result<Vec<_>>>()?;
+        for edition_id in pending_editions {
+            let removed = self.conn.execute(
+                "DELETE FROM newsletter_edition_recipients
+                 WHERE edition_id = ?1 AND contact_id = ?2 AND sent_at IS NULL",
+                params![edition_id, contact_id],
+            )?;
+            self.conn.execute(
+                "UPDATE newsletter_editions SET queued_count = MAX(queued_count - ?1, 0)
+                 WHERE id = ?2",
+                params![removed as i64, edition_id],
+            )?;
+        }
+
+        // Ligne newsletter en attente uniquement (pas les campagnes de catégorie NEWSLETTER
+        // comme Performance Stellium, qui n'ont pas de HTML d'édition).
         let _ = self.conn.execute(
             "DELETE FROM contact_etiquettes
              WHERE contact_id = ?1 AND email_envoye = 0
                AND etiquette_id IN (
-                 SELECT id FROM etiquettes WHERE email_actif = 1
-                   AND email_template_id IN (
-                     SELECT id FROM templates_email WHERE categorie = 'NEWSLETTER'
-                   )
+                 SELECT e.id FROM etiquettes e
+                 INNER JOIN templates_email t ON t.id = e.email_template_id
+                 WHERE e.email_actif = 1
+                   AND t.categorie = 'NEWSLETTER'
+                   AND CASE WHEN json_valid(t.variables)
+                         THEN json_type(t.variables, '$.newsletter_html') END IS NOT NULL
                )",
             params![contact_id],
         );
 
         Ok(updated > 0)
+    }
+
+    pub fn get_contact_newsletter_unsubscribed_at(&self, contact_id: i64) -> Result<Option<i64>> {
+        self.conn.query_row(
+            "SELECT newsletter_desinscrit_at FROM contacts WHERE id = ?1",
+            params![contact_id],
+            |row| row.get(0),
+        )
+    }
+
+    /// Case « Désinscrit de la newsletter » de la fiche contact.
+    pub fn set_contact_newsletter_unsubscribed(
+        &self,
+        contact_id: i64,
+        unsubscribed: bool,
+    ) -> Result<()> {
+        if unsubscribed {
+            self.mark_newsletter_unsubscribed(contact_id, Some("Fiche contact"))?;
+        } else {
+            self.conn.execute(
+                "UPDATE contacts
+                 SET newsletter_desinscrit_at = NULL, newsletter_desinscrit_note = NULL,
+                     updated_at = unixepoch()
+                 WHERE id = ?1",
+                params![contact_id],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Messages de désinscription déjà traités (la synchro ne les relit pas).
+    pub fn known_newsletter_unsubscribe_message_ids(
+        &self,
+    ) -> Result<std::collections::HashSet<String>> {
+        self.conn
+            .prepare("SELECT message_id FROM newsletter_unsubscribe_requests")?
+            .query_map([], |row| row.get(0))?
+            .collect()
+    }
+
+    /// Emails « Désinscription newsletter » reçus : désinscrit l'expéditeur s'il est un contact.
+    /// Chaque message n'est traité qu'une fois. Retourne le nombre de nouveaux désinscrits.
+    pub fn apply_newsletter_unsubscribe_requests(
+        &self,
+        requests: &[(String, String, i64)],
+    ) -> Result<u32> {
+        let mut unsubscribed = 0u32;
+        for (message_id, from_header, received_at) in requests {
+            let seen: bool = self.conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM newsletter_unsubscribe_requests WHERE message_id = ?1)",
+                params![message_id],
+                |row| row.get(0),
+            )?;
+            if seen {
+                continue;
+            }
+            let Some(sender) = sender_address(from_header) else {
+                continue;
+            };
+            let contacts: Vec<(i64, String)> = self
+                .conn
+                .prepare(
+                    "SELECT id, email FROM contacts
+                     WHERE email IS NOT NULL AND trim(email) <> ''",
+                )?
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect::<Result<Vec<_>>>()?;
+            let mut matched: Option<i64> = None;
+            for (contact_id, email) in contacts {
+                if !email.trim().eq_ignore_ascii_case(&sender) {
+                    continue;
+                }
+                matched.get_or_insert(contact_id);
+                if self.mark_newsletter_unsubscribed(
+                    contact_id,
+                    Some("Email « Désinscription newsletter » reçu"),
+                )? {
+                    unsubscribed += 1;
+                }
+            }
+            // Expéditeur inconnu : pas mémorisé, réessayé tant que l'email reste dans la fenêtre.
+            if matched.is_none() {
+                continue;
+            }
+            self.conn.execute(
+                "INSERT OR IGNORE INTO newsletter_unsubscribe_requests
+                    (message_id, from_header, contact_id, received_at, processed_at)
+                 VALUES (?1, ?2, ?3, ?4, unixepoch())",
+                params![message_id, from_header, matched, received_at],
+            )?;
+        }
+        Ok(unsubscribed)
     }
 
     pub fn try_newsletter_unsubscribe_from_reply(
@@ -390,11 +526,14 @@ impl Database {
         prepared_at: i64,
         queued: &[QueuedNewsletterContact],
     ) -> Result<i64> {
+        // html_meta : copie du modèle que la préparation vient d'écrire pour cette édition.
         self.conn.execute(
             "INSERT INTO newsletter_editions (
                 etiquette_id, template_id, edition_label, subject, plain_body, content_json,
-                theme, edition_instructions, audience_filters_json, prepared_at, queued_count, status
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'prepared')",
+                theme, edition_instructions, audience_filters_json, prepared_at, queued_count, status,
+                html_meta
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'prepared',
+                (SELECT variables FROM templates_email WHERE id = ?2))",
             params![
                 etiquette_id,
                 template_id,
@@ -427,7 +566,61 @@ impl Database {
             )?;
         }
 
+        self.supersede_older_newsletter_editions(etiquette_id, edition_id)?;
+
         Ok(edition_id)
+    }
+
+    /// Migration html_meta : reprise des éditions existantes (appelée après l'ajout de la colonne).
+    pub(crate) fn backfill_newsletter_edition_html_meta(&self) -> Result<()> {
+        // Le modèle partagé porte le HTML écrit par la dernière préparation : le recopier sur
+        // la dernière édition seulement (l'objet a pu être corrigé ensuite via le push Brevo).
+        self.conn.execute(
+            "UPDATE newsletter_editions
+             SET html_meta = (SELECT t.variables FROM templates_email t
+                              WHERE t.id = newsletter_editions.template_id)
+             WHERE id IN (SELECT MAX(id) FROM newsletter_editions GROUP BY etiquette_id)",
+            [],
+        )?;
+        // Une seule édition enviable par étiquette (lignes destinataires partagées) : la plus
+        // récente toutes éditions confondues ; les plus anciennes encore en attente sont
+        // annulées (jamais envoyées) ou remplacées.
+        let latest: Vec<(i64, i64)> = self
+            .conn
+            .prepare("SELECT etiquette_id, MAX(id) FROM newsletter_editions GROUP BY etiquette_id")?
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<_>>>()?;
+        for (etiquette_id, edition_id) in latest {
+            self.supersede_older_newsletter_editions(etiquette_id, edition_id)?;
+        }
+        Ok(())
+    }
+
+    /// Une seule édition enviable par étiquette : les lignes destinataires sont partagées
+    /// (une par contact), donc une nouvelle préparation remplace les éditions encore en attente.
+    /// Jamais envoyée → « cancelled » ; déjà en partie envoyée → « superseded ».
+    pub(crate) fn supersede_older_newsletter_editions(
+        &self,
+        etiquette_id: i64,
+        keep_edition_id: i64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE newsletter_editions SET status = 'cancelled'
+             WHERE etiquette_id = ?1 AND id <> ?2
+               AND status IN ('prepared', 'sending')
+               AND sent_count = 0",
+            params![etiquette_id, keep_edition_id],
+        )?;
+        self.conn.execute(
+            "UPDATE newsletter_editions SET status = 'superseded'
+             WHERE etiquette_id = ?1 AND id <> ?2
+               AND (
+                 status IN ('prepared', 'partial', 'sending')
+                 OR (status = 'completed' AND sent_count < queued_count)
+               )",
+            params![etiquette_id, keep_edition_id],
+        )?;
+        Ok(())
     }
 
     pub fn list_newsletter_editions(&self, limit: u32) -> Result<Vec<NewsletterEditionSummary>> {
@@ -462,7 +655,8 @@ impl Database {
             "SELECT id, edition_label, subject, plain_body, theme, edition_instructions,
                     prepared_at, send_started_at, send_completed_at,
                     queued_count, sent_count, error_count, status, content_json,
-                    brevo_campaign_id, brevo_list_id, brevo_template_id, brevo_pushed_at
+                    brevo_campaign_id, brevo_list_id, brevo_template_id, brevo_pushed_at,
+                    html_meta
              FROM newsletter_editions WHERE id = ?1",
             params![edition_id],
             |row| {
@@ -486,6 +680,7 @@ impl Database {
                     brevo_list_id: row.get(15)?,
                     brevo_template_id: row.get(16)?,
                     brevo_pushed_at: row.get(17)?,
+                    html_meta: row.get(18)?,
                 })
             },
         )?;
@@ -568,27 +763,32 @@ impl Database {
         self.conn.execute("BEGIN IMMEDIATE", [])?;
         let result = (|| -> Result<()> {
             if let Some(err) = error_message {
-                self.conn.execute(
+                // Destinataire retiré entre-temps (désinscription) : rien à compter.
+                let touched = self.conn.execute(
                     "UPDATE newsletter_edition_recipients
                      SET error_message = ?1
                      WHERE edition_id = ?2 AND contact_etiquette_id = ?3",
                     params![err, edition_id, contact_etiquette_id],
                 )?;
-                self.conn.execute(
-                    "UPDATE newsletter_editions SET error_count = error_count + 1 WHERE id = ?1",
-                    params![edition_id],
-                )?;
+                if touched > 0 {
+                    self.conn.execute(
+                        "UPDATE newsletter_editions SET error_count = error_count + 1 WHERE id = ?1",
+                        params![edition_id],
+                    )?;
+                }
             } else {
-                self.conn.execute(
+                let touched = self.conn.execute(
                     "UPDATE newsletter_edition_recipients
                      SET sent_at = ?1, gmail_message_id = ?2, error_message = NULL
                      WHERE edition_id = ?3 AND contact_etiquette_id = ?4",
                     params![sent_at, gmail_message_id, edition_id, contact_etiquette_id],
                 )?;
-                self.conn.execute(
-                    "UPDATE newsletter_editions SET sent_count = sent_count + 1 WHERE id = ?1",
-                    params![edition_id],
-                )?;
+                if touched > 0 {
+                    self.conn.execute(
+                        "UPDATE newsletter_editions SET sent_count = sent_count + 1 WHERE id = ?1",
+                        params![edition_id],
+                    )?;
+                }
             }
             Ok(())
         })();
@@ -610,6 +810,7 @@ impl Database {
         completed_at: i64,
         cancelled: bool,
     ) -> Result<NewsletterEditionSummary> {
+        self.sync_newsletter_edition_queued_count(edition_id)?;
         let (_queued, sent, errors): (i64, i64, i64) = self.conn.query_row(
             "SELECT queued_count, sent_count, error_count FROM newsletter_editions WHERE id = ?1",
             params![edition_id],
@@ -634,7 +835,7 @@ impl Database {
         self.conn.execute(
             "UPDATE newsletter_editions
              SET status = ?1, send_completed_at = ?2
-             WHERE id = ?3",
+             WHERE id = ?3 AND status NOT IN ('superseded', 'cancelled')",
             params![status, completed_at, edition_id],
         )?;
 
@@ -662,22 +863,55 @@ impl Database {
         )
     }
 
-    pub fn update_newsletter_edition_content(
+    /// Corrections après « Préparer » : l'envoi (et la reprise) part avec cette version.
+    /// Le modèle « Newsletter » est aligné pour que l'aperçu étiquette reste cohérent.
+    pub fn save_newsletter_edition_content(
         &self,
         edition_id: i64,
         subject: &str,
         plain_body: &str,
         content_json: &str,
+        html_meta: &str,
     ) -> Result<()> {
+        let subject = subject.trim();
+        let plain_body = plain_body.trim();
+        if subject.is_empty() || plain_body.is_empty() {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Objet et contenu de la newsletter obligatoires".into(),
+            ));
+        }
+        let has_html = serde_json::from_str::<serde_json::Value>(html_meta.trim())
+            .ok()
+            .and_then(|v| v.get("newsletter_html").and_then(|h| h.as_str()).map(|h| !h.trim().is_empty()))
+            .unwrap_or(false);
+        if !has_html {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Mise en page de la newsletter manquante — rechargez la page puis réessayez".into(),
+            ));
+        }
+        let variables = newsletter_template_variables(html_meta.trim());
         let updated = self.conn.execute(
             "UPDATE newsletter_editions
-             SET subject = ?1, plain_body = ?2, content_json = ?3
-             WHERE id = ?4 AND status IN ('prepared', 'partial', 'sending')",
-            params![subject, plain_body, content_json, edition_id],
+             SET subject = ?1, plain_body = ?2, content_json = ?3, html_meta = ?4
+             WHERE id = ?5
+               AND sent_count = 0
+               -- « Terminée 0/N » (envoi interrompu à vide) reste reprenable, donc modifiable.
+               AND status IN ('prepared', 'partial', 'sending', 'completed')",
+            params![subject, plain_body, content_json.trim(), variables, edition_id],
         )?;
+        // Déjà partie chez une partie des contacts : la suite garde la même version.
         if updated == 0 {
-            return Err(rusqlite::Error::QueryReturnedNoRows);
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Cette édition n'est plus modifiable (envoi commencé, annulée ou remplacée)".into(),
+            ));
         }
+        self.conn.execute(
+            "UPDATE templates_email
+             SET sujet = ?1, corps = ?2, variables = ?3, updated_at = unixepoch()
+             WHERE categorie = 'NEWSLETTER'
+               AND id = (SELECT template_id FROM newsletter_editions WHERE id = ?4)",
+            params![subject, plain_body, variables, edition_id],
+        )?;
         Ok(())
     }
 
@@ -769,7 +1003,55 @@ impl Database {
     }
 
     /// Réactive les lignes file après annulation précédente ou édition bloquée à 0/N.
+    /// Nombre préparé = lignes destinataires restantes (un contact supprimé depuis la
+    /// préparation disparaît en cascade) : sinon l'édition resterait « à relancer » sans fin.
+    fn sync_newsletter_edition_queued_count(&self, edition_id: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE newsletter_editions
+             SET queued_count = (SELECT COUNT(*) FROM newsletter_edition_recipients
+                                 WHERE edition_id = ?1)
+             WHERE id = ?1
+               AND (
+                 status IN ('prepared', 'partial', 'sending')
+                 OR (status = 'completed' AND sent_count < queued_count)
+               )",
+            params![edition_id],
+        )?;
+        Ok(())
+    }
+
     fn ensure_newsletter_edition_resumable(&self, edition_id: i64) -> Result<()> {
+        self.sync_newsletter_edition_queued_count(edition_id)?;
+        // Ligne restée « envoyée » d'une édition précédente (ex. ancienne réparation du suivi
+        // qui la remarquait envoyée) : à servir pour cette édition. L'ancien envoi est archivé
+        // par le trigger de remplacement.
+        self.conn.execute(
+            "UPDATE contact_etiquettes
+             SET email_envoye = 0, email_date_envoi = NULL,
+                 email_gmail_message_id = NULL, email_gmail_thread_id = NULL,
+                 email_sent_subject = NULL, email_sent_body = NULL, email_sent_template_nom = NULL,
+                 email_reponse_at = NULL, email_reponse_type = NULL, email_reponse_body = NULL,
+                 email_reponse_gmail_message_id = NULL,
+                 relance_email_sent_at = NULL, relance_email_skipped_at = NULL,
+                 email_relance_active = 0
+             WHERE id IN (
+               SELECT ner.contact_etiquette_id
+               FROM newsletter_edition_recipients ner
+               INNER JOIN newsletter_editions ne ON ne.id = ner.edition_id
+               WHERE ner.edition_id = ?1
+                 AND ner.sent_at IS NULL
+                 AND (
+                   ne.status IN ('prepared', 'partial', 'sending')
+                   OR (ne.status = 'completed' AND ne.sent_count < ne.queued_count)
+                 )
+             )
+             AND email_envoye = 1
+             AND (
+               email_date_envoi IS NULL
+               OR email_date_envoi < (SELECT prepared_at FROM newsletter_editions WHERE id = ?1)
+             )",
+            params![edition_id],
+        )?;
         self.conn.execute(
             "UPDATE contact_etiquettes SET email_annule = 0, email_suivi_ignore = 1
              WHERE id IN (
@@ -798,10 +1080,21 @@ impl Database {
     /// Destinataires encore à envoyer pour une édition (hors file Suivi standard).
     pub fn get_newsletter_send_queue(&self, edition_id: i64) -> Result<Vec<EtiquetteEmailQueueItem>> {
         self.ensure_newsletter_edition_resumable(edition_id)?;
+        // Contenu de l'édition (dernière version enregistrée), pas le modèle partagé « Newsletter ».
         let sql = "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
-                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
-                        t.variables, t.categorie, NULL,
+                        ne.subject, ne.plain_body, NULL,
+                        CASE
+                          WHEN ne.html_meta IS NOT NULL THEN ne.html_meta
+                          -- Édition antérieure à la colonne : le modèle seulement s'il a été écrit
+                          -- par sa préparation (dernière édition), jamais le HTML d'une autre.
+                          WHEN NOT EXISTS (
+                            SELECT 1 FROM newsletter_editions newer
+                            WHERE newer.etiquette_id = ne.etiquette_id AND newer.id > ne.id
+                          ) THEN t.variables
+                          ELSE NULL
+                        END,
+                        'NEWSLETTER', NULL,
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         c.registre,
                         COALESCE(ce.email_relance_active, 0),
@@ -819,6 +1112,7 @@ impl Database {
                    AND ner.sent_at IS NULL
                    AND ce.email_envoye = 0
                    AND COALESCE(ce.email_annule, 0) = 0
+                   AND c.newsletter_desinscrit_at IS NULL
                    AND (
                      ne.status IN ('prepared', 'partial', 'sending')
                      OR (ne.status = 'completed' AND ne.sent_count < ne.queued_count)
@@ -1316,5 +1610,537 @@ mod tests {
             serde_json::from_str(tpl.variables.as_deref().unwrap()).unwrap();
         assert_eq!(vars["newsletter_html"], "<p>Hi</p>");
         assert_eq!(vars["email_suivi_reponse"]["attendre_reponse"], false);
+    }
+
+    fn newsletter_etiquette(db: &Database) -> i64 {
+        db.create_etiquette(NewEtiquette {
+            nom: "Newsletter".into(),
+            couleur: None,
+            icone: None,
+            description: None,
+            priorite: Some(0),
+            auto_condition_type: None,
+            auto_condition_config: None,
+            auto_categories: None,
+            email_template_id: None,
+            email_delai_jours: None,
+            email_envoi_prevu: None,
+            email_envoi_heure: None,
+            email_envoi_jours_semaine: None,
+            email_actif: Some(false),
+            is_default: Some(false),
+            actif: Some(true),
+            segment_id: None,
+            rendement_cible: None,
+        })
+        .unwrap()
+        .id
+    }
+
+    /// Même enchaînement que la commande `prepare_newsletter_edition`.
+    fn prepare_edition(db: &Database, etiquette_id: i64, subject: &str, html: &str, at: i64) -> i64 {
+        let meta = serde_json::json!({ "newsletter_html": html }).to_string();
+        let template_id = db
+            .upsert_newsletter_template(etiquette_id, subject, "Corps", &meta)
+            .unwrap();
+        db.conn
+            .execute(
+                "UPDATE etiquettes SET email_template_id = ?1 WHERE id = ?2",
+                params![template_id, etiquette_id],
+            )
+            .unwrap();
+        let filters = NewsletterAudienceFilters::default();
+        let (_q, _s, queued) = db.queue_newsletter_edition(etiquette_id, at, &filters).unwrap();
+        db.create_newsletter_edition(
+            etiquette_id,
+            template_id,
+            subject,
+            subject,
+            "Corps",
+            "{}",
+            None,
+            None,
+            &serde_json::to_string(&filters).unwrap(),
+            at,
+            &queued,
+        )
+        .unwrap()
+    }
+
+    fn edition_status(db: &Database, edition_id: i64) -> String {
+        db.conn
+            .query_row(
+                "SELECT status FROM newsletter_editions WHERE id = ?1",
+                params![edition_id],
+                |row| row.get(0),
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn send_queue_uses_edition_content_and_saved_corrections() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let etiquette_id = newsletter_etiquette(&db);
+        db.create_contact(NewContact {
+            email: Some("alice@example.com".into()),
+            ..sample_contact("Dupont", "Alice")
+        })
+        .unwrap();
+        let edition = prepare_edition(&db, etiquette_id, "Juillet", "<p>Juillet</p>", 1_700_000_000);
+
+        // Le modèle partagé est modifié ailleurs : l'édition garde son contenu.
+        db.conn
+            .execute("UPDATE templates_email SET sujet = 'Autre', variables = '{}'", [])
+            .unwrap();
+        let item = &db.get_newsletter_send_queue(edition).unwrap()[0];
+        assert_eq!(item.template_sujet, "Juillet");
+        assert!(item.template_variables.as_deref().unwrap().contains("<p>Juillet</p>"));
+        assert_eq!(item.template_categorie.as_deref(), Some("NEWSLETTER"));
+
+        db.save_newsletter_edition_content(
+            edition,
+            " Juillet corrigé ",
+            "Corps corrigé",
+            r#"{"subject":"Juillet corrigé"}"#,
+            r#"{"newsletter_html":"<p>Corrigé</p>"}"#,
+        )
+        .unwrap();
+        let item = &db.get_newsletter_send_queue(edition).unwrap()[0];
+        assert_eq!(item.template_sujet, "Juillet corrigé");
+        assert_eq!(item.template_corps, "Corps corrigé");
+        let vars: serde_json::Value =
+            serde_json::from_str(item.template_variables.as_deref().unwrap()).unwrap();
+        assert_eq!(vars["newsletter_html"], "<p>Corrigé</p>");
+        assert_eq!(vars["email_suivi_reponse"]["attendre_reponse"], false);
+
+        // Modèle aligné sur la dernière version.
+        let sujet: String = db
+            .conn
+            .query_row("SELECT sujet FROM templates_email WHERE categorie = 'NEWSLETTER'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(sujet, "Juillet corrigé");
+
+        // Le modèle supprimé ne vide plus l'envoi.
+        db.conn.execute("DELETE FROM templates_email", []).unwrap();
+        let item = &db.get_newsletter_send_queue(edition).unwrap()[0];
+        assert_eq!(item.template_sujet, "Juillet corrigé");
+        assert!(item.template_variables.as_deref().unwrap().contains("<p>Corrigé</p>"));
+    }
+
+    #[test]
+    fn save_edition_content_refuses_empty_subject_and_closed_edition() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let etiquette_id = newsletter_etiquette(&db);
+        db.create_contact(NewContact {
+            email: Some("alice@example.com".into()),
+            ..sample_contact("Dupont", "Alice")
+        })
+        .unwrap();
+        let edition = prepare_edition(&db, etiquette_id, "Juillet", "<p>J</p>", 1_700_000_000);
+        assert!(db
+            .save_newsletter_edition_content(edition, "  ", "Corps", "{}", "{}")
+            .is_err());
+        // Envoi commencé (édition partielle) : la suite garde la version déjà envoyée.
+        db.conn
+            .execute(
+                "UPDATE newsletter_editions SET status = 'partial', sent_count = 1 WHERE id = ?1",
+                params![edition],
+            )
+            .unwrap();
+        assert!(db
+            .save_newsletter_edition_content(edition, "Objet", "Corps", "{}", "{}")
+            .is_err());
+        let subject: String = db
+            .conn
+            .query_row("SELECT subject FROM newsletter_editions WHERE id = ?1", params![edition], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(subject, "Juillet");
+    }
+
+    #[test]
+    fn new_preparation_replaces_pending_editions() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let etiquette_id = newsletter_etiquette(&db);
+        db.create_contact(NewContact {
+            email: Some("alice@example.com".into()),
+            ..sample_contact("Dupont", "Alice")
+        })
+        .unwrap();
+        let juin = prepare_edition(&db, etiquette_id, "Juin", "<p>Juin</p>", 1_700_000_000);
+        db.conn
+            .execute(
+                "UPDATE newsletter_editions SET status = 'partial', sent_count = 1, queued_count = 2 WHERE id = ?1",
+                params![juin],
+            )
+            .unwrap();
+        let juillet = prepare_edition(&db, etiquette_id, "Juillet", "<p>Juillet</p>", 1_700_000_100);
+        assert_eq!(edition_status(&db, juin), "superseded");
+        let aout = prepare_edition(&db, etiquette_id, "Août", "<p>Août</p>", 1_700_000_200);
+        assert_eq!(edition_status(&db, juillet), "cancelled");
+        assert_eq!(edition_status(&db, aout), "prepared");
+        assert!(db.get_newsletter_send_queue(juillet).unwrap().is_empty());
+        let item = &db.get_newsletter_send_queue(aout).unwrap()[0];
+        assert_eq!(item.template_sujet, "Août");
+    }
+
+    #[test]
+    fn send_queue_skips_contacts_unsubscribed_after_preparation() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let etiquette_id = newsletter_etiquette(&db);
+        let alice = db
+            .create_contact(NewContact {
+                email: Some("alice@example.com".into()),
+                ..sample_contact("Dupont", "Alice")
+            })
+            .unwrap();
+        db.create_contact(NewContact {
+            email: Some("bob@example.com".into()),
+            ..sample_contact("Martin", "Bob")
+        })
+        .unwrap();
+        let edition = prepare_edition(&db, etiquette_id, "Juillet", "<p>J</p>", 1_700_000_000);
+        assert_eq!(db.get_newsletter_send_queue(edition).unwrap().len(), 2);
+        db.conn
+            .execute(
+                "UPDATE contacts SET newsletter_desinscrit_at = 1 WHERE id = ?1",
+                params![alice.id],
+            )
+            .unwrap();
+        let queue = db.get_newsletter_send_queue(edition).unwrap();
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue[0].contact_prenom, "Bob");
+    }
+
+    #[test]
+    fn unsubscribe_email_applies_once_and_keeps_manual_resubscribe() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let alice = db
+            .create_contact(NewContact {
+                email: Some("Alice@Example.com".into()),
+                ..sample_contact("Dupont", "Alice")
+            })
+            .unwrap();
+        let req = vec![(
+            "msg1".to_string(),
+            "\"Alice Dupont\" <alice@example.com>".to_string(),
+            1_700_000_000i64,
+        )];
+        assert_eq!(db.apply_newsletter_unsubscribe_requests(&req).unwrap(), 1);
+        assert!(db.get_contact_newsletter_unsubscribed_at(alice.id.unwrap()).unwrap().is_some());
+
+        // Réinscription manuelle : le même email n'est pas réappliqué.
+        db.set_contact_newsletter_unsubscribed(alice.id.unwrap(), false).unwrap();
+        assert_eq!(db.apply_newsletter_unsubscribe_requests(&req).unwrap(), 0);
+        assert!(db.get_contact_newsletter_unsubscribed_at(alice.id.unwrap()).unwrap().is_none());
+
+        // Adresse seulement citée dans le nom affiché : pas une demande d'Alice.
+        let spoof = vec![(
+            "msg3".to_string(),
+            "\"alice@example.com\" <autre@example.org>".to_string(),
+            1_700_000_000i64,
+        )];
+        db.set_contact_newsletter_unsubscribed(alice.id.unwrap(), false).unwrap();
+        assert_eq!(db.apply_newsletter_unsubscribe_requests(&spoof).unwrap(), 0);
+
+        // Adresse voisine (joalice@) : pas de faux positif.
+        let other = vec![(
+            "msg2".to_string(),
+            "joalice@example.com".to_string(),
+            1_700_000_000i64,
+        )];
+        assert_eq!(db.apply_newsletter_unsubscribe_requests(&other).unwrap(), 0);
+        let remembered: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM newsletter_unsubscribe_requests WHERE message_id = 'msg2'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(remembered, 0, "expéditeur inconnu : réessayé au cycle suivant");
+    }
+
+    #[test]
+    fn contact_checkbox_unsubscribes_and_removes_pending_newsletter() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let etiquette_id = newsletter_etiquette(&db);
+        db.conn
+            .execute("UPDATE etiquettes SET email_actif = 1 WHERE id = ?1", params![etiquette_id])
+            .unwrap();
+        let alice = db
+            .create_contact(NewContact {
+                email: Some("alice@example.com".into()),
+                ..sample_contact("Dupont", "Alice")
+            })
+            .unwrap();
+        let edition = prepare_edition(&db, etiquette_id, "Juillet", "<p>J</p>", 1_700_000_000);
+        assert_eq!(db.get_newsletter_send_queue(edition).unwrap().len(), 1);
+        // Ligne de campagne « Performance Stellium » (catégorie NEWSLETTER, sans HTML d'édition).
+        let stellium_tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Performance AV/PER Stellium".into(),
+                sujet: "Perf".into(),
+                corps: "Corps".into(),
+                categorie: "NEWSLETTER".into(),
+                variables: Some(r#"{"corps_html":"<p>x</p>"}"#.into()),
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        db.conn
+            .execute("UPDATE etiquettes SET nom = 'Newsletter mensuelle' WHERE id = ?1", params![etiquette_id])
+            .unwrap();
+        let stellium_etiquette = newsletter_etiquette(&db);
+        db.conn
+            .execute(
+                "UPDATE etiquettes SET email_actif = 1, email_template_id = ?1 WHERE id = ?2",
+                params![stellium_tpl.id, stellium_etiquette],
+            )
+            .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO contact_etiquettes (contact_id, etiquette_id, email_envoye) VALUES (?1, ?2, 0)",
+                params![alice.id, stellium_etiquette],
+            )
+            .unwrap();
+
+        db.set_contact_newsletter_unsubscribed(alice.id.unwrap(), true).unwrap();
+        assert!(db.get_newsletter_send_queue(edition).unwrap().is_empty());
+        // L'édition ne l'attend plus : elle pourra se terminer (0 restant sur 0).
+        let queued: i64 = db
+            .conn
+            .query_row(
+                "SELECT queued_count FROM newsletter_editions WHERE id = ?1",
+                params![edition],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(queued, 0);
+        let stellium_left: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes WHERE etiquette_id = ?1",
+                params![stellium_etiquette],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(stellium_left, 1, "la campagne Stellium n'est pas touchée");
+        let newsletter_left: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes WHERE etiquette_id = ?1",
+                params![etiquette_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(newsletter_left, 0, "la ligne newsletter en attente est retirée");
+        let note: Option<String> = db
+            .conn
+            .query_row(
+                "SELECT newsletter_desinscrit_note FROM contacts WHERE id = ?1",
+                params![alice.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(note.as_deref(), Some("Fiche contact"));
+    }
+
+    #[test]
+    fn line_left_sent_by_previous_edition_is_served_and_archived() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let etiquette_id = newsletter_etiquette(&db);
+        db.create_contact(NewContact {
+            email: Some("alice@example.com".into()),
+            ..sample_contact("Dupont", "Alice")
+        })
+        .unwrap();
+        let edition = prepare_edition(&db, etiquette_id, "Août", "<p>A</p>", 1_700_000_000);
+        // État constaté en base : ligne remarquée envoyée (juin) après la préparation d'août.
+        db.conn
+            .execute(
+                "UPDATE contact_etiquettes SET email_envoye = 1, email_date_envoi = ?1,
+                    email_sent_subject = 'Juin'",
+                params![1_690_000_000i64],
+            )
+            .unwrap();
+        let queue = db.get_newsletter_send_queue(edition).unwrap();
+        assert_eq!(queue.len(), 1);
+        let archived: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM email_envoi_archive WHERE sent_subject = 'Juin'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(archived, 1, "l'envoi de juin reste dans l'historique");
+
+        // Envoi fait après la préparation : jamais remis en file.
+        db.conn
+            .execute(
+                "UPDATE contact_etiquettes SET email_envoye = 1, email_date_envoi = ?1",
+                params![1_700_000_500i64],
+            )
+            .unwrap();
+        assert!(db.get_newsletter_send_queue(edition).unwrap().is_empty());
+    }
+
+    #[test]
+    fn migration_backfill_never_mixes_two_editions() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let etiquette_id = newsletter_etiquette(&db);
+        db.create_contact(NewContact {
+            email: Some("alice@example.com".into()),
+            ..sample_contact("Dupont", "Alice")
+        })
+        .unwrap();
+        let juin = prepare_edition(&db, etiquette_id, "Juin", "<p>Juin</p>", 1_700_000_000);
+        let juillet = prepare_edition(&db, etiquette_id, "Juillet", "<p>Juillet</p>", 1_700_000_100);
+        // État d'une base d'avant la colonne : pas de HTML par édition, juin encore en attente.
+        db.conn
+            .execute("UPDATE newsletter_editions SET html_meta = NULL", [])
+            .unwrap();
+        db.conn
+            .execute(
+                "UPDATE newsletter_editions SET status = 'partial', sent_count = 1 WHERE id = ?1",
+                params![juin],
+            )
+            .unwrap();
+
+        db.backfill_newsletter_edition_html_meta().unwrap();
+
+        // Juillet (dernière, objet = modèle) récupère son HTML ; juin est remplacée sans HTML.
+        let item = &db.get_newsletter_send_queue(juillet).unwrap()[0];
+        assert!(item.template_variables.as_deref().unwrap().contains("<p>Juillet</p>"));
+        assert_eq!(edition_status(&db, juin), "superseded");
+        let juin_html: Option<String> = db
+            .conn
+            .query_row("SELECT html_meta FROM newsletter_editions WHERE id = ?1", params![juin], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(juin_html.is_none());
+
+        // Ancienne édition sans HTML dont l'objet n'est plus celui du modèle : jamais le HTML
+        // d'une autre édition.
+        db.conn
+            .execute(
+                "UPDATE newsletter_editions SET status = 'prepared', sent_count = 0 WHERE id = ?1",
+                params![juin],
+            )
+            .unwrap();
+        db.conn
+            .execute("UPDATE newsletter_editions SET status = 'cancelled' WHERE id = ?1", params![juillet])
+            .unwrap();
+        let item = &db.get_newsletter_send_queue(juin).unwrap()[0];
+        assert_eq!(item.template_sujet, "Juin");
+        assert!(item.template_variables.is_none());
+    }
+
+    #[test]
+    fn deleted_contact_does_not_leave_edition_to_resume_forever() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let etiquette_id = newsletter_etiquette(&db);
+        db.create_contact(NewContact {
+            email: Some("alice@example.com".into()),
+            ..sample_contact("Dupont", "Alice")
+        })
+        .unwrap();
+        let bob = db
+            .create_contact(NewContact {
+                email: Some("bob@example.com".into()),
+                ..sample_contact("Martin", "Bob")
+            })
+            .unwrap();
+        let edition = prepare_edition(&db, etiquette_id, "Août", "<p>A</p>", 1_700_000_000);
+        db.conn
+            .execute("DELETE FROM contacts WHERE id = ?1", params![bob.id])
+            .unwrap();
+        let queue = db.get_newsletter_send_queue(edition).unwrap();
+        assert_eq!(queue.len(), 1);
+        db.start_newsletter_edition_send(edition, 1_700_000_100).unwrap();
+        db.record_newsletter_edition_send(edition, queue[0].contact_etiquette_id, 1_700_000_200, None, None)
+            .unwrap();
+        let summary = db.finish_newsletter_edition_send(edition, 1_700_000_300, false).unwrap();
+        assert_eq!(summary.status, "completed");
+        assert_eq!((summary.sent_count, summary.queued_count), (1, 1));
+    }
+
+    #[test]
+    fn edition_replaced_during_send_stays_replaced_and_unsubscribe_is_not_counted() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let etiquette_id = newsletter_etiquette(&db);
+        let alice = db
+            .create_contact(NewContact {
+                email: Some("alice@example.com".into()),
+                ..sample_contact("Dupont", "Alice")
+            })
+            .unwrap();
+        db.create_contact(NewContact {
+            email: Some("bob@example.com".into()),
+            ..sample_contact("Martin", "Bob")
+        })
+        .unwrap();
+        let juin = prepare_edition(&db, etiquette_id, "Juin", "<p>J</p>", 1_700_000_000);
+        let queue = db.get_newsletter_send_queue(juin).unwrap();
+        db.start_newsletter_edition_send(juin, 1_700_000_010).unwrap();
+        // Alice se désinscrit pendant le lot : son envoi déjà parti n'est pas compté.
+        db.set_contact_newsletter_unsubscribed(alice.id.unwrap(), true).unwrap();
+        let alice_row = queue.iter().find(|q| q.contact_prenom == "Alice").unwrap();
+        db.record_newsletter_edition_send(juin, alice_row.contact_etiquette_id, 1_700_000_020, None, None)
+            .unwrap();
+        let sent: i64 = db
+            .conn
+            .query_row("SELECT sent_count FROM newsletter_editions WHERE id = ?1", params![juin], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(sent, 0);
+
+        // Nouvelle préparation pendant le lot : juin reste « annulée » à la fin du lot.
+        prepare_edition(&db, etiquette_id, "Juillet", "<p>Jl</p>", 1_700_000_030);
+        let summary = db.finish_newsletter_edition_send(juin, 1_700_000_040, false).unwrap();
+        assert_eq!(summary.status, "cancelled");
+    }
+
+    #[test]
+    fn managed_newsletter_template_cannot_be_deleted() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let etiquette_id = newsletter_etiquette(&db);
+        let managed = db
+            .upsert_newsletter_template(etiquette_id, "Objet", "Corps", r#"{"newsletter_html":"<p>x</p>"}"#)
+            .unwrap();
+        // Orphelin (pas encore relié à l'étiquette) : supprimable.
+        let orphan = db
+            .upsert_newsletter_template(etiquette_id, "Objet", "Corps", r#"{"newsletter_html":"<p>y</p>"}"#)
+            .unwrap();
+        db.conn
+            .execute(
+                "UPDATE etiquettes SET email_template_id = ?1 WHERE id = ?2",
+                params![managed, etiquette_id],
+            )
+            .unwrap();
+        assert!(db.delete_template_email(managed).is_err());
+        db.delete_template_email(orphan).unwrap();
+
+        // Autre modèle de catégorie NEWSLETTER (ex. Performance Stellium) : supprimable.
+        let stellium = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Performance AV/PER Stellium".into(),
+                sujet: "Perf".into(),
+                corps: "Corps".into(),
+                categorie: "NEWSLETTER".into(),
+                variables: Some(r#"{"corps_html":"<p>x</p>"}"#.into()),
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        db.delete_template_email(stellium.id).unwrap();
     }
 }

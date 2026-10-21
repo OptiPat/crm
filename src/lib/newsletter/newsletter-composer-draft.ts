@@ -29,6 +29,8 @@ export interface NewsletterComposerDraft {
   preparedQueueCount: number | null;
   /** Édition dont le compositeur affiche le contenu (évite d'écraser une autre édition préparée). */
   composerEditionId: number | null;
+  /** Modifié à la main depuis la préparation (ou le dernier enregistrement sur l'édition). */
+  composerDirty: boolean;
   savedAt: number;
 }
 
@@ -75,6 +77,7 @@ export function loadNewsletterComposerDraft(): NewsletterComposerDraft | null {
         typeof parsed.preparedQueueCount === "number" ? parsed.preparedQueueCount : null,
       composerEditionId:
         typeof parsed.composerEditionId === "number" ? parsed.composerEditionId : null,
+      composerDirty: parsed.composerDirty === true,
       savedAt: parsed.savedAt,
     };
   } catch {

@@ -56,7 +56,7 @@ import {
   setTemplateEmailAttachmentsInMeta,
 } from "@/lib/emails/template-email-attachments";
 import { filterTemplatesEmail } from "@/lib/emails/filter-templates-email";
-import { filterLibraryTemplates } from "@/lib/emails/template-library";
+import { filterLibraryTemplates, isManagedNewsletterTemplate } from "@/lib/emails/template-library";
 import {
   computeTemplatesEmailPageStats,
   getTemplateActivationFlags,
@@ -195,9 +195,14 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
     return m;
   }, [etiquettes]);
 
+  // Le modèle « Newsletter » en service est réécrit à chaque préparation : il se gère depuis la
+  // page Newsletter. Un ancien modèle orphelin reste visible (et supprimable).
   const libraryTemplates = useMemo(
-    () => filterLibraryTemplates(templates),
-    [templates]
+    () =>
+      filterLibraryTemplates(templates).filter(
+        (t) => !(isManagedNewsletterTemplate(t) && (linkCountByTemplate.get(t.id) ?? 0) > 0)
+      ),
+    [templates, linkCountByTemplate]
   );
 
   const categoryCounts = useMemo(() => {

@@ -251,6 +251,7 @@ pub fn send_email_unified(
     attachments: &[super::oauth_send::OutgoingEmailAttachment],
     sender_email: Option<&str>,
     audit_contact_id: Option<i64>,
+    list_unsubscribe_email: Option<&str>,
 ) -> Result<OAuthSendResult, String> {
     let oauth = EmailOAuthStore::load(app_handle)?;
     let primary_email = oauth.connection.as_ref().map(|c| c.email.as_str());
@@ -262,8 +263,12 @@ pub fn send_email_unified(
     let reply = super::oauth_send::GmailThreadReply {
         thread_id: thread_id.map(|s| s.to_string()),
         in_reply_to_message_id: in_reply_to_message_id.map(|s| s.to_string()),
+        list_unsubscribe_email: list_unsubscribe_email.map(|s| s.to_string()),
     };
-    let reply_ref = if reply.thread_id.is_some() || reply.in_reply_to_message_id.is_some() {
+    let reply_ref = if reply.thread_id.is_some()
+        || reply.in_reply_to_message_id.is_some()
+        || reply.list_unsubscribe_email.is_some()
+    {
         Some(&reply)
     } else {
         None

@@ -333,6 +333,8 @@ fn build_rfc2822_with_attachments(
 pub struct GmailThreadReply {
     pub thread_id: Option<String>,
     pub in_reply_to_message_id: Option<String>,
+    /// Newsletter : adresse du lien de désinscription (en-tête List-Unsubscribe, Gmail).
+    pub list_unsubscribe_email: Option<String>,
 }
 
 fn has_gmail_reply_context(reply: Option<&GmailThreadReply>) -> bool {
@@ -346,6 +348,16 @@ fn has_gmail_reply_context(reply: Option<&GmailThreadReply>) -> bool {
                 .as_deref()
                 .is_some_and(|value| !value.trim().is_empty())
     })
+}
+
+/// Même objet que le lien « Se désinscrire » du pied de newsletter : la demande reçue
+/// est reconnue par la synchro mail. Adresse invalide → pas d'en-tête.
+fn list_unsubscribe_header(email: &str) -> Option<String> {
+    let email = email.trim();
+    validate_recipient_email(email).ok()?;
+    Some(format!(
+        "List-Unsubscribe: <mailto:{email}?subject=D%C3%A9sinscription%20newsletter>\r\n"
+    ))
 }
 
 fn append_reply_headers(base: &str, reply: Option<&GmailThreadReply>) -> String {
@@ -362,6 +374,13 @@ fn append_reply_headers(base: &str, reply: Option<&GmailThreadReply>) -> String 
             extra.push_str(&format!("In-Reply-To: {}\r\n", token));
             extra.push_str(&format!("References: {}\r\n", token));
         }
+    }
+    if let Some(header) = reply
+        .list_unsubscribe_email
+        .as_deref()
+        .and_then(list_unsubscribe_header)
+    {
+        extra.push_str(&header);
     }
     if extra.is_empty() {
         return base.to_string();
@@ -845,6 +864,7 @@ mod tests {
             Some(&GmailThreadReply {
                 thread_id: Some("thread1".into()),
                 in_reply_to_message_id: Some("abc123".into()),
+                ..Default::default()
             }),
             &[],
         );
@@ -863,11 +883,34 @@ mod tests {
             Some(&GmailThreadReply {
                 thread_id: None,
                 in_reply_to_message_id: Some("x@y\r\nBcc: tiers@z.fr".into()),
+                ..Default::default()
             }),
         );
         assert!(!raw.contains("\r\nBcc:"));
         assert!(raw.starts_with("From: a@b.fr\r\nSubject: S\r\nIn-Reply-To: <"));
         assert!(raw.ends_with("\r\n\r\nCorps"));
+    }
+
+    #[test]
+    fn newsletter_list_unsubscribe_header_is_validated() {
+        let raw = append_reply_headers(
+            "From: a@b.fr\r\nSubject: S\r\n\r\nCorps",
+            Some(&GmailThreadReply {
+                list_unsubscribe_email: Some("cgp@cabinet.fr".into()),
+                ..Default::default()
+            }),
+        );
+        assert!(raw.contains(
+            "\r\nList-Unsubscribe: <mailto:cgp@cabinet.fr?subject=D%C3%A9sinscription%20newsletter>\r\n\r\nCorps"
+        ));
+        let injected = append_reply_headers(
+            "From: a@b.fr\r\n\r\nCorps",
+            Some(&GmailThreadReply {
+                list_unsubscribe_email: Some("x@y.fr\r\nBcc: tiers@z.fr".into()),
+                ..Default::default()
+            }),
+        );
+        assert_eq!(injected, "From: a@b.fr\r\n\r\nCorps");
     }
 
     #[test]
@@ -897,10 +940,12 @@ mod tests {
         assert!(has_gmail_reply_context(Some(&GmailThreadReply {
             thread_id: Some("thread-1".into()),
             in_reply_to_message_id: None,
+            ..Default::default()
         })));
         assert!(has_gmail_reply_context(Some(&GmailThreadReply {
             thread_id: None,
             in_reply_to_message_id: Some("message-1".into()),
+            ..Default::default()
         })));
     }
 
@@ -910,6 +955,7 @@ mod tests {
         assert!(!has_gmail_reply_context(Some(&GmailThreadReply {
             thread_id: Some("  ".into()),
             in_reply_to_message_id: None,
+            ..Default::default()
         })));
     }
 }

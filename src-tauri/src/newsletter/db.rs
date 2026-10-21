@@ -157,6 +157,9 @@ pub struct NewsletterEditionDetail {
     pub brevo_pushed_at: Option<i64>,
     #[serde(default)]
     pub content_json: Option<String>,
+    /// Mise en page envoyée (JSON `newsletter_html`) — NULL pour une édition ancienne.
+    #[serde(default)]
+    pub html_meta: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -69,6 +69,11 @@ const TABLE_POLICIES: &[(&str, WorkspaceTablePolicy)] = &[
         "newsletter_edition_recipients",
         WorkspaceTablePolicy::Shared,
     ),
+    // Suivi local des emails de désinscription déjà traités (boîte du poste).
+    (
+        "newsletter_unsubscribe_requests",
+        WorkspaceTablePolicy::LocalOnly,
+    ),
     ("investissement_versements", WorkspaceTablePolicy::Shared),
     ("investissement_valorisations", WorkspaceTablePolicy::Shared),
     ("investissement_revenus_percus", WorkspaceTablePolicy::Shared),

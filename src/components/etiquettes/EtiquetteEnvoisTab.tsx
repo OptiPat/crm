@@ -231,6 +231,9 @@ export function EtiquetteEnvoisTab({
       if (r.relance_prepared > 0) {
         parts.push(`${r.relance_prepared} relance(s) prête(s) à envoyer`);
       }
+      if (r.newsletter_unsubscribed > 0) {
+        parts.push(`${r.newsletter_unsubscribed} désinscription(s) newsletter`);
+      }
       if (parts.length > 0) {
         toast.success(`Détection : ${parts.join(", ")}`);
       }

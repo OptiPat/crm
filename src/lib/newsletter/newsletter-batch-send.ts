@@ -8,7 +8,9 @@ import {
   getNewsletterSendQueue,
   recordNewsletterEditionSend,
   startNewsletterEditionSend,
+  getContactNewsletterUnsubscribedAt,
 } from "@/lib/api/tauri-newsletter";
+import { parseNewsletterTemplateMeta } from "@/lib/newsletter/newsletter-html";
 import { sendEmail } from "@/lib/api/tauri-email";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { renderEtiquetteEmailPreview } from "@/lib/etiquettes/etiquette-email-preview";
@@ -41,6 +43,12 @@ export async function sendNewsletterBatch(input: {
       "Aucun destinataire en file pour cette édition — annulez la préparation puis préparez à nouveau la campagne."
     );
   }
+  // Jamais de newsletter sans sa mise en page (pied, lien de désinscription, mentions).
+  if (!parseNewsletterTemplateMeta(queue[0].template_variables)?.newsletter_html) {
+    throw new Error(
+      "Mise en page de cette édition introuvable — annulez la préparation puis préparez à nouveau la campagne."
+    );
+  }
 
   const progress: NewsletterBatchSendProgress = {
     sent: 0,
@@ -68,6 +76,16 @@ export async function sendNewsletterBatch(input: {
     progress.currentName = `${item.contact_prenom} ${item.contact_nom}`.trim();
     input.onProgress?.({ ...progress });
 
+    // Désinscrit depuis le début du lot (synchro mail, fiche contact) : pas d'envoi.
+    const unsubscribedAt = await getContactNewsletterUnsubscribedAt(item.contact_id).catch(
+      () => null
+    );
+    if (unsubscribedAt != null) {
+      progress.total -= 1;
+      input.onProgress?.({ ...progress });
+      continue;
+    }
+
     try {
       const gmailMessageId = await sendNewsletterQueueItem(item, cgp);
       progress.sent += 1;
@@ -87,7 +105,7 @@ export async function sendNewsletterBatch(input: {
     }
     input.onProgress?.({ ...progress });
 
-    if (progress.sent + progress.errors.length < queue.length && input.sendDelayMs > 0) {
+    if (progress.sent + progress.errors.length < progress.total && input.sendDelayMs > 0) {
       await sleep(input.sendDelayMs);
     }
   }
@@ -116,6 +134,8 @@ async function sendNewsletterQueueItem(
     subject: preview.subject,
     body: preview.body,
     body_html: preview.body_html ?? undefined,
+    // Même adresse que le lien « Se désinscrire » du pied de newsletter.
+    list_unsubscribe_email: cgp.email?.trim() || null,
   });
   await markEtiquetteEmailSent(
     item.contact_etiquette_id,
