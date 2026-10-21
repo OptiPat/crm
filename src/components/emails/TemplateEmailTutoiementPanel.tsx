@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
+import { UnknownVariablesWarning } from "@/components/emails/UnknownVariablesWarning";
 import { TemplateEmailAttachmentsPanel } from "@/components/emails/TemplateEmailAttachmentsPanel";
 import { buildTutoiementTemplateNom } from "@/lib/emails/template-email-formality";
 import type { TemplateEmailAttachmentMeta } from "@/lib/emails/template-email-attachments";
@@ -161,6 +162,7 @@ export function TemplateEmailTutoiementPanel({
               onSelectionSave={onEditorSelectionSave}
               placeholder="Rédigez la version tutoiement (ton, te, tiens…)"
             />
+            <UnknownVariablesWarning texts={[draft.sujet, draft.corpsHtml]} />
           </div>
           {onAttachmentsChange && (
             <TemplateEmailAttachmentsPanel

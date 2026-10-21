@@ -20,6 +20,9 @@
   --ring: hsl(222.2 84% 4.9%);
   --muted: hsl(210 40% 96.1%);
   --muted-foreground: hsl(215.4 16.3% 46.9%);
+  /* Actions dangereuses et erreurs (supprimer, quitter sans enregistrer, champ manquant) */
+  --destructive: hsl(0 72% 51%);
+  --destructive-foreground: hsl(0 0% 100%);
   --radius: 0.5rem;
 }
 
@@ -38,6 +41,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

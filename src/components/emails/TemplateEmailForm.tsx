@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback, type FormEvent } from "react";
 import { flushSync } from "react-dom";
 import { buildAgendaTemplateVariables, findUnresolvedAgendaTokens } from "@/lib/emails/agenda-links";
-import { findUnknownTemplateVariables } from "@/lib/emails/template-variable-check";
+import { UnknownVariablesWarning } from "@/components/emails/UnknownVariablesWarning";
 import { TemplateEmailAttachmentSaveContext } from "@/components/emails/template-email-attachment-save-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -928,16 +928,6 @@ export function TemplateEmailForm({
       buildAgendaTemplateVariables(cgp, formData.agenda_link_id)
     );
   }, [cgp, formData.sujet, formData.agenda_link_id, corpsHtml, tutoiementDraft, relanceDraft]);
-
-  /** Variables mal tapées (`{{prénom}}`…) : elles partiraient telles quelles. */
-  const unknownVariables = useMemo(() => {
-    const texts = [formData.sujet, corpsHtml];
-    if (tutoiementDraft.enabled) texts.push(tutoiementDraft.sujet, tutoiementDraft.corpsHtml);
-    if (relanceDraft.enabled && !relanceDraft.useSameMessage) {
-      texts.push(relanceDraft.sujet, relanceDraft.corpsHtml);
-    }
-    return findUnknownTemplateVariables(texts.join(" "), agendaLinks);
-  }, [formData.sujet, corpsHtml, tutoiementDraft, relanceDraft, agendaLinks]);
 
   const previewVariables = useMemo(() => {
     if (effectiveTemplateId == null) return formData.variables;
@@ -2546,15 +2536,7 @@ export function TemplateEmailForm({
                       </p>
                     )}
 
-                    {unknownVariables.length > 0 && (
-                      <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-                        {unknownVariables.length > 1 ? "Variables inconnues" : "Variable inconnue"}{" "}
-                        (message, version tu ou relance) : {unknownVariables.join(", ")}.{" "}
-                        {unknownVariables.length > 1 ? "Elles partiraient telles quelles" : "Elle partirait telle quelle"}{" "}
-                        dans l&apos;email — écrivez-les exactement comme dans « Variables à insérer »
-                        (minuscules, sans espace).
-                      </p>
-                    )}
+                    <UnknownVariablesWarning texts={[formData.sujet, corpsHtml]} agendaLinks={agendaLinks} />
 
                     {/* Lien d'agenda : à côté du message qui l'utilise (modèle et campagne). */}
                     {agendaLinks.length > 0 && (

@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
+import { UnknownVariablesWarning } from "@/components/emails/UnknownVariablesWarning";
 import { TemplateEmailAttachmentsPanel } from "@/components/emails/TemplateEmailAttachmentsPanel";
 import {
   buildRelanceTemplateNom,
@@ -243,6 +244,7 @@ export function TemplateEmailRelancePanel({
                   onSelectionSave={onRelanceEditorSelectionSave}
                   minHeight="160px"
                 />
+                <UnknownVariablesWarning texts={[draft.sujet, draft.corpsHtml]} />
               </div>
               {onRelanceAttachmentsChange && (
                 <TemplateEmailAttachmentsPanel
@@ -292,6 +294,9 @@ export function TemplateEmailRelancePanel({
                       }
                       onSelectionSave={onRelanceTuEditorSelectionSave}
                       minHeight="140px"
+                    />
+                    <UnknownVariablesWarning
+                      texts={[tutoiementDraft.sujet, tutoiementDraft.corpsHtml]}
                     />
                   </div>
                   {onRelanceTuAttachmentsChange && (

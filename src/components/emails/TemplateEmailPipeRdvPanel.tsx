@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
+import { UnknownVariablesWarning } from "@/components/emails/UnknownVariablesWarning";
 import { TemplateEmailAttachmentsPanel } from "@/components/emails/TemplateEmailAttachmentsPanel";
 import {
   buildPipeRdvFollowUpTemplateNom,
@@ -194,6 +195,7 @@ function PipeRdvDelayedEmailSection({
                   onChange={(html) => onMessageDraftChange({ corpsHtml: html })}
                   minHeight="140px"
                 />
+                <UnknownVariablesWarning texts={[messageDraft.sujet, messageDraft.corpsHtml]} />
                 {onLinkedAttachmentsChange && (
                   <TemplateEmailAttachmentsPanel
                     templateId={linkedTemplateId}
@@ -226,6 +228,7 @@ function PipeRdvDelayedEmailSection({
                   onChange={(html) => onMessageDraftChange({ tuCorpsHtml: html })}
                   minHeight="120px"
                 />
+                <UnknownVariablesWarning texts={[messageDraft.tuSujet, messageDraft.tuCorpsHtml]} />
                 {onLinkedTuAttachmentsChange && (
                   <TemplateEmailAttachmentsPanel
                     templateId={linkedTuTemplateId}

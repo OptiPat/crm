@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
+import { UnknownVariablesWarning } from "@/components/emails/UnknownVariablesWarning";
 import { CgpEmailSignaturePreview } from "@/components/emails/CgpEmailSignaturePreview";
 import { EmailAttachmentsPreviewList } from "@/components/emails/EmailAttachmentsPreviewList";
 import { CheckCircle2 } from "lucide-react";
@@ -253,6 +254,7 @@ export function EtiquetteEmailSendDialog({
                 Gras, listes et liens : modifiables directement — rendu identique à Gmail.
               </p>
             ) : null}
+            <UnknownVariablesWarning texts={[subject, htmlMode ? bodyHtml : bodyPlain]} />
           </div>
 
           {item ? (
