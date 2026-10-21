@@ -209,7 +209,7 @@ export function TemplateEmailTriggerPanel({ trigger, onChange, templateId }: Pro
 
       {!trigger.enabled && (
         <p className="text-sm text-center text-muted-foreground py-6 border border-dashed rounded-lg">
-          Désactivé — utilisez les étiquettes liées (onglet Liaisons) ou un envoi manuel.
+          Désactivé — utilisez les étiquettes liées (onglet Étiquettes, via « Plus d&apos;options » s&apos;il est masqué) ou un envoi manuel.
         </p>
       )}
 

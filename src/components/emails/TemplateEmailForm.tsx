@@ -337,6 +337,12 @@ export function TemplateEmailForm({
   // Modifié à la main depuis l'ouverture ou le dernier enregistrement (fermeture sans perte).
   const [dirty, setDirty] = useState(false);
   const [unsavedConfirmOpen, setUnsavedConfirmOpen] = useState(false);
+  // Onglets d'options (Pipe RDV, Box Placement, Déclencheur, Étiquettes, Action) : affichés
+  // seulement s'ils servent, ou sur « Plus d'options ».
+  const [showAllTabs, setShowAllTabs] = useState(false);
+  // Version tu existante en cours de chargement (ou illisible) : jamais de recopie du « vous »
+  // par-dessus, ni automatique ni par le bouton.
+  const [tuTextLocked, setTuTextLocked] = useState(false);
   const [etiquetteReplaceConfirm, setEtiquetteReplaceConfirm] = useState<{
     etiquetteId: number;
     etiquetteNom: string;
@@ -426,6 +432,7 @@ export function TemplateEmailForm({
       sujet: "",
       corpsHtml: "",
     });
+    setTuTextLocked(hasTu);
     if (hasTu && source.tutoiement_template_id) {
       void getTemplateEmailById(source.tutoiement_template_id)
         .then((tu) => {
@@ -438,8 +445,14 @@ export function TemplateEmailForm({
             sujet: tu.sujet,
             corpsHtml: tuHtml ?? plainTextToTemplateHtml(tu.corps),
           });
+          setTuTextLocked(false);
         })
-        .catch(() => undefined);
+        .catch(() => {
+          // Version tu illisible : on la laisse verrouillée plutôt que d'y recopier le « vous ».
+          if (!isStale()) {
+            toast.error("Version tutoiement illisible — fermez et rouvrez le modèle avant de la modifier.");
+          }
+        });
     }
     const meta = parseTemplateEmailMeta(source.variables);
     const hasDedicated = source.relance_template_id != null;
@@ -675,6 +688,7 @@ export function TemplateEmailForm({
     });
     setRelanceTemplateId(null);
     setTutoiementDraft({ enabled: false, sujet: "", corpsHtml: "" });
+    setTuTextLocked(false);
     setTutoiementTemplateId(null);
     setTutoiementVariables(null);
     setRelanceTuDraft({ enabled: false, sujet: "", corpsHtml: "" });
@@ -725,6 +739,7 @@ export function TemplateEmailForm({
     setDirty(false);
     setUnsavedConfirmOpen(false);
     setInvalidFields(new Set());
+    setShowAllTabs(false);
     setFormTab("message");
     void getCgpConfig().then(setCgp).catch(() => setCgp(null));
     void getAllContacts()
@@ -2242,6 +2257,20 @@ export function TemplateEmailForm({
     }
   };
 
+
+  /** Onglet d'option visible : utilisé, ouvert, ou toutes les options affichées. */
+  const showOptionTab = (tab: string, inUse: boolean) =>
+    showAllTabs || inUse || formTab === tab;
+  const hiddenOptionTabCount = isEphemeralMode
+    ? 0
+    : [
+        showOptionTab("pipe-rdv", pipeRdvDraft.trigger.enabled),
+        showOptionTab("placement-conforme", placementConformeDraft.trigger.enabled),
+        showOptionTab("declencheur", emailTrigger.enabled),
+        showOptionTab("liaisons", linkedEtiquetteIds.length > 0),
+        showOptionTab("action", tacheActif),
+      ].filter((visible) => !visible).length;
+
   return (
     <>
     <Dialog
@@ -2302,12 +2331,7 @@ export function TemplateEmailForm({
                 onValueChange={(v) => handleFormTabChange(v as FormTab)}
                 className="flex flex-col flex-1 min-h-0"
               >
-                <TabsList
-                  className={cn(
-                    "mx-6 mt-4 grid w-auto shrink-0",
-                    isEphemeralMode ? "grid-cols-6" : "grid-cols-8"
-                  )}
-                >
+                <TabsList className="mx-6 mt-4 flex h-auto w-auto shrink-0 flex-wrap justify-start gap-1">
                   <TabsTrigger value="message">Message</TabsTrigger>
                   <TabsTrigger value="tutoiement">
                     Tutoiement
@@ -2321,7 +2345,7 @@ export function TemplateEmailForm({
                       <span className="ml-1.5 text-[10px] text-orange-700">on</span>
                     )}
                   </TabsTrigger>
-                  {!isEphemeralMode && (
+                  {!isEphemeralMode && showOptionTab("pipe-rdv", pipeRdvDraft.trigger.enabled) && (
                     <TabsTrigger value="pipe-rdv">
                       Pipe RDV
                       {pipeRdvDraft.trigger.enabled && (
@@ -2329,14 +2353,15 @@ export function TemplateEmailForm({
                       )}
                     </TabsTrigger>
                   )}
-                  {!isEphemeralMode && (
-                    <TabsTrigger value="placement-conforme">
-                      Box Placement
-                      {placementConformeDraft.trigger.enabled && (
-                        <span className="ml-1.5 text-[10px] text-teal-700">on</span>
-                      )}
-                    </TabsTrigger>
-                  )}
+                  {!isEphemeralMode &&
+                    showOptionTab("placement-conforme", placementConformeDraft.trigger.enabled) && (
+                      <TabsTrigger value="placement-conforme">
+                        Box Placement
+                        {placementConformeDraft.trigger.enabled && (
+                          <span className="ml-1.5 text-[10px] text-teal-700">on</span>
+                        )}
+                      </TabsTrigger>
+                    )}
                   {isEphemeralMode ? (
                     <>
                       <TabsTrigger value="audience">Audience</TabsTrigger>
@@ -2349,29 +2374,57 @@ export function TemplateEmailForm({
                     </>
                   ) : (
                     <>
-                      <TabsTrigger value="declencheur">
-                        Déclencheur
-                        {emailTrigger.enabled && (
-                          <span className="ml-1.5 text-[10px] text-primary">on</span>
-                        )}
-                      </TabsTrigger>
-                      <TabsTrigger value="liaisons">
-                        Étiquettes
-                        {linkedEtiquetteIds.length > 0 && (
-                          <span className="ml-1.5 text-[10px] text-primary">
-                            ({linkedEtiquetteIds.length})
-                          </span>
-                        )}
-                      </TabsTrigger>
+                      {showOptionTab("declencheur", emailTrigger.enabled) && (
+                        <TabsTrigger value="declencheur">
+                          Déclencheur
+                          {emailTrigger.enabled && (
+                            <span className="ml-1.5 text-[10px] text-primary">on</span>
+                          )}
+                        </TabsTrigger>
+                      )}
+                      {showOptionTab("liaisons", linkedEtiquetteIds.length > 0) && (
+                        <TabsTrigger value="liaisons">
+                          Étiquettes
+                          {linkedEtiquetteIds.length > 0 && (
+                            <span className="ml-1.5 text-[10px] text-primary">
+                              ({linkedEtiquetteIds.length})
+                            </span>
+                          )}
+                        </TabsTrigger>
+                      )}
                     </>
                   )}
-                  <TabsTrigger value="action">
-                    Action
-                    {tacheActif && (
-                      <span className="ml-1.5 text-[10px] text-sky-700">on</span>
-                    )}
-                  </TabsTrigger>
+                  {(isEphemeralMode || showOptionTab("action", tacheActif)) && (
+                    <TabsTrigger value="action">
+                      Action
+                      {tacheActif && <span className="ml-1.5 text-[10px] text-sky-700">on</span>}
+                    </TabsTrigger>
+                  )}
                 </TabsList>
+                {!isEphemeralMode && (hiddenOptionTabCount > 0 || showAllTabs) && (
+                  <div className="mx-6 mt-1 flex justify-end">
+                  {hiddenOptionTabCount > 0 && (
+                    <button
+                      type="button"
+                      data-no-dirty
+                      className="ml-1 rounded-sm px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-background/60"
+                      onClick={() => setShowAllTabs(true)}
+                    >
+                      + Plus d&apos;options ({hiddenOptionTabCount})
+                    </button>
+                  )}
+                  {showAllTabs && hiddenOptionTabCount === 0 && (
+                    <button
+                      type="button"
+                      data-no-dirty
+                      className="ml-1 rounded-sm px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-background/60"
+                      onClick={() => setShowAllTabs(false)}
+                    >
+                      Moins d&apos;options
+                    </button>
+                  )}
+                  </div>
+                )}
 
                 <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
                   <TabsContent value="message" className="mt-0 space-y-4 data-[state=inactive]:hidden">
@@ -2478,13 +2531,14 @@ export function TemplateEmailForm({
                       <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                         Lien d&apos;agenda introuvable : {unresolvedAgendaTokens.join(", ")}. Il
                         partirait vide — l&apos;envoi sera bloqué tant que le lien n&apos;existe pas
-                        (Paramètres → Profil, ou lien d&apos;agenda choisi pour ce modèle).
+                        (Paramètres → Profil{agendaLinks.length > 0 ? ", ou « Lien Google Agenda » ci-dessous" : ""}).
                       </p>
                     )}
 
-                    {isEphemeralMode && agendaLinks.length > 0 && (
+                    {/* Lien d'agenda : à côté du message qui l'utilise (modèle et campagne). */}
+                    {agendaLinks.length > 0 && (
                       <div className="space-y-2">
-                        <Label htmlFor="agenda-link-ephemeral">Lien Google Agenda</Label>
+                        <Label htmlFor="agenda-link">Lien Google Agenda</Label>
                         <Select
                           value={formData.agenda_link_id ?? "__none__"}
                           onValueChange={(value) =>
@@ -2494,7 +2548,7 @@ export function TemplateEmailForm({
                             })
                           }
                         >
-                          <SelectTrigger id="agenda-link-ephemeral">
+                          <SelectTrigger id="agenda-link">
                             <SelectValue placeholder="Choisir un lien" />
                           </SelectTrigger>
                           <SelectContent>
@@ -2563,6 +2617,14 @@ export function TemplateEmailForm({
                       }
                       onEditorSelectionSave={(range) => {
                         tuEditorSelectionRef.current = range;
+                      }}
+                      copyFromVousLocked={tuTextLocked}
+                      onCopyFromVous={() => {
+                        if (tuTextLocked) return;
+                        // Texte vouvoiement à jour à chaque frappe (même non enregistré).
+                        applyTuCorpsHtml(corpsHtml);
+                        setTutoiementDraft((prev) => ({ ...prev, sujet: formData.sujet }));
+                        markDirty();
                       }}
                     />
                   </TabsContent>
@@ -2716,36 +2778,6 @@ export function TemplateEmailForm({
                       })()}
                     </div>
 
-                    {agendaLinks.length > 0 && (
-                      <div className="space-y-2">
-                        <Label htmlFor="agenda-link">Lien Google Agenda</Label>
-                        <Select
-                          value={formData.agenda_link_id ?? "__none__"}
-                          onValueChange={(value) =>
-                            setFormData({
-                              ...formData,
-                              agenda_link_id: value === "__none__" ? null : value,
-                            })
-                          }
-                        >
-                          <SelectTrigger id="agenda-link">
-                            <SelectValue placeholder="Choisir un lien" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">— Aucun</SelectItem>
-                            {agendaLinks.map((l) => (
-                              <SelectItem key={l.id} value={l.id}>
-                                {l.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          Pour {"{{lien_agenda}}"} dans le message — liens définis dans Paramètres
-                          → Profil.
-                        </p>
-                      </div>
-                    )}
                   </TabsContent>
 
                   <TabsContent value="action" className="mt-0 data-[state=inactive]:hidden">

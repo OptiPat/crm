@@ -1,3 +1,15 @@
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -5,7 +17,7 @@ import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
 import { TemplateEmailAttachmentsPanel } from "@/components/emails/TemplateEmailAttachmentsPanel";
 import { buildTutoiementTemplateNom } from "@/lib/emails/template-email-formality";
 import type { TemplateEmailAttachmentMeta } from "@/lib/emails/template-email-attachments";
-import { Users } from "lucide-react";
+import { Copy, Users } from "lucide-react";
 import type { RefObject, ReactNode } from "react";
 
 export type TemplateTutoiementDraft = {
@@ -28,7 +40,23 @@ type Props = {
   sujetInputRef?: RefObject<HTMLInputElement | null>;
   onSujetSelectionCapture?: () => void;
   onEditorSelectionSave?: (range: Range | null) => void;
+  /** Recopie l'objet et le message vouvoiement dans la version tu (à adapter ensuite). */
+  onCopyFromVous?: () => void;
+  /** Version tu existante pas encore chargée (ou illisible) : recopie interdite. */
+  copyFromVousLocked?: boolean;
 };
+
+/** La version tu a du contenu (texte ou image) : jamais écrasée sans confirmation. */
+function hasText(html: string): boolean {
+  if (/<img\b/i.test(html)) return true;
+  return (
+    html
+      .replace(/<[^>]*>/g, "")
+      .replace(/&nbsp;|&#160;/g, " ")
+      .replace(/\u00a0/g, " ")
+      .trim().length > 0
+  );
+}
 
 export function TemplateEmailTutoiementPanel({
   draft,
@@ -44,7 +72,11 @@ export function TemplateEmailTutoiementPanel({
   sujetInputRef,
   onSujetSelectionCapture,
   onEditorSelectionSave,
+  onCopyFromVous,
+  copyFromVousLocked = false,
 }: Props) {
+  const [confirmCopyOpen, setConfirmCopyOpen] = useState(false);
+  const tuIsEmpty = !draft.sujet.trim() && !hasText(draft.corpsHtml);
   const patch = (partial: Partial<TemplateTutoiementDraft>) =>
     onChange({ ...draft, ...partial });
 
@@ -70,7 +102,11 @@ export function TemplateEmailTutoiementPanel({
         <Switch
           id="tutoiement-enabled"
           checked={draft.enabled}
-          onCheckedChange={(checked) => patch({ enabled: checked })}
+          onCheckedChange={(checked) => {
+            patch({ enabled: checked });
+            // Première activation : on part du texte vouvoiement plutôt que d'une page blanche.
+            if (checked && tuIsEmpty && !copyFromVousLocked) onCopyFromVous?.();
+          }}
         />
       </div>
 
@@ -82,6 +118,25 @@ export function TemplateEmailTutoiementPanel({
 
       {draft.enabled && (
         <div className="space-y-4 rounded-lg border p-4">
+          {onCopyFromVous && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-violet-50/60 px-3 py-2">
+              <p className="text-xs text-muted-foreground">
+                Partez du texte vouvoiement, puis remplacez « vous » par « tu ».
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                data-no-dirty
+                disabled={copyFromVousLocked}
+                onClick={() => (tuIsEmpty ? onCopyFromVous() : setConfirmCopyOpen(true))}
+              >
+                <Copy className="h-3.5 w-3.5" />
+                Recopier le texte vouvoiement
+              </Button>
+            </div>
+          )}
           {variablePicker}
           <div className="space-y-2">
             <Label htmlFor="tu-sujet">Objet (tu)</Label>
@@ -118,6 +173,28 @@ export function TemplateEmailTutoiementPanel({
           )}
         </div>
       )}
+
+      <AlertDialog open={confirmCopyOpen} onOpenChange={setConfirmCopyOpen}>
+        <AlertDialogContent data-no-dirty>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remplacer la version tu ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              L&apos;objet et le message tu actuels seront remplacés par ceux du vouvoiement.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Garder la version tu</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmCopyOpen(false);
+                onCopyFromVous?.();
+              }}
+            >
+              Remplacer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

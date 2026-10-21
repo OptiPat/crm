@@ -165,11 +165,13 @@ export function TemplatesEmailHelp() {
           {"{{prenom}}"}, etc.
         </p>
         <p>
-          <strong className="text-foreground">2. Déclencheur</strong> (onglet du modèle) : événement
+          <strong className="text-foreground">2. Déclencheur</strong> (onglet du modèle, via « + Plus
+          d&apos;options ») : événement
           ex. nouvelle souscription + délai/heure — <em>sans créer d&apos;étiquette</em>.
         </p>
         <p>
-          <strong className="text-foreground">3. Étiquettes</strong> (optionnel) : liez le modèle
+          <strong className="text-foreground">3. Étiquettes</strong> (optionnel, via « + Plus
+          d&apos;options ») : liez le modèle
           pour les campagnes classiques par étiquette.
         </p>
         <p>
