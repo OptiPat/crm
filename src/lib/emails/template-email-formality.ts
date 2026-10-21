@@ -1,5 +1,9 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
 import { getTemplateCorpsHtml } from "@/lib/emails/template-email-html";
+import {
+  parseTemplateEmailAttachments,
+  setTemplateEmailAttachmentsInMeta,
+} from "@/lib/emails/template-email-attachments";
 
 /** Registre d'adresse sur la fiche contact (modèles liés tu / vous). */
 export type ContactRegistre = "VOUS" | "TU";
@@ -59,7 +63,8 @@ export function pickTemplateCorpsHtmlForRegistre(
 
 /**
  * Variables (PJ incluses) de la variante effective selon le registre.
- * Si une variante tu existe, on n'hérite pas des PJ du modèle principal.
+ * Variante tu sans pièce jointe : elle reprend celles du modèle principal (un contact « tu »
+ * ne doit pas recevoir le mail sans le document joint au vouvoiement).
  */
 export function pickTemplateVariablesForRegistre(
   principalVariables: string | null | undefined,
@@ -68,7 +73,10 @@ export function pickTemplateVariablesForRegistre(
   hasTutoiementVariant = false
 ): string | null | undefined {
   if (isContactTu(registre) && hasTutoiementVariant) {
-    return tutoiementVariables ?? null;
+    const tu = tutoiementVariables ?? null;
+    if (parseTemplateEmailAttachments(tu).length > 0) return tu;
+    const inherited = parseTemplateEmailAttachments(principalVariables);
+    return inherited.length > 0 ? setTemplateEmailAttachmentsInMeta(tu, inherited) : tu;
   }
   return principalVariables;
 }

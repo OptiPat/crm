@@ -9,6 +9,7 @@ import {
   sanitizeEmailHeaderValue,
 } from "@/lib/emails/template-email-html";
 import { buildVariablesFromContact } from "@/lib/emails/template-email-meta";
+import { findUnresolvedAgendaTokens } from "@/lib/emails/agenda-links";
 import {
   applyVariablesToNewsletterHtml,
   injectNewsletterSignatureHtml,
@@ -168,13 +169,39 @@ export function isScpiBulletinContentMissing(item: EtiquetteEmailQueueItem): boo
 
 /** Raison de blocage envoi campagne modèle (SCPI ou perf Stellium). */
 export function getCampaignTemplateSendBlockReason(
-  item: EtiquetteEmailQueueItem
+  item: EtiquetteEmailQueueItem,
+  cgp?: CgpConfig | null
 ): string | null {
-  return getScpiBulletinSendBlockReason(item) ?? getStelliumPerfSendBlockReason(item);
+  return (
+    getScpiBulletinSendBlockReason(item) ??
+    getStelliumPerfSendBlockReason(item) ??
+    getAgendaLinkSendBlockReason(item, cgp)
+  );
 }
 
-export function isCampaignTemplateSendBlocked(item: EtiquetteEmailQueueItem): boolean {
-  return getCampaignTemplateSendBlockReason(item) != null;
+export function isCampaignTemplateSendBlocked(
+  item: EtiquetteEmailQueueItem,
+  cgp?: CgpConfig | null
+): boolean {
+  return getCampaignTemplateSendBlockReason(item, cgp) != null;
+}
+
+/** Lien d'agenda du message introuvable : l'email partirait avec un lien vide. */
+export function getAgendaLinkSendBlockReason(
+  item: EtiquetteEmailQueueItem,
+  cgp: CgpConfig | null | undefined
+): string | null {
+  if (!cgp) return null;
+  const html = getTemplateCorpsHtml(item.template_variables) ?? "";
+  const newsletterHtml = isNewsletterTemplate(item.template_categorie)
+    ? (parseNewsletterTemplateMeta(item.template_variables)?.newsletter_html ?? "")
+    : "";
+  const missing = findUnresolvedAgendaTokens(
+    [item.template_sujet, item.template_corps, html, newsletterHtml].join("\n"),
+    buildTemplateVariables(item, cgp)
+  );
+  if (missing.length === 0) return null;
+  return `Lien d'agenda introuvable (${missing.join(", ")}) — vérifiez Paramètres → Profil ou le lien choisi dans le modèle`;
 }
 
 /** Raison de blocage envoi SCPI (null = envoi autorisé pour ce contrôle). */

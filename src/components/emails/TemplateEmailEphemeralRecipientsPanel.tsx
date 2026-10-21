@@ -21,6 +21,8 @@ type Props = {
   onExcludedChange: (ids: number[]) => void;
   campaignStatus: string;
   onCampaignUpdated?: () => void | Promise<void>;
+  /** Campagne déjà entièrement servie : supprimée à la préparation (l'éditeur se ferme). */
+  onCampaignClosed?: () => void | Promise<void>;
 };
 
 export function TemplateEmailEphemeralRecipientsPanel({
@@ -32,6 +34,7 @@ export function TemplateEmailEphemeralRecipientsPanel({
   onExcludedChange,
   campaignStatus,
   onCampaignUpdated,
+  onCampaignClosed,
 }: Props) {
   const [preview, setPreview] = useState<EphemeralCampaignAudiencePreview | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -114,6 +117,11 @@ export function TemplateEmailEphemeralRecipientsPanel({
         await onRequestSave();
       }
       const result = await syncEphemeralCampaignQueue(templateId);
+      if (result.auto_archived) {
+        toast.success(result.message);
+        await onCampaignClosed?.();
+        return;
+      }
       toast.success(result.message);
       toast.info("Envoyez depuis Suivi → Envois → Prêts à envoyer", { duration: 6000 });
       await loadPreview();
@@ -168,7 +176,8 @@ export function TemplateEmailEphemeralRecipientsPanel({
             <Badge className="bg-violet-100 text-violet-900 hover:bg-violet-100">File préparée</Badge>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
+        {/* Actions de préparation : pas des modifications du modèle (pas de « Quitter sans enregistrer »). */}
+        <div className="flex flex-wrap gap-2" data-no-dirty>
           <Button
             type="button"
             variant="outline"
@@ -216,6 +225,7 @@ export function TemplateEmailEphemeralRecipientsPanel({
         <Label htmlFor="recipient-search">Filtrer la liste</Label>
         <Input
           id="recipient-search"
+          data-no-dirty
           placeholder="Nom, prénom, email…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}

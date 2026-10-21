@@ -1,3 +1,4 @@
+import { assertAgendaLinksResolved } from "@/lib/emails/agenda-links";
 import { getContactById } from "@/lib/api/tauri-contacts";
 import { sendEmail } from "@/lib/api/tauri-email";
 import { logEmailSendError } from "@/lib/api/tauri-email-send-log";
@@ -122,6 +123,12 @@ export async function sendPlacementConformeTemplatedEmail(options: {
       extraVariables,
       forSend: true,
     }
+  );
+
+  assertAgendaLinksResolved(
+    [content.sujet, content.corps, corpsHtml],
+    cgp,
+    content.agenda_link_id ?? principal.agenda_link_id
   );
 
   await sendEmail({

@@ -6,7 +6,10 @@ import {
   pickTemplateContentForRegistre,
   pickTemplateVariablesForRegistre,
 } from "@/lib/emails/template-email-formality";
-import { setTemplateEmailAttachmentsInMeta } from "@/lib/emails/template-email-attachments";
+import {
+  parseTemplateEmailAttachments,
+  setTemplateEmailAttachmentsInMeta,
+} from "@/lib/emails/template-email-attachments";
 
 describe("template-email-formality", () => {
   it("normalise le registre", () => {
@@ -64,7 +67,10 @@ describe("template-email-formality", () => {
     ]);
     expect(pickTemplateVariablesForRegistre(principal, tu, "TU", true)).toBe(tu);
     expect(pickTemplateVariablesForRegistre(principal, tu, "VOUS", true)).toBe(principal);
-    expect(pickTemplateVariablesForRegistre(principal, null, "TU", true)).toBe(null);
+    // Variante tu sans pièce jointe : celles du modèle principal sont reprises.
+    expect(
+      parseTemplateEmailAttachments(pickTemplateVariablesForRegistre(principal, null, "TU", true))
+    ).toEqual(parseTemplateEmailAttachments(principal));
     expect(pickTemplateVariablesForRegistre(principal, null, "TU", false)).toBe(principal);
   });
 });

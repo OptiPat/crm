@@ -1418,14 +1418,14 @@ pub fn delete_template_email(
         .path()
         .app_data_dir()
         .map_err(|e| format!("Répertoire applicatif introuvable : {e}"))?;
-    crate::template_email_attachments::delete_all_template_attachments(&app_data, id)
-        .map_err(|e| format!("Nettoyage pièces jointes : {e}"))?;
-
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    database
+    // Base d'abord : si la suppression est refusée, aucun fichier n'est perdu.
+    let deleted = database
         .delete_template_email(id)
         .map_err(|e| format!("Failed to delete template: {}", e))?;
+    // Puis les fichiers du modèle et des variantes supprimées avec lui.
+    cleanup_deleted_template_attachments(&app_data, &deleted);
     Ok(())
 }
 
@@ -1537,23 +1537,67 @@ pub fn preview_ephemeral_campaign_audience(
 
 #[tauri::command]
 pub fn sync_ephemeral_campaign_queue(
+    app: AppHandle,
     db: State<'_, DbState>,
     template_id: i64,
 ) -> Result<crate::database::ephemeral_email_campaigns::SyncEphemeralCampaignResult, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    database
+    let result = database
         .sync_ephemeral_campaign_queue(template_id)
-        .map_err(|e| format!("Failed to sync ephemeral campaign queue: {}", e))
+        .map_err(|e| format!("Failed to sync ephemeral campaign queue: {}", e))?;
+    // Campagne déjà entièrement servie : supprimée à la préparation, fichiers ensuite.
+    if !result.deleted_template_ids.is_empty() {
+        if let Ok(app_data) = app.path().app_data_dir() {
+            cleanup_deleted_template_attachments(&app_data, &result.deleted_template_ids);
+        }
+    }
+    Ok(result)
 }
 
 #[tauri::command]
-pub fn archive_ephemeral_campaign(db: State<'_, DbState>, template_id: i64) -> Result<(), String> {
+pub fn archive_ephemeral_campaign(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    template_id: i64,
+) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    database
+    let deleted = database
         .archive_ephemeral_campaign(template_id)
-        .map_err(|e| format!("Failed to archive ephemeral campaign: {}", e))
+        .map_err(|e| format!("Failed to archive ephemeral campaign: {}", e))?;
+    if let Ok(app_data) = app.path().app_data_dir() {
+        cleanup_deleted_template_attachments(&app_data, &deleted);
+    }
+    Ok(())
+}
+
+/// Variantes détachées à l'enregistrement d'un modèle (tu, relance, Pipe) : supprimées si plus
+/// rien ne les utilise. Retourne les ids supprimés.
+#[tauri::command]
+pub fn delete_detached_template_children(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    child_ids: Vec<i64>,
+) -> Result<Vec<i64>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let deleted = database
+        .delete_detached_template_children(&child_ids)
+        .map_err(|e| format!("Variantes du modèle : {e}"))?;
+    if let Ok(app_data) = app.path().app_data_dir() {
+        cleanup_deleted_template_attachments(&app_data, &deleted);
+    }
+    Ok(deleted)
+}
+
+/// Pièces jointes des modèles supprimés en base (variantes comprises). Toujours après la
+/// suppression en base ; une erreur n'est que journalisée.
+pub(crate) fn cleanup_deleted_template_attachments(app_data: &std::path::Path, deleted: &[i64]) {
+    if let Err(e) = crate::template_email_attachments::remove_template_attachment_dirs(app_data, deleted)
+    {
+        eprintln!("Nettoyage pièces jointes : {e}");
+    }
 }
 
 // ========== ALERTES ==========
@@ -2773,6 +2817,7 @@ pub fn get_envois_snapshot(
 
 #[tauri::command]
 pub fn mark_etiquette_email_sent(
+    app: AppHandle,
     db: State<'_, DbState>,
     contact_etiquette_id: i64,
     gmail_message_id: Option<String>,
@@ -2787,7 +2832,11 @@ pub fn mark_etiquette_email_sent(
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     if queue_row_kind.as_deref() == Some("template") {
-        return database
+        // Dernier envoi d'une campagne éphémère : elle peut être supprimée (fichiers ensuite).
+        let before = database
+            .template_ids_with_children_for_envoi(contact_etiquette_id)
+            .unwrap_or_default();
+        database
             .mark_template_email_sent(
                 contact_etiquette_id,
                 gmail_message_id.as_deref(),
@@ -2797,7 +2846,23 @@ pub fn mark_etiquette_email_sent(
                 batch_id.as_deref(),
                 send_mode.as_deref(),
             )
-            .map_err(|e| format!("Failed to mark email sent: {}", e));
+            .map_err(|e| format!("Failed to mark email sent: {}", e))?;
+        // Seulement les modèles vraiment absents (pas une erreur de lecture passagère).
+        let gone: Vec<i64> = before
+            .into_iter()
+            .filter(|id| {
+                matches!(
+                    database.get_template_email_by_id(*id),
+                    Err(rusqlite::Error::QueryReturnedNoRows)
+                )
+            })
+            .collect();
+        if !gone.is_empty() {
+            if let Ok(app_data) = app.path().app_data_dir() {
+                cleanup_deleted_template_attachments(&app_data, &gone);
+            }
+        }
+        return Ok(());
     }
 
     database
@@ -3245,6 +3310,20 @@ pub async fn sync_email_campaign_responses(
                     Ok(()) => result.relance_prepared += 1,
                     Err(e) => eprintln!("Relance auto non préparée (ligne {row_id}) : {e}"),
                 }
+            }
+        }
+
+        // Campagnes éphémères dont la relance n'est plus possible : supprimées (envois archivés).
+        {
+            let db_guard = db_state.inner().lock().unwrap();
+            let database = db_guard.as_ref().ok_or("Database not initialized")?;
+            match database.sweep_finished_ephemeral_campaigns() {
+                Ok(deleted) => {
+                    if let Ok(app_data) = app.path().app_data_dir() {
+                        cleanup_deleted_template_attachments(&app_data, &deleted);
+                    }
+                }
+                Err(e) => eprintln!("Nettoyage des campagnes éphémères terminées : {e}"),
             }
         }
 

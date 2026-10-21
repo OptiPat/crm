@@ -16,7 +16,7 @@ const TEMPLATE_NOT_NEWSLETTER_SQL: &str = "COALESCE(t.categorie, '') != 'NEWSLET
 /// `ORDER BY RANDOM()` pour ne pas bloquer les plus anciennes derrière les 20 plus récentes.
 const PENDING_RESPONSE_CHECK_LIMIT: i64 = 20;
 /// D2b : au-delà de 14 jours après l'échéance, pas de relance automatique (relance manuelle possible).
-const AUTO_RELANCE_MAX_OVERDUE_SECS: i64 = 14 * 86_400;
+pub(crate) const AUTO_RELANCE_MAX_OVERDUE_SECS: i64 = 14 * 86_400;
 /// D2b : nombre de relances contrôlées puis préparées par cycle (quota Gmail).
 const AUTO_RELANCE_MAX_PER_CYCLE: usize = 20;
 

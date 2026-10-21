@@ -18,8 +18,6 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import {
   getAllTemplatesEmail,
   deleteTemplateEmail,
-  createTemplateEmail,
-  updateTemplateEmail,
   seedDefaultEmailTemplates,
   type TemplateEmail,
 } from "@/lib/api/tauri-templates-email";
@@ -45,16 +43,11 @@ import {
 } from "@/components/emails/templates-email-ui";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import {
-  duplicateTemplatePayload,
   EMAIL_TEMPLATE_CATEGORIES,
   resolveTemplateEmailCategory,
 } from "@/lib/emails/template-email-meta";
 import { buildTemplateLinkedPreviewSections } from "@/lib/emails/template-linked-previews";
-import { copyTemplateEmailAttachments } from "@/lib/api/tauri-template-email-attachments";
-import {
-  parseTemplateEmailAttachments,
-  setTemplateEmailAttachmentsInMeta,
-} from "@/lib/emails/template-email-attachments";
+import { duplicateTemplateEmail } from "@/lib/emails/template-email-duplicate";
 import { filterTemplatesEmail } from "@/lib/emails/filter-templates-email";
 import { filterLibraryTemplates, isManagedNewsletterTemplate } from "@/lib/emails/template-library";
 import {
@@ -398,21 +391,18 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
 
   const handleDuplicate = async (template: TemplateEmail) => {
     try {
-      const sourceAttachments = parseTemplateEmailAttachments(template.variables);
-      const payload = duplicateTemplatePayload(template);
-      payload.variables = setTemplateEmailAttachmentsInMeta(payload.variables, []);
-      const created = await createTemplateEmail(payload);
-      if (sourceAttachments.length > 0) {
-        const copied = await copyTemplateEmailAttachments(template.id, created.id);
-        await updateTemplateEmail(created.id, {
-          ...created,
-          variables: setTemplateEmailAttachmentsInMeta(created.variables, copied),
-        });
-      }
-      toast.success("Modèle dupliqué");
+      const created = await duplicateTemplateEmail(template, templates);
+      toast.success("Modèle dupliqué", {
+        description:
+          "Copie créée sans envoi automatique (déclencheur, Pipe RDV, Box Placement, étiquettes) — à activer si besoin.",
+      });
       await loadTemplates();
-    } catch {
-      toast.error("Erreur lors de la duplication");
+      // La copie est ouverte tout de suite pour être renommée / adaptée.
+      setPreviewId(created.id);
+      handleEdit(created);
+    } catch (e) {
+      toast.error((e instanceof Error ? e.message : String(e)) || "Erreur lors de la duplication");
+      await loadTemplates({ silent: true });
     }
   };
 
@@ -751,9 +741,9 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
         }}
         template={selectedTemplate}
         formMode={formMode}
-        onSuccess={async () => {
+        onSuccess={async (options) => {
           await loadTemplates({ silent: true });
-          if (formMode === "permanent") {
+          if (formMode === "permanent" && !options?.keepOpen) {
             handleFormClose();
           }
         }}
@@ -779,9 +769,11 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
                   </>
                 ) : (
                   <>
-                    <strong>{deleteTarget.nom}</strong> sera définitivement supprimé. Les étiquettes
-                    liées seront détachées ; les modèles qui l&apos;utilisaient comme relance le
-                    seront aussi.
+                    <strong>{deleteTarget.nom}</strong> sera définitivement supprimé, avec sa
+                    version tutoiement, sa relance dédiée et ses messages Pipe RDV (sauf s&apos;ils
+                    servent ailleurs ou si un rappel RDV est déjà planifié). Les étiquettes liées
+                    seront détachées. Les envois déjà partis restent dans l&apos;historique
+                    des contacts.
                   </>
                 )
               ) : null}

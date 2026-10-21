@@ -94,6 +94,45 @@ export function buildAgendaTemplateVariables(
   return vars;
 }
 
+const AGENDA_TOKEN_RE = /\{\{\s*(lien_agenda(?:_[a-z0-9_]+)?|lien_calendly)\s*\}\}/gi;
+
+/**
+ * Jetons d'agenda présents dans le texte qui partiraient vides : lien supprimé dans le profil,
+ * lien choisi dans le modèle introuvable, URL vide.
+ */
+export function findUnresolvedAgendaTokens(
+  text: string,
+  vars: Record<string, string>
+): string[] {
+  const missing = new Set<string>();
+  // Même correction des anciens jetons doublés que le rendu (`{{lien_agenda_lien_agenda_x}}`).
+  for (const match of normalizeBrokenAgendaTokens(text).matchAll(AGENDA_TOKEN_RE)) {
+    const key = match[1].toLowerCase();
+    if (!vars[key]?.trim()) missing.add(`{{${key}}}`);
+  }
+  return [...missing];
+}
+
+/** Lien d'agenda introuvable : erreur durable (réessayer ne changera rien). */
+export class AgendaLinkMissingError extends Error {}
+
+/** Envoi automatique (Pipe RDV, Box Placement) : refusé plutôt que parti avec un lien vide. */
+export function assertAgendaLinksResolved(
+  texts: Array<string | null | undefined>,
+  cgp: CgpConfig | null | undefined,
+  agendaLinkId: string | null | undefined
+): void {
+  const missing = findUnresolvedAgendaTokens(
+    texts.filter(Boolean).join("\n"),
+    buildAgendaTemplateVariables(cgp, agendaLinkId)
+  );
+  if (missing.length > 0) {
+    throw new AgendaLinkMissingError(
+      `Lien d'agenda introuvable (${missing.join(", ")}) — email non envoyé. Vérifiez Paramètres → Profil.`
+    );
+  }
+}
+
 export function createEmptyAgendaLink(): AgendaLink {
   const id = `lien_${Date.now()}`;
   return { id, label: "Nouveau lien", url: "" };

@@ -277,6 +277,7 @@ fn main() {
             preview_ephemeral_campaign_audience,
             sync_ephemeral_campaign_queue,
             archive_ephemeral_campaign,
+            delete_detached_template_children,
             get_all_alertes,
             get_alertes_non_traitees,
             get_app_notifications_summary,

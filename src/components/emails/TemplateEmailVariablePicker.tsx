@@ -243,6 +243,7 @@ export function TemplateEmailVariablePicker({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filtrer les variables…"
+          data-no-dirty
           className="h-7 pl-7 text-[11px]"
         />
       </div>

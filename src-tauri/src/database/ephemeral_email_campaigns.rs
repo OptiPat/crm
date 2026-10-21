@@ -129,6 +129,9 @@ pub struct SyncEphemeralCampaignResult {
     pub contacts_no_email: u64,
     pub auto_archived: bool,
     pub message: String,
+    /// Modèles supprimés si la campagne s'est terminée (nettoyage des pièces jointes).
+    #[serde(skip)]
+    pub deleted_template_ids: Vec<i64>,
 }
 
 struct ScopedInvestment {
@@ -159,32 +162,6 @@ impl Database {
         let meta = parse_template_meta(variables);
         let raw = meta.get(EPHEMERAL_CAMPAIGN_KEY)?;
         serde_json::from_value(raw.clone()).ok()
-    }
-
-    fn patch_ephemeral_campaign_in_variables(
-        &self,
-        template_id: i64,
-        patch: impl Fn(&mut EphemeralCampaignConfig),
-    ) -> Result<()> {
-        let variables: Option<String> = self.conn.query_row(
-            "SELECT variables FROM templates_email WHERE id = ?1",
-            params![template_id],
-            |row| row.get(0),
-        )?;
-        let Some(mut cfg) = self.parse_ephemeral_campaign_config(variables.as_deref()) else {
-            return Err(rusqlite::Error::InvalidParameterName(
-                "Modèle éphémère introuvable".into(),
-            ));
-        };
-        patch(&mut cfg);
-        let mut meta = parse_template_meta(variables.as_deref());
-        meta[EPHEMERAL_CAMPAIGN_KEY] = serde_json::to_value(&cfg).unwrap_or(json!({}));
-        let next = serde_json::to_string(&meta).unwrap_or_else(|_| "{}".to_string());
-        self.conn.execute(
-            "UPDATE templates_email SET variables = ?1, updated_at = unixepoch() WHERE id = ?2",
-            params![next, template_id],
-        )?;
-        Ok(())
     }
 
     fn ephemeral_batch_key(template_id: i64, cfg: &EphemeralCampaignConfig) -> String {
@@ -750,6 +727,7 @@ impl Database {
                 contacts_cancelled,
                 contacts_no_email,
                 auto_archived: false,
+                deleted_template_ids: Vec::new(),
                 message: format!(
                     "{} contact(s) en file · {} sans email · {} retiré(s)",
                     contacts_queued, contacts_no_email, contacts_cancelled
@@ -760,9 +738,11 @@ impl Database {
         match result {
             Ok(mut sync) => {
                 self.conn.execute("COMMIT", [])?;
-                if self.try_auto_archive_ephemeral_campaign(template_id)? {
+                let deleted = self.try_auto_archive_ephemeral_campaign(template_id)?;
+                if !deleted.is_empty() {
+                    sync.deleted_template_ids = deleted;
                     sync.auto_archived = true;
-                    sync.message.push_str(" · campagne archivée");
+                    sync.message.push_str(" · campagne terminée, retirée de la bibliothèque");
                 }
                 Ok(sync)
             }
@@ -811,50 +791,197 @@ impl Database {
         ids
     }
 
+    /// Supprime les variantes tu / relance d'une campagne éphémère. Retourne les ids supprimés.
     pub(crate) fn delete_ephemeral_linked_templates(
         &self,
         tpl: &super::models::TemplateEmail,
-    ) -> Result<()> {
+    ) -> Result<Vec<i64>> {
         let child_ids = self.ephemeral_linked_template_ids(tpl);
         self.conn.execute(
             "UPDATE templates_email SET tutoiement_template_id = NULL, relance_template_id = NULL WHERE id = ?1",
             params![tpl.id],
         )?;
+        let mut deleted = Vec::new();
         for child_id in child_ids {
             if self.template_linked_by_other_parent(child_id, tpl.id)? {
                 continue;
             }
             self.delete_auxiliary_template_email(child_id)?;
+            deleted.push(child_id);
         }
-        Ok(())
+        Ok(deleted)
     }
 
-    pub fn archive_ephemeral_campaign(&self, template_id: i64) -> Result<()> {
-        let tpl = self.get_template_email_by_id(template_id)?;
-        let cfg = self
-            .parse_ephemeral_campaign_config(tpl.variables.as_deref())
-            .ok_or_else(|| {
-                rusqlite::Error::InvalidParameterName("Modèle éphémère introuvable".into())
-            })?;
-        let batch_key = Self::ephemeral_batch_key(template_id, &cfg);
-        self.cancel_ephemeral_pending_envois(template_id, &batch_key)?;
-
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-        self.patch_ephemeral_campaign_in_variables(template_id, |cfg| {
-            cfg.status = "archived".to_string();
-            cfg.archived_at = Some(now);
-        })?;
-        self.delete_ephemeral_linked_templates(&tpl)
+    /// Campagne annulée ou terminée : supprimée de la bibliothèque (avec ses variantes tu /
+    /// relance). Les envois partis restent dans l'historique des échanges (archivés par le
+    /// déclencheur de suppression) ; les envois non partis et relances préparées sont retirés.
+    /// Tout ou rien. Retourne les ids des modèles supprimés.
+    pub fn archive_ephemeral_campaign(&self, template_id: i64) -> Result<Vec<i64>> {
+        if !self.email_archive_ready()? {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Historique des envois indisponible pour le moment — réessayez plus tard".into(),
+            ));
+        }
+        self.with_savepoint("ephemeral_delete", || {
+            let tpl = self.get_template_email_by_id(template_id)?;
+            let cfg = self
+                .parse_ephemeral_campaign_config(tpl.variables.as_deref())
+                .ok_or_else(|| {
+                    rusqlite::Error::InvalidParameterName("Modèle éphémère introuvable".into())
+                })?;
+            let batch_key = Self::ephemeral_batch_key(template_id, &cfg);
+            self.cancel_ephemeral_pending_envois(template_id, &batch_key)?;
+            let mut deleted = self.delete_ephemeral_linked_templates(&tpl)?;
+            self.delete_auxiliary_template_email(template_id)?;
+            deleted.push(template_id);
+            Ok(deleted)
+        })
     }
 
-    pub(crate) fn try_auto_archive_ephemeral_campaign(&self, template_id: i64) -> Result<bool> {
+    /// Campagne encore « vivante » après son dernier envoi : relance possible (préparée ou à
+    /// venir, email puis WhatsApp / SMS) ou réponse encore attendue. On la garde jusqu'à 30 jours
+    /// après l'échéance de relance de chaque envoi resté sans réponse (la relance email fait
+    /// repartir la date d'envoi, donc le délai).
+    fn ephemeral_followup_still_possible(
+        &self,
+        template_id: i64,
+        batch_key: &str,
+        variables: Option<&str>,
+        now: i64,
+    ) -> Result<bool> {
+        let relance = super::template_email_relance::parse_template_email_relance(variables);
+        let meta = variables.and_then(|v| serde_json::from_str::<Value>(v).ok());
+        // Même défaut que la file d'envoi : non pour une campagne éphémère, oui sinon.
+        let is_ephemeral = meta
+            .as_ref()
+            .and_then(|m| m.get(IS_EPHEMERAL_TEMPLATE_KEY))
+            .and_then(|v| v.as_bool().or_else(|| v.as_i64().map(|n| n != 0)))
+            .unwrap_or(false);
+        let awaits_reply = meta
+            .as_ref()
+            .and_then(|m| {
+                m.get("email_suivi_reponse")
+                    .and_then(|s| s.get("attendre_reponse"))
+                    .and_then(|a| a.as_bool())
+            })
+            .unwrap_or(!is_ephemeral);
+        if !relance.enabled && !awaits_reply {
+            return Ok(false);
+        }
+        let sent_dates: Vec<i64> = self
+            .conn
+            .prepare(
+                "SELECT email_date_envoi FROM contact_template_envois
+                 WHERE template_id = ?1
+                   AND COALESCE(campaign_batch_key, '') = ?2
+                   AND email_envoye = 1 AND email_date_envoi IS NOT NULL
+                   AND email_reponse_at IS NULL
+                   AND COALESCE(email_suivi_ignore, 0) = 0",
+            )?
+            .query_map(params![template_id, batch_key], |row| row.get(0))?
+            .collect::<Result<Vec<_>>>()?;
+        Ok(sent_dates.into_iter().any(|sent_at| {
+            let due = super::template_email_relance::resolve_relance_due_at(
+                variables,
+                sent_at,
+                super::template_email_relance::DEFAULT_RELANCE_DELAI_JOURS,
+            );
+            now <= due + EPHEMERAL_KEEP_AFTER_RELANCE_DUE_SECS
+        }))
+    }
+
+    /// Les déclencheurs d'archivage sont en place et actifs : supprimer une campagne garde ses
+    /// envois dans l'historique. Sinon on ne supprime rien (jamais de perte d'historique).
+    fn email_archive_ready(&self) -> Result<bool> {
+        let has_trigger: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master
+                           WHERE type = 'trigger' AND name = 'email_archive_cte_before_delete')",
+            [],
+            |row| row.get(0),
+        )?;
+        if !has_trigger {
+            return Ok(false);
+        }
+        let suspended: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(MAX(suspended), 0) FROM email_archive_control",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(1);
+        Ok(suspended == 0)
+    }
+
+    /// Campagnes éphémères terminées (ou déjà archivées par une version précédente) : supprimées,
+    /// ainsi que les anciennes copies « Nom (tu) » orphelines. Appelé à chaque synchro mail.
+    /// Une erreur sur une campagne n'arrête pas les autres. Retourne les ids supprimés.
+    pub fn sweep_finished_ephemeral_campaigns(&self) -> Result<Vec<i64>> {
+        if !self.email_archive_ready()? {
+            return Ok(Vec::new());
+        }
+        let templates: Vec<(i64, String, Option<String>)> = self
+            .conn
+            .prepare(
+                "SELECT id, nom, variables FROM templates_email
+                 WHERE variables LIKE '%ephemeral_campaign%'",
+            )?
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<Result<Vec<_>>>()?;
+        let mut removed = Vec::new();
+        // Messages « Rappel RDV — » / « Suivi RDV — » détachés (Pipe coupé alors qu'un envoi était
+        // planifié) : supprimés une fois que plus rien ne les utilise.
+        let pipe_children: Vec<i64> = self
+            .conn
+            .prepare(
+                "SELECT id FROM templates_email
+                 WHERE nom LIKE 'Rappel RDV — %' OR nom LIKE 'Suivi RDV — %'",
+            )?
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<_>>>()?;
+        match self.delete_detached_template_children(&pipe_children) {
+            Ok(ids) => removed.extend(ids),
+            Err(e) => eprintln!("Messages Pipe RDV orphelins non supprimés : {e}"),
+        }
+        for (id, nom, variables) in templates {
+            let Some(cfg) = self.parse_ephemeral_campaign_config(variables.as_deref()) else {
+                continue;
+            };
+            // Anciennes copies « Nom (tu) » recréées puis détachées : supprimées seulement si
+            // rien ne les utilise (ni lien, ni étiquette, ni envoi en file, ni déclencheur…).
+            let orphans: Vec<i64> = self
+                .conn
+                .prepare(
+                    "SELECT id FROM templates_email
+                     WHERE nom = ?1 || ' (tu)' AND id <> ?2
+                       AND COALESCE(variables, '') NOT LIKE '%ephemeral_campaign%'",
+                )?
+                .query_map(params![nom.trim(), id], |row| row.get(0))?
+                .collect::<Result<Vec<_>>>()?;
+            match self.delete_detached_template_children(&orphans) {
+                Ok(ids) => removed.extend(ids),
+                Err(e) => eprintln!("Copie tu orpheline de « {nom} » non supprimée : {e}"),
+            }
+            let result = if cfg.status == "archived" {
+                self.archive_ephemeral_campaign(id)
+            } else {
+                self.try_auto_archive_ephemeral_campaign(id)
+            };
+            match result {
+                Ok(ids) => removed.extend(ids),
+                Err(e) => eprintln!("Campagne éphémère « {nom} » non supprimée : {e}"),
+            }
+        }
+        Ok(removed)
+    }
+
+    /// Plus rien à envoyer ni à suivre : la campagne est supprimée. Retourne les ids supprimés
+    /// (vide si la campagne continue).
+    pub(crate) fn try_auto_archive_ephemeral_campaign(&self, template_id: i64) -> Result<Vec<i64>> {
         let tpl = self.get_template_email_by_id(template_id)?;
         let cfg = match self.parse_ephemeral_campaign_config(tpl.variables.as_deref()) {
             Some(c) if c.status != "archived" => c,
-            _ => return Ok(false),
+            _ => return Ok(Vec::new()),
         };
         let batch_key = Self::ephemeral_batch_key(template_id, &cfg);
 
@@ -868,23 +995,44 @@ impl Database {
             |row| row.get(0),
         )?;
         if pending_unsent > 0 {
-            return Ok(false);
+            return Ok(Vec::new());
         }
 
-        let any_rows: i64 = self.conn.query_row(
+        // Au moins un envoi parti : une campagne dont tout a été retiré (✕) avant envoi reste
+        // (brouillon, « Remettre en file » possible).
+        let any_sent: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM contact_template_envois
-             WHERE template_id = ?1 AND COALESCE(campaign_batch_key, '') = ?2",
+             WHERE template_id = ?1 AND COALESCE(campaign_batch_key, '') = ?2
+               AND email_envoye = 1",
             params![template_id, batch_key],
             |row| row.get(0),
         )?;
-        if any_rows == 0 {
-            return Ok(false);
+        if any_sent == 0 {
+            return Ok(Vec::new());
         }
 
-        self.archive_ephemeral_campaign(template_id)?;
-        Ok(true)
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        if self.ephemeral_followup_still_possible(
+            template_id,
+            &batch_key,
+            tpl.variables.as_deref(),
+            now,
+        )? {
+            return Ok(Vec::new());
+        }
+        if !self.email_archive_ready()? {
+            return Ok(Vec::new());
+        }
+
+        self.archive_ephemeral_campaign(template_id)
     }
 }
+
+/// Campagne éphémère gardée jusqu'à 30 jours après l'échéance de relance d'un envoi sans réponse.
+const EPHEMERAL_KEEP_AFTER_RELANCE_DUE_SECS: i64 = 30 * 86_400;
 
 fn parse_template_meta(variables: Option<&str>) -> Value {
     variables
@@ -1207,14 +1355,15 @@ mod tests {
     }
 
     #[test]
-    fn ephemeral_delete_blocked_until_archived() {
+    fn ephemeral_delete_blocked_until_cancelled_then_campaign_removed() {
         let db = Database::open_in_memory_for_tests().unwrap();
         let audience = ephemeral_audience_all_scpi(&["Epargne Pierre"]);
         let template_id = create_ephemeral_template(&db, &audience);
 
         assert!(db.delete_template_email(template_id).is_err());
+        // Annuler la campagne la retire de la bibliothèque (plus de modèle archivé en base).
         db.archive_ephemeral_campaign(template_id).unwrap();
-        db.delete_template_email(template_id).unwrap();
+        assert!(db.get_template_email_by_id(template_id).is_err());
     }
 
     #[test]
@@ -1404,15 +1553,176 @@ mod tests {
         db.mark_template_email_sent(row_id, None, None, Some("Objet"), None, None, None)
             .unwrap();
 
-        let cfg = db
-            .parse_ephemeral_campaign_config(
-                db.get_template_email_by_id(template_id)
-                    .unwrap()
-                    .variables
-                    .as_deref(),
+        // Terminée : supprimée de la bibliothèque, l'envoi reste dans l'historique des échanges.
+        assert!(db.get_template_email_by_id(template_id).is_err());
+        let archived: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM email_envoi_archive
+                 WHERE contact_id = ?1 AND source = 'template' AND sent_subject = 'Objet'",
+                params![c1_id],
+                |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(cfg.status, "archived");
+        assert_eq!(archived, 1);
+    }
+
+    #[test]
+    fn ephemeral_with_relance_stays_until_relance_window_is_over() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let audience = ephemeral_audience_all_scpi(&["Epargne Pierre"]);
+        let template_id = create_ephemeral_template(&db, &audience);
+        // Relance activée (5 jours) et suivi de réponse.
+        let tpl = db.get_template_email_by_id(template_id).unwrap();
+        let mut meta: Value = serde_json::from_str(tpl.variables.as_deref().unwrap()).unwrap();
+        meta["email_relance"] = json!({ "enabled": true, "delai_jours": 5 });
+        db.conn
+            .execute(
+                "UPDATE templates_email SET variables = ?1 WHERE id = ?2",
+                params![meta.to_string(), template_id],
+            )
+            .unwrap();
+        let c1 = db
+            .create_contact(sample_contact("ALPHA", "Jean", "a@example.com"))
+            .unwrap();
+        let c1_id = c1.id.expect("contact id");
+        db.create_investissement(scpi_inv(c1_id, "Epargne Pierre", false))
+            .unwrap();
+        db.sync_ephemeral_campaign_queue(template_id).unwrap();
+        let row_id: i64 = db
+            .conn
+            .query_row(
+                "SELECT id FROM contact_template_envois WHERE contact_id = ?1 AND template_id = ?2",
+                params![c1_id, template_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        db.mark_template_email_sent(row_id, None, None, Some("Objet"), None, None, None)
+            .unwrap();
+        db.conn
+            .execute(
+                "UPDATE contact_template_envois SET email_suivi_ignore = 0 WHERE id = ?1",
+                params![row_id],
+            )
+            .unwrap();
+        db.sweep_finished_ephemeral_campaigns().unwrap();
+        assert!(
+            db.get_template_email_by_id(template_id).is_ok(),
+            "relance encore possible : la campagne reste"
+        );
+
+        // Relance email partie : WhatsApp / SMS encore proposés et réponse encore suivie.
+        db.conn
+            .execute(
+                "UPDATE contact_template_envois SET relance_email_sent_at = unixepoch() WHERE id = ?1",
+                params![row_id],
+            )
+            .unwrap();
+        db.sweep_finished_ephemeral_campaigns().unwrap();
+        assert!(
+            db.get_template_email_by_id(template_id).is_ok(),
+            "après la relance email, la campagne reste"
+        );
+
+        // 1er envoi vieux de 40 jours (échéance 5 j + 30 j de marge passées) → campagne supprimée.
+        db.conn
+            .execute(
+                "UPDATE contact_template_envois SET email_date_envoi = unixepoch() - 40 * 86400
+                 WHERE id = ?1",
+                params![row_id],
+            )
+            .unwrap();
+        db.sweep_finished_ephemeral_campaigns().unwrap();
+        assert!(db.get_template_email_by_id(template_id).is_err());
+    }
+
+    #[test]
+    fn campaign_with_every_recipient_removed_before_sending_is_kept() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let audience = ephemeral_audience_all_scpi(&["Epargne Pierre"]);
+        let template_id = create_ephemeral_template(&db, &audience);
+        let c1 = db
+            .create_contact(sample_contact("ALPHA", "Jean", "a@example.com"))
+            .unwrap();
+        let c1_id = c1.id.expect("contact id");
+        db.create_investissement(scpi_inv(c1_id, "Epargne Pierre", false))
+            .unwrap();
+        db.sync_ephemeral_campaign_queue(template_id).unwrap();
+        // Tout retiré (✕), rien n'est parti : la campagne reste (« Remettre en file » possible).
+        db.conn
+            .execute(
+                "UPDATE contact_template_envois SET email_annule = 1 WHERE template_id = ?1",
+                params![template_id],
+            )
+            .unwrap();
+        assert!(db.sweep_finished_ephemeral_campaigns().unwrap().is_empty());
+        assert!(db.get_template_email_by_id(template_id).is_ok());
+    }
+
+    #[test]
+    fn detached_tu_variant_of_a_campaign_is_deleted() {
+        use crate::database::models::NewTemplateEmail;
+        let db = Database::open_in_memory_for_tests().unwrap();
+        // Variante tu telle que l'éditeur la crée pour une campagne (méta « brouillon »).
+        let tu = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Campagne (tu)".into(),
+                sujet: "Objet tu".into(),
+                corps: "Corps tu".into(),
+                categorie: "EPHEMERE".into(),
+                variables: Some(
+                    r#"{"is_ephemeral":true,"ephemeral_campaign":{"status":"draft"}}"#.into(),
+                ),
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap()
+            .id;
+        assert_eq!(db.delete_detached_template_children(&[tu]).unwrap(), vec![tu]);
+    }
+
+    #[test]
+    fn sweep_removes_previously_archived_campaign_and_orphan_tu_copies() {
+        use crate::database::models::NewTemplateEmail;
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let audience = ephemeral_audience_all_scpi(&["Epargne Pierre"]);
+        let template_id = create_ephemeral_template(&db, &audience);
+        let nom = db.get_template_email_by_id(template_id).unwrap().nom;
+        let mut orphan_ids = Vec::new();
+        for _ in 0..2 {
+            orphan_ids.push(
+                db.create_template_email(NewTemplateEmail {
+                    nom: format!("{nom} (tu)"),
+                    sujet: "Objet tu".into(),
+                    corps: "Corps tu".into(),
+                    categorie: "AUTRE".into(),
+                    variables: None,
+                    agenda_link_id: None,
+                    relance_template_id: None,
+                    tutoiement_template_id: None,
+                })
+                .unwrap()
+                .id,
+            );
+        }
+        // État laissé par l'ancienne version : campagne « archivée » restée en base.
+        let tpl = db.get_template_email_by_id(template_id).unwrap();
+        let mut meta: Value = serde_json::from_str(tpl.variables.as_deref().unwrap()).unwrap();
+        meta[EPHEMERAL_CAMPAIGN_KEY]["status"] = json!("archived");
+        db.conn
+            .execute(
+                "UPDATE templates_email SET variables = ?1 WHERE id = ?2",
+                params![meta.to_string(), template_id],
+            )
+            .unwrap();
+
+        assert_eq!(db.sweep_finished_ephemeral_campaigns().unwrap().len(), 3);
+        assert!(db.get_template_email_by_id(template_id).is_err());
+        for id in orphan_ids {
+            assert!(db.get_template_email_by_id(id).is_err());
+        }
+        assert!(db.sweep_finished_ephemeral_campaigns().unwrap().is_empty());
     }
 
     #[test]

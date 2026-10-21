@@ -1,3 +1,4 @@
+import { assertAgendaLinksResolved } from "@/lib/emails/agenda-links";
 import { getContactById, type Contact } from "@/lib/api/tauri-contacts";
 import { sendEmail } from "@/lib/api/tauri-email";
 import { logEmailSendError } from "@/lib/api/tauri-email-send-log";
@@ -220,6 +221,12 @@ export async function sendPipeRdvTemplatedEmailToContact(options: {
     options.tutoiement?.variables,
     registre,
     options.tutoiement != null
+  );
+
+  assertAgendaLinksResolved(
+    [content.sujet, content.corps, corpsHtml],
+    cgp,
+    content.agenda_link_id ?? options.principal.agenda_link_id
   );
 
   await sendEmail({

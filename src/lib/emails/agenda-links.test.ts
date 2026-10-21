@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAgendaTemplateVariables,
+  findUnresolvedAgendaTokens,
   normalizeAgendaLinks,
   normalizeAgendaLinkId,
   agendaLinkVariableKey,
@@ -60,5 +61,24 @@ describe("agenda-links", () => {
       lien_agenda_suivi: "https://suivi.test",
     });
     expect(out).toBe("https://suivi.test");
+  });
+
+  it("signale les liens d'agenda qui partiraient vides", () => {
+    const cgp = {
+      agenda_links: [{ id: "principal", label: "Principal", url: "https://cal.test/p" }],
+    } as never;
+    const ok = buildAgendaTemplateVariables(cgp, "principal");
+    expect(findUnresolvedAgendaTokens("Réservez 👉 {{lien_agenda}} ou {{lien_agenda_principal}}", ok)).toEqual([]);
+    // Lien choisi dans le modèle supprimé du profil + lien fixe inconnu.
+    const broken = buildAgendaTemplateVariables(cgp, "suivi");
+    expect(
+      findUnresolvedAgendaTokens("{{ lien_agenda }} et {{lien_agenda_suivi}} et {{prenom}}", broken)
+    ).toEqual(["{{lien_agenda}}", "{{lien_agenda_suivi}}"]);
+    // Ancien jeton doublé : corrigé comme au rendu, pas bloqué à tort.
+    expect(findUnresolvedAgendaTokens("{{lien_agenda_lien_agenda_principal}}", ok)).toEqual([]);
+    // Aucun lien configuré.
+    expect(findUnresolvedAgendaTokens("{{lien_calendly}}", buildAgendaTemplateVariables(null))).toEqual([
+      "{{lien_calendly}}",
+    ]);
   });
 });

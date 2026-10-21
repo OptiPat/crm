@@ -7,7 +7,10 @@ import { logEmailSendError } from "@/lib/api/tauri-email-send-log";
 import { sendEmail } from "@/lib/api/tauri-email";
 import { buildSendEmailAttachmentsFromTemplate } from "@/lib/emails/template-email-attachments";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
-import { renderEtiquetteEmailPreview } from "@/lib/etiquettes/etiquette-email-preview";
+import {
+  getAgendaLinkSendBlockReason,
+  renderEtiquetteEmailPreview,
+} from "@/lib/etiquettes/etiquette-email-preview";
 
 export interface EtiquetteBatchSendProgress {
   sent: number;
@@ -84,6 +87,25 @@ export async function sendEtiquetteBatch(input: {
         templateNom:
           item.queue_row_kind === "template" ? item.template_sujet : null,
         errorMessage: err,
+        batchId,
+        sendMode: "batch",
+      }).catch(() => {});
+      progress.lastProcessedItem = item;
+      progress.currentContactEtiquetteId = undefined;
+      input.onProgress?.({ ...progress });
+      continue;
+    }
+
+    // Lien d'agenda introuvable : jamais d'email avec un lien vide.
+    const agendaBlock = getAgendaLinkSendBlockReason(item, cgp);
+    if (agendaBlock) {
+      progress.errors.push(`${name} : ${agendaBlock}`);
+      await logEmailSendError({
+        contactId: item.contact_id,
+        contactEtiquetteId: item.contact_etiquette_id,
+        etiquetteNom: item.queue_row_kind === "template" ? null : item.etiquette_nom,
+        templateNom: item.queue_row_kind === "template" ? item.template_sujet : null,
+        errorMessage: agendaBlock,
         batchId,
         sendMode: "batch",
       }).catch(() => {});

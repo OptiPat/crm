@@ -97,7 +97,7 @@ export function EtiquetteEmailSendDialog({
   const batchLocked =
     item != null && isEtiquetteQueueItemBatchLocked(item);
   const scpiSendBlockReason =
-    item != null ? getCampaignTemplateSendBlockReason(item) : null;
+    item != null ? getCampaignTemplateSendBlockReason(item, cgpConfig) : null;
   const sendBlocked =
     batchLocked || isEtiquetteEmailSendActive() || scpiSendBlockReason != null;
 

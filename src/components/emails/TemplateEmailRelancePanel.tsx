@@ -250,6 +250,7 @@ export function TemplateEmailRelancePanel({
                   attachments={relanceAttachments}
                   onChange={onRelanceAttachmentsChange}
                   disabled={attachmentsDisabled}
+                  inheritHint="Sans pièce jointe ici, celles du 1er email sont envoyées."
                 />
               )}
 
@@ -299,6 +300,7 @@ export function TemplateEmailRelancePanel({
                       attachments={relanceTuAttachments}
                       onChange={onRelanceTuAttachmentsChange}
                       disabled={attachmentsDisabled}
+                      inheritHint="Sans pièce jointe ici, celles de la relance vouvoiement (sinon du 1er email) sont envoyées."
                     />
                   )}
                 </div>

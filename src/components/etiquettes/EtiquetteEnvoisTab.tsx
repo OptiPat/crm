@@ -396,7 +396,7 @@ export function EtiquetteEnvoisTab({
     const blocked = scpiBatchReadyItems.find((i) => isCampaignTemplateSendBlocked(i));
     if (blocked) {
       toast.warning(
-        getCampaignTemplateSendBlockReason(blocked) ??
+        getCampaignTemplateSendBlockReason(blocked, cgpConfig) ??
           "Envoi SCPI bloqué — relancez Préparer (checklist SCPI)."
       );
       return;
@@ -852,7 +852,7 @@ export function EtiquetteEnvoisTab({
               ? renderEtiquetteEmailPreview(item, cgpConfig)
               : null;
           const scpiSendBlockReason =
-            options.mode === "ready" ? getCampaignTemplateSendBlockReason(item) : null;
+            options.mode === "ready" ? getCampaignTemplateSendBlockReason(item, cgpConfig) : null;
           const scpiDigestStale =
             options.mode === "ready" &&
             isScpiBulletinQueueItem(item) &&

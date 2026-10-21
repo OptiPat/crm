@@ -113,6 +113,7 @@ export function TemplateEmailTutoiementPanel({
               attachments={attachments}
               onChange={onAttachmentsChange}
               disabled={attachmentsDisabled}
+              inheritHint="Sans pièce jointe ici, celles du message vouvoiement sont envoyées."
             />
           )}
         </div>

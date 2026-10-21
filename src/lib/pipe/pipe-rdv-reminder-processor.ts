@@ -1,3 +1,4 @@
+import { AgendaLinkMissingError } from "@/lib/emails/agenda-links";
 import { getContactById } from "@/lib/api/tauri-contacts";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { getPipeById } from "@/lib/api/tauri-pipe";
@@ -106,18 +107,25 @@ async function sendDueReminder(schedule: PipeRdvReminderSchedule): Promise<"sent
   );
   const rdvStage = timelineEntry ? rdvStageFromEntryTitre(timelineEntry.titre) ?? undefined : undefined;
 
-  await sendPipeRdvTemplatedEmailToContact({
-    contact,
-    pipe,
-    principal,
-    tutoiement,
-    rdvStage,
-    timelineEntryTitre: timelineEntry?.titre,
-    startAtUnix: schedule.rdv_at,
-    endAtUnix: schedule.rdv_end_at,
-    visioLink: schedule.visio_link,
-    eventLocation: schedule.event_location,
-  });
+  try {
+    await sendPipeRdvTemplatedEmailToContact({
+      contact,
+      pipe,
+      principal,
+      tutoiement,
+      rdvStage,
+      timelineEntryTitre: timelineEntry?.titre,
+      startAtUnix: schedule.rdv_at,
+      endAtUnix: schedule.rdv_end_at,
+      visioLink: schedule.visio_link,
+      eventLocation: schedule.event_location,
+    });
+  } catch (e) {
+    // Lien d'agenda introuvable : signalé une fois, pas réessayé à chaque cycle (il bloquerait
+    // les rappels suivants).
+    if (e instanceof AgendaLinkMissingError) await markPipeRdvReminderScheduleSent(schedule.id);
+    throw e;
+  }
 
   await markPipeRdvReminderScheduleSent(schedule.id);
   return "sent";

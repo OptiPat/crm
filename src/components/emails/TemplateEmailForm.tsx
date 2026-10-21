@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback, type FormEvent } from "react";
 import { flushSync } from "react-dom";
+import { buildAgendaTemplateVariables, findUnresolvedAgendaTokens } from "@/lib/emails/agenda-links";
+import { TemplateEmailAttachmentSaveContext } from "@/components/emails/template-email-attachment-save-context";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -54,6 +56,8 @@ import {
   getTemplateEmailById,
   getEtiquetteIdsForTemplate,
   setTemplateEtiquetteLinks,
+  deleteDetachedTemplateChildren,
+  getAllTemplatesEmail,
   getTemplateEmailAction,
   setTemplateEmailAction,
   type NewTemplateEmail,
@@ -206,7 +210,8 @@ interface TemplateEmailFormProps {
   onOpenChange: (open: boolean) => void;
   template?: TemplateEmail | null;
   formMode?: TemplateEmailFormMode;
-  onSuccess?: () => void | Promise<void>;
+  /** `keepOpen` : enregistrement fait pour continuer (ex. joindre un fichier) — ne pas fermer. */
+  onSuccess?: (options?: { keepOpen?: boolean }) => void | Promise<void>;
 }
 
 export function TemplateEmailForm({
@@ -329,6 +334,35 @@ export function TemplateEmailForm({
   const [destinatairesTabPending, setDestinatairesTabPending] = useState(false);
   const [abandonConfirmOpen, setAbandonConfirmOpen] = useState(false);
   const [abandoning, setAbandoning] = useState(false);
+  // Modifié à la main depuis l'ouverture ou le dernier enregistrement (fermeture sans perte).
+  const [dirty, setDirty] = useState(false);
+  const [unsavedConfirmOpen, setUnsavedConfirmOpen] = useState(false);
+  const [etiquetteReplaceConfirm, setEtiquetteReplaceConfirm] = useState<{
+    etiquetteId: number;
+    etiquetteNom: string;
+    currentTemplateNom: string;
+  } | null>(null);
+  const [templateNames, setTemplateNames] = useState<Map<number, string>>(() => new Map());
+  const [invalidFields, setInvalidFields] = useState<ReadonlySet<"nom" | "sujet" | "corps">>(
+    () => new Set()
+  );
+  const clearInvalid = (field: "nom" | "sujet" | "corps") =>
+    setInvalidFields((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  const keepOpenAfterSaveRef = useRef(false);
+  const lastSubmitOkRef = useRef(false);
+  // Pas deux enregistrements en parallèle (Ctrl+S répété, clic pendant l'enregistrement).
+  const savingRef = useRef(false);
+  // Modification faite pendant un enregistrement : elle reste « non enregistrée ».
+  const dirtyVersionRef = useRef(0);
+  const markDirty = useCallback(() => {
+    dirtyVersionRef.current += 1;
+    setDirty(true);
+  }, []);
   const saveBeforeSyncRef = useRef<{
     resolve: () => void;
     reject: (reason?: unknown) => void;
@@ -688,12 +722,18 @@ export function TemplateEmailForm({
     }
     openedWithTemplateIdRef.current = template?.id ?? null;
     setConfirmAbandonOnClose(isEphemeralMode && template?.id == null);
+    setDirty(false);
+    setUnsavedConfirmOpen(false);
+    setInvalidFields(new Set());
     setFormTab("message");
     void getCgpConfig().then(setCgp).catch(() => setCgp(null));
     void getAllContacts()
       .then((list) => setContacts(list.filter((c) => c.email?.trim())))
       .catch(() => setContacts([]));
     void getAllEtiquettes().then(setEtiquettes).catch(() => setEtiquettes([]));
+    void getAllTemplatesEmail()
+      .then((list) => setTemplateNames(new Map(list.map((t) => [t.id, t.nom]))))
+      .catch(() => setTemplateNames(new Map()));
   }, [open, template?.id, isEphemeralMode]);
 
   useEffect(() => {
@@ -858,6 +898,21 @@ export function TemplateEmailForm({
     );
   }, [confirmAbandonOnClose, effectiveTemplateId, ephemeralCampaign.status]);
 
+  /** Jetons d'agenda du message qui partiraient vides (lien supprimé ou introuvable). */
+  const unresolvedAgendaTokens = useMemo(() => {
+    if (!cgp) return [];
+    // Message principal, version tutoiement et relance dédiée (même lien d'agenda à l'envoi).
+    const texts = [formData.sujet, corpsHtml];
+    if (tutoiementDraft.enabled) texts.push(tutoiementDraft.sujet, tutoiementDraft.corpsHtml);
+    if (relanceDraft.enabled && !relanceDraft.useSameMessage) {
+      texts.push(relanceDraft.sujet, relanceDraft.corpsHtml);
+    }
+    return findUnresolvedAgendaTokens(
+      texts.join("\n"),
+      buildAgendaTemplateVariables(cgp, formData.agenda_link_id)
+    );
+  }, [cgp, formData.sujet, formData.agenda_link_id, corpsHtml, tutoiementDraft, relanceDraft]);
+
   const previewVariables = useMemo(() => {
     if (effectiveTemplateId == null) return formData.variables;
     return mergeAttachmentsIntoVariables(formData.variables, attachments, effectiveTemplateId);
@@ -907,8 +962,12 @@ export function TemplateEmailForm({
       setAbandonConfirmOpen(true);
       return;
     }
+    if (dirty) {
+      setUnsavedConfirmOpen(true);
+      return;
+    }
     closeForm();
-  }, [shouldConfirmAbandonEphemeral, closeForm]);
+  }, [shouldConfirmAbandonEphemeral, closeForm, dirty]);
 
   const handleConfirmAbandon = async () => {
     const id = effectiveTemplateId;
@@ -961,14 +1020,33 @@ export function TemplateEmailForm({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!teamLock.ready) return;
+    lastSubmitOkRef.current = false;
+    if (savingRef.current) return;
+    if (!teamLock.ready) {
+      toast.message("Modèle en cours d'ouverture — réessayez dans un instant.");
+      return;
+    }
+    savingRef.current = true;
+    try {
+      await submitTemplate();
+    } finally {
+      savingRef.current = false;
+    }
+  };
+
+  const submitTemplate = async () => {
+    const versionAtStart = dirtyVersionRef.current;
     const corpsHtmlForSave = canonicalizeCorpsHtmlForSave(corpsHtml);
     const plainCorps = htmlToPlainEmail(corpsHtmlForSave) || formData.corps.trim();
-    if (!formData.nom.trim() || !formData.sujet.trim() || !plainCorps) {
-      toast.error("Nom, objet et message sont obligatoires");
-      if (isEphemeralMode && ephemeralSaveIntentRef.current !== "default") {
-        setFormTab("message");
-      }
+    const missing = new Set<"nom" | "sujet" | "corps">();
+    if (!formData.nom.trim()) missing.add("nom");
+    if (!formData.sujet.trim()) missing.add("sujet");
+    if (!plainCorps) missing.add("corps");
+    setInvalidFields(missing);
+    if (missing.size > 0) {
+      const labels = { nom: "nom du modèle", sujet: "objet", corps: "message" } as const;
+      toast.error(`À compléter : ${[...missing].map((f) => labels[f]).join(", ")}`);
+      setFormTab("message");
       rejectPendingEphemeralSave(new Error("validation"));
       return;
     }
@@ -1690,6 +1768,48 @@ export function TemplateEmailForm({
         await setTemplateEtiquetteLinks(templateId, linkedEtiquetteIds);
         notifyEtiquettesChanged();
       }
+      // Variantes détachées (tu désactivé, relance revenue au même message, Pipe coupé) :
+      // supprimées si plus rien ne les utilise — pas de modèle « fantôme » dans la bibliothèque.
+      const previousChildIds = [
+        tutoiementTemplateId,
+        relanceTemplateId,
+        relanceTuTemplateId,
+        pipeRdvReminderTemplateId,
+        pipeRdvReminderTuTemplateId,
+        pipeRdvFollowUpTemplateId,
+        pipeRdvFollowUpTuTemplateId,
+      ].filter((id): id is number => id != null);
+      if (previousChildIds.length > 0) {
+        const deleted = await deleteDetachedTemplateChildren(previousChildIds).catch(
+          () => [] as number[]
+        );
+        // Variante supprimée : son id et ses pièces jointes en mémoire sont oubliés (sinon une
+        // réactivation dans la même session réutiliserait des fichiers supprimés).
+        const forget = (
+          id: number | null,
+          setter: (value: number | null) => void,
+          attachmentsState: { reset: () => void }
+        ) => {
+          if (id == null || !deleted.includes(id)) return;
+          setter(null);
+          attachmentsState.reset();
+        };
+        forget(tutoiementTemplateId, setTutoiementTemplateId, tutoiementAttachmentsState);
+        forget(relanceTemplateId, setRelanceTemplateId, relanceAttachmentsState);
+        forget(relanceTuTemplateId, setRelanceTuTemplateId, relanceTuAttachmentsState);
+        forget(pipeRdvReminderTemplateId, setPipeRdvReminderTemplateId, pipeReminderAttachmentsState);
+        forget(
+          pipeRdvReminderTuTemplateId,
+          setPipeRdvReminderTuTemplateId,
+          pipeReminderTuAttachmentsState
+        );
+        forget(pipeRdvFollowUpTemplateId, setPipeRdvFollowUpTemplateId, pipeFollowUpAttachmentsState);
+        forget(
+          pipeRdvFollowUpTuTemplateId,
+          setPipeRdvFollowUpTuTemplateId,
+          pipeFollowUpTuAttachmentsState
+        );
+      }
       if (templateId != null) {
         await setTemplateEmailAction({
           template_id: templateId,
@@ -1700,9 +1820,14 @@ export function TemplateEmailForm({
         });
         notifyTachesChanged();
       }
-      await onSuccess?.();
+      lastSubmitOkRef.current = true;
+      if (dirtyVersionRef.current === versionAtStart) setDirty(false);
+      // Liens étiquette ↔ modèle à jour (confirmation « Remplacer ? » juste).
+      void getAllEtiquettes().then(setEtiquettes).catch(() => undefined);
+      const keepOpen = keepOpenAfterSaveRef.current;
+      await onSuccess?.({ keepOpen });
       if (isEphemeralMode) {
-        if (saveIntentAtStart === "default") {
+        if (saveIntentAtStart === "default" && !keepOpen) {
           setFormTab("destinataires");
         }
         return;
@@ -1996,9 +2121,23 @@ export function TemplateEmailForm({
   );
 
   const toggleEtiquetteLink = (id: number) => {
+    const adding = !linkedEtiquetteIds.includes(id);
+    const etiquette = etiquettes.find((e) => e.id === id);
+    const currentTemplateId = etiquette?.email_template_id ?? null;
+    // Une étiquette n'envoie qu'un modèle : relier celui-ci remplacerait son modèle actuel.
+    if (adding && etiquette && currentTemplateId != null && currentTemplateId !== effectiveTemplateId) {
+      setEtiquetteReplaceConfirm({
+        etiquetteId: id,
+        etiquetteNom: etiquette.nom,
+        currentTemplateNom:
+          templateNames.get(currentTemplateId) ?? "un autre modèle",
+      });
+      return;
+    }
     setLinkedEtiquetteIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
+    markDirty();
   };
 
   const requestEphemeralSave = useCallback((): Promise<void> => {
@@ -2052,6 +2191,57 @@ export function TemplateEmailForm({
     ]
   );
 
+
+  /** Enregistre sans fermer l'éditeur (pièce jointe sur un modèle pas encore enregistré). */
+  const saveKeepingOpen = async (): Promise<boolean> => {
+    keepOpenAfterSaveRef.current = true;
+    try {
+      await handleSubmit({ preventDefault() {} } as FormEvent);
+    } finally {
+      keepOpenAfterSaveRef.current = false;
+    }
+    return lastSubmitOkRef.current;
+  };
+
+  /** Toute saisie ou action dans le formulaire compte comme une modification, sauf l'aperçu,
+   * la recherche de variables, les onglets et le pied de fenêtre (`data-no-dirty`). */
+  const trackDirtyEvent = (
+    target: EventTarget | null,
+    kind: "input" | "click",
+    trusted: boolean
+  ) => {
+    // Seules les actions de l'utilisateur comptent : les composants (listes, interrupteurs)
+    // émettent aussi des événements quand le code fixe leur valeur au chargement.
+    if (!trusted || !(target instanceof Element)) return;
+    if (target.closest("[data-no-dirty]") || target.closest('[role="tab"]')) return;
+    if (kind === "click") {
+      const control = target.closest(
+        'button, [role="switch"], [role="checkbox"], [role="radio"], [role="option"], [role="menuitem"]'
+      );
+      // Ouvrir une liste déroulante n'est pas une modification (le choix d'une option, si).
+      if (!control || control.getAttribute("role") === "combobox") return;
+    }
+    markDirty();
+  };
+
+  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      // Enregistre sans fermer ni changer d'onglet ; ignoré pendant un enregistrement.
+      if (!e.repeat && !loading) void saveKeepingOpen();
+      return;
+    }
+    // Activation au clavier (Entrée / Espace sur une option, un interrupteur, une pastille).
+    if (e.key === " " || e.key === "Enter") {
+      trackDirtyEvent(e.target, "click", e.nativeEvent.isTrusted);
+    }
+    // Entrée dans un champ d'une ligne ne doit jamais enregistrer (ni fermer) le modèle.
+    if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
+      const type = e.target.type;
+      if (!["checkbox", "radio", "button", "submit", "file"].includes(type)) e.preventDefault();
+    }
+  };
+
   return (
     <>
     <Dialog
@@ -2086,7 +2276,25 @@ export function TemplateEmailForm({
           />
         </div>
 
-        <form ref={formRef} noValidate onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+        <TemplateEmailAttachmentSaveContext.Provider
+          value={{ saveBeforeAttach: saveKeepingOpen, markDirty }}
+        >
+        <form
+          ref={formRef}
+          noValidate
+          onSubmit={handleSubmit}
+          onKeyDown={handleFormKeyDown}
+          onInputCapture={(e) => trackDirtyEvent(e.target, "input", e.nativeEvent.isTrusted)}
+          onChangeCapture={(e) => trackDirtyEvent(e.target, "input", e.nativeEvent.isTrusted)}
+          onClickCapture={(e) => trackDirtyEvent(e.target, "click", e.nativeEvent.isTrusted)}
+          // Choix d'une option à la souris dans une liste : validé au relâchement, sans clic.
+          onPointerUpCapture={(e) => {
+            if (e.target instanceof Element && e.target.closest('[role="option"]')) {
+              trackDirtyEvent(e.target, "click", e.nativeEvent.isTrusted);
+            }
+          }}
+          className="flex flex-col flex-1 min-h-0"
+        >
           <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
             <div className="flex-1 min-h-0 flex flex-col min-w-0">
               <Tabs
@@ -2172,10 +2380,18 @@ export function TemplateEmailForm({
                       <Input
                         id="nom"
                         value={formData.nom}
-                        onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
+                        onChange={(e) => {
+                          setFormData({ ...formData, nom: e.target.value });
+                          clearInvalid("nom");
+                        }}
                         placeholder="Ex. Rappel déclaration IR"
                         autoFocus
+                        aria-invalid={invalidFields.has("nom") || undefined}
+                        className={cn(invalidFields.has("nom") && "border-destructive")}
                       />
+                      {invalidFields.has("nom") && (
+                        <p className="text-xs text-destructive">Donnez un nom au modèle.</p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -2211,7 +2427,12 @@ export function TemplateEmailForm({
                         ref={sujetInputRef}
                         id="sujet"
                         value={formData.sujet}
-                        onChange={(e) => setFormData({ ...formData, sujet: e.target.value })}
+                        onChange={(e) => {
+                          setFormData({ ...formData, sujet: e.target.value });
+                          clearInvalid("sujet");
+                        }}
+                        aria-invalid={invalidFields.has("sujet") || undefined}
+                        className={cn(invalidFields.has("sujet") && "border-destructive")}
                         onSelect={captureSujetSelection}
                         onKeyUp={captureSujetSelection}
                         onClick={captureSujetSelection}
@@ -2219,6 +2440,9 @@ export function TemplateEmailForm({
                         onBlur={captureSujetSelection}
                         placeholder="Ex. {{prenom}}, votre déclaration d'impôts"
                       />
+                      {invalidFields.has("sujet") && (
+                        <p className="text-xs text-destructive">L&apos;objet est obligatoire.</p>
+                      )}
                     </div>
 
                     {mainVariablePicker}
@@ -2230,18 +2454,33 @@ export function TemplateEmailForm({
                       disabled={loading}
                     />
 
-                    <div className="space-y-2">
+                    <div
+                      className={cn(
+                        "space-y-2",
+                        invalidFields.has("corps") && "rounded-md ring-1 ring-destructive p-1"
+                      )}
+                    >
                       <Label htmlFor="corps">Message *</Label>
                       <RichTextEmailEditor
                         ref={richEditorRef}
                         value={corpsHtml}
-                        onChange={applyCorpsHtml}
+                        onChange={(html) => {
+                          applyCorpsHtml(html);
+                          clearInvalid("corps");
+                        }}
                         onSelectionSave={(range) => {
                           editorSelectionRef.current = range;
                         }}
                         minHeight="240px"
                       />
                     </div>
+                    {unresolvedAgendaTokens.length > 0 && (
+                      <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                        Lien d&apos;agenda introuvable : {unresolvedAgendaTokens.join(", ")}. Il
+                        partirait vide — l&apos;envoi sera bloqué tant que le lien n&apos;existe pas
+                        (Paramètres → Profil, ou lien d&apos;agenda choisi pour ce modèle).
+                      </p>
+                    )}
 
                     {isEphemeralMode && agendaLinks.length > 0 && (
                       <div className="space-y-2">
@@ -2274,13 +2513,13 @@ export function TemplateEmailForm({
                       </div>
                     )}
 
-                    <div className="space-y-2 lg:hidden">
+                    <div className="space-y-2 lg:hidden" data-no-dirty>
                       <Label>Aperçu sur</Label>
                       <Select value={previewContactId} onValueChange={setPreviewContactId}>
                         <SelectTrigger className="h-9">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent data-no-dirty>
                           <SelectItem value="sample">Contact fictif (Marie Dupont)</SelectItem>
                           {contacts.slice(0, 200).map((c) => (
                             <SelectItem key={c.id} value={String(c.id)}>
@@ -2444,6 +2683,7 @@ export function TemplateEmailForm({
                       {etiquettes.length === 0 ? (
                         <p className="text-sm text-muted-foreground py-4">Aucune étiquette.</p>
                       ) : (
+                        <div data-no-dirty>
                         <CategoryTogglePills
                           categories={etiquettes.map((e) => ({
                             value: String(e.id),
@@ -2452,7 +2692,28 @@ export function TemplateEmailForm({
                           selected={linkedEtiquetteIds.map(String)}
                           onToggle={(value) => toggleEtiquetteLink(parseInt(value, 10))}
                         />
+                        </div>
                       )}
+                      {(() => {
+                        const others = etiquettes.filter(
+                          (e) =>
+                            !linkedEtiquetteIds.includes(e.id) &&
+                            e.email_template_id != null &&
+                            e.email_template_id !== effectiveTemplateId
+                        );
+                        if (others.length === 0) return null;
+                        return (
+                          <p className="text-xs text-muted-foreground">
+                            Déjà reliées à un autre modèle :{" "}
+                            {others
+                              .map(
+                                (e) =>
+                                  `${e.nom} → « ${templateNames.get(e.email_template_id!) ?? "autre modèle"} »`
+                              )
+                              .join(" · ")}
+                          </p>
+                        );
+                      })()}
                     </div>
 
                     {agendaLinks.length > 0 && (
@@ -2529,6 +2790,11 @@ export function TemplateEmailForm({
                             setEphemeralCampaign((prev) => ({ ...prev, excluded_contact_ids }))
                           }
                           campaignStatus={ephemeralCampaign.status}
+                          onCampaignClosed={async () => {
+                            setDirty(false);
+                            await onSuccess?.();
+                            onOpenChange(false);
+                          }}
                           onCampaignUpdated={async () => {
                             const id = effectiveTemplateId;
                             if (id == null) return;
@@ -2551,6 +2817,7 @@ export function TemplateEmailForm({
             </div>
 
             <aside
+              data-no-dirty
               className={cn(
                 "hidden lg:flex flex-col w-[300px] shrink-0 border-l bg-muted/15",
                 "p-4 gap-3 overflow-y-auto"
@@ -2561,7 +2828,7 @@ export function TemplateEmailForm({
                 <SelectTrigger className="h-9 text-xs">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent data-no-dirty>
                   <SelectItem value="sample">Marie Dupont (exemple)</SelectItem>
                   {contacts.slice(0, 200).map((c) => (
                     <SelectItem key={c.id} value={String(c.id)}>
@@ -2578,7 +2845,7 @@ export function TemplateEmailForm({
                   <SelectTrigger className="h-9 text-xs">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent data-no-dirty>
                     <SelectItem value="VOUS">Aperçu vouvoiement</SelectItem>
                     <SelectItem value="TU">Aperçu tutoiement</SelectItem>
                   </SelectContent>
@@ -2602,7 +2869,12 @@ export function TemplateEmailForm({
             </aside>
           </div>
 
-          <DialogFooter className="px-6 py-4 border-t shrink-0 gap-2">
+          <DialogFooter className="px-6 py-4 border-t shrink-0 gap-2" data-no-dirty>
+            {dirty && (
+              <span className="mr-auto self-center text-xs text-muted-foreground">
+                Modifications non enregistrées · Ctrl+S pour enregistrer
+              </span>
+            )}
             <Button type="button" variant="outline" onClick={handleRequestClose}>
               {shouldConfirmAbandonEphemeral() ? "Abandonner" : "Annuler"}
             </Button>
@@ -2611,8 +2883,68 @@ export function TemplateEmailForm({
             </Button>
           </DialogFooter>
         </form>
+        </TemplateEmailAttachmentSaveContext.Provider>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog
+      open={etiquetteReplaceConfirm != null}
+      onOpenChange={(next) => {
+        if (!next) setEtiquetteReplaceConfirm(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remplacer le modèle de cette étiquette ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            L&apos;étiquette « {etiquetteReplaceConfirm?.etiquetteNom} » envoie actuellement «{" "}
+            {etiquetteReplaceConfirm?.currentTemplateNom} ». Une étiquette n&apos;envoie qu&apos;un
+            modèle : la relier à celui-ci arrêtera l&apos;envoi de «{" "}
+            {etiquetteReplaceConfirm?.currentTemplateNom} » pour cette étiquette (à
+            l&apos;enregistrement).
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Garder l&apos;actuel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              const id = etiquetteReplaceConfirm?.etiquetteId;
+              setEtiquetteReplaceConfirm(null);
+              if (id != null) {
+                setLinkedEtiquetteIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+                markDirty();
+              }
+            }}
+          >
+            Remplacer
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <AlertDialog open={unsavedConfirmOpen} onOpenChange={setUnsavedConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Quitter sans enregistrer ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Vos modifications de ce modèle seront perdues.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Continuer l&apos;édition</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={() => {
+              setUnsavedConfirmOpen(false);
+              setDirty(false);
+              closeForm();
+            }}
+          >
+            Quitter sans enregistrer
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     <AlertDialog open={abandonConfirmOpen} onOpenChange={setAbandonConfirmOpen}>
       <AlertDialogContent>

@@ -325,13 +325,18 @@ pub fn copy_template_attachments(
     Ok(copied)
 }
 
-pub fn delete_all_template_attachments(app_data_dir: &Path, template_id: i64) -> Result<(), String> {
-    if template_id <= 0 {
-        return Ok(());
-    }
-    let dir = template_attachments_dir(app_data_dir, template_id);
-    if dir.is_dir() {
-        fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+/// Pièces jointes des modèles supprimés (ids renvoyés par la base, variantes comprises).
+/// Appelé **après** la suppression en base : un refus ne fait jamais perdre de fichier, et seuls
+/// les modèles réellement supprimés sont touchés (autre base, sauvegarde restaurée : rien d'autre).
+pub fn remove_template_attachment_dirs(app_data_dir: &Path, template_ids: &[i64]) -> Result<(), String> {
+    for &id in template_ids {
+        if id <= 0 {
+            continue;
+        }
+        let dir = template_attachments_dir(app_data_dir, id);
+        if dir.is_dir() {
+            fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+        }
     }
     Ok(())
 }
@@ -339,6 +344,19 @@ pub fn delete_all_template_attachments(app_data_dir: &Path, template_id: i64) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn attachment_dirs_removed_only_for_deleted_templates() {
+        let tmp = std::env::temp_dir().join(format!("crm_attach_deleted_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        for id in [5, 6] {
+            fs::create_dir_all(template_attachments_dir(&tmp, id)).unwrap();
+        }
+        remove_template_attachment_dirs(&tmp, &[6, 7]).unwrap();
+        assert!(template_attachments_dir(&tmp, 5).is_dir());
+        assert!(!template_attachments_dir(&tmp, 6).exists());
+        let _ = fs::remove_dir_all(&tmp);
+    }
 
     #[test]
     fn guess_mime_type_maps_pdf() {

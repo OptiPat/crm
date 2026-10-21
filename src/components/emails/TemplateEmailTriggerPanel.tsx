@@ -341,6 +341,7 @@ export function TemplateEmailTriggerPanel({ trigger, onChange, templateId }: Pro
                 size="sm"
                 disabled={templateId == null || backfillLoading}
                 onClick={() => void handleBackfill()}
+                data-no-dirty
               >
                 {backfillLoading ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />

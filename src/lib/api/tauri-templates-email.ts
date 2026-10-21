@@ -52,6 +52,13 @@ export async function deleteTemplateEmail(id: number): Promise<void> {
   notifyTemplatesEmailChanged();
 }
 
+/** Variantes tu / relance / Pipe détachées d'un modèle : supprimées si plus rien ne les utilise. */
+export async function deleteDetachedTemplateChildren(childIds: number[]): Promise<number[]> {
+  const deleted = await invoke<number[]>("delete_detached_template_children", { childIds });
+  if (deleted.length > 0) notifyTemplatesEmailChanged();
+  return deleted;
+}
+
 export interface TemplateEmailAction {
   template_id: number;
   tache_actif: boolean;

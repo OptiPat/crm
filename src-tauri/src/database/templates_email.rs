@@ -36,6 +36,14 @@ const TEMPLATE_EMAIL_LIBRARY_VISIBLE_WHERE: &str = "
           )
     )";
 
+/// Ids des modèles enfants Pipe RDV rangés dans la méta du parent.
+const PIPE_CHILD_ID_PATHS: [(&str, &str); 4] = [
+    ("pipe_rdv_reminder", "reminder_template_id"),
+    ("pipe_rdv_reminder", "reminder_tutoiement_template_id"),
+    ("pipe_rdv_follow_up", "follow_up_template_id"),
+    ("pipe_rdv_follow_up", "follow_up_tutoiement_template_id"),
+];
+
 impl super::Database {
     fn map_template_email_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<super::models::TemplateEmail> {
         Ok(super::models::TemplateEmail {
@@ -192,6 +200,168 @@ impl super::Database {
         Ok(())
     }
 
+    /// Modèles enfants : variante tu, relance dédiée (et sa variante tu), rappel / suivi Pipe RDV
+    /// (et leurs variantes tu).
+    pub(crate) fn template_child_ids(&self, tpl: &super::models::TemplateEmail) -> Vec<i64> {
+        let mut ids: Vec<i64> = Vec::new();
+        ids.extend(tpl.tutoiement_template_id);
+        if let Some(rel_id) = tpl.relance_template_id {
+            ids.push(rel_id);
+            if let Ok(rel) = self.get_template_email_by_id(rel_id) {
+                ids.extend(rel.tutoiement_template_id);
+            }
+        }
+        if let Some(meta) = tpl
+            .variables
+            .as_deref()
+            .and_then(|v| serde_json::from_str::<serde_json::Value>(v).ok())
+        {
+            for (key, field) in PIPE_CHILD_ID_PATHS {
+                if let Some(id) = meta.get(key).and_then(|o| o.get(field)).and_then(|v| v.as_i64()) {
+                    ids.push(id);
+                }
+            }
+        }
+        ids.retain(|id| *id > 0 && *id != tpl.id);
+        ids.dedup();
+        ids
+    }
+
+    /// Modèle encore utilisé : relié à un autre modèle (tu, relance, Pipe RDV) ou à une étiquette.
+    fn template_still_referenced(&self, id: i64) -> Result<bool> {
+        let by_column: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM templates_email
+                           WHERE tutoiement_template_id = ?1 OR relance_template_id = ?1)
+                 OR EXISTS(SELECT 1 FROM etiquettes WHERE email_template_id = ?1)
+                 -- Rappel / suivi RDV déjà planifié avec ce message : il doit pouvoir partir.
+                 OR EXISTS(SELECT 1 FROM pipe_rdv_scheduled_emails
+                           WHERE template_id = ?1 AND sent_at IS NULL AND cancelled_at IS NULL)",
+            params![id],
+            |row| row.get(0),
+        )?;
+        if by_column {
+            return Ok(true);
+        }
+        let mut stmt = self.conn.prepare(
+            "SELECT variables FROM templates_email
+             WHERE variables LIKE '%pipe_rdv_reminder%' OR variables LIKE '%pipe_rdv_follow_up%'",
+        )?;
+        let variables = stmt
+            .query_map([], |row| row.get::<_, Option<String>>(0))?
+            .collect::<Result<Vec<_>>>()?;
+        Ok(variables.iter().flatten().any(|raw| {
+            serde_json::from_str::<serde_json::Value>(raw)
+                .ok()
+                .is_some_and(|meta| {
+                    PIPE_CHILD_ID_PATHS.iter().any(|(key, field)| {
+                        meta.get(key).and_then(|o| o.get(field)).and_then(|v| v.as_i64())
+                            == Some(id)
+                    })
+                })
+        }))
+    }
+
+    /// Variantes détachées d'un modèle (tu désactivé, relance revenue au même message, Pipe coupé,
+    /// modèle parent supprimé) : supprimées si plus rien ne les utilise, pour ne pas réapparaître
+    /// comme modèles « fantômes ». Retourne les ids supprimés.
+    pub fn delete_detached_template_children(&self, candidates: &[i64]) -> Result<Vec<i64>> {
+        self.with_savepoint("detached_children", || {
+            let mut queue: Vec<i64> = candidates.to_vec();
+            let mut deleted = Vec::new();
+            while let Some(id) = queue.pop() {
+                if deleted.contains(&id) {
+                    continue;
+                }
+                let Ok(child) = self.get_template_email_by_id(id) else {
+                    continue;
+                };
+                if self.template_still_referenced(id)? || self.template_has_own_activity(&child)? {
+                    continue;
+                }
+                // Ses propres variantes (ex. relance tu) deviennent à leur tour candidates.
+                queue.extend(self.template_child_ids(&child));
+                self.delete_auxiliary_template_email(id)?;
+                deleted.push(id);
+            }
+            Ok(deleted)
+        })
+    }
+
+    /// Modèle d'une ligne d'envoi « modèle » et ses variantes (nettoyage des fichiers si la
+    /// campagne est supprimée après ce dernier envoi).
+    pub fn template_ids_with_children_for_envoi(&self, row_id: i64) -> Result<Vec<i64>> {
+        let template_id: i64 = self.conn.query_row(
+            "SELECT template_id FROM contact_template_envois WHERE id = ?1",
+            params![row_id],
+            |row| row.get(0),
+        )?;
+        let tpl = self.get_template_email_by_id(template_id)?;
+        let mut ids = self.template_child_ids(&tpl);
+        ids.push(template_id);
+        Ok(ids)
+    }
+
+    /// Modèle qui vit par lui-même (jamais supprimé comme simple variante) : campagne éphémère,
+    /// newsletter, envoi automatique actif, ou envois encore en file.
+    fn template_has_own_activity(&self, tpl: &super::models::TemplateEmail) -> Result<bool> {
+        let meta = tpl
+            .variables
+            .as_deref()
+            .and_then(|v| serde_json::from_str::<serde_json::Value>(v).ok())
+            .unwrap_or(serde_json::Value::Null);
+        let enabled = |key: &str| {
+            meta.get(key)
+                .and_then(|o| o.get("enabled"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        };
+        // Variante tu / relance d'une campagne éphémère : marquée « brouillon » sans aucun envoi.
+        // Ce n'est pas une campagne à part entière, elle peut partir quand on la détache.
+        let ephemeral_status = meta
+            .get("ephemeral_campaign")
+            .and_then(|c| c.get("status"))
+            .and_then(|v| v.as_str());
+        let ephemeral_variant_without_sends = ephemeral_status == Some("draft")
+            && !self.conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM contact_template_envois WHERE template_id = ?1)",
+                params![tpl.id],
+                |row| row.get::<_, bool>(0),
+            )?;
+        if (meta.get("ephemeral_campaign").is_some() && !ephemeral_variant_without_sends)
+            || meta.get("newsletter_html").is_some()
+            || enabled("email_trigger")
+            || enabled("pipe_rdv_trigger")
+            || enabled("placement_conforme_trigger")
+        {
+            return Ok(true);
+        }
+        self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM contact_template_envois
+                           WHERE template_id = ?1
+                             AND ((email_envoye = 0 AND COALESCE(email_annule, 0) = 0)
+                                  OR COALESCE(email_relance_active, 0) = 1))",
+            params![tpl.id],
+            |row| row.get(0),
+        )
+    }
+
+    /// Suppressions en plusieurs étapes : tout ou rien (point de sauvegarde, imbriquable).
+    pub(crate) fn with_savepoint<T>(&self, name: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
+        self.conn.execute_batch(&format!("SAVEPOINT {name}"))?;
+        match f() {
+            Ok(value) => {
+                self.conn.execute_batch(&format!("RELEASE {name}"))?;
+                Ok(value)
+            }
+            Err(e) => {
+                let _ = self
+                    .conn
+                    .execute_batch(&format!("ROLLBACK TO {name}; RELEASE {name}"));
+                Err(e)
+            }
+        }
+    }
+
     /// True si un autre modèle (hors `exclude_parent_id`) référence encore `child_id`.
     pub(crate) fn template_linked_by_other_parent(
         &self,
@@ -207,7 +377,13 @@ impl super::Database {
         Ok(n > 0)
     }
 
-    pub fn delete_template_email(&self, id: i64) -> Result<()> {
+    /// Supprime un modèle et ses variantes (tu, relance, Pipe) non utilisées ailleurs.
+    /// Retourne les ids supprimés (pour nettoyer leurs pièces jointes).
+    pub fn delete_template_email(&self, id: i64) -> Result<Vec<i64>> {
+        self.with_savepoint("template_delete", || self.delete_template_email_inner(id))
+    }
+
+    fn delete_template_email_inner(&self, id: i64) -> Result<Vec<i64>> {
         let tpl = self.get_template_email_by_id(id)?;
         // Modèle géré par la page Newsletter (HTML de l'édition) — pas les autres modèles
         // de catégorie NEWSLETTER (ex. Performance Stellium).
@@ -237,8 +413,12 @@ impl super::Database {
                         .into(),
                 ));
             }
-            self.delete_ephemeral_linked_templates(&tpl)?;
         }
+        let mut deleted = Vec::new();
+        if self.parse_ephemeral_campaign_config(tpl.variables.as_deref()).is_some() {
+            deleted.extend(self.delete_ephemeral_linked_templates(&tpl)?);
+        }
+        let children = self.template_child_ids(&tpl);
         self.skip_prepared_relances_using_template(id)?;
         self.conn.execute(
             "UPDATE templates_email SET relance_template_id = NULL WHERE relance_template_id = ?1",
@@ -250,7 +430,10 @@ impl super::Database {
         )?;
         self.conn
             .execute("DELETE FROM templates_email WHERE id = ?1", params![id])?;
-        Ok(())
+        deleted.push(id);
+        // Sa version tu, sa relance et ses messages Pipe partent avec lui (s'ils ne servent pas ailleurs).
+        deleted.extend(self.delete_detached_template_children(&children)?);
+        Ok(deleted)
     }
 
     fn template_email_nom_exists(&self, nom: &str) -> Result<bool> {
@@ -467,5 +650,158 @@ Bien cordialement,\n\
             );
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::database::models::{NewEtiquette, NewTemplateEmail};
+    use crate::database::Database;
+    use rusqlite::params;
+
+    fn tpl(db: &Database, nom: &str, variables: Option<String>) -> i64 {
+        db.create_template_email(NewTemplateEmail {
+            nom: nom.into(),
+            sujet: "Objet".into(),
+            corps: "Corps".into(),
+            categorie: "AUTRE".into(),
+            variables,
+            agenda_link_id: None,
+            relance_template_id: None,
+            tutoiement_template_id: None,
+        })
+        .unwrap()
+        .id
+    }
+
+    fn link(db: &Database, parent: i64, tu: Option<i64>, relance: Option<i64>) {
+        db.conn
+            .execute(
+                "UPDATE templates_email SET tutoiement_template_id = ?1, relance_template_id = ?2
+                 WHERE id = ?3",
+                params![tu, relance, parent],
+            )
+            .unwrap();
+    }
+
+    fn exists(db: &Database, id: i64) -> bool {
+        db.get_template_email_by_id(id).is_ok()
+    }
+
+    #[test]
+    fn detached_children_are_deleted_unless_still_used() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let parent = tpl(&db, "Suivi", None);
+        let tu = tpl(&db, "Suivi (tu)", None);
+        let rel = tpl(&db, "Relance — Suivi", None);
+        let rel_tu = tpl(&db, "Relance — Suivi (tu)", None);
+        link(&db, rel, Some(rel_tu), None);
+        link(&db, parent, Some(tu), Some(rel));
+
+        // Toujours reliés : rien n'est supprimé.
+        assert!(db.delete_detached_template_children(&[tu, rel]).unwrap().is_empty());
+
+        // Tu désactivé et relance revenue au même message : tu, relance et relance tu partent.
+        link(&db, parent, None, None);
+        let mut deleted = db.delete_detached_template_children(&[tu, rel]).unwrap();
+        deleted.sort();
+        assert_eq!(deleted, {
+            let mut v = vec![tu, rel, rel_tu];
+            v.sort();
+            v
+        });
+        assert!(exists(&db, parent));
+
+        // Variante utilisée par une étiquette : conservée.
+        let standalone = tpl(&db, "Autre (tu)", None);
+        let etiquette = db
+            .create_etiquette(NewEtiquette {
+                nom: "Étiquette".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: Some(standalone),
+                email_delai_jours: None,
+                email_envoi_prevu: None,
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+                actif: Some(true),
+                segment_id: None,
+                rendement_cible: None,
+            })
+            .unwrap();
+        assert!(etiquette.id > 0);
+        assert!(db.delete_detached_template_children(&[standalone]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn deleting_parent_removes_its_variants_but_keeps_shared_pipe_children() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let reminder = tpl(&db, "Rappel RDV — Confirmation", None);
+        let pipe_meta = serde_json::json!({
+            "pipe_rdv_reminder": { "enabled": true, "reminder_template_id": reminder }
+        })
+        .to_string();
+        let parent = tpl(&db, "Confirmation", Some(pipe_meta.clone()));
+        let tu = tpl(&db, "Confirmation (tu)", None);
+        link(&db, parent, Some(tu), None);
+        // Ancien doublon qui partage encore le même rappel.
+        let copy = tpl(&db, "Confirmation (copie)", Some(pipe_meta));
+
+        db.delete_template_email(parent).unwrap();
+        assert!(!exists(&db, tu), "la version tu part avec le modèle");
+        assert!(exists(&db, reminder), "rappel encore utilisé par la copie");
+
+        db.delete_template_email(copy).unwrap();
+        assert!(!exists(&db, reminder));
+    }
+
+    #[test]
+    fn detached_pipe_reminder_kept_while_a_reminder_is_still_scheduled() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let reminder = tpl(&db, "Rappel RDV — Confirmation", None);
+        db.conn
+            .execute(
+                "INSERT INTO pipe_rdv_scheduled_emails
+                    (pipe_timeline_entry_id, pipe_id, contact_id, template_id, send_at, rdv_at, rdv_end_at)
+                 VALUES (1, 1, 1, ?1, 0, 0, 0)",
+                params![reminder],
+            )
+            .unwrap();
+        assert!(db.delete_detached_template_children(&[reminder]).unwrap().is_empty());
+        db.conn
+            .execute("UPDATE pipe_rdv_scheduled_emails SET sent_at = 1", [])
+            .unwrap();
+        assert_eq!(db.delete_detached_template_children(&[reminder]).unwrap(), vec![reminder]);
+    }
+
+    #[test]
+    fn detached_candidate_with_its_own_activity_is_never_deleted() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let with_trigger = tpl(
+            &db,
+            "Bienvenue (tu)",
+            Some(r#"{"email_trigger":{"enabled":true}}"#.into()),
+        );
+        let campaign = tpl(&db, "Campagne", Some(r#"{"ephemeral_campaign":{"status":"prepared"}}"#.into()));
+        let queued = tpl(&db, "Autre (tu)", None);
+        db.conn
+            .execute(
+                "INSERT INTO contact_template_envois (contact_id, template_id, email_envoye)
+                 VALUES (1, ?1, 0)",
+                params![queued],
+            )
+            .ok();
+        let deleted = db
+            .delete_detached_template_children(&[with_trigger, campaign])
+            .unwrap();
+        assert!(deleted.is_empty());
+        assert!(exists(&db, with_trigger) && exists(&db, campaign));
     }
 }
