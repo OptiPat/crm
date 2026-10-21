@@ -125,7 +125,7 @@ export function TemplateEmailPlacementConformePanel({ draft, onChange }: Props) 
             <code className="text-[11px]">
               {"{{libelle_client}}"}, {"{{produit}}"}, {"{{libelle_stellium}}"}, {"{{date_operation}}"}
             </code>
-            . Tu / vous selon le registre de la fiche contact.
+            . Tu / vous selon la fiche contact.
           </p>
         </div>
       )}

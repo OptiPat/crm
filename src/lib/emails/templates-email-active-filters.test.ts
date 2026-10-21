@@ -13,8 +13,8 @@ describe("templates-email-active-filters", () => {
         searchQuery: " IR ",
       })
     ).toEqual([
-      { id: "activation", label: "Mode : Déclencheur" },
-      { id: "category", label: "Fiscalité" },
+      { id: "activation", label: "Déclencheur actif" },
+      { id: "category", label: "Catégorie : Fiscalité" },
       { id: "search", label: "Recherche « IR »" },
     ]);
   });

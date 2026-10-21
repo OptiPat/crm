@@ -501,7 +501,7 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
       />
       {showFooter ?
         <p className="px-3 pb-2 text-[11px] text-muted-foreground border-t bg-muted/10">
-          Mise en forme conservée à l&apos;envoi Gmail (gras, listes, liens). Variables{" "}
+          Mise en forme conservée à l&apos;envoi (gras, listes, liens). Variables{" "}
           {"{{prenom}}"} etc. : insérez-les via les badges ci-dessus.
         </p>
       : null}

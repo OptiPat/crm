@@ -268,8 +268,8 @@ export function TemplateEmailCorrectionDialog({
           <DialogHeader>
             <DialogTitle>Envoyer un correctif</DialogTitle>
             <DialogDescription>
-              Répond dans la conversation de chaque destinataire de « {template.nom} » (même fil
-              Gmail, objet « Re: »). Rien ne part avant votre confirmation.
+              Répond dans la conversation de chaque destinataire de « {template.nom} » (même
+              conversation, objet « Re: »). Rien ne part avant votre confirmation.
             </DialogDescription>
           </DialogHeader>
 

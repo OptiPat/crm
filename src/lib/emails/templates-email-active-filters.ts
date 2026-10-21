@@ -24,13 +24,13 @@ export function buildTemplatesEmailActiveFilterChips(input: {
   if (input.activationFilter) {
     chips.push({
       id: "activation",
-      label: `Mode : ${TEMPLATE_ACTIVATION_MODE_LABELS[input.activationFilter]}`,
+      label: TEMPLATE_ACTIVATION_MODE_LABELS[input.activationFilter],
     });
   }
   if (input.categoryFilter !== "all") {
     chips.push({
       id: "category",
-      label: getTemplateCategoryMeta(input.categoryFilter).label,
+      label: `Catégorie : ${getTemplateCategoryMeta(input.categoryFilter).label}`,
     });
   }
   if (input.searchQuery.trim()) {

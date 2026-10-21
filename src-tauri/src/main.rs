@@ -274,6 +274,7 @@ fn main() {
             remove_template_email_attachment_cmd,
             copy_template_email_attachments_cmd,
             seed_default_email_templates,
+            list_missing_default_email_templates,
             preview_ephemeral_campaign_audience,
             sync_ephemeral_campaign_queue,
             archive_ephemeral_campaign,

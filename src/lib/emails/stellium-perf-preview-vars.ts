@@ -165,7 +165,7 @@ export function isStelliumPerfQueueItem(item: { etiquette_nom?: string | null })
   return (item.etiquette_nom ?? "").includes("Performance AV/PER Stellium");
 }
 
-const STELLIUM_SCALAR_KEYS = [
+export const STELLIUM_SCALAR_KEYS = [
   "periode",
   "releve_date",
   "releve_date_label",

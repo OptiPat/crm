@@ -170,7 +170,7 @@ export function TemplateEmailPreviewPanel({
       });
       toast.success(
         preview.body_html
-          ? `Email de test envoyé à ${to} (version HTML, comme dans Gmail)`
+          ? `Email de test envoyé à ${to} (avec la mise en forme)`
           : `Email de test envoyé à ${to}`
       );
     } catch (e) {
@@ -221,7 +221,7 @@ export function TemplateEmailPreviewPanel({
         )}
         {preview.body_html && (
           <p className="text-[10px] text-muted-foreground border-t pt-2">
-            Rendu HTML (gras, listes, liens) — identique à l&apos;envoi Gmail si vous n&apos;éditez
+            Rendu HTML (gras, listes, liens) — identique à l&apos;envoi si vous n&apos;éditez
             pas le texte au moment de l&apos;envoi.
           </p>
         )}

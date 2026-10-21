@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback, type FormEvent } from "react";
 import { flushSync } from "react-dom";
 import { buildAgendaTemplateVariables, findUnresolvedAgendaTokens } from "@/lib/emails/agenda-links";
+import { findUnknownTemplateVariables } from "@/lib/emails/template-variable-check";
 import { TemplateEmailAttachmentSaveContext } from "@/components/emails/template-email-attachment-save-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -397,7 +398,7 @@ export function TemplateEmailForm({
     nom: "",
     sujet: "",
     corps: "",
-    categorie: "RELANCE",
+    categorie: "AUTRE",
     variables: null,
     agenda_link_id: null,
     relance_template_id: null,
@@ -659,7 +660,7 @@ export function TemplateEmailForm({
       nom: "",
       sujet: "",
       corps: "",
-      categorie: ephemeralDefaults ? "EPHEMERE" : "RELANCE",
+      categorie: ephemeralDefaults ? "EPHEMERE" : "AUTRE",
       variables: null,
       agenda_link_id: null,
       relance_template_id: null,
@@ -927,6 +928,16 @@ export function TemplateEmailForm({
       buildAgendaTemplateVariables(cgp, formData.agenda_link_id)
     );
   }, [cgp, formData.sujet, formData.agenda_link_id, corpsHtml, tutoiementDraft, relanceDraft]);
+
+  /** Variables mal tapées (`{{prénom}}`…) : elles partiraient telles quelles. */
+  const unknownVariables = useMemo(() => {
+    const texts = [formData.sujet, corpsHtml];
+    if (tutoiementDraft.enabled) texts.push(tutoiementDraft.sujet, tutoiementDraft.corpsHtml);
+    if (relanceDraft.enabled && !relanceDraft.useSameMessage) {
+      texts.push(relanceDraft.sujet, relanceDraft.corpsHtml);
+    }
+    return findUnknownTemplateVariables(texts.join(" "), agendaLinks);
+  }, [formData.sujet, corpsHtml, tutoiementDraft, relanceDraft, agendaLinks]);
 
   const previewVariables = useMemo(() => {
     if (effectiveTemplateId == null) return formData.variables;
@@ -2336,20 +2347,20 @@ export function TemplateEmailForm({
                   <TabsTrigger value="tutoiement">
                     Tutoiement
                     {tutoiementDraft.enabled && (
-                      <span className="ml-1.5 text-[10px] text-violet-700">on</span>
+                      <span className="ml-1.5 text-[10px] text-indigo-700" title="Activé">✓</span>
                     )}
                   </TabsTrigger>
                   <TabsTrigger value="relance">
                     Relance
                     {relanceDraft.enabled && (
-                      <span className="ml-1.5 text-[10px] text-orange-700">on</span>
+                      <span className="ml-1.5 text-[10px] text-orange-700" title="Activé">✓</span>
                     )}
                   </TabsTrigger>
                   {!isEphemeralMode && showOptionTab("pipe-rdv", pipeRdvDraft.trigger.enabled) && (
                     <TabsTrigger value="pipe-rdv">
                       Pipe RDV
                       {pipeRdvDraft.trigger.enabled && (
-                        <span className="ml-1.5 text-[10px] text-emerald-700">on</span>
+                        <span className="ml-1.5 text-[10px] text-emerald-700" title="Activé">✓</span>
                       )}
                     </TabsTrigger>
                   )}
@@ -2358,7 +2369,7 @@ export function TemplateEmailForm({
                       <TabsTrigger value="placement-conforme">
                         Box Placement
                         {placementConformeDraft.trigger.enabled && (
-                          <span className="ml-1.5 text-[10px] text-teal-700">on</span>
+                          <span className="ml-1.5 text-[10px] text-teal-700" title="Activé">✓</span>
                         )}
                       </TabsTrigger>
                     )}
@@ -2378,7 +2389,7 @@ export function TemplateEmailForm({
                         <TabsTrigger value="declencheur">
                           Déclencheur
                           {emailTrigger.enabled && (
-                            <span className="ml-1.5 text-[10px] text-primary">on</span>
+                            <span className="ml-1.5 text-[10px] text-primary" title="Activé">✓</span>
                           )}
                         </TabsTrigger>
                       )}
@@ -2397,7 +2408,7 @@ export function TemplateEmailForm({
                   {(isEphemeralMode || showOptionTab("action", tacheActif)) && (
                     <TabsTrigger value="action">
                       Action
-                      {tacheActif && <span className="ml-1.5 text-[10px] text-sky-700">on</span>}
+                      {tacheActif && <span className="ml-1.5 text-[10px] text-sky-700" title="Activé">✓</span>}
                     </TabsTrigger>
                   )}
                 </TabsList>
@@ -2532,6 +2543,16 @@ export function TemplateEmailForm({
                         Lien d&apos;agenda introuvable : {unresolvedAgendaTokens.join(", ")}. Il
                         partirait vide — l&apos;envoi sera bloqué tant que le lien n&apos;existe pas
                         (Paramètres → Profil{agendaLinks.length > 0 ? ", ou « Lien Google Agenda » ci-dessous" : ""}).
+                      </p>
+                    )}
+
+                    {unknownVariables.length > 0 && (
+                      <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                        {unknownVariables.length > 1 ? "Variables inconnues" : "Variable inconnue"}{" "}
+                        (message, version tu ou relance) : {unknownVariables.join(", ")}.{" "}
+                        {unknownVariables.length > 1 ? "Elles partiraient telles quelles" : "Elle partirait telle quelle"}{" "}
+                        dans l&apos;email — écrivez-les exactement comme dans « Variables à insérer »
+                        (minuscules, sans espace).
                       </p>
                     )}
 
@@ -2740,7 +2761,7 @@ export function TemplateEmailForm({
                       <Label>Étiquettes qui envoient ce modèle</Label>
                       <p className="text-xs text-muted-foreground">
                         Équivalent au choix du modèle sur chaque étiquette (onglet Email). Les
-                        étiquettes cochées utiliseront ce template en campagne.
+                        étiquettes cochées utiliseront ce modèle en campagne.
                       </p>
                       {etiquettes.length === 0 ? (
                         <p className="text-sm text-muted-foreground py-4">Aucune étiquette.</p>

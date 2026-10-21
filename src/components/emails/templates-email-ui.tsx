@@ -22,9 +22,7 @@ import {
   getTemplatePlacementConformeBadgeLabel,
   getEphemeralCampaignBadgeLabel,
   getTemplateTriggerShortLabel,
-  TEMPLATE_ACTIVATION_MODE_OPTIONS,
   type TemplateActivationFlags,
-  type TemplateActivationStatFilter,
 } from "@/lib/emails/template-email-activation";
 import type {
   TemplatesEmailActiveFilterChip,
@@ -89,7 +87,7 @@ export function TemplatesEmailMailboxStatus({
     >
       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
       <span className="truncate">
-        {providerLabel ?? "OAuth"}
+        {providerLabel ?? "Boîte mail"}
         {emailStatus?.email ? ` · ${emailStatus.email}` : ""}
       </span>
     </span>
@@ -131,7 +129,7 @@ export function TemplatesEmailDeliveryBanner({
             })
           }
         >
-          Configurer OAuth
+          Connecter ma boîte mail
         </Button>
         <Button
           type="button"
@@ -186,7 +184,7 @@ export function TemplatesEmailHelp() {
 function TemplateSouscriptionDuplicateBadge({ title }: { title?: string }) {
   return (
     <TemplateActivationBadge
-      className="border-amber-300 bg-amber-50 text-amber-950"
+      className="border-rose-300 bg-rose-50 text-rose-900"
       title={title}
     >
       <AlertTriangle className="h-3 w-3 shrink-0" />
@@ -248,7 +246,8 @@ export function TemplateActivationBadges({
       {attachmentCount > 0 && (
         <TemplateActivationBadge className="border-slate-200 bg-slate-50 text-slate-800">
           <Paperclip className="h-3 w-3 shrink-0" />
-          {attachmentCount} PJ
+          {attachmentCount} pièce{attachmentCount > 1 ? "s" : ""} jointe
+          {attachmentCount > 1 ? "s" : ""}
         </TemplateActivationBadge>
       )}
       {flags.hasTrigger && triggerLabel && (
@@ -282,9 +281,9 @@ export function TemplateActivationBadges({
         </TemplateActivationBadge>
       )}
       {flags.hasTutoiement && (
-        <TemplateActivationBadge className="border-violet-200 bg-violet-50 text-violet-900">
+        <TemplateActivationBadge className="border-indigo-200 bg-indigo-50 text-indigo-900">
           <MessageCircle className="h-3 w-3 shrink-0" />
-          Tu
+          Tutoiement
         </TemplateActivationBadge>
       )}
       {flags.isLibraryOnly && (
@@ -365,51 +364,6 @@ export function TemplatePreviewActivationStatus({
           })}
         </div>
       )}
-    </div>
-  );
-}
-
-export function TemplateActivationModeFilters({
-  active,
-  onChange,
-}: {
-  active: TemplateActivationStatFilter | null;
-  onChange: (id: TemplateActivationStatFilter | null) => void;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        Mode d&apos;activation
-      </p>
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => onChange(null)}
-          className={cn(
-            "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-            active == null
-              ? "border-primary bg-primary/10 text-primary"
-              : "border-border text-muted-foreground hover:bg-muted/50"
-          )}
-        >
-          Tous
-        </button>
-        {TEMPLATE_ACTIVATION_MODE_OPTIONS.map((mode) => (
-          <button
-            key={mode.id}
-            type="button"
-            onClick={() => onChange(active === mode.id ? null : mode.id)}
-            className={cn(
-              "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-              active === mode.id
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border text-muted-foreground hover:bg-muted/50"
-            )}
-          >
-            {mode.label}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -501,7 +455,7 @@ export function TemplatePreviewContactControls({
       </div>
       {showRegistreToggle && (
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Registre (exemple)</Label>
+          <Label className="text-xs text-muted-foreground">Tutoiement / vouvoiement (exemple)</Label>
           <Select
             value={previewRegistre}
             onValueChange={(value) => onPreviewRegistreChange(value as ContactRegistre)}

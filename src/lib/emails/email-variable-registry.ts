@@ -168,6 +168,7 @@ const CATEGORY_DEFAULT_GROUPS: Partial<Record<EmailTemplateCategory, EmailVariab
   BULLETINS: ["scpi", "campagne"],
   ARBITRAGE: ["placement", "campagne"],
   SUIVI_ANNUEL: ["campagne"],
+  AUTRE: ["campagne"],
   RELANCE: ["campagne"],
   FISCALITE: ["campagne"],
   BIENVENUE: ["campagne"],

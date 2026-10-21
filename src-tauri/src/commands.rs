@@ -1523,6 +1523,16 @@ pub fn seed_default_email_templates(
         .map_err(|e| format!("Failed to seed email templates: {}", e))
 }
 
+/// Modèles par défaut qui seraient ajoutés (confirmation avant « Modèles par défaut »).
+#[tauri::command]
+pub fn list_missing_default_email_templates(db: State<'_, DbState>) -> Result<Vec<String>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .missing_default_email_template_names()
+        .map_err(|e| format!("Modèles par défaut : {e}"))
+}
+
 #[tauri::command]
 pub fn preview_ephemeral_campaign_audience(
     db: State<'_, DbState>,

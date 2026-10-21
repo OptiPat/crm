@@ -66,7 +66,7 @@ const PAGE_HEADERS: Record<string, PageHeaderMeta> = {
   },
   "templates-email": {
     title: "Modèles email",
-    subtitle: "Templates et déclencheurs",
+    subtitle: "Modèles et envois automatiques",
   },
   notes: {
     title: "Notes",

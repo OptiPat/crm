@@ -27,20 +27,10 @@ export type TemplateActivationStatFilter =
   | "relance"
   | "no_channel";
 
-export const TEMPLATE_ACTIVATION_MODE_OPTIONS: {
-  id: TemplateActivationStatFilter;
-  label: string;
-}[] = [
-  { id: "trigger", label: "Déclencheur" },
-  { id: "etiquette", label: "Étiquette" },
-  { id: "relance", label: "Relance" },
-  { id: "no_channel", label: "Sans canal" },
-];
-
 export const TEMPLATE_ACTIVATION_MODE_LABELS: Record<TemplateActivationStatFilter, string> = {
-  trigger: "Déclencheur",
-  etiquette: "Étiquette",
-  relance: "Relance",
+  trigger: "Déclencheur actif",
+  etiquette: "Lié à une étiquette",
+  relance: "Avec relance",
   no_channel: "Sans canal",
 };
 

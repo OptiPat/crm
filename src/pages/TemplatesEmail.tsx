@@ -19,6 +19,7 @@ import {
   getAllTemplatesEmail,
   deleteTemplateEmail,
   seedDefaultEmailTemplates,
+  listMissingDefaultEmailTemplates,
   type TemplateEmail,
 } from "@/lib/api/tauri-templates-email";
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
@@ -30,7 +31,6 @@ import { isEphemeralTemplate, parseEphemeralCampaignConfig } from "@/lib/emails/
 import { archiveEphemeralCampaign } from "@/lib/api/tauri-ephemeral-campaign";
 import { TemplateEmailPreviewPanel } from "@/components/emails/TemplateEmailPreviewPanel";
 import {
-  TemplateActivationModeFilters,
   TemplateCategoryFilters,
   TemplateListRow,
   TemplatePreviewActions,
@@ -84,6 +84,8 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
   const [etiquettes, setEtiquettes] = useState<Etiquette[]>([]);
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
+  // Modèles d'exemple à ajouter : montrés avant (ils peuvent recréer un modèle supprimé ou renommé).
+  const [seedConfirmNames, setSeedConfirmNames] = useState<string[] | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formMode, setFormMode] = useState<TemplateEmailFormMode>("permanent");
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateEmail | null>(null);
@@ -363,6 +365,23 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
   const handleSeedDefaults = async () => {
     setSeeding(true);
     try {
+      const missing = await listMissingDefaultEmailTemplates();
+      if (missing.length === 0) {
+        toast.success("Bibliothèque déjà complète");
+        return;
+      }
+      setSeedConfirmNames(missing);
+    } catch {
+      toast.error("Impossible de lister les modèles par défaut");
+    } finally {
+      setSeeding(false);
+    }
+  };
+
+  const confirmSeedDefaults = async () => {
+    setSeedConfirmNames(null);
+    setSeeding(true);
+    try {
       const n = await seedDefaultEmailTemplates();
       if (n > 0) {
         await loadTemplates();
@@ -562,9 +581,9 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
             highlight={activationFilter === "trigger"}
           />
           <StatCard
-            title="Liés étiquette"
+            title="Liés à une étiquette"
             value={stats.etiquette}
-            description="Campagnes classiques par tag"
+            description="Campagnes classiques par étiquette"
             icon={Tag}
             accentColor="#2563eb"
             iconColor="text-blue-700"
@@ -573,7 +592,7 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
             highlight={activationFilter === "etiquette"}
           />
           <StatCard
-            title="Relance configurée"
+            title="Avec relance"
             value={stats.relance}
             description="2e email après le 1er envoi"
             icon={RefreshCw}
@@ -629,10 +648,6 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
               counts={categoryCounts}
               onChange={setCategoryFilter}
             />
-            <TemplateActivationModeFilters
-              active={activationFilter}
-              onChange={setActivationFilter}
-            />
             <TemplatesEmailActiveFilterChips
               chips={activeFilterChips}
               onRemove={removeActiveFilter}
@@ -645,13 +660,18 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
             ) : templates.length === 0 ? (
               <div className="text-center py-10 space-y-3">
                 <p className="text-sm text-muted-foreground">Aucun modèle pour le moment.</p>
-                <Button variant="outline" size="sm" onClick={() => void handleSeedDefaults()}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={seeding}
+                  onClick={() => void handleSeedDefaults()}
+                >
                   Charger les modèles par défaut
                 </Button>
               </div>
             ) : filtered.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-10">
-                Aucun résultat — modifiez la recherche, l&apos;intention ou la synthèse.
+                Aucun résultat — modifiez la recherche ou les filtres.
               </p>
             ) : (
               <div className="space-y-2 max-h-[min(80vh,840px)] overflow-y-auto pr-1">
@@ -748,6 +768,38 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
           }
         }}
       />
+
+      <AlertDialog
+        open={seedConfirmNames != null}
+        onOpenChange={(open) => {
+          if (!open) setSeedConfirmNames(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ajouter les modèles par défaut ?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  {seedConfirmNames?.length ?? 0} modèle
+                  {(seedConfirmNames?.length ?? 0) > 1 ? "s" : ""} absent
+                  {(seedConfirmNames?.length ?? 0) > 1 ? "s" : ""} de votre bibliothèque (par nom) —
+                  y compris ceux que vous auriez supprimés ou renommés :
+                </p>
+                <ul className="list-disc pl-5">
+                  {seedConfirmNames?.map((nom) => (
+                    <li key={nom}>{nom}</li>
+                  ))}
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmSeedDefaults()}>Ajouter</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={deleteTarget != null}

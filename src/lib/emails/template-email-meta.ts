@@ -76,7 +76,7 @@ export const EMAIL_TEMPLATE_CATEGORIES: {
   { id: "BULLETINS", label: "Bulletins SCPI", badgeClass: "bg-teal-100 text-teal-900 ring-1 ring-teal-200/70" },
   { id: "NEWSLETTER", label: "Newsletter", badgeClass: "bg-indigo-100 text-indigo-800" },
   { id: "EPHEMERE", label: "Éphémère", badgeClass: "bg-fuchsia-100 text-fuchsia-900 ring-1 ring-fuchsia-200/70" },
-  { id: "RELANCE", label: "Relance", badgeClass: "bg-orange-100 text-orange-800" },
+  { id: "RELANCE", label: "Mail de relance", badgeClass: "bg-orange-100 text-orange-800" },
   { id: "AUTRE", label: "Autre", badgeClass: "bg-gray-100 text-gray-800" },
 ];
 
@@ -269,15 +269,15 @@ export function getAgendaVariableTokens(links: AgendaLink[]) {
   const tokens: { token: string; label: string; hint: string }[] = [
     {
       token: "{{lien_agenda}}",
-      label: "Lien Google Agenda (choix du template)",
-      hint: "Paramètres → liens + sélection dans le template",
+      label: "Lien Google Agenda (choisi pour ce modèle)",
+      hint: "Paramètres → liens + sélection dans le modèle",
     },
   ];
   for (const link of links) {
     tokens.push({
       token: agendaLinkVariableToken(link.id),
       label: link.label,
-      hint: "Lien fixe (tous templates)",
+      hint: "Lien fixe (même lien dans tous les modèles)",
     });
   }
   return tokens;

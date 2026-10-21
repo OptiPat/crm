@@ -67,20 +67,35 @@ function VariableChip({
   const accent = groupAccentClass(groupId);
   const tooltip = formatTooltip(variable);
   const htmlOnly = variable.format === "html";
+  // Clavier : Entrée / Espace insèrent comme le clic (la souris passe par onMouseDown pour
+  // garder la position du curseur dans le texte).
+  const keyInsert = (field: "sujet" | "corps") => (event: React.KeyboardEvent) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    if (event.repeat) return;
+    onInsert(variable.token, field);
+  };
+  const code = (
+    <span className="ml-1 shrink-0 font-mono text-[9px] font-normal text-muted-foreground group-hover:text-primary-foreground/80">
+      {variable.token}
+    </span>
+  );
 
   if (htmlOnly) {
     return (
       <button
         type="button"
-        className={`inline-flex h-5 max-w-[11rem] shrink-0 cursor-pointer items-center truncate rounded border bg-background px-1.5 text-[10px] font-medium leading-none hover:bg-primary hover:text-primary-foreground ${accent}`}
+        className={`group inline-flex h-5 max-w-[22rem] shrink-0 cursor-pointer items-center rounded border bg-background px-1.5 text-[10px] font-medium leading-none hover:bg-primary hover:text-primary-foreground ${accent}`}
         title={`${tooltip}\n→ message (HTML, corps uniquement)`}
         onMouseDown={(event) => {
           event.preventDefault();
           onInsert(variable.token, "corps");
         }}
+        onKeyDown={keyInsert("corps")}
       >
-        {variable.label}
-        <span className="ml-1 rounded bg-muted px-1 text-[9px] font-normal text-muted-foreground">
+        <span className="min-w-0 truncate">{variable.label}</span>
+        {code}
+        <span className="ml-1 shrink-0 rounded bg-muted px-1 text-[9px] font-normal text-muted-foreground">
           HTML
         </span>
       </button>
@@ -91,14 +106,16 @@ function VariableChip({
     <span className="inline-flex shrink-0">
       <button
         type="button"
-        className={`inline-flex h-5 max-w-[11rem] cursor-pointer items-center truncate rounded-l border border-r-0 bg-background px-1.5 text-[10px] font-medium leading-none hover:bg-primary hover:text-primary-foreground ${accent}`}
+        className={`group inline-flex h-5 max-w-[22rem] cursor-pointer items-center rounded-l border border-r-0 bg-background px-1.5 text-[10px] font-medium leading-none hover:bg-primary hover:text-primary-foreground ${accent}`}
         title={`${tooltip}\n→ message`}
         onMouseDown={(event) => {
           event.preventDefault();
           onInsert(variable.token, "corps");
         }}
+        onKeyDown={keyInsert("corps")}
       >
-        {variable.label}
+        <span className="min-w-0 truncate">{variable.label}</span>
+        {code}
       </button>
       <button
         type="button"
@@ -108,8 +125,9 @@ function VariableChip({
           event.preventDefault();
           onInsert(variable.token, "sujet");
         }}
+        onKeyDown={keyInsert("sujet")}
       >
-        obj
+        + objet
       </button>
     </span>
   );
@@ -278,7 +296,7 @@ export function TemplateEmailVariablePicker({
       )}
 
       <p className="text-[10px] leading-tight text-muted-foreground">
-        Clic → corps · obj → objet · survol = token
+        Clic → message · « + objet » → objet
         {showStelliumHint ? " · Stellium : chiffres à la préparation" : ""}
       </p>
     </div>

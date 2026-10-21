@@ -447,6 +447,16 @@ impl super::Database {
 
     /// Crée les modèles par défaut. Si `only_if_empty`, ne fait rien dès qu’au moins un modèle existe.
     pub fn ensure_default_email_templates(&self, only_if_empty: bool) -> Result<usize> {
+        Ok(self.default_email_templates_to_add(only_if_empty, false)?.len())
+    }
+
+    /// Modèles par défaut absents de la bibliothèque (pour les montrer avant de les ajouter).
+    pub fn missing_default_email_template_names(&self) -> Result<Vec<String>> {
+        self.default_email_templates_to_add(false, true)
+    }
+
+    /// Noms des modèles par défaut absents ; les crée sauf en `dry_run`.
+    fn default_email_templates_to_add(&self, only_if_empty: bool, dry_run: bool) -> Result<Vec<String>> {
         if only_if_empty {
             let count: i64 = self.conn.query_row(
                 "SELECT COUNT(*) FROM templates_email",
@@ -454,7 +464,7 @@ impl super::Database {
                 |row| row.get(0),
             )?;
             if count > 0 {
-                return Ok(0);
+                return Ok(Vec::new());
             }
         }
 
@@ -467,7 +477,7 @@ impl super::Database {
                 corps: "Bonjour {{prenom}} {{nom}},\n\nIl y a plus d'un an que nous n'avons pas échangé. Je serais ravi de faire un point sur votre situation et vos objectifs.\n\n{{cgp_prenom}} {{cgp_nom}}\n{{cgp_telephone}}\n{{lien_agenda}}".into(),
                 categorie: "RELANCE".into(),
                 variables: None,
-                agenda_link_id: Some("principal".into()),
+                agenda_link_id: None,
                 relance_template_id: None,
                 tutoiement_template_id: None,
             },
@@ -497,7 +507,7 @@ impl super::Database {
                 corps: "Bonjour {{prenom}} {{nom}},\n\nVotre prochain rendez-vous de suivi approche. Réservez un créneau sur Google Agenda : {{lien_agenda}}\n\nÀ bientôt,\n{{cgp_prenom}} {{cgp_nom}}".into(),
                 categorie: "RENDEZ_VOUS".into(),
                 variables: None,
-                agenda_link_id: Some("suivi".into()),
+                agenda_link_id: None,
                 relance_template_id: None,
                 tutoiement_template_id: None,
             },
@@ -547,20 +557,22 @@ Bien cordialement,\n\
 {{cgp_email}}".into(),
                 categorie: "ARBITRAGE".into(),
                 variables: None,
-                agenda_link_id: Some("principal".into()),
+                agenda_link_id: None,
                 relance_template_id: None,
                 tutoiement_template_id: None,
             },
         ];
 
-        let mut created = 0;
+        let mut names = Vec::new();
         for t in defaults {
             if !self.template_email_nom_exists(&t.nom)? {
-                self.create_template_email(t)?;
-                created += 1;
+                names.push(t.nom.clone());
+                if !dry_run {
+                    self.create_template_email(t)?;
+                }
             }
         }
-        Ok(created)
+        Ok(names)
     }
 
     #[allow(dead_code)]
@@ -803,5 +815,31 @@ mod tests {
             .unwrap();
         assert!(deleted.is_empty());
         assert!(exists(&db, with_trigger) && exists(&db, campaign));
+    }
+
+    #[test]
+    fn missing_default_templates_listed_without_creating_them() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let before = db.missing_default_email_template_names().unwrap();
+        assert!(!before.is_empty());
+        let count = |db: &Database| -> i64 {
+            db.conn.query_row("SELECT COUNT(*) FROM templates_email", [], |r| r.get(0)).unwrap()
+        };
+        let n0 = count(&db);
+        // La liste ne crée rien.
+        assert_eq!(db.missing_default_email_template_names().unwrap(), before);
+        assert_eq!(count(&db), n0);
+        // L'ajout crée exactement ces modèles, sans lien d'agenda imposé.
+        assert_eq!(db.ensure_default_email_templates(false).unwrap(), before.len());
+        assert!(db.missing_default_email_template_names().unwrap().is_empty());
+        let forced: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM templates_email WHERE agenda_link_id IN ('principal', 'suivi')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(forced, 0);
     }
 }

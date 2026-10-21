@@ -100,6 +100,11 @@ export async function seedDefaultEmailTemplates(options?: {
   });
 }
 
+/** Modèles par défaut qui seraient ajoutés (absents de la bibliothèque, par nom). */
+export async function listMissingDefaultEmailTemplates(): Promise<string[]> {
+  return invoke<string[]>("list_missing_default_email_templates");
+}
+
 export interface TemplateSouscriptionBackfillResult {
   scanned: number;
   scheduled: number;
