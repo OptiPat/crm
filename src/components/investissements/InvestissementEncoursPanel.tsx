@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import {
   getRevenusPercusByInvestissement,
@@ -418,14 +419,11 @@ export function InvestissementEncoursPanel({
           <Label htmlFor={`encours-montant-${investissementId}`}>
             {isValorisation ? "Valorisation (€)" : "Encours (€)"}
           </Label>
-          <Input
+          <MoneyInput
             id={`encours-montant-${investissementId}`}
-            type="number"
-            step="0.01"
-            min="0"
             value={montant}
-            onChange={(e) => setMontant(e.target.value)}
-            placeholder="Ex: 25000"
+            onValueChange={setMontant}
+            placeholder="Ex : 25 000"
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import {
   createInvestissementVersement,
@@ -111,14 +112,11 @@ export function InvestissementVersementsPanel({
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <div className="space-y-1.5">
           <Label htmlFor={`versement-montant-${investissementId}`}>Montant (€)</Label>
-          <Input
+          <MoneyInput
             id={`versement-montant-${investissementId}`}
-            type="number"
-            step="0.01"
-            min="0"
             value={montant}
-            onChange={(e) => setMontant(e.target.value)}
-            placeholder="Ex: 5000"
+            onValueChange={setMontant}
+            placeholder="Ex : 5 000"
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();

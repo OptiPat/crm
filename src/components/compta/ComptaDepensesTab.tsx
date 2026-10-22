@@ -3,6 +3,7 @@ import { Copy, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -311,25 +312,19 @@ export function ComptaDepensesTab({ year, month, depenses, onChanged }: ComptaDe
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="dep-ttc">Montant TTC (€)</Label>
-                    <Input
+                    <MoneyInput
                       id="dep-ttc"
-                      type="number"
-                      step="0.01"
-                      min="0"
                       value={ttc}
-                      onChange={(e) => setTtc(e.target.value)}
+                      onValueChange={setTtc}
                       required
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="dep-tva">Montant TVA (€)</Label>
-                    <Input
+                    <MoneyInput
                       id="dep-tva"
-                      type="number"
-                      step="0.01"
-                      min="0"
                       value={tva}
-                      onChange={(e) => setTva(e.target.value)}
+                      onValueChange={setTva}
                     />
                     <div className="flex flex-wrap gap-1">
                       {COMPTA_TVA_RATES.map((rate) => (

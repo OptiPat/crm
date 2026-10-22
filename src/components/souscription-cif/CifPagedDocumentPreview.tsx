@@ -43,15 +43,56 @@ export function CifPagedDocumentPreview({
 
   const fingerprint = useMemo(() => cifFlowFingerprint(preview), [preview]);
 
-  /** N'affiche qu'une page à la fois (les pages Paged.js sont rendues empilées). */
-  const applyPageVisibility = useCallback((index: number) => {
+  /**
+   * Réduit la page affichée pour qu'elle tienne dans la colonne (écran étroit).
+   * Simple transformation visuelle appliquée APRÈS la pagination, sur des pages déjà
+   * découpées en taille réelle : la mise en page et les sauts de page ne changent pas.
+   */
+  const applyPageFit = useCallback(() => {
     const target = targetRef.current;
     if (!target) return;
-    const pages = target.querySelectorAll<HTMLElement>(".pagedjs_page");
-    pages.forEach((pageEl, i) => {
-      pageEl.style.display = i === index ? "" : "none";
+    const available = target.clientWidth;
+    target.querySelectorAll<HTMLElement>(".pagedjs_page").forEach((pageEl) => {
+      if (pageEl.style.display === "none") return;
+      const width = pageEl.offsetWidth;
+      const height = pageEl.offsetHeight;
+      const scale = width > 0 && available > 0 ? Math.min(1, available / width) : 1;
+      if (scale >= 1) {
+        pageEl.style.transform = "";
+        pageEl.style.transformOrigin = "";
+        pageEl.style.margin = "";
+        return;
+      }
+      pageEl.style.transformOrigin = "top left";
+      pageEl.style.transform = `scale(${scale})`;
+      // La transformation ne réduit pas la place occupée : marges négatives pour la récupérer.
+      const left = (available - width * scale) / 2;
+      pageEl.style.margin = `0 ${-(width * (1 - scale)) - left}px ${16 - height * (1 - scale)}px ${left}px`;
     });
   }, []);
+
+  /** N'affiche qu'une page à la fois (les pages Paged.js sont rendues empilées). */
+  const applyPageVisibility = useCallback(
+    (index: number) => {
+      const target = targetRef.current;
+      if (!target) return;
+      const pages = target.querySelectorAll<HTMLElement>(".pagedjs_page");
+      pages.forEach((pageEl, i) => {
+        pageEl.style.display = i === index ? "" : "none";
+      });
+      applyPageFit();
+    },
+    [applyPageFit]
+  );
+
+  // Réajuste la réduction quand la colonne change de largeur.
+  useEffect(() => {
+    const target = targetRef.current;
+    if (!target || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => applyPageFit());
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [applyPageFit]);
 
   useEffect(() => {
     const source = sourceRef.current;

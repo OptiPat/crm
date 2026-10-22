@@ -19,7 +19,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Upload, File, X, FileText } from "lucide-react";
-import { uploadDocument, createDocument, discardStagedDocument, type NewDocument } from "@/lib/api/tauri-documents";
+import { uploadDocument, createDocument, type NewDocument } from "@/lib/api/tauri-documents";
+import { discardUnreferencedStagedFiles } from "@/lib/documents/discard-staged-import";
 import { extractTextFromPDFPath, parseAuto, isNativeTextPDF, type ExtractedData } from "@/lib/pdf";
 import { ExtractedDataPreviewAdvanced } from "./ExtractedDataPreviewAdvanced";
 import { IdentityExtractPreviewDialog } from "./IdentityExtractPreviewDialog";
@@ -65,6 +66,14 @@ interface DocumentUploadProps {
   contactLieuNaissance?: string;
   /** Volet empilé (drill-down dashboard). */
   nestedSheet?: boolean;
+  /** Import en file (page Documents) : « Fichier 1 sur 3 — nom.pdf ». */
+  queueLabel?: string;
+  /** Import en file : bouton « Passer ce fichier » (la copie temporaire est supprimée). */
+  onSkip?: () => void;
+  /** Appelé à chaque import réussi (client et type retenus, pour pré-remplir le suivant). */
+  onImported?: (info: { contactId?: number; typeDocument: string }) => void;
+  /** Assistant RIO intégré : PDF enregistré avant le tri du patrimoine (import acquis). */
+  onDocumentCreated?: () => void;
 }
 
 const IDENTITY_REQUIRED_MSG =
@@ -86,6 +95,10 @@ export function DocumentUpload({
   contactDateNaissance,
   contactLieuNaissance,
   nestedSheet = false,
+  queueLabel,
+  onSkip,
+  onImported,
+  onDocumentCreated,
 }: DocumentUploadProps) {
   useLockAppMainScroll(open && nestedSheet);
   const [loading, setLoading] = useState(false);
@@ -120,31 +133,54 @@ export function DocumentUpload({
   });
 
   const importSucceededRef = useRef(false);
+  useEffect(() => {
+    // Un succès tardif (assistant RIO après fermeture) ne doit pas protéger l'ouverture suivante.
+    if (open) importSucceededRef.current = false;
+  }, [open]);
 
-  const discardStagedPaths = async (...paths: (string | undefined)[]) => {
-    for (const path of paths) {
-      if (path) await discardStagedDocument(path);
-    }
+  const discardStagedPaths = (...paths: (string | null | undefined)[]) =>
+    discardUnreferencedStagedFiles(paths);
+
+  /** Tous les chemins de succès (formulaire, identité, assistant RIO/QPI) passent ici. */
+  const handleImportSuccess = () => {
+    importSucceededRef.current = true;
+    onImported?.({
+      contactId: effectiveContactId,
+      typeDocument: formData.type_document || "AUTRE",
+    });
+    onSuccess();
   };
+
+  // Toujours fermer via handleDialogOpenChange : sinon la copie temporaire reste.
+  const closeDialog = () => handleDialogOpenChange(false);
 
   const identityImport = useIdentityDocumentImport({
     effectiveContactId,
     foyerId,
     formNotes: formData.notes,
     formDateDocument: formData.date_document,
-    onSuccess,
-    onOpenChange,
+    onSuccess: handleImportSuccess,
+    onOpenChange: (nextOpen) => {
+      if (!nextOpen) closeDialog();
+      else onOpenChange(nextOpen);
+    },
   });
 
-  const handleDialogOpenChange = (nextOpen: boolean) => {
+  function handleDialogOpenChange(nextOpen: boolean) {
     if (!nextOpen && !importSucceededRef.current) {
-      void discardStagedPaths(uploadedFile?.path, identityImport.uploadedVersoFile?.path);
+      // Fichier courant, fichier reçu à l'ouverture (drag & drop) et verso :
+      // jamais un fichier déjà référencé en base (vérifié avant suppression).
+      void discardStagedPaths(
+        uploadedFile?.path,
+        initialFilePathRef.current,
+        identityImport.uploadedVersoFile?.path
+      );
     }
     if (!nextOpen) {
       importSucceededRef.current = false;
     }
     onOpenChange(nextOpen);
-  };
+  }
 
   const identityTextCallbacks = {
     setExtractedText,
@@ -450,8 +486,7 @@ export function DocumentUpload({
           notes: formData.notes ? `${formData.notes} (verso)` : "Verso",
         });
       }
-      importSucceededRef.current = true;
-      onSuccess();
+      handleImportSuccess();
       handleDialogOpenChange(false);
 
       setUploadedFile(null);
@@ -554,12 +589,25 @@ export function DocumentUpload({
           {...nestedStackedOutsideHandlers(nestedSheet)}
         >
         <PortalLayerProvider layer={nestedStackedPortalLayer(nestedSheet)}>
+        {queueLabel && (
+          <p className="shrink-0 truncate text-xs font-medium text-primary" title={queueLabel}>
+            {queueLabel}
+          </p>
+        )}
         {isStelliumWizardMode ? (
           <RioImportWizard
             embedded
             open={open}
-            onOpenChange={onOpenChange}
-            onSuccess={onSuccess}
+            onOpenChange={(nextOpen) => {
+              if (!nextOpen) closeDialog();
+              else onOpenChange(nextOpen);
+            }}
+            onSuccess={handleImportSuccess}
+            onDocumentCreated={() => {
+              // Fichier déjà déplacé et référencé : la fermeture ne doit rien supprimer.
+              importSucceededRef.current = true;
+              onDocumentCreated?.();
+            }}
             contactId={contactId}
             defaultContactId={effectiveContactId}
             defaultTypeDocument={formData.type_document}
@@ -878,11 +926,21 @@ export function DocumentUpload({
           </div>
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
+            {onSkip && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="sm:mr-auto"
+                disabled={loading}
+                onClick={() => {
+                  onSkip();
+                  closeDialog();
+                }}
+              >
+                Passer ce fichier
+              </Button>
+            )}
+            <Button type="button" variant="outline" onClick={closeDialog}>
               Annuler
             </Button>
             <Button type="submit" disabled={loading || !uploadedFile}>

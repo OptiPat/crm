@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { ContactNotesLog } from "@/components/contacts/ContactNotesLog";
 import {
@@ -295,8 +296,6 @@ export function InvestissementForm({
   const [numeroContrat, setNumeroContrat] = useState("");
   const [urlContrat, setUrlContrat] = useState("");
   const [montantInitial, setMontantInitial] = useState("");
-  // Saisie que le navigateur ne sait pas lire comme un nombre (il renvoie alors une valeur vide).
-  const [montantInitialInvalid, setMontantInitialInvalid] = useState(false);
   const [dateSouscription, setDateSouscription] = useState("");
   const [dateFinDemembrement, setDateFinDemembrement] = useState("");
   const [demembrementKind, setDemembrementKind] =
@@ -529,7 +528,6 @@ export function InvestissementForm({
   // Pré-remplir le formulaire APRÈS que les données sont chargées
   useEffect(() => {
     if (open && dataLoaded) {
-      setMontantInitialInvalid(false);
       if (investissement) {
         // Pré-remplir le formulaire pour modification
         setContactId(investissement.contact_id?.toString() || "");
@@ -652,7 +650,6 @@ export function InvestissementForm({
     setUrlContrat("");
     setNomProduitSuggestions([]);
     setMontantInitial("");
-    setMontantInitialInvalid(false);
     setDateSouscription("");
     setDateFinDemembrement("");
     setDemembrementKind("TEMPORAIRE");
@@ -712,14 +709,6 @@ export function InvestissementForm({
     const hasOwner = investissementCommun ? !!foyerId : !!contactId;
     if (!hasOwner || !typeProduit || !nomProduit.trim()) {
       toast.error("Veuillez remplir tous les champs obligatoires");
-      return;
-    }
-
-    // Saisie non numérique : la valeur reste "" et onChange peut ne pas s'être déclenché.
-    if (montantInitialInvalid || montantInputRef.current?.validity.badInput) {
-      setMontantInitialInvalid(true);
-      toast.error("Le montant saisi n'est pas un nombre valide");
-      montantInputRef.current?.focus();
       return;
     }
 
@@ -1406,26 +1395,13 @@ export function InvestissementForm({
             <Label htmlFor="montant">
               {isMeubles ? "Valorisation (€)" : "Montant initial (€)"}
             </Label>
-            <Input
+            <MoneyInput
               ref={montantInputRef}
               id="montant"
-              type="number"
-              step="0.01"
               value={montantInitial}
-              onChange={(e) => {
-                setMontantInitial(e.target.value);
-                setMontantInitialInvalid(e.target.validity.badInput);
-              }}
-              placeholder="Ex: 10000"
-              aria-invalid={montantInitialInvalid || undefined}
-              aria-describedby={montantInitialInvalid ? "montant-error" : undefined}
-              className={montantInitialInvalid ? "border-destructive" : undefined}
+              onValueChange={setMontantInitial}
+              placeholder="Ex : 10 000"
             />
-            {montantInitialInvalid && (
-              <p id="montant-error" className="text-xs text-destructive">
-                Montant invalide : saisissez uniquement des chiffres (ex. 10000 ou 10000.50).
-              </p>
-            )}
           </div>
 
           {/* Date de souscription */}
@@ -1504,13 +1480,10 @@ export function InvestissementForm({
                 <Label htmlFor="montant-versement-mensuel-prevoyance">
                   Montant du versement mensuel (€)
                 </Label>
-                <Input
+                <MoneyInput
                   id="montant-versement-mensuel-prevoyance"
-                  type="number"
-                  step="0.01"
-                  min="0"
                   value={montantVersementMensuel}
-                  onChange={(e) => setMontantVersementMensuel(e.target.value)}
+                  onValueChange={setMontantVersementMensuel}
                   placeholder="Ex. 85"
                 />
               </div>
@@ -1624,26 +1597,20 @@ export function InvestissementForm({
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="mensualite-credit-scpi">Mensualité crédit (€/mois)</Label>
-                  <Input
+                  <MoneyInput
                     id="mensualite-credit-scpi"
-                    type="number"
-                    step="0.01"
-                    min="0"
                     value={mensualiteCredit}
-                    onChange={(e) => setMensualiteCredit(e.target.value)}
+                    onValueChange={setMensualiteCredit}
                     placeholder="Ex. 650"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="credit-crd-scpi">Capital restant dû (€)</Label>
-                  <Input
+                  <MoneyInput
                     id="credit-crd-scpi"
-                    type="number"
-                    step="0.01"
-                    min="0"
                     value={creditCrd}
-                    onChange={(e) => setCreditCrd(e.target.value)}
-                    placeholder="Ex. 45000"
+                    onValueChange={setCreditCrd}
+                    placeholder="Ex. 45 000"
                   />
                 </div>
                 <div className="space-y-2 col-span-2 sm:col-span-1">
@@ -1668,37 +1635,28 @@ export function InvestissementForm({
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="mensualite-credit">Mensualité crédit (€/mois)</Label>
-                  <Input
+                  <MoneyInput
                     id="mensualite-credit"
-                    type="number"
-                    step="0.01"
-                    min="0"
                     value={mensualiteCredit}
-                    onChange={(e) => setMensualiteCredit(e.target.value)}
-                    placeholder="Ex. 1500"
+                    onValueChange={setMensualiteCredit}
+                    placeholder="Ex. 1 500"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="credit-crd">Capital restant dû (€)</Label>
-                  <Input
+                  <MoneyInput
                     id="credit-crd"
-                    type="number"
-                    step="0.01"
-                    min="0"
                     value={creditCrd}
-                    onChange={(e) => setCreditCrd(e.target.value)}
-                    placeholder="Ex. 210000"
+                    onValueChange={setCreditCrd}
+                    placeholder="Ex. 210 000"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="loyer-mensuel">Loyer mensuel (€)</Label>
-                  <Input
+                  <MoneyInput
                     id="loyer-mensuel"
-                    type="number"
-                    step="0.01"
-                    min="0"
                     value={loyerMensuel}
-                    onChange={(e) => setLoyerMensuel(e.target.value)}
+                    onValueChange={setLoyerMensuel}
                     placeholder="Ex. 800"
                   />
                 </div>
@@ -1740,12 +1698,10 @@ export function InvestissementForm({
               <div className="grid grid-cols-2 gap-4 ml-6">
                 <div className="space-y-2">
                   <Label htmlFor="montant-vp">Montant (€)</Label>
-                  <Input
+                  <MoneyInput
                     id="montant-vp"
-                    type="number"
-                    step="0.01"
                     value={montantVersementProgramme}
-                    onChange={(e) => setMontantVersementProgramme(e.target.value)}
+                    onValueChange={setMontantVersementProgramme}
                     placeholder="Ex: 500"
                   />
                 </div>

@@ -82,6 +82,8 @@ export interface RioImportWizardProps {
   embedded?: boolean;
   /** Retour vers les autres types de document (mode embedded). */
   onRequestGenericImport?: () => void;
+  /** Le PDF est enregistré en base (avant le tri du patrimoine) : l'import compte comme fait. */
+  onDocumentCreated?: () => void;
 }
 
 export function RioImportWizard({
@@ -102,6 +104,7 @@ export function RioImportWizard({
   initialFormNotes,
   embedded = false,
   onRequestGenericImport,
+  onDocumentCreated,
 }: RioImportWizardProps) {
   const [step, setStep] = useState<RioImportStep>(1);
   const [loading, setLoading] = useState(false);
@@ -167,6 +170,7 @@ export function RioImportWizard({
     existingDocumentId,
     onSuccess,
     onOpenChange,
+    onDocumentCreated,
   });
 
   const { applyCoupleRioData } = useRioCoupleImport({

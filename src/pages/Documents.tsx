@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,6 +89,20 @@ import {
   type StagedDocumentFile,
 } from "@/lib/documents/detect-dropped-document-import";
 import {
+  DOCUMENT_IMPORT_EXTENSIONS,
+  EMPTY_IMPORT_QUEUE,
+  carryOverTypeDocument,
+  dequeueImportPath,
+  enqueueImportPaths,
+  fileNameFromPath,
+  formatFilesCount,
+  formatImportQueueLabel,
+  resolveQueuedTypeDocument,
+  type DocumentImportQueue,
+} from "@/lib/documents/document-import-queue";
+import { discardUnreferencedStagedFiles } from "@/lib/documents/discard-staged-import";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import {
   buildClientDocumentFolders,
   documentsInFolder,
   getFolderLabel,
@@ -118,6 +132,16 @@ import { resolveSendDocumentToOneDriveAction } from "@/lib/client-onedrive/send-
 import { subscribeClientOneDriveChanged } from "@/lib/client-onedrive/client-onedrive-events";
 import { openClientOneDriveFolderWithFeedback } from "@/lib/client-onedrive/open-client-onedrive-folder";
 
+/** Fichier de la file en cours d'import (copie temporaire déjà faite). */
+type QueuedImportItem = {
+  id: number;
+  stagedPath: string;
+  /** "upload" : DocumentUpload nettoie lui-même ; "stellium" : la page nettoie. */
+  flow: "upload" | "stellium";
+  succeeded: boolean;
+  skipped: boolean;
+};
+
 type DocumentsProps = {
   onNavigate?: (page: string) => void;
 };
@@ -140,6 +164,19 @@ export function Documents({ onNavigate }: DocumentsProps) {
     extractedData?: ExtractedData;
   } | null>(null);
   const [dropBusy, setDropBusy] = useState(false);
+  // File d'import multi-fichiers (drag & drop / sélecteur) : préparation fichier par fichier.
+  const [importQueue, setImportQueue] = useState<DocumentImportQueue>(EMPTY_IMPORT_QUEUE);
+  const importQueueRef = useRef<DocumentImportQueue>(EMPTY_IMPORT_QUEUE);
+  const queueItemRef = useRef<QueuedImportItem | null>(null);
+  const queueItemSeqRef = useRef(0);
+  /** Vrai de la préparation d'un fichier de la file jusqu'à la fermeture de son import. */
+  const queueActiveRef = useRef(false);
+  const importCarryRef = useRef<{ contactId?: number; typeDocument?: string }>({});
+  const [activeQueueItemId, setActiveQueueItemId] = useState<number | null>(null);
+  const [uploadQueueFileName, setUploadQueueFileName] = useState<string | undefined>();
+  const [uploadDefaultContactId, setUploadDefaultContactId] = useState<number | undefined>();
+  const [stopQueuePrompt, setStopQueuePrompt] = useState(false);
+  const stopQueuePromptRef = useRef(false);
   const [openedFolderKey, setOpenedFolderKey] = useState<DocumentFolderKey | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [editTarget, setEditTarget] = useState<Document | null>(null);
@@ -500,61 +537,194 @@ export function Documents({ onNavigate }: DocumentsProps) {
   const openUpload = (defaultTypeDocument?: string) => {
     setUploadInitialFile(undefined);
     setUploadDefaultType(defaultTypeDocument);
+    setUploadDefaultContactId(undefined);
+    setUploadQueueFileName(undefined);
+    setActiveQueueItemId(null);
     setShowUpload(true);
   };
 
-  const handleDroppedPaths = useCallback(
-    async (paths: string[]) => {
-      const sourcePath = paths[0];
-      if (!sourcePath) return;
-      if (dropBusy) {
-        toast.info("Un fichier est déjà en cours de préparation, patientez un instant.");
-        return;
-      }
-      if (showUpload || stelliumDropImport != null || rioReimportDoc != null) {
-        toast.info(
-          "Un import est déjà ouvert : terminez-le ou fermez-le avant de déposer un autre fichier."
-        );
-        return;
-      }
-      if (paths.length > 1) {
-        const ignored = paths.length - 1;
-        toast.warning(
-          `1 seul fichier à la fois : ${ignored} fichier${ignored > 1 ? "s" : ""} ignoré${ignored > 1 ? "s" : ""}.`
-        );
-      }
-      setDropBusy(true);
-      try {
-        const staged = await stageDocumentFromPath(sourcePath);
-        const plan = await detectDroppedDocumentImport(staged);
-        if (isStelliumDropKind(plan.kind)) {
+  const updateImportQueue = (next: DocumentImportQueue) => {
+    importQueueRef.current = next;
+    setImportQueue(next);
+  };
+
+  /**
+   * Prépare (copie temporaire + détection RIO/QPI/identité) le prochain fichier
+   * de la file et ouvre l'import adapté. Les fichiers en attente ne sont pas copiés.
+   */
+  const startNextQueuedImport = async () => {
+    queueActiveRef.current = true;
+    setDropBusy(true);
+    try {
+      for (;;) {
+        const { queue, path } = dequeueImportPath(importQueueRef.current);
+        if (path == null) {
+          updateImportQueue(EMPTY_IMPORT_QUEUE);
+          importCarryRef.current = {};
+          queueActiveRef.current = false;
+          return;
+        }
+        updateImportQueue(queue);
+        const label = formatImportQueueLabel(queue, fileNameFromPath(path));
+
+        let staged: StagedDocumentFile;
+        try {
+          staged = await stageDocumentFromPath(path);
+        } catch (error) {
+          console.error("Drop import:", error);
+          toast.error(`Impossible d'importer « ${fileNameFromPath(path)} ».`);
+          continue;
+        }
+
+        const plan = await detectDroppedDocumentImport(staged).catch((error: unknown) => {
+          console.error("Drop import detection:", error);
+          return { kind: "generic" as const, defaultTypeDocument: "AUTRE", extractedData: undefined };
+        });
+        const itemId = ++queueItemSeqRef.current;
+        const stellium = isStelliumDropKind(plan.kind);
+        queueItemRef.current = {
+          id: itemId,
+          stagedPath: staged.path,
+          flow: stellium ? "stellium" : "upload",
+          succeeded: false,
+          skipped: false,
+        };
+        setActiveQueueItemId(itemId);
+
+        if (stellium) {
           setStelliumDropImport({
             file: staged,
             defaultTypeDocument: plan.defaultTypeDocument,
             extractedData: plan.extractedData,
           });
-          toast.info(
+          const recognized =
             plan.kind === "stellium_qpi"
               ? "Profil investisseur reconnu — vérifiez les informations avant d'importer."
-              : "Relevé patrimonial reconnu — vérifiez les informations avant d'importer."
-          );
+              : "Relevé patrimonial reconnu — vérifiez les informations avant d'importer.";
+          toast.info(label ? `${label} : ${recognized}` : recognized);
           return;
         }
-        setUploadDefaultType(plan.defaultTypeDocument);
+        const carry = importCarryRef.current;
+        setUploadDefaultType(resolveQueuedTypeDocument(plan.defaultTypeDocument, carry.typeDocument));
+        setUploadDefaultContactId(carry.contactId);
+        setUploadQueueFileName(fileNameFromPath(path));
         setUploadInitialFile(staged);
         setShowUpload(true);
         if (plan.kind === "identity") {
           toast.info("Pièce d'identité probable — choisissez le client.");
         }
-      } catch (error) {
-        console.error("Drop import:", error);
-        toast.error("Impossible d'importer le fichier déposé.");
-      } finally {
-        setDropBusy(false);
+        return;
       }
-    },
-    [dropBusy, showUpload, stelliumDropImport, rioReimportDoc]
-  );
+    } finally {
+      setDropBusy(false);
+    }
+  };
+
+  /**
+   * Fermeture d'un import (réussi, passé ou annulé). `itemId` : élément de file
+   * qui se ferme, null pour un import ouvert à la main ou une relance RIO.
+   */
+  const handleImportClosed = (itemId: number | null) => {
+    const item = queueItemRef.current;
+    if (itemId != null) {
+      if (item?.id !== itemId) return; // fermeture en double ou tardive
+      queueItemRef.current = null;
+      setActiveQueueItemId(null);
+      if (item.flow === "stellium" && !item.succeeded) {
+        // DocumentUpload nettoie ses propres copies ; l'assistant RIO/QPI non.
+        void discardUnreferencedStagedFiles([item.stagedPath]);
+      }
+      if (!item.succeeded && !item.skipped && importQueueRef.current.pending.length > 0) {
+        stopQueuePromptRef.current = true; // queueActiveRef reste vrai pendant la question
+        setStopQueuePrompt(true);
+        return;
+      }
+      queueActiveRef.current = false;
+    } else if (queueActiveRef.current) {
+      return;
+    }
+    if (importQueueRef.current.pending.length > 0) {
+      void startNextQueuedImport();
+    } else {
+      updateImportQueue(EMPTY_IMPORT_QUEUE);
+      importCarryRef.current = {};
+    }
+  };
+
+  /** L'import qui rappelle (id capturé au rendu) est-il toujours l'import actif ? */
+  const isCurrentImport = (itemId: number | null) =>
+    (queueItemRef.current?.id ?? null) === itemId;
+  /** Élément de file affiché par l'assistant RIO/QPI (null : relance depuis la bibliothèque). */
+  const stelliumItemId = stelliumDropImport != null ? activeQueueItemId : null;
+
+  const markQueueItemSucceeded = (itemId: number | null) => {
+    const item = queueItemRef.current;
+    if (itemId != null && item?.id === itemId) item.succeeded = true;
+  };
+
+  const continueQueueAfterCancel = () => {
+    if (!stopQueuePromptRef.current) return;
+    stopQueuePromptRef.current = false;
+    setStopQueuePrompt(false);
+    queueActiveRef.current = false;
+    void startNextQueuedImport();
+  };
+
+  const stopImportQueue = () => {
+    stopQueuePromptRef.current = false;
+    setStopQueuePrompt(false);
+    queueActiveRef.current = false;
+    // Les fichiers en attente n'ont jamais été copiés : rien à nettoyer.
+    updateImportQueue(EMPTY_IMPORT_QUEUE);
+    importCarryRef.current = {};
+  };
+
+  /** Drag & drop ou sélecteur : ajoute à la file, démarre si aucun import n'est ouvert. */
+  const enqueueImportFiles = (paths: string[]) => {
+    const busy =
+      queueActiveRef.current ||
+      showUpload ||
+      stelliumDropImport != null ||
+      rioReimportDoc != null;
+    const { queue, added } = enqueueImportPaths(
+      busy ? importQueueRef.current : EMPTY_IMPORT_QUEUE,
+      paths
+    );
+    if (added === 0) {
+      if (busy) toast.info("Déjà dans la file d'import.");
+      return;
+    }
+    updateImportQueue(queue);
+    if (busy) {
+      toast.info(`${formatFilesCount(added)} ajouté${added > 1 ? "s" : ""} à la file.`);
+      return;
+    }
+    importCarryRef.current = {};
+    void startNextQueuedImport();
+  };
+
+  // Callback stable pour l'écoute Tauri (pas de réabonnement à chaque rendu).
+  const enqueueImportFilesRef = useRef(enqueueImportFiles);
+  useEffect(() => {
+    enqueueImportFilesRef.current = enqueueImportFiles;
+  });
+  const handleDroppedPaths = useCallback((paths: string[]) => {
+    enqueueImportFilesRef.current(paths);
+  }, []);
+
+  const pickFilesToImport = async () => {
+    try {
+      const selected = await openFileDialog({
+        multiple: true,
+        filters: [{ name: "Documents", extensions: DOCUMENT_IMPORT_EXTENSIONS }],
+      });
+      const paths = Array.isArray(selected) ? selected : selected ? [selected] : [];
+      if (paths.length > 0) enqueueImportFiles(paths);
+    } catch (error) {
+      console.error("Sélection de fichiers:", error);
+      toast.error("Impossible d'ouvrir le sélecteur de fichiers.");
+    }
+  };
 
   const { isDragging } = useDocumentsPageDragDrop(handleDroppedPaths);
 
@@ -674,9 +844,9 @@ export function Documents({ onNavigate }: DocumentsProps) {
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-primary/10 backdrop-blur-[1px]">
           <div className="rounded-xl border-2 border-dashed border-primary bg-background/95 px-8 py-6 text-center shadow-lg">
             <Upload className="h-10 w-10 mx-auto text-primary mb-2" />
-            <p className="text-sm font-medium">Déposez le fichier pour l&apos;importer</p>
+            <p className="text-sm font-medium">Déposez un ou plusieurs fichiers pour les importer</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Un fichier à la fois — relevé patrimonial, profil investisseur ou pièce d&apos;identité reconnus automatiquement
+              Importés l&apos;un après l&apos;autre — relevé patrimonial, profil investisseur ou pièce d&apos;identité reconnus automatiquement
             </p>
           </div>
         </div>
@@ -690,9 +860,17 @@ export function Documents({ onNavigate }: DocumentsProps) {
             Gérez les documents de vos clients
           </p>
         </div>
-        <Button className="gap-2" onClick={() => openUpload()}>
-          <Upload className="h-4 w-4" />
-          Importer un document
+        <Button
+          className="gap-2"
+          disabled={dropBusy}
+          title="Sélectionnez un ou plusieurs fichiers"
+          onClick={() => void pickFilesToImport()}
+        >
+          {dropBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          Importer des documents
+          {importQueue.pending.length > 0 && (
+            <span className="text-xs opacity-80">({importQueue.pending.length} en attente)</span>
+          )}
         </Button>
       </div>
 
@@ -1012,19 +1190,73 @@ export function Documents({ onNavigate }: DocumentsProps) {
       </Card>
 
       <DocumentUpload
+        key={activeQueueItemId ?? "manual"}
         open={showUpload}
         onOpenChange={(open) => {
+          // Rappel tardif d'une fenêtre précédente : ne pas fermer l'import suivant.
+          if (!open && !isCurrentImport(activeQueueItemId)) return;
           setShowUpload(open);
           if (!open) {
             setUploadDefaultType(undefined);
             setUploadInitialFile(undefined);
+            setUploadDefaultContactId(undefined);
+            setUploadQueueFileName(undefined);
+            handleImportClosed(activeQueueItemId);
           }
         }}
-        onSuccess={loadDocuments}
-        defaultContactId={openedFolderContactId ?? undefined}
+        onSuccess={() => {
+          markQueueItemSucceeded(activeQueueItemId);
+          void loadDocuments();
+        }}
+        onImported={({ contactId, typeDocument }) => {
+          if (!isCurrentImport(activeQueueItemId)) return;
+          importCarryRef.current = {
+            contactId,
+            typeDocument: carryOverTypeDocument(typeDocument),
+          };
+        }}
+        onSkip={
+          activeQueueItemId != null && importQueue.total > 1
+            ? () => {
+                const item = queueItemRef.current;
+                if (item?.id === activeQueueItemId) item.skipped = true;
+              }
+            : undefined
+        }
+        queueLabel={
+          activeQueueItemId != null && uploadQueueFileName
+            ? formatImportQueueLabel(importQueue, uploadQueueFileName)
+            : undefined
+        }
+        defaultContactId={uploadDefaultContactId ?? openedFolderContactId ?? undefined}
         defaultTypeDocument={uploadDefaultType}
         initialUploadedFile={uploadInitialFile}
+        onDocumentCreated={() => markQueueItemSucceeded(activeQueueItemId)}
       />
+
+      <AlertDialog
+        open={stopQueuePrompt}
+        onOpenChange={(open) => {
+          // « Tout arrêter » a déjà fermé la question : continueQueueAfterCancel ne fait rien.
+          if (!open) continueQueueAfterCancel();
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Arrêter l&apos;import des fichiers ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Le fichier annulé n&apos;a pas été importé.{" "}
+              {importQueue.pending.length > 1
+                ? `${importQueue.pending.length} fichiers restants ne seront pas importés si vous arrêtez.`
+                : "1 fichier restant ne sera pas importé si vous arrêtez."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Continuer avec le suivant</AlertDialogCancel>
+            <AlertDialogAction onClick={stopImportQueue}>Tout arrêter</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <DocumentPreviewSheet
         doc={previewDoc}
@@ -1065,18 +1297,27 @@ export function Documents({ onNavigate }: DocumentsProps) {
       />
 
       <RioImportWizard
+        key={
+          stelliumDropImport?.file.path ??
+          (rioReimportDoc ? `reimport:${rioReimportDoc.id}` : "rio")
+        }
         open={stelliumDropImport != null || rioReimportDoc != null}
         onOpenChange={(open) => {
-          if (!open) {
+          // Rappel tardif d'un assistant précédent : ne pas fermer l'import suivant.
+          if (open || !isCurrentImport(stelliumItemId)) return;
+          setStelliumDropImport(null);
+          setRioReimportDoc(null);
+          handleImportClosed(stelliumItemId);
+        }}
+        onSuccess={() => {
+          if (isCurrentImport(stelliumItemId)) {
+            markQueueItemSucceeded(stelliumItemId);
             setStelliumDropImport(null);
             setRioReimportDoc(null);
           }
-        }}
-        onSuccess={() => {
-          setStelliumDropImport(null);
-          setRioReimportDoc(null);
           void loadDocuments();
         }}
+        onDocumentCreated={() => markQueueItemSucceeded(stelliumItemId)}
         contactId={rioReimportDoc?.contact_id ?? undefined}
         defaultContactId={openedFolderContactId ?? undefined}
         defaultTypeDocument={

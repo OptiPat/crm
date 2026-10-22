@@ -41,6 +41,8 @@ export function useRioPatrimoineFlow(options: {
   existingDocumentId?: number;
   onSuccess: () => void;
   onOpenChange: (open: boolean) => void;
+  /** Le PDF vient d'être enregistré en base (avant l'étape de tri du patrimoine). */
+  onDocumentCreated?: () => void;
 }) {
   const [showPatrimoineTri, setShowPatrimoineTri] = useState(false);
   const [triContactId, setTriContactId] = useState<number | null>(null);
@@ -116,6 +118,7 @@ export function useRioPatrimoineFlow(options: {
           })
         );
         documentFilePath = document.chemin_fichier;
+        options.onDocumentCreated?.();
       }
 
       if (

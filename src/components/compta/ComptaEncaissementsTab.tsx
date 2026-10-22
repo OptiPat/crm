@@ -3,6 +3,7 @@ import { Copy, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -257,15 +258,15 @@ export function ComptaEncaissementsTab({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="enc-exo">Montant exonéré (€)</Label>
-                <Input id="enc-exo" type="number" step="0.01" min="0" value={exonere} onChange={(e) => setExonere(e.target.value)} />
+                <MoneyInput id="enc-exo" value={exonere} onValueChange={setExonere} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="enc-ht">Montant HT (€)</Label>
-                <Input id="enc-ht" type="number" step="0.01" min="0" value={ht} onChange={(e) => setHt(e.target.value)} required />
+                <MoneyInput id="enc-ht" value={ht} onValueChange={setHt} required />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="enc-tva">Montant TVA (€)</Label>
-                <Input id="enc-tva" type="number" step="0.01" min="0" value={tva} onChange={(e) => setTva(e.target.value)} required />
+                <MoneyInput id="enc-tva" value={tva} onValueChange={setTva} required />
               </div>
               <div className="space-y-1">
                 <Label>Total TTC</Label>
@@ -273,7 +274,7 @@ export function ComptaEncaissementsTab({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="enc-don">Montant don (€)</Label>
-                <Input id="enc-don" type="number" step="0.01" min="0" value={don} onChange={(e) => setDon(e.target.value)} />
+                <MoneyInput id="enc-don" value={don} onValueChange={setDon} />
               </div>
               <div className="space-y-1 md:col-span-2">
                 <Label>Total reçu (après don)</Label>
