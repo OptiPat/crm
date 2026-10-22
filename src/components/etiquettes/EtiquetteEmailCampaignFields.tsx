@@ -263,7 +263,7 @@ export function EtiquetteEmailCampaignFields({
                 <p className="leading-relaxed">
                   <strong>Aucune date à saisir.</strong> Les contacts taggés entrent en file dès que
                   Stellium envoie le mail « Remboursement Exceltis » correspondant à cette gamme et ce
-                  millésime (détection Gmail automatique).
+                  millésime (détection automatique dans la boîte mail).
                 </p>
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   Posez l&apos;étiquette sur les fiches contact, activez la campagne ci-dessus, puis

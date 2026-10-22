@@ -104,7 +104,7 @@ export function DocumentsOneDriveLibrary() {
 
       <p className="text-sm text-muted-foreground py-10 text-center">
 
-        Connectez Microsoft OneDrive dans Paramètres → Intégrations → Dossiers clients.
+        Connectez Microsoft OneDrive dans Paramètres → Équipe &amp; intégrations → Dossiers clients.
 
       </p>
 
@@ -120,7 +120,7 @@ export function DocumentsOneDriveLibrary() {
 
       <p className="text-sm text-muted-foreground py-10 text-center">
 
-        Choisissez le dossier racine « Dossier clients » dans Paramètres → Intégrations.
+        Choisissez le dossier racine « Dossier clients » dans Paramètres → Équipe &amp; intégrations.
 
       </p>
 

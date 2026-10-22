@@ -9,6 +9,7 @@ import {
 } from "@/lib/emails/template-email-attachments";
 import { importTemplateEmailAttachment } from "@/lib/api/tauri-template-email-attachments";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { TemplateEmailAttachmentSaveContext } from "@/components/emails/template-email-attachment-save-context";
 
 interface TemplateEmailAttachmentsPanelProps {
@@ -54,7 +55,7 @@ export function TemplateEmailAttachmentsPanel({
       if (!added) return;
       changeAttachments([...attachments, added]);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(userErrorMessage(e, "Impossible d'ajouter la pièce jointe"));
     }
   };
 

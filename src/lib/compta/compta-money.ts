@@ -5,9 +5,15 @@ export function formatComptaMoney(amount: number): string {
   }).format(amount);
 }
 
-/** Format utilisé dans l'export PDF ComptaZen. */
+/**
+ * Format utilisé dans l'export PDF ComptaZen : « 12 345,00 € ».
+ * Espace normale comme séparateur de milliers (jsPDF affiche mal U+202F / U+00A0).
+ */
 export function formatComptaMoneyPdf(amount: number): string {
-  return `${amount.toFixed(2).replace(".", ",")} €`;
+  const [intPart, decPart] = Math.abs(amount).toFixed(2).split(".");
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  const sign = amount < 0 && Number(`${intPart}.${decPart}`) !== 0 ? "-" : "";
+  return `${sign}${grouped},${decPart} €`;
 }
 
 export function roundComptaMoney(amount: number): number {

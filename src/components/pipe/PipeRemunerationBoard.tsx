@@ -23,6 +23,7 @@ import {
 import { inferTypeProduitFromStelliumProductLabel } from "@/lib/pipe/remuneration-type-produit";
 import { formatPipeContactLabel } from "@/lib/pipe/pipe-types";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 function resolveTypeProduit(row: PipeRemunerationRow): string {
   const stored = row.type_produit?.trim();
@@ -120,7 +121,7 @@ export function PipeRemunerationBoard() {
       await updatePlacementOperationPvManual(row.placement_operation_id, pv);
       await reload();
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer le montant"));
     } finally {
       setSavingPvId(null);
     }

@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/tauri-pipe-timeline";
 import { subscribePipeChanged } from "@/lib/pipe/pipe-events";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 function mergeTimelineEntry(
   entries: PipeTimelineEntryRecord[],
@@ -30,7 +31,7 @@ export function usePipeTimeline(pipeId: number) {
       const rows = await listPipeTimelineEntries(pipeId);
       setEntries(rows);
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de charger l'historique"));
     } finally {
       setLoading(false);
     }

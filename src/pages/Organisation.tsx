@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { GitBranch, ListTree, Network, Settings, Upload, Users2 } from "lucide-react";
+import { ListTree, Network, Settings, Upload, Users2 } from "lucide-react";
 import { toast } from "sonner";
 import { getAllContacts, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { contactFilleulRankUpdatePayload, contactFilleulVolumeUpdatePayload, contactFilleulManagerVolumeUpdatePayload } from "@/lib/contacts/contact-form-utils";
@@ -450,16 +450,7 @@ export function Organisation({ onNavigate }: OrganisationProps) {
   return (
     <div className="space-y-4 p-3 sm:p-4">
       {organisationDrillDownOpen ? <DashboardDrillDownBackdrop /> : null}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
-            <GitBranch className="h-6 w-6 text-primary" aria-hidden />
-            Organisation
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Réseau filleuls et parrains.
-          </p>
-        </div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
         <div className="flex flex-wrap items-center gap-2">
           <OrganisationMemberSearch
             roster={searchRoster}

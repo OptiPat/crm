@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { activateLicense, getLicenseStatus, startLicenseTrial } from "@/lib/api/tauri-license";
 import { KeyRound, Sparkles } from "lucide-react";
 import { useAppBranding } from "@/components/app-branding/AppBrandingProvider";
+import { looksLikeEmail } from "@/lib/settings/email-format";
 
 interface LicenseActivationProps {
   onComplete: () => void;
@@ -39,7 +40,8 @@ export function LicenseActivation({ onComplete }: LicenseActivationProps) {
       .catch(() => {});
   }, []);
 
-  const emailValid = useMemo(() => clientEmail.trim().includes("@"), [clientEmail]);
+  const emailValid = useMemo(() => looksLikeEmail(clientEmail), [clientEmail]);
+  const showEmailError = clientEmail.trim() !== "" && !emailValid;
 
   const handleTrial = async () => {
     setError("");
@@ -93,7 +95,7 @@ export function LicenseActivation({ onComplete }: LicenseActivationProps) {
           <CardHeader>
             <CardTitle>Choisissez votre mode d&apos;accès</CardTitle>
             <CardDescription>
-              Accès complet pour l&apos;instant — la facturation sera activée plus tard.
+              Renseignez votre email, puis choisissez l&apos;accès gratuit ou votre clé de licence.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -106,7 +108,17 @@ export function LicenseActivation({ onComplete }: LicenseActivationProps) {
                   value={clientEmail}
                   onChange={(e) => setClientEmail(e.target.value)}
                   placeholder="conseiller@cabinet-exemple.fr"
+                  aria-invalid={showEmailError}
+                  aria-describedby="license-email-help"
                 />
+                <p
+                  id="license-email-help"
+                  className={showEmailError ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
+                >
+                  {showEmailError ?
+                    "Saisissez un email valide (ex. conseiller@cabinet.fr)"
+                  : "Obligatoire pour activer l'accès"}
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="license-name">Nom</Label>

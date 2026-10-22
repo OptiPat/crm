@@ -113,6 +113,8 @@ export function SetupPassword({ onPasswordCreated }: SetupPasswordProps) {
                     size="icon"
                     className="absolute right-1 top-1 h-8 w-8"
                     onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                    title={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -156,6 +158,10 @@ export function SetupPassword({ onPasswordCreated }: SetupPasswordProps) {
                     size="icon"
                     className="absolute right-1 top-1 h-8 w-8"
                     onClick={() => setShowConfirm(!showConfirm)}
+                    aria-label={
+                      showConfirm ? "Masquer la confirmation" : "Afficher la confirmation"
+                    }
+                    title={showConfirm ? "Masquer la confirmation" : "Afficher la confirmation"}
                   >
                     {showConfirm ? (
                       <EyeOff className="h-4 w-4" />
@@ -171,6 +177,18 @@ export function SetupPassword({ onPasswordCreated }: SetupPasswordProps) {
                   <p className="text-sm text-red-800">{error}</p>
                 </div>
               )}
+
+              <div
+                role="note"
+                className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"
+              >
+                <p className="font-medium">Notez ce mot de passe en lieu sûr.</p>
+                <p className="mt-1">
+                  Sans lui, vous ne pourrez plus ouvrir le CRM : il n&apos;existe aucune
+                  réinitialisation automatique. Vos données ne seraient pas perdues, mais il
+                  faudrait contacter le support pour retrouver l&apos;accès.
+                </p>
+              </div>
 
               <div className="bg-muted p-3 rounded-lg">
                 <p className="text-xs text-muted-foreground">

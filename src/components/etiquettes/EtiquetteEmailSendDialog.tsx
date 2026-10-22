@@ -34,6 +34,8 @@ import {
   startIndividualEtiquetteEmailSend,
 } from "@/lib/etiquettes/etiquette-email-send-runner";
 import { toast } from "sonner";
+import { useUnsavedCloseGuard } from "@/hooks/useUnsavedCloseGuard";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface EtiquetteEmailSendDialogProps {
   item: EtiquetteEmailQueueItem | null;
@@ -63,6 +65,8 @@ export function EtiquetteEmailSendDialog({
   const [senderEmail, setSenderEmail] = useState<string | null>(null);
   const editorElementRef = useRef<HTMLDivElement>(null);
   const bodyDirtyRef = useRef(false);
+  // Confirmation à la fermeture seulement si l'objet ou le message ont été retouchés.
+  const closeGuard = useUnsavedCloseGuard({ open, onClose: () => onOpenChange(false) });
 
   useEffect(() => {
     if (!open || !item) return;
@@ -169,6 +173,7 @@ export function EtiquetteEmailSendDialog({
     }
 
     const itemSnapshot = item;
+    closeGuard.resetDirty();
     onOpenChange(false);
     toast.info(
       `Envoi en arrière-plan — ${item.contact_prenom} ${item.contact_nom}. Vous pouvez continuer à utiliser le CRM.`
@@ -185,12 +190,13 @@ export function EtiquetteEmailSendDialog({
         onSent: (meta) => onSent?.(meta),
       });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erreur envoi");
+      toast.error(userErrorMessage(error, "Envoi de l'email impossible"));
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={open} onOpenChange={closeGuard.handleOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Confirmer l&apos;envoi</DialogTitle>
@@ -216,7 +222,10 @@ export function EtiquetteEmailSendDialog({
             <Input
               id="confirm-subject"
               value={subject}
-              onChange={(e) => setSubject(e.target.value)}
+              onChange={(e) => {
+                setSubject(e.target.value);
+                closeGuard.markDirty();
+              }}
             />
           </div>
 
@@ -233,7 +242,10 @@ export function EtiquetteEmailSendDialog({
                 editorElementRef={editorElementRef}
                 value={bodyHtml}
                 onChange={(html, meta) => {
-                  if (meta?.edited) bodyDirtyRef.current = true;
+                  if (meta?.edited) {
+                    bodyDirtyRef.current = true;
+                    closeGuard.markDirty();
+                  }
                   setBodyHtml(html);
                 }}
                 minHeight="9rem"
@@ -244,14 +256,17 @@ export function EtiquetteEmailSendDialog({
               <Textarea
                 id="confirm-body"
                 value={bodyPlain}
-                onChange={(e) => setBodyPlain(e.target.value)}
+                onChange={(e) => {
+                  setBodyPlain(e.target.value);
+                  closeGuard.markDirty();
+                }}
                 rows={12}
                 className="text-sm leading-relaxed"
               />
             )}
             {htmlMode ? (
               <p className="text-[11px] text-muted-foreground">
-                Gras, listes et liens : modifiables directement — rendu identique à Gmail.
+                Gras, listes et liens : modifiables directement — rendu identique dans la boîte mail du client.
               </p>
             ) : null}
             <UnknownVariablesWarning texts={[subject, htmlMode ? bodyHtml : bodyPlain]} />
@@ -277,7 +292,7 @@ export function EtiquetteEmailSendDialog({
           />
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={closeGuard.requestClose}>
             Annuler
           </Button>
           <Button
@@ -293,5 +308,7 @@ export function EtiquetteEmailSendDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {closeGuard.discardDialog}
+    </>
   );
 }

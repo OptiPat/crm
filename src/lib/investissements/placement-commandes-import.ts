@@ -38,6 +38,7 @@ import {
 } from "@/lib/foyers/foyer-utils";
 import { numeroContratMatchKey } from "@/lib/investissements/investissement-display";
 import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
+import { FREQUENCE_VERSEMENT_LABELS } from "@/lib/investissements/investissement-versements";
 import { parseNomCompletInvestisseur } from "@/lib/contacts/investor-name-parse";
 import { parseImportMontantEuros } from "@/lib/investissements/parse-import-montant-euros";
 
@@ -105,13 +106,10 @@ export type PlacementImportLineStatus =
   | "duplicate_csv"
   | "imported";
 
-export const PLACEMENT_VP_FREQUENCE_OPTIONS = [
+export const PLACEMENT_VP_FREQUENCE_OPTIONS: readonly { value: string; label: string }[] = [
   { value: "", label: "—" },
-  { value: "MENSUEL", label: "Mensuel" },
-  { value: "TRIMESTRIEL", label: "Trimestriel" },
-  { value: "SEMESTRIEL", label: "Semestriel" },
-  { value: "ANNUEL", label: "Annuel" },
-] as const;
+  ...Object.entries(FREQUENCE_VERSEMENT_LABELS).map(([value, label]) => ({ value, label })),
+];
 
 /** AV, PER, contrat de capitalisation — fusion VI/VP par n° contrat. */
 export function isPlacementContratVpMerge(typeProduit: string): boolean {

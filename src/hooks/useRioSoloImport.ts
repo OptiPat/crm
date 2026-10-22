@@ -6,6 +6,10 @@ import type { ExtractedData } from "@/lib/pdf";
 export function useRioSoloImport(options: {
   effectiveContactId?: number;
   foyerId?: number;
+  /**
+   * Confirmation avant fusion d'identité. Seul appelant (RioImportWizard) : fournit
+   * toujours sa RioIdentityMergeDialog ; window.confirm n'est qu'un filet de secours.
+   */
   confirmIdentityMerge?: (message: string) => boolean | Promise<boolean>;
 }) {
   const applySoloRioData = useCallback(

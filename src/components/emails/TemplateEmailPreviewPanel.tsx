@@ -23,6 +23,7 @@ import { EMAIL_PREVIEW_HTML_CLASS } from "@/lib/emails/email-preview-html-styles
 import { cn } from "@/lib/utils";
 import { Loader2, Mail, Paperclip } from "lucide-react";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type TemplateEmailPreviewPanelProps = {
   sujet: string;
@@ -174,7 +175,7 @@ export function TemplateEmailPreviewPanel({
           : `Email de test envoyé à ${to}`
       );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Envoi du test impossible");
+      toast.error(userErrorMessage(e, "Envoi du test impossible"));
     } finally {
       setSendingTest(false);
     }

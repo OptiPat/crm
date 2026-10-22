@@ -21,6 +21,13 @@ import {
   isCampaignTemplateSendBlocked,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { toast } from "sonner";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import {
+  batchRecipientLabel,
+  splitBatchSendItems,
+} from "@/components/etiquettes/etiquette-batch-send-split";
+import { getEtiquetteQueueItemKey } from "@/lib/etiquettes/etiquette-queue-item-key";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function EtiquetteBatchSendDialog({
   items,
@@ -39,6 +46,7 @@ export function EtiquetteBatchSendDialog({
 }) {
   const [progress, setProgress] = useState<EtiquetteBatchSendProgress | null>(null);
   const [running, setRunning] = useState(false);
+  const [recipientsOpen, setRecipientsOpen] = useState(false);
 
   useEffect(() => {
     return subscribeEtiquetteBatchSend((p, isRunning) => {
@@ -47,24 +55,28 @@ export function EtiquetteBatchSendDialog({
     });
   }, []);
 
-  const blockedItems = items.filter((i) => isCampaignTemplateSendBlocked(i));
-  const sendBlocked = blockedItems.length > 0;
-  const blockReason =
-    blockedItems.map((i) => getCampaignTemplateSendBlockReason(i)).find(Boolean) ?? null;
+  // Lignes bloquées (SCPI / Stellium : résumé à repréparer ; lien d'agenda introuvable) :
+  // jamais envoyées, exclues du lot.
+  const { sendable: sendableItems, blocked: blockedItems } = splitBatchSendItems(items, (i) =>
+    isCampaignTemplateSendBlocked(i, cgpConfig)
+      ? (getCampaignTemplateSendBlockReason(i, cgpConfig) ?? "Envoi bloqué")
+      : null
+  );
+  const sendCount = sendableItems.length;
 
   const start = async () => {
-    if (items.length === 0 || running || isEtiquetteEmailSendActive() || sendBlocked) return;
+    if (sendCount === 0 || running || isEtiquetteEmailSendActive()) return;
     onOpenChange(false);
     toast.info("Envoi en arrière-plan — vous pouvez continuer à utiliser le CRM.");
     try {
       await startEtiquetteBatchSend({
-        items,
+        items: sendableItems,
         cgp: cgpConfig,
         onItemSent,
         onDone,
       });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur envoi groupé");
+      toast.error(userErrorMessage(e, "Erreur envoi groupé"));
     }
   };
 
@@ -102,13 +114,48 @@ export function EtiquetteBatchSendDialog({
               Chaque destinataire recevra son email personnalisé. L&apos;envoi se poursuit en
               arrière-plan — barre de progression visible dans la file d&apos;envoi.
             </p>
-            {sendBlocked ? (
-              <p className="text-xs text-amber-800 dark:text-amber-200 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-2">
-                {blockedItems.length} email
-                {blockedItems.length > 1 ? "s" : ""} bloqué
-                {blockedItems.length > 1 ? "s" : ""}
-                {blockReason ? ` — ${blockReason}` : ""}.
-              </p>
+            {blockedItems.length > 0 ? (
+              <div className="text-xs text-amber-800 dark:text-amber-200 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-2 space-y-1">
+                <p className="font-medium">
+                  {blockedItems.length} email{blockedItems.length > 1 ? "s" : ""} ne
+                  {blockedItems.length > 1 ? " peuvent" : " peut"} pas partir et{" "}
+                  {blockedItems.length > 1 ? "seront exclus" : "sera exclu"} de l&apos;envoi :
+                </p>
+                <ul className="max-h-32 overflow-y-auto space-y-0.5">
+                  {blockedItems.map(({ item, reason }) => (
+                    <li key={getEtiquetteQueueItemKey(item)}>
+                      <span className="font-medium">{batchRecipientLabel(item)}</span> — {reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {sendCount > 0 ? (
+              <div className="rounded-md border">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-1 px-2 py-1.5 text-left text-sm font-medium hover:bg-muted/50"
+                  aria-expanded={recipientsOpen}
+                  onClick={() => setRecipientsOpen((o) => !o)}
+                >
+                  {recipientsOpen ?
+                    <ChevronDown className="h-4 w-4" aria-hidden />
+                  : <ChevronRight className="h-4 w-4" aria-hidden />}
+                  Voir les destinataires ({sendCount})
+                </button>
+                {recipientsOpen ? (
+                  <ul className="max-h-48 overflow-y-auto border-t px-3 py-2 text-sm space-y-0.5">
+                    {sendableItems.map((item) => (
+                      <li key={getEtiquetteQueueItemKey(item)} className="flex justify-between gap-3">
+                        <span className="truncate">{batchRecipientLabel(item)}</span>
+                        <span className="truncate text-muted-foreground">
+                          {item.contact_email?.trim() || "pas d'email"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
             ) : null}
           </div>
         )}
@@ -117,12 +164,14 @@ export function EtiquetteBatchSendDialog({
             Annuler
           </Button>
           <Button
-            disabled={
-              running || items.length === 0 || isEtiquetteEmailSendActive() || sendBlocked
-            }
+            disabled={running || sendCount === 0 || isEtiquetteEmailSendActive()}
             onClick={() => void start()}
           >
-            {running ? "Envoi en cours…" : `Envoyer ${items.length} email${items.length > 1 ? "s" : ""}`}
+            {running ?
+              "Envoi en cours…"
+            : blockedItems.length > 0 ?
+              `Envoyer ${sendCount > 1 ? `les ${sendCount} autres` : sendCount === 1 ? "l'autre email" : "les autres"}`
+            : `Envoyer ${sendCount} email${sendCount > 1 ? "s" : ""}`}
           </Button>
         </DialogFooter>
       </DialogContent>

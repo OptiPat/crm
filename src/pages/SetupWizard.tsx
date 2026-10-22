@@ -11,7 +11,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAppBranding } from "@/components/app-branding/AppBrandingProvider";
-import { User, Check } from "lucide-react";
+import { User, Check, AlertCircle } from "lucide-react";
+import { looksLikeEmail } from "@/lib/settings/email-format";
 import {
   getCgpConfig,
   saveCgpConfig,
@@ -26,6 +27,8 @@ interface SetupWizardProps {
 export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
   const { displayName } = useAppBranding();
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [cgpConfig, setCgpConfig] = useState<CgpConfig>({
     nom: "",
     prenom: "",
@@ -46,14 +49,21 @@ export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
         }
       } catch (error) {
         console.error("Error loading wizard data:", error);
+        setLoadError(
+          "Impossible de relire les informations déjà enregistrées. Vous pouvez les saisir ci-dessous."
+        );
       }
     };
 
     void loadData();
   }, []);
 
+  const emailValue = cgpConfig.email?.trim() ?? "";
+  const emailLooksWrong = emailValue !== "" && !looksLikeEmail(emailValue);
+
   const handleFinish = async () => {
     setLoading(true);
+    setSaveError("");
     try {
       await saveCgpConfig({
         ...cgpConfig,
@@ -63,6 +73,9 @@ export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
       onWizardComplete();
     } catch (error) {
       console.error("Error completing wizard:", error);
+      setSaveError(
+        "L'enregistrement n'a pas abouti. Vos informations sont toujours affichées : réessayez avec « Terminer ». Si le problème continue, redémarrez le CRM."
+      );
     } finally {
       setLoading(false);
     }
@@ -91,6 +104,11 @@ export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {loadError ? (
+            <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              {loadError}
+            </p>
+          ) : null}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="prenom">Prénom</Label>
@@ -131,7 +149,14 @@ export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
                 value={cgpConfig.email || ""}
                 onChange={(e) => setCgpConfig({ ...cgpConfig, email: e.target.value })}
                 placeholder="contact@cabinet.fr"
+                aria-describedby={emailLooksWrong ? "email-format-warning" : undefined}
               />
+              {emailLooksWrong ? (
+                <p id="email-format-warning" className="text-xs text-muted-foreground">
+                  Cette adresse semble incomplète (ex. contact@cabinet.fr). Vous pouvez tout de
+                  même continuer et la corriger plus tard.
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="telephone">Téléphone</Label>
@@ -143,6 +168,15 @@ export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
               />
             </div>
           </div>
+          {saveError ? (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+            >
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" aria-hidden />
+              <p>{saveError}</p>
+            </div>
+          ) : null}
         </CardContent>
         <CardFooter className="flex justify-end">
           <Button onClick={() => void handleFinish()} disabled={loading} className="gap-2">

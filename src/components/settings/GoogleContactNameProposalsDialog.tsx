@@ -17,6 +17,7 @@ import {
 } from "@/lib/api/tauri-google-contacts";
 import { notifyContactsChanged } from "@/lib/contacts/contact-events";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type GoogleContactNameProposalsDialogProps = {
   open: boolean;
@@ -49,7 +50,7 @@ export function GoogleContactNameProposalsDialog({
         toast.info("Aucune proposition nom/prénom à valider.");
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Analyse Google Contacts impossible.");
+      toast.error(userErrorMessage(e, "Analyse Google Contacts impossible."));
     } finally {
       setLoading(false);
     }
@@ -73,7 +74,7 @@ export function GoogleContactNameProposalsDialog({
       await dismissGoogleContactNameProposal(contactId);
       dismissProposal(contactId);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Impossible d'enregistrer l'ignoré.");
+      toast.error(userErrorMessage(e, "Impossible d'ignorer cette proposition."));
     }
   };
 
@@ -86,7 +87,7 @@ export function GoogleContactNameProposalsDialog({
       dismissProposal(proposal.contactId);
       toast.success(googleContactSyncToastMessage(result));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Association impossible.");
+      toast.error(userErrorMessage(e, "Association impossible."));
     } finally {
       setApplyingKey(null);
     }

@@ -32,6 +32,7 @@ import {
 import { toast } from "sonner";
 import { DashboardPanel } from "./dashboard-ui";
 import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface TachesPreviewProps {
   onNavigate?: (page: string) => void;
@@ -82,7 +83,7 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
       toast.success("Échéance reportée");
       await load();
     } catch (error) {
-      toast.error(`Erreur : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible de reporter la tâche"));
     }
   };
 

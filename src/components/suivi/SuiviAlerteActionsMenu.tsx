@@ -102,7 +102,7 @@ export function SuiviAlerteActionsMenu({
         />
         <MenuItem
           icon={Clock}
-          label="Snooze 1 semaine"
+          label="Masquer 1 semaine"
           hint="sans modifier les dates contact"
           onClick={() => run(() => onSnooze(7))}
         />

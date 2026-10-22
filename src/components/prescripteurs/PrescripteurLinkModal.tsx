@@ -20,6 +20,16 @@ import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import { contactMatchesSearch } from "@/lib/search-utils";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface PrescripteurLinkModalProps {
   open: boolean;
@@ -38,6 +48,10 @@ export function PrescripteurLinkModal({
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [linkingId, setLinkingId] = useState<number | null>(null);
   const [linkedThisSession, setLinkedThisSession] = useState(0);
+  const [replaceTarget, setReplaceTarget] = useState<{
+    contact: Contact;
+    otherName: string;
+  } | null>(null);
 
   const loadContacts = async () => {
     const all = await getAllContacts();
@@ -71,16 +85,16 @@ export function PrescripteurLinkModal({
       const otherName = other
         ? `${other.prenom} ${other.nom}`.trim()
         : "un autre prescripteur";
-      if (
-        !confirm(
-          `${contact.prenom} ${contact.nom} est déjà lié à ${otherName}.\n\nRemplacer par ${prescripteur.prenom} ${prescripteur.nom} ?`
-        )
-      ) {
-        return;
-      }
+      setReplaceTarget({ contact, otherName });
+      return;
     }
 
+    await linkContact(contact);
+  };
+
+  const linkContact = async (contact: Contact) => {
     setLinkingId(contact.id);
+
     try {
       const updated = await updateContact(
         contact.id,
@@ -105,6 +119,7 @@ export function PrescripteurLinkModal({
   const prescripteurLabel = `${prescripteur.prenom} ${prescripteur.nom}`.trim();
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
         <DialogHeader>
@@ -217,5 +232,39 @@ export function PrescripteurLinkModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog
+      open={replaceTarget != null}
+      onOpenChange={(next) => {
+        if (!next) setReplaceTarget(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Changer de prescripteur ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            <strong>
+              {replaceTarget?.contact.prenom} {replaceTarget?.contact.nom}
+            </strong>{" "}
+            est déjà recommandé par {replaceTarget?.otherName}. Le remplacer par{" "}
+            <strong>{prescripteurLabel}</strong> ?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Annuler</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              const target = replaceTarget;
+              setReplaceTarget(null);
+              if (target) void linkContact(target.contact);
+            }}
+          >
+            Remplacer
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
+

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { saveComptaConfig, type ComptaConfig } from "@/lib/api/tauri-compta";
 import { comptaDriveFolderName } from "@/lib/compta/compta-month";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface ComptaConfigPanelProps {
   config: ComptaConfig;
@@ -43,7 +44,7 @@ export function ComptaConfigPanel({
       onSaved(draft);
       toast.success("Configuration comptabilité enregistrée");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur enregistrement");
+      toast.error(userErrorMessage(e, "Impossible d'enregistrer la configuration"));
     } finally {
       setSaving(false);
     }

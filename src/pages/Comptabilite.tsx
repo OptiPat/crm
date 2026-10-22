@@ -7,9 +7,8 @@ import {
   Cloud,
   FileDown,
   FileSpreadsheet,
+  CircleCheck,
   Loader2,
-  Lock,
-  Unlock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +38,7 @@ import { computeComptaAnnualSummary } from "@/lib/compta/compta-bilan";
 import { isComptaDriveConfigured } from "@/lib/compta/compta-month-reminder";
 import { formatComptaMonthLabel, shiftComptaMonth } from "@/lib/compta/compta-month";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function Comptabilite() {
   const canExport = useCanExport();
@@ -131,7 +131,7 @@ export function Comptabilite() {
       });
       toast.success("PDF exporté");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur export PDF");
+      toast.error(userErrorMessage(e, "Impossible d'exporter le PDF"));
     } finally {
       setExportBusy(false);
     }
@@ -143,7 +143,7 @@ export function Comptabilite() {
       exportComptaJournalCsv({ year, month, depenses, encaissements, deplacements });
       toast.success("CSV exporté");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Export non autorisé");
+      toast.error(userErrorMessage(e, "Export impossible"));
     }
   };
 
@@ -153,9 +153,9 @@ export function Comptabilite() {
       const next = !monthClosed;
       await setComptaMonthClosed(year, month, next);
       setMonthClosed(next);
-      toast.success(next ? "Mois marqué comme clôturé" : "Mois rouvert");
+      toast.success(next ? "Mois marqué comme terminé" : "Mois remis en cours");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur");
+      toast.error(userErrorMessage(e, "Impossible de modifier la clôture du mois"));
     } finally {
       setClosingBusy(false);
     }
@@ -174,20 +174,33 @@ export function Comptabilite() {
     <div className="space-y-6 p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Comptabilité</h1>
           <p className="text-sm text-muted-foreground">
             Journal mensuel — dépenses, encaissements et déplacements
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center rounded-md border bg-background">
-            <Button type="button" variant="ghost" size="icon" onClick={() => shiftMonth(-1)}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Mois précédent"
+              title="Mois précédent"
+              onClick={() => shiftMonth(-1)}
+            >
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="min-w-[140px] px-1 text-center font-medium capitalize">
               {monthLabel}
             </span>
-            <Button type="button" variant="ghost" size="icon" onClick={() => shiftMonth(1)}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Mois suivant"
+              title="Mois suivant"
+              onClick={() => shiftMonth(1)}
+            >
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -207,7 +220,7 @@ export function Comptabilite() {
                 <ChevronDown className="ml-1 h-4 w-4" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-52 p-1">
+            <PopoverContent align="end" className="w-56 p-1">
               <Button
                 type="button"
                 variant="ghost"
@@ -218,7 +231,7 @@ export function Comptabilite() {
                 }}
               >
                 <Cloud className="mr-2 h-4 w-4" />
-                Sync Drive
+                Synchroniser Drive
               </Button>
               {config ? (
                 <Button
@@ -231,7 +244,7 @@ export function Comptabilite() {
                   }}
                 >
                   <CalendarSync className="mr-2 h-4 w-4" />
-                  Sync Agenda
+                  Synchroniser l&apos;agenda
                 </Button>
               ) : null}
             </PopoverContent>
@@ -270,19 +283,18 @@ export function Comptabilite() {
               variant={monthClosed ? "secondary" : "outline"}
               size="sm"
               disabled={closingBusy || loading}
+              aria-pressed={monthClosed}
               title={
                 monthClosed
-                  ? "Rouvrir le mois pour le marquer comme en cours"
-                  : "Marquer le mois comme terminé (sync Drive faite)"
+                  ? "Mois marqué terminé (simple repère, les saisies restent modifiables). Cliquer pour le remettre en cours."
+                  : "Repère personnel : indique que le mois est fini (Drive synchronisé). Rien n'est verrouillé, vous pourrez toujours modifier."
               }
               onClick={() => void toggleMonthClosed()}
             >
-              {monthClosed ? (
-                <Lock className="mr-2 h-4 w-4" />
-              ) : (
-                <Unlock className="mr-2 h-4 w-4" />
-              )}
-              {monthClosed ? "Clôturé" : "Clôturer"}
+              <CircleCheck
+                className={monthClosed ? "mr-2 h-4 w-4 text-emerald-600" : "mr-2 h-4 w-4"}
+              />
+              {monthClosed ? "Terminé" : "Marquer terminé"}
             </Button>
           ) : null}
         </div>

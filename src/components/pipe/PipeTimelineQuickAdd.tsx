@@ -23,6 +23,7 @@ import {
   type PipeTimelineUserType,
 } from "@/lib/pipe/pipe-timeline-types";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type PipeTimelineQuickAddType = (typeof PIPE_TIMELINE_QUICK_ADD_TYPES)[number];
 
@@ -120,7 +121,7 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
       cancelAdd();
       onAdded?.();
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'ajouter l'entrée"));
     } finally {
       setSaving(false);
     }
@@ -149,7 +150,7 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
       cancelAdd();
       onAdded?.();
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer le RDV"));
     } finally {
       setSaving(false);
     }

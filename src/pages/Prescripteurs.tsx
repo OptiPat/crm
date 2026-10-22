@@ -65,6 +65,7 @@ import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type PrescripteursProps = {
   onNavigate?: (page: string) => void;
@@ -83,6 +84,7 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
     Record<number, Investissement[]>
   >({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [expandedPrescripteurs, setExpandedPrescripteurs] = useState<Set<number>>(new Set());
   const [expandedInvestissements, setExpandedInvestissements] = useState<Set<number>>(
     new Set()
@@ -130,8 +132,10 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
         if (prev == null) return prev;
         return dataContacts.some((c) => c.id === prev) ? prev : null;
       });
+      setLoadError(false);
     } catch (error) {
       console.error("Erreur chargement données:", error);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -456,7 +460,7 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
           <p className="text-muted-foreground mt-1 text-sm max-w-xl">
             Réseaux de recommandations —{" "}
             <span className="tabular-nums text-foreground/80">
-              {filteredPrescripteurs.length} racine
+              {filteredPrescripteurs.length} prescripteur
               {filteredPrescripteurs.length !== 1 ? "s" : ""}
             </span>
             {prefs.searchQuery.trim() ? " (recherche active)" : ""}
@@ -498,7 +502,7 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
                   assertCanExport(canExport);
                   downloadPrescripteurNetworkCsv(expandedTree, foyersInfo);
                 } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "Export non autorisé");
+                  toast.error(userErrorMessage(e, "Export impossible"));
                 }
               }
             : undefined
@@ -517,21 +521,42 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
         </CardHeader>
 
         <CardContent className="pt-0 space-y-3">
-          {filteredPrescripteurs.length === 0 ? (
+          {loadError && contacts.length === 0 ? (
+            <div className="py-14 text-center space-y-3 rounded-xl border border-dashed border-border/80">
+              <p className="text-sm text-destructive">Impossible de charger les prescripteurs.</p>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setLoading(true);
+                  void loadData();
+                }}
+              >
+                Réessayer
+              </Button>
+            </div>
+          ) : filteredPrescripteurs.length === 0 ? (
             <div className="py-14 text-center rounded-xl border border-dashed border-border/80 bg-muted/15">
               <p className="font-medium text-foreground/90">Aucun prescripteur</p>
               <p className="text-sm text-muted-foreground mt-1 mb-4 max-w-sm mx-auto">
-                {prefs.searchQuery.trim()
-                  ? "Aucune racine ne correspond à cette recherche."
+                {prefs.searchQuery.trim() || prefs.statFilter
+                  ? "Aucun prescripteur ne correspond à cette recherche."
                   : "Créez un prescripteur ou assignez-en un depuis la fiche d'un client."}
               </p>
-              {!prefs.searchQuery.trim() && (
+              {prefs.searchQuery.trim() || prefs.statFilter ? (
+                <Button
+                  variant="outline"
+                  onClick={() => updatePrefs({ searchQuery: "", statFilter: null })}
+                >
+                  Effacer la recherche et les filtres
+                </Button>
+              ) : (
                 <Button className="gap-2" onClick={() => setShowPrescripteurForm(true)}>
                   <Plus className="h-4 w-4" />
                   Nouveau prescripteur
                 </Button>
               )}
             </div>
+
           ) : (
             filteredPrescripteurs.map((prescripteur) => {
               const isExpanded = expandedPrescripteurId === prescripteur.contact.id;
@@ -667,8 +692,11 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
                       if (clientsOrphelins.length > 0) {
                         return (
                           <p>
-                            Attention : {clientsOrphelins.length} client(s) recommandé(s)
-                            perdront leur lien prescripteur.
+                            Attention : {clientsOrphelins.length}{" "}
+                            {clientsOrphelins.length > 1 ?
+                              "clients recommandés perdront"
+                            : "client recommandé perdra"}{" "}
+                            leur lien prescripteur.
                           </p>
                         );
                       }

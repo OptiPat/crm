@@ -41,8 +41,9 @@ export function EtiquetteBatchSendBanner() {
             variant="outline"
             size="sm"
             onClick={() => abortEtiquetteBatchSend()}
+            title="Les emails déjà partis le restent ; les suivants ne sont pas envoyés."
           >
-            Annuler
+            Arrêter l&apos;envoi
           </Button>
         </div>
       </div>

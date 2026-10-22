@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 import { ChevronRight } from "lucide-react";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function EtiquettePipelineBoard({
   etiquetteId,
@@ -66,7 +67,7 @@ export function EtiquettePipelineBoard({
       await setContactPipelineStatus(contact.contact_etiquette_id, next);
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur");
+      toast.error(userErrorMessage(e, "Impossible de faire avancer le contact"));
     }
   };
 

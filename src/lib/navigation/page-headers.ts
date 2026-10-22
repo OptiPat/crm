@@ -40,9 +40,17 @@ const PAGE_HEADERS: Record<string, PageHeaderMeta> = {
     title: "Partenaires",
     subtitle: "Produits et encours partenaires",
   },
+  organisation: {
+    title: "Organisation",
+    subtitle: "Réseau filleuls et parrains",
+  },
   investissements: {
     title: "Investissements",
     subtitle: "Encours et souscriptions",
+  },
+  "veille-fonds": {
+    title: "Veille fonds",
+    subtitle: "Classement par score court terme (1 sem, 1 mois, 3 mois, YTD)",
   },
   interactions: {
     title: "Historique des échanges",

@@ -31,6 +31,8 @@ export interface NewsletterComposerDraft {
   composerEditionId: number | null;
   /** Modifié à la main depuis la préparation (ou le dernier enregistrement sur l'édition). */
   composerDirty: boolean;
+  /** Texte retouché à la main depuis la dernière génération IA (absent des anciens brouillons). */
+  editedSinceGeneration?: boolean;
   savedAt: number;
 }
 
@@ -78,6 +80,8 @@ export function loadNewsletterComposerDraft(): NewsletterComposerDraft | null {
       composerEditionId:
         typeof parsed.composerEditionId === "number" ? parsed.composerEditionId : null,
       composerDirty: parsed.composerDirty === true,
+      editedSinceGeneration:
+        typeof parsed.editedSinceGeneration === "boolean" ? parsed.editedSinceGeneration : undefined,
       savedAt: parsed.savedAt,
     };
   } catch {

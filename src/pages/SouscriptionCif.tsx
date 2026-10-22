@@ -74,6 +74,16 @@ import {
 import { requestOpenParametres } from "@/lib/navigation/app-navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -119,6 +129,7 @@ export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProp
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [contactsLoadError, setContactsLoadError] = useState(false);
   const [cgp, setCgp] = useState<CgpConfig | null>(null);
   const [selectedContactId, setSelectedContactId] = useState<number | undefined>(
     () => initialDraft?.selectedContactId
@@ -230,8 +241,10 @@ export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProp
   const loadContacts = useCallback(async () => {
     try {
       setContacts(await getAllContacts());
+      setContactsLoadError(false);
     } catch (error) {
       console.error("Erreur chargement contacts (souscription CIF):", error);
+      setContactsLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -452,19 +465,48 @@ export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProp
 
   const clientPdfName = variables.client_nom_prenom?.trim() || "Client";
 
+  /** Téléchargement en attente de confirmation (champs à compléter). */
+  const [pendingPrint, setPendingPrint] = useState<{
+    documentIds: readonly SouscriptionCifDocumentId[];
+    missingLabels: string[];
+  } | null>(null);
+
+  const runPrint = useCallback(
+    (documentIds: readonly SouscriptionCifDocumentId[]) => {
+      void printDocuments(
+        buildCifPrintBundle(cifPreviews, DOCUMENT_LABELS, documentIds),
+        clientPdfName
+      );
+    },
+    [cifPreviews, clientPdfName, printDocuments]
+  );
+
+  /** Avertit (sans bloquer) si des champs restent à compléter avant l'export. */
+  const requestPrint = useCallback(
+    (documentIds: readonly SouscriptionCifDocumentId[]) => {
+      const missingLabels = [
+        ...new Set(
+          documentIds.flatMap((id) =>
+            cifPreviews[id].missingKeys.map((k) => SOUSCRIPTION_VARIABLE_LABELS[k] ?? k)
+          )
+        ),
+      ];
+      if (missingLabels.length > 0) {
+        setPendingPrint({ documentIds, missingLabels });
+        return;
+      }
+      runPrint(documentIds);
+    },
+    [cifPreviews, runPrint]
+  );
+
   const printAllDocuments = useCallback(() => {
-    void printDocuments(
-      buildCifPrintBundle(cifPreviews, DOCUMENT_LABELS, getCifPrintDocumentOrder(productType)),
-      clientPdfName
-    );
-  }, [cifPreviews, clientPdfName, printDocuments, productType]);
+    requestPrint(getCifPrintDocumentOrder(productType));
+  }, [productType, requestPrint]);
 
   const printActiveDocument = useCallback(() => {
-    void printDocuments(
-      buildCifPrintBundle(cifPreviews, DOCUMENT_LABELS, [activeDocument]),
-      clientPdfName
-    );
-  }, [activeDocument, cifPreviews, clientPdfName, printDocuments]);
+    requestPrint([activeDocument]);
+  }, [activeDocument, requestPrint]);
 
   const preview =
     activeDocument === "convention-rto"
@@ -587,6 +629,21 @@ export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProp
         <CardContent>
           {loading ? (
             <p className="text-sm text-muted-foreground">Chargement des contacts…</p>
+          ) : contactsLoadError && contacts.length === 0 ? (
+            <div className="space-y-3">
+              <p className="text-sm text-destructive">Impossible de charger les clients.</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setLoading(true);
+                  void loadContacts();
+                }}
+              >
+                Réessayer
+              </Button>
+            </div>
           ) : (
             <ContactPersonSearch
               label="Client"
@@ -752,6 +809,51 @@ export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProp
           </div>
         </div>
       )}
+
+      <AlertDialog
+        open={pendingPrint != null}
+        onOpenChange={(open) => {
+          if (!open) setPendingPrint(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingPrint?.missingLabels.length === 1
+                ? "1 champ à compléter"
+                : `${pendingPrint?.missingLabels.length ?? 0} champs à compléter`}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Ces informations apparaîtront entre crochets dans le PDF si vous téléchargez
+                  maintenant :
+                </p>
+                <ul className="max-h-48 list-disc space-y-0.5 overflow-y-auto pl-5 text-foreground">
+                  {pendingPrint?.missingLabels.map((label) => (
+                    <li key={label}>{label}</li>
+                  ))}
+                </ul>
+                <p>
+                  Pour compléter, cliquez sur une zone surlignée en orange dans l&apos;aperçu.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Compléter</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const ids = pendingPrint?.documentIds;
+                setPendingPrint(null);
+                if (ids) runPrint(ids);
+              }}
+            >
+              Télécharger quand même
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {contactDetailSheet}
     </div>

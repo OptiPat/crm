@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -218,7 +220,7 @@ export function FoyerGroupingModal({
       onOpenChange(false);
     } catch (error) {
       console.error("Erreur création foyers:", error);
-      alert("Erreur lors de la création des foyers: " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de créer les foyers."));
     } finally {
       setLoading(false);
     }

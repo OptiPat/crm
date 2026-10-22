@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import type { IdentityPreviewValues } from "@/components/documents/IdentityExtractPreviewDialog";
 import { getContactById } from "@/lib/api/tauri-contacts";
 import {
@@ -251,7 +252,7 @@ export function useIdentityDocumentImport(options: {
         return true;
       } catch (error) {
         console.error("Erreur application identité:", error);
-        alert("Erreur lors de la mise à jour: " + String(error));
+        toast.error(userErrorMessage(error, "Impossible de mettre à jour le contact"));
         return false;
       } finally {
         setLoading(false);

@@ -23,7 +23,7 @@ export function ParametresEmailHistoriqueSection() {
         <div>
           <p className="text-sm font-medium">Sync auto à l'ouverture de Relation client</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Une passe incrémentale à l'ouverture de Relation client. Utilisez « Sync Gmail » sur la
+            Une passe incrémentale à l'ouverture de Relation client. Utilisez « Sync boîte mail » sur la
             fiche pour l'import complet (5 ans), repris automatiquement par lots jusqu'à la fin.
           </p>
         </div>

@@ -6,6 +6,7 @@ import {
   type InvestissementPortfolioSort,
 } from "@/lib/investissements/investissements-portfolio-utils";
 import { INVESTISSEMENT_TYPE_FILTER_OPTIONS } from "@/components/investissements/InvestissementMultiFilterSelect";
+import { INVESTISSEMENTS_PAGE_DEFAULTS } from "@/lib/investissements/investissements-page-preferences";
 
 export type InvestissementActiveFilterId =
   | "sans_vp"
@@ -94,13 +95,13 @@ export function buildInvestissementActiveFilterChips(input: {
       label: `Partenaires (${input.partenaireFilters.length})`,
     });
   }
-  if (input.sortKey !== "date_desc") {
+  if (input.sortKey !== INVESTISSEMENTS_PAGE_DEFAULTS.sortKey) {
     chips.push({
       id: "sort",
       label: `Tri : ${INVESTISSEMENT_PORTFOLIO_SORT_LABELS[input.sortKey]}`,
     });
   }
-  if (input.groupMode !== "category") {
+  if (input.groupMode !== INVESTISSEMENTS_PAGE_DEFAULTS.groupMode) {
     chips.push({
       id: "group",
       label: `Regroupement : ${INVESTISSEMENT_PORTFOLIO_GROUP_LABELS[input.groupMode]}`,

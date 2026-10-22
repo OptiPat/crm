@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -41,12 +41,18 @@ import {
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 import { TeamLockBanner } from "@/components/team/TeamLockBanner";
 import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
+import { useUnsavedCloseGuard } from "@/hooks/useUnsavedCloseGuard";
+import { PipeContactSelect } from "@/components/pipe/PipeContactSelect";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface InteractionFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   interaction?: InteractionWithContact | null;
+  /** Contact imposé à la création (fiche contact, filtre par contact) : non modifiable. */
   defaultContactId?: number;
+  /** Contact proposé à la création mais modifiable (ex. échange sélectionné dans le journal). */
+  initialContactId?: number;
   onSuccess?: () => void;
   nestedSheet?: boolean;
 }
@@ -76,6 +82,7 @@ export function InteractionForm({
   onOpenChange,
   interaction,
   defaultContactId,
+  initialContactId,
   onSuccess,
   nestedSheet = false,
 }: InteractionFormProps) {
@@ -89,6 +96,15 @@ export function InteractionForm({
     entityType: "interaction",
     entityId: interaction?.id,
   });
+  const closeGuard = useUnsavedCloseGuard({
+    open,
+    onClose: () => onOpenChange(false),
+    stacked: nestedSheet,
+  });
+  const [contactError, setContactError] = useState(false);
+  // Lu seulement à l'ouverture : changer la sélection du journal ne doit pas vider la saisie.
+  const initialContactIdRef = useRef(initialContactId);
+  initialContactIdRef.current = initialContactId;
 
   useEffect(() => {
     if (!open) return;
@@ -114,24 +130,17 @@ export function InteractionForm({
         date_interaction: toLocalDatetimeInput(interaction.date_interaction),
       });
     } else {
-      setFormData(emptyForm(defaultContactId));
+      setFormData(emptyForm(defaultContactId ?? initialContactIdRef.current));
     }
+    setContactError(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- (ré)initialise sur ouverture / changement d'id, pas pendant la saisie
   }, [open, interaction?.id, defaultContactId]);
-
-  useEffect(() => {
-    if (!open || interaction || defaultContactId) return;
-    if (formData.contact_id === 0 && contacts[0]?.id) {
-      setFormData((prev) => ({ ...prev, contact_id: contacts[0].id! }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- dépend de contacts.length, pas de l'identité du tableau contacts
-  }, [open, interaction, defaultContactId, contacts.length, formData.contact_id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!teamLock.ready) return;
     if (!formData.contact_id) {
-      alert("Sélectionnez un contact");
+      setContactError(true);
       return;
     }
     setLoading(true);
@@ -158,17 +167,19 @@ export function InteractionForm({
         skipTimelineReload: true,
       });
       onSuccess?.();
+      closeGuard.resetDirty();
       onOpenChange(false);
     } catch (error) {
       console.error(error);
-      toast.error(`Erreur : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible d'enregistrer l'interaction"));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
+    <>
+    <Dialog open={open} onOpenChange={closeGuard.handleOpenChange} modal={!nestedSheet}>
       <DialogContent
         hideOverlay={nestedSheet}
         className={nestedStackedDialogClass(
@@ -197,27 +208,22 @@ export function InteractionForm({
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
           onWheel={nestedSheet ? stopWheelPropagation : undefined}
         >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label>Contact *</Label>
-            <Select
-              value={formData.contact_id ? String(formData.contact_id) : ""}
-              onValueChange={(v) =>
-                setFormData({ ...formData, contact_id: Number(v) })
-              }
+        <form onSubmit={handleSubmit} className="space-y-4" {...closeGuard.trackDirtyProps}>
+          <div className="space-y-1">
+            <PipeContactSelect
+              contacts={contacts}
+              value={formData.contact_id}
+              onChange={(contactId) => {
+                setFormData((prev) => ({ ...prev, contact_id: contactId }));
+                setContactError(false);
+              }}
               disabled={!!defaultContactId && !interaction}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Choisir un contact" />
-              </SelectTrigger>
-              <SelectContent>
-                {contacts.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.prenom} {c.nom}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder="Choisir un contact…"
+              showCreateButton={false}
+            />
+            {contactError && (
+              <p className="text-xs text-destructive">Choisissez un contact</p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -271,8 +277,8 @@ export function InteractionForm({
             />
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter data-no-dirty>
+            <Button type="button" variant="outline" onClick={closeGuard.requestClose}>
               Annuler
             </Button>
             <Button
@@ -287,5 +293,7 @@ export function InteractionForm({
         </PortalLayerProvider>
       </DialogContent>
     </Dialog>
+    {closeGuard.discardDialog}
+    </>
   );
 }

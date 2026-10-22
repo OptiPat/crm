@@ -7,6 +7,17 @@ import { getTachesByContact, deleteTache, type Tache } from "@/lib/api/tauri-tac
 import { subscribeTachesChanged } from "@/lib/taches/tache-events";
 import { useArbitrageTacheDone } from "@/hooks/useArbitrageTacheDone";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface ContactTachesPanelProps {
   contactId: number;
@@ -23,6 +34,7 @@ export function ContactTachesPanel({
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Tache | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Tache | null>(null);
 
   useEffect(() => {
     onNestedFormOpenChange?.(formOpen);
@@ -49,12 +61,20 @@ export function ContactTachesPanel({
     void tryComplete(tache);
   };
 
-  const handleDelete = async (tache: Tache) => {
-    if (!window.confirm(`Supprimer la tâche « ${tache.titre} » ?`)) return;
+  const handleDelete = (tache: Tache) => {
+    setDeleteTarget(tache);
+  };
+
+  const confirmDelete = async () => {
+    const tache = deleteTarget;
+    setDeleteTarget(null);
+    if (!tache) return;
     try {
       await deleteTache(tache.id);
+      toast.success("Tâche supprimée");
     } catch (error) {
-      toast.error(`Erreur : ${String(error)}`);
+      console.error("Erreur suppression tâche:", error);
+      toast.error(userErrorMessage(error, "Impossible de supprimer la tâche."));
     }
   };
 
@@ -99,7 +119,7 @@ export function ContactTachesPanel({
                 setEditing(x as Tache);
                 setFormOpen(true);
               }}
-              onDelete={(x) => void handleDelete(x as Tache)}
+              onDelete={(x) => handleDelete(x as Tache)}
             />
           ))}
           {faites.length > 0 && (
@@ -116,7 +136,7 @@ export function ContactTachesPanel({
                     setEditing(x as Tache);
                     setFormOpen(true);
                   }}
-                  onDelete={(x) => void handleDelete(x as Tache)}
+                  onDelete={(x) => handleDelete(x as Tache)}
                 />
               ))}
             </>
@@ -125,6 +145,33 @@ export function ContactTachesPanel({
       )}
 
       {arbitrageDialog}
+
+      <AlertDialog
+        open={deleteTarget != null}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent stacked={nestedSheet}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer cette tâche ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              La tâche <strong>« {deleteTarget?.titre?.trim() || "sans titre"} »</strong> sera
+              définitivement supprimée.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => void confirmDelete()}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
 
       <TacheForm
         open={formOpen}

@@ -35,6 +35,7 @@ import {
   placementOperationDisplayStatusLabel,
 } from "@/lib/placement/placement-operations-ui";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function PlacementOperationsPanel({
   onOpenContact,
@@ -93,7 +94,7 @@ export function PlacementOperationsPanel({
       await notifyPlacementConformeClientsAfterScan(result.new_conforme_ids);
       await reload();
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible d'analyser les opérations"));
     } finally {
       setScanning(false);
     }
@@ -108,7 +109,7 @@ export function PlacementOperationsPanel({
       await notifyPlacementConformeClientAfterManualMark(operation);
       await reload();
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible de marquer l'opération conforme"));
     } finally {
       setUpdatingId(null);
     }
@@ -121,7 +122,7 @@ export function PlacementOperationsPanel({
       notifyPlacementOperationsChanged();
       await reload();
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible de renvoyer l'email au client"));
     } finally {
       setResendingId(null);
     }
@@ -135,7 +136,7 @@ export function PlacementOperationsPanel({
       toast.success("Opération retirée du tableau");
       await reload();
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible de masquer l'opération"));
     } finally {
       setDismissingId(null);
     }

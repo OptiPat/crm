@@ -24,6 +24,7 @@ import {
   type SuiviQuickAddType,
 } from "@/lib/pipe/pipe-suivi";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const TYPE_ICONS: Record<SuiviQuickAddType, typeof Phone> = {
   APPEL: Phone,
@@ -90,7 +91,7 @@ export function PipeSuiviQuickAdd({
       cancelAdd();
       onAdded?.();
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'ajouter l'entrée"));
     } finally {
       setSaving(false);
     }
@@ -112,7 +113,7 @@ export function PipeSuiviQuickAdd({
       cancelAdd();
       onAdded?.();
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer le RDV"));
     } finally {
       setSaving(false);
     }

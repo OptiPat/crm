@@ -19,7 +19,7 @@ export function ScpiTrimestreGuideDialog({
         <DialogHeader>
           <DialogTitle>Guide bulletins SCPI trimestriels</DialogTitle>
           <DialogDescription>
-            Parcours T1–T4 : PDF → OCR Mistral → prepare CRM → envoi Gmail → Journal.
+            Parcours T1–T4 : PDF → lecture automatique → préparation dans le CRM → envoi par email → Journal.
           </DialogDescription>
         </DialogHeader>
         <ol className="space-y-3 text-sm text-muted-foreground list-decimal pl-4">
@@ -31,7 +31,7 @@ export function ScpiTrimestreGuideDialog({
           </li>
           <li>
             <strong className="text-foreground font-normal">OCR + résumé</strong> — Mistral lit
-            chaque PDF et produit un digest client. Clé API : Newsletter → Paramètres.
+            chaque PDF et produit un digest client. Clé API : Newsletter → Réglages newsletter.
           </li>
           <li>
             <strong className="text-foreground font-normal">Prepare CRM</strong> — remplit Suivi →

@@ -1,6 +1,19 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, type RefObject } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  STACKED_NESTED_ALERT_CONTENT_Z,
+  STACKED_NESTED_ALERT_OVERLAY_Z,
+} from "@/lib/ui/stacked-sheet-layers";
 import {
   Bold,
   ImageIcon,
@@ -37,6 +50,7 @@ import {
   NOTE_TEXT_COLORS,
 } from "@/lib/notes/note-editor-colors";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const FONT_SIZE_OPTIONS = [
   { value: 13, label: "13" },
@@ -102,6 +116,10 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
   useImperativeHandle(forwardedRef, () => editorRef.current as HTMLDivElement);
   const lastEmitted = useRef(value);
   const savedSelectionRef = useRef<Range | null>(null);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("https://");
+  /** Sélection figée à l'ouverture du dialogue de lien (le focus part dans le champ URL). */
+  const linkSelectionRef = useRef<Range | null>(null);
 
   const captureSelection = useCallback(() => {
     const el = editorRef.current;
@@ -136,12 +154,14 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
     const el = editorRef.current;
     if (!el) return;
     if (el.contains(document.activeElement)) return;
+    // Fenêtre « Insérer un lien » ouverte : réécrire le contenu détacherait la sélection mémorisée.
+    if (linkDialogOpen) return;
     const next = value || "";
     if (el.innerHTML !== next) {
       el.innerHTML = next;
     }
     lastEmitted.current = next;
-  }, [value]);
+  }, [value, linkDialogOpen]);
 
   useEffect(() => {
     syncFromValue();
@@ -198,13 +218,22 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
   };
 
   const insertLink = () => {
-    const url = window.prompt("URL du lien (https://…)", "https://");
-    if (!url?.trim()) return;
-    const normalized = normalizeNoteHref(url.trim());
+    captureSelection();
+    linkSelectionRef.current = savedSelectionRef.current?.cloneRange() ?? null;
+    setLinkUrl("https://");
+    setLinkDialogOpen(true);
+  };
+
+  const submitLink = () => {
+    const url = linkUrl.trim();
+    if (!url) return;
+    const normalized = normalizeNoteHref(url);
     if (!normalized) {
       toast.error("URL invalide. Utilisez https://… ou www.…");
       return;
     }
+    setLinkDialogOpen(false);
+    savedSelectionRef.current = linkSelectionRef.current;
     exec("createLink", normalized);
   };
 
@@ -228,7 +257,7 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
         captureSelection();
         emitChange(false, true);
       } else {
-        window.alert("Sélectionnez du texte avant de choisir une taille.");
+        toast.info("Sélectionnez du texte avant de choisir une taille.");
       }
     });
   };
@@ -242,7 +271,7 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
         captureSelection();
         emitChange(false, true);
       } else {
-        window.alert("Sélectionnez du texte avec une taille personnalisée.");
+        toast.info("Sélectionnez du texte avec une taille personnalisée.");
       }
     });
   };
@@ -270,7 +299,7 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
       captureSelection();
       emitChange(false, true);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Import image impossible.");
+      toast.error(userErrorMessage(error, "Import de l'image impossible."));
     }
   };
 
@@ -376,6 +405,7 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
           size="icon"
           className="h-8 w-8"
           title="Lien"
+          onMouseDown={preventToolbarFocusSteal}
           onClick={insertLink}
         >
           <Link2 className="h-4 w-4" />
@@ -505,6 +535,50 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
           {"{{prenom}}"} etc. : insérez-les via les badges ci-dessus.
         </p>
       : null}
+      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+        <DialogContent
+          className={cn("max-w-md", STACKED_NESTED_ALERT_CONTENT_Z)}
+          overlayClassName={STACKED_NESTED_ALERT_OVERLAY_Z}
+          onCloseAutoFocus={(e) => {
+            // Ne pas rendre le focus au bouton de la barre d'outils : l'éditeur le reprend.
+            e.preventDefault();
+          }}
+        >
+          <form
+            className="grid gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              // Le dialogue est rendu dans un portail : l'événement remonterait sinon
+              // jusqu'à un éventuel <form> parent (ex. formulaire de modèle).
+              e.stopPropagation();
+              submitLink();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Insérer un lien</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-2">
+              <Label htmlFor="rich-editor-link-url">Adresse du lien</Label>
+              <Input
+                id="rich-editor-link-url"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://…"
+                maxLength={2048}
+                autoFocus
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setLinkDialogOpen(false)}>
+                Annuler
+              </Button>
+              <Button type="submit" disabled={!linkUrl.trim()}>
+                Insérer
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
   }

@@ -17,6 +17,7 @@ import {
   saveAutoLockMinutes,
   type AppRuntimePrefs,
 } from "@/lib/api/tauri-app-runtime";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 function formatDelay(minutes: number): string {
   return minutes === 0 ? "Désactivé" : `${minutes} minutes`;
@@ -35,7 +36,7 @@ export function AutoLockSettings() {
     window.addEventListener(APP_RUNTIME_PREFS_CHANGED_EVENT, handlePrefsChanged);
     void getAppRuntimePrefs()
       .then((prefs) => setMinutes(prefs.auto_lock_minutes))
-      .catch((error) => toast.error(String(error)))
+      .catch((error) => toast.error(userErrorMessage(error, "Impossible de charger les préférences")))
       .finally(() => setLoading(false));
     return () => window.removeEventListener(APP_RUNTIME_PREFS_CHANGED_EVENT, handlePrefsChanged);
   }, []);
@@ -55,7 +56,7 @@ export function AutoLockSettings() {
       );
     } catch (error) {
       setMinutes(previous);
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible d'enregistrer le verrouillage automatique"));
     } finally {
       setSaving(false);
     }

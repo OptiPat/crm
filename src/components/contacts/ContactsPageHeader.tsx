@@ -83,7 +83,7 @@ export function ContactsPageHeader({
                   }}
                 >
                   <Home className="h-4 w-4" />
-                  Import immo
+                  Importer biens immobiliers
                 </Button>
               )}
               {mainTab === "clients" && onImportPlacement && (
@@ -96,7 +96,7 @@ export function ContactsPageHeader({
                   }}
                 >
                   <Landmark className="h-4 w-4" />
-                  Import placement
+                  Importer placements
                 </Button>
               )}
               <Button
@@ -108,7 +108,7 @@ export function ContactsPageHeader({
                 }}
               >
                 <GitMerge className="h-4 w-4" />
-                Dédupliquer
+                Fusionner les doublons
               </Button>
               {filteredCount > 0 && (
                 <Button
@@ -120,7 +120,9 @@ export function ContactsPageHeader({
                   }}
                 >
                   <Trash2 className="h-4 w-4" />
-                  Supprimer tous ({mainTab === "clients" ? "clients" : "filleuls"})
+                  {filteredCount > 1
+                    ? `Supprimer les ${filteredCount} affichés`
+                    : "Supprimer le contact affiché"}
                 </Button>
               )}
             </div>

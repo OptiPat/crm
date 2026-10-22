@@ -45,6 +45,7 @@ import { preventCustomOverlayOutsideDismiss } from "@/lib/ui/radix-outside-inter
 import { RioPdfPreviewPanel } from "./RioPdfPreviewPanel";
 import { ExtractedDataPreviewAdvanced } from "./ExtractedDataPreviewAdvanced";
 import { RioPatrimoineReviewStep } from "./RioPatrimoineReviewStep";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type PickedFile = { path: string; name: string; size: number };
 
@@ -323,7 +324,7 @@ export function RioImportWizard({
       void syncContactLinkFromExtractedData(parsedData);
     } catch (error) {
       console.error("Erreur extraction RIO:", error);
-      toast.error("Erreur lors de l'extraction : " + String(error));
+      toast.error(userErrorMessage(error, "Impossible d'extraire les données du document"));
     } finally {
       setExtracting(false);
     }
@@ -373,7 +374,7 @@ export function RioImportWizard({
         await handleExtractText(file.path);
       }
     } catch (error) {
-      toast.error("Erreur sélection fichier : " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de sélectionner le fichier"));
     }
   };
 
@@ -465,7 +466,7 @@ export function RioImportWizard({
         }
       }
     } catch (error) {
-      toast.error("Erreur lors de l'enregistrement : " + String(error));
+      toast.error(userErrorMessage(error, "Impossible d'enregistrer les données"));
     } finally {
       setLoading(false);
     }
@@ -586,6 +587,8 @@ export function RioImportWizard({
                       type="button"
                       variant="ghost"
                       size="icon"
+                      aria-label="Retirer le fichier"
+                      title="Retirer le fichier"
                       onClick={() => {
                         setUploadedFile(null);
                         setExtractedData(null);

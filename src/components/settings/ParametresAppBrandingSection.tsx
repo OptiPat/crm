@@ -22,6 +22,7 @@ import {
 import { DEFAULT_APP_DISPLAY_NAME } from "@/lib/app-branding";
 import { resolveAppLogoSrc } from "@/lib/app-branding-resolve";
 import { cn } from "@/lib/utils";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type FormState = {
   displayName: string;
@@ -166,7 +167,7 @@ export function ParametresAppBrandingSection() {
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Enregistrement impossible";
+        userErrorMessage(error, "Enregistrement impossible");
       toast.error(message);
     } finally {
       setSaving(false);

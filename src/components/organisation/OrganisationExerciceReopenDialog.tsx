@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { reopenFilleulExercice } from "@/lib/api/tauri-filleul-volumes";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type OrganisationExerciceReopenDialogProps = {
   open: boolean;
@@ -54,7 +55,7 @@ export function OrganisationExerciceReopenDialog({
     } catch (error) {
       console.error(error);
       toast.error(
-        error instanceof Error ? error.message : "Impossible de déclôturer l'exercice"
+        userErrorMessage(error, "Impossible de rouvrir l'exercice")
       );
     } finally {
       setReopening(false);

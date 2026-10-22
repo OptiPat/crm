@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Pas de thème sombre : les classes dark: ne s'activent que sous une classe .dark (jamais posée),
+   et non plus selon le réglage clair/sombre de Windows. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: hsl(0 0% 97%);
   --foreground: hsl(222.2 84% 4.9%);

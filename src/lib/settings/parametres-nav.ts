@@ -82,7 +82,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
       {
         id: "email-connexion",
         label: "Connexion",
-        description: "Google ou Microsoft (OAuth)",
+        description: "Connexion à votre messagerie (Google ou Microsoft)",
         icon: Mail,
       },
       {
@@ -129,8 +129,8 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
       },
       {
         id: "integrations",
-        label: "Intégrations",
-        description: "API locale et Telegram",
+        label: "Équipe & intégrations",
+        description: "Travail en équipe, OneDrive clients, Telegram",
         icon: Workflow,
       },
       {

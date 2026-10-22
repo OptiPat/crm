@@ -18,6 +18,7 @@ import { linkChecklistItemDocument } from "@/lib/pipe/pipe-checklist-link-docume
 import { usePipeChecklistHookSession } from "@/lib/pipe/pipe-checklist-hook-session";
 import { notifyPipeR1ChecklistChanged } from "@/lib/pipe/pipe-r1-checklist-events";
 import { subscribeDocumentsChanged } from "@/lib/documents/document-events";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function usePipeR1DocumentChecklist(
   pipeId: number,
@@ -59,7 +60,7 @@ export function usePipeR1DocumentChecklist(
       setDocuments(loadedDocs);
     } catch (err) {
       if (generation !== sessionGenerationRef.current) return;
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de charger la liste de documents"));
       setChecklist(null);
       checklistRef.current = null;
     } finally {
@@ -129,7 +130,7 @@ export function usePipeR1DocumentChecklist(
         });
         return true;
       } catch (err) {
-        toast.error(String(err));
+        toast.error(userErrorMessage(err, "Impossible d'enregistrer la liste de documents"));
         if (
           generation !== persistGenerationRef.current ||
           activePipeIdRef.current !== requestPipeId

@@ -62,7 +62,9 @@ import {
 import type { PipeContactTimelineEntry } from "@/lib/api/tauri-pipe-contact-timeline";
 import { InteractionForm } from "./InteractionForm";
 import { toast } from "sonner";
+import { useConfirmDialog } from "@/components/pipe/useConfirmDialog";
 import { cn } from "@/lib/utils";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface ContactInteractionsPanelProps {
   contactId: number;
@@ -202,6 +204,7 @@ export function ContactInteractionsPanel({
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<InteractionWithContact | null>(null);
+  const deleteConfirm = useConfirmDialog(nestedSheet ? { stacked: true } : undefined);
   const [filter, setFilter] = useState<RelationTimelineFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [syncing, setSyncing] = useState(false);
@@ -345,10 +348,10 @@ export function ContactInteractionsPanel({
             }`
           );
         } else if (untilComplete && !complete) {
-          toast.info("Import en pause — relancez Sync Gmail ou rouvrez l’onglet Relation.");
+          toast.info("Import en pause — relancez « Sync boîte mail » ou rouvrez l’onglet Relation.");
         }
       } catch (error) {
-        if (!quiet) toast.error(String(error));
+        if (!quiet) toast.error(userErrorMessage(error, "Impossible de synchroniser les emails"));
       } finally {
         syncLockRef.current = false;
         if (!quiet) setSyncing(false);
@@ -474,13 +477,19 @@ export function ContactInteractionsPanel({
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Supprimer cette interaction ?")) return;
+    const ok = await deleteConfirm.confirm({
+      title: "Supprimer cette interaction ?",
+      description: "Cette action est irréversible.",
+      confirmLabel: "Supprimer",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await deleteInteraction(id);
       await load();
       onContactUpdated?.();
     } catch (error) {
-      toast.error(`Erreur : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible de supprimer l'interaction"));
     }
   };
 
@@ -532,6 +541,7 @@ export function ContactInteractionsPanel({
 
   return (
     <>
+      {deleteConfirm.dialog}
       <Card className="border-primary/15 shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3">
@@ -728,7 +738,7 @@ export function ContactInteractionsPanel({
                   ? "Aucun résultat pour cette recherche."
                   : filter !== "all"
                     ? "Changez le filtre Tout / CRM / Boîte mail / Pipe."
-                    : "Les envois campagne apparaissent après envoi ; synchronisez Gmail pour la boîte mail."}
+                    : "Les envois campagne apparaissent après envoi ; cliquez sur « Sync boîte mail » pour voir les emails."}
               </p>
               {(filter !== "all" || searchQuery.trim()) && timeline.length > 0 && (
                 <Button

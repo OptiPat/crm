@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { updateDocument, type Document } from "@/lib/api/tauri-documents";
 import { DOCUMENT_TYPE_LABELS } from "@/lib/documents/document-type-labels";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 /** Pour une pièce d'identité, `date_document` porte la date d'expiration : c'est
  *  elle que lit le contrôle de conformité pour signaler un document périmé. */
@@ -81,7 +82,7 @@ export function DocumentEditDialog({
       onOpenChange(false);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Modification impossible"
+        userErrorMessage(error, "Modification impossible")
       );
     } finally {
       setSaving(false);

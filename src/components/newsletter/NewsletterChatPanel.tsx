@@ -10,6 +10,7 @@ import {
 } from "@/lib/api/tauri-newsletter";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const QUICK_PROMPTS = [
   "Rends l'objet plus accrocheur",
@@ -71,7 +72,7 @@ export function NewsletterChatPanel({
     } catch (e) {
       onHistoryChange(history);
       setMessage(trimmed);
-      toast.error(e instanceof Error ? e.message : "Reformulation impossible");
+      toast.error(userErrorMessage(e, "Reformulation impossible"));
     } finally {
       setRefining(false);
     }

@@ -12,6 +12,7 @@ import {
 import { pickAndInstallArbitrageFicheTemplate } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-fiche-template";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type ArbitrageFicheTemplatesManagerProps = {
   productKind: ArbitrageFicheProductKind;
@@ -57,7 +58,7 @@ export function ArbitrageFicheTemplatesManager({
       }
     } catch (error) {
       console.error(error);
-      toast.error(`Impossible d'enregistrer le modèle : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible d'enregistrer le modèle"));
     } finally {
       setUploading(false);
     }
@@ -68,7 +69,7 @@ export function ArbitrageFicheTemplatesManager({
       await setDefaultArbitrageFicheTemplate(templateId, productKind, templateFamily);
       await refresh();
     } catch (error) {
-      toast.error(`Erreur : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible de définir le modèle par défaut"));
     }
   };
 
@@ -78,7 +79,7 @@ export function ArbitrageFicheTemplatesManager({
       await refresh();
       toast.success("Modèle supprimé");
     } catch (error) {
-      toast.error(`Erreur : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible de supprimer le modèle"));
     }
   };
 

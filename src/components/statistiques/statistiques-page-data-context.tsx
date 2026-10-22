@@ -25,6 +25,8 @@ export type StatistiquesPageData = {
   dashboard: DashboardStats | null;
   selfContactId: number | null;
   loading: boolean;
+  /** Données qui n'ont pas pu être chargées au dernier rafraîchissement (libellés). */
+  loadErrorSources: string[];
   lastUpdatedAt: Date | null;
   dataRefreshKey: number;
   refreshData: (options?: { silent?: boolean }) => Promise<void>;
@@ -40,6 +42,7 @@ export function StatistiquesPageDataProvider({ children }: { children: ReactNode
   const [dashboard, setDashboard] = useState<DashboardStats | null>(null);
   const [selfContactId, setSelfContactId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadErrorSources, setLoadErrorSources] = useState<string[]>([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
   const loadSeqRef = useRef(0);
@@ -59,6 +62,7 @@ export function StatistiquesPageDataProvider({ children }: { children: ReactNode
     if (loadSeqRef.current !== seq) return;
 
     let refreshed = false;
+    const failed: string[] = [];
 
     if (contactsResult.status === "fulfilled") {
       const contactRows = contactsResult.value;
@@ -69,6 +73,7 @@ export function StatistiquesPageDataProvider({ children }: { children: ReactNode
       }
     } else {
       console.error("Erreur chargement contacts statistiques:", contactsResult.reason);
+      failed.push("contacts");
       if (!silent) {
         setContacts([]);
         setSelfContactId(null);
@@ -80,6 +85,7 @@ export function StatistiquesPageDataProvider({ children }: { children: ReactNode
       refreshed = true;
     } else {
       console.error("Erreur chargement investissements statistiques:", invResult.reason);
+      failed.push("investissements");
       if (!silent) setInvestissementsWithDetails([]);
     }
 
@@ -88,12 +94,15 @@ export function StatistiquesPageDataProvider({ children }: { children: ReactNode
       refreshed = true;
     } else {
       console.error("Erreur chargement dashboard statistiques:", dashboardResult.reason);
+      failed.push("indicateurs");
       if (!silent) setDashboard(null);
     }
 
     if (cgpResult.status !== "fulfilled") {
       console.error("Erreur chargement config CGP statistiques:", cgpResult.reason);
     }
+
+    setLoadErrorSources(failed);
 
     if (refreshed) {
       setLastUpdatedAt(new Date());
@@ -126,6 +135,7 @@ export function StatistiquesPageDataProvider({ children }: { children: ReactNode
       dashboard,
       selfContactId,
       loading,
+      loadErrorSources,
       lastUpdatedAt,
       dataRefreshKey,
       refreshData,
@@ -136,6 +146,7 @@ export function StatistiquesPageDataProvider({ children }: { children: ReactNode
       dashboard,
       selfContactId,
       loading,
+      loadErrorSources,
       lastUpdatedAt,
       dataRefreshKey,
       refreshData,

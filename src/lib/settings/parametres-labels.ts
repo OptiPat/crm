@@ -7,6 +7,6 @@ export const PARAMETRES_PATH = {
   emailStellium: "Paramètres → Emails & envois → Exceltis Stellium",
   email: "Paramètres → Emails & envois",
   agenda: "Paramètres → Agenda & RDV",
-  newsletter: "Newsletter → Paramètres",
+  newsletter: "Newsletter → Réglages newsletter",
   compta: "page Comptabilité",
 } as const;

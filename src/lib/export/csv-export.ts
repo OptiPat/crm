@@ -9,6 +9,14 @@ function escapeCell(value: string | number | null | undefined): string {
   return s;
 }
 
+/**
+ * Nombre décimal lisible par Excel en français : virgule décimale,
+ * sans séparateur de milliers. Ex. 1234.5 → « 1234,50 ».
+ */
+export function formatCsvDecimal(value: number, fractionDigits = 2): string {
+  return value.toFixed(fractionDigits).replace(".", ",");
+}
+
 export function rowsToCsv(
   headers: string[],
   rows: (string | number | null | undefined)[][],

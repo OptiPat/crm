@@ -20,6 +20,7 @@ import {
 import { createContact, type Contact } from "@/lib/api/tauri-contacts";
 import { ContactRegistreToggle } from "@/components/contacts/ContactRegistreSwitch";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const PARRAINAGE_CONTACT_CATEGORIES = [
   { value: "SUSPECT_FILLEUL", label: "Suspect filleul" },
@@ -108,7 +109,7 @@ export function ParrainageQuickContactDialog({
       onOpenChange(false);
     } catch (err) {
       console.error(err);
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de créer le contact"));
     } finally {
       setLoading(false);
     }

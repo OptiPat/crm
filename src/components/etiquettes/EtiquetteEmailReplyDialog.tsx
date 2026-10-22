@@ -34,7 +34,7 @@ export function EtiquetteEmailReplyDialog({
             Répondre à {item.contact_prenom} {item.contact_nom}
           </DialogTitle>
           <DialogDescription>
-            Rédigez votre réponse — elle part dans le fil Gmail de l&apos;envoi campagne. Le suivi
+            Rédigez votre réponse — elle part dans la même conversation que l&apos;envoi campagne. Le suivi
             « en attente de réponse » se clôture après l&apos;envoi. Si le client a déjà répondu sans
             que vous écriviez ici, fermez cette fenêtre et utilisez « Réponse reçue » sur la ligne.
           </DialogDescription>

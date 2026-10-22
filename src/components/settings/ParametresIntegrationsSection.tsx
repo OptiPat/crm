@@ -15,6 +15,7 @@ import { MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { ClientOneDriveSettingsPanel } from "@/components/client-onedrive/ClientOneDriveSettingsPanel";
 import { TeamWorkspaceSettingsPanel } from "@/components/settings/TeamWorkspaceSettingsPanel";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function ParametresIntegrationsSection() {
   const [birthdaySettings, setBirthdaySettings] = useState<BirthdayTelegramSettings | null>(null);
@@ -73,7 +74,7 @@ export function ParametresIntegrationsSection() {
     } catch (error) {
       console.error(error);
       toast.error(
-        error instanceof Error ? error.message : "Test Telegram impossible."
+        userErrorMessage(error, "Test Telegram impossible.")
       );
     } finally {
       setTestingTelegram(false);
@@ -96,7 +97,7 @@ export function ParametresIntegrationsSection() {
     } catch (error) {
       console.error(error);
       toast.error(
-        error instanceof Error ? error.message : "Envoi impossible."
+        userErrorMessage(error, "Envoi impossible.")
       );
     } finally {
       setSendingReminders(false);
@@ -105,7 +106,7 @@ export function ParametresIntegrationsSection() {
 
   if (loading) {
     return (
-      <SettingsPanel title="Intégrations" description="Chargement…">
+      <SettingsPanel title="Équipe & intégrations" description="Chargement…">
         <p className="text-sm text-muted-foreground">Chargement…</p>
       </SettingsPanel>
     );
@@ -134,19 +135,28 @@ export function ParametresIntegrationsSection() {
           </div>
 
           <div className="grid gap-2 max-w-md">
-            <Label htmlFor="birthday-telegram-chat-id">Chat ID Telegram</Label>
+            <Label htmlFor="birthday-telegram-chat-id">
+              Identifiant de votre conversation{" "}
+              <span className="text-xs font-normal text-muted-foreground">(Chat ID)</span>
+            </Label>
             <Input
               id="birthday-telegram-chat-id"
               value={birthdayChatId}
               onChange={(e) => setBirthdayChatId(e.target.value)}
               placeholder="8003147252"
               className="font-mono text-sm"
+              aria-describedby="birthday-telegram-chat-id-help"
             />
+            <p id="birthday-telegram-chat-id-help" className="text-xs text-muted-foreground">
+              Un nombre qui désigne votre compte Telegram : envoyez un message à @userinfobot,
+              il vous le répond.
+            </p>
           </div>
 
           <div className="grid gap-2 max-w-md">
             <Label htmlFor="birthday-telegram-bot-token">
-              Token du bot
+              Code secret du bot{" "}
+              <span className="text-xs font-normal text-muted-foreground">(appelé « token » dans Telegram)</span>
               {birthdaySettings?.botTokenConfigured ? (
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
                   (configuré — laisser vide pour conserver)
@@ -161,12 +171,17 @@ export function ParametresIntegrationsSection() {
               onChange={(e) => setBirthdayBotToken(e.target.value)}
               placeholder="123456789:ABC…"
               className="font-mono text-sm"
+              aria-describedby="birthday-telegram-bot-token-help"
             />
+            <p id="birthday-telegram-bot-token-help" className="text-xs text-muted-foreground">
+              Fourni par @BotFather quand vous créez votre bot (le « robot » Telegram qui vous
+              enverra les rappels). Gardez-le pour vous.
+            </p>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Créez un bot via @BotFather, récupérez le token et votre chat ID (@userinfobot).
-            Envoyez <strong>/start</strong> au bot avant le premier test.
+            Envoyez <strong>/start</strong> à votre bot avant le premier test, sinon Telegram
+            refuse de lui transmettre les messages.
           </p>
 
           <div className="flex flex-wrap gap-2">

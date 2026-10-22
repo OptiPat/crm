@@ -34,7 +34,19 @@ import { Newsletter } from "@/pages/Newsletter";
 import { AppBrandingProvider } from "@/components/app-branding/AppBrandingProvider";
 import { EspaceClientProvider } from "@/components/espace-client/EspaceClientProvider";
 import { TeamWorkspaceProvider } from "@/components/team/TeamWorkspaceProvider";
-import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
+import { PageErrorBoundary } from "@/components/layout/PageErrorBoundary";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { hasUnsavedPageChanges } from "@/lib/navigation/page-leave-guard";
+import { clearPendingNavigationIntents } from "@/lib/navigation/app-navigation";
 import { AppUpdateProvider } from "@/components/system/app-update-context";
 import { isWizardCompleted } from "@/lib/api/tauri-settings";
 import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
@@ -53,6 +65,24 @@ import { useFundWatchlistCoachGlobalListener } from "@/hooks/useFundWatchlistCoa
 import { loadCoachGenerating } from "@/lib/fund-watchlist/fund-watchlist-coach-store";
 
 const ETIQUETTES_RECALC_SESSION_KEY = "crm_etiquettes_recalc_done";
+const PAGE_HISTORY_MAX = 30;
+/** Durée par défaut des messages (les erreurs restent 10 s : voir main.tsx). */
+const TOAST_DURATION_MS = 6000;
+
+type PageNavState = { page: string; history: string[] };
+type PendingNavigation = { page: string; back: boolean };
+
+/** Une fenêtre (dialogue, panneau) est ouverte : on ne change pas de page dessous au clavier/souris. */
+function isModalOpen(): boolean {
+  return document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]') != null;
+}
+
+/** Saisie en cours : Alt+← y garde son sens (mot précédent, etc.). */
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  return target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])') != null;
+}
 
 function AppInner() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
@@ -60,7 +90,11 @@ function AppInner() {
   const [isEngineAvailable, setIsEngineAvailable] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const [showLicense, setShowLicense] = useState(false);
-  const [currentPage, setCurrentPage] = useState("dashboard");
+  const [nav, setNav] = useState<PageNavState>({ page: "dashboard", history: [] });
+  const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
+  const [lockConfirmOpen, setLockConfirmOpen] = useState(false);
+  const navRef = useRef(nav);
+  const currentPage = nav.page;
   const [unlockNotice, setUnlockNotice] = useState("");
   const [unlockReason, setUnlockReason] = useState("");
   const etiquettesRecalcDone = useRef(
@@ -69,8 +103,14 @@ function AppInner() {
   const etiquettesRecalcInFlight = useRef(false);
 
   const handleSessionLocked = useCallback((payload?: UiSessionLockedPayload) => {
+    // La page courante est gardée : on y revient après déverrouillage (la base, elle, est refermée).
     setIsAuthenticated(false);
-    setCurrentPage("dashboard");
+    // Navigation en attente de confirmation : son intention ne doit pas ressurgir au retour.
+    setPendingNavigation((prev) => {
+      if (prev) clearPendingNavigationIntents();
+      return null;
+    });
+    setLockConfirmOpen(false);
     setUnlockNotice((prev) => payload?.message || prev);
     setUnlockReason(payload?.reason || "");
   }, []);
@@ -85,19 +125,102 @@ function AppInner() {
     handleSessionLocked();
   }, [handleSessionLocked]);
 
-  useAppNavigationListener((detail) => {
-    if (detail.type === "page" && detail.page !== currentPage) {
-      setCurrentPage(detail.page);
+  /** Bouton « Verrouiller » : confirmation si saisie non enregistrée (pas le verrouillage auto). */
+  const requestLock = useCallback(() => {
+    if (hasUnsavedPageChanges()) {
+      setLockConfirmOpen(true);
+      return;
     }
+    void handleLogout();
+  }, [handleLogout]);
+
+  useEffect(() => {
+    navRef.current = nav;
+  }, [nav]);
+
+  const commitNavigation = useCallback((page: string, back: boolean) => {
+    setNav((prev) => {
+      if (prev.page === page) return prev;
+      const history = back
+        ? prev.history.slice(0, -1)
+        : [...prev.history, prev.page].slice(-PAGE_HISTORY_MAX);
+      return { page, history };
+    });
+  }, []);
+
+  /** Point d'entrée unique de tout changement de page (menu, recherche, liens, notifications). */
+  const navigateTo = useCallback(
+    (page: string) => {
+      if (page === navRef.current.page) return;
+      if (hasUnsavedPageChanges()) {
+        setPendingNavigation({ page, back: false });
+        return;
+      }
+      commitNavigation(page, false);
+    },
+    [commitNavigation]
+  );
+
+  const goBack = useCallback(() => {
+    const { history } = navRef.current;
+    const previous = history[history.length - 1];
+    if (!previous) return;
+    if (hasUnsavedPageChanges()) {
+      setPendingNavigation({ page: previous, back: true });
+      return;
+    }
+    commitNavigation(previous, true);
+  }, [commitNavigation]);
+
+  const navigationConfirmedRef = useRef(false);
+
+  const confirmPendingNavigation = () => {
+    navigationConfirmedRef.current = true;
+    if (pendingNavigation) commitNavigation(pendingNavigation.page, pendingNavigation.back);
+    setPendingNavigation(null);
+  };
+
+  /** Fermeture de la confirmation : sans « Quitter », l'intention déjà enregistrée est oubliée. */
+  const closePendingNavigation = () => {
+    if (!navigationConfirmedRef.current) clearPendingNavigationIntents();
+    navigationConfirmedRef.current = false;
+    setPendingNavigation(null);
+  };
+
+  useAppNavigationListener((detail) => {
+    if (detail.type === "page") navigateTo(detail.page);
   });
 
   const navigateVeilleFonds = useCallback(() => {
-    setCurrentPage("veille-fonds");
-  }, []);
+    navigateTo("veille-fonds");
+  }, [navigateTo]);
+
+  // Retour : Alt+← et bouton « précédent » de la souris.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && e.key === "ArrowLeft" && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
+        if (e.defaultPrevented || isEditableTarget(e.target) || isModalOpen()) return;
+        e.preventDefault();
+        goBack();
+      }
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button !== 3) return;
+      e.preventDefault();
+      if (!isModalOpen()) goBack();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [isAuthenticated, goBack]);
 
   useBackgroundAutomationListener(isEngineAvailable);
   useOneDriveBackgroundListener(isEngineAvailable);
-  useAutomationNotificationListener(isAuthenticated, setCurrentPage);
+  useAutomationNotificationListener(isAuthenticated, navigateTo);
   useAutoLock(isAuthenticated, handleLogout, handleSessionLocked);
   useFundWatchlistCoachGlobalListener(
     isEngineAvailable && (isAuthenticated || loadCoachGenerating()),
@@ -259,74 +382,62 @@ function AppInner() {
         return (
           <Dashboard
             currentPage={currentPage}
-            onNavigate={setCurrentPage}
+            onNavigate={navigateTo}
           />
         );
       case "statistiques":
-        return <Statistiques onNavigate={setCurrentPage} />;
+        return <Statistiques onNavigate={navigateTo} />;
       case "pipe":
-        return (
-          <ErrorBoundary>
-            <Pipe />
-          </ErrorBoundary>
-        );
+        return <Pipe />;
       case "pipe-parrainage":
-        return (
-          <ErrorBoundary>
-            <PipeParrainage />
-          </ErrorBoundary>
-        );
+        return <PipeParrainage />;
       case "contacts":
-        return (
-          <ErrorBoundary>
-            <Contacts onNavigate={setCurrentPage} />
-          </ErrorBoundary>
-        );
+        return <Contacts onNavigate={navigateTo} />;
       case "familles":
-        return <Familles onNavigate={setCurrentPage} />;
+        return <Familles onNavigate={navigateTo} />;
       case "foyers":
-        return <Foyers onNavigate={setCurrentPage} />;
+        return <Foyers onNavigate={navigateTo} />;
       case "prescripteurs":
-        return <Prescripteurs onNavigate={setCurrentPage} />;
+        return <Prescripteurs onNavigate={navigateTo} />;
       case "partenaires":
-        return <Partenaires onNavigate={setCurrentPage} />;
+        return <Partenaires onNavigate={navigateTo} />;
       case "organisation":
-        return <Organisation onNavigate={setCurrentPage} />;
+        return <Organisation onNavigate={navigateTo} />;
       case "investissements":
-        return <Investissements onNavigate={setCurrentPage} />;
+        return <Investissements onNavigate={navigateTo} />;
       case "veille-fonds":
-        return <VeilleFonds onNavigate={setCurrentPage} />;
+        return <VeilleFonds onNavigate={navigateTo} />;
       case "interactions":
         return (
           <Interactions
             currentPage={currentPage}
-            onNavigate={setCurrentPage}
+            onNavigate={navigateTo}
           />
         );
       case "taches":
-        return <Taches onNavigate={setCurrentPage} />;
+        return <Taches onNavigate={navigateTo} />;
       case "agenda":
-        return <Agenda onNavigate={setCurrentPage} />;
+        return <Agenda onNavigate={navigateTo} />;
       case "templates-email":
-        return <TemplatesEmail onNavigate={setCurrentPage} currentPage={currentPage} />;
+        return <TemplatesEmail onNavigate={navigateTo} currentPage={currentPage} />;
       case "newsletter":
-        return <Newsletter onNavigate={setCurrentPage} />;
+        return <Newsletter onNavigate={navigateTo} />;
       case "suivi":
         return (
           <Suivi
             currentPage={currentPage}
-            onNavigate={setCurrentPage}
+            onNavigate={navigateTo}
           />
         );
       case "etiquettes":
-        return <Etiquettes onNavigate={setCurrentPage} />;
+        return <Etiquettes onNavigate={navigateTo} />;
       case "documents":
-        return <Documents onNavigate={setCurrentPage} />;
+        return <Documents onNavigate={navigateTo} />;
       case "souscription-cif":
         return (
           <SouscriptionCif
             currentPage={currentPage}
-            onNavigate={setCurrentPage}
+            onNavigate={navigateTo}
           />
         );
       case "notes":
@@ -337,14 +448,14 @@ function AppInner() {
         return (
           <Parametres
             currentPage={currentPage}
-            onNavigate={setCurrentPage}
+            onNavigate={navigateTo}
           />
         );
       default:
         return (
           <Dashboard
             currentPage={currentPage}
-            onNavigate={setCurrentPage}
+            onNavigate={navigateTo}
           />
         );
     }
@@ -380,46 +491,86 @@ function AppInner() {
   }
 
   // Afficher l'application avec le layout
-  try {
-    return (
-      <EspaceClientProvider enabled={isEngineAvailable}>
-        <TeamWorkspaceProvider enabled={isEngineAvailable}>
-          <AppUpdateProvider>
-            <Layout
-              currentPage={currentPage}
-              onPageChange={setCurrentPage}
-              onLogout={handleLogout}
+  return (
+    <EspaceClientProvider enabled={isEngineAvailable}>
+      <TeamWorkspaceProvider enabled={isEngineAvailable}>
+        <AppUpdateProvider>
+          <Layout
+            currentPage={currentPage}
+            onPageChange={navigateTo}
+            onBack={nav.history.length > 0 ? goBack : undefined}
+            onLogout={requestLock}
+          >
+            <TeamWorkspaceStatusBanner onOpenSettings={() => navigateTo("parametres")} />
+            <PageErrorBoundary
+              key={currentPage}
+              onGoHome={currentPage === "dashboard" ? undefined : () => navigateTo("dashboard")}
             >
-              <TeamWorkspaceStatusBanner onOpenSettings={() => setCurrentPage("parametres")} />
               {renderPage()}
-            </Layout>
-          </AppUpdateProvider>
-          <Toaster richColors position="top-right" visibleToasts={4} expand />
-        </TeamWorkspaceProvider>
-      </EspaceClientProvider>
-    );
-  } catch (error) {
-    console.error("Error rendering app:", error);
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-red-600 mb-4">Erreur de chargement</h1>
-          <p className="text-muted-foreground mb-4">
-            Une erreur s'est produite lors du chargement de l'application.
-          </p>
-          <p className="text-sm text-muted-foreground font-mono">
-            {String(error)}
-          </p>
-        </div>
-      </div>
-    );
-  }
+            </PageErrorBoundary>
+          </Layout>
+        </AppUpdateProvider>
+        <AlertDialog
+          open={pendingNavigation != null}
+          onOpenChange={(open) => {
+            if (!open) closePendingNavigation();
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Quitter cette page ?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Vos modifications ne sont pas enregistrées. Si vous quittez, elles seront perdues.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Continuer l&apos;édition</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" onClick={confirmPendingNavigation}>
+                Quitter sans enregistrer
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        <AlertDialog open={lockConfirmOpen} onOpenChange={setLockConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Verrouiller sans enregistrer ?</AlertDialogTitle>
+              <AlertDialogDescription>Vos modifications seront perdues.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Continuer l&apos;édition</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={() => {
+                  setLockConfirmOpen(false);
+                  void handleLogout();
+                }}
+              >
+                Verrouiller sans enregistrer
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        <Toaster
+          richColors
+          closeButton
+          position="top-right"
+          offset={{ top: 96, right: 24 }}
+          visibleToasts={4}
+          expand
+          toastOptions={{ duration: TOAST_DURATION_MS, closeButtonAriaLabel: "Fermer" }}
+        />
+      </TeamWorkspaceProvider>
+    </EspaceClientProvider>
+  );
 }
 
 export default function App() {
   return (
-    <AppBrandingProvider>
-      <AppInner />
-    </AppBrandingProvider>
+    <PageErrorBoundary variant="app">
+      <AppBrandingProvider>
+        <AppInner />
+      </AppBrandingProvider>
+    </PageErrorBoundary>
   );
 }

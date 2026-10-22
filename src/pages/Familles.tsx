@@ -65,6 +65,7 @@ import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { cn } from "@/lib/utils";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type FamillesProps = {
   onNavigate?: (page: string) => void;
@@ -88,6 +89,7 @@ export function Familles({ onNavigate }: FamillesProps) {
     Record<number, Investissement[]>
   >({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [famillesDb, setFamillesDb] = useState<Awaited<ReturnType<typeof getAllFamilles>>>([]);
   const [expandedFamilleKey, setExpandedFamilleKey] = useState<string | null>(
     () => loadFamillesPagePreferences().expandedFamilleKey
@@ -133,8 +135,10 @@ export function Familles({ onNavigate }: FamillesProps) {
 
       setInvestissementsByContact(investsByContact);
       setInvestissementsByFoyer(investsByFoyer);
+      setLoadError(false);
     } catch (error) {
       console.error("Erreur chargement familles:", error);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -477,7 +481,7 @@ export function Familles({ onNavigate }: FamillesProps) {
                   assertCanExport(canExport);
                   downloadFamilleMembersCsv(expandedFamille);
                 } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "Export non autorisé");
+                  toast.error(userErrorMessage(e, "Export impossible"));
                 }
               }
             : undefined
@@ -487,7 +491,10 @@ export function Familles({ onNavigate }: FamillesProps) {
 
       {excludedHomonyms.length > 0 && (
         <div className="rounded-lg border border-dashed border-border/70 bg-muted/15 px-3 py-3">
-          <p className="text-xs font-medium text-muted-foreground mb-2">
+          <p
+            className="text-xs font-medium text-muted-foreground mb-2"
+            title="Regroupement : les contacts qui portent le même nom (homonymes) sont réunis automatiquement dans une famille. Ceux-ci en ont été retirés à la main."
+          >
             Hors regroupement ({excludedHomonyms.length}) — homonymes retirés manuellement
           </p>
           <ul className="flex flex-wrap gap-2">
@@ -529,17 +536,42 @@ export function Familles({ onNavigate }: FamillesProps) {
         </CardHeader>
 
         <CardContent className="pt-0 space-y-3">
-          {filteredFamilles.length === 0 ? (
+          {loadError && contacts.length === 0 ? (
+            <div className="py-14 text-center space-y-3 rounded-xl border border-dashed border-border/80">
+              <p className="text-sm text-destructive">Impossible de charger les familles.</p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setLoading(true);
+                  void loadData();
+                }}
+              >
+                Réessayer
+              </Button>
+            </div>
+          ) : filteredFamilles.length === 0 ? (
             <div className="py-14 text-center text-muted-foreground rounded-xl border border-dashed border-border/80 bg-muted/15">
-              {prefs.searchQuery.trim() ? (
-                <p>Aucune famille ne correspond à votre recherche.</p>
+              {prefs.searchQuery.trim() || prefs.statFilter ? (
+                <div className="space-y-3">
+                  <p>Aucune famille ne correspond à votre recherche.</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => updatePrefs({ searchQuery: "", statFilter: null })}
+                  >
+                    Effacer la recherche et les filtres
+                  </Button>
+                </div>
               ) : (
                 <div className="space-y-2">
                   <p className="font-medium text-foreground/80">Aucune famille détectée</p>
                   <p className="text-sm max-w-sm mx-auto">
-                    Créez une famille manuellement ou attendez deux homonymes pour un
-                    regroupement automatique.
+                    Créez une famille manuellement, ou elle se crée toute seule dès que
+                    deux contacts portent le même nom (homonymes).
                   </p>
+
                   <Button
                     type="button"
                     variant="outline"

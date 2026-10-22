@@ -5,6 +5,7 @@ import {
   localImageToDataUrl,
   readLocalImageFile,
 } from "@/lib/api/tauri-secure-files";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export type IdentityPreviewPage = {
   label: string;
@@ -71,7 +72,7 @@ export async function loadIdentityDocumentPreviewPages(
   } catch (error) {
     console.error("Impossible de charger l'aperçu pièce d'identité:", error);
     const message =
-      error instanceof Error ? error.message : "Erreur inconnue lors du rendu du PDF.";
+      userErrorMessage(error, "Impossible d'afficher l'aperçu du document.");
     throw new IdentityDocumentPreviewError(message, error);
   }
 }

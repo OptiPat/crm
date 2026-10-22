@@ -92,6 +92,7 @@ import {
   type InvestissementActiveFilterId,
 } from "@/lib/investissements/investissements-active-filters";
 import {
+  INVESTISSEMENTS_PAGE_DEFAULTS,
   loadInvestissementsPagePreferences,
   saveInvestissementsPagePreferences,
 } from "@/lib/investissements/investissements-page-preferences";
@@ -114,6 +115,7 @@ import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type InvestissementsProps = {
   onNavigate?: (page: string) => void;
@@ -160,6 +162,7 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
   const canExport = useCanExport();
   const [investissements, setInvestissements] = useState<InvestissementWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [origineFilters, setOrigineFilters] = useState<OrigineFilterChip[]>([]);
@@ -183,8 +186,12 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
     inv: InvestissementWithDetails;
     members: Contact[];
   } | null>(null);
-  const [sortKey, setSortKey] = useState<InvestissementPortfolioSort>("client_asc");
-  const [groupMode, setGroupMode] = useState<InvestissementPortfolioGroup>("category");
+  const [sortKey, setSortKey] = useState<InvestissementPortfolioSort>(
+    INVESTISSEMENTS_PAGE_DEFAULTS.sortKey
+  );
+  const [groupMode, setGroupMode] = useState<InvestissementPortfolioGroup>(
+    INVESTISSEMENTS_PAGE_DEFAULTS.groupMode
+  );
 
   useEffect(() => {
     const prefs = loadInvestissementsPagePreferences();
@@ -219,8 +226,10 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
       const data = await getInvestissementsWithDetails();
       setInvestissements(data);
       setInvestissementsListVersion((v) => v + 1);
+      setLoadError(false);
     } catch (error) {
       console.error("Error loading investissements:", error);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -289,7 +298,7 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
       toast.success("Investissement supprimé");
     } catch (error) {
       console.error("Error deleting investissement:", error);
-      toast.error("Erreur lors de la suppression : " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de supprimer l'investissement"));
     } finally {
       setDeleteBusy(false);
     }
@@ -372,8 +381,8 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
     avPerVpStats.total === 0
       ? "Aucun contrat AV/PER — avec moi"
       : sansVpFilter
-        ? `${avPerVpStats.withoutVp} sans VP — filtre actif`
-        : `${avPerVpStats.withVp}/${avPerVpStats.total} avec VP — AV & PER`;
+        ? `${avPerVpStats.withoutVp} sans versement programmé — filtre actif`
+        : `${avPerVpStats.withVp}/${avPerVpStats.total} avec versement programmé — AV & PER`;
 
   const scpiReinvestStats = useMemo(
     () => computeScpiReinvestissementCoverageStats(investissements),
@@ -505,6 +514,9 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
       return matchesSearch && matchesType && matchesPartenaire;
     });
 
+    // Filtre « encours » + tri par date choisi : on trie par encours. Comparaison
+    // volontaire avec "date_desc" (et non le tri par défaut) pour ne pas changer
+    // cette bascule ; le tri par défaut vient de INVESTISSEMENTS_PAGE_DEFAULTS.
     return sortInvestissementsPortfolio(
       list,
       encoursPlacementsFilter && sortKey === "date_desc" ? "encours_desc" : sortKey,
@@ -572,8 +584,8 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
     sansVpFilter ||
     sansReinvestFilter ||
     encoursPlacementsFilter ||
-    sortKey !== "date_desc" ||
-    groupMode !== "category";
+    sortKey !== INVESTISSEMENTS_PAGE_DEFAULTS.sortKey ||
+    groupMode !== INVESTISSEMENTS_PAGE_DEFAULTS.groupMode;
 
   const resetFilters = () => {
     setOrigineFilters([]);
@@ -582,8 +594,8 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
     setPartenaireFilters([]);
     setStatutFilter("all");
     clearStatFilters();
-    setSortKey("date_desc");
-    setGroupMode("category");
+    setSortKey(INVESTISSEMENTS_PAGE_DEFAULTS.sortKey);
+    setGroupMode(INVESTISSEMENTS_PAGE_DEFAULTS.groupMode);
   };
 
   const activeFilterChips = useMemo(
@@ -639,10 +651,10 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
         setPartenaireFilters([]);
         break;
       case "sort":
-        setSortKey("date_desc");
+        setSortKey(INVESTISSEMENTS_PAGE_DEFAULTS.sortKey);
         break;
       case "group":
-        setGroupMode("category");
+        setGroupMode(INVESTISSEMENTS_PAGE_DEFAULTS.groupMode);
         break;
       default:
         break;
@@ -761,7 +773,7 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
 
       <section className="space-y-2" aria-label="Synthèse du portefeuille">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Synthèse — cliquer sur Couverture VP, Encours ou Réinv. dividendes pour filtrer la liste
+          Synthèse — cliquer sur Couverture versements programmés, Encours ou Réinvestissement des dividendes pour filtrer la liste
         </p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <StatCard
@@ -804,7 +816,7 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
             iconBgColor="bg-blue-50"
           />
           <StatCard
-            title="Couverture VP"
+            title="Couverture versements programmés"
             value={avPerVpPercentLabel}
             description={avPerVpDescription}
             icon={Percent}
@@ -817,7 +829,7 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
             }
           />
           <StatCard
-            title="Réinv. dividendes"
+            title="Réinvestissement dividendes"
             value={scpiReinvestPercentLabel}
             description={scpiReinvestDescription}
             icon={RefreshCw}
@@ -1054,6 +1066,21 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">
               Chargement...
+            </div>
+          ) : loadError && investissements.length === 0 ? (
+            <div className="py-10 text-center space-y-3">
+              <p className="text-sm text-destructive">
+                Impossible de charger les investissements.
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setLoading(true);
+                  void loadInvestissements();
+                }}
+              >
+                Réessayer
+              </Button>
             </div>
           ) : investissements.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-muted/25 px-6 py-10 text-center">

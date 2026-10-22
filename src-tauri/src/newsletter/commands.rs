@@ -137,7 +137,7 @@ pub fn save_newsletter_settings(
         && !store.is_provider_api_key_configured("mistral")
     {
         return Err(
-            "Clé API Mistral absente — Newsletter → Paramètres → clé Mistral (OCR + résumés SCPI)."
+            "Clé API Mistral absente — Newsletter → Réglages newsletter → clé Mistral (OCR + résumés SCPI)."
                 .to_string(),
         );
     }
@@ -914,14 +914,14 @@ pub fn push_newsletter_edition_to_brevo(
         .brevo_sender_name
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| "Renseignez le nom expéditeur Brevo (Newsletter → Paramètres).".to_string())?
+        .ok_or_else(|| "Renseignez le nom expéditeur Brevo (Newsletter → Réglages newsletter).".to_string())?
         .to_string();
     let sender_email = store
         .brevo_sender_email
         .as_deref()
         .filter(|s| !s.trim().is_empty())
         .ok_or_else(|| {
-            "Renseignez l'email expéditeur Brevo (Newsletter → Paramètres).".to_string()
+            "Renseignez l'email expéditeur Brevo (Newsletter → Réglages newsletter).".to_string()
         })?
         .to_string();
     validate_brevo_sender_email(&sender_email)?;
@@ -1018,7 +1018,7 @@ fn validate_brevo_sender_email(email: &str) -> Result<(), String> {
     if email.contains('@') && email.len() >= 5 && !email.chars().any(char::is_whitespace) {
         return Ok(());
     }
-    Err("Email expéditeur Brevo invalide (Newsletter → Paramètres).".into())
+    Err("Email expéditeur Brevo invalide (Newsletter → Réglages newsletter).".into())
 }
 
 fn edition_allows_brevo_push(status: &str) -> bool {
@@ -1036,7 +1036,7 @@ fn brevo_api_key(store: &NewsletterStore) -> Result<String, String> {
                 "Clé API Brevo illisible — fermez et rouvrez le CRM avec votre mot de passe maître."
                     .to_string()
             } else {
-                "Clé API Brevo non configurée (Newsletter → Paramètres).".to_string()
+                "Clé API Brevo non configurée (Newsletter → Réglages newsletter).".to_string()
             }
         })
 }

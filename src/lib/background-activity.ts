@@ -6,7 +6,7 @@ export type BackgroundActivityKind =
   | "newsletter-send";
 
 const LABELS: Record<BackgroundActivityKind, string> = {
-  "relation-sync": "Synchronisation Gmail / Agenda…",
+  "relation-sync": "Synchronisation boîte mail / agenda…",
   "stellium-scan": "Scan Stellium Exceltis…",
   "box-placement-scan": "Scan Box Placement…",
   "etiquettes-recalc": "Recalcul des étiquettes…",

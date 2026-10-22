@@ -34,6 +34,8 @@ import {
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 import { TeamLockBanner } from "@/components/team/TeamLockBanner";
 import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
+import { useUnsavedCloseGuard } from "@/hooks/useUnsavedCloseGuard";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const FOYER_TYPE_OPTIONS = [
   "CELIBATAIRE",
@@ -77,6 +79,11 @@ export function FoyerForm({
     entityType: "foyer",
     entityId: foyer?.id,
   });
+  const closeGuard = useUnsavedCloseGuard({
+    open,
+    onClose: () => onOpenChange(false),
+    stacked: nestedSheet,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -108,6 +115,7 @@ export function FoyerForm({
         const created = await createFoyer(formData);
         onSuccess(created.id);
       }
+      closeGuard.resetDirty();
       onOpenChange(false);
       // Réinitialiser le formulaire
       setFormData({
@@ -123,14 +131,15 @@ export function FoyerForm({
       });
     } catch (error) {
       console.error("Error saving foyer:", error);
-      toast.error("Erreur lors de l'enregistrement: " + String(error));
+      toast.error(userErrorMessage(error, "Impossible d'enregistrer le foyer"));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
+    <>
+    <Dialog open={open} onOpenChange={closeGuard.handleOpenChange} modal={!nestedSheet}>
       <DialogContent
         hideOverlay={nestedSheet}
         className={nestedStackedDialogClass(
@@ -155,7 +164,11 @@ export function FoyerForm({
           message={teamLock.error}
         />
 
-        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <form
+          onSubmit={handleSubmit}
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
+          {...closeGuard.trackDirtyProps}
+        >
           <div
             className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1"
             onWheel={nestedSheet ? stopWheelPropagation : undefined}
@@ -315,11 +328,11 @@ export function FoyerForm({
 
           </div>
 
-          <DialogFooter className="shrink-0 pt-4">
+          <DialogFooter className="shrink-0 pt-4" data-no-dirty>
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
+              onClick={closeGuard.requestClose}
             >
               Annuler
             </Button>
@@ -331,5 +344,7 @@ export function FoyerForm({
         </PortalLayerProvider>
       </DialogContent>
     </Dialog>
+    {closeGuard.discardDialog}
+    </>
   );
 }

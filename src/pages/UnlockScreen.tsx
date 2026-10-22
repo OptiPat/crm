@@ -42,6 +42,7 @@ export function UnlockScreen({
   );
   const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [forgotHelpOpen, setForgotHelpOpen] = useState(false);
 
   useEffect(() => {
     if (initialNotice) {
@@ -242,6 +243,15 @@ export function UnlockScreen({
                     <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
                     <div className="space-y-3">
                       <p className="text-sm sm:text-base text-red-800">{displayedError}</p>
+                      {remainingSeconds > 0 && (
+                        <p className="text-xs text-red-700">
+                          Par sécurité, après plusieurs mots de passe incorrects, le CRM bloque
+                          les essais pendant un moment. Ce délai s&apos;allonge à chaque nouvel
+                          échec (1 min, 5 min, 15 min, puis 1 h au maximum). Vos données ne sont
+                          pas touchées. Si vous ne retrouvez pas le mot de passe, voyez
+                          « Mot de passe oublié ? » ci-dessous.
+                        </p>
+                      )}
                       {recoveryAvailable && (
                         <div className="space-y-2">
                           <p className="text-xs text-red-700">
@@ -315,6 +325,37 @@ export function UnlockScreen({
                     : "Déverrouiller"}
               </Button>
             </form>
+
+            <div className="mt-6 border-t border-border/60 pt-4 text-center">
+              <button
+                type="button"
+                className="text-sm text-primary underline-offset-4 hover:underline"
+                aria-expanded={forgotHelpOpen}
+                aria-controls="forgot-password-help"
+                onClick={() => setForgotHelpOpen((open) => !open)}
+              >
+                Mot de passe oublié ?
+              </button>
+              {forgotHelpOpen && (
+                <div
+                  id="forgot-password-help"
+                  className="mt-3 space-y-2 rounded-lg border bg-muted/40 p-4 text-left text-sm text-muted-foreground"
+                >
+                  <p className="font-medium text-foreground">Vos données ne sont pas perdues.</p>
+                  <p>
+                    Ce mot de passe verrouille seulement l&apos;ouverture du CRM sur cet
+                    ordinateur : vos contacts et documents restent intacts.
+                  </p>
+                  <p>
+                    Par sécurité, il n&apos;existe pas de réinitialisation depuis cet écran
+                    (sinon n&apos;importe qui pourrait ouvrir le CRM). Contactez le support du
+                    CRM : il vous aidera à définir un nouveau mot de passe sans perdre vos
+                    données.
+                  </p>
+                  <p>En attendant, n&apos;essayez pas de supprimer ou déplacer des fichiers du CRM.</p>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 

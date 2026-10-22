@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -100,7 +102,7 @@ export function FoyerLinkModal({
       onOpenChange(false);
     } catch (error) {
       console.error("Erreur rattachement foyer:", error);
-      alert("Erreur lors du rattachement au foyer: " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de rattacher le contact au foyer."));
     } finally {
       setLoading(false);
     }
@@ -125,7 +127,7 @@ export function FoyerLinkModal({
       onOpenChange(false);
     } catch (error) {
       console.error("Erreur création foyer:", error);
-      alert("Erreur lors de la création du foyer: " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de créer le foyer."));
     } finally {
       setLoading(false);
     }
@@ -175,9 +177,9 @@ export function FoyerLinkModal({
 
           {/* Rôle du contact actuel */}
           <div className="space-y-2">
-            <Label>Rôle de {currentContact.prenom} dans le foyer</Label>
+            <Label htmlFor="foyer-link-role">Rôle de {currentContact.prenom} dans le foyer</Label>
             <Select value={selectedRole} onValueChange={setSelectedRole}>
-              <SelectTrigger>
+              <SelectTrigger id="foyer-link-role">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

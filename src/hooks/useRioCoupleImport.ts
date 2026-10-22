@@ -11,6 +11,10 @@ export function useRioCoupleImport(options: {
   foyerId?: number;
   formFoyerId?: number;
   importContacts: Contact[];
+  /**
+   * Confirmation avant fusion d'identité. Seul appelant (RioImportWizard) : fournit
+   * toujours sa RioIdentityMergeDialog ; window.confirm n'est qu'un filet de secours.
+   */
   confirmIdentityMerge?: (message: string) => boolean | Promise<boolean>;
 }) {
   const applyCoupleRioData = useCallback(

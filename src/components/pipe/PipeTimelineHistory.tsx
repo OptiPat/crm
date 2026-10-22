@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useConfirmDialog } from "@/components/pipe/useConfirmDialog";
 import { Calendar, FileText, Pencil, Phone, Send, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ import { isProspectionMilestoneEntry } from "@/lib/pipe/pipe-prospection-phase";
 import { formatTimelineOccurredAt, datetimeLocalToUnix, unixToDatetimeLocalInput } from "@/lib/pipe/pipe-timeline-types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const TYPE_ICONS = {
   APPEL: Phone,
@@ -164,7 +166,7 @@ function TimelineEntryRow({
       toast.success("Trace RDV mise à jour");
       setEditing(false);
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer la modification"));
     } finally {
       setSaving(false);
     }
@@ -179,7 +181,7 @@ function TimelineEntryRow({
       toast.success(prospectionMilestone ? "Prospection enregistrée" : "Notes enregistrées");
       setEditing(false);
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer les notes"));
     } finally {
       setSaving(false);
     }
@@ -200,7 +202,7 @@ function TimelineEntryRow({
       toastAfterPipeRdvReschedule(calendar);
       setSuiviRdvRescheduleOpen(false);
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de décaler le RDV"));
     } finally {
       setSuiviSaving(false);
     }
@@ -477,6 +479,7 @@ function TimelineEntryRow({
                 size="icon"
                 className="h-8 w-8"
                 aria-label="Supprimer l'entrée"
+                title="Supprimer l'entrée"
                 onClick={onDelete}
               >
                 <Trash2 className="h-4 w-4 text-muted-foreground" />
@@ -541,6 +544,7 @@ export function PipeTimelineHistory({
   focusProspectionToken = 0,
 }: PipeTimelineHistoryProps) {
   const { entries, loading, removeEntry, updateMilestoneNotes } = timeline;
+  const deleteConfirm = useConfirmDialog();
   const prospectionMilestoneRef = useRef<HTMLLIElement>(null);
   const [highlightProspection, setHighlightProspection] = useState(false);
   const [suiviPlacementHints, setSuiviPlacementHints] = useState<SuiviPlacementTimelineHints>(
@@ -609,11 +613,20 @@ export function PipeTimelineHistory({
       );
       return;
     }
+    const confirmed = await deleteConfirm.confirm({
+      title: "Supprimer cette entrée ?",
+      description: `Cette entrée (${formatTimelineEntryBadgeLabel(entry, context)} du ${formatTimelineOccurredAt(
+        entry.occurred_at
+      )}) sera supprimée définitivement.`,
+      confirmLabel: "Supprimer",
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       await removeEntry(entry.id);
       toast.success("Entrée supprimée");
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de supprimer l'entrée"));
     }
   };
 
@@ -634,6 +647,7 @@ export function PipeTimelineHistory({
 
   return (
     <div className="space-y-8">
+      {deleteConfirm.dialog}
       {grouped.map((yearGroup) => (
         <section key={yearGroup.year} className="space-y-5">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

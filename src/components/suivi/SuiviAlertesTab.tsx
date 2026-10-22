@@ -123,6 +123,18 @@ function persistPrefs(partial: Partial<SuiviAlertesPreferences>, current: SuiviA
   return next;
 }
 
+/** « 1 alerte reportée » / « 3 alertes reportées ». */
+function alertesCount(n: number, participe: string): string {
+  const s = n > 1 ? "s" : "";
+  return `${n} alerte${s} ${participe}${s}`;
+}
+
+function echecsRestantsLabel(failed: number): string {
+  return failed > 1
+    ? `les ${failed} alertes en échec restent sélectionnées pour réessayer`
+    : "l'alerte en échec reste sélectionnée pour réessayer";
+}
+
 export function SuiviAlertesTab({
   alertes,
   loading,
@@ -315,7 +327,11 @@ export function SuiviAlertesTab({
     }
   };
 
-  const handleReporterSuivi = async (alerte: AlerteWithContact, mois: number) => {
+  const handleReporterSuivi = async (
+    alerte: AlerteWithContact,
+    mois: number,
+    options?: { silent?: boolean }
+  ): Promise<boolean> => {
     try {
       if (isAlerteArbitrageAvPer(alerte.type_alerte)) {
         await reporterAlerteArbitrage(alerte.alerte_id, mois);
@@ -334,19 +350,23 @@ export function SuiviAlertesTab({
         await marquerAlerteTraitee(alerte.alerte_id);
       }
       onAlertesChange((prev) => prev.filter((a) => a.alerte_id !== alerte.alerte_id));
-      toast.success(
-        isAlerteArbitrageAvPer(alerte.type_alerte)
-          ? `Arbitrage reporté de ${mois} mois`
-          : `Suivi reporté de ${mois} mois`
-      );
+      if (!options?.silent) {
+        toast.success(
+          isAlerteArbitrageAvPer(alerte.type_alerte)
+            ? `Arbitrage reporté de ${mois} mois`
+            : `Suivi reporté de ${mois} mois`
+        );
+      }
       notifyRelationChanged(alerte.contact_id);
       notifyTachesChanged();
       if (isAlerteArbitrageAvPer(alerte.type_alerte)) {
         notifyInvestissementsChanged();
       }
+      return true;
     } catch (error) {
       console.error("Error reporting suivi:", error);
-      toast.error("Erreur lors du report du suivi");
+      if (!options?.silent) toast.error("Erreur lors du report du suivi");
+      return false;
     }
   };
 
@@ -359,14 +379,19 @@ export function SuiviAlertesTab({
         next.delete(alerte.alerte_id);
         return next;
       });
-      toast.success(`Alerte masquée ${days} jours`);
+      toast.success(
+        days === 7 ? "Alerte masquée 1 semaine" : `Alerte masquée ${days} jours`
+      );
     } catch (error) {
       console.error("Error snoozing alerte:", error);
-      toast.error("Erreur lors du snooze");
+      toast.error("Impossible de masquer l’alerte");
     }
   };
 
-  const handleSupprimer = async (id: number) => {
+  const handleSupprimer = async (
+    id: number,
+    options?: { silent?: boolean }
+  ): Promise<boolean> => {
     try {
       await deleteAlerte(id);
       onAlertesChange((prev) => prev.filter((a) => a.alerte_id !== id));
@@ -375,10 +400,12 @@ export function SuiviAlertesTab({
         next.delete(id);
         return next;
       });
-      toast.success("Alerte supprimée");
+      if (!options?.silent) toast.success("Alerte supprimée");
+      return true;
     } catch (error) {
       console.error("Error deleting alerte:", error);
-      toast.error("Erreur lors de la suppression");
+      if (!options?.silent) toast.error("Erreur lors de la suppression");
+      return false;
     }
   };
 
@@ -448,11 +475,18 @@ export function SuiviAlertesTab({
     if (targets.length === 0) return;
     setBulkBusy(true);
     try {
+      const failedIds = new Set<number>();
       for (const alerte of targets) {
-        await handleReporterSuivi(alerte, mois);
+        if (!(await handleReporterSuivi(alerte, mois, { silent: true }))) failedIds.add(alerte.alerte_id);
       }
-      setSelectedIds(new Set());
-      toast.success(`${targets.length} alerte(s) reportée(s)`);
+      // Les alertes en échec restent cochées pour pouvoir réessayer.
+      setSelectedIds(failedIds);
+      const ok = targets.length - failedIds.size;
+      if (failedIds.size === 0) {
+        toast.success(`${alertesCount(ok, "reportée")} de ${mois} mois`);
+      } else {
+        toast.error(`${alertesCount(ok, "reportée")} sur ${targets.length} — ${echecsRestantsLabel(failedIds.size)}`);
+      }
     } finally {
       setBulkBusy(false);
     }
@@ -463,12 +497,20 @@ export function SuiviAlertesTab({
     if (ids.length === 0) return;
     setBulkBusy(true);
     try {
+      const failedIds = new Set<number>();
       for (const id of ids) {
-        await handleSupprimer(id);
+        if (!(await handleSupprimer(id, { silent: true }))) failedIds.add(id);
       }
-      setSelectedIds(new Set());
+      setSelectedIds(failedIds);
       setBulkDeleteOpen(false);
+      const ok = ids.length - failedIds.size;
+      if (failedIds.size === 0) {
+        toast.success(alertesCount(ok, "supprimée"));
+      } else {
+        toast.error(`${alertesCount(ok, "supprimée")} sur ${ids.length} — ${echecsRestantsLabel(failedIds.size)}`);
+      }
     } finally {
+
       setBulkBusy(false);
     }
   };

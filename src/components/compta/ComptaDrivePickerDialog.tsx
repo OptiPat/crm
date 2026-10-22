@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/tauri-compta-sync";
 import { driveFileViewUrl } from "@/lib/compta/compta-drive";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export interface ComptaDrivePickerContext {
   year: number;
@@ -55,7 +56,7 @@ export function ComptaDrivePickerDialog({
         setParentFolderId(result.parentFolderId ?? null);
         setItems(result.items);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Impossible d'ouvrir Drive");
+        toast.error(userErrorMessage(e, "Impossible d'ouvrir Google Drive"));
         setItems([]);
       } finally {
         setLoading(false);

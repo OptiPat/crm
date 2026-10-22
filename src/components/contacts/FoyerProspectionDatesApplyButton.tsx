@@ -9,6 +9,7 @@ import {
   propagateProspectionDatesToRelatedContacts,
   type ProspectionDatesFields,
 } from "@/lib/foyers/foyer-prospection-dates-sync";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface FoyerProspectionDatesApplyButtonProps {
   contactId: number;
@@ -82,7 +83,7 @@ export function FoyerProspectionDatesApplyButton({
       onApplied?.();
     } catch (error) {
       toast.error(
-        "Impossible d'appliquer les dates au conjoint / foyer : " + String(error)
+        userErrorMessage(error, "Impossible d'appliquer les dates au conjoint / foyer")
       );
     } finally {
       setLoading(false);

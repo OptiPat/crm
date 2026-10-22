@@ -17,6 +17,7 @@ import {
 } from "@/lib/pipe/pipe-rdv-plan-option";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface PipeTimelineResumeRdvFormProps {
   rdvStage: PipeRdvStage;
@@ -68,7 +69,7 @@ export function PipeTimelineResumeRdvForm({
       onSuccess?.();
       onCancel();
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer le RDV"));
     } finally {
       setSaving(false);
     }

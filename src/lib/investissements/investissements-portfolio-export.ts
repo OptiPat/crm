@@ -1,11 +1,16 @@
 import type { InvestissementWithDetails } from "@/lib/api/tauri-investissements";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
+import { formatCsvDecimal } from "@/lib/export/csv-export";
+import { formatNomProduit } from "@/lib/investissements/investissement-display";
 import {
   getEffectiveEncoursCentimes,
   isPlacementEncoursEligible,
 } from "@/lib/investissements/investissement-encours";
 import { hasScpiCredit } from "@/lib/investissements/investissement-scpi-reinvest";
-import { hasActiveVersementProgramme } from "@/lib/investissements/investissement-versements";
+import {
+  getFrequenceVersementLabel,
+  hasActiveVersementProgramme,
+} from "@/lib/investissements/investissement-versements";
 import {
   getInvestissementStatutLabel,
   isInvestissementActifEncours,
@@ -17,9 +22,9 @@ export const INVESTISSEMENTS_CSV_HEADERS = [
   "Montant souscrit (€)",
   "Encours (€)",
   "Versement programmé",
-  "Montant VP (€)",
-  "Fréquence VP",
-  "Réinvest. dividendes",
+  "Montant versement programmé (€)",
+  "Fréquence versement programmé",
+  "Réinvestissement dividendes",
   "Client prénom",
   "Client nom",
   "ID contact",
@@ -34,9 +39,10 @@ export const INVESTISSEMENTS_CSV_HEADERS = [
   "Notes",
 ] as const;
 
+/** Montant en euros, virgule décimale (lu comme un nombre par Excel FR). */
 function euroFromCentimes(centimes?: number | null): string {
   if (centimes == null) return "";
-  return (centimes / 100).toFixed(2);
+  return formatCsvDecimal(centimes / 100);
 }
 
 export function investissementToCsvRow(inv: InvestissementWithDetails): string[] {
@@ -48,12 +54,12 @@ export function investissementToCsvRow(inv: InvestissementWithDetails): string[]
 
   return [
     inv.nom_produit,
-    inv.type_produit,
+    formatNomProduit(inv.type_produit),
     euroFromCentimes(inv.montant_initial),
     encoursEligible ? euroFromCentimes(encoursCentimes) : "",
     hasVp ? "Oui" : "Non",
     hasVp ? euroFromCentimes(inv.montant_versement_programme) : "",
-    hasVp ? (inv.frequence_versement ?? "") : "",
+    hasVp ? getFrequenceVersementLabel(inv.frequence_versement) : "",
     inv.reinvestissement_dividendes ? "Oui" : "Non",
     inv.contact_id ? inv.contact_prenom : "Commun",
     inv.contact_id ? inv.contact_nom : inv.foyer_nom ?? "",

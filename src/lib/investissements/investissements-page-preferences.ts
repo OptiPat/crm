@@ -14,7 +14,8 @@ export type InvestissementsPagePreferences = {
   partenaireFilters: string[];
 };
 
-const DEFAULTS: InvestissementsPagePreferences = {
+/** Valeurs par défaut de la page (seule source pour le tri et le regroupement par défaut). */
+export const INVESTISSEMENTS_PAGE_DEFAULTS: Readonly<InvestissementsPagePreferences> = {
   sortKey: "client_asc",
   groupMode: "category",
   origineFilters: [],
@@ -46,31 +47,31 @@ function sanitizePreferences(
   return {
     sortKey: VALID_SORTS.has(raw.sortKey ?? "")
       ? (raw.sortKey as InvestissementPortfolioSort)
-      : DEFAULTS.sortKey,
+      : INVESTISSEMENTS_PAGE_DEFAULTS.sortKey,
     groupMode: VALID_GROUPS.has(raw.groupMode ?? "")
       ? (raw.groupMode as InvestissementPortfolioGroup)
-      : DEFAULTS.groupMode,
+      : INVESTISSEMENTS_PAGE_DEFAULTS.groupMode,
     origineFilters: Array.isArray(raw.origineFilters)
       ? raw.origineFilters.filter((x): x is OrigineFilterChip =>
           VALID_ORIGINE.has(x)
         )
-      : DEFAULTS.origineFilters,
+      : INVESTISSEMENTS_PAGE_DEFAULTS.origineFilters,
     typeFilters: Array.isArray(raw.typeFilters)
       ? raw.typeFilters.filter((x) => typeof x === "string")
-      : DEFAULTS.typeFilters,
+      : INVESTISSEMENTS_PAGE_DEFAULTS.typeFilters,
     partenaireFilters: Array.isArray(raw.partenaireFilters)
       ? raw.partenaireFilters.filter((x) => typeof x === "string")
-      : DEFAULTS.partenaireFilters,
+      : INVESTISSEMENTS_PAGE_DEFAULTS.partenaireFilters,
   };
 }
 
 export function loadInvestissementsPagePreferences(): InvestissementsPagePreferences {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULTS };
+    if (!raw) return { ...INVESTISSEMENTS_PAGE_DEFAULTS };
     return sanitizePreferences(JSON.parse(raw) as Partial<InvestissementsPagePreferences>);
   } catch {
-    return { ...DEFAULTS };
+    return { ...INVESTISSEMENTS_PAGE_DEFAULTS };
   }
 }
 

@@ -15,6 +15,7 @@ import {
 } from "@/lib/investissements/investissement-statut";
 import { Archive, ArchiveRestore } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirmDialog } from "@/components/pipe/useConfirmDialog";
 
 export function InvestissementCloturePanel({
   investissement,
@@ -25,6 +26,7 @@ export function InvestissementCloturePanel({
 }) {
   const [dateCloture, setDateCloture] = useState(todayLocal());
   const [saving, setSaving] = useState(false);
+  const reopenConfirm = useConfirmDialog();
   const isActif = isInvestissementActifEncours(investissement);
   const isCloture = isInvestissementCloture(investissement);
 
@@ -53,13 +55,12 @@ export function InvestissementCloturePanel({
   };
 
   const handleReopen = async () => {
-    if (
-      !window.confirm(
-        `Rouvrir « ${investissement.nom_produit} » et le remettre dans l'encours ?`
-      )
-    ) {
-      return;
-    }
+    const ok = await reopenConfirm.confirm({
+      title: "Rouvrir l'investissement ?",
+      description: `« ${investissement.nom_produit} » sera remis dans l'encours.`,
+      confirmLabel: "Rouvrir",
+    });
+    if (!ok) return;
     setSaving(true);
     try {
       const updated = await reopenInvestissement(investissement.id);
@@ -75,6 +76,7 @@ export function InvestissementCloturePanel({
 
   return (
     <div className="rounded-lg border border-border/80 bg-muted/20 p-4 space-y-3">
+      {reopenConfirm.dialog}
       <div>
         <h3 className="text-sm font-medium">Sortie d&apos;encours</h3>
         <p className="text-xs text-muted-foreground mt-1">

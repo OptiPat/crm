@@ -13,6 +13,8 @@ import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import { Loader2, PlusCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirmDialog } from "@/components/pipe/useConfirmDialog";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function InvestissementVersementsPanel({
   investissementId,
@@ -26,6 +28,7 @@ export function InvestissementVersementsPanel({
   const [versements, setVersements] = useState<InvestissementVersement[]>([]);
   const [montant, setMontant] = useState("");
   const [dateVersement, setDateVersement] = useState(todayLocal());
+  const deleteConfirm = useConfirmDialog();
 
   const load = useCallback(async () => {
     try {
@@ -64,7 +67,7 @@ export function InvestissementVersementsPanel({
     } catch (error) {
       console.error(error);
       toast.error(
-        error instanceof Error ? error.message : "Erreur lors de l'enregistrement"
+        userErrorMessage(error, "Impossible d'enregistrer le versement")
       );
     } finally {
       setSaving(false);
@@ -72,7 +75,13 @@ export function InvestissementVersementsPanel({
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Supprimer ce versement complémentaire ?")) return;
+    const ok = await deleteConfirm.confirm({
+      title: "Supprimer ce versement complémentaire ?",
+      description: "Cette action est irréversible.",
+      confirmLabel: "Supprimer",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await deleteInvestissementVersement(id);
       toast.success("Versement supprimé");
@@ -88,6 +97,7 @@ export function InvestissementVersementsPanel({
 
   return (
     <div className="space-y-4 border-t pt-4">
+      {deleteConfirm.dialog}
       <div className="flex items-start gap-2">
         <PlusCircle className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" aria-hidden />
         <div>

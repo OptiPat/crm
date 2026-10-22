@@ -118,6 +118,7 @@ import { Plus, Tag, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TeamLockBanner } from "@/components/team/TeamLockBanner";
 import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
+import { useUnsavedCloseGuard } from "@/hooks/useUnsavedCloseGuard";
 
 interface EtiquetteFormProps {
   open: boolean;
@@ -170,6 +171,7 @@ export function EtiquetteForm({
     entityType: "etiquette",
     entityId: etiquette?.id,
   });
+  const closeGuard = useUnsavedCloseGuard({ open, onClose: () => onOpenChange(false) });
   
   // État du formulaire
   const [nom, setNom] = useState("");
@@ -833,6 +835,7 @@ export function EtiquetteForm({
 
       notifyEtiquettesChanged();
       onSuccess();
+      closeGuard.resetDirty();
       onOpenChange(false);
     } catch (error) {
       console.error("Error saving etiquette:", error);
@@ -865,7 +868,7 @@ export function EtiquetteForm({
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={closeGuard.handleOpenChange}>
       <DialogContent className="max-w-3xl sm:max-w-4xl h-[min(92vh,860px)] flex flex-col gap-0 p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-0 shrink-0">
           <DialogTitle>
@@ -920,7 +923,15 @@ export function EtiquetteForm({
                   Désactivée : plus de règle auto ni email. Tags manuels conservés.
                 </p>
               </div>
-              <Switch id="actif" checked={actif} onCheckedChange={setActif} />
+              <Switch
+                id="actif"
+                checked={actif}
+                onCheckedChange={(checked) => {
+                  setActif(checked);
+                  // Hors du <form> suivi par la garde : signaler la modification.
+                  closeGuard.markDirty();
+                }}
+              />
             </div>
           </div>
           <EtiquetteFormStatusBadges
@@ -953,7 +964,11 @@ export function EtiquetteForm({
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-col flex-1 min-h-0"
+          {...closeGuard.trackDirtyProps}
+        >
           {!etiquette && !duplicateFrom && (
             <div
               className={cn(
@@ -1019,6 +1034,10 @@ export function EtiquetteForm({
                       onChange={(e) => {
                         setNom(e.target.value);
                         if (fieldHighlight === "nom") setFieldHighlight(null);
+                      }}
+                      // Entrée ne doit pas enregistrer avant d'avoir réglé la règle ou l'email.
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.preventDefault();
                       }}
                       placeholder="Ex. Déclaration IR, Suivi urgent…"
                       required
@@ -1710,11 +1729,14 @@ export function EtiquetteForm({
             <div className="flex-1 min-h-[8rem]" aria-hidden />
           )}
 
-          <DialogFooter className="px-6 py-4 border-t bg-background shrink-0 gap-2 sm:gap-0">
+          <DialogFooter
+            className="px-6 py-4 border-t bg-background shrink-0 gap-2 sm:gap-0"
+            data-no-dirty
+          >
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
+              onClick={closeGuard.requestClose}
             >
               Annuler
             </Button>
@@ -1735,6 +1757,7 @@ export function EtiquetteForm({
           await reloadSegments();
           onSegmentsChanged?.();
           if (created?.id) {
+            closeGuard.markDirty();
             setSegmentId(created.id);
             setUseGroupRule(true);
             setUseComboRule(false);
@@ -1742,6 +1765,7 @@ export function EtiquetteForm({
           }
         }}
       />
+      {closeGuard.discardDialog}
     </>
   );
 }

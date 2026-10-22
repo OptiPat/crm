@@ -17,6 +17,7 @@ import {
   FICHE_CONSEIL_ARBITRAGE_REDACTION_LABELS,
   isAvArbitrageRedaction,
 } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-redaction-labels";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type Draft = {
   nom: string;
@@ -130,7 +131,7 @@ export function FicheConseilRedactionPresetsManager({
       cancelEdit();
       await refresh();
     } catch (error) {
-      toast.error(`Erreur : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible d'enregistrer le texte"));
     } finally {
       setSaving(false);
     }
@@ -143,7 +144,7 @@ export function FicheConseilRedactionPresetsManager({
       await refresh();
       toast.success("Texte supprimé");
     } catch (error) {
-      toast.error(`Erreur : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible de supprimer le texte"));
     }
   };
 
@@ -241,13 +242,22 @@ export function FicheConseilRedactionPresetsManager({
             <li key={preset.id} className="flex items-center justify-between gap-2 p-3">
               <span className="text-sm font-medium">{preset.nom}</span>
               <div className="flex gap-1">
-                <Button type="button" size="icon" variant="ghost" onClick={() => startEdit(preset)}>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  aria-label={`Modifier « ${preset.nom} »`}
+                  title="Modifier"
+                  onClick={() => startEdit(preset)}
+                >
                   <Pencil className="h-4 w-4" />
                 </Button>
                 <Button
                   type="button"
                   size="icon"
                   variant="ghost"
+                  aria-label={`Supprimer « ${preset.nom} »`}
+                  title="Supprimer"
                   onClick={() => void handleDelete(preset)}
                 >
                   <Trash2 className="h-4 w-4" />

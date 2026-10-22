@@ -48,6 +48,7 @@ import {
   isSuiviRdvEntry,
 } from "@/lib/pipe/pipe-suivi";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface AgendaPipeRdvManageDialogProps {
   open: boolean;
@@ -94,7 +95,7 @@ export function AgendaPipeRdvManageDialog({
         setMode("menu");
       })
       .catch((e) => {
-        toast.error(e instanceof Error ? e.message : "Impossible de charger le RDV Pipe");
+        toast.error(userErrorMessage(e, "Impossible de charger le RDV"));
         onOpenChange(false);
       })
       .finally(() => setLoading(false));
@@ -137,7 +138,7 @@ export function AgendaPipeRdvManageDialog({
       onOpenChange(false);
       onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur lors du décalage");
+      toast.error(userErrorMessage(e, "Impossible de décaler le RDV"));
     } finally {
       setSaving(false);
     }
@@ -160,7 +161,7 @@ export function AgendaPipeRdvManageDialog({
       onOpenChange(false);
       onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur lors de l'annulation");
+      toast.error(userErrorMessage(e, "Impossible d'annuler le RDV"));
     } finally {
       setSaving(false);
     }

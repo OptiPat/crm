@@ -16,6 +16,7 @@ import { parseEurosInput } from "@/lib/espace-client/client-investissement-updat
 import { normalizeExtranetBookmarkUrl } from "@/lib/espace-client/client-extranet-bookmark";
 import { PLAFOND_DECLARATION_CENTIMES } from "@/lib/espace-client/scpi-client-tracking";
 import { CP } from "./client-preview-theme";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const INPUT_CLASS =
   "mt-1 w-full rounded-lg border border-[var(--cp-line)] bg-[var(--cp-surface)] px-3 py-2 text-sm text-[var(--cp-ink)]";
@@ -169,7 +170,7 @@ export function ClientPreviewAddAvoir({
       reset();
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Enregistrement impossible.");
+      setError(userErrorMessage(err, "Enregistrement impossible."));
     }
   };
 

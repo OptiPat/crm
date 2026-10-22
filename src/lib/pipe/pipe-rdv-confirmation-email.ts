@@ -428,7 +428,7 @@ export async function maybeSendPipeRdvConfirmationEmail(
     if (!options.quiet) {
       toast.warning(
         sent > 0
-          ? `${sent} confirmation(s) envoyée(s) — Gmail saturé pour le reste, nouvel essai dans 1 min.`
+          ? `${sent} confirmation(s) envoyée(s) — messagerie saturée pour le reste, nouvel essai dans 1 min.`
           : `Confirmation RDV non envoyée : ${humanizeTransientEmailSendError(transientMsg)}`
       );
     }

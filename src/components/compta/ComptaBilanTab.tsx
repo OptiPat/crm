@@ -172,11 +172,25 @@ export function ComptaBilanTab({
           <h2 className="text-lg font-semibold">Bilan annuel {year}</h2>
         </div>
         <div className="flex items-center rounded-md border bg-background">
-          <Button type="button" variant="ghost" size="icon" onClick={() => onYearChange(year - 1)}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Année précédente"
+            title="Année précédente"
+            onClick={() => onYearChange(year - 1)}
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="min-w-[4rem] px-2 text-center font-medium tabular-nums">{year}</span>
-          <Button type="button" variant="ghost" size="icon" onClick={() => onYearChange(year + 1)}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Année suivante"
+            title="Année suivante"
+            onClick={() => onYearChange(year + 1)}
+          >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>

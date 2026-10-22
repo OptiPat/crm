@@ -1,5 +1,6 @@
 import { openExternalUrl } from "@/lib/api/tauri-system";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const HTTP_LINK = /^https?:\/\//i;
 const MAILTO_LINK = /^mailto:/i;
@@ -22,5 +23,5 @@ export function handleNoteLinkClick(event: React.MouseEvent<HTMLElement>): void 
   const href = anchor.getAttribute("href");
   if (!href || !isNoteExternalHref(href)) return;
   event.preventDefault();
-  void openNoteLink(href).catch((err) => toast.error(String(err)));
+  void openNoteLink(href).catch((err) => toast.error(userErrorMessage(err, "Impossible d'ouvrir le lien")));
 }

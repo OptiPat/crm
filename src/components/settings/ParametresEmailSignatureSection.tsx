@@ -12,6 +12,7 @@ import {
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { PARAMETRES_PATH } from "@/lib/settings/parametres-labels";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type ParametresEmailSignatureSectionProps = {
   cgpConfig: CgpConfig;
@@ -43,7 +44,7 @@ export function ParametresEmailSignatureSection({
       const sig = await fetchGmailSignatureForCgp();
       applyImportedSignature(sig);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Import signature impossible");
+      toast.error(userErrorMessage(e, "Import de la signature impossible"));
     } finally {
       setImportingSignature(false);
     }
@@ -56,7 +57,7 @@ export function ParametresEmailSignatureSection({
       if (!sig) return;
       applyImportedSignature(sig);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Import image impossible");
+      toast.error(userErrorMessage(e, "Import de l'image impossible"));
     } finally {
       setImportingSignature(false);
     }
@@ -69,7 +70,7 @@ export function ParametresEmailSignatureSection({
       if (!sig) return;
       applyImportedSignature(sig);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Import Outlook impossible");
+      toast.error(userErrorMessage(e, "Import depuis Outlook impossible"));
     } finally {
       setImportingSignature(false);
     }

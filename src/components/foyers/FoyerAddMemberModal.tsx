@@ -137,9 +137,9 @@ export function FoyerAddMemberModal({
 
         <div className="space-y-3 shrink-0">
           <div className="space-y-2">
-            <Label>Rôle par défaut des nouveaux membres</Label>
+            <Label htmlFor="foyer-add-member-role">Rôle par défaut des nouveaux membres</Label>
             <Select value={selectedRole} onValueChange={setSelectedRole}>
-              <SelectTrigger>
+              <SelectTrigger id="foyer-add-member-role">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

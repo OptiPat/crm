@@ -12,6 +12,7 @@ import { newNewsletterImageId, pickNewsletterImageDataUrl } from "@/lib/newslett
 import { ImagePlus, Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type NewsletterPlacedImagesEditorProps = {
   draft: GeneratedNewsletterContent;
@@ -52,7 +53,7 @@ export function NewsletterPlacedImagesEditor({
       ]);
       toast.success("Image ajoutée — choisissez sa position");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Import image impossible");
+      toast.error(userErrorMessage(e, "Import image impossible"));
     } finally {
       setImporting(false);
     }

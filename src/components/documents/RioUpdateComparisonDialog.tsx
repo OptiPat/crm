@@ -57,6 +57,7 @@ import {
 import { resolvePartenaireIdForRioLabel } from "@/lib/documents/rio-product-partenaire";
 import { toast } from "sonner";
 import { RioImportStepper } from "./RioImportStepper";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 function isResidencePrincipaleType(type: string): boolean {
   return type === "RP" || type === "RESIDENCE_PRINCIPALE";
@@ -762,7 +763,7 @@ export function RioUpdateComparisonDialog({
       onComplete();
     } catch (error) {
       console.error("Erreur lors de la mise à jour:", error);
-      toast.error("Erreur lors de la mise à jour du patrimoine : " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de mettre à jour le patrimoine"));
     } finally {
       setSaving(false);
     }

@@ -127,6 +127,7 @@ export function Etiquettes({ onNavigate }: { onNavigate?: (page: string) => void
   const isWide = useMediaQuery("(min-width: 1024px)");
   const [etiquettes, setEtiquettes] = useState<EtiquetteWithCount[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [pageFilter, setPageFilter] = useState<EtiquettePageFilter>("all");
   const [sortBy, setSortBy] = useState<EtiquetteSort>("contacts");
@@ -180,6 +181,7 @@ export function Etiquettes({ onNavigate }: { onNavigate?: (page: string) => void
   const loadEtiquettes = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadFailed(false);
       let data = await getAllEtiquettesWithCount();
 
       if (data.length === 0) {
@@ -209,6 +211,7 @@ export function Etiquettes({ onNavigate }: { onNavigate?: (page: string) => void
       await refreshSegmentLookup();
     } catch (error) {
       console.error("Error loading etiquettes:", error);
+      setLoadFailed(true);
       toast.error("Erreur lors du chargement des étiquettes");
     } finally {
       setLoading(false);
@@ -443,6 +446,23 @@ export function Etiquettes({ onNavigate }: { onNavigate?: (page: string) => void
               />
             ))}
           </div>
+        ) : loadFailed && etiquettes.length === 0 ? (
+          <div className="text-center py-10 px-4" role="alert">
+            <Tag className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+            <p className="text-sm font-medium">Impossible de charger les étiquettes</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Vos étiquettes ne sont pas perdues. Réessayez dans un instant.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={() => void loadEtiquettes()}
+            >
+              Réessayer
+            </Button>
+          </div>
         ) : filteredEtiquettes.length === 0 ? (
           <div className="text-center py-10 px-4">
             <Tag className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
@@ -649,7 +669,7 @@ export function Etiquettes({ onNavigate }: { onNavigate?: (page: string) => void
               {etiquetteToDelete && etiquetteToDelete.contact_count > 0 && (
                 <span className="block mt-2 text-destructive">
                   Attention : {etiquetteToDelete.contact_count} contact
-                  {etiquetteToDelete.contact_count > 1 ? "s" : ""} perdront cette étiquette.
+                  {etiquetteToDelete.contact_count > 1 ? "s perdront" : " perdra"} cette étiquette.
                 </span>
               )}
             </AlertDialogDescription>

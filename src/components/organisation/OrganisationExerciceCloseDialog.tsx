@@ -18,6 +18,7 @@ import {
 } from "@/lib/organisation/organisation-volume-history";
 import { closeFilleulExercice } from "@/lib/api/tauri-filleul-volumes";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type OrganisationExerciceCloseDialogProps = {
   open: boolean;
@@ -64,7 +65,7 @@ export function OrganisationExerciceCloseDialog({
     } catch (error) {
       console.error(error);
       toast.error(
-        error instanceof Error ? error.message : "Impossible de clôturer l'exercice"
+        userErrorMessage(error, "Impossible de clôturer l'exercice")
       );
     } finally {
       setClosing(false);

@@ -18,6 +18,7 @@ import {
   filterContactsForBulkAssign,
 } from "@/lib/etiquettes/etiquette-bulk-assign";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface EtiquetteBulkAssignDialogProps {
   open: boolean;
@@ -83,7 +84,7 @@ export function EtiquetteBulkAssignDialog({
       onAssigned?.();
       onOpenChange(false);
     } catch (error) {
-      toast.error(`Attribution impossible : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Attribution impossible"));
     } finally {
       setSaving(false);
     }

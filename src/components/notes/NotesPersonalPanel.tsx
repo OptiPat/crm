@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePageLeaveGuard } from "@/lib/navigation/page-leave-guard";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { Plus, Pin, Trash2, Save, Search, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,6 +72,7 @@ export function NotesPersonalPanel() {
   useEffect(() => {
     isDirtyRef.current = isDirty;
   }, [isDirty]);
+  usePageLeaveGuard(isDirty);
 
   const categories = useMemo(() => uniquePersonalNoteCategories(notes), [notes]);
 
@@ -113,7 +116,7 @@ export function NotesPersonalPanel() {
       const rows = await getAllPersonalNotes();
       applyNoteRows(rows, options?.preserveDraft ?? false);
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible de charger les notes"));
     } finally {
       setLoading(false);
     }
@@ -182,7 +185,7 @@ export function NotesPersonalPanel() {
       await load();
       toast.success("Note enregistrée.");
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible d'enregistrer la note"));
     } finally {
       setSaving(false);
     }
@@ -198,7 +201,7 @@ export function NotesPersonalPanel() {
       await load();
       toast.success("Note supprimée.");
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible de supprimer la note"));
     } finally {
       setSaving(false);
       setShowDeleteDialog(false);

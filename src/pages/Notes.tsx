@@ -14,10 +14,11 @@ export function Notes() {
           <TabsTrigger value="personal">Mes notes</TabsTrigger>
           <TabsTrigger value="shared">Bibliothèque partagée</TabsTrigger>
         </TabsList>
-        <TabsContent value="personal" className="mt-4">
+        {/* Les deux onglets restent montés : changer d'onglet ne perd pas une note en cours. */}
+        <TabsContent value="personal" forceMount className="mt-4 data-[state=inactive]:hidden">
           <NotesPersonalPanel />
         </TabsContent>
-        <TabsContent value="shared" className="mt-4">
+        <TabsContent value="shared" forceMount className="mt-4 data-[state=inactive]:hidden">
           <NotesSharedPanel isActive={tab === "shared"} />
         </TabsContent>
       </Tabs>

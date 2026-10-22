@@ -30,18 +30,24 @@ import {
   type ParrainagePipeStage,
 } from "@/lib/parrainage-pipe/parrainage-pipe-types";
 import { toast } from "sonner";
+import {
+  BoardContactSearch,
+  BoardContactSearchEmpty,
+} from "@/components/pipe/BoardContactSearch";
+import { filterByContactSearch } from "@/lib/pipe/pipe-contact-search";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function PipeParrainage() {
-  const exerciceOptions = useMemo(() => {
-    const current = currentFiscalYearLabel();
-    return listSelectableFiscalYearLabels().filter((label) => label >= current);
-  }, []);
+  const exerciceOptions = useMemo(() => listSelectableFiscalYearLabels(), []);
   const defaultExercice = useMemo(() => currentFiscalYearLabel(), []);
 
   const [exerciceLabel, setExerciceLabel] = useState(defaultExercice);
   const [pipes, setPipes] = useState<ParrainagePipeRecord[]>([]);
   const [counts, setCounts] = useState({ sms_envoyes: 0, confirmations: 0, presences: 0, parrainages: 0 });
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [search, setSearch] = useState("");
+  const loadGenerationRef = useRef(0);
   const [selected, setSelected] = useState<ParrainagePipeRecord | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [stageDialog, setStageDialog] = useState<{
@@ -55,6 +61,8 @@ export function PipeParrainage() {
     const onFocus = (event: Event) => {
       const detail = (event as CustomEvent<{ pipeId: number | null }>).detail;
       if (detail?.pipeId != null) {
+        // Une recherche active pourrait masquer la carte ciblée.
+        setSearch("");
         setScrollToPipeId(detail.pipeId);
       }
     };
@@ -63,21 +71,27 @@ export function PipeParrainage() {
   }, []);
 
   const loadData = useCallback(async () => {
+    const generation = ++loadGenerationRef.current;
     setLoading(true);
     try {
       const [pipeRows, funnelCounts] = await Promise.all([
         listParrainagePipes(exerciceLabel),
         getParrainageFunnelCounts(exerciceLabel),
       ]);
+      if (generation !== loadGenerationRef.current) return;
       setPipes(pipeRows);
       setCounts(funnelCounts);
+      setLoaded(true);
       setSelected((prev) => (prev ? pipeRows.find((p) => p.id === prev.id) ?? null : null));
     } catch (error) {
-      toast.error(String(error));
+      if (generation !== loadGenerationRef.current) return;
+      toast.error(userErrorMessage(error, "Impossible de charger les parrainages"));
     } finally {
-      setLoading(false);
+      if (generation === loadGenerationRef.current) setLoading(false);
     }
   }, [exerciceLabel]);
+
+  const searchedPipes = useMemo(() => filterByContactSearch(pipes, search), [pipes, search]);
 
   useEffect(() => {
     void loadData();
@@ -109,14 +123,18 @@ export function PipeParrainage() {
       toast.success(`Étape : ${PARRAINAGE_PIPE_STAGE_LABELS[stage]}`);
       await loadData();
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible de changer l'étape"));
     }
   };
 
   const funnelCards = [
     { label: "SMS envoyés", current: counts.sms_envoyes },
     { label: "« Oui, je viens »", current: counts.confirmations },
-    { label: "Présents JD/PO", current: counts.presences },
+    {
+      label: "Présents",
+      title: "Présents à la Journée Découverte (JD) ou à la Présentation d'opportunité (PO)",
+      current: counts.presences,
+    },
     { label: "Inscrits", current: counts.parrainages },
   ];
 
@@ -143,6 +161,7 @@ export function PipeParrainage() {
             {funnelCards.map((card) => (
               <div
                 key={card.label}
+                title={"title" in card ? card.title : undefined}
                 className="rounded-md border border-border/50 bg-muted/20 px-2.5 py-1 text-xs"
               >
                 <span className="text-muted-foreground">{card.label} : </span>
@@ -173,18 +192,37 @@ export function PipeParrainage() {
           />
         ) : (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-            {loading ? (
+            {loading && !loaded ? (
               <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
                 Chargement…
               </div>
             ) : (
-              <ParrainagePipeBoard
-                pipes={pipes}
-                selectedId={null}
-                scrollToPipeId={scrollToPipeId}
-                onSelect={setSelected}
-                onRequestStageChange={(pipe, stage) => void handleStageChange(pipe, stage)}
-              />
+              <>
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-4 py-2">
+                  <BoardContactSearch
+                    value={search}
+                    onChange={setSearch}
+                    resultCount={searchedPipes.length}
+                    className="flex-1"
+                  />
+                  {loading ? (
+                    <span className="text-xs text-muted-foreground" aria-live="polite">
+                      Actualisation…
+                    </span>
+                  ) : null}
+                </div>
+                {searchedPipes.length === 0 && pipes.length > 0 ? (
+                  <BoardContactSearchEmpty query={search} onClear={() => setSearch("")} />
+                ) : (
+                  <ParrainagePipeBoard
+                    pipes={searchedPipes}
+                    selectedId={null}
+                    scrollToPipeId={scrollToPipeId}
+                    onSelect={setSelected}
+                    onRequestStageChange={(pipe, stage) => void handleStageChange(pipe, stage)}
+                  />
+                )}
+              </>
             )}
           </div>
         )}

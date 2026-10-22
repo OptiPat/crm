@@ -14,6 +14,20 @@ export const AV_PER_TYPES = ["ASSURANCE_VIE", "PER"] as const;
 
 export type AvPerType = (typeof AV_PER_TYPES)[number];
 
+/** Libellés des fréquences de versement programmé (codes stockés en base). */
+export const FREQUENCE_VERSEMENT_LABELS: Record<string, string> = {
+  MENSUEL: "Mensuel",
+  TRIMESTRIEL: "Trimestriel",
+  SEMESTRIEL: "Semestriel",
+  ANNUEL: "Annuel",
+};
+
+/** Libellé lisible d'une fréquence ; code inconnu renvoyé tel quel. */
+export function getFrequenceVersementLabel(code?: string | null): string {
+  if (!code) return "";
+  return FREQUENCE_VERSEMENT_LABELS[code] ?? code;
+}
+
 type VersementProgrammeFields = {
   id?: number;
   origine?: string;

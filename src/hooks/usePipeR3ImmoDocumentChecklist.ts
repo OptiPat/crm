@@ -36,6 +36,7 @@ import { notifyPipeR3ImmoChecklistChanged } from "@/lib/pipe/pipe-r3-immo-checkl
 import { subscribePipeR1ChecklistChanged } from "@/lib/pipe/pipe-r1-checklist-events";
 import { subscribeDocumentsChanged } from "@/lib/documents/document-events";
 import { useR3ImmoChecklistTemplate } from "@/hooks/useR3ImmoChecklistTemplate";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function usePipeR3ImmoDocumentChecklist(
   pipeId: number,
@@ -78,7 +79,7 @@ export function usePipeR3ImmoDocumentChecklist(
       setFoyerMembers(loadedFoyer);
       setInvestissements(loadedInvestissements);
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de charger les données du foyer"));
     }
   }, [contactId, enabled, secondaryContactId]);
 
@@ -123,7 +124,7 @@ export function usePipeR3ImmoDocumentChecklist(
       setR1Checklist(loadedR1);
     } catch (err) {
       if (generation !== sessionGenerationRef.current) return;
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de charger la liste de documents"));
       setChecklist(null);
       checklistRef.current = null;
     } finally {
@@ -255,7 +256,7 @@ export function usePipeR3ImmoDocumentChecklist(
         }
         return true;
       } catch (err) {
-        toast.error(String(err));
+        toast.error(userErrorMessage(err, "Impossible d'enregistrer la liste de documents"));
         if (
           generation !== persistGenerationRef.current ||
           activePipeIdRef.current !== requestPipeId

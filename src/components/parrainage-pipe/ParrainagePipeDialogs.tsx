@@ -25,6 +25,7 @@ import {
   type ParrainageInvitationType,
 } from "@/lib/parrainage-pipe/parrainage-pipe-types";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface ParrainagePipeCreateDialogProps {
   open: boolean;
@@ -68,7 +69,7 @@ export function ParrainagePipeCreateDialog({
       onCreated();
       onOpenChange(false);
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible de créer le suivi de parrainage"));
     } finally {
       setSaving(false);
     }

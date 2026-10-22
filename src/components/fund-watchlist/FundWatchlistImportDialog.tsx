@@ -18,6 +18,7 @@ import {
   type CristallianceSupportsImportRow,
 } from "@/lib/fund-watchlist/cristalliance-supports-import";
 import { pickCristallianceSupportsSheetName } from "@/lib/fund-watchlist/cristalliance-supports-layout";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type Step = "pick" | "preview";
 
@@ -93,7 +94,7 @@ export function FundWatchlistImportDialog({
       onApplied?.();
       handleOpenChange(false);
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible d'importer les fonds"));
     } finally {
       setBusy(false);
     }

@@ -87,12 +87,12 @@ export function TacheRecurrenceFields({
         <>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Rythme</Label>
+              <Label htmlFor="tache-recurrence-freq">Rythme</Label>
               <Select
                 value={rec.freq}
                 onValueChange={(v) => patch({ freq: v as TacheRecurrenceFreq })}
               >
-                <SelectTrigger>
+                <SelectTrigger id="tache-recurrence-freq">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -186,12 +186,12 @@ export function TacheRecurrenceFields({
           {rec.freq === "yearly" && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Mois</Label>
+                <Label htmlFor="tache-recurrence-month">Mois</Label>
                 <Select
                   value={String(rec.month ?? 1)}
                   onValueChange={(v) => patch({ month: parseInt(v, 10) })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="tache-recurrence-month">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

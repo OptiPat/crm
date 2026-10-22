@@ -140,7 +140,7 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
     if (!selectedFile) return;
 
     if (selectedFile.size > 10 * 1024 * 1024) {
-      alert("Le fichier est trop volumineux (max 10MB)");
+      toast.error("Le fichier est trop volumineux (max 10MB)");
       return;
     }
 
@@ -151,7 +151,7 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
       const workbook = XLSX.read(data);
       
       if (workbook.SheetNames.length === 0) {
-        alert("Le fichier ne contient aucune feuille");
+        toast.error("Le fichier ne contient aucune feuille");
         return;
       }
       
@@ -159,7 +159,7 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
       const jsonData = XLSX.utils.sheet_to_json(firstSheet);
       
       if (jsonData.length === 0) {
-        alert("Le fichier est vide");
+        toast.error("Le fichier est vide");
         return;
       }
 

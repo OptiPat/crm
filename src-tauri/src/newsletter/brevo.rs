@@ -70,7 +70,7 @@ impl BrevoClient {
     fn new(api_key: &str) -> Result<Self, String> {
         let trimmed = api_key.trim();
         if trimmed.is_empty() {
-            return Err("Clé API Brevo non configurée (Newsletter → Paramètres).".into());
+            return Err("Clé API Brevo non configurée (Newsletter → Réglages newsletter).".into());
         }
         let client = Client::builder()
             .timeout(Duration::from_secs(120))
@@ -122,7 +122,7 @@ impl BrevoClient {
 
         if !status.is_success() {
             let hint = match status.as_u16() {
-                401 => "Clé API Brevo invalide (Newsletter → Paramètres).",
+                401 => "Clé API Brevo invalide (Newsletter → Réglages newsletter).",
                 402 => "Crédits Brevo insuffisants ou plan limité.",
                 404 => "Ressource Brevo introuvable (template ou liste).",
                 _ => "Vérifiez la clé API, le domaine expéditeur et le template Brevo.",
@@ -204,10 +204,10 @@ pub fn push_newsletter_campaign(
         return Err("Sélectionnez un template Brevo.".into());
     }
     if input.sender_email.trim().is_empty() {
-        return Err("Renseignez l'email expéditeur Brevo (Newsletter → Paramètres).".into());
+        return Err("Renseignez l'email expéditeur Brevo (Newsletter → Réglages newsletter).".into());
     }
     if input.sender_name.trim().is_empty() {
-        return Err("Renseignez le nom expéditeur Brevo (Newsletter → Paramètres).".into());
+        return Err("Renseignez le nom expéditeur Brevo (Newsletter → Réglages newsletter).".into());
     }
 
     let client = BrevoClient::new(api_key)?;

@@ -13,6 +13,7 @@ import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 import { importPipeChecklistDocument } from "@/lib/pipe/pipe-checklist-document-import";
 import { mergePipeChecklistDocument } from "@/lib/pipe/pipe-checklist-documents";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const NONE_DOC_VALUE = "__none__";
 
@@ -63,7 +64,7 @@ export function PipeChecklistDocumentLink({
     try {
       await onLink(nextDocumentId);
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de lier le document"));
     }
   };
 
@@ -87,7 +88,7 @@ export function PipeChecklistDocumentLink({
       toast.success("Pièce jointe importée et liée");
     } catch (err) {
       setPendingDoc(null);
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'importer le document"));
     } finally {
       setImporting(false);
     }

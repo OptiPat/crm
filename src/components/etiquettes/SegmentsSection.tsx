@@ -24,6 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface SegmentsSectionProps {
   etiquettes?: EtiquetteWithCount[];
@@ -75,7 +76,7 @@ export function SegmentsSection({ etiquettes = [] }: SegmentsSectionProps) {
           : "Aucun contact dans ce groupe"
       );
     } catch (e) {
-      toast.error(`Échec de l'export : ${String(e)}`);
+      toast.error(userErrorMessage(e, "Échec de l'export"));
     } finally {
       setExportingId(null);
     }
@@ -88,7 +89,7 @@ export function SegmentsSection({ etiquettes = [] }: SegmentsSectionProps) {
       toast.success("Groupe de contacts supprimé");
       await load();
     } catch (e) {
-      toast.error(String(e));
+      toast.error(userErrorMessage(e, "Impossible de supprimer le segment"));
     } finally {
       setDeleteTarget(null);
     }

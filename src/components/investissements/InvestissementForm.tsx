@@ -174,12 +174,14 @@ import {
   financingCentimesToEuro,
 } from "@/lib/investissements/investissement-immo-financing";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { cn } from "@/lib/utils";
 import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 import { preventStackedSheetOutsideDismiss } from "@/lib/ui/radix-outside-interaction";
 import { TeamLockBanner } from "@/components/team/TeamLockBanner";
 import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
+import { useUnsavedCloseGuard } from "@/hooks/useUnsavedCloseGuard";
 import {
   stopWheelPropagation,
   useLockAppMainScroll,
@@ -237,6 +239,7 @@ function InvestissementFormSectionNav({
 }) {
   return (
     <nav
+      data-no-dirty
       aria-label="Sections du formulaire investissement"
       className={cn(
         "flex flex-wrap gap-1 border-b border-border/80 bg-card pb-2",
@@ -292,6 +295,8 @@ export function InvestissementForm({
   const [numeroContrat, setNumeroContrat] = useState("");
   const [urlContrat, setUrlContrat] = useState("");
   const [montantInitial, setMontantInitial] = useState("");
+  // Saisie que le navigateur ne sait pas lire comme un nombre (il renvoie alors une valeur vide).
+  const [montantInitialInvalid, setMontantInitialInvalid] = useState(false);
   const [dateSouscription, setDateSouscription] = useState("");
   const [dateFinDemembrement, setDateFinDemembrement] = useState("");
   const [demembrementKind, setDemembrementKind] =
@@ -326,6 +331,7 @@ export function InvestissementForm({
     ContactEtiquetteDetails[]
   >([]);
   const exceltisChoiceTouchedRef = useRef(false);
+  const montantInputRef = useRef<HTMLInputElement>(null);
   const [liveEncours, setLiveEncours] = useState<{
     actuel?: number;
     date?: number;
@@ -342,6 +348,11 @@ export function InvestissementForm({
     onOpenChange,
     entityType: "investissement",
     entityId: investissement?.id,
+  });
+  const closeGuard = useUnsavedCloseGuard({
+    open,
+    onClose: () => onOpenChange(false),
+    stacked: nestedSheet,
   });
 
   const editingInvestissement = liveInvestissement ?? investissement ?? null;
@@ -518,10 +529,12 @@ export function InvestissementForm({
   // Pré-remplir le formulaire APRÈS que les données sont chargées
   useEffect(() => {
     if (open && dataLoaded) {
+      setMontantInitialInvalid(false);
       if (investissement) {
         // Pré-remplir le formulaire pour modification
         setContactId(investissement.contact_id?.toString() || "");
-        setInvestissementCommun(!!investissement.foyer_id);
+        // Commun = rattaché au foyer sans titulaire ; un placement de membre peut aussi porter foyer_id.
+        setInvestissementCommun(investissement.contact_id == null && investissement.foyer_id != null);
         setFoyerId(investissement.foyer_id?.toString() || "");
         setTypeProduit(investissement.type_produit);
         setPartenaireId(investissement.partenaire_id?.toString() || "");
@@ -639,6 +652,7 @@ export function InvestissementForm({
     setUrlContrat("");
     setNomProduitSuggestions([]);
     setMontantInitial("");
+    setMontantInitialInvalid(false);
     setDateSouscription("");
     setDateFinDemembrement("");
     setDemembrementKind("TEMPORAIRE");
@@ -701,6 +715,14 @@ export function InvestissementForm({
       return;
     }
 
+    // Saisie non numérique : la valeur reste "" et onChange peut ne pas s'être déclenché.
+    if (montantInitialInvalid || montantInputRef.current?.validity.badInput) {
+      setMontantInitialInvalid(true);
+      toast.error("Le montant saisi n'est pas un nombre valide");
+      montantInputRef.current?.focus();
+      return;
+    }
+
     const urlContratTrim = showNumeroContratField ? urlContrat.trim() : "";
     if (urlContratTrim && !/^https?:\/\//i.test(urlContratTrim)) {
       toast.error("Le lien du contrat doit commencer par http:// ou https://");
@@ -715,6 +737,7 @@ export function InvestissementForm({
         | undefined;
       if (
         !investissement &&
+        !investissementCommun &&
         exceltisChoice.hasExceltis &&
         contactId &&
         isExceltisEligibleProductType(typeProduit)
@@ -868,11 +891,12 @@ export function InvestissementForm({
       }
 
       onSuccess();
+      closeGuard.resetDirty();
       onOpenChange(false);
       resetForm();
     } catch (error) {
       console.error("Error saving investissement:", error);
-      toast.error("Erreur lors de l'enregistrement: " + String(error));
+      toast.error(userErrorMessage(error, "Impossible d'enregistrer l'investissement"));
     } finally {
       setLoading(false);
     }
@@ -903,6 +927,36 @@ export function InvestissementForm({
   const defaultContact = defaultContactId
     ? contacts.find((c) => c.id === defaultContactId)
     : undefined;
+
+  /**
+   * Titulaire au choix (membre ou foyer en commun) quand on part d'une fiche contact, d'une
+   * fiche foyer ou d'un placement existant dont le titulaire fait partie d'un foyer.
+   */
+  const holderFoyerId =
+    (isEdit && investissement?.contact_id == null ? investissement?.foyer_id : undefined) ??
+    defaultFoyerId ??
+    defaultContact?.foyer_id ??
+    (isEdit ? (investissement?.foyer_id ?? ownerContact?.foyer_id) : undefined) ??
+    undefined;
+  const holderFoyer =
+    holderFoyerId != null ? foyers.find((f) => f.id === holderFoyerId) : undefined;
+  const holderMembers = useMemo(() => {
+    if (holderFoyerId == null) return [];
+    const members = contacts.filter((c) => c.foyer_id === holderFoyerId);
+    // Le contact de la fiche ouverte en premier.
+    return [...members].sort(
+      (a, b) => Number(b.id === defaultContactId) - Number(a.id === defaultContactId)
+    );
+  }, [contacts, holderFoyerId, defaultContactId]);
+  // Page Investissements en modification : l'ancienne liste (tous clients, tous foyers) reste,
+  // pour pouvoir corriger une attribution hors du foyer.
+  const showHolderChoice =
+    holderFoyer != null && (defaultContactId != null || defaultFoyerId != null);
+  /** Sans contexte (page Investissements) : foyer du client choisi, pour la case « commun ». */
+  const selectedContactFoyer = useMemo(() => {
+    const fid = contacts.find((c) => c.id?.toString() === contactId)?.foyer_id;
+    return fid != null ? foyers.find((f) => f.id === fid) : undefined;
+  }, [contacts, contactId, foyers]);
 
   const sectionVisibility = useMemo(
     () => ({
@@ -947,20 +1001,22 @@ export function InvestissementForm({
     return "Nouvel investissement";
   }, [investissement, nomProduit, typeProduit, defaultContact, defaultFoyerId, foyers]);
 
-  const formDescription = isEdit
+  const formDescription = showHolderChoice
+    ? "Choisissez le titulaire : une personne du foyer ou le foyer en commun."
+    : isEdit
     ? ownerContact
       ? `Investissement de ${ownerContact.prenom} ${ownerContact.nom}.`
       : "Modifiez les informations de l'investissement."
     : lockedContactContext && defaultContact
-      ? `Investissement pour ${defaultContact.prenom} ${defaultContact.nom}.`
-      : "Ajoutez un investissement pour un client ou un foyer.";
+        ? `Investissement pour ${defaultContact.prenom} ${defaultContact.nom}.`
+        : "Ajoutez un investissement pour un client ou un foyer.";
 
   const formFooter = (
     <>
       <Button
         type="button"
         variant="outline"
-        onClick={() => onOpenChange(false)}
+        onClick={closeGuard.requestClose}
         disabled={loading}
       >
         Annuler
@@ -974,6 +1030,54 @@ export function InvestissementForm({
   const formFields = (
     <>
       <InvestissementFormSection sectionKey="identification">
+          {showHolderChoice && holderFoyer ? (
+            <div className="space-y-2">
+              <Label>
+                Titulaire <span className="text-red-500">*</span>
+              </Label>
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Titulaire">
+                {holderMembers.map((member) => {
+                  const selected =
+                    !investissementCommun && contactId === member.id?.toString();
+                  return (
+                    <Button
+                      key={member.id}
+                      type="button"
+                      size="sm"
+                      role="radio"
+                      aria-checked={selected}
+                      variant={selected ? "default" : "outline"}
+                      onClick={() => {
+                        setInvestissementCommun(false);
+                        setContactId(member.id!.toString());
+                      }}
+                    >
+                      {member.prenom} {member.nom}
+                    </Button>
+                  );
+                })}
+                <Button
+                  type="button"
+                  size="sm"
+                  role="radio"
+                  aria-checked={investissementCommun}
+                  variant={investissementCommun ? "default" : "outline"}
+                  onClick={() => {
+                    setInvestissementCommun(true);
+                    setFoyerId(holderFoyer.id.toString());
+                  }}
+                >
+                  Foyer {holderFoyer.nom} (commun)
+                </Button>
+              </div>
+              {investissementCommun && (
+                <p className="text-xs text-muted-foreground">
+                  Placement commun : visible sur la fiche du foyer et sur celle de chaque membre.
+                </p>
+              )}
+            </div>
+          ) : (
+            <>
           {/* Client (masqué si ouvert depuis la fiche contact) */}
           {lockedContactContext && defaultContact ? (
             <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
@@ -1018,10 +1122,20 @@ export function InvestissementForm({
                 type="checkbox"
                 id="investissement-commun"
                 checked={investissementCommun}
-                onChange={(e) => setInvestissementCommun(e.target.checked)}
+                onChange={(e) => {
+                  setInvestissementCommun(e.target.checked);
+                  // Le foyer du client choisi est proposé d'office.
+                  if (e.target.checked && !foyerId && selectedContactFoyer) {
+                    setFoyerId(selectedContactFoyer.id.toString());
+                  }
+                }}
                 className="h-4 w-4"
               />
-              <Label htmlFor="investissement-commun">Investissement commun (foyer)</Label>
+              <Label htmlFor="investissement-commun">
+                {selectedContactFoyer && !investissementCommun
+                  ? `Investissement commun (foyer ${selectedContactFoyer.nom})`
+                  : "Investissement commun (foyer)"}
+              </Label>
             </div>
           )}
 
@@ -1042,6 +1156,8 @@ export function InvestissementForm({
                 </SelectContent>
               </Select>
             </div>
+          )}
+            </>
           )}
 
           <div className="space-y-2">
@@ -1291,13 +1407,25 @@ export function InvestissementForm({
               {isMeubles ? "Valorisation (€)" : "Montant initial (€)"}
             </Label>
             <Input
+              ref={montantInputRef}
               id="montant"
               type="number"
               step="0.01"
               value={montantInitial}
-              onChange={(e) => setMontantInitial(e.target.value)}
+              onChange={(e) => {
+                setMontantInitial(e.target.value);
+                setMontantInitialInvalid(e.target.validity.badInput);
+              }}
               placeholder="Ex: 10000"
+              aria-invalid={montantInitialInvalid || undefined}
+              aria-describedby={montantInitialInvalid ? "montant-error" : undefined}
+              className={montantInitialInvalid ? "border-destructive" : undefined}
             />
+            {montantInitialInvalid && (
+              <p id="montant-error" className="text-xs text-destructive">
+                Montant invalide : saisissez uniquement des chiffres (ex. 10000 ou 10000.50).
+              </p>
+            )}
           </div>
 
           {/* Date de souscription */}
@@ -1688,6 +1816,8 @@ export function InvestissementForm({
           <Separator />
           <InvestissementFormSection sectionKey="suivi">
           {showVersementsSection && editingInvestissement && (
+            /* Versements enregistrés à part : pas une modification du formulaire. */
+            <div data-no-dirty>
             <InvestissementVersementsPanel
               investissementId={editingInvestissement.id}
               onUpdated={async () => {
@@ -1703,6 +1833,7 @@ export function InvestissementForm({
                 }
               }}
             />
+            </div>
           )}
 
           {showEncoursSection && editingInvestissement && valorisationUiMode ? (
@@ -1719,6 +1850,8 @@ export function InvestissementForm({
                   })}
                 </p>
               ) : null}
+            {/* Encours enregistré à part : n'est pas une modification du formulaire. */}
+            <div data-no-dirty>
             <InvestissementEncoursPanel
               investissementId={editingInvestissement.id}
               montantInitial={editingInvestissement.montant_initial}
@@ -1739,6 +1872,7 @@ export function InvestissementForm({
                 }
               }}
             />
+            </div>
             </>
           ) : null}
           </InvestissementFormSection>
@@ -1748,14 +1882,16 @@ export function InvestissementForm({
       {editingInvestissement && (
         <>
           <Separator />
-          <InvestissementCloturePanel
-            investissement={editingInvestissement}
-            onChanged={(updated) => {
-              setLiveInvestissement(updated);
-              setVersementProgramme(false);
-              onSuccess();
-            }}
-          />
+          <div data-no-dirty>
+            <InvestissementCloturePanel
+              investissement={editingInvestissement}
+              onChanged={(updated) => {
+                setLiveInvestissement(updated);
+                setVersementProgramme(false);
+                onSuccess();
+              }}
+            />
+          </div>
         </>
       )}
 
@@ -1771,6 +1907,7 @@ export function InvestissementForm({
     <form
       onSubmit={handleSubmit}
       className={useSheet ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "space-y-4"}
+      {...closeGuard.trackDirtyProps}
     >
       {useSheet ? (
         <InvestissementFormSectionNav
@@ -1789,11 +1926,16 @@ export function InvestissementForm({
         <div className={useSheet ? "space-y-4" : undefined}>{formFields}</div>
       </div>
       {useSheet ? (
-        <SheetFooter className="mt-0 shrink-0 gap-2 border-t bg-card px-6 py-4 sm:flex-row sm:justify-end">
+        <SheetFooter
+          className="mt-0 shrink-0 gap-2 border-t bg-card px-6 py-4 sm:flex-row sm:justify-end"
+          data-no-dirty
+        >
           {formFooter}
         </SheetFooter>
       ) : (
-        <DialogFooter className="pt-4">{formFooter}</DialogFooter>
+        <DialogFooter className="pt-4" data-no-dirty>
+          {formFooter}
+        </DialogFooter>
       )}
     </form>
   );
@@ -1835,7 +1977,7 @@ export function InvestissementForm({
   return (
     <>
       {useSheet ? (
-        <Sheet open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
+        <Sheet open={open} onOpenChange={closeGuard.handleOpenChange} modal={!nestedSheet}>
           <SheetContent
             side="right"
             hideOverlay={nestedSheet}
@@ -1862,7 +2004,7 @@ export function InvestissementForm({
           </SheetContent>
         </Sheet>
       ) : (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={closeGuard.handleOpenChange}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
               <DialogHeader>
@@ -1875,6 +2017,7 @@ export function InvestissementForm({
         </Dialog>
       )}
       {partenaireFormModal}
+      {closeGuard.discardDialog}
     </>
   );
 }

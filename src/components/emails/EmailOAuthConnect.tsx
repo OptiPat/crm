@@ -26,6 +26,7 @@ import {
   type EmailConnectionStatus,
 } from "@/lib/api/tauri-email-oauth";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { cn } from "@/lib/utils";
 
 type EmailOAuthConnectProps = {
@@ -80,7 +81,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
         setGoogleClientSecret("");
         setShowReplaceGoogleSecret(false);
       }
-      toast.success("Identifiants OAuth enregistrés");
+      toast.success("Identifiants de connexion enregistrés");
     } catch {
       toast.error("Erreur lors de l'enregistrement");
     }
@@ -117,7 +118,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
       );
     } catch (e) {
       console.error(e);
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(userErrorMessage(e, "Connexion à la messagerie impossible"));
     } finally {
       setConnecting(null);
     }
@@ -139,7 +140,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
       const msg = await testEmailConnection();
       toast.success(msg);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(userErrorMessage(e, "Test de la connexion impossible"));
     } finally {
       setTesting(false);
     }
@@ -312,7 +313,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
 
       <details className="group rounded-xl border border-border/80 bg-muted/20 open:bg-muted/30">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/40 rounded-xl [&::-webkit-details-marker]:hidden">
-          <span>Configuration OAuth avancée</span>
+          <span>Configuration avancée de la connexion</span>
           <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
         </summary>
         <div className="px-4 pb-4 space-y-4 border-t border-border/60 pt-4">
@@ -437,7 +438,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
     return (
       <SettingsPanel
         title="Connexion boîte mail"
-        description="OAuth Gmail ou Outlook — requis pour les envois depuis Suivi."
+        description="Gmail ou Outlook — requis pour les envois depuis Suivi."
         action={
           oauthConnected ? (
             <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 font-normal">
@@ -468,7 +469,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
           )}
         </div>
         <CardDescription>
-          Connectez votre boîte Gmail ou Outlook (OAuth). Guide :{" "}
+          Connectez votre boîte Gmail ou Outlook. Guide :{" "}
           <code className="text-xs">docs/EMAIL_OAUTH_SETUP.md</code>
         </CardDescription>
       </CardHeader>

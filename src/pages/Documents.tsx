@@ -126,6 +126,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [contactsById, setContactsById] = useState<Record<number, Contact>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
@@ -199,8 +200,10 @@ export function Documents({ onNavigate }: DocumentsProps) {
         if (c.id) map[c.id] = c;
       }
       setContactsById(map);
+      setLoadError(false);
     } catch (error) {
       console.error("Error loading documents:", error);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -503,7 +506,23 @@ export function Documents({ onNavigate }: DocumentsProps) {
   const handleDroppedPaths = useCallback(
     async (paths: string[]) => {
       const sourcePath = paths[0];
-      if (!sourcePath || dropBusy) return;
+      if (!sourcePath) return;
+      if (dropBusy) {
+        toast.info("Un fichier est déjà en cours de préparation, patientez un instant.");
+        return;
+      }
+      if (showUpload || stelliumDropImport != null || rioReimportDoc != null) {
+        toast.info(
+          "Un import est déjà ouvert : terminez-le ou fermez-le avant de déposer un autre fichier."
+        );
+        return;
+      }
+      if (paths.length > 1) {
+        const ignored = paths.length - 1;
+        toast.warning(
+          `1 seul fichier à la fois : ${ignored} fichier${ignored > 1 ? "s" : ""} ignoré${ignored > 1 ? "s" : ""}.`
+        );
+      }
       setDropBusy(true);
       try {
         const staged = await stageDocumentFromPath(sourcePath);
@@ -516,8 +535,8 @@ export function Documents({ onNavigate }: DocumentsProps) {
           });
           toast.info(
             plan.kind === "stellium_qpi"
-              ? "QPI détecté — vérifiez l'import."
-              : "RIO détecté — vérifiez l'import."
+              ? "Profil investisseur reconnu — vérifiez les informations avant d'importer."
+              : "Relevé patrimonial reconnu — vérifiez les informations avant d'importer."
           );
           return;
         }
@@ -534,7 +553,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
         setDropBusy(false);
       }
     },
-    [dropBusy]
+    [dropBusy, showUpload, stelliumDropImport, rioReimportDoc]
   );
 
   const { isDragging } = useDocumentsPageDragDrop(handleDroppedPaths);
@@ -657,7 +676,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
             <Upload className="h-10 w-10 mx-auto text-primary mb-2" />
             <p className="text-sm font-medium">Déposez le fichier pour l&apos;importer</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Détection auto RIO, QPI ou pièce d&apos;identité
+              Un fichier à la fois — relevé patrimonial, profil investisseur ou pièce d&apos;identité reconnus automatiquement
             </p>
           </div>
         </div>
@@ -721,7 +740,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
                   variant={librarySource === "crm" ? "secondary" : "ghost"}
                   onClick={() => setLibrarySource("crm")}
                 >
-                  CRM local
+                  Dans le logiciel
                 </Button>
                 <Button
                   type="button"
@@ -904,6 +923,20 @@ export function Documents({ onNavigate }: DocumentsProps) {
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">
               Chargement...
+            </div>
+          ) : loadError && documents.length === 0 ? (
+            <div className="py-10 text-center space-y-3">
+              <p className="text-sm text-destructive">Impossible de charger les documents.</p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setLoading(true);
+                  void loadDocuments();
+                }}
+              >
+                Réessayer
+              </Button>
             </div>
           ) : documents.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-muted/25 px-6 py-10 text-center">
@@ -1089,7 +1122,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
                     {overwriteOneDriveTarget.nom_fichier}
                   </span>{" "}
                   existe déjà dans le dossier OneDrive du client. Le remplacer écrase la copie
-                  cloud ; le document reste en GED.
+                  cloud ; le document reste enregistré dans le logiciel.
                 </>
               ) : null}
             </AlertDialogDescription>

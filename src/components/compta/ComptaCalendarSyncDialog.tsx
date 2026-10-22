@@ -32,6 +32,7 @@ import {
   resolveComptaImportDestination,
 } from "@/lib/compta/compta-location-hint";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface ComptaCalendarSyncDialogProps {
   open: boolean;
@@ -122,6 +123,12 @@ export function ComptaCalendarSyncDialog({
   const batchGenRef = useRef(0);
   const cityRecalcTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  // Distance saisie à la main quand le calcul automatique échoue.
+  const [manualKm, setManualKm] = useState<{
+    proposal: ComptaCalendarTripProposal;
+    value: string;
+  } | null>(null);
+
   const patchDraft = useCallback((eventId: string, patch: Partial<TripDraft>) => {
     setDrafts((prev) => ({
       ...prev,
@@ -185,30 +192,31 @@ export function ComptaCalendarSyncDialog({
           return false;
         }
 
-        if (options?.promptOnFail) {
-          const manual = window.prompt(
-            "Impossible de calculer automatiquement.\nEntrez la distance aller simple en km :"
-          );
-          if (manual && !Number.isNaN(parseFloat(manual))) {
-            const result = computeIndemniteKm(parseFloat(manual), config.indemniteKm);
-            patchDraft(proposal.eventId, {
-              km: result.roundTripKm,
-              indemnite: result.indemnite,
-              calcBusy: false,
-              calcError: false,
-            });
-            setSelectedTrips((prev) => ({ ...prev, [proposal.eventId]: true }));
-            return true;
-          }
-        }
-
         patchDraft(proposal.eventId, { calcBusy: false, calcError: true });
-        if (options?.promptOnFail) toast.error("Calcul de distance échoué");
+        if (options?.promptOnFail) setManualKm({ proposal, value: "" });
         return false;
       }
     },
     [config.adresseDepart, config.indemniteKm, patchDraft]
   );
+
+  const applyManualKm = () => {
+    if (!manualKm) return;
+    const km = parseFloat(manualKm.value.replace(/\s/g, "").replace(",", "."));
+    if (Number.isNaN(km) || km <= 0) {
+      toast.error("Saisissez une distance en km (ex. 12,5)");
+      return;
+    }
+    const result = computeIndemniteKm(km, config.indemniteKm);
+    patchDraft(manualKm.proposal.eventId, {
+      km: result.roundTripKm,
+      indemnite: result.indemnite,
+      calcBusy: false,
+      calcError: false,
+    });
+    setSelectedTrips((prev) => ({ ...prev, [manualKm.proposal.eventId]: true }));
+    setManualKm(null);
+  };
 
   const scheduleCityRecalc = useCallback(
     (proposal: ComptaCalendarTripProposal, cityHint: string) => {
@@ -282,7 +290,7 @@ export function ComptaCalendarSyncDialog({
       await autoCalculateTrips(items, batchGen);
     } catch (e) {
       if (batchGen !== batchGenRef.current) return;
-      toast.error(e instanceof Error ? e.message : "Erreur scan Agenda");
+      toast.error(userErrorMessage(e, "Impossible d'analyser l'agenda du mois"));
       setProposals([]);
       setLoading(false);
     }
@@ -346,7 +354,7 @@ export function ComptaCalendarSyncDialog({
       return true;
     } catch (e) {
       if (!options?.silent) {
-        toast.error(e instanceof Error ? e.message : "Import déplacement échoué");
+        toast.error(userErrorMessage(e, "Impossible d'importer le déplacement"));
       }
       return false;
     } finally {
@@ -648,6 +656,42 @@ export function ComptaCalendarSyncDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      <Dialog open={manualKm != null} onOpenChange={(o) => !o && setManualKm(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Distance à saisir</DialogTitle>
+            <DialogDescription>
+              Impossible de calculer la distance automatiquement. Entrez la distance aller simple en
+              km.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              applyManualKm();
+            }}
+          >
+            <Label htmlFor="compta-manual-km">Distance aller simple (km)</Label>
+            <Input
+              id="compta-manual-km"
+              inputMode="decimal"
+              autoFocus
+              value={manualKm?.value ?? ""}
+              onChange={(e) =>
+                setManualKm((prev) => (prev ? { ...prev, value: e.target.value } : prev))
+              }
+              placeholder="Ex. 12,5"
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setManualKm(null)}>
+                Annuler
+              </Button>
+              <Button type="submit">Valider</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

@@ -83,6 +83,7 @@ import { type ContactFoyerRelationsActions } from "@/components/contacts/Contact
 import { ContactDetailSyntheseTab } from "@/components/contacts/ContactDetailSyntheseTab";
 import { ContactRegistreSwitch } from "@/components/contacts/ContactRegistreSwitch";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { ContactInteractionsPanel } from "@/components/interactions/ContactInteractionsPanel";
 import { ContactTachesPanel } from "@/components/taches/ContactTachesPanel";
 import { ContactCustomFieldsPanel } from "@/components/contacts/ContactCustomFieldsPanel";
@@ -125,7 +126,7 @@ interface ContactDetailProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   contact: Contact | null;
-  onDelete: (id: number) => void;
+  onDelete: (id: number) => void | Promise<void>;
   onUpdate?: () => void;
   onContactRefreshed?: (contact: Contact) => void;
   onOpenContact?: (contact: Contact) => void;
@@ -187,6 +188,11 @@ export function ContactDetail({
   const [showDocUpload, setShowDocUpload] = useState(false);
   const [interactionFormOpen, setInteractionFormOpen] = useState(false);
   const [tacheFormOpen, setTacheFormOpen] = useState(false);
+  const [deleteContactBusy, setDeleteContactBusy] = useState(false);
+  const [investissementToDelete, setInvestissementToDelete] =
+    useState<Investissement | null>(null);
+  const [deleteInvestissementBusy, setDeleteInvestissementBusy] = useState(false);
+  const [memberToRemove, setMemberToRemove] = useState<Contact | null>(null);
   const [foyerRenamePrompt, setFoyerRenamePrompt] = useState<{
     foyer: Foyer;
     suggestedNom: string;
@@ -247,15 +253,16 @@ export function ContactDetail({
     setShowEditForm(true);
   };
 
-  const handleRemoveMemberFromFoyer = async (member: Contact) => {
+  const handleRemoveMemberFromFoyer = (member: Contact) => {
     if (!member?.id) return;
+    setMemberToRemove(member);
+  };
 
+  const confirmRemoveMemberFromFoyer = async () => {
+    const member = memberToRemove;
+    setMemberToRemove(null);
+    if (!member?.id) return;
     const isSelf = member.id === contact?.id;
-    const confirmMsg = isSelf
-      ? `Voulez-vous vraiment dissocier ${member.prenom} ${member.nom} de ce foyer ?`
-      : `Retirer ${member.prenom} ${member.nom} du foyer « ${foyer?.nom ?? ""} » ?`;
-
-    if (!confirm(confirmMsg)) return;
 
     try {
       await dissociateContactFromFoyer(member);
@@ -767,11 +774,16 @@ export function ContactDetail({
   const statutSuivi = contact.statut_suivi || "ACTIF";
   const showStatutBadge = statutSuivi !== "ACTIF";
 
-  const confirmDeleteContact = () => {
-    if (!contact?.id) return;
-    onDelete(contact.id);
-    setShowDeleteContactDialog(false);
-    onOpenChange(false);
+  const confirmDeleteContact = async () => {
+    if (!contact?.id || deleteContactBusy) return;
+    setDeleteContactBusy(true);
+    try {
+      await onDelete(contact.id);
+    } finally {
+      setDeleteContactBusy(false);
+      setShowDeleteContactDialog(false);
+      onOpenChange(false);
+    }
   };
 
   const handleEditInvestissement = (inv: Investissement) => {
@@ -779,19 +791,24 @@ export function ContactDetail({
     setShowInvestissementForm(true);
   };
 
-  const handleDeleteInvestissement = async (inv: Investissement) => {
-    if (
-      window.confirm(
-        `Êtes-vous sûr de vouloir supprimer l'investissement "${inv.nom_produit}" ?`
-      )
-    ) {
-      try {
-        await deleteInvestissement(inv.id);
-        await loadInvestissements(); // Recharger la liste
-      } catch (error) {
-        console.error("Error deleting investissement:", error);
-        alert("Erreur lors de la suppression: " + String(error));
-      }
+  const handleDeleteInvestissement = (inv: Investissement) => {
+    setInvestissementToDelete(inv);
+  };
+
+  const confirmDeleteInvestissement = async () => {
+    const inv = investissementToDelete;
+    if (!inv || deleteInvestissementBusy) return;
+    setDeleteInvestissementBusy(true);
+    try {
+      await deleteInvestissement(inv.id);
+      setInvestissementToDelete(null);
+      toast.success("Investissement supprimé");
+      await loadInvestissements(); // Recharger la liste
+    } catch (error) {
+      console.error("Error deleting investissement:", error);
+      toast.error(userErrorMessage(error, "Impossible de supprimer l’investissement."));
+    } finally {
+      setDeleteInvestissementBusy(false);
     }
   };
 
@@ -857,7 +874,8 @@ export function ContactDetail({
             variant="outline"
             size="icon"
             onClick={() => openEditForm()}
-            title="Modifier"
+            title="Modifier le contact"
+            aria-label="Modifier le contact"
           >
             <Edit className="h-4 w-4" />
           </Button>
@@ -866,8 +884,9 @@ export function ContactDetail({
             variant="outline"
             size="icon"
             onClick={() => setShowDeleteContactDialog(true)}
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            className="text-destructive hover:text-destructive hover:bg-destructive/10"
             title="Supprimer le contact"
+            aria-label="Supprimer le contact"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -878,6 +897,7 @@ export function ContactDetail({
               size="icon"
               onClick={() => onOpenChange(false)}
               title="Fermer la fiche"
+              aria-label="Fermer la fiche"
             >
               <X className="h-4 w-4" />
             </Button>
@@ -1345,8 +1365,74 @@ export function ContactDetail({
       )}
 
       <AlertDialog
+        open={investissementToDelete != null}
+        onOpenChange={(next) => {
+          if (!next && !deleteInvestissementBusy) setInvestissementToDelete(null);
+        }}
+      >
+        <AlertDialogContent stacked={nestedInvestissementSheet}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer cet investissement ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vous allez supprimer{" "}
+              <strong>
+                {investissementToDelete?.nom_produit?.trim() || "cet investissement"}
+              </strong>
+              . Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteInvestissementBusy}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteInvestissementBusy}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmDeleteInvestissement();
+              }}
+            >
+              {deleteInvestissementBusy ? "Suppression…" : "Supprimer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={memberToRemove != null}
+        onOpenChange={(next) => {
+          if (!next) setMemberToRemove(null);
+        }}
+      >
+        <AlertDialogContent stacked={nestedInvestissementSheet}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {memberToRemove?.id === contact.id
+                ? "Dissocier ce contact du foyer ?"
+                : "Retirer ce membre du foyer ?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>
+                {memberToRemove?.prenom} {memberToRemove?.nom}
+              </strong>{" "}
+              {memberToRemove?.id === contact.id
+                ? "ne fera plus partie de ce foyer."
+                : `sera retiré du foyer${foyer?.nom ? ` « ${foyer.nom} »` : ""}.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmRemoveMemberFromFoyer()}>
+              {memberToRemove?.id === contact.id ? "Dissocier" : "Retirer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
         open={showDeleteContactDialog}
-        onOpenChange={setShowDeleteContactDialog}
+        onOpenChange={(next) => {
+          if (!deleteContactBusy) setShowDeleteContactDialog(next);
+        }}
       >
         <AlertDialogContent stacked={nestedInvestissementSheet}>
           <AlertDialogHeader>
@@ -1365,13 +1451,18 @@ export function ContactDetail({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteContactBusy}>Annuler</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={confirmDeleteContact}
+              disabled={deleteContactBusy}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmDeleteContact();
+              }}
             >
-              Supprimer
+              {deleteContactBusy ? "Suppression…" : "Supprimer"}
             </AlertDialogAction>
+
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

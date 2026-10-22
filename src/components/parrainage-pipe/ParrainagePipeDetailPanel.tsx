@@ -43,6 +43,7 @@ import {
 } from "@/lib/parrainage-pipe/parrainage-call-schedule";
 import { ParrainageScriptPanel } from "@/components/parrainage-pipe/ParrainageScriptPanel";
 import { PipeProspectionContactSection } from "@/components/pipe/PipeProspectionContactSection";
+import { useConfirmDialog } from "@/components/pipe/useConfirmDialog";
 import { toast } from "sonner";
 
 function isPinnedTimelineEntry(entry: ParrainagePipeTimelineEntry): boolean {
@@ -224,8 +225,16 @@ export function ParrainagePipeDetailPanel({
     }
   };
 
+  const removeConfirm = useConfirmDialog();
+
   const handleDelete = async () => {
-    if (!window.confirm("Retirer ce contact du pipe parrainage ?")) return;
+    const confirmed = await removeConfirm.confirm({
+      title: "Retirer ce contact du pipe parrainage ?",
+      description: `${formatParrainageContactLabel(pipe)} sera retiré du pipe parrainage et son historique (appels, notes) supprimé. La fiche contact est conservée.`,
+      confirmLabel: "Retirer du pipe",
+      destructive: true,
+    });
+    if (!confirmed) return;
     setSaving(true);
     try {
       await deleteParrainagePipe(pipe.id);
@@ -433,6 +442,7 @@ export function ParrainagePipeDetailPanel({
           Retirer du pipe
         </Button>
       </div>
+      {removeConfirm.dialog}
     </div>
   );
 }

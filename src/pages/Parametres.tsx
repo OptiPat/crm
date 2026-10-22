@@ -1,5 +1,16 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   SettingsShell,
   SettingsPageHeader,
@@ -24,6 +35,7 @@ import { ParametresCustomFieldsSection } from "@/components/settings/ParametresC
 import { ParametresSearchBar } from "@/components/settings/ParametresSearchBar";
 import { normalizeAgendaLinks, type AgendaLink } from "@/lib/emails/agenda-links";
 import { getCgpConfig, saveCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
+import { notifyCgpConfigChanged } from "@/lib/settings/cgp-config-events";
 import { notifyAppBrandingChanged } from "@/lib/api/tauri-app-branding";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { getAppInfo, listDbBackups, type DbBackupEntry } from "@/lib/api/tauri-system";
@@ -44,6 +56,7 @@ import {
 } from "@/lib/settings/parametres-nav";
 import type { ParametresSearchItem } from "@/lib/settings/parametres-search";
 import { resolveSettingsSection, isEmailSettingsSection } from "@/lib/settings/parametres-section-resolve";
+import { allowNextPageLeave, usePageLeaveGuard } from "@/lib/navigation/page-leave-guard";
 
 const EMPTY_CGP_CONFIG: CgpConfig = {
   nom: "",
@@ -127,6 +140,8 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
   const [cgpConfig, setCgpConfig] = useState<CgpConfig>(EMPTY_CGP_CONFIG);
   const [savedSnapshot, setSavedSnapshot] = useState("");
   const [loadingConfig, setLoadingConfig] = useState(true);
+  const [configLoadFailed, setConfigLoadFailed] = useState(false);
+  const [configReloadKey, setConfigReloadKey] = useState(0);
   const [savingProfile, setSavingProfile] = useState(false);
   const [emailConnected, setEmailConnected] = useState(false);
   const [dbPath, setDbPath] = useState("");
@@ -144,35 +159,73 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
   const showSaveBar =
     isDirty && SECTIONS_WITH_SAVE.includes(activeSection) && !loadingConfig;
 
-  const confirmDiscardDirty = useCallback(() => {
-    if (!isDirty || !SECTIONS_WITH_SAVE.includes(activeSection)) return true;
-    return window.confirm(
-      "Modifications non enregistrées. Continuer sans enregistrer ?"
-    );
-  }, [isDirty, activeSection]);
+  // Sortie par le menu latéral / la recherche globale : App demande confirmation.
+  usePageLeaveGuard(isDirty);
+
+  /** Remet le formulaire dans l'état enregistré (vraie annulation des modifications). */
+  const restoreSavedConfig = useCallback(() => {
+    setCgpConfig(savedSnapshot ? (JSON.parse(savedSnapshot) as CgpConfig) : EMPTY_CGP_CONFIG);
+  }, [savedSnapshot]);
+
+  // Action en attente derrière la fenêtre « Quitter sans enregistrer ? ».
+  const pendingLeaveRef = useRef<(() => void) | null>(null);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+
+  /** Exécute `action` tout de suite, ou après confirmation s'il y a des modifications. */
+  const runAfterDiscardConfirm = useCallback(
+    (action: () => void) => {
+      if (!isDirty || !SECTIONS_WITH_SAVE.includes(activeSection)) {
+        action();
+        return;
+      }
+      pendingLeaveRef.current = action;
+      setLeaveConfirmOpen(true);
+    },
+    [isDirty, activeSection]
+  );
+
+  const confirmLeaveWithoutSaving = () => {
+    const action = pendingLeaveRef.current;
+    pendingLeaveRef.current = null;
+    setLeaveConfirmOpen(false);
+    restoreSavedConfig();
+    // L'état « modifié » n'est remis à zéro qu'au prochain rendu : sans ceci, App redemanderait.
+    allowNextPageLeave();
+    action?.();
+  };
+
+  const openExternalSettings = useCallback(
+    (page: "newsletter" | "comptabilite") => {
+      runAfterDiscardConfirm(() => {
+        if (page === "newsletter") {
+          requestOpenNewsletterSettings({ currentPage, setCurrentPage: onNavigate });
+        } else {
+          requestOpenComptabilite({ currentPage, setCurrentPage: onNavigate });
+        }
+      });
+    },
+    [runAfterDiscardConfirm, currentPage, onNavigate]
+  );
 
   const redirectExternalSection = useCallback(
     (section: SettingsSectionId) => {
       if (!isParametresExternalSection(section)) return false;
-      if (!confirmDiscardDirty()) return true;
-      if (section === "newsletter") {
-        requestOpenNewsletterSettings({ currentPage, setCurrentPage: onNavigate });
-      } else {
-        requestOpenComptabilite({ currentPage, setCurrentPage: onNavigate });
-      }
+      openExternalSettings(section === "newsletter" ? "newsletter" : "comptabilite");
       return true;
     },
-    [confirmDiscardDirty, currentPage, onNavigate]
+    [openExternalSettings]
   );
 
   const applyParametresNavigation = useCallback(
     (rawSection: string, scrollToId?: string, emailTab?: string) => {
       const section = resolveSettingsSection(rawSection, emailTab);
       if (redirectExternalSection(section)) return;
-      setActiveSection(section);
-      setScrollTargetId(scrollToId ?? null);
+      runAfterDiscardConfirm(() => {
+        setActiveSection(section);
+        setScrollTargetId(scrollToId ?? null);
+      });
     },
-    [redirectExternalSection]
+    [redirectExternalSection, runAfterDiscardConfirm]
   );
 
   useEffect(() => {
@@ -205,6 +258,7 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
   useEffect(() => {
     const load = async () => {
       setLoadingConfig(true);
+      setConfigLoadFailed(false);
       try {
         const [config, emailSt] = await Promise.all([
           getCgpConfig(),
@@ -220,12 +274,17 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
         }
       } catch (error) {
         console.error("Erreur chargement config CGP:", error);
+        // Pas de formulaire vide modifiable : un enregistrement écraserait le vrai profil.
+        setConfigLoadFailed(true);
         toast.error("Impossible de charger le profil");
       } finally {
         setLoadingConfig(false);
       }
     };
     void load();
+  }, [configReloadKey]);
+
+  useEffect(() => {
     getAppInfo()
       .then((info) => {
         setDbPath(info.db_path);
@@ -261,6 +320,7 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
       await saveCgpConfig(cgpConfig);
       setSavedSnapshot(configSnapshotKey(cgpConfig));
       notifyAppBrandingChanged();
+      notifyCgpConfigChanged();
       toast.success("Paramètres enregistrés");
     } catch (error) {
       console.error("Erreur sauvegarde profil:", error);
@@ -282,19 +342,19 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
   }, [showSaveBar, handleSaveProfile]);
 
   const handleDiscard = () => {
-    if (!savedSnapshot) return;
-    setCgpConfig(JSON.parse(savedSnapshot) as CgpConfig);
+    restoreSavedConfig();
     toast.message("Modifications annulées");
   };
 
   const handleNavigateToSection = useCallback(
     (section: SettingsSectionId, options?: { scrollToId?: string }) => {
       if (redirectExternalSection(section)) return;
-      if (!confirmDiscardDirty()) return;
-      setActiveSection(section);
-      if (options?.scrollToId) setScrollTargetId(options.scrollToId);
+      runAfterDiscardConfirm(() => {
+        setActiveSection(section);
+        if (options?.scrollToId) setScrollTargetId(options.scrollToId);
+      });
     },
-    [redirectExternalSection, confirmDiscardDirty]
+    [redirectExternalSection, runAfterDiscardConfirm]
   );
 
   const handleSectionChange = useCallback(
@@ -306,24 +366,32 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
 
   const handleSearchSelect = useCallback(
     (item: ParametresSearchItem) => {
-      if (item.externalPage === "newsletter") {
-        if (!confirmDiscardDirty()) return;
-        requestOpenNewsletterSettings({ currentPage, setCurrentPage: onNavigate });
-        return;
-      }
-      if (item.externalPage === "comptabilite") {
-        if (!confirmDiscardDirty()) return;
-        requestOpenComptabilite({ currentPage, setCurrentPage: onNavigate });
+      if (item.externalPage === "newsletter" || item.externalPage === "comptabilite") {
+        openExternalSettings(item.externalPage);
         return;
       }
       handleNavigateToSection(item.section, { scrollToId: item.scrollToId });
     },
-    [confirmDiscardDirty, currentPage, onNavigate, handleNavigateToSection]
+    [openExternalSettings, handleNavigateToSection]
   );
 
   const renderSection = () => {
     if (loadingConfig && !SECTIONS_WITHOUT_CONFIG_LOAD.includes(activeSection)) {
       return <SettingsLoading />;
+    }
+    if (configLoadFailed && !SECTIONS_WITHOUT_CONFIG_LOAD.includes(activeSection)) {
+      return (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-3 text-sm">
+          <p className="font-medium">Impossible de charger votre profil.</p>
+          <p className="text-muted-foreground">
+            Vos informations ne sont pas perdues. Réessayez ; si le problème continue, redémarrez
+            le CRM.
+          </p>
+          <Button type="button" variant="outline" onClick={() => setConfigReloadKey((k) => k + 1)}>
+            Réessayer
+          </Button>
+        </div>
+      );
     }
 
     switch (activeSection) {
@@ -333,14 +401,9 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
             cgpConfig={cgpConfig}
             backups={backups}
             onNavigate={handleNavigateToSection}
-            onNavigateExternal={(page) => {
-              if (!confirmDiscardDirty()) return;
-              if (page === "newsletter") {
-                requestOpenNewsletterSettings({ currentPage, setCurrentPage: onNavigate });
-              } else {
-                requestOpenComptabilite({ currentPage, setCurrentPage: onNavigate });
-              }
-            }}
+            onNavigateExternal={(page) =>
+              openExternalSettings(page === "newsletter" ? "newsletter" : "comptabilite")
+            }
           />
         );
       case "profil":
@@ -440,6 +503,33 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
       }
     >
       <div className={showSaveBar ? "pb-20" : undefined}>{renderSection()}</div>
+      <AlertDialog
+        open={leaveConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            pendingLeaveRef.current = null;
+            setLeaveConfirmOpen(false);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Quitter sans enregistrer ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vos modifications de cette section seront perdues.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Continuer l&apos;édition</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={confirmLeaveWithoutSaving}
+            >
+              Quitter sans enregistrer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SettingsShell>
   );
 }

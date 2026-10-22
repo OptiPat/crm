@@ -22,6 +22,7 @@ import { GoogleContactBatchReportDialog } from "@/components/settings/GoogleCont
 import { GoogleContactNameProposalsDialog } from "@/components/settings/GoogleContactNameProposalsDialog";
 import { PARAMETRES_PATH } from "@/lib/settings/parametres-labels";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function ParametresEmailGoogleContactsSection() {
   const [batchGoogleOpen, setBatchGoogleOpen] = useState(false);
@@ -43,7 +44,7 @@ export function ParametresEmailGoogleContactsSection() {
       setBatchReportOpen(true);
       toast.success(googleContactBatchSyncSummary(result));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Synchronisation Google Contacts impossible.");
+      toast.error(userErrorMessage(e, "Synchronisation Google Contacts impossible."));
     } finally {
       setBatchGoogleRunning(false);
       setBatchGoogleOpen(false);
@@ -87,7 +88,7 @@ export function ParametresEmailGoogleContactsSection() {
               }
               setNameProposalsOpen(true);
             } catch (e) {
-              toast.error(e instanceof Error ? e.message : "Connexion Google indisponible.");
+              toast.error(userErrorMessage(e, "Connexion Google indisponible."));
             }
           }}
         >

@@ -54,6 +54,7 @@ import { useGlobalContactDetailSheet } from "@/components/layout/ContactDetailSh
 import type { PipeRdvPlanOption } from "@/lib/pipe/pipe-rdv-plan-option";
 import { toast } from "sonner";
 import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface PipeDetailPanelProps {
   pipe: PipeRecord;
@@ -140,7 +141,7 @@ export function PipeDetailPanel({
       setConfirmArchive(false);
       onRefreshed?.(updated);
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de désarchiver le dossier"));
     } finally {
       setArchiving(false);
     }
@@ -154,7 +155,7 @@ export function PipeDetailPanel({
       setConfirmDelete(false);
       onDeleted();
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de supprimer le dossier"));
     } finally {
       setDeleting(false);
     }

@@ -152,7 +152,7 @@ export function ParametresOverview({
           onClick={() => onNavigate("suivi")}
         />
         <StatusTile
-          title="Intégrations"
+          title="Équipe & intégrations"
           value="API & Telegram"
           subtitle="Automatisations locales et rappels anniversaires"
           icon={Workflow}

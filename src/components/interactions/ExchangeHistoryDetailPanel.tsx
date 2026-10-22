@@ -198,7 +198,7 @@ export function ExchangeHistoryDetailPanel({
                   </div>
                 ) : entry.email_reponse_type === "mail" ? (
                   <p className="text-sm text-muted-foreground italic">
-                    Réponse enregistrée — texte non stocké. Consultez le fil Gmail depuis la fiche
+                    Réponse enregistrée — texte non stocké. Consultez la conversation depuis la fiche
                     Relation ou Suivi → Envois.
                   </p>
                 ) : entry.email_reponse_type === "rdv" ? (

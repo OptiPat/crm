@@ -46,6 +46,7 @@ import { openComptaDriveLink } from "@/lib/compta/compta-drive";
 import { useComptaNameSuggestions } from "@/hooks/useComptaNameSuggestions";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const ENCAISSEMENT_SORT_OPTIONS = [
   { value: "date-desc", label: "Date (récent)" },
@@ -190,7 +191,7 @@ export function ComptaEncaissementsTab({
       setFormOpen(false);
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur");
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer l'encaissement"));
     } finally {
       setBusy(false);
     }
@@ -206,7 +207,7 @@ export function ComptaEncaissementsTab({
       setDeleteId(null);
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur");
+      toast.error(userErrorMessage(err, "Impossible de supprimer l'encaissement"));
     } finally {
       setBusy(false);
     }
@@ -339,17 +340,17 @@ export function ComptaEncaissementsTab({
                 </div>
                 <div className="flex gap-1 ml-auto">
                   {e.lienDrive ? (
-                    <Button type="button" variant="ghost" size="icon" onClick={() => void openComptaDriveLink(e.lienDrive!)}>
+                    <Button type="button" variant="ghost" size="icon" aria-label="Ouvrir le justificatif dans Drive" title="Ouvrir le justificatif dans Drive" onClick={() => void openComptaDriveLink(e.lienDrive!)}>
                       <ExternalLink className="h-4 w-4" />
                     </Button>
                   ) : null}
-                  <Button type="button" variant="ghost" size="icon" onClick={() => loadEdit(e)}>
+                  <Button type="button" variant="ghost" size="icon" aria-label="Modifier l'encaissement" title="Modifier l'encaissement" onClick={() => loadEdit(e)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => duplicateEncaissement(e)}>
+                  <Button type="button" variant="ghost" size="icon" aria-label="Dupliquer l'encaissement" title="Dupliquer l'encaissement" onClick={() => duplicateEncaissement(e)}>
                     <Copy className="h-4 w-4" />
                   </Button>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => setDeleteId(e.id)}>
+                  <Button type="button" variant="ghost" size="icon" aria-label="Supprimer l'encaissement" title="Supprimer l'encaissement" onClick={() => setDeleteId(e.id)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>

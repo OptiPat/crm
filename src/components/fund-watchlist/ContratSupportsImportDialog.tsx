@@ -20,6 +20,7 @@ import {
   summarizeContratSupportsImport,
   type ContratSupportImportRow,
 } from "@/lib/fund-watchlist/contrat-supports-import";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type Step = "pick" | "preview" | "done";
 
@@ -99,7 +100,7 @@ export function ContratSupportsImportDialog({
       setStep("done");
       onApplied?.();
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible d'importer les supports"));
     } finally {
       setBusy(false);
     }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   getContactNewsletterUnsubscribedAt,
@@ -39,7 +40,7 @@ export function ContactNewsletterUnsubscribeCheckbox({ contactId }: { contactId:
       notifyContactsChanged();
       toast.success(next ? "Désinscrit de la newsletter" : "Réinscrit à la newsletter (inclus à la prochaine préparation)");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e) || "Mise à jour impossible");
+      toast.error(userErrorMessage(e, "Mise à jour impossible"));
     } finally {
       setSaving(false);
     }

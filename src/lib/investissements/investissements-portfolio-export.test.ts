@@ -33,11 +33,12 @@ describe("investissements-portfolio-export", () => {
   it("exporte encours et VP", () => {
     const row = investissementToCsvRow(baseInv());
     expect(INVESTISSEMENTS_CSV_HEADERS).toHaveLength(row.length);
-    expect(row[2]).toBe("1000.00");
-    expect(row[3]).toBe("1200.00");
+    expect(row[1]).toBe("Assurance Vie");
+    expect(row[2]).toBe("1000,00");
+    expect(row[3]).toBe("1200,00");
     expect(row[4]).toBe("Oui");
-    expect(row[5]).toBe("50.00");
-    expect(row[6]).toBe("MENSUEL");
+    expect(row[5]).toBe("50,00");
+    expect(row[6]).toBe("Mensuel");
   });
 
   it("SCPI crédit et sans encours pour immo", () => {

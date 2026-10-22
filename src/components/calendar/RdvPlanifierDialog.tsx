@@ -74,6 +74,7 @@ import { rdvPlanifierFormSessionKey } from "@/lib/calendar/rdv-planifier-form-se
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { usePipeR2ConfirmationOptOut } from "@/hooks/usePipeR2ConfirmationOptOut";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export type RdvPlanifierContext =
   | { kind: "agenda" }
@@ -354,7 +355,7 @@ export function RdvPlanifierDialog({
       setEnd(unixToDatetimeLocalInput(slot.endAt));
       toast.success("Prochain créneau libre proposé");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Impossible de chercher un créneau");
+      toast.error(userErrorMessage(e, "Impossible de chercher un créneau"));
     }
   };
 
@@ -442,7 +443,7 @@ export function RdvPlanifierDialog({
       onOpenChange(false);
       onCreated?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur planification RDV");
+      toast.error(userErrorMessage(e, "Impossible de planifier le RDV"));
     } finally {
       setSubmitting(false);
     }

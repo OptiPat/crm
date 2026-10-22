@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ContactInitialsAvatar, DashboardPanel } from "./dashboard-ui";
 import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 async function copyBirthdayMessage(contact: BirthdayContactToday): Promise<void> {
   try {
@@ -36,7 +37,7 @@ async function copyBirthdayMessage(contact: BirthdayContactToday): Promise<void>
     await navigator.clipboard.writeText(draft.message);
     toast.success("Message copié dans le presse-papiers.");
   } catch (error) {
-    toast.error(`Copie impossible : ${String(error)}`);
+    toast.error(userErrorMessage(error, "Copie impossible"));
   }
 }
 
@@ -65,8 +66,8 @@ async function openBirthdayMessage(
   } catch (error) {
     toast.error(
       channel === "sms"
-        ? `Impossible d'ouvrir le SMS : ${String(error)}`
-        : `Impossible d'ouvrir WhatsApp : ${String(error)}`
+        ? userErrorMessage(error, "Impossible d'ouvrir le SMS")
+        : userErrorMessage(error, "Impossible d'ouvrir WhatsApp")
     );
   }
 }

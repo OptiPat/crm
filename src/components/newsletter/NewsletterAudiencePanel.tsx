@@ -419,7 +419,9 @@ export function newsletterChecklistOk(input: {
   const messages: string[] = [];
   if (!input.hasContent) messages.push("Générez ou saisissez le contenu");
   if (!input.emailConnected && !input.brevoConfigured) {
-    messages.push("Connectez Gmail ou configurez Brevo (Paramètres → Newsletter)");
+    messages.push(
+      "Connectez votre messagerie (Paramètres → Emails & envois) ou configurez Brevo (Réglages newsletter)"
+    );
   }
   const hasPreparedAudience = (input.preparedEditionQueuedCount ?? 0) > 0;
   if (!hasPreparedAudience && (!input.preview || input.preview.eligible === 0)) {

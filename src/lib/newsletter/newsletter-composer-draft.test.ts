@@ -58,8 +58,10 @@ describe("newsletter-composer-draft", () => {
       preparedQueueCount: 12,
       composerEditionId: 7,
       composerDirty: false,
+      editedSinceGeneration: true,
     });
     const loaded = loadNewsletterComposerDraft();
+    expect(loaded?.editedSinceGeneration).toBe(true);
     expect(loaded?.theme).toBe("Assurance emprunteur");
     expect(loaded?.structurePresetId).toBe("actu-echeance");
     expect(loaded?.editMode).toBe("sections");
@@ -67,6 +69,14 @@ describe("newsletter-composer-draft", () => {
     expect(loaded?.content?.sections[0]?.title).toBe("Point 1");
     expect(loaded?.audienceFilters.excludeContactIds).toEqual([42]);
     expect(loaded?.activeEditionId).toBe(7);
+  });
+
+  it("ancien brouillon sans editedSinceGeneration : valeur inconnue", () => {
+    localStorage.setItem(
+      "crm_newsletter_composer_draft",
+      JSON.stringify({ savedAt: 1, theme: "x", plainBody: "Texte", composerDirty: true })
+    );
+    expect(loadNewsletterComposerDraft()?.editedSinceGeneration).toBeUndefined();
   });
 
   it("clears storage when draft is empty", () => {

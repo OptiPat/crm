@@ -144,7 +144,7 @@ export function ExchangeEmailReplyForm({
         <p className="text-[11px] text-muted-foreground">
           {sendsFromOfficeMailbox
             ? "La boîte cabinet Microsoft ne peut pas prolonger un fil Gmail : un nouveau message sera envoyé."
-            : "Gras, listes et liens — rendu identique à Gmail. La signature est ajoutée à l’envoi."}
+            : "Gras, listes et liens — rendu identique dans la boîte mail du client. La signature est ajoutée à l’envoi."}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">

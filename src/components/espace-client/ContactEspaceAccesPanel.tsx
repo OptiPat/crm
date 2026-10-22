@@ -83,7 +83,7 @@ export function ContactEspaceAccesPanel({
       ]);
       setAcces(row);
       // Sert uniquement à prévenir qu'aucun portail n'est configuré : le
-      // réglage lui-même vit dans Paramètres → Intégrations.
+      // réglage lui-même vit dans Paramètres → Espace client.
       setPortalUrl(config.portal_url?.trim() ?? "");
       if (row?.email_utilise) {
         setEmail(row.email_utilise);
@@ -299,8 +299,8 @@ export function ContactEspaceAccesPanel({
       <div className="mt-4 space-y-3 border-t border-border/60 pt-3">
         {!portalUrl.trim() ? (
           <p className="text-sm text-muted-foreground">
-            Portail non configuré — renseignez son adresse dans Paramètres →
-            Intégrations avant de synchroniser.
+            Portail non configuré — renseignez son adresse dans Paramètres → Espace
+            client avant de synchroniser.
           </p>
         ) : null}
         <div className="flex flex-wrap gap-2">

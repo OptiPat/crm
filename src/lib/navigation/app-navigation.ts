@@ -97,6 +97,64 @@ function persistNavigationDetail(detail: AppNavigationDetail): void {
   }
 }
 
+/**
+ * Toutes les clés sessionStorage d'intention de navigation (écrites avant que App change de page,
+ * lues une fois par la page cible). Littéraux plutôt qu'imports : les modules *-navigation
+ * importent ce fichier. `app-navigation.test.ts` échoue si une clé `crm_nav_*` / `crm_open_*`
+ * du code n'est pas listée ici.
+ */
+export const PENDING_NAVIGATION_INTENT_KEYS = [
+  // Fiche contact (investissement-navigation, useContactDetailSheet, SuiviAlertesTab)
+  CRM_OPEN_CONTACT_ID_KEY,
+  CRM_OPEN_CONTACT_TAB_KEY,
+  "crm_open_contact_investissement",
+  // Suivi
+  "crm_nav_suivi_tab",
+  "crm_nav_suivi_envois_subtab",
+  "crm_nav_suivi_contact_id",
+  "crm_nav_suivi_envois_contact_id",
+  "crm_nav_suivi_etiquette_id",
+  // Interactions, documents
+  "crm_nav_interactions_contact_id",
+  "crm_nav_documents_contact_id",
+  // Paramètres, newsletter
+  CRM_PARAMETRES_SECTION_KEY,
+  CRM_PARAMETRES_SCROLL_KEY,
+  CRM_PARAMETRES_EMAIL_TAB_KEY,
+  CRM_NEWSLETTER_TAB_KEY,
+  // Foyers, familles, prescripteurs, partenaires
+  "crm_open_foyer_id",
+  "crm_nav_foyers_focus_contact_id",
+  "crm_nav_familles_famille_key",
+  "crm_nav_familles_focus_contact_id",
+  "crm_nav_prescripteurs_root_id",
+  "crm_nav_prescripteurs_focus_contact_id",
+  "crm_nav_partenaires_partenaire_id",
+  "crm_nav_partenaires_focus_investissement_id",
+  // Pipe, pipe parrainage
+  "crm_pipe_focus_id",
+  "crm_parrainage_pipe_focus_id",
+  // Agenda
+  "crm_nav_agenda_week_start",
+  "crm_nav_agenda_highlight_start",
+  "crm_nav_agenda_highlight_end",
+  "crm_nav_agenda_rdv_pipe_draft",
+  // Tâches, contacts, étiquettes
+  "crm_nav_taches_echeance_filter",
+  "crm_nav_taches_focus_contact_id",
+  "crm_nav_contacts_category_filter",
+  "crm_nav_etiquettes_edit_id",
+  // Veille fonds : ouverture du rapport du coach
+  "fund-watchlist-coach-open-dialog",
+] as const;
+
+/** Navigation refusée (« Continuer l'édition ») ou session verrouillée : l'intention ne doit pas ressurgir. */
+export function clearPendingNavigationIntents(): void {
+  for (const key of PENDING_NAVIGATION_INTENT_KEYS) {
+    sessionStorage.removeItem(key);
+  }
+}
+
 /** Notifie les pages déjà montées + persiste pour le prochain mount. */
 export function dispatchAppNavigation(detail: AppNavigationDetail): void {
   persistNavigationDetail(detail);

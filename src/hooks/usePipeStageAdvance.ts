@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { setPipeStage, type PipeRecord } from "@/lib/api/tauri-pipe";
 import { PIPE_STAGE_LABELS, type PipeStage } from "@/lib/pipe/pipe-types";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export interface PendingPipeStageAdvance {
   pipeId: number;
@@ -44,7 +45,7 @@ export function usePipeStageAdvance(onApplied?: (pipe: PipeRecord) => void) {
         setPending(null);
         onApplied?.(updated);
       } catch (err) {
-        toast.error(String(err));
+        toast.error(userErrorMessage(err, "Impossible de changer l'étape du dossier"));
       } finally {
         setSaving(false);
       }

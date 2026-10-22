@@ -203,6 +203,7 @@ import {
 } from "@/lib/emails/template-email-ephemeral";
 import { TeamLockBanner } from "@/components/team/TeamLockBanner";
 import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
+import { usePageLeaveGuard } from "@/lib/navigation/page-leave-guard";
 
 export type TemplateEmailFormMode = "permanent" | "ephemeral";
 
@@ -338,6 +339,7 @@ export function TemplateEmailForm({
   // Modifié à la main depuis l'ouverture ou le dernier enregistrement (fermeture sans perte).
   const [dirty, setDirty] = useState(false);
   const [unsavedConfirmOpen, setUnsavedConfirmOpen] = useState(false);
+  usePageLeaveGuard(open && dirty);
   // Onglets d'options (Pipe RDV, Box Placement, Déclencheur, Étiquettes, Action) : affichés
   // seulement s'ils servent, ou sur « Plus d'options ».
   const [showAllTabs, setShowAllTabs] = useState(false);

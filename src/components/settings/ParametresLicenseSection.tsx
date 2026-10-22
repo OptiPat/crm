@@ -13,6 +13,7 @@ import {
 import { KeyRound, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { LICENSE_UI_VISIBLE } from "@/lib/licensing/license-ui";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 function formatDate(ts: number | null): string {
   if (!ts) return "—";
@@ -81,7 +82,7 @@ export function ParametresLicenseSection() {
       setLicenseKey("");
       toast.success("Licence activée.");
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible d'activer la licence"));
     } finally {
       setActivating(false);
     }
@@ -100,7 +101,7 @@ export function ParametresLicenseSection() {
       setStatus(next);
       toast.success("Essai relancé.");
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible de relancer l'essai"));
     } finally {
       setActivating(false);
     }

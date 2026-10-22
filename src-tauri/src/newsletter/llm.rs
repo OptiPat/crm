@@ -87,7 +87,7 @@ fn call_chat(
     let key = api_key.trim();
     if key.is_empty() {
         return Err(format!(
-            "Clé API {} non configurée (Newsletter → Paramètres).",
+            "Clé API {} non configurée (Newsletter → Réglages newsletter).",
             provider.label()
         ));
     }
@@ -502,29 +502,29 @@ fn format_http_error(provider: LlmProvider, status: u16, text: &str) -> String {
 fn http_error_hint(provider: LlmProvider, status: u16) -> String {
     match status {
         401 => format!(
-            "Clé API {} invalide — vérifiez Newsletter → Paramètres.",
+            "Clé API {} invalide — vérifiez Newsletter → Réglages newsletter.",
             provider.label()
         ),
         429 => match provider {
             LlmProvider::Google => "Quota Gemini dépassé — attendez (souvent 1 min ou jusqu'à minuit PT), \
-                vérifiez usage/facturation sur Google AI Studio, ou changez de fournisseur (Newsletter → Paramètres). \
+                vérifiez usage/facturation sur Google AI Studio, ou changez de fournisseur (Newsletter → Réglages newsletter). \
                 Rapport Coach : réduisez les favoris si le quota est serré."
                 .to_string(),
             _ => format!(
                 "Quota ou limite de requêtes {} dépassé — attendez puis réessayez, \
-                ou changez de fournisseur (Newsletter → Paramètres).",
+                ou changez de fournisseur (Newsletter → Réglages newsletter).",
                 provider.label()
             ),
         },
         402 | 403 => format!(
-            "Accès {} refusé ou facturation requise — vérifiez le forfait et les droits de la clé API (Newsletter → Paramètres).",
+            "Accès {} refusé ou facturation requise — vérifiez le forfait et les droits de la clé API (Newsletter → Réglages newsletter).",
             provider.label()
         ),
         502 | 503 | 504 => format!(
             "Service {} temporairement indisponible — réessayez dans quelques minutes.",
             provider.label()
         ),
-        _ => "Vérifiez votre connexion, la clé API (Newsletter → Paramètres) et le message ci-dessus.".to_string(),
+        _ => "Vérifiez votre connexion, la clé API (Newsletter → Réglages newsletter) et le message ci-dessus.".to_string(),
     }
 }
 

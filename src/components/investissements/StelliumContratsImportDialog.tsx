@@ -28,6 +28,7 @@ import {
 import { formatStelliumPerfPctLabel } from "@/lib/investissements/stellium-perf-display";
 import { buildStelliumImportPrepareInput } from "@/lib/investissements/stellium-perf-campaign";
 import { StelliumPerfPrepareCampaignButton } from "@/components/emails/StelliumPerfPrepareCampaignButton";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type Step = "pick" | "preview";
 
@@ -162,7 +163,7 @@ export function StelliumContratsImportDialog({
       );
       applyPreview(preview);
     } catch (error) {
-      toast.error("Actualisation impossible : " + String(error));
+      toast.error(userErrorMessage(error, "Impossible d'actualiser l'aperçu"));
     } finally {
       setRefreshing(false);
     }
@@ -208,7 +209,7 @@ export function StelliumContratsImportDialog({
       applyPreview(preview);
       setStep("preview");
     } catch (error) {
-      toast.error("Lecture impossible : " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de lire le fichier"));
     } finally {
       setBusy(false);
     }
@@ -305,7 +306,7 @@ export function StelliumContratsImportDialog({
         toast.error(failed > 0 ? "Échec de l'import" : "Rien à appliquer");
       }
     } catch (error) {
-      toast.error("Erreur : " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de mettre à jour les encours"));
     } finally {
       setBusy(false);
     }

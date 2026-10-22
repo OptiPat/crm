@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useConfirmDialog } from "@/components/pipe/useConfirmDialog";
 import { Calendar, FileText, Pencil, Phone, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,6 +55,7 @@ import {
 } from "@/lib/pipe/pipe-timeline-types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const TYPE_ICONS = {
   APPEL: Phone,
@@ -100,6 +102,7 @@ export function PipeTimelinePhaseEntryRow({
 }: PipeTimelinePhaseEntryRowProps) {
   const [editing, setEditing] = useState(false);
   const [rdvOutcomeOpen, setRdvOutcomeOpen] = useState(false);
+  const deleteConfirm = useConfirmDialog();
   const [occurredAt, setOccurredAt] = useState(() => unixToDatetimeLocalInput(entry.occurred_at));
   const [titre, setTitre] = useState(entry.titre ?? "");
   const [contenu, setContenu] = useState(entry.contenu ?? "");
@@ -236,7 +239,7 @@ export function PipeTimelinePhaseEntryRow({
       }
       setEditing(false);
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer l'entrée"));
     } finally {
       setSaving(false);
     }
@@ -251,11 +254,20 @@ export function PipeTimelinePhaseEntryRow({
       toast.error("Cette trace d'historique RDV ne peut pas être supprimée.");
       return;
     }
+    const confirmed = await deleteConfirm.confirm({
+      title: "Supprimer cette entrée ?",
+      description: `Cette entrée (${typeLabel} du ${formatTimelineOccurredAt(
+        entry.occurred_at
+      )}) sera supprimée définitivement.`,
+      confirmLabel: "Supprimer",
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       await timeline.removeEntry(entry.id);
       toast.success("Entrée supprimée");
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de supprimer l'entrée"));
     }
   };
 
@@ -296,7 +308,7 @@ export function PipeTimelinePhaseEntryRow({
 
       toast.success(`RDV typifié : ${formatRdvPlanOptionLabel(target)}`);
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de mettre à jour l'agenda"));
     }
   };
 
@@ -339,7 +351,8 @@ export function PipeTimelinePhaseEntryRow({
         variant="ghost"
         size="icon"
         className={variant === "timeline" ? "h-8 w-8" : "h-7 w-7"}
-        aria-label="Supprimer"
+        aria-label="Supprimer l'entrée"
+        title="Supprimer l'entrée"
         onClick={() => void handleDelete()}
         disabled={disabled || isRdvTimelineTraceNote(entry)}
       >
@@ -395,7 +408,7 @@ export function PipeTimelinePhaseEntryRow({
     />
   );
 
-  const rdvDialog =
+  const rdvOutcomeDialog =
     liveEntry.entry_type === "RDV" ? (
       <PipeRdvOutcomeDialog
         open={rdvOutcomeOpen}
@@ -409,6 +422,12 @@ export function PipeTimelinePhaseEntryRow({
         }}
       />
     ) : null;
+  const entryDialogs = (
+    <>
+      {rdvOutcomeDialog}
+      {deleteConfirm.dialog}
+    </>
+  );
 
   if (variant === "timeline" && timelineStyle) {
     return (
@@ -431,7 +450,7 @@ export function PipeTimelinePhaseEntryRow({
             {editing ? editForm : entryContent}
           </article>
         </li>
-        {rdvDialog}
+        {entryDialogs}
       </>
     );
   }
@@ -460,7 +479,7 @@ export function PipeTimelinePhaseEntryRow({
         </div>
         {actionButtons}
       </li>
-      {rdvDialog}
+      {entryDialogs}
     </>
   );
 }

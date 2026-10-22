@@ -55,6 +55,7 @@ import { openComptaDriveLink } from "@/lib/compta/compta-drive";
 import { useComptaNameSuggestions } from "@/hooks/useComptaNameSuggestions";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const DEPENSE_SORT_OPTIONS = [
   { value: "date-desc", label: "Date (récent)" },
@@ -203,7 +204,7 @@ export function ComptaDepensesTab({ year, month, depenses, onChanged }: ComptaDe
       setFormOpen(false);
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur");
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer la dépense"));
     } finally {
       setBusy(false);
     }
@@ -219,7 +220,7 @@ export function ComptaDepensesTab({ year, month, depenses, onChanged }: ComptaDe
       setDeleteId(null);
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur");
+      toast.error(userErrorMessage(err, "Impossible de supprimer la dépense"));
     } finally {
       setBusy(false);
     }
@@ -423,18 +424,20 @@ export function ComptaDepensesTab({ year, month, depenses, onChanged }: ComptaDe
                       type="button"
                       variant="ghost"
                       size="icon"
+                      aria-label="Ouvrir le justificatif dans Drive"
+                      title="Ouvrir le justificatif dans Drive"
                       onClick={() => void openComptaDriveLink(d.lienDrive!)}
                     >
                       <ExternalLink className="h-4 w-4" />
                     </Button>
                   ) : null}
-                  <Button type="button" variant="ghost" size="icon" onClick={() => loadEdit(d)}>
+                  <Button type="button" variant="ghost" size="icon" aria-label="Modifier la dépense" title="Modifier la dépense" onClick={() => loadEdit(d)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => duplicateDepense(d)}>
+                  <Button type="button" variant="ghost" size="icon" aria-label="Dupliquer la dépense" title="Dupliquer la dépense" onClick={() => duplicateDepense(d)}>
                     <Copy className="h-4 w-4" />
                   </Button>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => setDeleteId(d.id)}>
+                  <Button type="button" variant="ghost" size="icon" aria-label="Supprimer la dépense" title="Supprimer la dépense" onClick={() => setDeleteId(d.id)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>

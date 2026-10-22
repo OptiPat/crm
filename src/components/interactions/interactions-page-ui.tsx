@@ -46,7 +46,7 @@ export function InteractionsPageHelp() {
           ici que vous <strong className="text-foreground">répondez</strong> au client depuis le CRM.
           Si le client a déjà répondu, clôturez le suivi depuis{" "}
           <strong className="text-foreground">Suivi → Envois</strong> (« Réponse reçue ») — la
-          détection Gmail tourne aussi en arrière-plan.
+          détection des réponses dans la boîte mail tourne aussi en arrière-plan.
         </p>
         <p>
           <strong className="text-foreground">Fiche contact → Relation</strong> montre la vue 360°

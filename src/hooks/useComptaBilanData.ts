@@ -5,6 +5,7 @@ import {
   type ComptaDeplacement,
   type ComptaEncaissement,
 } from "@/lib/api/tauri-compta";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function useComptaBilanData(
   bilanYear: number,
@@ -31,7 +32,7 @@ export function useComptaBilanData(
       setEncaissements(data.encaissements);
       setDeplacements(data.deplacements);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur de chargement");
+      setError(userErrorMessage(e, "Impossible de charger le bilan"));
     } finally {
       setLoading(false);
     }

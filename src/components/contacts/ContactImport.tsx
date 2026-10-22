@@ -1,3 +1,4 @@
+import { normalizeImportAmount } from "@/lib/contacts/import-amount";
 import { useState } from "react";
 import { inferTypeProduitFromImportProduitLabel } from "@/lib/investissements/infer-type-produit-from-import-label";
 import { Button } from "@/components/ui/button";
@@ -307,6 +308,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         detectedMapping[col] = "prospect_filleul";
       } else if (
         (colLower.includes("montant") && colLower.includes("vp")) ||
+        colLower.includes("versement programm") ||
         col === "Montant VP" // Exact match
       ) {
         detectedMapping[col] = "montant_vp";
@@ -346,7 +348,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     
     // Vérifier la taille du fichier (max 10MB)
     if (selectedFile.size > 10 * 1024 * 1024) {
-      alert("Le fichier est trop volumineux (max 10MB)");
+      toast.error("Le fichier est trop volumineux (max 10MB)");
       return;
     }
 
@@ -361,7 +363,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       const workbook = isCsv ? XLSX.read(data, { raw: true }) : XLSX.read(data);
       
       if (workbook.SheetNames.length === 0) {
-        alert("Le fichier ne contient aucune feuille");
+        toast.error("Le fichier ne contient aucune feuille");
         return;
       }
       
@@ -369,7 +371,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       const jsonData = XLSX.utils.sheet_to_json(firstSheet);
       
       if (jsonData.length === 0) {
-        alert("Le fichier est vide");
+        toast.error("Le fichier est vide");
         return;
       }
 
@@ -829,7 +831,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   // Parser le montant souscrit (en centimes)
                   let montantInitial = null;
                   if (row.data.montant) {
-                    const montantStr = String(row.data.montant).replace(/[^\d.,]/g, '').replace(',', '.');
+                    const montantStr = normalizeImportAmount(row.data.montant);
                     const montantEuros = parseFloat(montantStr);
                     if (!isNaN(montantEuros)) {
                       montantInitial = Math.round(montantEuros * 100);
@@ -839,7 +841,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   // Parser le montant VP (en centimes)
                   let montantVP = null;
                   if (row.data.montant_vp) {
-                    const montantVPStr = String(row.data.montant_vp).replace(/[^\d.,]/g, '').replace(',', '.');
+                    const montantVPStr = normalizeImportAmount(row.data.montant_vp);
                     const montantVPEuros = parseFloat(montantVPStr);
                     if (!isNaN(montantVPEuros)) {
                       montantVP = Math.round(montantVPEuros * 100);
@@ -1494,7 +1496,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               // Parser le montant
               let montantInitial: number | undefined;
               if (row.data.montant) {
-                const montantStr = String(row.data.montant).replace(/[^\d.,]/g, '').replace(',', '.');
+                const montantStr = normalizeImportAmount(row.data.montant);
                 const montantNum = parseFloat(montantStr);
                 if (!isNaN(montantNum) && montantNum > 0) {
                   montantInitial = Math.round(montantNum * 100);
@@ -1504,7 +1506,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               // 🔥 Parser le montant VP (versement programmé)
               let montantVP: number | undefined;
               if (row.data.montant_vp) {
-                const vpStr = String(row.data.montant_vp).replace(/[^\d.,]/g, '').replace(',', '.');
+                const vpStr = normalizeImportAmount(row.data.montant_vp);
                 const montantVPEuros = parseFloat(vpStr);
                 if (!isNaN(montantVPEuros)) {
                   montantVP = Math.round(montantVPEuros * 100);
@@ -1714,7 +1716,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             // Parser le montant souscrit (en centimes)
             let montantInitial = null;
             if (row.data.montant) {
-              const montantStr = String(row.data.montant).replace(/[^\d.,]/g, '').replace(',', '.');
+              const montantStr = normalizeImportAmount(row.data.montant);
               const montantEuros = parseFloat(montantStr);
               if (!isNaN(montantEuros)) {
                 montantInitial = Math.round(montantEuros * 100); // Convertir en centimes
@@ -1724,7 +1726,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             // Parser le montant VP (en centimes)
             let montantVP = null;
             if (row.data.montant_vp) {
-              const montantVPStr = String(row.data.montant_vp).replace(/[^\d.,]/g, '').replace(',', '.');
+              const montantVPStr = normalizeImportAmount(row.data.montant_vp);
               const montantVPEuros = parseFloat(montantVPStr);
               if (!isNaN(montantVPEuros)) {
                 montantVP = Math.round(montantVPEuros * 100);
@@ -1904,8 +1906,14 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           }
         }
         
-        // Parser le montant
-        const montantInitial = row.data.montant ? Math.round(parseFloat(String(row.data.montant)) * 100) : undefined;
+        // Parser les montants (même règle que les investissements individuels :
+        // espaces de milliers et virgule décimale tolérés, ex. « 10 000,50 »)
+        const parseFoyerMontantCentimes = (raw: unknown): number | undefined => {
+          if (raw == null || raw === '') return undefined;
+          const euros = parseFloat(normalizeImportAmount(raw));
+          return Number.isNaN(euros) ? undefined : Math.round(euros * 100);
+        };
+        const montantInitial = parseFoyerMontantCentimes(row.data.montant);
         
         // 🔥 FIX: Utiliser le vrai nom du produit (ex: "NCap Regions") au lieu du type (ex: "SCPI")
         const nomProduit = row.data.nom_produit 
@@ -1916,7 +1924,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         const dateSouscription = parseImportDate(row.data.date_souscription);
         
         // Montant VP
-        const montantVP = row.data.montant_vp ? Math.round(parseFloat(String(row.data.montant_vp)) * 100) : undefined;
+        const montantVP = parseFoyerMontantCentimes(row.data.montant_vp);
         
         // Réinvestissement
         let reinvestissement = false;

@@ -270,6 +270,7 @@ function TreeNode({
                 className="h-7 px-2 text-amber-700 hover:text-amber-800 hover:bg-amber-50"
                 onClick={() => onRequestUnlink(node.contact)}
                 title="Retirer du réseau (conserve le contact)"
+                aria-label="Retirer du réseau (conserve le contact)"
               >
                 <Unlink2 className="h-3 w-3" />
               </Button>
@@ -278,9 +279,10 @@ function TreeNode({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
                 onClick={() => onRequestDelete(node.contact)}
                 title="Supprimer le contact"
+                aria-label={`Supprimer le contact ${node.contact.prenom} ${node.contact.nom}`}
               >
                 <Trash2 className="h-3 w-3" />
               </Button>

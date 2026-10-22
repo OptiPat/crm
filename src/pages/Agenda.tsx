@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, RefreshCw } from "lucide-react";
+import { CalendarPlus, ChevronLeft, ChevronRight, ExternalLink, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgendaWeekView } from "@/components/calendar/AgendaWeekView";
 import { AgendaPipeRdvManageDialog } from "@/components/calendar/AgendaPipeRdvManageDialog";
@@ -20,8 +20,10 @@ import {
   formatAgendaWeekRange,
   googleCalendarDayUrl,
   isCurrentWeek,
+  nextFullHourUnix,
   startOfWeekMonday,
 } from "@/lib/calendar/agenda-week";
+import { DEFAULT_RDV_DURATION_MINUTES } from "@/lib/calendar/rdv-duration";
 import type { GoogleCalendarWeekEvent } from "@/lib/api/tauri-calendar";
 import { openExternalUrl } from "@/lib/api/tauri-system";
 import { requestOpenParametres } from "@/lib/navigation/app-navigation";
@@ -122,6 +124,22 @@ export function Agenda({ onNavigate }: AgendaProps) {
     }
   }, [lastSync]);
 
+  const openPlanifierAt = (startAt: number, endAt: number) => {
+    const draft = consumeAgendaRdvPipeDraft();
+    setPlanifierContext(
+      draft
+        ? {
+            kind: "pipe",
+            pipe: draft.pipe,
+            rdvStage: draft.rdvStage,
+            contenu: draft.contenu,
+          }
+        : { kind: "agenda" }
+    );
+    setSlotDefaults({ startAt, endAt });
+    setPlanifierOpen(true);
+  };
+
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
@@ -168,7 +186,14 @@ export function Agenda({ onNavigate }: AgendaProps) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="icon" onClick={goPrevWeek} aria-label="Semaine précédente">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={goPrevWeek}
+            aria-label="Semaine précédente"
+            title="Semaine précédente"
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button
@@ -179,7 +204,14 @@ export function Agenda({ onNavigate }: AgendaProps) {
           >
             Aujourd&apos;hui
           </Button>
-          <Button type="button" variant="outline" size="icon" onClick={goNextWeek} aria-label="Semaine suivante">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={goNextWeek}
+            aria-label="Semaine suivante"
+            title="Semaine suivante"
+          >
             <ChevronRight className="h-4 w-4" />
           </Button>
           <Button
@@ -189,6 +221,7 @@ export function Agenda({ onNavigate }: AgendaProps) {
             onClick={() => void handleRefresh()}
             disabled={refreshing || loading}
             aria-label="Actualiser"
+            title="Actualiser"
           >
             <RefreshCw className={cn("h-4 w-4", (refreshing || loading) && "animate-spin")} />
           </Button>
@@ -201,6 +234,21 @@ export function Agenda({ onNavigate }: AgendaProps) {
           >
             <ExternalLink className="h-3.5 w-3.5" />
             Google Agenda
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="gap-1"
+            onClick={() => {
+              // Semaine affichée autre que la courante : lundi 9h de cette semaine.
+              const startAt = isCurrentWeek(weekStartAt)
+                ? nextFullHourUnix()
+                : Math.floor(new Date(weekStartAt * 1000).setHours(9, 0, 0, 0) / 1000);
+              openPlanifierAt(startAt, startAt + DEFAULT_RDV_DURATION_MINUTES * 60);
+            }}
+          >
+            <CalendarPlus className="h-3.5 w-3.5" />
+            Planifier un RDV
           </Button>
         </div>
       </div>
@@ -217,21 +265,7 @@ export function Agenda({ onNavigate }: AgendaProps) {
         loading={loading}
         highlightStartAt={navHighlight?.startAt ?? null}
         highlightEndAt={navHighlight?.endAt ?? null}
-        onSlotClick={({ startAt, endAt }) => {
-          const draft = consumeAgendaRdvPipeDraft();
-          setPlanifierContext(
-            draft
-              ? {
-                  kind: "pipe",
-                  pipe: draft.pipe,
-                  rdvStage: draft.rdvStage,
-                  contenu: draft.contenu,
-                }
-              : { kind: "agenda" }
-          );
-          setSlotDefaults({ startAt, endAt });
-          setPlanifierOpen(true);
-        }}
+        onSlotClick={({ startAt, endAt }) => openPlanifierAt(startAt, endAt)}
         onPipeEventClick={(ev) => {
           setSelectedPipeEvent(ev);
           setPipeManageOpen(true);

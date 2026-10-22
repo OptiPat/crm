@@ -73,6 +73,7 @@ import {
   saveTemplatesEmailPagePreferences,
 } from "@/lib/emails/templates-email-page-preferences";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type TemplatesEmailProps = {
   onNavigate?: (page: string) => void;
@@ -420,7 +421,7 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
       setPreviewId(created.id);
       handleEdit(created);
     } catch (e) {
-      toast.error((e instanceof Error ? e.message : String(e)) || "Erreur lors de la duplication");
+      toast.error(userErrorMessage(e, "Impossible de dupliquer le modèle"));
       await loadTemplates({ silent: true });
     }
   };

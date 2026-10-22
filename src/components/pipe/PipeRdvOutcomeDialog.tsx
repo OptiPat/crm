@@ -25,6 +25,7 @@ import { formatSuiviRdvDisplayLabel, isSuiviRdvEntry } from "@/lib/pipe/pipe-sui
 import { PIPE_STAGE_LABELS } from "@/lib/pipe/pipe-types";
 import { formatTimelineOccurredAt } from "@/lib/pipe/pipe-timeline-types";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface PipeRdvOutcomeDialogProps {
   open: boolean;
@@ -102,7 +103,7 @@ export function PipeRdvOutcomeDialog({
       );
       onClose();
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer l'annulation du RDV"));
     } finally {
       setSaving(false);
     }

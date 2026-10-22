@@ -23,6 +23,7 @@ import {
   isSameEtiquetteQueueItem,
 } from "@/lib/etiquettes/etiquette-queue-item-key";
 import { toast } from "sonner";
+import { invokeErrorMessage, userErrorMessage } from "@/lib/api/invoke-error";
 
 export type EtiquetteEmailSendActivity = {
   batchRunning: boolean;
@@ -233,14 +234,14 @@ export function startIndividualEtiquetteEmailSend(input: {
       });
     } catch (error) {
       console.error("Error sending etiquette email:", error);
-      const hint = error instanceof Error ? error.message : "Erreur lors de l'envoi";
+      const hint = userErrorMessage(error, "Envoi de l'email impossible");
       await logEmailSendError({
         contactId: item.contact_id,
         contactEtiquetteId: item.contact_etiquette_id,
         etiquetteNom: item.queue_row_kind === "template" ? null : item.etiquette_nom,
         templateNom: item.queue_row_kind === "template" ? item.template_sujet : null,
         subject: input.subject,
-        errorMessage: hint,
+        errorMessage: invokeErrorMessage(error),
         sendMode: "individual",
       }).catch(() => {});
       toast.error(hint.includes("connexion") ? hint : `${hint} (Paramètres → Emails & envois → Connexion)`);

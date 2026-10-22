@@ -53,6 +53,7 @@ import {
   type R3ImmoChecklistTemplate,
   type R3ImmoVisibilityRule,
 } from "@/lib/pipe/r3-immo-checklist-template";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface PipeChecklistSettingsDialogProps {
   open: boolean;
@@ -506,7 +507,7 @@ export function PipeChecklistSettingsDialog({
       onOpenChange(false);
       onSaved?.();
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer les listes de documents"));
     } finally {
       setSaving(false);
     }

@@ -100,7 +100,7 @@ function MemberCard({
   onRoleChange,
   onMemberClick,
   onExcludeFromFamille,
-  excludeTitle = "Retirer du regroupement (homonyme)",
+  excludeTitle = "Retirer de cette famille automatique (homonyme : même nom de famille, sans lien de parenté)",
 }: {
   membre: MemberWithInvestments;
   foyer?: Foyer;
@@ -300,7 +300,7 @@ export function FamilleMemberTree({
           le contact.{" "}
           {isManual
             ? "Icône − pour retirer un membre de cette famille."
-            : "Icône − pour retirer un homonyme du regroupement."}
+            : "Icône − pour retirer un homonyme (même nom, sans lien de parenté) de cette famille regroupée automatiquement."}
         </p>
       )}
       {famille.membres.map((membre) => (
@@ -315,7 +315,7 @@ export function FamilleMemberTree({
           excludeTitle={
             isManual
               ? "Retirer de la famille"
-              : "Retirer du regroupement (homonyme)"
+              : "Retirer de cette famille automatique (homonyme : même nom de famille, sans lien de parenté)"
           }
         />
       ))}

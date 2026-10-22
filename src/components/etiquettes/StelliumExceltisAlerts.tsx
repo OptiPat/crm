@@ -10,6 +10,7 @@ import {
 } from "@/lib/api/tauri-stellium-exceltis";
 import { stelliumExceltisHeadline } from "@/lib/etiquettes/stellium-signal-ui";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type StelliumExceltisAlertsProps = {
   onOpenEtiquette?: (etiquetteId: number) => void;
@@ -41,7 +42,7 @@ export function StelliumExceltisAlerts({ onOpenEtiquette }: StelliumExceltisAler
       await load();
       toast.success("Annonce masquée");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur");
+      toast.error(userErrorMessage(e, "Impossible de masquer l'alerte"));
     }
   };
 

@@ -16,6 +16,7 @@ import {
 } from "@/lib/investissements/investissement-encours";
 import {
   getMontantInvestiCentimes,
+  getFrequenceVersementLabel,
   hasActiveVersementProgramme,
 } from "@/lib/investissements/investissement-versements";
 import {
@@ -260,10 +261,14 @@ export function InvestissementCard({
               </InvestissementMetaRow>
             )}
             {hasActiveVersementProgramme(inv) && (
-                <InvestissementMetaRow icon={Repeat} tone="vp">
-                  VP : {formatEuroCentimes(inv.montant_versement_programme!)}
+                <InvestissementMetaRow
+                  icon={Repeat}
+                  tone="vp"
+                  title="Versement programmé"
+                >
+                  Versement programmé : {formatEuroCentimes(inv.montant_versement_programme!)}
                   {inv.frequence_versement &&
-                    ` (${inv.frequence_versement})`}
+                    ` (${getFrequenceVersementLabel(inv.frequence_versement).toLowerCase()})`}
                 </InvestissementMetaRow>
               )}
             {inv.type_produit === "SCPI_DEMEMBREMENT" &&
@@ -316,8 +321,12 @@ export function InvestissementCard({
                 return null;
               })()}
             {inv.reinvestissement_dividendes && (
-              <InvestissementMetaRow icon={TrendingUp} tone="growth">
-                Réinv.{" "}
+              <InvestissementMetaRow
+                icon={TrendingUp}
+                tone="growth"
+                title="Réinvestissement des dividendes"
+              >
+                Réinvestissement{" "}
                 {(() => {
                   const match = inv.notes?.match(/(\d+)%/);
                   return match?.[1] ? `${match[1]}%` : "100%";

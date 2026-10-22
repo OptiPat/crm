@@ -17,6 +17,7 @@ import {
 } from "@/lib/contacts/duplicate-identity";
 import { mergeDuplicateGroup } from "@/lib/contacts/merge-duplicate-group";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface ContactDeduplicateProps {
   open: boolean;
@@ -117,7 +118,7 @@ export function ContactDeduplicate({ open, onOpenChange, onSuccess }: ContactDed
       }
     } catch (error) {
       console.error("Error deduplicating:", error);
-      toast.error("Erreur lors de la déduplication: " + String(error));
+      toast.error(userErrorMessage(error, "La fusion des doublons a échoué."));
     } finally {
       setWorking(false);
     }
@@ -155,7 +156,7 @@ export function ContactDeduplicate({ open, onOpenChange, onSuccess }: ContactDed
       }
     } catch (error) {
       console.error("Error merging review group:", error);
-      toast.error("Erreur fusion: " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de fusionner les contacts"));
     } finally {
       setWorking(false);
     }
@@ -186,7 +187,7 @@ export function ContactDeduplicate({ open, onOpenChange, onSuccess }: ContactDed
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
-            Dédupliquer les contacts
+            Fusionner les doublons
           </DialogTitle>
           <DialogDescription>
             Même nom et prénom : fusion automatique seulement si email et téléphone
@@ -272,7 +273,7 @@ export function ContactDeduplicate({ open, onOpenChange, onSuccess }: ContactDed
                 Annuler
               </Button>
               <Button onClick={handleStart} disabled={working}>
-                {working ? "Analyse..." : "Analyser et dédupliquer"}
+                {working ? "Analyse…" : "Analyser et fusionner les doublons"}
               </Button>
             </>
           )}

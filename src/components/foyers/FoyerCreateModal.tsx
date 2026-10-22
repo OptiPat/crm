@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -138,7 +140,7 @@ export function FoyerCreateModal({
 
   const handleSubmit = async () => {
     if (!foyerName.trim()) {
-      alert("Veuillez saisir un nom de foyer");
+      toast.error("Veuillez saisir un nom de foyer");
       return;
     }
 
@@ -163,7 +165,7 @@ export function FoyerCreateModal({
       setMemberSearch("");
     } catch (error) {
       console.error("🏠 [FoyerCreateModal] ❌ Erreur:", error);
-      alert("Erreur lors de la création du foyer: " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de créer le foyer."));
     } finally {
       setLoading(false);
     }
@@ -248,6 +250,8 @@ export function FoyerCreateModal({
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label="Retirer ce membre du foyer"
+                        title="Retirer ce membre du foyer"
                         onClick={() => handleRemoveMember(member.contact.id!)}
                       >
                         <X className="h-4 w-4" />

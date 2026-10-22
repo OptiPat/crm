@@ -193,6 +193,7 @@ export function TacheItem({
               variant="ghost"
               size="icon"
               title="Rattacher un contact"
+              aria-label="Rattacher un contact"
               onClick={() => onAttachContact(tache)}
             >
               <UserPlus className="h-4 w-4" />
@@ -205,6 +206,7 @@ export function TacheItem({
               variant="ghost"
               size="icon"
               title="Planifier un RDV"
+              aria-label="Planifier un RDV"
               onClick={() => onPlanifierRdv(tache)}
             >
               <Calendar className="h-4 w-4" />
@@ -213,12 +215,26 @@ export function TacheItem({
 
           {contacts.length > 0 && <TacheChainMenu tache={tache} />}
 
-          <Button type="button" variant="ghost" size="icon" onClick={() => onEdit(tache)}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            title="Modifier la tâche"
+            aria-label="Modifier la tâche"
+            onClick={() => onEdit(tache)}
+          >
             <Pencil className="h-4 w-4" />
           </Button>
 
           {onDelete && (
-            <Button type="button" variant="ghost" size="icon" onClick={() => onDelete(tache)}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              title="Supprimer la tâche"
+              aria-label="Supprimer la tâche"
+              onClick={() => onDelete(tache)}
+            >
               <Trash2 className="h-4 w-4 text-destructive" />
             </Button>
           )}

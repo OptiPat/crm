@@ -88,6 +88,7 @@ import {
   emptyFilleulDossier,
 } from "@/lib/organisation/organisation-filleul-dossier";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const APPEL_PRISE_CONTACT_ALL_STEPS = [
   ...APPEL_PRISE_CONTACT_STEPS,
@@ -134,6 +135,8 @@ function CoachScriptReplyFields({
           <div className="flex items-center justify-between gap-2">
             <Label className="text-xs text-muted-foreground">{primaryLabel}</Label>
             <Button
+              aria-label="Copier le texte"
+              title="Copier le texte"
               type="button"
               variant="ghost"
               size="sm"
@@ -160,6 +163,8 @@ function CoachScriptReplyFields({
           <div className="flex items-center justify-between gap-2">
             <Label className="text-xs text-muted-foreground">{followUp.label}</Label>
             <Button
+              aria-label="Copier le texte"
+              title="Copier le texte"
               type="button"
               variant="ghost"
               size="sm"
@@ -288,8 +293,8 @@ function CoachMessagingChannelButtons({
     } catch (error) {
       toast.error(
         channel === "sms"
-          ? `Impossible d'ouvrir le SMS : ${String(error)}`
-          : `Impossible d'ouvrir WhatsApp : ${String(error)}`
+          ? userErrorMessage(error, "Impossible d'ouvrir le SMS")
+          : userErrorMessage(error, "Impossible d'ouvrir WhatsApp")
       );
     }
   };
@@ -403,7 +408,7 @@ function SmsAnticipationPicker({
               telephone={pipe.contact_telephone}
               message={text}
             />
-            <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => void copy()}>
+            <Button aria-label="Copier le texte" title="Copier le texte" type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => void copy()}>
               <Copy className="size-3.5" />
             </Button>
           </div>
@@ -480,7 +485,7 @@ function SmsAnticipationInitialReplyPicker({
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-2">
           <Label className="text-xs text-muted-foreground">Réponse à envoyer</Label>
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => void copy()}>
+          <Button aria-label="Copier le texte" title="Copier le texte" type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => void copy()}>
             <Copy className="size-3.5" />
           </Button>
         </div>
@@ -554,6 +559,8 @@ function SmsAnticipationProfileReplyPicker({
         <div className="flex items-center justify-between gap-2">
           <Label className="text-xs text-muted-foreground">Réponse à envoyer</Label>
           <Button
+            aria-label="Copier le texte"
+            title="Copier le texte"
             type="button"
             variant="ghost"
             size="sm"
@@ -576,6 +583,8 @@ function SmsAnticipationProfileReplyPicker({
           <div className="flex items-center justify-between gap-2">
             <Label className="text-xs text-muted-foreground">{selectedOption.followUp.label}</Label>
             <Button
+              aria-label="Copier le texte"
+              title="Copier le texte"
               type="button"
               variant="ghost"
               size="sm"
@@ -664,7 +673,7 @@ function SmsAnticipationReplyPicker({
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-2">
           <Label className="text-xs text-muted-foreground">Réponse à envoyer</Label>
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => void copy()}>
+          <Button aria-label="Copier le texte" title="Copier le texte" type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => void copy()}>
             <Copy className="size-3.5" />
           </Button>
         </div>
@@ -731,7 +740,7 @@ function SmsAnticipationObjectionPicker({
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-2">
           <Label className="text-xs text-muted-foreground">Réponse si insiste pour du SMS</Label>
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => void copy()}>
+          <Button aria-label="Copier le texte" title="Copier le texte" type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => void copy()}>
             <Copy className="size-3.5" />
           </Button>
         </div>
@@ -1485,6 +1494,8 @@ function AppelPriseContactSection({
           <div className="flex items-center justify-between gap-2">
             <Label className="text-xs text-muted-foreground">Script</Label>
             <Button
+              aria-label="Copier le texte"
+              title="Copier le texte"
               type="button"
               variant="ghost"
               size="sm"

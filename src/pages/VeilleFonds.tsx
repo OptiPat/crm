@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import {
   ArrowLeft,
+  ChevronDown,
   Clock,
   FileDown,
   FileUp,
@@ -25,7 +26,13 @@ import {
   X,
 } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import {
   getFundWatchlistBoursoramaBenchmarksCached,
   getAllFundWatchlistEntries,
@@ -133,9 +140,44 @@ const DEFAULT_OPTIONAL_COLUMNS: Record<FundWatchlistOptionalColumnGroup, boolean
   sfdr: false,
 };
 
+/** Libellés d'en-tête plus clairs que les sigles (affichage seulement). */
+const COLUMN_LABEL_OVERRIDES: Partial<Record<FundWatchlistColumnId, string>> = {
+  perf_ytd: "Depuis le 1er janv.",
+};
+
+/** Infobulles d'en-tête expliquant les colonnes techniques. */
+const COLUMN_DESCRIPTIONS: Partial<Record<FundWatchlistColumnId, string>> = {
+  score_ct:
+    "Score court terme : moyenne des performances sur 1 semaine, 1 mois, 3 mois et depuis le 1er janvier, pénalisée si elles sont irrégulières ou négatives. Plus il est élevé, mieux c'est.",
+  perf_ytd: "Performance depuis le 1er janvier de l'année en cours",
+  detention: "Encours détenu par vos clients sur ce fonds",
+};
+
+function columnLabel(column: FundWatchlistColumnId): string {
+  return COLUMN_LABEL_OVERRIDES[column] ?? FUND_WATCHLIST_COLUMN_LABELS[column];
+}
+
+/** Colonnes chiffrées élargies de 6 px : texte passé de 11 à 12 px. */
+const READABLE_TEXT_EXTRA_WIDTH = "6px";
+
+function readableColumnStyle(column: FundWatchlistColumnId): CSSProperties {
+  const style = fundWatchlistColumnStyle(column);
+  if (column === "nom" || column === "categorie" || column === "favorite") return style;
+  const widen = (value?: string) =>
+    value && value.endsWith("px") ? `calc(${value} + ${READABLE_TEXT_EXTRA_WIDTH})` : value;
+  return { ...style, minWidth: widen(style.minWidth), width: widen(style.width) };
+}
+
+const ANNUAL_COLUMN_STYLE: CSSProperties = {
+  minWidth: `calc(${FUND_WATCHLIST_ANNUAL_YEAR_MIN_WIDTH} + ${READABLE_TEXT_EXTRA_WIDTH})`,
+  width: `calc(${FUND_WATCHLIST_ANNUAL_YEAR_MIN_WIDTH} + ${READABLE_TEXT_EXTRA_WIDTH})`,
+};
+
 export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   const [entries, setEntries] = useState<FundWatchlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [importOpen, setImportOpen] = useState(false);
@@ -167,9 +209,11 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     try {
       const rows = await getAllFundWatchlistEntries();
       setEntries(rows);
+      setLoadError(false);
       return rows;
     } catch (error) {
-      toast.error(String(error));
+      setLoadError(true);
+      toast.error(userErrorMessage(error, "Impossible de charger la liste des fonds"));
       return [];
     } finally {
       setLoading(false);
@@ -297,7 +341,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       setBoursoramaBenchmarks(benchmarks);
     } catch (error) {
       const detail =
-        error instanceof Error ? error.message : "réseau ou Boursorama indisponible";
+        userErrorMessage(error, "réseau ou Boursorama indisponible");
       toast.warning(
         `Références Boursorama non mises à jour (${detail}). Médiane watchlist utilisée pour la lecture patrimoniale.`,
         { id: FUND_WATCHLIST_COACH_TOAST_ID, duration: 8000 }
@@ -314,7 +358,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     ).catch((error: unknown) => {
       setCoachGenerating(false);
       saveCoachGenerating(false);
-      toast.error(String(error), { id: FUND_WATCHLIST_COACH_TOAST_ID });
+      toast.error(userErrorMessage(error, "Impossible de générer le rapport"), { id: FUND_WATCHLIST_COACH_TOAST_ID });
     });
   };
 
@@ -422,7 +466,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       const result = await runUcComparison({ isins });
       setCompareResponse(result);
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible de comparer les fonds"));
       setView("table");
     } finally {
       setCompareLoading(false);
@@ -433,7 +477,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     try {
       await setFundWatchlistFavorite(entry.isin, !entry.is_favorite);
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible de modifier le favori"));
     }
   };
 
@@ -491,7 +535,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       return (
         <TableCell
           key={column}
-          style={fundWatchlistColumnStyle(column)}
+          style={readableColumnStyle(column)}
           className={cn("overflow-hidden px-0 py-1.5", alignClass)}
         >
           <Button
@@ -515,9 +559,9 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       return (
         <TableCell
           key={column}
-          style={fundWatchlistColumnStyle(column)}
+          style={readableColumnStyle(column)}
           className={cn(
-            "overflow-hidden px-1 py-1.5 font-mono text-[11px] leading-tight",
+            "overflow-hidden px-1 py-1.5 font-mono text-xs leading-tight",
             alignClass
           )}
         >
@@ -531,7 +575,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       return (
         <TableCell
           key={column}
-          style={fundWatchlistColumnStyle(column)}
+          style={readableColumnStyle(column)}
           className={cn("px-2 py-2 align-top whitespace-normal", alignClass)}
         >
           <span className="block break-words leading-snug">{entry.nom}</span>
@@ -542,7 +586,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       return (
         <TableCell
           key={column}
-          style={fundWatchlistColumnStyle(column)}
+          style={readableColumnStyle(column)}
           className={cn("px-1 py-1.5 text-muted-foreground whitespace-normal", alignClass)}
         >
           <span className="block break-words leading-snug" title={entry.categorie ?? undefined}>
@@ -555,7 +599,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       return (
         <TableCell
           key={column}
-          style={fundWatchlistColumnStyle(column)}
+          style={readableColumnStyle(column)}
           className={cn("px-1 py-1.5 tabular-nums", alignClass)}
         >
           {entry.sri ?? "—"}
@@ -567,8 +611,8 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       return (
         <TableCell
           key={column}
-          style={fundWatchlistColumnStyle(column)}
-          className={cn("px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap", alignClass)}
+          style={readableColumnStyle(column)}
+          className={cn("px-1 py-1.5 tabular-nums text-xs whitespace-nowrap", alignClass)}
         >
           {detention ? (
             <button
@@ -590,15 +634,15 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       return (
         <TableCell
           key={column}
-          style={fundWatchlistColumnStyle(column)}
+          style={readableColumnStyle(column)}
           className={cn(
-            "px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap",
+            "px-1 py-1.5 tabular-nums text-xs whitespace-nowrap",
             alignClass,
             fundPerfSignTextClass(score)
           )}
           title={
             score == null
-              ? "Les 4 horizons court terme sont requis (1 sem, 1 mois, 3 mois, YTD)"
+              ? "Les 4 horizons court terme sont requis (1 semaine, 1 mois, 3 mois, depuis le 1er janvier)"
               : undefined
           }
         >
@@ -631,9 +675,9 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       return (
         <TableCell
           key={column}
-          style={fundWatchlistColumnStyle(column)}
+          style={readableColumnStyle(column)}
           className={cn(
-            "px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap",
+            "px-1 py-1.5 tabular-nums text-xs whitespace-nowrap",
             alignClass,
             isPerf ? fundPerfSignTextClass(value) : undefined
           )}
@@ -646,8 +690,8 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       return (
         <TableCell
           key={column}
-          style={fundWatchlistColumnStyle(column)}
-          className={cn("px-1 py-1.5 tabular-nums text-[11px] whitespace-nowrap", alignClass)}
+          style={readableColumnStyle(column)}
+          className={cn("px-1 py-1.5 tabular-nums text-xs whitespace-nowrap", alignClass)}
         >
           {formatFundSharpe(entry.sharpe_ratio)}
         </TableCell>
@@ -656,13 +700,13 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     return (
       <TableCell
         key={column}
-        style={fundWatchlistColumnStyle(column)}
+        style={readableColumnStyle(column)}
         className={cn("overflow-hidden pl-2 pr-1 py-1.5", alignClass)}
       >
         {entry.sfdr ? (
           <Badge
             variant="outline"
-            className="inline-block max-w-full text-[10px] font-normal px-1.5 py-0 whitespace-normal leading-tight"
+            className="inline-block max-w-full text-xs font-normal px-1.5 py-0 whitespace-normal leading-tight"
           >
             {entry.sfdr}
           </Badge>
@@ -787,16 +831,12 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
     <div className="space-y-6 p-6">
       <div className="rounded-2xl border border-border/70 bg-gradient-to-br from-primary/8 via-card to-amber-500/10 dark:from-primary/15 dark:via-card dark:to-amber-500/10 p-4 sm:p-5 space-y-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <span className="w-1 h-7 rounded-full bg-primary/80 shrink-0" aria-hidden />
-              <h1 className="text-2xl font-serif font-bold flex items-center gap-2">
-                <LineChart className="h-7 w-7 text-primary" />
-                Veille fonds
-              </h1>
-            </div>
-            <p className="text-muted-foreground mt-1 max-w-2xl ml-4">
-              Classement par score court terme (1 sem, 1 mois, 3 mois, YTD).
+          <div className="flex items-center gap-3">
+            <span className="w-1 h-7 rounded-full bg-primary/80 shrink-0" aria-hidden />
+            <LineChart className="h-6 w-6 text-primary shrink-0" aria-hidden />
+            <p className="text-muted-foreground max-w-2xl">
+              Classement par score court terme (1 semaine, 1 mois, 3 mois, depuis le 1er
+              janvier).
             </p>
           </div>
           <div className="flex flex-col items-start gap-1 sm:items-end">
@@ -811,7 +851,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
             </Button>
             {selectedCompareCount > 0 && (
               <Button variant="ghost" size="sm" onClick={clearCompareSelection}>
-                Tout décocher
+                Tout décocher ({selectedCompareCount})
               </Button>
             )}
             <Button
@@ -833,14 +873,51 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                 Régénérer
               </Button>
             )}
-            <Button variant="outline" onClick={() => setPositionsImportOpen(true)}>
-              <Users className="h-4 w-4 mr-2" />
-              Importer positions
-            </Button>
-            <Button onClick={() => setImportOpen(true)}>
-              <FileUp className="h-4 w-4 mr-2" />
-              Importer Excel
-            </Button>
+            <Popover open={importMenuOpen} onOpenChange={setImportMenuOpen}>
+              <PopoverTrigger asChild>
+                <Button>
+                  <FileUp className="h-4 w-4 mr-2" />
+                  Importer
+                  <ChevronDown className="ml-1 h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-72 p-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-auto w-full justify-start py-2 text-left"
+                  onClick={() => {
+                    setImportMenuOpen(false);
+                    setImportOpen(true);
+                  }}
+                >
+                  <FileUp className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="flex flex-col items-start">
+                    <span>Catalogue Cristalliance (Excel)</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      Met à jour la liste des fonds et leurs performances
+                    </span>
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-auto w-full justify-start py-2 text-left"
+                  onClick={() => {
+                    setImportMenuOpen(false);
+                    setPositionsImportOpen(true);
+                  }}
+                >
+                  <Users className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="flex flex-col items-start">
+                    <span>Positions clients (CSV plateforme)</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      Indique quels clients détiennent chaque fonds
+                    </span>
+                  </span>
+                </Button>
+              </PopoverContent>
+            </Popover>
             </div>
           {coachReport && !coachGenerating && (
             <p className="text-xs text-muted-foreground text-left sm:text-right">
@@ -926,11 +1003,6 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                 >
                   Favoris
                 </Button>
-                {selectedCompareCount > 0 && (
-                  <Button size="sm" variant="ghost" onClick={clearCompareSelection}>
-                    Tout décocher ({selectedCompareCount})
-                  </Button>
-                )}
                 {!isDefaultTableView && (
                   <Button size="sm" variant="ghost" onClick={clearTableFilters}>
                     <X className="h-4 w-4 mr-1" />
@@ -955,7 +1027,16 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {entries.length === 0 && !loading ? (
+          {entries.length === 0 && loading ? (
+            <div className="p-8 text-center text-muted-foreground">Chargement…</div>
+          ) : entries.length === 0 && loadError ? (
+            <div className="p-8 text-center space-y-3">
+              <p className="text-sm text-destructive">Impossible de charger la liste des fonds.</p>
+              <Button variant="outline" onClick={() => void load()}>
+                Réessayer
+              </Button>
+            </div>
+          ) : entries.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
               <p>Aucun fonds importé.</p>
               <Button className="mt-4" onClick={() => setImportOpen(true)}>
@@ -969,7 +1050,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                 <thead className="sticky top-0 z-10 bg-card [&_tr]:border-b">
                   <TableRow className="hover:bg-transparent">
                     <th
-                      className="h-9 w-9 px-1 text-center text-[10px] font-medium text-muted-foreground"
+                      className="h-9 w-9 px-1 text-center text-xs font-medium text-muted-foreground"
                       title="Sélection pour comparateur (2 à 4 fonds)"
                     >
                       <Scale className="h-3.5 w-3.5 mx-auto opacity-60" aria-hidden />
@@ -979,7 +1060,8 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                       <FundWatchlistColumnHeader
                         key={column}
                         column={column}
-                        label={FUND_WATCHLIST_COLUMN_LABELS[column]}
+                        label={columnLabel(column)}
+                        description={COLUMN_DESCRIPTIONS[column]}
                         align={FUND_WATCHLIST_COLUMN_ALIGN[column]}
                         className={
                           column === "nom"
@@ -988,7 +1070,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                               ? "whitespace-normal px-1"
                               : undefined
                         }
-                        style={fundWatchlistColumnStyle(column)}
+                        style={readableColumnStyle(column)}
                         sort={sort}
                         filter={columnFilters[column]}
                         distinctValues={distinctByColumn.get(column)}
@@ -1007,10 +1089,8 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                           column={column}
                           label={year}
                           align="right"
-                          style={{
-                            minWidth: FUND_WATCHLIST_ANNUAL_YEAR_MIN_WIDTH,
-                            width: FUND_WATCHLIST_ANNUAL_YEAR_MIN_WIDTH,
-                          }}
+                          description={`Performance sur l'année ${year}`}
+                          style={ANNUAL_COLUMN_STYLE}
                           sort={sort}
                           filter={columnFilters[column]}
                           onCycleSort={(col) =>
@@ -1027,10 +1107,11 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                       <FundWatchlistColumnHeader
                         key={column}
                         column={column}
-                        label={FUND_WATCHLIST_COLUMN_LABELS[column]}
+                        label={columnLabel(column)}
+                        description={COLUMN_DESCRIPTIONS[column]}
                         align={FUND_WATCHLIST_COLUMN_ALIGN[column]}
                         className={column === "sfdr" ? "pl-2" : undefined}
-                        style={fundWatchlistColumnStyle(column)}
+                        style={readableColumnStyle(column)}
                         sort={sort}
                         filter={columnFilters[column]}
                         distinctValues={distinctByColumn.get(column)}
@@ -1073,12 +1154,9 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                           return (
                           <TableCell
                             key={`${entry.id}-annual-${year}`}
-                            style={{
-                              minWidth: FUND_WATCHLIST_ANNUAL_YEAR_MIN_WIDTH,
-                              width: FUND_WATCHLIST_ANNUAL_YEAR_MIN_WIDTH,
-                            }}
+                            style={ANNUAL_COLUMN_STYLE}
                             className={cn(
-                              "px-1 py-1.5 text-right tabular-nums text-[11px] whitespace-nowrap",
+                              "px-1 py-1.5 text-right tabular-nums text-xs whitespace-nowrap",
                               fundPerfSignTextClass(annualValue)
                             )}
                           >

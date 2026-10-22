@@ -18,6 +18,7 @@ import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface EtiquetteQuickPickDialogProps {
   open: boolean;
@@ -72,7 +73,7 @@ export function EtiquetteQuickPickDialog({
       notifyEtiquettesChanged();
       onChanged?.();
     } catch (error) {
-      toast.error(`Erreur : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible de modifier l'étiquette"));
     } finally {
       setBusyId(null);
     }

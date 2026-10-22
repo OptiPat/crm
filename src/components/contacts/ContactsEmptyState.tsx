@@ -30,6 +30,7 @@ export function ContactsEmptyState({
   subTab,
   onCreate,
   onImport,
+  onClearFilters,
 }: {
   hasSearch: boolean;
   hasFilters: boolean;
@@ -37,6 +38,7 @@ export function ContactsEmptyState({
   subTab: ClientSubTab | FilleulSubTab;
   onCreate: () => void;
   onImport: () => void;
+  onClearFilters?: () => void;
 }) {
   if (hasSearch || hasFilters) {
     return (
@@ -46,6 +48,11 @@ export function ContactsEmptyState({
         <p className="text-sm text-muted-foreground mt-1">
           Modifiez la recherche ou retirez un filtre.
         </p>
+        {onClearFilters ? (
+          <Button variant="outline" className="mt-4" onClick={onClearFilters}>
+            Effacer la recherche et les filtres
+          </Button>
+        ) : null}
       </div>
     );
   }

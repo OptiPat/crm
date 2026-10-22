@@ -76,7 +76,7 @@ export function getSetupChecklist(
     {
       id: "oauth",
       label: "Boîte mail connectée",
-      hint: "Google ou Microsoft (OAuth)",
+      hint: "Connexion à votre messagerie (Google ou Microsoft)",
       done: emailConnected,
       section: "email-connexion",
     },

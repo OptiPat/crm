@@ -20,6 +20,8 @@ import {
 import { createContact, type Contact } from "@/lib/api/tauri-contacts";
 import { ContactRegistreToggle } from "@/components/contacts/ContactRegistreSwitch";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
+
 const PIPE_CONTACT_CATEGORIES = [
   { value: "SUSPECT_CLIENT", label: "Suspect client" },
   { value: "PROSPECT_CLIENT", label: "Prospect client" },
@@ -106,7 +108,7 @@ export function PipeQuickContactDialog({
       onOpenChange(false);
     } catch (err) {
       console.error(err);
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de créer le contact"));
     } finally {
       setLoading(false);
     }

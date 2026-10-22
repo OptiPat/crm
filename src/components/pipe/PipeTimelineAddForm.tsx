@@ -38,6 +38,7 @@ import { usePipeR2ConfirmationOptOut } from "@/hooks/usePipeR2ConfirmationOptOut
 import { toast } from "sonner";
 import { TeamLockBanner } from "@/components/team/TeamLockBanner";
 import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export interface PipeRdvSubmitPayload {
   occurredAtUnix: number;
@@ -192,7 +193,7 @@ export function PipeTimelineAddForm({
             sendConfirmationEmail: confirmationOptOut.sendConfirmationEmail,
           });
         } catch (err) {
-          toast.error(String(err));
+          toast.error(userErrorMessage(err, "Impossible d'enregistrer le RDV"));
         }
       })();
       return;

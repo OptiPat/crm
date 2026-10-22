@@ -50,6 +50,7 @@ import {
   resolveTemplateAgendaUrl,
   sendableCorrectionTargets,
 } from "@/lib/emails/template-email-correction";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 /** Pause entre deux envois (quota Gmail, envoi progressif). */
 const SEND_DELAY_MS = 1200;
@@ -110,7 +111,7 @@ export function TemplateEmailCorrectionDialog({
         setDays(sendDays);
         setDay(sendDays[0]?.day ?? "");
       } catch (e) {
-        if (!cancelled) toast.error(e instanceof Error ? e.message : "Chargement impossible");
+        if (!cancelled) toast.error(userErrorMessage(e, "Chargement impossible"));
       }
     })();
     return () => {
@@ -127,7 +128,7 @@ export function TemplateEmailCorrectionDialog({
     try {
       setTargets(await listTemplateCorrectionTargets(template.id, day));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Chargement des destinataires impossible");
+      toast.error(userErrorMessage(e, "Chargement des destinataires impossible"));
     } finally {
       setLoading(false);
     }
@@ -174,7 +175,7 @@ export function TemplateEmailCorrectionDialog({
       });
       toast.success(`Test envoyé à ${cgp.email}`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Envoi du test impossible");
+      toast.error(userErrorMessage(e, "Envoi du test impossible"));
     } finally {
       setTesting(false);
     }

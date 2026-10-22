@@ -5,6 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -39,7 +49,7 @@ import {
   type TeamAuditEntry,
 } from "@/lib/api/tauri-team-collaboration";
 import { getOAuthAppSettings, saveMicrosoftOAuthClientId } from "@/lib/api/tauri-email-oauth";
-import { invokeErrorMessage } from "@/lib/api/invoke-error";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import type {
   TeamRole,
   TeamMigrationPreview,
@@ -55,7 +65,28 @@ import {
 } from "@/lib/team/team-setup-guidance";
 import { toast } from "sonner";
 
+const pluriel = (n: number) => (n > 1 ? "s" : "");
+
+type ConfirmRequest = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  destructive?: boolean;
+  resolve: (confirmed: boolean) => void;
+};
+
 export function TeamWorkspaceSettingsPanel() {
+  // Fenêtre de confirmation de l'app (au lieu des boîtes système Windows).
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
+  const askConfirm = useCallback(
+    (request: Omit<ConfirmRequest, "resolve">) =>
+      new Promise<boolean>((resolve) => setConfirmRequest({ ...request, resolve })),
+    []
+  );
+  const settleConfirm = (confirmed: boolean) => {
+    confirmRequest?.resolve(confirmed);
+    setConfirmRequest(null);
+  };
   const {
     config,
     teamConfigured,
@@ -133,7 +164,7 @@ export function TeamWorkspaceSettingsPanel() {
       setClientIdConfigured(Boolean(oauthSettings.microsoft_client_id?.trim()));
     } catch (error) {
       console.error(error);
-      toast.error(invokeErrorMessage(error) || "Impossible de charger le mode équipe.");
+      toast.error(userErrorMessage(error, "Impossible de charger le mode équipe."));
     } finally {
       setLoading(false);
     }
@@ -173,7 +204,7 @@ export function TeamWorkspaceSettingsPanel() {
       await refreshAll();
       toast.success("Client ID Microsoft enregistré.");
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Enregistrement impossible.");
+      toast.error(userErrorMessage(error, "Enregistrement impossible."));
     } finally {
       setSavingClientId(false);
     }
@@ -190,7 +221,7 @@ export function TeamWorkspaceSettingsPanel() {
         await saveMicrosoftOAuthClientId(microsoftClientId.trim());
         await refreshAll();
       } catch (error) {
-        toast.error(invokeErrorMessage(error) || "Enregistrement du Client ID impossible.");
+        toast.error(userErrorMessage(error, "Enregistrement du Client ID impossible."));
         return;
       } finally {
         setSavingClientId(false);
@@ -204,7 +235,7 @@ export function TeamWorkspaceSettingsPanel() {
       setConnection(next);
       toast.success("Compte Microsoft équipe connecté.");
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Connexion impossible.");
+      toast.error(userErrorMessage(error, "Connexion impossible."));
     } finally {
       setConnecting(false);
     }
@@ -216,7 +247,7 @@ export function TeamWorkspaceSettingsPanel() {
       setConnection({ connected: false, email: null, expiresAt: null });
       toast.success("Compte Microsoft équipe déconnecté.");
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Déconnexion impossible.");
+      toast.error(userErrorMessage(error, "Déconnexion impossible."));
     }
   };
 
@@ -248,7 +279,7 @@ export function TeamWorkspaceSettingsPanel() {
       await refresh();
       toast.success("Configuration équipe enregistrée.");
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Enregistrement impossible.");
+      toast.error(userErrorMessage(error, "Enregistrement impossible."));
     } finally {
       setSavingConfig(false);
     }
@@ -264,7 +295,7 @@ export function TeamWorkspaceSettingsPanel() {
       `Client ID Azure : ${microsoftClientId.trim() || "—"}`,
       `Object ID groupe Conseillers : ${advisorGroupId.trim() || "—"}`,
       `Object ID groupe Assistantes : ${secretaryGroupId.trim() || "—"}`,
-      `Hostname SharePoint : ${siteHostname.trim() || "—"}`,
+      `Adresse SharePoint du cabinet : ${siteHostname.trim() || "—"}`,
       `Chemin du site : ${sitePath.trim() || "—"}`,
       `ID site Graph : ${siteId.trim() || "—"}`,
       `Nom du site : ${siteName.trim() || "—"}`,
@@ -288,7 +319,7 @@ export function TeamWorkspaceSettingsPanel() {
     const hostname = siteHostname.trim();
     const path = sitePath.trim();
     if (!hostname || !path) {
-      toast.error("Renseignez le hostname et le chemin du site SharePoint.");
+      toast.error("Renseignez l'adresse SharePoint et le chemin du site.");
       return;
     }
     setTestingSharePoint(true);
@@ -300,10 +331,10 @@ export function TeamWorkspaceSettingsPanel() {
       setSiteId(result.siteId);
       setSiteName(result.siteName);
       toast.success(
-        `Connexion OK — ${result.listCount} liste(s), ${result.driveCount} bibliothèque(s). Enregistrez pour conserver l'ID site.`
+        `Connexion OK — ${result.listCount} liste${pluriel(result.listCount)}, ${result.driveCount} bibliothèque${pluriel(result.driveCount)}. Enregistrez pour conserver l'ID site.`
       );
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Test SharePoint impossible.");
+      toast.error(userErrorMessage(error, "Test SharePoint impossible."));
     } finally {
       setTestingSharePoint(false);
     }
@@ -316,16 +347,16 @@ export function TeamWorkspaceSettingsPanel() {
       return;
     }
     if (!config.siteHostname?.trim() || !config.sitePath?.trim()) {
-      toast.error("Enregistrez d'abord la configuration équipe (hostname et chemin du site).");
+      toast.error("Enregistrez d'abord la configuration équipe (adresse SharePoint et chemin du site).");
       return;
     }
     setProvisioningSharePoint(true);
     try {
       await provisionTeamWorkspace();
       await refresh();
-      toast.success("Espace équipe provisionné (listes CRM sur SharePoint).");
+      toast.success("Espace CRM créé sur SharePoint.");
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Provisionnement SharePoint impossible.");
+      toast.error(userErrorMessage(error, "Création de l'espace CRM sur SharePoint impossible."));
     } finally {
       setProvisioningSharePoint(false);
     }
@@ -337,7 +368,7 @@ export function TeamWorkspaceSettingsPanel() {
       return;
     }
     if (!config.siteId?.trim()) {
-      toast.error("Provisionnez d'abord l'espace équipe SharePoint.");
+      toast.error("Créez d'abord l'espace CRM sur SharePoint.");
       return;
     }
     setPreparingMigration(true);
@@ -348,7 +379,7 @@ export function TeamWorkspaceSettingsPanel() {
       setMigrationValidateReport(null);
       toast.success("Aperçu migration généré (aucune donnée envoyée).");
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Préparation migration impossible.");
+      toast.error(userErrorMessage(error, "Préparation migration impossible."));
     } finally {
       setPreparingMigration(false);
     }
@@ -359,12 +390,14 @@ export function TeamWorkspaceSettingsPanel() {
       toast.error("Générez d'abord l'aperçu migration.");
       return;
     }
-    const confirmed = window.confirm(
-      "Envoyer une copie test de vos données locales vers la liste CRM_Data SharePoint ?\n\n" +
-        "Aucune bascule en mode synchronisation ne sera effectuée. " +
-        "Les enregistrements déjà identiques seront ignorés. " +
-        "En cas d'erreur, vous pourrez relancer l'envoi."
-    );
+    const confirmed = await askConfirm({
+      title: "Envoyer une copie test vers SharePoint ?",
+      description:
+        "Une copie de vos données locales sera envoyée dans l'espace CRM de SharePoint (liste CRM_Data).\n\n" +
+        "Le CRM ne passe pas encore en mode équipe. Les enregistrements déjà identiques sont ignorés. " +
+        "En cas d'erreur, vous pourrez relancer l'envoi.",
+      confirmLabel: "Envoyer la copie test",
+    });
     if (!confirmed) {
       return;
     }
@@ -375,15 +408,15 @@ export function TeamWorkspaceSettingsPanel() {
       setMigrationValidateReport(null);
       if (report.complete) {
         toast.success(
-          `Copie test envoyée — ${report.created} créé(s), ${report.updated} mis à jour, ${report.skipped} ignoré(s).`
+          `Copie test envoyée — ${report.created} créé${pluriel(report.created)}, ${report.updated} mis à jour, ${report.skipped} ignoré${pluriel(report.skipped)}.`
         );
       } else {
         toast.error(
-          `Envoi partiel — ${report.failed} échec(s). Consultez le rapport et relancez après correction.`
+          `Envoi partiel — ${report.failed} échec${pluriel(report.failed)}. Consultez le rapport et relancez après correction.`
         );
       }
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Envoi SharePoint impossible.");
+      toast.error(userErrorMessage(error, "Envoi SharePoint impossible."));
     } finally {
       setUploadingMigration(false);
     }
@@ -398,12 +431,13 @@ export function TeamWorkspaceSettingsPanel() {
       toast.error("Terminez d'abord l'envoi SharePoint sans échec.");
       return;
     }
-    const confirmed = window.confirm(
-      "Valider la restauration test depuis SharePoint ?\n\n" +
-        "Le CRM téléchargera la liste CRM_Data distante, reconstruira un snapshot " +
-        "et vérifiera l'intégrité en mémoire uniquement.\n\n" +
-        "Aucune donnée brute ne sera affichée. Aucune modification locale ni distante."
-    );
+    const confirmed = await askConfirm({
+      title: "Vérifier la copie sur SharePoint ?",
+      description:
+        "Le CRM va relire la copie envoyée sur SharePoint et vérifier qu'elle est complète et identique à vos données.\n\n" +
+        "Rien n'est modifié, ni sur ce PC ni sur SharePoint.",
+      confirmLabel: "Vérifier",
+    });
     if (!confirmed) {
       return;
     }
@@ -413,15 +447,15 @@ export function TeamWorkspaceSettingsPanel() {
       setMigrationValidateReport(report);
       if (report.valid) {
         toast.success(
-          `Restauration test valide — ${report.totalRecords} enregistrement(s), checksum OK.`
+          `Copie vérifiée — ${report.totalRecords} enregistrement${pluriel(report.totalRecords)}, identique à vos données.`
         );
       } else {
         toast.error(
-          `Validation échouée — ${report.errors.length} problème(s). Consultez le rapport.`
+          `Validation échouée — ${report.errors.length} problème${pluriel(report.errors.length)}. Consultez le rapport.`
         );
       }
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Validation restauration impossible.");
+      toast.error(userErrorMessage(error, "Validation restauration impossible."));
     } finally {
       setValidatingRestore(false);
     }
@@ -429,15 +463,17 @@ export function TeamWorkspaceSettingsPanel() {
 
   const handleActivateSync = async () => {
     if (!migrationValidateReport?.valid || !migrationValidateReport.checksumMatch) {
-      toast.error("Validez d'abord la restauration SharePoint et son checksum.");
+      toast.error("Vérifiez d'abord la copie envoyée sur SharePoint.");
       return;
     }
-    const confirmed = window.confirm(
-      "Activer définitivement le cache équipe sur ce poste ?\n\n" +
-        "La base historique patrimoine-crm.db restera intacte. Le CRM créera un cache équipe séparé, " +
-        "réservera des plages d'identifiants et synchronisera ensuite SharePoint automatiquement.\n\n" +
-        "Ne fermez pas l'application pendant cette opération."
-    );
+    const confirmed = await askConfirm({
+      title: "Passer ce poste en mode équipe ?",
+      description:
+        "Ce choix est définitif. Votre base actuelle (patrimoine-crm.db) reste intacte : le CRM crée à côté " +
+        "une copie locale de l'équipe, puis la synchronise automatiquement avec SharePoint.\n\n" +
+        "Ne fermez pas l'application pendant cette opération.",
+      confirmLabel: "Activer le mode équipe",
+    });
     if (!confirmed) return;
     setActivatingSync(true);
     try {
@@ -445,22 +481,24 @@ export function TeamWorkspaceSettingsPanel() {
       setSyncActivationReport(report);
       await refresh();
       toast.success(
-        `Synchronisation équipe activée — ${report.synchronizedRecords} enregistrement(s), ` +
-          `${report.reservedIdBlocks} plage(s) d'identifiants.`
+        `Synchronisation équipe activée — ${report.synchronizedRecords} enregistrement${pluriel(report.synchronizedRecords)}, ` +
+          `${report.reservedIdBlocks} plage${pluriel(report.reservedIdBlocks)} d'identifiants.`
       );
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Activation de la synchronisation impossible.");
+      toast.error(userErrorMessage(error, "Activation de la synchronisation impossible."));
     } finally {
       setActivatingSync(false);
     }
   };
 
   const handleJoinTeam = async () => {
-    const confirmed = window.confirm(
-      "Rejoindre l'espace équipe et télécharger le CRM partagé sur ce poste ?\n\n" +
-        "Cette action est réservée à un poste local vide. Le CRM vérifiera votre compte Microsoft, " +
-        "créera un cache séparé et conservera la base locale historique intacte."
-    );
+    const confirmed = await askConfirm({
+      title: "Rejoindre l'équipe sur ce poste ?",
+      description:
+        "Le CRM partagé de l'équipe sera téléchargé sur ce PC. Réservé à un poste où le CRM est encore vide.\n\n" +
+        "Le CRM vérifie votre compte Microsoft, crée une copie locale de l'équipe et garde votre base actuelle intacte.",
+      confirmLabel: "Rejoindre l'équipe",
+    });
     if (!confirmed) return;
     setJoiningTeam(true);
     try {
@@ -469,31 +507,34 @@ export function TeamWorkspaceSettingsPanel() {
       setSyncActivationReport(report);
       await refresh();
       toast.success(
-        `Espace équipe rejoint — ${report.synchronizedRecords} enregistrement(s) téléchargé(s).`
+        `Espace équipe rejoint — ${report.synchronizedRecords} enregistrement${pluriel(report.synchronizedRecords)} téléchargé${pluriel(report.synchronizedRecords)}.`
       );
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Impossible de rejoindre l'espace équipe.");
+      toast.error(userErrorMessage(error, "Impossible de rejoindre l'espace équipe."));
     } finally {
       setJoiningTeam(false);
     }
   };
 
   const handleRebuildCache = async () => {
-    const confirmed = window.confirm(
-      "Reconstruire entièrement le cache local depuis SharePoint ?\n\n" +
-        "Cette opération est autorisée uniquement lorsque toutes les modifications locales sont synchronisées."
-    );
+    const confirmed = await askConfirm({
+      title: "Retélécharger toute la copie de l'équipe ?",
+      description:
+        "La copie locale de l'équipe sera entièrement reconstruite à partir de SharePoint.\n\n" +
+        "Possible uniquement quand toutes vos modifications ont déjà été envoyées.",
+      confirmLabel: "Retélécharger",
+    });
     if (!confirmed) return;
     setRebuildingCache(true);
     try {
       const report = await rebuildTeamCacheFromSharePoint();
       await refresh();
       toast.success(
-        `Cache reconstruit — ${report.synchronizedRecords} enregistrement(s), ` +
-          `${report.reservedIdBlocks} plage(s) d’identifiants.`
+        `Copie de l'équipe retéléchargée — ${report.synchronizedRecords} enregistrement${pluriel(report.synchronizedRecords)}, ` +
+          `${report.reservedIdBlocks} plage${pluriel(report.reservedIdBlocks)} d’identifiants.`
       );
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Reconstruction du cache impossible.");
+      toast.error(userErrorMessage(error, "Impossible de retélécharger la copie de l'équipe."));
     } finally {
       setRebuildingCache(false);
     }
@@ -506,18 +547,21 @@ export function TeamWorkspaceSettingsPanel() {
       setSyncConflicts((current) => current.filter((conflict) => conflict.id !== conflictId));
       toast.success("Conflit résolu : la version locale sera renvoyée vers SharePoint.");
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Impossible de résoudre le conflit.");
+      toast.error(userErrorMessage(error, "Impossible de résoudre le conflit."));
     } finally {
       setResolvingConflictId(null);
     }
   };
 
   const handleAcceptRemoteConflict = async (conflict: TeamSyncConflict) => {
-    const confirmed = window.confirm(
-      conflict.remoteDeleted
-        ? "La version SharePoint supprime cet enregistrement. Abandonner votre modification locale et accepter la suppression ?"
-        : "Abandonner votre modification locale et conserver la version SharePoint ?"
-    );
+    const confirmed = await askConfirm({
+      title: "Abandonner votre modification ?",
+      description: conflict.remoteDeleted
+        ? "Sur SharePoint, cet enregistrement a été supprimé. Votre modification sur ce PC sera abandonnée et la suppression appliquée."
+        : "Votre modification sur ce PC sera abandonnée au profit de la version enregistrée sur SharePoint.",
+      confirmLabel: conflict.remoteDeleted ? "Accepter la suppression" : "Garder la version SharePoint",
+      destructive: true,
+    });
     if (!confirmed) return;
     setResolvingConflictId(conflict.id);
     try {
@@ -525,7 +569,7 @@ export function TeamWorkspaceSettingsPanel() {
       setSyncConflicts((current) => current.filter((entry) => entry.id !== conflict.id));
       toast.success("Conflit résolu avec la version SharePoint.");
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Impossible d'appliquer la version SharePoint.");
+      toast.error(userErrorMessage(error, "Impossible d'appliquer la version SharePoint."));
     } finally {
       setResolvingConflictId(null);
     }
@@ -698,7 +742,7 @@ export function TeamWorkspaceSettingsPanel() {
               />
               <p className="text-xs text-muted-foreground">
                 Identifiants UUID des groupes Microsoft Entra (Azure). Deux groupes distincts
-                sont requis avant les opérations sensibles sur un espace SharePoint provisionné
+                sont requis avant les opérations sensibles sur un espace SharePoint déjà créé
                 (export, migration). Seul un conseiller peut les configurer. Retirer une
                 assistante se fait dans Microsoft 365 (groupe Entra + site SharePoint), pas
                 dans le CRM.
@@ -722,7 +766,10 @@ export function TeamWorkspaceSettingsPanel() {
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="team-site-hostname">Hostname SharePoint</Label>
+              <Label htmlFor="team-site-hostname">
+                Adresse SharePoint du cabinet{" "}
+                <span className="text-xs font-normal text-muted-foreground">(sans https://, ex. cabinet.sharepoint.com)</span>
+              </Label>
               <Input
                 id="team-site-hostname"
                 value={siteHostname}
@@ -813,7 +860,7 @@ export function TeamWorkspaceSettingsPanel() {
                   ) : (
                     <Users className="h-4 w-4" />
                   )}
-                  Provisionner listes CRM
+                  Créer l&apos;espace CRM sur SharePoint
                 </Button>
               ) : null}
               {!syncActivated && canManage ? (
@@ -845,7 +892,8 @@ export function TeamWorkspaceSettingsPanel() {
             {!syncActivated && canManage ? (
               <p className="text-sm text-foreground">
                 Sur le PC de Tony (dossiers déjà là) : ne cliquez pas sur Rejoindre — utilisez
-                Provisionner puis la série migration. Rejoindre est pour un poste vide.
+                « Créer l&apos;espace CRM sur SharePoint » puis les étapes de copie ci-dessous.
+                Rejoindre est pour un poste vide.
               </p>
             ) : null}
             {!syncActivated && migrationPreview ? (
@@ -858,7 +906,9 @@ export function TeamWorkspaceSettingsPanel() {
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                   <dt className="text-muted-foreground">Enregistrements</dt>
                   <dd className="font-mono">{migrationPreview.totalRecords}</dd>
-                  <dt className="text-muted-foreground">Checksum SHA-256</dt>
+                  <dt className="text-muted-foreground">
+                    Empreinte de contrôle <span className="text-[10px]">(checksum SHA-256)</span>
+                  </dt>
                   <dd className="font-mono break-all col-span-1">{migrationPreview.checksumSha256}</dd>
                 </dl>
                 {migrationPreview.tableCounts.length > 0 ? (
@@ -980,13 +1030,13 @@ export function TeamWorkspaceSettingsPanel() {
                       <dd className="font-mono">{migrationValidateReport.totalRecords}</dd>
                       <dt className="text-muted-foreground">Tombstones</dt>
                       <dd className="font-mono">{migrationValidateReport.tombstoneCount}</dd>
-                      <dt className="text-muted-foreground">Checksum</dt>
+                      <dt className="text-muted-foreground">Copie identique (checksum)</dt>
                       <dd className="font-mono break-all">
                         {migrationValidateReport.checksumMatch ? "OK" : " divergent"}
                       </dd>
                       <dt className="text-muted-foreground">Clés étrangères</dt>
                       <dd className="font-mono">
-                        {migrationValidateReport.foreignKeyOk ? "OK" : " violation(s)"}
+                        {migrationValidateReport.foreignKeyOk ? "OK" : "violations détectées"}
                       </dd>
                       <dt className="text-muted-foreground">Intégrité SQLite</dt>
                       <dd className="font-mono">
@@ -1029,7 +1079,7 @@ export function TeamWorkspaceSettingsPanel() {
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
                   Synchronisation automatique active toutes les 10 secondes. Ne recliquez pas
-                  Provisionner ni Envoyer une copie vers SharePoint.
+                  « Créer l&apos;espace CRM » ni « Envoyer la copie test ».
                 </p>
                 {canManage ? (
                   <Button
@@ -1044,13 +1094,13 @@ export function TeamWorkspaceSettingsPanel() {
                     ) : (
                       <Database className="h-4 w-4" />
                     )}
-                    Reconstruire le cache depuis SharePoint
+                    Retélécharger la copie de l&apos;équipe depuis SharePoint
                   </Button>
                 ) : null}
                 {syncActivationReport ? (
                   <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                    Cache équipe actif — {syncActivationReport.synchronizedRecords} enregistrement(s)
-                    synchronisé(s), {syncActivationReport.reservedIdBlocks} plage(s)
+                    Copie locale de l&apos;équipe à jour — {syncActivationReport.synchronizedRecords} enregistrement{pluriel(syncActivationReport.synchronizedRecords)}
+                    synchronisé{pluriel(syncActivationReport.synchronizedRecords)}, {syncActivationReport.reservedIdBlocks} plage{pluriel(syncActivationReport.reservedIdBlocks)}
                     d&apos;identifiants.
                   </p>
                 ) : null}
@@ -1062,7 +1112,7 @@ export function TeamWorkspaceSettingsPanel() {
                 {syncConflicts.length > 0 ? (
                   <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
                     <p className="font-medium">
-                      {syncConflicts.length} conflit(s) à confirmer
+                      {syncConflicts.length} conflit{pluriel(syncConflicts.length)} à confirmer
                     </p>
                     {syncConflicts.map((conflict) => (
                       <div
@@ -1109,7 +1159,8 @@ export function TeamWorkspaceSettingsPanel() {
               </p>
             ) : (
               <p className="text-sm text-foreground">
-                Espace collaboratif provisionné (site Graph : {config.siteId}).
+                Espace d&apos;équipe créé sur SharePoint{" "}
+                <span className="text-xs text-muted-foreground">(site Graph : {config.siteId})</span>
               </p>
             )}
           </div>
@@ -1152,6 +1203,34 @@ export function TeamWorkspaceSettingsPanel() {
           </p>
         ) : null}
       </div>
+      <AlertDialog
+        open={confirmRequest != null}
+        onOpenChange={(open) => {
+          if (!open) settleConfirm(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmRequest?.title}</AlertDialogTitle>
+            <AlertDialogDescription className="whitespace-pre-line">
+              {confirmRequest?.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className={
+                confirmRequest?.destructive ?
+                  "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                : undefined
+              }
+              onClick={() => settleConfirm(true)}
+            >
+              {confirmRequest?.confirmLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SettingsPanel>
   );
 }

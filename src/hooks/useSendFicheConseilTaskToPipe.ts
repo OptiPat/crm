@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import type { Tache } from "@/lib/api/tauri-taches";
 import { createSuiviPipeFromFicheConseilTask, ensureSuiviStelliumActDraftForFicheConseilTask, findExistingSuiviPipeForFicheConseilTask } from "@/lib/placement/create-suivi-from-fiche-conseil-task";
 import { navigateToPipe } from "@/lib/navigation/pipe-navigation";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function useSendFicheConseilTaskToPipe(onNavigate?: (page: string) => void) {
   const [sendToPipeBusyId, setSendToPipeBusyId] = useState<number | null>(null);
@@ -44,7 +45,7 @@ export function useSendFicheConseilTaskToPipe(onNavigate?: (page: string) => voi
         navigateToPipe(onNavigate, suivi.id);
       } catch (error) {
         console.error(error);
-        toast.error(String(error));
+        toast.error(userErrorMessage(error, "Impossible d'envoyer la tâche vers le Pipe"));
       } finally {
         setSendToPipeBusyId(null);
       }

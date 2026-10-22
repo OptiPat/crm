@@ -147,7 +147,15 @@ export function ContactPersonSearch({
         </Popover>
 
         {allowCreate && onCreate && (
-          <Button type="button" variant="outline" size="icon" onClick={() => setShowCreate((v) => !v)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            title="Créer une personne"
+            aria-label="Créer une personne"
+            aria-expanded={showCreate}
+            onClick={() => setShowCreate((v) => !v)}
+          >
             <Plus className="h-4 w-4" />
           </Button>
         )}

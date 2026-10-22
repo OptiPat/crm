@@ -107,6 +107,12 @@ export const PARAMETRES_SEARCH_INDEX: ParametresSearchItem[] = [
     section: "fiches-conseil",
   },
   {
+    id: "travail-equipe",
+    label: "Travail en équipe (dossier partagé SharePoint)",
+    keywords: ["équipe", "equipe", "collaborateur", "partage", "sharepoint", "mode équipe"],
+    section: "integrations",
+  },
+  {
     id: "telegram",
     label: "Anniversaires Telegram",
     keywords: ["telegram", "anniversaire", "bot", "rappel"],

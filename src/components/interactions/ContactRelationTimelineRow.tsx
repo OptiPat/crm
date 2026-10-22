@@ -40,6 +40,7 @@ import {
   type MailAttachmentMeta,
 } from "@/lib/api/tauri-contact-gmail";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const TYPE_ICONS: Record<string, typeof Phone> = {
   APPEL: Phone,
@@ -105,7 +106,7 @@ function AttachmentsList({
       );
       return;
     }
-    void openContactMailAttachment(messageRowId, id).catch((e) => toast.error(String(e)));
+    void openContactMailAttachment(messageRowId, id).catch((e) => toast.error(userErrorMessage(e, "Impossible d'ouvrir la pièce jointe")));
   };
 
   return (
@@ -176,7 +177,7 @@ function MailboxMessageBody({
       }
       setExpanded(true);
     } catch (e) {
-      toast.error(String(e));
+      toast.error(userErrorMessage(e, "Impossible de charger le message complet"));
     } finally {
       setLoadingBody(false);
     }
@@ -218,12 +219,12 @@ function MailboxMessageBody({
           className="h-7 px-2 text-xs gap-1"
           onClick={() =>
             void openGmailMessage(message.gmail_message_id, message.gmail_thread_id).catch((e) =>
-              toast.error(String(e))
+              toast.error(userErrorMessage(e, "Impossible d'ouvrir le message"))
             )
           }
         >
           <ExternalLink className="h-3.5 w-3.5" />
-          Gmail
+          Ouvrir
         </Button>
       </div>
       {expanded && body && (
@@ -442,7 +443,7 @@ export function ContactRelationTimelineRow({
                 ) : entry.email_reponse_type === "mail" ? (
                   <p className="text-xs text-muted-foreground italic">
                     Texte non importé — ouvrez Historique des échanges pour importer depuis
-                    Gmail.
+                    la boîte mail.
                   </p>
                 ) : entry.email_reponse_type === "rdv" ? (
                   <p className="text-xs text-muted-foreground">
@@ -606,6 +607,8 @@ export function ContactRelationTimelineRow({
             variant="ghost"
             size="icon"
             className="h-8 w-8"
+            aria-label="Modifier l'interaction"
+            title="Modifier l'interaction"
             onClick={() => onEdit(interaction)}
           >
             <Pencil className="h-4 w-4" />
@@ -616,6 +619,8 @@ export function ContactRelationTimelineRow({
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-destructive"
+            aria-label="Supprimer l'interaction"
+            title="Supprimer l'interaction"
             onClick={() => onDelete(interaction.id)}
           >
             <Trash2 className="h-4 w-4" />

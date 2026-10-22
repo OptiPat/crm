@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useInteractionsAutoRefresh } from "@/hooks/useInteractionsAutoRefresh";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { toast } from "sonner";
@@ -59,6 +69,7 @@ import {
   splitCardContentClassName,
   splitCardHeaderClassName,
 } from "@/components/layout";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface InteractionsProps {
   currentPage?: string;
@@ -78,6 +89,7 @@ export function Interactions({ onNavigate }: InteractionsProps) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<InteractionWithContact | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<ExchangeHistoryEntry | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ExchangeHistoryEntry | null>(null);
   const [contactFilterId, setContactFilterId] = useState<number | null>(null);
   const [historyLimit, setHistoryLimit] = useState(400);
   const [historyTruncated, setHistoryTruncated] = useState(false);
@@ -238,10 +250,16 @@ export function Interactions({ onNavigate }: InteractionsProps) {
     }
   }, [loading, filtered, selectedEntry]);
 
-  const handleDelete = async (entry: ExchangeHistoryEntry) => {
-    const manual = manualEntryToInteraction(entry);
-    if (!manual) return;
-    if (!confirm("Supprimer cette interaction ?")) return;
+  const handleDelete = (entry: ExchangeHistoryEntry) => {
+    if (!manualEntryToInteraction(entry)) return;
+    setPendingDelete(entry);
+  };
+
+  const confirmDelete = async () => {
+    const entry = pendingDelete;
+    setPendingDelete(null);
+    const manual = entry ? manualEntryToInteraction(entry) : null;
+    if (!entry || !manual) return;
     try {
       await deleteInteraction(manual.id);
       if (
@@ -252,7 +270,7 @@ export function Interactions({ onNavigate }: InteractionsProps) {
       }
       toast.success("Interaction supprimée");
     } catch (error) {
-      toast.error(`Erreur : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible de supprimer l'interaction"));
     }
   };
 
@@ -294,7 +312,7 @@ export function Interactions({ onNavigate }: InteractionsProps) {
     onClose: () => setSelectedEntry(null),
     onEdit: !isCampaignRelatedExchangeEntry(entry) ? () => startEdit(entry) : undefined,
     onDelete: !isCampaignRelatedExchangeEntry(entry)
-      ? () => void handleDelete(entry)
+      ? () => handleDelete(entry)
       : undefined,
     onOpenContact: () => openContact(entry.contact_id),
     onNavigateSuiviEnvois:
@@ -456,11 +474,35 @@ export function Interactions({ onNavigate }: InteractionsProps) {
         open={showForm}
         onOpenChange={setShowForm}
         interaction={editing}
-        defaultContactId={
-          contactFilterId ?? selectedEntry?.contact_id ?? undefined
-        }
+        defaultContactId={contactFilterId ?? undefined}
+        initialContactId={selectedEntry?.contact_id ?? undefined}
         onSuccess={() => void load()}
       />
+
+      <AlertDialog
+        open={pendingDelete != null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer cette interaction ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              L&apos;échange sera retiré du journal. Cette action est définitive.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void confirmDelete()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {contactDetailSheet}
     </div>

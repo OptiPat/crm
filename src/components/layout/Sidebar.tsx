@@ -160,6 +160,16 @@ function useGroupOpen(page: string, groups: NavGroup[]) {
   return [open, setOpen] as const;
 }
 
+const SIDEBAR_COLLAPSED_KEY = "crm_sidebar_collapsed";
+
+function readCollapsedPreference(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function formatSidebarVersion(version: string, collapsed: boolean): string {
   if (collapsed) {
     const parts = version.split(".");
@@ -170,9 +180,19 @@ function formatSidebarVersion(version: string, collapsed: boolean): string {
 
 export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
   const { displayName, logoSrc } = useAppBranding();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(readCollapsedPreference);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [groupsOpen, setGroupsOpen] = useGroupOpen(currentPage, navGroups);
+
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+    } catch {
+      /* stockage indisponible : état non mémorisé */
+    }
+  };
 
   useEffect(() => {
     void getAppInfo()
@@ -197,6 +217,9 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
         variant={isActive ? "secondary" : "ghost"}
         className={navButtonClass(isActive, indented ? "h-9 text-sm" : undefined)}
         onClick={() => onPageChange(item.id)}
+        aria-current={isActive ? "page" : undefined}
+        title={collapsed ? item.label : undefined}
+        aria-label={collapsed ? item.label : undefined}
       >
         <Icon className={cn("h-4 w-4 shrink-0", !collapsed && "mr-3")} />
         {!collapsed && <span className="truncate">{item.label}</span>}
@@ -222,6 +245,7 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
             variant={active ? "secondary" : "ghost"}
             className={navButtonClass(active)}
             title={group.label}
+            aria-label={group.label}
           >
             <GroupIcon className="h-5 w-5" />
           </Button>
@@ -241,6 +265,7 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
                   size="sm"
                   className="w-full justify-start"
                   onClick={() => onPageChange(item.id)}
+                  aria-current={isActive ? "page" : undefined}
                 >
                   <Icon className="h-4 w-4 mr-2 shrink-0" />
                   <span className="truncate">{item.label}</span>
@@ -266,6 +291,12 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
             variant={active ? "secondary" : "ghost"}
             className="flex-1 justify-start min-w-0"
             onClick={() => onPageChange(group.landingPage)}
+            aria-current={
+              currentPage === group.landingPage &&
+              !group.children.some((c) => c.id === group.landingPage)
+                ? "page"
+                : undefined
+            }
           >
             <GroupIcon className="h-5 w-5 mr-3 shrink-0" />
             <span className="truncate">{group.label}</span>
@@ -340,9 +371,10 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={toggleCollapsed}
           className="h-8 w-8 shrink-0"
           aria-label={collapsed ? "Déplier le menu" : "Replier le menu"}
+          title={collapsed ? "Déplier le menu" : "Replier le menu"}
         >
           {collapsed ? (
             <ChevronRight className="h-4 w-4" />

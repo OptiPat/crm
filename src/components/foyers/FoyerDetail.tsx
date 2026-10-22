@@ -56,7 +56,7 @@ import {
   isPlacementValorisationUpdateEligible,
 } from "@/lib/investissements/investissement-encours";
 import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
-import type { Investissement } from "@/lib/api/tauri-investissements";
+import { getInvestissementsByFoyer, type Investissement } from "@/lib/api/tauri-investissements";
 
 interface FoyerDetailProps {
   open: boolean;
@@ -84,6 +84,10 @@ export function FoyerDetail({
   const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  // Investissements rattachés au foyer : les communs sont supprimés avec lui, ceux d'un membre gardés.
+  const [deleteImpact, setDeleteImpact] = useState<
+    { communs: number; communsCentimes: number; personnels: number } | "loading" | "error"
+  >("loading");
   const [encoursInvestissement, setEncoursInvestissement] =
     useState<Investissement | null>(null);
 
@@ -178,16 +182,31 @@ export function FoyerDetail({
           variant="outline"
           size="icon"
           onClick={() => setShowEditForm(true)}
-          title="Modifier"
+          title="Modifier le foyer"
+          aria-label="Modifier le foyer"
         >
           <Edit className="h-4 w-4" />
         </Button>
         <Button
           variant="outline"
           size="icon"
-          onClick={() => setShowDeleteDialog(true)}
-          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-          title="Supprimer"
+          onClick={() => {
+            setShowDeleteDialog(true);
+            setDeleteImpact("loading");
+            void getInvestissementsByFoyer(foyer.id)
+              .then((rows) => {
+                const communs = rows.filter((inv) => inv.contact_id == null);
+                setDeleteImpact({
+                  communs: communs.length,
+                  communsCentimes: communs.reduce((t, inv) => t + (inv.montant_initial || 0), 0),
+                  personnels: rows.length - communs.length,
+                });
+              })
+              .catch(() => setDeleteImpact("error"));
+          }}
+          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+          title="Supprimer le foyer"
+          aria-label="Supprimer le foyer"
         >
           <Trash2 className="h-4 w-4" />
         </Button>
@@ -196,7 +215,8 @@ export function FoyerDetail({
             variant="ghost"
             size="icon"
             onClick={() => onOpenChange(false)}
-            title="Fermer"
+            title="Fermer la fiche"
+            aria-label="Fermer la fiche"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -511,15 +531,45 @@ export function FoyerDetail({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Supprimer ce foyer ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Le foyer « {foyer?.nom} » sera supprimé. Les contacts ne seront
-              pas supprimés, seulement détachés du foyer.
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Le foyer « {foyer?.nom} » sera supprimé. Les contacts ne seront pas supprimés,
+                  seulement détachés du foyer.
+                </p>
+                <p>Les documents rattachés au foyer seront aussi supprimés.</p>
+                {deleteImpact === "loading" ? (
+                  <p>Vérification des investissements du foyer…</p>
+                ) : deleteImpact === "error" ? (
+                  <p className="font-medium text-destructive">
+                    Impossible de vérifier les investissements : les investissements communs du
+                    foyer seront supprimés définitivement.
+                  </p>
+                ) : deleteImpact.communs > 0 ? (
+                  <p className="font-medium text-destructive">
+                    {deleteImpact.communs > 1
+                      ? `${deleteImpact.communs} investissements communs seront supprimés définitivement`
+                      : "1 investissement commun sera supprimé définitivement"}
+                    {deleteImpact.communsCentimes > 0
+                      ? ` (${formatEuroCentimes(deleteImpact.communsCentimes)}).`
+                      : "."}
+                  </p>
+                ) : null}
+                {deleteImpact !== "loading" && deleteImpact !== "error" && deleteImpact.personnels > 0 && (
+                  <p>
+                    {deleteImpact.personnels > 1
+                      ? `${deleteImpact.personnels} investissements d'un membre sont conservés sur sa fiche.`
+                      : "1 investissement d'un membre est conservé sur sa fiche."}
+                  </p>
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annuler</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
+              disabled={deleteImpact === "loading"}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Supprimer

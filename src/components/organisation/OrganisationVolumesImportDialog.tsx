@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { FileUp, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { getAllContacts } from "@/lib/api/tauri-contacts";
 import { importFilleulVolumeExercices } from "@/lib/api/tauri-filleul-volumes";
 import { currentFiscalYearLabel } from "@/lib/pipe/remuneration-fiscal-year";
@@ -140,8 +141,10 @@ export function OrganisationVolumesImportDialog({
       handleOpenChange(false);
       onApplied?.();
     } catch (error) {
-      console.error(error);
-      toast.error(String(error));
+      console.error("Erreur import volumes organisation:", error);
+      toast.error(
+        userErrorMessage(error, "Impossible d’importer les volumes")
+      );
     } finally {
       setBusy(false);
     }

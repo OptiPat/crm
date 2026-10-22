@@ -45,6 +45,7 @@ import {
   IMPORT_DIALOG_HEADER_CLASS,
   flushImportDialogPendingEdits,
 } from "@/components/investissements/import-dialog-fullscreen";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type Step = "pick" | "preview";
 
@@ -133,7 +134,7 @@ export function FinzzleClientsImportDialog({
       setSelected(defaultSelectedFinzzleClientLineKeys(preview, duplicateAction));
       setStep("preview");
     } catch (error) {
-      toast.error("Lecture impossible : " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de lire le fichier"));
     } finally {
       setBusy(false);
     }

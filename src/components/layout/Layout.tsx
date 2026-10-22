@@ -14,10 +14,12 @@ interface LayoutProps {
   children: ReactNode;
   currentPage: string;
   onPageChange: (page: string) => void;
+  /** Retour à la page précédente (absent s'il n'y en a pas). */
+  onBack?: () => void;
   onLogout: () => void;
 }
 
-export function Layout({ children, currentPage, onPageChange, onLogout }: LayoutProps) {
+export function Layout({ children, currentPage, onPageChange, onBack, onLogout }: LayoutProps) {
   useBackgroundSync();
   useAlertesBackgroundGeneration();
 
@@ -31,6 +33,7 @@ export function Layout({ children, currentPage, onPageChange, onLogout }: Layout
             onLogout={onLogout}
             currentPage={currentPage}
             onPageChange={onPageChange}
+            onBack={onBack}
           />
           <AppNotificationsBar onPageChange={onPageChange} currentPage={currentPage} />
           <EtiquetteEmailSendBanner />

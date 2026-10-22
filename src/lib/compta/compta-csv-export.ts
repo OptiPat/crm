@@ -7,11 +7,45 @@ import {
   buildComptaJournalEntries,
   comptaJournalTypeLabel,
 } from "@/lib/compta/compta-journal";
+import {
+  downloadCsvFile,
+  formatCsvDecimal,
+  rowsToCsv,
+} from "@/lib/export/csv-export";
 
-function csvCell(value: string | number): string {
-  const text = String(value);
-  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
-  return text;
+export const COMPTA_JOURNAL_CSV_HEADERS = [
+  "Date",
+  "Type",
+  "Libellé",
+  "HT",
+  "TVA",
+  "TTC",
+  "Don",
+  "Lien Drive",
+] as const;
+
+/** Contenu CSV du journal (séparateur « ; », virgule décimale, BOM UTF-8). */
+export function buildComptaJournalCsv(input: {
+  depenses: ComptaDepense[];
+  encaissements: ComptaEncaissement[];
+  deplacements: ComptaDeplacement[];
+}): string {
+  const entries = buildComptaJournalEntries(
+    input.encaissements,
+    input.depenses,
+    input.deplacements
+  );
+  const rows = entries.map((e) => [
+    e.date,
+    comptaJournalTypeLabel(e.type),
+    e.libelle,
+    formatCsvDecimal(e.ht),
+    formatCsvDecimal(e.tva),
+    formatCsvDecimal(e.ttc),
+    e.don > 0 ? formatCsvDecimal(e.don) : "",
+    e.lienDrive ?? "",
+  ]);
+  return rowsToCsv([...COMPTA_JOURNAL_CSV_HEADERS], rows);
 }
 
 export function exportComptaJournalCsv(input: {
@@ -21,41 +55,8 @@ export function exportComptaJournalCsv(input: {
   encaissements: ComptaEncaissement[];
   deplacements: ComptaDeplacement[];
 }): void {
-  const entries = buildComptaJournalEntries(
-    input.encaissements,
-    input.depenses,
-    input.deplacements
+  downloadCsvFile(
+    `compta-journal-${input.year}-${String(input.month).padStart(2, "0")}.csv`,
+    buildComptaJournalCsv(input)
   );
-  const header = [
-    "Date",
-    "Type",
-    "Libellé",
-    "HT",
-    "TVA",
-    "TTC",
-    "Don",
-    "Lien Drive",
-  ];
-  const rows = entries.map((e) =>
-    [
-      e.date,
-      comptaJournalTypeLabel(e.type),
-      e.libelle,
-      e.ht.toFixed(2),
-      e.tva.toFixed(2),
-      e.ttc.toFixed(2),
-      e.don > 0 ? e.don.toFixed(2) : "",
-      e.lienDrive ?? "",
-    ]
-      .map(csvCell)
-      .join(",")
-  );
-  const csv = `\uFEFF${header.join(",")}\n${rows.join("\n")}`;
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `compta-journal-${input.year}-${String(input.month).padStart(2, "0")}.csv`;
-  anchor.click();
-  URL.revokeObjectURL(url);
 }

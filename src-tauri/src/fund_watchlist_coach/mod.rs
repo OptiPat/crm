@@ -237,7 +237,7 @@ fn generate_favorites_report(
             error
         } else {
             format!(
-                "Configurez votre clé API {} dans Newsletter → Paramètres.",
+                "Configurez votre clé API {} dans Newsletter → Réglages newsletter.",
                 provider.label()
             )
         }

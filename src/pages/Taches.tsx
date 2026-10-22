@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, ListTodo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,6 +59,7 @@ import {
 } from "@/lib/taches/taches-page-preferences";
 import type { TachePriorite } from "@/lib/api/tauri-taches";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface TachesProps {
   onNavigate?: (page: string) => void;
@@ -69,8 +70,14 @@ export function Taches({ onNavigate }: TachesProps) {
     loadTachesPagePreferences()
   );
   const [taches, setTaches] = useState<TacheWithContact[]>([]);
+  // Liste déjà affichée : un échec de rechargement est signalé par un toast.
+  const tachesCountRef = useRef(0);
+  useEffect(() => {
+    tachesCountRef.current = taches.length;
+  }, [taches]);
   const [alertesCount, setAlertesCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<TacheWithContact | null>(null);
   const [rdvTache, setRdvTache] = useState<TacheWithContact | null>(null);
@@ -117,9 +124,11 @@ export function Taches({ onNavigate }: TachesProps) {
       ]);
       setTaches(allTaches);
       setAlertesCount(alertes.length);
+      setLoadError(false);
     } catch (error) {
       console.error("Erreur chargement tâches:", error);
-      toast.error("Impossible de charger les tâches");
+      setLoadError(true);
+      if (tachesCountRef.current > 0) toast.error("Impossible de recharger les tâches");
     } finally {
       setLoading(false);
     }
@@ -226,7 +235,7 @@ export function Taches({ onNavigate }: TachesProps) {
       await deleteTache(deleteTarget.id);
       setDeleteTarget(null);
     } catch (error) {
-      toast.error(`Erreur : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible de supprimer la tâche"));
     } finally {
       setDeleteBusy(false);
     }
@@ -237,7 +246,7 @@ export function Taches({ onNavigate }: TachesProps) {
       await updateTache(tache.id, buildPostponedTachePayload(tache, days));
       toast.success("Échéance reportée");
     } catch (error) {
-      toast.error(`Erreur : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible de reporter la tâche"));
     }
   };
 
@@ -278,7 +287,7 @@ export function Taches({ onNavigate }: TachesProps) {
           : "Tâches marquées comme faites"
       );
     } catch (error) {
-      toast.error(`Erreur : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible de marquer les tâches comme faites"));
     } finally {
       setBulkBusy(false);
     }
@@ -334,12 +343,10 @@ export function Taches({ onNavigate }: TachesProps) {
     <div className="w-full min-w-0 max-w-[1200px] space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-serif font-bold text-primary">
-            <ListTodo className="h-6 w-6" />
-            Tâches & rappels
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            To-do manuelles ({activesCount} à faire) — relances auto dans{" "}
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <ListTodo className="h-4 w-4 shrink-0" aria-hidden />
+            <span>
+            Tâches manuelles ({activesCount} à faire) — relances auto dans{" "}
             {onNavigate ? (
               <button
                 type="button"
@@ -351,6 +358,7 @@ export function Taches({ onNavigate }: TachesProps) {
             ) : (
               "Suivi → Alertes"
             )}
+            </span>
           </p>
         </div>
         <Button
@@ -419,7 +427,22 @@ export function Taches({ onNavigate }: TachesProps) {
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Chargement…</p>
+      ) : loadError && taches.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border p-10 text-center space-y-3">
+          <p className="text-sm text-destructive">Impossible de charger les tâches.</p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setLoading(true);
+              void load();
+            }}
+          >
+            Réessayer
+          </Button>
+        </div>
       ) : filtered.length === 0 ? (
+
         <div className="rounded-lg border border-dashed border-border p-10 text-center">
           <ListTodo className="mx-auto h-8 w-8 text-muted-foreground" />
           <p className="mt-2 text-sm text-muted-foreground">

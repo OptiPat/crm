@@ -27,6 +27,7 @@ import { RioImportWizard } from "./RioImportWizard";
 import { terminateOcrWorker, isLikelyIdentityFileName, looksLikeIdentityDocument, isIdentityFilePath } from "@/lib/identity";
 import { getContactById, getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { isImageFile, useIdentityDocumentImport } from "@/hooks/useIdentityDocumentImport";
 import { getMimeType } from "@/lib/documents/file-mime";
 import type { IdentityImportMode } from "@/lib/documents/identity-document-apply";
@@ -173,14 +174,28 @@ export function DocumentUpload({
   }, [open, contactId, defaultContactId, foyerId, defaultTypeDocument]);
 
   const initialFileProcessedRef = useRef(false);
+  const initialFilePathRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       initialFileProcessedRef.current = false;
+      initialFilePathRef.current = null;
       return;
     }
-    if (!initialUploadedFile || initialFileProcessedRef.current) return;
+    if (!initialUploadedFile) return;
+    if (initialFileProcessedRef.current) {
+      // 2e fichier reçu alors que l'import est ouvert : on le signale et on
+      // supprime sa copie temporaire (elle ne sera jamais utilisée).
+      if (initialUploadedFile.path !== initialFilePathRef.current) {
+        toast.info(
+          "Un import est déjà en cours : terminez-le avant d'ajouter un autre fichier."
+        );
+        void discardStagedPaths(initialUploadedFile.path);
+      }
+      return;
+    }
     initialFileProcessedRef.current = true;
+    initialFilePathRef.current = initialUploadedFile.path;
 
     const file = initialUploadedFile;
     const nextType =
@@ -250,7 +265,7 @@ export function DocumentUpload({
       await identityImport.runDualIdentityExtract(uploadedFile, file, identityTextCallbacks);
     } catch (error) {
       console.error("Error selecting verso file:", error);
-      alert("Erreur lors de la sélection du verso: " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de sélectionner le verso"));
     }
   };
 
@@ -299,7 +314,7 @@ export function DocumentUpload({
       }
     } catch (error) {
       console.error("Error selecting file:", error);
-      alert("Erreur lors de la sélection du fichier: " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de sélectionner le fichier"));
     }
   };
 
@@ -365,7 +380,7 @@ export function DocumentUpload({
       setShowPreview(true);
     } catch (error) {
       console.error("❌ Erreur lors de l'extraction:", error);
-      alert("Erreur lors de l'extraction du texte: " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de lire le contenu du fichier"));
     } finally {
       setExtracting(false);
     }
@@ -393,7 +408,7 @@ export function DocumentUpload({
     e.preventDefault();
     
     if (!uploadedFile) {
-      alert("Veuillez sélectionner un fichier");
+      toast.error("Veuillez sélectionner un fichier");
       return;
     }
     if (isIdentityMode && !effectiveContactId) {
@@ -401,7 +416,7 @@ export function DocumentUpload({
       return;
     }
     if (identityImport.identityImportMode === "two_files" && isIdentityMode && !identityImport.uploadedVersoFile) {
-      alert("Sélectionnez le recto et le verso (2 fichiers).");
+      toast.error("Sélectionnez le recto et le verso (2 fichiers).");
       return;
     }
 
@@ -448,7 +463,7 @@ export function DocumentUpload({
     } catch (error) {
       console.error("Error saving document:", error);
       await discardStagedPaths(uploadedFile?.path, identityImport.uploadedVersoFile?.path);
-      alert("Erreur lors de l'enregistrement: " + String(error));
+      toast.error(userErrorMessage(error, "Impossible d'enregistrer le document"));
     } finally {
       setLoading(false);
     }
@@ -676,6 +691,8 @@ export function DocumentUpload({
                       type="button"
                       variant="ghost"
                       size="icon"
+                      aria-label="Retirer le recto"
+                      title="Retirer le recto"
                       onClick={() => {
                         setUploadedFile(null);
                         setExtractedText("");
@@ -703,6 +720,8 @@ export function DocumentUpload({
                       type="button"
                       variant="ghost"
                       size="icon"
+                      aria-label="Retirer le verso"
+                      title="Retirer le verso"
                       onClick={() => {
                         identityImport.setUploadedVersoFile(null);
                         setExtractedText("");
@@ -739,6 +758,8 @@ export function DocumentUpload({
                     type="button"
                     variant="ghost"
                     size="icon"
+                    aria-label="Retirer le fichier"
+                    title="Retirer le fichier"
                     onClick={() => {
                       identityImport.resetIdentityFiles({
                         clearUploadedFile: () => setUploadedFile(null),

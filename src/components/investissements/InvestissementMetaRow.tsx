@@ -10,6 +10,8 @@ interface InvestissementMetaRowProps {
   children: React.ReactNode;
   className?: string;
   tone?: InvestissementMetaTone;
+  /** Infobulle (libellé complet). */
+  title?: string;
 }
 
 export function InvestissementMetaRow({
@@ -17,9 +19,11 @@ export function InvestissementMetaRow({
   children,
   className,
   tone = "default",
+  title,
 }: InvestissementMetaRowProps) {
   return (
     <span
+      title={title}
       className={cn(
         "inline-flex items-center gap-1.5 text-sm",
         INVESTISSEMENT_META_TONE_CLASS[tone],

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
-import { useCanExport } from "@/components/team/TeamWorkspaceProvider";
+import { useCanExport, useTeamWorkspace } from "@/components/team/TeamWorkspaceProvider";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -71,6 +71,7 @@ export function ParametresDatabaseSection({
   onSecretsProtectionCleaned,
 }: ParametresDatabaseSectionProps) {
   const canExport = useCanExport();
+  const { teamConfigured } = useTeamWorkspace();
   const [cleaningUp, setCleaningUp] = useState(false);
   const [cleaningSecretKey, setCleaningSecretKey] = useState(false);
   const [creatingBackup, setCreatingBackup] = useState(false);
@@ -316,7 +317,11 @@ export function ParametresDatabaseSection({
       <div className="space-y-6">
       <SettingsPanel
         title="Où sont stockées vos données ?"
-        description="Tout le CRM vit sur ce PC — rien n'est envoyé sur Internet (sauf vos emails OAuth)."
+        description={
+          teamConfigured ?
+            "Vos données sont sur ce PC et, en mode équipe, partagées sur le SharePoint du cabinet. Les autres services ne reçoivent des données que si vous les activez : messagerie, Brevo, assistant IA, Telegram, OneDrive clients…"
+          : "Vos données sont stockées sur ce PC. Seuls les services que vous activez reçoivent des données : messagerie (Google ou Microsoft), Brevo, assistant IA, Telegram, OneDrive clients, mode équipe (SharePoint)…"
+        }
         action={
           backups.length > 0 ? (
             <Badge variant="secondary" className="font-normal gap-1">
@@ -357,7 +362,7 @@ export function ParametresDatabaseSection({
           <Explainer>
             Le fichier ci-dessous contient tous vos contacts, foyers, investissements et réglages. Les PDF
             sont dans le sous-dossier <code className="text-xs bg-muted px-1 rounded">documents/</code> au
-            même emplacement. Chaque copie de secours inclut aussi la connexion Gmail, la config newsletter,
+            même emplacement. Chaque copie de secours inclut aussi la connexion à votre messagerie, la config newsletter,
             le verrou mot de passe et le logo (<code className="text-xs bg-muted px-1 rounded">backups/</code>
             ). Vous pouvez aussi exporter tout le dossier applicatif (CRM fermé).
           </Explainer>
@@ -398,12 +403,12 @@ export function ParametresDatabaseSection({
               </div>
               <Explainer>
                 Copie <strong>tout</strong> le dossier applicatif : base, documents PDF, logo,
-                mot de passe, connexion email OAuth, newsletter… sur une clé USB, OneDrive, etc.{" "}
+                mot de passe, connexion à votre messagerie, newsletter… sur une clé USB, OneDrive, etc.{" "}
                 <strong>Votre base actuelle n&apos;est jamais modifiée</strong> — lecture seule via
                 une copie cohérente SQLite. Seules les copies locales redondantes (dossier{" "}
                 <code className="text-xs bg-muted px-1 rounded">backups/</code>) sont exclues. Sur
                 un nouveau PC ou après perte du Trousseau macOS, les données restent récupérables,
-                mais OAuth et les clés API doivent être reconnectés.
+                mais la connexion à votre messagerie et les clés API doivent être refaites.
               </Explainer>
             </div>
             <Button
@@ -515,7 +520,7 @@ export function ParametresDatabaseSection({
               <p className="text-sm font-medium">Copies automatiques de secours</p>
             <Explainer>
                 Avant chaque mise à jour du logiciel (et une fois par jour), le CRM duplique votre base, le
-                dossier <strong>documents</strong> (PDF), et les fichiers de configuration (Gmail OAuth,
+                dossier <strong>documents</strong> (PDF), et les fichiers de configuration (connexion à votre messagerie,
                 newsletter, verrou, logo). Ce ne sont pas des exports Excel : des fichiers techniques pour
                 revenir en arrière. La restauration remet l&apos;ensemble de la même date si disponible.
               </Explainer>

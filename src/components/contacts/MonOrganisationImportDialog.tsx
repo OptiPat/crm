@@ -40,6 +40,7 @@ import {
   IMPORT_DIALOG_HEADER_CLASS,
   flushImportDialogPendingEdits,
 } from "@/components/investissements/import-dialog-fullscreen";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type Step = "pick" | "preview";
 
@@ -143,7 +144,7 @@ export function MonOrganisationImportDialog({
         toast.warning(`Feuille « ${MON_ORGANISATION_SHEET_NAME} » absente — première feuille utilisée`);
       }
     } catch (error) {
-      toast.error("Lecture impossible : " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de lire le fichier"));
     } finally {
       setBusy(false);
     }

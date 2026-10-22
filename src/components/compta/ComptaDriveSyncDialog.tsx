@@ -65,6 +65,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface ComptaDriveSyncDialogProps {
   open: boolean;
@@ -265,7 +266,7 @@ export function ComptaDriveSyncDialog({
         }));
       } catch (e) {
         if (batchGen !== batchGenRef.current) return;
-        const message = e instanceof Error ? e.message : "Extraction PDF échouée";
+        const message = userErrorMessage(e, "Lecture du PDF impossible");
         setEncDrafts((prev) => ({
           ...prev,
           [file.id]: {
@@ -320,7 +321,7 @@ export function ComptaDriveSyncDialog({
         }));
       } catch (e) {
         if (batchGen !== batchGenRef.current) return;
-        const message = e instanceof Error ? e.message : "Extraction PDF échouée";
+        const message = userErrorMessage(e, "Lecture du PDF impossible");
         setDepDrafts((prev) => ({
           ...prev,
           [file.id]: {
@@ -383,7 +384,7 @@ export function ComptaDriveSyncDialog({
       }
     } catch (e) {
       if (batchGen !== batchGenRef.current) return;
-      toast.error(e instanceof Error ? e.message : "Erreur scan Drive");
+      toast.error(userErrorMessage(e, "Impossible d'analyser le dossier Google Drive"));
       setScan(null);
     } finally {
       if (batchGen === batchGenRef.current) {
@@ -504,7 +505,7 @@ export function ComptaDriveSyncDialog({
       return true;
     } catch (e) {
       if (!options?.silent) {
-        toast.error(e instanceof Error ? e.message : "Import encaissement échoué");
+        toast.error(userErrorMessage(e, "Impossible d'importer l'encaissement"));
       }
       return false;
     } finally {
@@ -557,7 +558,7 @@ export function ComptaDriveSyncDialog({
       return true;
     } catch (e) {
       if (!options?.silent) {
-        toast.error(e instanceof Error ? e.message : "Import dépense échoué");
+        toast.error(userErrorMessage(e, "Impossible d'importer la dépense"));
       }
       return false;
     } finally {
@@ -871,6 +872,8 @@ function DepenseFileRow({
             type="button"
             variant="ghost"
             size="icon"
+            aria-label="Ouvrir le fichier dans Google Drive"
+            title="Ouvrir le fichier dans Google Drive"
             onClick={() => void openComptaDriveLink(file.webViewLink!)}
           >
             <ExternalLink className="h-4 w-4" />
@@ -945,6 +948,8 @@ function DepenseFileRow({
             type="button"
             variant="ghost"
             size="icon"
+            aria-label="Ouvrir le fichier dans Google Drive"
+            title="Ouvrir le fichier dans Google Drive"
             onClick={() => void openComptaDriveLink(file.webViewLink!)}
           >
             <ExternalLink className="h-4 w-4" />
@@ -1115,6 +1120,8 @@ function EncaissementFileRow({
             type="button"
             variant="ghost"
             size="icon"
+            aria-label="Ouvrir le fichier dans Google Drive"
+            title="Ouvrir le fichier dans Google Drive"
             onClick={() => void openComptaDriveLink(file.webViewLink!)}
           >
             <ExternalLink className="h-4 w-4" />
@@ -1162,6 +1169,8 @@ function EncaissementFileRow({
             type="button"
             variant="ghost"
             size="icon"
+            aria-label="Ouvrir le fichier dans Google Drive"
+            title="Ouvrir le fichier dans Google Drive"
             onClick={() => void openComptaDriveLink(file.webViewLink!)}
           >
             <ExternalLink className="h-4 w-4" />

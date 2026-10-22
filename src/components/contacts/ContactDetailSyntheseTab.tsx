@@ -60,6 +60,7 @@ import {
 } from "@/lib/contacts/investisseur-sri";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface ContactDetailSyntheseTabProps {
   contact: ContactRecord;
@@ -266,7 +267,7 @@ export function ContactDetailSyntheseTab({
         onContactUpdated?.();
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Sync Google Contacts impossible.");
+      toast.error(userErrorMessage(e, "Synchronisation Google Contacts impossible."));
     } finally {
       setSyncingGoogle(false);
     }
@@ -684,7 +685,7 @@ export function ContactDetailSyntheseTab({
                 onContactUpdated?.();
               } catch (error: unknown) {
                 toast.error(
-                  error instanceof Error ? error.message : "Impossible d'enregistrer la note"
+                  userErrorMessage(error, "Impossible d'enregistrer la note")
                 );
                 throw error;
               } finally {

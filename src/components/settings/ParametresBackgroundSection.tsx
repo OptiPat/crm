@@ -32,6 +32,8 @@ import {
 import { testDesktopAutomationNotification } from "@/lib/background/background-automation-notify";
 import { Bell, Monitor, Power } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirmDialog } from "@/components/pipe/useConfirmDialog";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 function AutomationToggle({
   id,
@@ -72,6 +74,7 @@ export function ParametresBackgroundSection() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingNotif, setTestingNotif] = useState(false);
+  const quitConfirm = useConfirmDialog();
   const [jobStats, setJobStats] = useState(() => getAutomationJobStats());
 
   useEffect(() => {
@@ -117,7 +120,7 @@ export function ParametresBackgroundSection() {
       prefsRef.current = saved;
       setPrefs(saved);
     } catch (e) {
-      toast.error(String(e));
+      toast.error(userErrorMessage(e, "Impossible d'enregistrer les préférences"));
       try {
         const loaded = await getAppRuntimePrefs();
         prefsRef.current = loaded;
@@ -368,7 +371,7 @@ export function ParametresBackgroundSection() {
                     );
                   }
                 })
-                .catch((e) => toast.error(String(e)))
+                .catch((e) => toast.error(userErrorMessage(e, "Impossible d'envoyer la notification de test")))
                 .finally(() => setTestingNotif(false));
             }}
           >
@@ -382,19 +385,23 @@ export function ParametresBackgroundSection() {
           variant="destructive"
           size="sm"
           onClick={() => {
-            if (
-              !window.confirm(
-                "Quitter complètement Patrimoine CRM ? Les automatisations s'arrêteront."
-              )
-            ) {
-              return;
-            }
-            void quitAppFully().catch((e) => toast.error(String(e)));
+            void quitConfirm
+              .confirm({
+                title: "Quitter complètement Patrimoine CRM ?",
+                description: "Les automatisations s'arrêteront.",
+                confirmLabel: "Quitter",
+                destructive: true,
+              })
+              .then((ok) => {
+                if (!ok) return;
+                void quitAppFully().catch((e) => toast.error(userErrorMessage(e, "Impossible de quitter l'application")));
+              });
           }}
         >
           <Power className="h-4 w-4 mr-1.5" />
           Quitter complètement Patrimoine CRM
         </Button>
+        {quitConfirm.dialog}
       </div>
     </SettingsPanel>
   );

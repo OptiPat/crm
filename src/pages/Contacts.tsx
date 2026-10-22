@@ -112,6 +112,7 @@ import {
   splitPanelHeightClass,
 } from "@/components/layout";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type MainTab = "clients" | "filleuls";
 
@@ -132,6 +133,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const [contacts, setContacts] = useState<Contact[]>(initialListState.contacts);
   const [foyers, setFoyers] = useState<Foyer[]>(initialListState.foyers);
   const [loading, setLoading] = useState(initialListState.loading);
+  const [loadError, setLoadError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [mainTab, setMainTab] = useState<MainTab>("clients");
   const [clientSubTab, setClientSubTab] = useState<ClientSubTab>("CLIENT");
@@ -164,6 +166,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const [onedriveConnected, setOnedriveConnected] = useState(false);
   const [onedriveLinkByContact, setOnedriveLinkByContact] = useState<Record<number, boolean>>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const listZoneRef = useRef<HTMLDivElement>(null);
   const pendingOpenContactIdRef = useRef<number | null>(null);
   const contactsRefreshGenRef = useRef(0);
 
@@ -239,7 +242,15 @@ export function Contacts({ onNavigate }: ContactsProps) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      // Ctrl+K reste réservé à la recherche globale ; Ctrl+F cible la liste.
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f") {
+        // Fenêtre ouverte, ou saisie en cours hors de la liste (fiche épinglée) : ne pas voler le focus.
+        if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+        const active = document.activeElement;
+        const editing =
+          active instanceof HTMLElement &&
+          (active.isContentEditable || active.matches("input, textarea, select"));
+        if (editing && !listZoneRef.current?.contains(active)) return;
         e.preventDefault();
         searchInputRef.current?.focus();
       }
@@ -345,6 +356,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
       setContacts(dataContacts);
       setFoyers(dataFoyers);
       setContactsListCache({ contacts: dataContacts, foyers: dataFoyers });
+      setLoadError(false);
       setSelectedContact((prev) => {
         if (!prev?.id) return prev;
         return dataContacts.find((c) => c.id === prev.id) ?? prev;
@@ -357,7 +369,10 @@ export function Contacts({ onNavigate }: ContactsProps) {
         setTimeout(() => void loadContacts(options), 500);
       } else {
         console.error("Error loading contacts:", error);
-        if (!silent) setLoading(false);
+        if (!silent) {
+          setLoading(false);
+          setLoadError(true);
+        }
         setIsInitialLoad(false);
       }
     }
@@ -714,9 +729,10 @@ export function Contacts({ onNavigate }: ContactsProps) {
       if (selectedContact?.id === id) {
         closeContactDetail();
       }
+      toast.success("Contact supprimé");
     } catch (error) {
       console.error("Error deleting contact:", error);
-      toast.error("Erreur lors de la suppression: " + String(error));
+      toast.error(userErrorMessage(error, "Impossible de supprimer le contact."));
     }
   };
 
@@ -730,9 +746,10 @@ export function Contacts({ onNavigate }: ContactsProps) {
       return;
     }
 
+    const total = contactsToDelete.length;
+    let deleted = 0;
+    let cleared = 0;
     try {
-      let deleted = 0;
-      let cleared = 0;
 
       if (isClients) {
         // 🔥 Suppression des CLIENTS : logique spéciale pour protéger les filleuls
@@ -796,8 +813,26 @@ export function Contacts({ onNavigate }: ContactsProps) {
       }
     } catch (error) {
       console.error("Error deleting contacts:", error);
-      toast.error("Erreur lors de la suppression: " + String(error));
+      const done = deleted + cleared;
+      toast.error(
+        `${done} traité${done > 1 ? "s" : ""} sur ${total} (${deleted} supprimé${deleted > 1 ? "s" : ""}), puis erreur : ${userErrorMessage(error, "la suppression s’est arrêtée.")}`
+      );
     }
+  };
+
+  const clearSearchAndFilters = () => {
+    setSearchQuery("");
+    setStatutFilter("ALL");
+    setEtiquetteFilter("ALL");
+    setSegmentFilter("ALL");
+    setNeedsFollowupOnly(false);
+    setPipelineStageFilter(null);
+  };
+
+  const retryLoadContacts = () => {
+    setLoadError(false);
+    setLoading(true);
+    void loadContacts();
   };
 
   const currentSubTab =
@@ -862,6 +897,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
         )}
       >
       <Card
+        ref={listZoneRef}
         className={splitCardClassName(
           showPinnedSplit,
           cn("min-w-0 border-border/70 shadow-sm", showPinnedSplit && "min-w-0 flex-1")
@@ -993,7 +1029,8 @@ export function Contacts({ onNavigate }: ContactsProps) {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     ref={searchInputRef}
-                    placeholder="Rechercher… (Ctrl+K)"
+                    placeholder="Rechercher… (Ctrl+F)"
+                    aria-label="Rechercher dans la liste des contacts"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-9"
@@ -1001,7 +1038,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
                 </div>
 
                 <Select value={statutFilter} onValueChange={setStatutFilter}>
-                  <SelectTrigger className="w-[180px]">
+                  <SelectTrigger className="w-[180px]" aria-label="Filtrer par statut">
                     <Filter className="h-4 w-4 mr-2 shrink-0" />
                     <SelectValue />
                   </SelectTrigger>
@@ -1014,7 +1051,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
                 </Select>
 
                 <Select value={etiquetteFilter} onValueChange={setEtiquetteFilter}>
-                  <SelectTrigger className="w-[200px]">
+                  <SelectTrigger className="w-[200px]" aria-label="Filtrer par étiquette">
                     <Tag className="h-4 w-4 mr-2 shrink-0 text-muted-foreground" />
                     <SelectValue placeholder="Étiquette" />
                   </SelectTrigger>
@@ -1037,7 +1074,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
 
                 {segmentsDisponibles.length > 0 && (
                   <Select value={segmentFilter} onValueChange={setSegmentFilter}>
-                    <SelectTrigger className="w-[200px]">
+                    <SelectTrigger className="w-[200px]" aria-label="Filtrer par groupe de contacts">
                       <Filter className="h-4 w-4 mr-2 shrink-0" />
                       <SelectValue placeholder="Groupe de contacts" />
                     </SelectTrigger>
@@ -1105,6 +1142,13 @@ export function Contacts({ onNavigate }: ContactsProps) {
                 <div key={i} className="h-20 rounded-xl bg-muted/50 animate-pulse" />
               ))}
             </div>
+          ) : loadError && contacts.length === 0 ? (
+            <div className="py-10 text-center space-y-3">
+              <p className="text-sm text-destructive">Impossible de charger les contacts.</p>
+              <Button variant="outline" onClick={retryLoadContacts}>
+                Réessayer
+              </Button>
+            </div>
           ) : filteredContacts.length === 0 ? (
             <ContactsEmptyState
               hasSearch={!!searchQuery.trim()}
@@ -1114,6 +1158,9 @@ export function Contacts({ onNavigate }: ContactsProps) {
               onCreate={() => setShowForm(true)}
               onImport={() =>
                 mainTab === "filleuls" ? setShowImportFilleuls(true) : setShowImport(true)
+              }
+              onClearFilters={
+                hasExtraFilters || pipelineStageFilter ? clearSearchAndFilters : undefined
               }
             />
           ) : groupByFoyer && contactsGroupedByFoyer ? (
@@ -1345,7 +1392,9 @@ export function Contacts({ onNavigate }: ContactsProps) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Supprimer tous les {mainTab === "clients" ? "clients" : "filleuls"} ?
+              {filteredContacts.length > 1
+                ? `Supprimer les ${filteredContacts.length} ${mainTab === "clients" ? "clients" : "filleuls"} affichés ?`
+                : `Supprimer le ${mainTab === "clients" ? "client" : "filleul"} affiché ?`}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-left space-y-2">
               <span className="block">

@@ -323,8 +323,16 @@ impl Database {
                 )
                 .unwrap_or(0);
 
-            // Si plus aucun membre, supprimer le foyer (et ses investissements)
-            if remaining_members == 0 {
+            // Plus aucun membre : le foyer part, sauf s'il porte encore des investissements
+            // communs (gardés jusqu'à une suppression manuelle, avec avertissement).
+            let communs: i64 = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM investissements WHERE foyer_id = ?1 AND contact_id IS NULL",
+                    params![fid],
+                    |row| row.get(0),
+                )?;
+            if remaining_members == 0 && communs == 0 {
                 self.delete_foyer(fid)?;
             }
         }
@@ -366,7 +374,13 @@ impl Database {
             []
         )?;
 
-        // Supprimer les investissements dont le foyer_id n'existe plus
+        // Foyer disparu : l'investissement d'un contact est gardé (détaché), seul le commun part
+        self.conn.execute(
+            "UPDATE investissements SET foyer_id = NULL
+             WHERE foyer_id IS NOT NULL AND foyer_id NOT IN (SELECT id FROM foyers)
+               AND contact_id IS NOT NULL",
+            [],
+        )?;
         let deleted_foyer = self.conn.execute(
             "DELETE FROM investissements WHERE foyer_id IS NOT NULL AND foyer_id NOT IN (SELECT id FROM foyers)",
             []
@@ -378,20 +392,23 @@ impl Database {
         Ok(deleted_contact + deleted_foyer)
     }
 
-    /// 🔥 Nettoyer les foyers orphelins (sans membres)
+    /// Supprime les foyers sans membre. Les investissements d'un contact sont détachés ;
+    /// un foyer qui porte encore des investissements communs est gardé (suppression manuelle,
+    /// avec avertissement, depuis sa fiche) pour ne rien effacer en silence.
     pub fn cleanup_orphaned_foyers(&self) -> Result<usize> {
-        // D'abord supprimer les investissements liés à ces foyers orphelins
         self.conn.execute(
-            "DELETE FROM investissements WHERE foyer_id IN (
-                SELECT f.id FROM foyers f 
+            "UPDATE investissements SET foyer_id = NULL
+             WHERE contact_id IS NOT NULL AND foyer_id IN (
+                SELECT f.id FROM foyers f
                 WHERE NOT EXISTS (SELECT 1 FROM contacts c WHERE c.foyer_id = f.id)
-            )",
+             )",
             [],
         )?;
 
-        // Puis supprimer les foyers sans membres
         let deleted = self.conn.execute(
-            "DELETE FROM foyers WHERE id NOT IN (SELECT DISTINCT foyer_id FROM contacts WHERE foyer_id IS NOT NULL)",
+            "DELETE FROM foyers
+             WHERE id NOT IN (SELECT DISTINCT foyer_id FROM contacts WHERE foyer_id IS NOT NULL)
+               AND id NOT IN (SELECT DISTINCT foyer_id FROM investissements WHERE foyer_id IS NOT NULL)",
             []
         )?;
 

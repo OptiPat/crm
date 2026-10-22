@@ -34,6 +34,8 @@ type NewsletterCampaignReadyCardProps = {
   batchSending: boolean;
   batchProgress: { sent: number; total: number } | null;
   emailConnected: boolean;
+  /** Boîte d'envoi connectée (« Gmail », « Outlook », « votre boîte mail »). */
+  mailboxLabel: string;
   hasPlainBody: boolean;
   onCopyBrevoText: () => void;
   onPushToBrevo: () => void;
@@ -62,6 +64,7 @@ export function NewsletterCampaignReadyCard({
   batchSending,
   batchProgress,
   emailConnected,
+  mailboxLabel,
   hasPlainBody,
   onCopyBrevoText,
   onPushToBrevo,
@@ -92,20 +95,27 @@ export function NewsletterCampaignReadyCard({
                 </p>
               : brevoConfigured ?
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Contacts pas encore synchronisés vers Brevo
+                  Contacts pas encore envoyés vers Brevo
                 </p>
               : null}
               {gmailQueueReady ?
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {preparedQueueCount} email{preparedQueueCount !== 1 ? "s" : ""} encore en file Gmail
+                  {preparedQueueCount} email{preparedQueueCount !== 1 ? "s" : ""} prêt
+                  {preparedQueueCount !== 1 ? "s" : ""} à partir depuis {mailboxLabel}
                 </p>
               : null}
             </div>
             <Popover>
               <PopoverTrigger asChild>
-                <Button type="button" variant="outline" size="icon" className="h-8 w-8 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  title="Actions de la campagne"
+                >
                   <MoreHorizontal className="h-4 w-4" />
-                  <span className="sr-only">Actions campagne</span>
+                  <span className="sr-only">Actions de la campagne</span>
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-56 p-1">
@@ -135,7 +145,7 @@ export function NewsletterCampaignReadyCard({
                     onClick={onSendGmail}
                   >
                     <Send className="h-4 w-4 mr-2" />
-                    Envoyer via Gmail
+                    Envoyer depuis {mailboxLabel}
                   </Button>
                 : null}
               </PopoverContent>
@@ -155,7 +165,7 @@ export function NewsletterCampaignReadyCard({
               {batchSending ?
                 <Loader2 className="h-4 w-4 animate-spin shrink-0" />
               : null}
-              Envoi Gmail… {batchProgress.sent}/{batchProgress.total}
+              Envoi en cours… {batchProgress.sent}/{batchProgress.total}
             </p>
           : null}
 
@@ -163,7 +173,7 @@ export function NewsletterCampaignReadyCard({
             <div className="rounded-md border bg-background/80 p-3 space-y-3">
               <p className="text-xs font-medium">Prochaine étape Brevo</p>
               <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                <li>Pousser les contacts (liste + brouillon campagne)</li>
+                <li>Envoyer les contacts vers Brevo (liste + brouillon de campagne)</li>
                 <li>Copier le texte ci-dessous</li>
                 <li>Brouillon → Modifier le design → coller → Aperçu et test → Envoyer</li>
               </ol>
@@ -191,7 +201,7 @@ export function NewsletterCampaignReadyCard({
                   {brevoPushing ?
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   : <ExternalLink className="h-4 w-4 mr-2" />}
-                  Pousser vers Brevo
+                  Envoyer vers Brevo
                 </Button>
                 {hasPlainBody ?
                   <Button
@@ -218,13 +228,13 @@ export function NewsletterCampaignReadyCard({
             </div>
           : batchSending ?
             <Button type="button" variant="destructive" onClick={onCancelBatchSend}>
-              Annuler l&apos;envoi Gmail
+              Arrêter l&apos;envoi
             </Button>
           : emailConnected && gmailQueueReady && !brevoPrimary ?
             <div className="flex flex-col sm:flex-row gap-2">
               <Button type="button" onClick={onSendGmail}>
                 <Send className="h-4 w-4 mr-2" />
-                Envoyer la campagne (Gmail)
+                Envoyer la campagne ({mailboxLabel})
               </Button>
               <p className="text-xs text-muted-foreground self-center">
                 Délai {Math.round(sendDelayMs / 1000)} s entre chaque envoi

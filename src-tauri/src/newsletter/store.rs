@@ -629,7 +629,7 @@ impl NewsletterStore {
                         .to_string()
                 } else {
                     format!(
-                        "Configurez votre clé API {} dans Newsletter → Paramètres.",
+                        "Configurez votre clé API {} dans Newsletter → Réglages newsletter.",
                         super::llm::LlmProvider::parse(provider_id).label()
                     )
                 }
@@ -647,7 +647,7 @@ impl NewsletterStore {
                 Err(error)
             } else {
                 Err(
-                    "Clé API Mistral absente — Newsletter → Paramètres → clé Mistral (OCR + résumés SCPI)."
+                    "Clé API Mistral absente — Newsletter → Réglages newsletter → clé Mistral (OCR + résumés SCPI)."
                         .to_string(),
                 )
             }

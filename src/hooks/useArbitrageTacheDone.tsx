@@ -12,6 +12,7 @@ import {
 } from "@/lib/api/tauri-taches";
 import { spawnedNextTacheToastMessage } from "@/lib/taches/tache-recurrence-ui";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type TacheLike = Pick<Tache, "id" | "titre" | "statut">;
 
@@ -26,7 +27,7 @@ export function useArbitrageTacheDone(onAfterDone?: () => void) {
           await setTacheStatut(tache.id, "A_FAIRE");
           onAfterDone?.();
         } catch (error) {
-          toast.error(`Erreur : ${String(error)}`);
+          toast.error(userErrorMessage(error, "Impossible de modifier la tâche"));
         }
         return;
       }
@@ -40,7 +41,7 @@ export function useArbitrageTacheDone(onAfterDone?: () => void) {
         if (msg) toast.success(msg);
         onAfterDone?.();
       } catch (error) {
-        toast.error(`Erreur : ${String(error)}`);
+        toast.error(userErrorMessage(error, "Impossible de terminer la tâche"));
       }
     },
     [onAfterDone]
@@ -67,7 +68,7 @@ export function useArbitrageTacheDone(onAfterDone?: () => void) {
         onAfterDone?.();
       } catch (error) {
         console.error(error);
-        toast.error(`Erreur : ${String(error)}`);
+        toast.error(userErrorMessage(error, "Impossible de terminer la tâche"));
       } finally {
         setSubmitting(false);
       }

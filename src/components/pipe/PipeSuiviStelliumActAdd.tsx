@@ -56,6 +56,7 @@ import {
   type VpMiseEnPlaceActValue,
 } from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-types";
 import { resolveInvestissementIdForStelliumAct } from "@/lib/placement/resolve-investissement-for-stellium-act";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 async function resolveDraftInvestissementId(
   contactId: number,
@@ -356,7 +357,7 @@ export function PipeSuiviStelliumActAdd({
       }
     } catch (err) {
       console.error(err);
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de créer l'opération"));
     } finally {
       setSavingId(null);
     }
@@ -430,7 +431,7 @@ export function PipeSuiviStelliumActAdd({
       setNewActVpMiseEnPlace({ ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE });
     } catch (err) {
       console.error(err);
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de créer l'opération"));
     } finally {
       setSavingId(null);
     }

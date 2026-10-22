@@ -185,7 +185,7 @@ export function PlacementImportPreviewLine({
         </ImportPreviewField>
 
         <ImportPreviewField
-          label="VP"
+          label="Versement programmé"
           highlight={crmDiffHighlight(crmDiffHighlights, "montantVpCentimes")}
         >
           {editable && editableViVp ? (
@@ -232,7 +232,7 @@ export function PlacementImportPreviewLine({
         </ImportPreviewField>
 
         <ImportPreviewField
-          label="Réinv. div."
+          label="Réinvestissement dividendes"
           highlight={
             crmDiffHighlight(crmDiffHighlights, "reinvestissementDividendes") ??
             crmDiffHighlight(crmDiffHighlights, "pourcentageReinvestissement")

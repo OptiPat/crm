@@ -53,6 +53,6 @@ export async function retryPlacementConformeClientEmail(
   if (outcome === "sent") {
     toast.success("Email(s) client Box Placement envoyé(s)");
   } else if (outcome === "skipped") {
-    toast.message("Email client non envoyé — vérifiez le modèle, l'email contact ou la connexion OAuth.");
+    toast.message("Email client non envoyé — vérifiez le modèle, l'email du contact ou la connexion à votre messagerie.");
   }
 }

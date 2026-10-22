@@ -45,6 +45,7 @@ import {
 import { ComptaListSortSelect } from "@/components/compta/ComptaListSortSelect";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const DEPLACEMENT_SORT_OPTIONS = [
   { value: "date-desc", label: "Date (récent)" },
@@ -75,6 +76,8 @@ export function ComptaDeplacementsTab({
   const [km, setKm] = useState<number | null>(null);
   const [indemnite, setIndemnite] = useState<number | null>(null);
   const [calcBusy, setCalcBusy] = useState(false);
+  const [manualKmOpen, setManualKmOpen] = useState(false);
+  const [manualKm, setManualKm] = useState("");
   const [busy, setBusy] = useState(false);
 
   const filtered = useMemo(() => {
@@ -152,20 +155,24 @@ export function ComptaDeplacementsTab({
       setKm(result.roundTripKm);
       setIndemnite(result.indemnite);
       toast.success("Distance calculée");
-    } catch {
-      const manual = window.prompt(
-        "Impossible de calculer automatiquement.\nEntrez la distance aller simple en km :"
-      );
-      if (manual && !Number.isNaN(parseFloat(manual))) {
-        const result = computeIndemniteKm(parseFloat(manual), config.indemniteKm);
-        setKm(result.roundTripKm);
-        setIndemnite(result.indemnite);
-      } else {
-        toast.error("Calcul de distance échoué");
-      }
+    } catch (err) {
+      console.error("Calcul de distance échoué :", err);
+      setManualKm("");
+      setManualKmOpen(true);
     } finally {
       setCalcBusy(false);
     }
+  };
+
+  const manualKmValue = parseFloat(manualKm.trim().replace(/\s/g, "").replace(",", "."));
+  const manualKmValid = Number.isFinite(manualKmValue) && manualKmValue > 0;
+
+  const applyManualKm = () => {
+    if (!manualKmValid) return;
+    const result = computeIndemniteKm(manualKmValue, config.indemniteKm);
+    setKm(result.roundTripKm);
+    setIndemnite(result.indemnite);
+    setManualKmOpen(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -194,7 +201,7 @@ export function ComptaDeplacementsTab({
       setFormOpen(false);
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur");
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer le déplacement"));
     } finally {
       setBusy(false);
     }
@@ -210,7 +217,7 @@ export function ComptaDeplacementsTab({
       setDeleteId(null);
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur");
+      toast.error(userErrorMessage(err, "Impossible de supprimer le déplacement"));
     } finally {
       setBusy(false);
     }
@@ -322,13 +329,13 @@ export function ComptaDeplacementsTab({
                   </p>
                 </div>
                 <div className="flex gap-1 ml-auto">
-                  <Button type="button" variant="ghost" size="icon" onClick={() => loadEdit(d)}>
+                  <Button type="button" variant="ghost" size="icon" aria-label="Modifier le déplacement" title="Modifier le déplacement" onClick={() => loadEdit(d)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => duplicateDeplacement(d)}>
+                  <Button type="button" variant="ghost" size="icon" aria-label="Dupliquer le déplacement" title="Dupliquer le déplacement" onClick={() => duplicateDeplacement(d)}>
                     <Copy className="h-4 w-4" />
                   </Button>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => setDeleteId(d.id)}>
+                  <Button type="button" variant="ghost" size="icon" aria-label="Supprimer le déplacement" title="Supprimer le déplacement" onClick={() => setDeleteId(d.id)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -365,6 +372,43 @@ export function ComptaDeplacementsTab({
             <AlertDialogCancel>Annuler</AlertDialogCancel>
             <AlertDialogAction onClick={() => void handleDelete()}>Supprimer</AlertDialogAction>
           </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={manualKmOpen} onOpenChange={setManualKmOpen}>
+        <AlertDialogContent>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              applyManualKm();
+            }}
+            className="space-y-4"
+          >
+            <AlertDialogHeader>
+              <AlertDialogTitle>Distance à saisir</AlertDialogTitle>
+              <AlertDialogDescription>
+                Le calcul automatique n&apos;a pas abouti. Indiquez la distance aller simple :
+                l&apos;aller-retour et l&apos;indemnité seront calculés.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="compta-manual-km">Distance aller simple (km)</Label>
+              <Input
+                id="compta-manual-km"
+                inputMode="decimal"
+                autoFocus
+                value={manualKm}
+                onChange={(e) => setManualKm(e.target.value)}
+                placeholder="Ex. 12,5"
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel type="button">Annuler</AlertDialogCancel>
+              <Button type="submit" disabled={!manualKmValid}>
+                Valider
+              </Button>
+            </AlertDialogFooter>
+          </form>
         </AlertDialogContent>
       </AlertDialog>
     </div>

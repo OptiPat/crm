@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { History, Loader2, Zap } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type SimpleTriggerSnapshot = Pick<
   TemplateEmailTriggerConfig,
@@ -92,7 +93,7 @@ export function TemplateEmailTriggerPanel({ trigger, onChange, templateId }: Pro
           : "Aucune souscription éligible à rattraper."
       );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Échec du rattrapage");
+      toast.error(userErrorMessage(e, "Échec du rattrapage"));
     } finally {
       setBackfillLoading(false);
     }

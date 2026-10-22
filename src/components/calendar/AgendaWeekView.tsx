@@ -1,19 +1,21 @@
+import { useMemo } from "react";
 import type { GoogleCalendarWeekEvent } from "@/lib/api/tauri-calendar";
 import { openExternalUrl } from "@/lib/api/tauri-system";
 import {
   agendaGridHeightPx,
+  agendaGridHourCount,
+  agendaGridRangeForEvents,
   agendaHourLineTopPx,
   agendaSlotStartUnixFromClick,
-  AGENDA_GRID_END_HOUR,
-  AGENDA_GRID_HOUR_COUNT,
-  AGENDA_GRID_START_HOUR,
   AGENDA_HOUR_HEIGHT_PX,
+  AGENDA_SLOT_SNAP_MINUTES,
   eventDayIndex,
   eventLayoutHeightPx,
   eventLayoutTopPx,
   formatWeekdayHeader,
   hourLabels,
   isTodayInWeek,
+  layoutOverlappingEvents,
   weekdayLabels,
 } from "@/lib/calendar/agenda-week";
 import { DEFAULT_RDV_DURATION_MINUTES } from "@/lib/calendar/rdv-duration";
@@ -33,11 +35,16 @@ function isPipeLinkedEvent(ev: GoogleCalendarWeekEvent): boolean {
   return ev.pipe_timeline_entry_id != null && ev.pipe_id != null;
 }
 
+const TIME_FMT = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
+const DAY_INDEXES = [0, 1, 2, 3, 4, 5, 6] as const;
+
 function formatEventTime(startAt: number, endAt: number, allDay: boolean): string {
   if (allDay) return "Journée";
-  const fmt = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  return `${fmt.format(new Date(startAt * 1000))}–${fmt.format(new Date(endAt * 1000))}`;
+  return `${TIME_FMT.format(new Date(startAt * 1000))}–${TIME_FMT.format(new Date(endAt * 1000))}`;
 }
+
+/** En dessous, titre et heure tiennent sur une seule ligne. */
+const EVENT_TWO_LINES_MIN_HEIGHT_PX = 32;
 
 export function AgendaWeekView({
   weekStartAt,
@@ -48,13 +55,32 @@ export function AgendaWeekView({
   onSlotClick,
   onPipeEventClick,
 }: AgendaWeekViewProps) {
-  const hours = hourLabels();
-  const gridHeight = agendaGridHeightPx();
-  const hourSlots = Array.from({ length: AGENDA_GRID_HOUR_COUNT }, (_, i) => i);
   const days = weekdayLabels().map((_, dayIndex) => dayIndex);
-
-  const timedEvents = events.filter((ev) => !ev.all_day);
+  const timedEvents = useMemo(() => events.filter((ev) => !ev.all_day), [events]);
   const allDayEvents = events.filter((ev) => ev.all_day);
+
+  const range = useMemo(() => {
+    const intervals: { start_at: number; end_at: number }[] = [...timedEvents];
+    if (highlightStartAt != null && highlightEndAt != null) {
+      intervals.push({ start_at: highlightStartAt, end_at: highlightEndAt });
+    }
+    return agendaGridRangeForEvents(weekStartAt, intervals);
+  }, [timedEvents, highlightStartAt, highlightEndAt, weekStartAt]);
+  const hours = hourLabels(range);
+  const gridHeight = agendaGridHeightPx(range);
+  const hourSlots = Array.from({ length: agendaGridHourCount(range) }, (_, i) => i);
+
+  const eventsByDay = useMemo(
+    () =>
+      DAY_INDEXES.map((dayIndex) => {
+        const dayEvents = timedEvents.filter(
+          (ev) => eventDayIndex(ev.start_at, weekStartAt) === dayIndex
+        );
+        const layout = layoutOverlappingEvents(dayEvents);
+        return dayEvents.map((ev, i) => ({ ev, ...layout[i] }));
+      }),
+    [timedEvents, weekStartAt]
+  );
 
   const highlightDayIndex =
     highlightStartAt != null ? eventDayIndex(highlightStartAt, weekStartAt) : null;
@@ -80,7 +106,7 @@ export function AgendaWeekView({
 
           {allDayEvents.length > 0 && (
             <div className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] border-b bg-muted/10">
-              <div className="px-2 py-1 text-[10px] text-muted-foreground">Journée</div>
+              <div className="px-2 py-1 text-[11px] text-muted-foreground">Journée</div>
               {days.map((dayIndex) => {
                 const dayAllDay = allDayEvents.filter(
                   (ev) => eventDayIndex(ev.start_at, weekStartAt) === dayIndex
@@ -92,7 +118,7 @@ export function AgendaWeekView({
                         key={ev.google_event_id}
                         type="button"
                         className={cn(
-                          "w-full truncate rounded px-1.5 py-0.5 text-left text-[10px]",
+                          "w-full truncate rounded px-1.5 py-0.5 text-left text-[11px]",
                           isPipeLinkedEvent(ev)
                             ? "bg-emerald-200/80 hover:bg-emerald-300/80 border border-emerald-400/50"
                             : "bg-slate-200/80 hover:bg-slate-300/80"
@@ -121,7 +147,7 @@ export function AgendaWeekView({
               {hours.map((label, index) => (
                 <div
                   key={label}
-                  className="absolute left-0 right-0 text-[10px] text-muted-foreground px-1 -translate-y-1/2 text-right pointer-events-none tabular-nums"
+                  className="absolute left-0 right-0 text-[11px] text-muted-foreground px-1 -translate-y-1/2 text-right pointer-events-none tabular-nums"
                   style={{ top: agendaHourLineTopPx(index) }}
                 >
                   {label}
@@ -147,7 +173,9 @@ export function AgendaWeekView({
                           weekStartAt,
                           dayIndex,
                           offsetY,
-                          gridHeight
+                          gridHeight,
+                          AGENDA_SLOT_SNAP_MINUTES,
+                          range
                         );
                         const endAt = startAt + DEFAULT_RDV_DURATION_MINUTES * 60;
                         onSlotClick({ startAt, endAt, dayIndex });
@@ -177,52 +205,67 @@ export function AgendaWeekView({
                     <div
                       className="absolute left-1 right-1 rounded border border-primary/50 bg-primary/15 z-10 pointer-events-none"
                       style={{
-                        top: eventLayoutTopPx(highlightStartAt, weekStartAt, dayIndex),
+                        top: eventLayoutTopPx(highlightStartAt, weekStartAt, dayIndex, range),
                         height: eventLayoutHeightPx(highlightStartAt, highlightEndAt),
                       }}
                     />
                   )}
 
-                {timedEvents
-                  .filter((ev) => eventDayIndex(ev.start_at, weekStartAt) === dayIndex)
-                  .map((ev) => {
-                    const top = eventLayoutTopPx(ev.start_at, weekStartAt, dayIndex);
-                    const height = eventLayoutHeightPx(ev.start_at, ev.end_at);
-                    const clippedTop = top < gridHeight && top + height > 0;
-                    if (!clippedTop && top >= gridHeight) return null;
-                    return (
-                      <button
-                        key={ev.google_event_id}
-                        type="button"
-                        className={cn(
-                          "absolute left-0.5 right-0.5 z-20 m-0 overflow-hidden rounded-sm border px-1 py-0.5 text-left text-[10px] leading-tight box-border",
-                          isPipeLinkedEvent(ev)
-                            ? "border-emerald-400/80 bg-emerald-100/90 hover:bg-emerald-200/90"
-                            : "border-blue-200/80 bg-blue-100/90 hover:bg-blue-200/90"
-                        )}
-                        style={{
-                          top: Math.max(0, top),
-                          height: Math.max(18, height),
-                        }}
-                        title={`${ev.title}\n${formatEventTime(ev.start_at, ev.end_at, ev.all_day)}${
-                          isPipeLinkedEvent(ev) ? "\nRDV Pipe — clic pour décaler / annuler" : ""
-                        }`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isPipeLinkedEvent(ev) && onPipeEventClick) {
-                            onPipeEventClick(ev);
-                          } else if (ev.html_link) {
-                            void openExternalUrl(ev.html_link);
-                          }
-                        }}
-                      >
-                        <span className="block font-medium truncate">{ev.title}</span>
-                        <span className="block text-[9px] text-muted-foreground tabular-nums">
-                          {formatEventTime(ev.start_at, ev.end_at, ev.all_day)}
+                {eventsByDay[dayIndex].map(({ ev, column, columnCount }) => {
+                  const top = eventLayoutTopPx(ev.start_at, weekStartAt, dayIndex, range);
+                  if (top >= gridHeight) return null;
+                  const height = Math.max(
+                    18,
+                    Math.min(eventLayoutHeightPx(ev.start_at, ev.end_at), gridHeight - top)
+                  );
+                  const timeLabel = formatEventTime(ev.start_at, ev.end_at, ev.all_day);
+                  const twoLines = height >= EVENT_TWO_LINES_MIN_HEIGHT_PX;
+                  return (
+                    <button
+                      key={ev.google_event_id}
+                      type="button"
+                      className={cn(
+                        "absolute z-20 m-0 overflow-hidden rounded-sm border px-1 py-0.5 text-left text-[11px] leading-tight box-border",
+                        isPipeLinkedEvent(ev)
+                          ? "border-emerald-400/80 bg-emerald-100/90 hover:bg-emerald-200/90"
+                          : "border-blue-200/80 bg-blue-100/90 hover:bg-blue-200/90"
+                      )}
+                      style={{
+                        top,
+                        height,
+                        left: `calc(${(column / columnCount) * 100}% + 2px)`,
+                        width: `calc(${100 / columnCount}% - 4px)`,
+                      }}
+                      title={`${ev.title}\n${timeLabel}${
+                        isPipeLinkedEvent(ev) ? "\nRDV Pipe — clic pour décaler / annuler" : ""
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isPipeLinkedEvent(ev) && onPipeEventClick) {
+                          onPipeEventClick(ev);
+                        } else if (ev.html_link) {
+                          void openExternalUrl(ev.html_link);
+                        }
+                      }}
+                    >
+                      {twoLines ? (
+                        <>
+                          <span className="block font-medium truncate">{ev.title}</span>
+                          <span className="block text-muted-foreground tabular-nums">
+                            {timeLabel}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="block truncate">
+                          <span className="tabular-nums text-muted-foreground">
+                            {TIME_FMT.format(new Date(ev.start_at * 1000))}
+                          </span>{" "}
+                          <span className="font-medium">{ev.title}</span>
                         </span>
-                      </button>
-                    );
-                  })}
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -236,7 +279,7 @@ export function AgendaWeekView({
       )}
 
       <p className="px-4 py-2 text-[11px] text-muted-foreground border-t">
-        Affichage {AGENDA_GRID_START_HOUR}h–{AGENDA_GRID_END_HOUR}h
+        Affichage {range.startHour}h–{range.endHour}h
         {onSlotClick ? " · clic créneau libre = planifier" : ""}
         {onPipeEventClick ? " · vert = RDV Pipe (décaler / annuler)" : ""}
         {!onPipeEventClick && !onSlotClick ? " · clic = ouvrir dans Google Agenda" : ""}

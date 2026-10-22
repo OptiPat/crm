@@ -297,7 +297,7 @@ export function ContactOneDriveActions({
             />
           ) : (
             <p className="text-sm text-muted-foreground py-6 text-center">
-              Configurez d&apos;abord le dossier racine dans Paramètres → Intégrations.
+              Configurez d&apos;abord le dossier racine dans Paramètres → Équipe &amp; intégrations.
             </p>
           )}
         </PortalLayerProvider>
@@ -321,7 +321,7 @@ export function ContactOneDriveActions({
         variant="outline"
         size="sm"
         className="gap-1.5 text-muted-foreground"
-        title="Configurer OneDrive dans Paramètres → Intégrations"
+        title="Configurer OneDrive dans Paramètres → Équipe & intégrations"
         onClick={() => onOpenSettings?.()}
       >
         <Cloud className="h-4 w-4" />

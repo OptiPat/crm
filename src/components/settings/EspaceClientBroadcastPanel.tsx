@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarPlus, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirmDialog } from "@/components/pipe/useConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
-import { invokeErrorMessage } from "@/lib/api/invoke-error";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import {
   broadcastEspaceAvisImposition,
   broadcastEspaceEcheance,
@@ -16,6 +17,8 @@ import {
 import { getCgpConfig } from "@/lib/api/tauri-settings";
 import { normalizeAgendaLinks, type AgendaLink } from "@/lib/emails/agenda-links";
 
+const pluriel = (n: number) => (n > 1 ? "s" : "");
+
 function dateToUnix(valeur: string): number | null {
   if (!valeur) return null;
   const [annee, mois, jour] = valeur.split("-").map(Number);
@@ -24,10 +27,10 @@ function dateToUnix(valeur: string): number | null {
 }
 
 function resumeEnvoi(result: EspaceBroadcastResult): string {
-  const parts = [`${result.crees} créé(s)`];
-  if (result.relances > 0) parts.push(`${result.relances} re-synchronisé(s)`);
-  if (result.ignores > 0) parts.push(`${result.ignores} ignoré(s)`);
-  if (result.echecs.length > 0) parts.push(`${result.echecs.length} échec(s)`);
+  const parts = [`${result.crees} créé${pluriel(result.crees)}`];
+  if (result.relances > 0) parts.push(`${result.relances} re-synchronisé${pluriel(result.relances)}`);
+  if (result.ignores > 0) parts.push(`${result.ignores} ignoré${pluriel(result.ignores)}`);
+  if (result.echecs.length > 0) parts.push(`${result.echecs.length} échec${pluriel(result.echecs.length)}`);
   return parts.join(" · ");
 }
 
@@ -47,6 +50,7 @@ export function EspaceClientBroadcastPanel() {
   const [rdvLienId, setRdvLienId] = useState("");
   const [envoiEcheance, setEnvoiEcheance] = useState(false);
   const [envoiAvis, setEnvoiAvis] = useState(false);
+  const envoiConfirm = useConfirmDialog();
 
   const charger = useCallback(async () => {
     try {
@@ -58,7 +62,7 @@ export function EspaceClientBroadcastPanel() {
       setPreview(apercu);
       setLiens(normalizeAgendaLinks(cgp));
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Impossible de compter les espaces actifs");
+      toast.error(userErrorMessage(error, "Impossible de compter les espaces actifs"));
     }
   }, [date, titre]);
 
@@ -83,15 +87,22 @@ export function EspaceClientBroadcastPanel() {
       ignores > 0
         ? ` ${ignores} ont déjà la même échéance ce jour-là (re-synchronisation).`
         : "";
-    if (
-      !window.confirm(
-        n > 0
-          ? `Créer cette échéance chez ${n} client(s) dont l'espace est actif ?${detailIgnores}`
-          : `Aucun nouveau : re-synchroniser les ${ignores} échéance(s) déjà créées ?`
-      )
-    ) {
-      return;
-    }
+    const okEcheance = await envoiConfirm.confirm(
+      n > 0
+        ? {
+            title: `Créer cette échéance chez ${n} client${pluriel(n)} ?`,
+            description: `Seuls les clients dont l'espace est actif sont concernés.${detailIgnores}`,
+            confirmLabel: "Créer l'échéance",
+          }
+        : {
+            title: "Re-synchroniser les échéances ?",
+            description: ignores > 1
+                ? `Aucun nouveau client : les ${ignores} échéances déjà créées seront re-synchronisées.`
+                : "Aucun nouveau client : l'échéance déjà créée sera re-synchronisée.",
+            confirmLabel: "Re-synchroniser",
+          }
+    );
+    if (!okEcheance) return;
     setEnvoiEcheance(true);
     try {
       const result = await broadcastEspaceEcheance(
@@ -107,7 +118,7 @@ export function EspaceClientBroadcastPanel() {
         toast.success(resumeEnvoi(result));
       }
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Envoi impossible");
+      toast.error(userErrorMessage(error, "Impossible d'envoyer l'échéance aux clients"));
     } finally {
       setEnvoiEcheance(false);
     }
@@ -126,20 +137,25 @@ export function EspaceClientBroadcastPanel() {
       return;
     }
     const extra = [
-      enAttente > 0 ? `${enAttente} en attente seront re-synchronisé(s)` : "",
-      ignores > 0 ? `${ignores} déjà traité(s) (validée, reçue ou importée) seront ignorés` : "",
+      enAttente > 0 ? `${enAttente} en attente ${enAttente > 1 ? "seront re-synchronisées" : "sera re-synchronisée"}` : "",
+      ignores > 0 ? `${ignores} déjà traité${pluriel(ignores)} (validée, reçue ou importée) ${ignores > 1 ? "seront ignorés" : "sera ignoré"}` : "",
     ]
       .filter(Boolean)
       .join(". ");
-    if (
-      !window.confirm(
-        n > 0
-          ? `Demander le dernier avis d'imposition à ${n} client(s) ?${extra ? ` ${extra}.` : ""}`
-          : `Re-synchroniser ${enAttente} demande(s) déjà en attente ? Une demande annulée peut être relancée.`
-      )
-    ) {
-      return;
-    }
+    const okAvis = await envoiConfirm.confirm(
+      n > 0
+        ? {
+            title: `Demander le dernier avis d'imposition à ${n} client${pluriel(n)} ?`,
+            description: extra ? `${extra}.` : undefined,
+            confirmLabel: "Envoyer la demande",
+          }
+        : {
+            title: `Re-synchroniser ${enAttente} demande${pluriel(enAttente)} déjà en attente ?`,
+            description: "Une demande annulée peut être relancée.",
+            confirmLabel: "Re-synchroniser",
+          }
+    );
+    if (!okAvis) return;
     setEnvoiAvis(true);
     try {
       const result = await broadcastEspaceAvisImposition();
@@ -150,7 +166,7 @@ export function EspaceClientBroadcastPanel() {
         toast.success(resumeEnvoi(result));
       }
     } catch (error) {
-      toast.error(invokeErrorMessage(error) || "Envoi impossible");
+      toast.error(userErrorMessage(error, "Impossible d'envoyer la demande d'avis d'imposition"));
     } finally {
       setEnvoiAvis(false);
     }
@@ -164,6 +180,7 @@ export function EspaceClientBroadcastPanel() {
 
   return (
     <>
+      {envoiConfirm.dialog}
       <SettingsPanel
         title="Échéance à tous les espaces"
         description="La même échéance est créée chez chaque client dont l'accès est actif, puis synchronisée."
@@ -172,7 +189,7 @@ export function EspaceClientBroadcastPanel() {
           <p className="text-sm text-muted-foreground">
             {preview == null
               ? "Comptage des espaces…"
-              : `${actifs} espace(s) actif(s). Une date passée reste dans le CRM mais n'apparaît pas chez le client.`}
+              : `${actifs} espace${pluriel(actifs)} actif${pluriel(actifs)}. Une date passée reste dans le CRM mais n'apparaît pas chez le client.`}
           </p>
           {date && titre.trim() && preview != null && echeanceIgnores > 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -243,8 +260,8 @@ export function EspaceClientBroadcastPanel() {
               <CalendarPlus className="mr-2 h-4 w-4" />
             )}
             {echeanceACreer === 0 && echeanceIgnores > 0
-              ? `Re-synchroniser ${echeanceIgnores} échéance(s)`
-              : `Envoyer à ${echeanceACreer} client(s)`}
+              ? `Re-synchroniser ${echeanceIgnores} échéance${pluriel(echeanceIgnores)}`
+              : `Envoyer à ${echeanceACreer} client${pluriel(echeanceACreer)}`}
           </Button>
         </div>
       </SettingsPanel>
@@ -259,15 +276,15 @@ export function EspaceClientBroadcastPanel() {
               ? "Comptage des espaces…"
               : avisActionnables === 0
                 ? preview.avisDejaTraites > 0
-                  ? `Les ${preview.avisDejaTraites} espace(s) actif(s) ont déjà cette demande (reçue, importée ou validée).`
+                  ? `${preview.avisDejaTraites > 1 ? `Les ${preview.avisDejaTraites} espaces actifs ont` : "L'espace actif a"} déjà cette demande (reçue, importée ou validée).`
                   : "Aucun espace client actif."
-                : `${preview.avisADemander} client(s) à solliciter${
+                : `${preview.avisADemander} client${pluriel(preview.avisADemander)} à solliciter${
                     preview.avisEnAttente > 0
-                      ? ` · ${preview.avisEnAttente} en attente, re-synchronisé(s)`
+                      ? ` · ${preview.avisEnAttente} en attente, re-synchronisée${pluriel(preview.avisEnAttente)}`
                       : ""
                   }${
                     preview.avisDejaTraites > 0
-                      ? ` · ${preview.avisDejaTraites} déjà traité(s), ignorés`
+                      ? ` · ${preview.avisDejaTraites} déjà traité${pluriel(preview.avisDejaTraites)}, ignoré${pluriel(preview.avisDejaTraites)}`
                       : ""
                   }.`}
           </p>

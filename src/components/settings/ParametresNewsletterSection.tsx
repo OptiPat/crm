@@ -54,6 +54,7 @@ import {
 } from "@/lib/newsletter/newsletter-typography";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 function NewsletterColorField({
   id,
@@ -260,12 +261,12 @@ export function ParametresNewsletterSection({
     const providerChanged =
       savedLlmProvider != null && llmProvider !== savedLlmProvider;
     if (requireLlmApiKey && !selectedProviderKeyConfigured && !apiKeyInput.trim()) {
-      toast.error(`Saisissez votre clé API ${llmProviderMeta.label} avant d'enregistrer`);
+      toast.error(`Saisissez votre clé de connexion ${llmProviderMeta.label} avant d'enregistrer`);
       return;
     }
     if (providerChanged && !apiKeyInput.trim() && !selectedProviderKeyConfigured) {
       toast.error(
-        `Vous avez sélectionné ${llmProviderMeta.label} : saisissez la clé API correspondante avant d'enregistrer.`
+        `Vous avez sélectionné ${llmProviderMeta.label} : saisissez la clé de connexion correspondante avant d'enregistrer.`
       );
       return;
     }
@@ -274,7 +275,7 @@ export function ParametresNewsletterSection({
       !settings?.mistralApiKeyConfigured &&
       !mistralApiKeyInput.trim()
     ) {
-      toast.error("Saisissez la clé API Mistral (bulletins SCPI) avant d'enregistrer");
+      toast.error("Saisissez la clé de connexion Mistral (bulletins SCPI) avant d'enregistrer");
       return;
     }
     setSaving(true);
@@ -326,7 +327,7 @@ export function ParametresNewsletterSection({
         toast.success("Paramètres newsletter enregistrés");
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur enregistrement");
+      toast.error(userErrorMessage(e, "Erreur enregistrement"));
     } finally {
       setSaving(false);
     }
@@ -339,7 +340,7 @@ export function ParametresNewsletterSection({
       toast.success(message);
       await loadBrevoTemplates();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Connexion Brevo impossible");
+      toast.error(userErrorMessage(e, "Connexion Brevo impossible"));
     } finally {
       setTestingBrevo(false);
     }
@@ -372,7 +373,7 @@ export function ParametresNewsletterSection({
       }
       void loadBrevoTemplates();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur enregistrement Brevo");
+      toast.error(userErrorMessage(e, "Erreur enregistrement Brevo"));
     } finally {
       setSaving(false);
     }
@@ -387,7 +388,7 @@ export function ParametresNewsletterSection({
       setAudienceFilters(saved.defaultAudienceFilters ?? next);
       onSettingsSync?.(saved);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Impossible d'enregistrer les exclusions");
+      toast.error(userErrorMessage(e, "Impossible d'enregistrer les exclusions"));
     } finally {
       setSavingExclusions(false);
     }
@@ -458,7 +459,10 @@ export function ParametresNewsletterSection({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="param-llm-key">Clé API {llmProviderMeta.label}</Label>
+              <Label htmlFor="param-llm-key">
+                Clé de connexion {llmProviderMeta.label}{" "}
+                <span className="text-xs font-normal text-muted-foreground">(clé API)</span>
+              </Label>
               <Input
                 id="param-llm-key"
                 type="password"
@@ -515,7 +519,10 @@ export function ParametresNewsletterSection({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="param-mistral-scpi-key">Clé API Mistral</Label>
+                <Label htmlFor="param-mistral-scpi-key">
+                  Clé de connexion Mistral{" "}
+                  <span className="text-xs font-normal text-muted-foreground">(clé API)</span>
+                </Label>
                 <Input
                   id="param-mistral-scpi-key"
                   type="password"
@@ -563,14 +570,14 @@ export function ParametresNewsletterSection({
       <SettingsPanel
         id="newsletter-brevo"
         title="Brevo (envoi professionnel)"
-        description="Clé API, expéditeur et template par défaut. Le premier push amorce un brouillon Brevo avec le texte du CRM — personnalisez ensuite librement dans Brevo."
+        description="Clé de connexion, expéditeur et modèle par défaut. Le premier envoi vers Brevo crée un brouillon avec le texte du CRM — personnalisez-le ensuite librement dans Brevo."
       >
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="param-brevo-key">
               {settings?.brevoApiKeyConfigured ?
-                "Nouvelle clé API (laisser vide pour conserver)"
-              : "Clé API Brevo"}
+                "Nouvelle clé de connexion (laisser vide pour conserver)"
+              : "Clé de connexion Brevo (clé API)"}
             </Label>
             <Input
               id="param-brevo-key"
@@ -667,7 +674,7 @@ export function ParametresNewsletterSection({
             <pre className="text-[11px] whitespace-pre-wrap bg-muted/30 rounded p-2">{`<p>Bonjour {{ contact.FIRSTNAME }},</p>
 <p>… zone de corps éditable dans le brouillon …</p>`}</pre>
             <p>
-              Après chaque push CRM : Marketing → Campagnes → Brouillons → « CRM — … » →{" "}
+              Après chaque envoi vers Brevo : Marketing → Campagnes → Brouillons → « CRM — … » →{" "}
               <strong>Modifier le design</strong> → coller le texte du compositeur → envoyer.
             </p>
           </div>
@@ -963,9 +970,12 @@ export function ParametresNewsletterSection({
         <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-5">
           <li>Destinataires = contacts avec email (sauf désinscrits et exclusions permanentes)</li>
           <li>Un seul lien principal (bouton agenda)</li>
-          <li>Envoi Gmail : connectez Gmail (Paramètres → Emails & envois)</li>
-          <li>Envoi Brevo : préparez la campagne puis « Pousser vers Brevo »</li>
-          <li>Testez avec « M'envoyer un test » avant la campagne Gmail</li>
+          <li>
+            Envoi depuis votre boîte mail : connectez votre messagerie Google ou Microsoft
+            (Paramètres → Emails & envois)
+          </li>
+          <li>Envoi Brevo : préparez la campagne puis « Envoyer vers Brevo »</li>
+          <li>Testez avec « M&apos;envoyer un test » avant d&apos;envoyer la campagne</li>
         </ul>
       </SettingsPanel>
     </div>

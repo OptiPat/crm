@@ -44,7 +44,11 @@ import {
 } from "@/lib/pipe/pipe-types";
 import { isPipeRdvStage, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { defaultSuiviPipeTitre } from "@/lib/pipe/pipe-suivi";
-import { isPipeFormDirty, type PipeFormSnapshot } from "@/lib/pipe/pipe-form-dirty";
+import {
+  isPipeFormDirty,
+  mergePipeFormOnReload,
+  type PipeFormSnapshot,
+} from "@/lib/pipe/pipe-form-dirty";
 import { PipeContactSelect } from "@/components/pipe/PipeContactSelect";
 import {
   createInitialSuiviStelliumActs,
@@ -187,7 +191,27 @@ export function PipeFormPanel({
     buildFormState(pipe, initialType, defaultContactId, buildOptions)
   );
 
+  const formRef = useRef(form);
+  formRef.current = form;
+  const resetForPipeIdRef = useRef<number | null | undefined>(undefined);
+
   useEffect(() => {
+    // Un rechargement en arrière-plan renvoie un nouvel objet pour le même pipe :
+    // ne pas écraser une saisie en cours.
+    const pipeId = pipe?.id ?? null;
+    const samePipe = resetForPipeIdRef.current === pipeId;
+    resetForPipeIdRef.current = pipeId;
+    if (samePipe && isPipeFormDirty(initialFormRef.current, formRef.current)) {
+      const merged = mergePipeFormOnReload(
+        initialFormRef.current as FormState,
+        formRef.current,
+        buildFormState(pipe, initialType, defaultContactId, buildOptions)
+      );
+      initialFormRef.current = merged.initial;
+      formRef.current = merged.form;
+      setForm(merged.form);
+      return;
+    }
     const next = buildFormState(pipe, initialType, defaultContactId, buildOptions);
     setForm(next);
     setSuiviStelliumActs(createInitialSuiviStelliumActs());
@@ -278,16 +302,17 @@ export function PipeFormPanel({
       if (cancelled) return;
       const conjoint = members.find((m) => m.id !== form.contactId);
       if (!conjoint?.id) return;
-      setForm((prev) => {
-        if (prev.contactId !== form.contactId || prev.secondaryContactId > 0) return prev;
-        return {
-          ...prev,
-          secondaryContactId: conjoint.id,
-          titre: titreEditedRef.current
-            ? prev.titre
-            : defaultPipeTitreFromCouple(primary, conjoint),
-        };
-      });
+      const prev = formRef.current;
+      if (prev.contactId !== form.contactId || prev.secondaryContactId > 0) return;
+      const next = {
+        ...prev,
+        secondaryContactId: conjoint.id,
+        titre: titreEditedRef.current ? prev.titre : defaultPipeTitreFromCouple(primary, conjoint),
+      };
+      // Contact prérempli : l'ajout automatique du conjoint n'est pas une saisie.
+      if (!isPipeFormDirty(initialFormRef.current, prev)) initialFormRef.current = next;
+      formRef.current = next;
+      setForm(next);
     });
     return () => {
       cancelled = true;

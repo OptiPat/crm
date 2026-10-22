@@ -33,6 +33,7 @@ import {
   type FicheConseilArbitrageRedactionInput,
 } from "@/lib/pdf/arbitrage-fiche-conseil/arbitrage-redaction-labels";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const PRESET_NONE = "__none__";
 
@@ -140,7 +141,7 @@ export function ArbitrageFicheRedactionDialog({
           } catch (error) {
             console.error(error);
             toast.error(
-              `Enregistrement impossible : ${String(error)} — génération de la fiche en cours.`
+              `${userErrorMessage(error, "Impossible d'enregistrer le texte dans la bibliothèque")} — génération de la fiche en cours.`
             );
           }
         }

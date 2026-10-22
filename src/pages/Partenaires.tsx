@@ -56,6 +56,7 @@ import { subscribeInvestissementsChanged } from "@/lib/investissements/investiss
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { navigateToFoyers } from "@/lib/navigation/foyers-navigation";
 import { cn } from "@/lib/utils";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type PartenairesProps = {
   onNavigate?: (page: string) => void;
@@ -420,7 +421,7 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
                   assertCanExport(canExport);
                   downloadPartenaireProductsCsv(expandedRow, contactLabelById, foyerLabelById);
                 } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "Export non autorisé");
+                  toast.error(userErrorMessage(e, "Export impossible"));
                 }
               }
             : undefined
@@ -452,12 +453,22 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
                   ? "Modifiez la recherche ou les filtres."
                   : "Ajoutez assureurs, gestionnaires SCPI/FIP ou promoteurs."}
               </p>
-              {!prefs.searchQuery.trim() && !prefs.statFilter && prefs.typeFilter === "ALL" && (
+              {!prefs.searchQuery.trim() && !prefs.statFilter && prefs.typeFilter === "ALL" ? (
                 <Button onClick={openCreateForm} className="gap-2">
                   <Plus className="h-4 w-4" />
                   Ajouter un partenaire
                 </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    updatePrefs({ searchQuery: "", statFilter: null, typeFilter: "ALL" })
+                  }
+                >
+                  Effacer la recherche et les filtres
+                </Button>
               )}
+
             </div>
           ) : (
             filteredRows.map((row) => {

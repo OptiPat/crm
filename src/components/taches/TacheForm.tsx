@@ -66,6 +66,8 @@ import {
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 import { TeamLockBanner } from "@/components/team/TeamLockBanner";
 import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
+import { useUnsavedCloseGuard } from "@/hooks/useUnsavedCloseGuard";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface TacheFormProps {
   open: boolean;
@@ -177,6 +179,11 @@ export function TacheForm({
     entityType: "tache",
     entityId: tache?.id,
   });
+  const closeGuard = useUnsavedCloseGuard({
+    open,
+    onClose: () => onOpenChange(false),
+    stacked: nestedSheet,
+  });
   const fixedContactIdsKey = fixedContactIds?.join(",") ?? "";
   const isCreate = !tache;
   const contactFirst = isGlobalTacheCreate({ tache, fixedContactId, fixedContactIds });
@@ -277,10 +284,12 @@ export function TacheForm({
       if (tache) {
         await updateTache(tache.id, payload);
         onSuccess?.();
+        closeGuard.resetDirty();
         onOpenChange(false);
       } else {
         await createTache(payload);
         onSuccess?.();
+        closeGuard.resetDirty();
         if (createAnother) {
           setForm(buildCreateAnotherState(fixedContactId, fixedContactIds));
           toast.success("Tâche créée — saisissez la suivante");
@@ -290,7 +299,7 @@ export function TacheForm({
       }
     } catch (error) {
       console.error(error);
-      toast.error(`Erreur : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible d'enregistrer la tâche"));
     } finally {
       setLoading(false);
     }
@@ -394,7 +403,8 @@ export function TacheForm({
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
+    <>
+    <Dialog open={open} onOpenChange={closeGuard.handleOpenChange} modal={!nestedSheet}>
       <DialogContent
         hideOverlay={nestedSheet}
         className={nestedStackedDialogClass(
@@ -439,7 +449,7 @@ export function TacheForm({
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
           onWheel={nestedSheet ? stopWheelPropagation : undefined}
         >
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" {...closeGuard.trackDirtyProps}>
           {contactFirst ? (
             <>
               {contactField}
@@ -477,8 +487,8 @@ export function TacheForm({
             />
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="gap-2 sm:gap-0" data-no-dirty>
+            <Button type="button" variant="outline" onClick={closeGuard.requestClose}>
               Annuler
             </Button>
             {isCreate && (
@@ -500,5 +510,7 @@ export function TacheForm({
         </PortalLayerProvider>
       </DialogContent>
     </Dialog>
+    {closeGuard.discardDialog}
+    </>
   );
 }

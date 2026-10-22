@@ -42,7 +42,8 @@ import {
   resolveAffaireBoardColumn,
   type PipeBoardColumn,
 } from "@/lib/pipe/pipe-board-columns";
-import { confirmDiscardPipeFormEdits } from "@/lib/pipe/pipe-form-dirty";
+import { PIPE_FORM_DISCARD_CONFIRM } from "@/lib/pipe/pipe-form-dirty";
+import { registerPageLeaveGuard } from "@/lib/navigation/page-leave-guard";
 import { trackVersementAffaireOnPipeCreate } from "@/lib/placement/pipe-placement-tracking";
 import { type PipeStage, type PipeType } from "@/lib/pipe/pipe-types";
 import {
@@ -74,6 +75,12 @@ import { PipeDetailPanel } from "@/components/pipe/PipeDetailPanel";
 import { PipeStageAdvanceDialog } from "@/components/pipe/PipeStageAdvanceDialog";
 import { PipeDetailLayoutToolbar } from "@/components/pipe/PipeDetailLayoutToolbar";
 import { RdvPlanifierDialog } from "@/components/calendar/RdvPlanifierDialog";
+import { useConfirmDialog } from "@/components/pipe/useConfirmDialog";
+import {
+  BoardContactSearch,
+  BoardContactSearchEmpty,
+} from "@/components/pipe/BoardContactSearch";
+import { filterByContactSearch } from "@/lib/pipe/pipe-contact-search";
 import { toast } from "sonner";
 import { usePipeStageAdvance } from "@/hooks/usePipeStageAdvance";
 import { cn } from "@/lib/utils";
@@ -109,6 +116,8 @@ export function Pipe() {
   const [listFilters, setListFilters] = useState<PipeListFilters>(() => loadPipeListFilters());
   const [showArchived, setShowArchived] = useState(() => loadPipeShowArchived());
   const [panelMode, setPanelMode] = useState<PanelMode>("empty");
+  /** Incrémenté après un abandon confirmé : remonte le formulaire sur l'état enregistré. */
+  const [formResetKey, setFormResetKey] = useState(0);
   const [selectedPipe, setSelectedPipe] = useState<PipeRecord | null>(null);
   const [createType, setCreateType] = useState<PipeType>("AFFAIRE");
   const [createPrefill, setCreatePrefill] = useState<{
@@ -135,7 +144,13 @@ export function Pipe() {
   );
   const [dismissingPlacementId, setDismissingPlacementId] = useState<number | null>(null);
   const [detailExpanded, setDetailExpanded] = useState(false);
+  const [boardSearch, setBoardSearch] = useState("");
   const formIsDirtyRef = useRef(false);
+  // Quitter la page (menu, recherche globale) avec une saisie en cours : App demande confirmation.
+  useEffect(() => registerPageLeaveGuard(() => formIsDirtyRef.current), []);
+  const panelModeRef = useRef<PanelMode>("empty");
+  const discardConfirm = useConfirmDialog();
+  const { confirm: confirmDialog } = discardConfirm;
   const placementBoardLoadedRef = useRef(false);
   const pendingPipeFocusRef = useRef<number | null>(consumePipeFocusId());
   const pipesRef = useRef<PipeRecord[]>([]);
@@ -160,20 +175,37 @@ export function Pipe() {
     }
   }, [section]);
 
-  const backToBoard = useCallback(() => {
-    if (panelMode === "edit" && formIsDirtyRef.current && !confirmDiscardPipeFormEdits()) {
-      return;
-    }
+  /** Formulaire (création ou modification) ouvert avec une saisie non enregistrée. */
+  const formHasUnsavedEdits = useCallback(
+    () =>
+      (panelModeRef.current === "edit" || panelModeRef.current === "create") &&
+      formIsDirtyRef.current,
+    []
+  );
+
+  /** `true` si on peut quitter le formulaire (rien à perdre ou abandon confirmé). */
+  const confirmLeaveForm = useCallback(async () => {
+    if (!formHasUnsavedEdits()) return true;
+    if (!(await confirmDialog(PIPE_FORM_DISCARD_CONFIRM))) return false;
+    // Saisie abandonnée : on remonte le formulaire (même clé de création si on rouvre le même).
+    formIsDirtyRef.current = false;
+    setFormResetKey((k) => k + 1);
+    return true;
+  }, [confirmDialog, formHasUnsavedEdits]);
+
+  const backToBoard = useCallback(async () => {
+    if (!(await confirmLeaveForm())) return;
     setCreatePrefill(null);
     setSelectedPipe(null);
     setSelectedPlacementOperationId(null);
     setPanelMode("empty");
     setDetailExpanded(false);
     detailExpandedBeforeFormRef.current = null;
-  }, [panelMode]);
+  }, [confirmLeaveForm]);
 
   useEffect(() => {
-    if (panelMode !== "edit") {
+    panelModeRef.current = panelMode;
+    if (panelMode !== "edit" && panelMode !== "create") {
       formIsDirtyRef.current = false;
     }
   }, [panelMode]);
@@ -282,6 +314,10 @@ export function Pipe() {
   );
 
   const affaires = useMemo(() => filterAffairesForBoard(activePipes), [activePipes]);
+  const searchedAffaires = useMemo(
+    () => filterByContactSearch(affaires, boardSearch),
+    [affaires, boardSearch]
+  );
   const suiviColumnByPipe = useMemo(
     () => buildSuiviPlacementColumnByPipe(placementBoardRows),
     [placementBoardRows]
@@ -314,12 +350,15 @@ export function Pipe() {
   };
 
   const openRdvPlanifier = useCallback(
-    (
+    async (
       pipe: PipeRecord,
       planOption?: PipeRdvPlanOption,
       options?: { keepPanelMode?: boolean; isDirty?: boolean }
     ) => {
-      if (options?.isDirty && !confirmDiscardPipeFormEdits()) return;
+      if (options?.isDirty) {
+        if (!(await confirmDialog(PIPE_FORM_DISCARD_CONFIRM))) return;
+        setFormResetKey((k) => k + 1);
+      }
       setSelectedPipe(pipe);
       if (!options?.keepPanelMode) setPanelMode("view");
       setRdvPlanifierPipe(pipe);
@@ -327,7 +366,7 @@ export function Pipe() {
       setRdvPlanifierStage(planOption ? rdvStageFromPlanOption(planOption) : undefined);
       setRdvPlanifierOpen(true);
     },
-    []
+    [confirmDialog]
   );
 
   const loadPlacementCounts = useCallback(async () => {
@@ -383,7 +422,7 @@ export function Pipe() {
 
       const focusId = pendingPipeFocusRef.current ?? peekPipeFocusId();
       pendingPipeFocusRef.current = null;
-      if (focusId) {
+      if (focusId && !formHasUnsavedEdits()) {
         await focusPipeById(focusId, rows);
         if (generation !== loadPipesGenerationRef.current) return;
       } else {
@@ -400,18 +439,30 @@ export function Pipe() {
         setLoading(false);
       }
     }
-  }, [focusPipeById, loadPlacementCounts, showArchived, syncSelectedPipeAfterLoad]);
+  }, [
+    focusPipeById,
+    formHasUnsavedEdits,
+    loadPlacementCounts,
+    showArchived,
+    syncSelectedPipeAfterLoad,
+  ]);
 
   useEffect(() => {
     const onPipeFocus = (event: Event) => {
       const pipeId = (event as CustomEvent<{ pipeId: number }>).detail?.pipeId;
       if (!pipeId) return;
       pendingPipeFocusRef.current = null;
-      void focusPipeById(pipeId);
+      void (async () => {
+        if (!(await confirmLeaveForm())) {
+          clearPipeFocusId();
+          return;
+        }
+        await focusPipeById(pipeId);
+      })();
     };
     window.addEventListener(PIPE_FOCUS_EVENT, onPipeFocus);
     return () => window.removeEventListener(PIPE_FOCUS_EVENT, onPipeFocus);
-  }, [focusPipeById]);
+  }, [confirmLeaveForm, focusPipeById]);
 
   useEffect(() => {
     void loadPipes();
@@ -462,7 +513,9 @@ export function Pipe() {
     }
   }, [section, showArchived, loadPlacementBoardRows]);
 
-  const setSectionPersisted = (next: PipeSection) => {
+  const setSectionPersisted = async (next: PipeSection) => {
+    if (next === section) return;
+    if (!(await confirmLeaveForm())) return;
     setSection(next);
     savePipeSection(next);
     setSelectedPlacementOperationId(null);
@@ -479,22 +532,24 @@ export function Pipe() {
     );
   }, [pipes, selectedPipe]);
 
-  const openCreate = (type: PipeType, prefill?: typeof createPrefill) => {
+  const openCreate = async (type: PipeType, prefill?: typeof createPrefill) => {
+    if (!(await confirmLeaveForm())) return;
     setCreateType(type);
     setCreatePrefill(prefill ?? null);
     setSelectedPipe(null);
     setPanelMode("create");
   };
 
-
-  const openView = (pipe: PipeRecord) => {
+  const openView = async (pipe: PipeRecord) => {
+    if (!(await confirmLeaveForm())) return;
     setSelectedPlacementOperationId(null);
     setSelectedPipe(pipe);
     setPanelMode("view");
     expandBoardDetailIfNeeded();
   };
 
-  const openPlacementOperation = (row: PlacementOperationWithContact) => {
+  const openPlacementOperation = async (row: PlacementOperationWithContact) => {
+    if (!(await confirmLeaveForm())) return;
     setSelectedPlacementOperationId(row.operation.id);
     const pipeId = row.operation.pipe_id;
     if (pipeId == null || pipeId <= 0) {
@@ -564,7 +619,7 @@ export function Pipe() {
       <PipeDetailLayoutToolbar
         expanded={detailExpanded}
         onExpand={expandDetail}
-        onBackToBoard={backToBoard}
+        onBackToBoard={() => void backToBoard()}
       />
     </div>
   ) : null;
@@ -628,7 +683,8 @@ export function Pipe() {
     }
   };
 
-  const cancelPanel = () => {
+  const cancelPanel = async () => {
+    if (!(await confirmLeaveForm())) return;
     setCreatePrefill(null);
     if (selectedPipe) {
       setPanelMode("view");
@@ -637,16 +693,17 @@ export function Pipe() {
     }
   };
 
-  const handleRequestStageChange = (pipe: PipeRecord, target: PipeBoardColumn) => {
+  const handleRequestStageChange = async (pipe: PipeRecord, target: PipeBoardColumn) => {
     const current = resolveAffaireBoardColumn(pipe, rdvEntriesByPipeId[pipe.id] ?? []);
     const action = resolvePipeBoardStageDrop(current, target);
-    const isDirty = panelMode === "edit" && formIsDirtyRef.current;
+    const isDirty = formHasUnsavedEdits();
     if (action.kind === "plan-rdv") {
-      openRdvPlanifier(pipe, defaultPlanOptionForRdvStage(action.rdvStage), { isDirty });
+      await openRdvPlanifier(pipe, defaultPlanOptionForRdvStage(action.rdvStage), { isDirty });
       return;
     }
     if (action.kind === "manual-advance") {
-      if (isDirty && !confirmDiscardPipeFormEdits()) return;
+      if (isDirty && !(await confirmDialog(PIPE_FORM_DISCARD_CONFIRM))) return;
+      if (isDirty && panelMode === "create") setPanelMode(selectedPipe ? "view" : "empty");
       if (panelMode === "edit") setPanelMode("view");
       stageAdvance.requestStageChange(pipe.id, action.stage, pipe.titre);
     }
@@ -674,18 +731,18 @@ export function Pipe() {
 
   const handleRequestRdvStageFromForm = (stage: PipeRdvStage, options: { isDirty: boolean }) => {
     if (!selectedPipe) return;
-    openRdvPlanifier(selectedPipe, defaultPlanOptionForRdvStage(stage), {
+    void openRdvPlanifier(selectedPipe, defaultPlanOptionForRdvStage(stage), {
       keepPanelMode: true,
       isDirty: options.isDirty,
     });
   };
 
-  const handleRequestTerminalStageFromForm = (
+  const handleRequestTerminalStageFromForm = async (
     stage: PipeStage,
     options: { isDirty: boolean }
   ) => {
     if (!selectedPipe) return;
-    if (options.isDirty && !confirmDiscardPipeFormEdits()) return;
+    if (options.isDirty && !(await confirmDialog(PIPE_FORM_DISCARD_CONFIRM))) return;
     setPanelMode("view");
     stageAdvance.requestStageChange(selectedPipe.id, stage, selectedPipe.titre);
   };
@@ -727,8 +784,8 @@ export function Pipe() {
         <PipeFormPanel
           key={
             panelMode === "edit"
-              ? `edit-${selectedPipe?.id}`
-              : `create-${createType}-${createPrefill?.parentPipeId ?? "solo"}`
+              ? `edit-${selectedPipe?.id}-${formResetKey}`
+              : `create-${createType}-${createPrefill?.parentPipeId ?? "solo"}-${formResetKey}`
           }
           pipe={panelMode === "edit" ? selectedPipe : null}
           allPipes={pipes}
@@ -744,9 +801,9 @@ export function Pipe() {
               ? handleRequestTerminalStageFromForm
               : undefined
           }
-          onDirtyChange={panelMode === "edit" ? handleFormDirtyChange : undefined}
+          onDirtyChange={handleFormDirtyChange}
           onSuccess={handleSaved}
-          onCancel={cancelPanel}
+          onCancel={() => void cancelPanel()}
         />
       )}
 
@@ -758,11 +815,11 @@ export function Pipe() {
           onDeleted={handleDeleted}
           onArchived={handleArchived}
           onRefreshed={handlePipeRefreshed}
-          onPlanRdv={(planOption) => openRdvPlanifier(selectedPipe, planOption)}
-          onOpenChildAffaire={openView}
+          onPlanRdv={(planOption) => void openRdvPlanifier(selectedPipe, planOption)}
+          onOpenChildAffaire={(child) => void openView(child)}
           onOpenParentPipe={(parentId) => {
             const parent = pipes.find((p) => p.id === parentId);
-            if (parent) openView(parent);
+            if (parent) void openView(parent);
           }}
           focusHistoriqueToken={focusHistoriqueToken}
         />
@@ -775,9 +832,9 @@ export function Pipe() {
       <PipePageToolbar
         section={section}
         showArchived={showArchived}
-        onSectionChange={setSectionPersisted}
+        onSectionChange={(next) => void setSectionPersisted(next)}
         onShowArchivedChange={setShowArchivedPersisted}
-        onCreate={openCreate}
+        onCreate={(type) => void openCreate(type)}
         onOpenSettings={() => setChecklistSettingsOpen(true)}
       />
 
@@ -804,7 +861,7 @@ export function Pipe() {
               <PipePlacementBoard
                 rows={placementBoardRows}
                 selectedOperationId={selectedPlacementOperationId}
-                onSelect={openPlacementOperation}
+                onSelect={(row) => void openPlacementOperation(row)}
                 onDismiss={handleDismissPlacementOperation}
                 dismissingOperationId={dismissingPlacementId}
               />
@@ -813,16 +870,28 @@ export function Pipe() {
                 <PipeRemunerationBoard />
               </div>
             ) : (
-              <PipeBoard
-                affaires={affaires}
-                selectedId={selectedPipe?.id ?? null}
-                rdvEntriesByPipeId={rdvEntriesByPipeId}
-                onSelect={openView}
-                onRequestStageChange={(pipe, column) =>
-                  void handleRequestStageChange(pipe, column)
-                }
-                onToggleEtudeRealisee={handleToggleEtudeRealisee}
-              />
+              <>
+                <BoardContactSearch
+                  value={boardSearch}
+                  onChange={setBoardSearch}
+                  resultCount={searchedAffaires.length}
+                  className="shrink-0 border-b border-border/60 px-4 py-2"
+                />
+                {searchedAffaires.length === 0 && affaires.length > 0 ? (
+                  <BoardContactSearchEmpty query={boardSearch} onClear={() => setBoardSearch("")} />
+                ) : (
+                  <PipeBoard
+                    affaires={searchedAffaires}
+                    selectedId={selectedPipe?.id ?? null}
+                    rdvEntriesByPipeId={rdvEntriesByPipeId}
+                    onSelect={(pipe) => void openView(pipe)}
+                    onRequestStageChange={(pipe, column) =>
+                      void handleRequestStageChange(pipe, column)
+                    }
+                    onToggleEtudeRealisee={handleToggleEtudeRealisee}
+                  />
+                )}
+              </>
             )}
           </div>
 
@@ -862,7 +931,7 @@ export function Pipe() {
                 <PipeList
                   pipes={filteredListPipes}
                   selectedId={selectedPipe?.id ?? null}
-                  onSelect={openView}
+                  onSelect={(pipe) => void openView(pipe)}
                   placementCountsByPipe={placementCountsByPipe}
                   suiviColumnByPipe={suiviColumnByPipe}
                   r1MissingByPipeId={r1MissingByPipeId}
@@ -885,6 +954,7 @@ export function Pipe() {
         onCancel={stageAdvance.cancelStageChange}
         onConfirm={stageAdvance.confirmStageChange}
       />
+      {discardConfirm.dialog}
       {rdvPlanifierPipe && (
         <RdvPlanifierDialog
           open={rdvPlanifierOpen}

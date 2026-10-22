@@ -160,7 +160,8 @@ export function PartenaireDetail({
           variant="outline"
           size="icon"
           onClick={() => setShowEditForm(true)}
-          title="Modifier"
+          title="Modifier le partenaire"
+          aria-label="Modifier le partenaire"
         >
           <Edit className="h-4 w-4" />
         </Button>
@@ -168,8 +169,9 @@ export function PartenaireDetail({
           variant="outline"
           size="icon"
           onClick={() => setShowDeleteDialog(true)}
-          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-          title="Supprimer"
+          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+          title="Supprimer le partenaire"
+          aria-label="Supprimer le partenaire"
         >
           <Trash2 className="h-4 w-4" />
         </Button>
@@ -178,7 +180,8 @@ export function PartenaireDetail({
             variant="ghost"
             size="icon"
             onClick={() => onOpenChange(false)}
-            title="Fermer"
+            title="Fermer la fiche"
+            aria-label="Fermer la fiche"
           >
             <X className="h-4 w-4" />
           </Button>

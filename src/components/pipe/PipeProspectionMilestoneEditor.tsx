@@ -26,6 +26,7 @@ import {
   type PipeTimelineUserType,
 } from "@/lib/pipe/pipe-timeline-types";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const QUICK_ADD_TYPES = ["APPEL", "RDV", "NOTE"] as const;
 const QUICK_ADD_ICONS = {
@@ -104,7 +105,7 @@ export function PipeProspectionMilestoneEditor({
       cancelAdd();
       onAfterEntryAdded?.();
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer l'étape"));
     } finally {
       setAdding(false);
     }
@@ -133,7 +134,7 @@ export function PipeProspectionMilestoneEditor({
       cancelAdd();
       onAfterEntryAdded?.();
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer le RDV"));
     } finally {
       setAdding(false);
     }

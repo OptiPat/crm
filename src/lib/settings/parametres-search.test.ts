@@ -55,7 +55,7 @@ describe("parametres-nav", () => {
     const suivi = SETTINGS_NAV_FLAT.find((i) => i.id === "suivi");
     const integrations = SETTINGS_NAV_FLAT.find((i) => i.id === "integrations");
     expect(suivi?.label).toBe("Agenda & RDV");
-    expect(integrations?.label).toBe("Intégrations");
+    expect(integrations?.label).toBe("Équipe & intégrations");
   });
 });
 

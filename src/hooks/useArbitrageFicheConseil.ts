@@ -36,6 +36,7 @@ import {
   resolveFicheConseilTemplateFamily,
   stelliumProductLabelToFicheProductKind,
 } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export type FicheConseilHook = ReturnType<typeof useArbitrageFicheConseil>;
 
@@ -132,7 +133,7 @@ export function useArbitrageFicheConseil() {
         );
       } catch (error) {
         console.error(error);
-        toast.error(`Erreur : ${String(error)}`);
+        toast.error(userErrorMessage(error, "Impossible de générer la fiche conseil"));
       } finally {
         setBusy(false);
       }
@@ -282,7 +283,7 @@ export function useArbitrageFicheConseil() {
         });
       } catch (error) {
         console.error(error);
-        toast.error(`Erreur : ${String(error)}`);
+        toast.error(userErrorMessage(error, "Impossible de préparer la fiche conseil"));
       } finally {
         setBusy(false);
       }
@@ -358,7 +359,7 @@ export function useArbitrageFicheConseil() {
           await continueWithInvestissement(pending.context, investissementId);
         } catch (error) {
           console.error(error);
-          toast.error(`Erreur : ${String(error)}`);
+          toast.error(userErrorMessage(error, "Impossible de préparer la fiche conseil"));
         } finally {
           setBusy(false);
         }

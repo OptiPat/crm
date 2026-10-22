@@ -19,6 +19,7 @@ import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-dr
 import { DashboardPanel } from "./dashboard-ui";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 function formatTime(unix: number): string {
   return new Intl.DateTimeFormat("fr-FR", {
@@ -135,7 +136,7 @@ export function CalendarTodayPreview({
       notifyRelationChanged(crm.contact_id);
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur");
+      toast.error(userErrorMessage(e, "Impossible de marquer le RDV comme effectué"));
     }
   };
 

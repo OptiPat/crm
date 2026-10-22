@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { BarChart3 } from "lucide-react";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import {
@@ -49,6 +49,67 @@ function exerciceBranchCellTitle(row: OrganisationVolumeRow): string | undefined
       : `Filleul direct : objectif ${formatFilleulVolumeDisplay(ORGANISATION_DIRECT_BRANCH_VOLUME_TARGET)} (volume branche exercice) en cours`;
   }
   return "Volume branche de l'exercice en cours (propre + filleuls actifs)";
+}
+
+/**
+ * Champ volume : enregistre au blur ou sur Entrée ; une saisie invalide
+ * est signalée (bordure rouge + message) au lieu d'être ignorée en silence.
+ */
+function VolumeCellInput({
+  defaultValue,
+  className,
+  title,
+  ariaLabel,
+  onCommit,
+}: {
+  defaultValue: string;
+  className?: string;
+  title?: string;
+  ariaLabel: string;
+  onCommit: (parsed: number) => void;
+}) {
+  const [invalid, setInvalid] = useState(false);
+  const commit = (raw: string) => {
+    const parsed = parseFilleulVolumeField(raw);
+    if (parsed == null) {
+      setInvalid(true);
+      return;
+    }
+    setInvalid(false);
+    onCommit(parsed);
+  };
+  return (
+    <div className="ml-auto flex flex-col items-end gap-0.5">
+      <Input
+        className={cn(
+          className,
+          invalid && "border-destructive focus-visible:ring-destructive"
+        )}
+        inputMode="decimal"
+        placeholder="0"
+        title={title}
+        aria-label={ariaLabel}
+        aria-invalid={invalid || undefined}
+        defaultValue={defaultValue}
+        onChange={() => {
+          if (invalid) setInvalid(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            // Le blur déclenche l'enregistrement (une seule sauvegarde).
+            e.currentTarget.blur();
+          }
+        }}
+        onBlur={(e) => commit(e.target.value)}
+      />
+      {invalid ? (
+        <span role="alert" className="text-[11px] font-normal text-destructive">
+          Montant invalide (ex. 12 500,50)
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 function managerObjectiveCellTitle(row: OrganisationVolumeRow): string | undefined {
@@ -234,16 +295,13 @@ export function OrganisationBranchVolumesPanel({
                         {formatFilleulVolumeDisplay(row.managerVolume)}
                       </span>
                     ) : (
-                      <Input
+                      <VolumeCellInput
                         key={`mgr-${row.contactId}-${contact.filleul_volume_manager ?? "empty"}`}
                         className="h-8 w-full max-w-[9rem] ml-auto text-right tabular-nums bg-background"
-                        inputMode="decimal"
-                        placeholder="0"
                         title={managerObjectiveCellTitle(row)}
+                        ariaLabel={`Objectif Manager (cumul) — ${row.label}`}
                         defaultValue={formatFilleulVolumeField(row.managerVolume)}
-                        onBlur={(e) => {
-                          const parsed = parseFilleulVolumeField(e.target.value);
-                          if (parsed == null) return;
+                        onCommit={(parsed) => {
                           if (parsed === row.managerVolume) return;
                           void onManagerVolumeSave(contact, parsed === 0 ? null : parsed);
                         }}
@@ -256,15 +314,12 @@ export function OrganisationBranchVolumesPanel({
                         {formatFilleulVolumeDisplay(row.ownVolume)}
                       </span>
                     ) : (
-                      <Input
+                      <VolumeCellInput
                         key={`vol-${row.contactId}-${liveMode ? contact.filleul_volume ?? "empty" : row.ownVolume}`}
-                        className={cn("h-8 w-full max-w-[8rem] ml-auto text-right tabular-nums")}
-                        inputMode="decimal"
-                        placeholder="0"
+                        className="h-8 w-full max-w-[8rem] ml-auto text-right tabular-nums"
+                        ariaLabel={`Volume perso de l'exercice — ${row.label}`}
                         defaultValue={formatFilleulVolumeField(row.ownVolume)}
-                        onBlur={(e) => {
-                          const parsed = parseFilleulVolumeField(e.target.value);
-                          if (parsed == null) return;
+                        onCommit={(parsed) => {
                           if (parsed === row.ownVolume) return;
                           void onVolumeSave(contact, liveMode && parsed === 0 ? null : parsed);
                         }}
@@ -280,19 +335,17 @@ export function OrganisationBranchVolumesPanel({
                     title={exerciceBranchCellTitle(row)}
                   >
                     {canEditBranchVolume ? (
-                      <Input
+                      <VolumeCellInput
                         key={`branch-${row.contactId}-${row.branchVolume}`}
                         className="h-8 w-full max-w-[9rem] ml-auto text-right tabular-nums bg-background"
-                        inputMode="decimal"
-                        placeholder="0"
+                        ariaLabel={`Volume organisation de l'exercice — ${row.label}`}
                         defaultValue={formatFilleulVolumeField(exerciceDisplay)}
-                        onBlur={(e) => {
-                          const parsed = parseFilleulVolumeField(e.target.value);
-                          if (parsed == null) return;
+                        onCommit={(parsed) => {
                           if (parsed === row.branchVolume) return;
                           void onBranchVolumeSave?.(contact, parsed);
                         }}
                       />
+
                     ) : (
                       formatFilleulVolumeDisplay(exerciceDisplay)
                     )}

@@ -30,6 +30,9 @@ import {
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 import { TeamLockBanner } from "@/components/team/TeamLockBanner";
 import { useTeamFormRecordLock } from "@/hooks/useTeamFormRecordLock";
+import { useUnsavedCloseGuard } from "@/hooks/useUnsavedCloseGuard";
+import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface PartenaireFormProps {
   open: boolean;
@@ -59,6 +62,11 @@ export function PartenaireForm({
     onOpenChange,
     entityType: "partenaire",
     entityId: partenaire?.id,
+  });
+  const closeGuard = useUnsavedCloseGuard({
+    open,
+    onClose: () => onOpenChange(false),
+    stacked: nestedSheet,
   });
 
   useLockAppMainScroll(open && nestedSheet);
@@ -90,17 +98,19 @@ export function PartenaireForm({
         const created = await createPartenaire(formData);
         onSuccess(created.id);
       }
+      closeGuard.resetDirty();
       onOpenChange(false);
     } catch (error) {
       console.error("Error saving partenaire:", error);
-      alert("Erreur lors de l'enregistrement: " + String(error));
+      toast.error(userErrorMessage(error, "Impossible d'enregistrer le partenaire"));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
+    <>
+    <Dialog open={open} onOpenChange={closeGuard.handleOpenChange} modal={!nestedSheet}>
       <DialogContent
         hideOverlay={nestedSheet}
         className={nestedStackedDialogClass("max-w-md", nestedSheet, "deep")}
@@ -122,7 +132,7 @@ export function PartenaireForm({
           message={teamLock.error}
         />
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" {...closeGuard.trackDirtyProps}>
           <div className="space-y-2">
             <Label htmlFor="raison_sociale">Nom *</Label>
             <Input
@@ -173,11 +183,11 @@ export function PartenaireForm({
             </p>
           </div>
 
-          <DialogFooter className="pt-4">
+          <DialogFooter className="pt-4" data-no-dirty>
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
+              onClick={closeGuard.requestClose}
             >
               Annuler
             </Button>
@@ -189,5 +199,7 @@ export function PartenaireForm({
         </PortalLayerProvider>
       </DialogContent>
     </Dialog>
+    {closeGuard.discardDialog}
+    </>
   );
 }

@@ -48,8 +48,8 @@ export function PrescripteursPageHelp() {
         </p>
         <p>
           La recherche porte sur <strong className="text-foreground">tout le réseau</strong>, pas
-          seulement les racines. Depuis une fiche contact → Couple / foyer, le bouton « Voir le
-          réseau » ouvre cette page sur la bonne branche.
+          seulement les prescripteurs en tête de réseau. Depuis une fiche contact → Couple / foyer,
+          le bouton « Voir le réseau » ouvre cette page sur la bonne branche.
         </p>
       </div>
     </details>
@@ -104,7 +104,7 @@ export function PrescripteursStatCards({
       <StatCard
         title="Patrimoine apporté"
         value={totalPatrimoineLabel}
-        description="Hors patrimoine personnel des racines"
+        description="Hors patrimoine personnel des prescripteurs"
         icon={TrendingUp}
         accentColor="#047857"
         iconColor="text-emerald-700"

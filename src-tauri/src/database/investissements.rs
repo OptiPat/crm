@@ -503,11 +503,8 @@ impl super::Database {
         } else {
             0
         };
-        if self
-            .get_investissement_by_id(id)
-            .ok()
-            .is_some_and(|i| i.statut == "CLOTURE")
-        {
+        let previous = self.get_investissement_by_id(id).ok();
+        if previous.as_ref().is_some_and(|i| i.statut == "CLOTURE") {
             versement_programme = 0;
         }
         let reinvestissement_dividendes =
@@ -664,6 +661,18 @@ impl super::Database {
 
         let inv = self.get_investissement_by_id(id)?;
         self.sync_contacts_statut_suivi_after_investissement_change(inv.contact_id, inv.foyer_id)?;
+        // Changement de titulaire : l'ancien titulaire est recalculé lui aussi.
+        if let Some(prev) = previous {
+            if prev.contact_id != inv.contact_id || prev.foyer_id != inv.foyer_id {
+                if let Some(old_contact) = prev.contact_id.filter(|c| Some(*c) != inv.contact_id) {
+                    self.sync_dernier_contact_from_investissements(old_contact)?;
+                }
+                self.sync_contacts_statut_suivi_after_investissement_change(
+                    prev.contact_id,
+                    prev.foyer_id,
+                )?;
+            }
+        }
         Ok(inv)
     }
 

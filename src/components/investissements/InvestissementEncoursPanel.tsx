@@ -48,6 +48,7 @@ import {
 import { ChartEmpty, ChartLoading, ChartTooltipBox } from "@/components/dashboard/dashboard-ui";
 import { ChevronDown, Loader2, Trash2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirmDialog } from "@/components/pipe/useConfirmDialog";
 import { cn } from "@/lib/utils";
 
 const ENCOURS_COLOR = "#C9A227";
@@ -147,6 +148,7 @@ export function InvestissementEncoursPanel({
   const [versements, setVersements] = useState<InvestissementVersement[]>([]);
   const [montant, setMontant] = useState("");
   const [dateValorisation, setDateValorisation] = useState(todayLocal());
+  const deleteConfirm = useConfirmDialog();
 
   const loadHistory = useCallback(async () => {
     try {
@@ -253,14 +255,15 @@ export function InvestissementEncoursPanel({
   };
 
   const handleDelete = async (id: number) => {
-    if (
-      !confirm(
-        isValorisation
-          ? "Supprimer cette valorisation ?"
-          : "Supprimer ce relevé d'encours ?"
-      )
-    )
-      return;
+    const ok = await deleteConfirm.confirm({
+      title: isValorisation
+        ? "Supprimer cette valorisation ?"
+        : "Supprimer ce relevé d'encours ?",
+      description: "Cette action est irréversible.",
+      confirmLabel: "Supprimer",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await deleteInvestissementValorisation(id);
       toast.success("Relevé supprimé");
@@ -274,6 +277,7 @@ export function InvestissementEncoursPanel({
 
   return (
     <div className="space-y-4 border-t pt-4">
+      {deleteConfirm.dialog}
       <div className="flex items-start gap-2">
         <TrendingUp className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" aria-hidden />
         <div>

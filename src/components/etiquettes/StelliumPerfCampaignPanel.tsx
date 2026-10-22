@@ -240,7 +240,7 @@ export function StelliumPerfCampaignPanel({
             <li className="flex items-start gap-2">
               <StepIcon done={sendDone} />
               <span>
-                <strong className="font-normal">3. Envoi Gmail</strong>
+                <strong className="font-normal">3. Envoi par email</strong>
                 {prepareDone ? (
                   <>
                     {" "}

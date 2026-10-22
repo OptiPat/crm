@@ -11,6 +11,7 @@ import {
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 interface PipeProspectionContactSectionProps {
   contactId: number;
@@ -44,7 +45,7 @@ export function PipeProspectionContactSection({
       setSourceLead(loadedContact.source_lead ?? "");
       setAllContacts(contacts);
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de charger le contact"));
     } finally {
       setLoading(false);
     }
@@ -76,7 +77,7 @@ export function PipeProspectionContactSection({
       setContact(updated);
       contactRef.current = updated;
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer le contact"));
       throw err;
     } finally {
       setSaving(false);

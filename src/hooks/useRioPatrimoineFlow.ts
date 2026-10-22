@@ -22,6 +22,7 @@ import {
   patrimoineOwnerLabel,
 } from "@/lib/documents/rio-patrimoine-target";
 import type { ExtractedData } from "@/lib/pdf";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type UploadedFile = { path: string; name: string; size: number };
 
@@ -267,7 +268,7 @@ export function useRioPatrimoineFlow(options: {
         options.onOpenChange(false);
       } catch (error) {
         console.error("❌ Erreur lors de la création des investissements:", error);
-        toast.error("Erreur lors de la création des investissements : " + String(error));
+        toast.error(userErrorMessage(error, "Impossible de créer les investissements"));
       } finally {
         callbacks.setLoading(false);
       }

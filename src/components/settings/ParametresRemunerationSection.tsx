@@ -24,6 +24,7 @@ import {
   setTpcForFiscalYear,
 } from "@/lib/pipe/remuneration-settings";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function ParametresRemunerationSection() {
   const [fiscalYear, setFiscalYear] = useState(() => currentFiscalYearLabel());
@@ -62,7 +63,7 @@ export function ParametresRemunerationSection() {
       setTpc(parsed as RemunerationTpcPercent);
       toast.success(`TPC ${parsed} % enregistré pour ${fiscalYear}`);
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer le taux"));
     } finally {
       setSaving(false);
     }
@@ -75,7 +76,7 @@ export function ParametresRemunerationSection() {
       setCifEnabled(checked);
       toast.success(checked ? "Mode CIF activé" : "Mode CIF désactivé");
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer l'option CIF"));
     } finally {
       setSaving(false);
     }

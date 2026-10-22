@@ -16,7 +16,7 @@ export function isTransientEmailSendError(message: string): boolean {
 
 export function humanizeTransientEmailSendError(raw: string): string {
   if (isTransientEmailSendError(raw)) {
-    return "Gmail saturé (quota minute) — nouvel essai automatique dans 1 min.";
+    return "Messagerie saturée (trop d'envois en une minute) — nouvel essai automatique dans 1 min.";
   }
   return raw;
 }

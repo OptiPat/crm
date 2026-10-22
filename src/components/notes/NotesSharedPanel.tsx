@@ -31,6 +31,8 @@ import { buildSharedNotePrintDocument } from "@/lib/notes/note-print-document";
 import { useNotePrint } from "@/components/notes/NotePrintProvider";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { usePageLeaveGuard } from "@/lib/navigation/page-leave-guard";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 const EMPTY = { title: "", content_html: "" };
 
@@ -79,6 +81,7 @@ export function NotesSharedPanel({ isActive = true }: { isActive?: boolean }) {
 
   const isEditing = editMode !== "view";
   const isDirty = isEditing && !draftsEqual(draft, baseline);
+  usePageLeaveGuard(isDirty);
 
   const loadLocal = useCallback(async () => {
     setLoading(true);
@@ -87,7 +90,7 @@ export function NotesSharedPanel({ isActive = true }: { isActive?: boolean }) {
       setNotes(rows);
       setSelectedId((prev) => pickSelectedId(prev, rows));
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible de charger les notes partagées"));
     } finally {
       setLoading(false);
     }
@@ -106,7 +109,7 @@ export function NotesSharedPanel({ isActive = true }: { isActive?: boolean }) {
       }
       notifyNotesChanged();
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible de synchroniser les notes partagées"));
     } finally {
       setSyncing(false);
     }
@@ -217,7 +220,7 @@ export function NotesSharedPanel({ isActive = true }: { isActive?: boolean }) {
         notifyNotesChanged();
         toast.success("Complément publié.");
       } catch (error) {
-        toast.error(String(error));
+        toast.error(userErrorMessage(error, "Impossible de publier le complément"));
       } finally {
         setSaving(false);
       }
@@ -246,7 +249,7 @@ export function NotesSharedPanel({ isActive = true }: { isActive?: boolean }) {
       notifyNotesChanged();
       toast.success(editMode === "create" ? "Note partagée publiée." : "Note mise à jour.");
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible d'enregistrer la note partagée"));
     } finally {
       setSaving(false);
     }
@@ -263,7 +266,7 @@ export function NotesSharedPanel({ isActive = true }: { isActive?: boolean }) {
       notifyNotesChanged();
       toast.success("Note supprimée.");
     } catch (error) {
-      toast.error(String(error));
+      toast.error(userErrorMessage(error, "Impossible de supprimer la note partagée"));
     } finally {
       setSaving(false);
       setShowDeleteDialog(false);

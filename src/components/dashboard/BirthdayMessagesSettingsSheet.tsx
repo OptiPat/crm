@@ -49,6 +49,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type RegistreTab = "tu" | "vous";
 type GenreTab = "m" | "f" | "n";
@@ -263,9 +264,9 @@ function ContactPreviewBlock({
 
   return (
     <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
-      <Label className="text-sm font-medium">Aperçu contact du jour</Label>
+      <Label htmlFor="birthday-preview-contact" className="text-sm font-medium">Aperçu contact du jour</Label>
       <Select value={contactId} onValueChange={setContactId}>
-        <SelectTrigger className="h-9 text-sm">
+        <SelectTrigger id="birthday-preview-contact" className="h-9 text-sm">
           <SelectValue placeholder="Choisir un contact" />
         </SelectTrigger>
         <SelectContent>
@@ -346,7 +347,7 @@ export function BirthdayMessagesSettingsSheet({
       setBuiltinBodies(builtin);
       setDraft(buildBirthdayEditorDraft(settings, builtin));
     } catch (error) {
-      toast.error(`Impossible de charger les messages : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible de charger les messages"));
       setDraft(emptyDraft());
       setBuiltinBodies(emptyBuiltin());
     } finally {
@@ -372,7 +373,7 @@ export function BirthdayMessagesSettingsSheet({
       );
       onOpenChange(false);
     } catch (error) {
-      toast.error(`Enregistrement impossible : ${String(error)}`);
+      toast.error(userErrorMessage(error, "Impossible d'enregistrer les messages"));
     } finally {
       setSaving(false);
     }

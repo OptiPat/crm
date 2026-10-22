@@ -125,6 +125,7 @@ import {
   type CampaignMessagingChannel,
 } from "@/lib/emails/campaign-messaging-relance";
 import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type EnvoisSubTab =
   | "ready"
@@ -179,6 +180,9 @@ export function EtiquetteEnvoisTab({
   const [cancelConfirmItem, setCancelConfirmItem] =
     useState<EtiquetteEmailQueueItem | null>(null);
   const [dismissConfirmItem, setDismissConfirmItem] =
+    useState<EtiquetteEmailQueueItem | null>(null);
+  // « Retirer du suivi » : pas d'annulation possible côté base → confirmation avant.
+  const [followupDismissItem, setFollowupDismissItem] =
     useState<EtiquetteEmailQueueItem | null>(null);
   const [bulkConfirm, setBulkConfirm] = useState<{
     action: EnvoisBulkRemoveAction;
@@ -350,7 +354,7 @@ export function EtiquetteEnvoisTab({
       }
       onQueueChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur lors de la restauration");
+      toast.error(userErrorMessage(e, "Impossible de restaurer l'envoi"));
     } finally {
       setRepairingMisplaced(false);
     }
@@ -393,11 +397,15 @@ export function EtiquetteEnvoisTab({
       toast.info("Aucun bulletin SCPI en file pour ce trimestre.");
       return;
     }
-    const blocked = scpiBatchReadyItems.find((i) => isCampaignTemplateSendBlocked(i));
-    if (blocked) {
+    // Lot SCPI : tout ou rien. Un seul bulletin bloqué arrête l'envoi, avec sa raison.
+    const blockedItems = scpiBatchReadyItems.filter((i) => isCampaignTemplateSendBlocked(i, cgpConfig));
+    if (blockedItems.length > 0) {
+      const reason =
+        getCampaignTemplateSendBlockReason(blockedItems[0], cgpConfig) ??
+        "relancez Préparer (checklist SCPI).";
+      const n = blockedItems.length;
       toast.warning(
-        getCampaignTemplateSendBlockReason(blocked, cgpConfig) ??
-          "Envoi SCPI bloqué — relancez Préparer (checklist SCPI)."
+        `Envoi des bulletins SCPI bloqué : ${n} bulletin${n > 1 ? "s" : ""} ne ${n > 1 ? "peuvent" : "peut"} pas partir — ${reason}`
       );
       return;
     }
@@ -546,11 +554,14 @@ export function EtiquetteEnvoisTab({
   const selectedReadyItems = readyDisplayed.filter((i) =>
     selectedIds.has(getEtiquetteQueueItemKey(i))
   );
-  const selectedReadySendBlocked = selectedReadyItems.some((i) =>
-    isCampaignTemplateSendBlocked(i)
-  );
+  const selectedReadyBlockedCount = selectedReadyItems.filter((i) =>
+    isCampaignTemplateSendBlocked(i, cgpConfig)
+  ).length;
+  // Bloqués (SCPI / Stellium / lien d'agenda) exclus du lot dans la fenêtre d'envoi ; tout bloqué = rien à envoyer.
+  const selectedReadySendBlocked =
+    selectedReadyItems.length > 0 && selectedReadyBlockedCount === selectedReadyItems.length;
   const selectedReadySendBlockReason = selectedReadyItems
-    .map((i) => getCampaignTemplateSendBlockReason(i))
+    .map((i) => getCampaignTemplateSendBlockReason(i, cgpConfig))
     .find(Boolean);
   const selectedFollowupRelanceItems = followup.filter(
     (i) => {
@@ -603,7 +614,7 @@ export function EtiquetteEnvoisTab({
       await loadQueue({ silent: true });
       onQueueChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur");
+      toast.error(userErrorMessage(e, "Impossible de retirer les envois sélectionnés"));
     } finally {
       setBulkRemoving(false);
     }
@@ -633,7 +644,7 @@ export function EtiquetteEnvoisTab({
       notifyRelationChanged(item.contact_id);
       await loadQueue();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur");
+      toast.error(userErrorMessage(e, "Impossible d'enregistrer la réponse"));
     }
   };
 
@@ -646,7 +657,7 @@ export function EtiquetteEnvoisTab({
       toast.success("Suivi retiré pour cet envoi");
       await loadQueue();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur");
+      toast.error(userErrorMessage(e, "Impossible d'ignorer la relance"));
     }
   };
 
@@ -668,7 +679,7 @@ export function EtiquetteEnvoisTab({
       await loadQueue({ silent: true });
       onQueueChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur");
+      toast.error(userErrorMessage(e, "Impossible d'annuler l'envoi"));
     } finally {
       setCancelling(false);
     }
@@ -705,7 +716,7 @@ export function EtiquetteEnvoisTab({
       await loadQueue({ silent: true });
       onQueueChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur");
+      toast.error(userErrorMessage(e, "Impossible de retirer l'envoi annulé"));
     } finally {
       setDismissing(false);
     }
@@ -749,7 +760,7 @@ export function EtiquetteEnvoisTab({
       await loadQueue();
       onQueueChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur");
+      toast.error(userErrorMessage(e, "Impossible de préparer la relance"));
     } finally {
       setRelancing(false);
     }
@@ -777,7 +788,7 @@ export function EtiquetteEnvoisTab({
       await loadQueue();
       onQueueChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur");
+      toast.error(userErrorMessage(e, "Impossible d'enregistrer la relance"));
     }
   };
 
@@ -794,7 +805,7 @@ export function EtiquetteEnvoisTab({
         duration: 4000,
       });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(userErrorMessage(e, "Impossible de préparer la relance"));
     }
   };
 
@@ -1167,7 +1178,8 @@ export function EtiquetteEnvoisTab({
                       size="sm"
                       variant="ghost"
                       title="Retirer du suivi"
-                      onClick={() => void handleDismissFollowup(item)}
+                      aria-label={`Retirer ${item.contact_prenom} ${item.contact_nom} du suivi`}
+                      onClick={() => setFollowupDismissItem(item)}
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -1476,15 +1488,21 @@ export function EtiquetteEnvoisTab({
                         isEtiquetteEmailSendActive()
                       }
                       title={
-                        selectedReadySendBlockReason ??
-                        (selectedReadySendBlocked
-                          ? "Sélection avec envoi SCPI bloqué — relancez Préparer"
-                          : undefined)
+                        selectedReadySendBlocked ?
+                          (selectedReadySendBlockReason ??
+                          "Sélection avec envoi SCPI bloqué — relancez Préparer")
+                        : selectedReadyBlockedCount > 0 ?
+                          `${selectedReadyBlockedCount} email${selectedReadyBlockedCount > 1 ? "s" : ""} bloqué${selectedReadyBlockedCount > 1 ? "s" : ""} ${selectedReadyBlockedCount > 1 ? "seront" : "sera"} exclu${selectedReadyBlockedCount > 1 ? "s" : ""} de l'envoi`
+                        : undefined
                       }
                       onClick={() => setBatchOpen(true)}
                     >
                       <Send className="h-4 w-4 mr-1" />
-                      Envoyer la sélection ({selectedReadyItems.length})
+                      Envoyer la sélection (
+                      {selectedReadyBlockedCount > 0 ?
+                        `${selectedReadyItems.length - selectedReadyBlockedCount} sur ${selectedReadyItems.length}`
+                      : selectedReadyItems.length}
+                      )
                     </Button>
                   }
                 />
@@ -1764,6 +1782,46 @@ export function EtiquetteEnvoisTab({
               }}
             >
               {bulkRemoving ? "Traitement…" : "Confirmer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!followupDismissItem}
+        onOpenChange={(open) => {
+          if (!open) setFollowupDismissItem(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Retirer du suivi ?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  <strong className="text-foreground">
+                    {followupDismissItem?.contact_prenom} {followupDismissItem?.contact_nom}
+                  </strong>
+                  {" — "}
+                  {followupDismissItem?.etiquette_nom}
+                </p>
+                <p>
+                  Ce contact ne sera plus suivi pour cet envoi (plus de relance proposée). Ce
+                  retrait ne peut pas être annulé.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const item = followupDismissItem;
+                setFollowupDismissItem(null);
+                if (item) void handleDismissFollowup(item);
+              }}
+            >
+              Retirer du suivi
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

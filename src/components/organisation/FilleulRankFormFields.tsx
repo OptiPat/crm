@@ -33,12 +33,12 @@ export function FilleulRankFormFields({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div className="space-y-2">
-        <Label>Titre (Organisation)</Label>
+        <Label htmlFor="filleul-rank-titre">Titre (Organisation)</Label>
         <Select
           value={titre || SELECT_NONE}
           onValueChange={(v) => onTitreChange(v === SELECT_NONE ? undefined : v)}
         >
-          <SelectTrigger>
+          <SelectTrigger id="filleul-rank-titre">
             <SelectValue placeholder="Aucun" />
           </SelectTrigger>
           <SelectContent>
@@ -55,12 +55,12 @@ export function FilleulRankFormFields({
         </Select>
       </div>
       <div className="space-y-2">
-        <Label>Qualification</Label>
+        <Label htmlFor="filleul-rank-qualification">Qualification</Label>
         <Select
           value={qualification || SELECT_NONE}
           onValueChange={(v) => onQualificationChange(v === SELECT_NONE ? undefined : v)}
         >
-          <SelectTrigger>
+          <SelectTrigger id="filleul-rank-qualification">
             <SelectValue placeholder="Aucune" />
           </SelectTrigger>
           <SelectContent>

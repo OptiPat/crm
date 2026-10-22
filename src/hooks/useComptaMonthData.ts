@@ -9,6 +9,7 @@ import {
   type ComptaDeplacement,
   type ComptaEncaissement,
 } from "@/lib/api/tauri-compta";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function useComptaMonthData(year: number, month: number) {
   const [config, setConfig] = useState<ComptaConfig | null>(null);
@@ -33,7 +34,7 @@ export function useComptaMonthData(year: number, month: number) {
       setEncaissements(enc);
       setDeplacements(depl);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur de chargement");
+      setError(userErrorMessage(e, "Impossible de charger le mois"));
     } finally {
       setLoading(false);
     }

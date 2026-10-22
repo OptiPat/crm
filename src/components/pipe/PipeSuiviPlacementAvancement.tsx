@@ -27,6 +27,7 @@ import {
 import { placementOperationIsDeclaredInWorkflow } from "@/lib/placement/placement-operations-ui";
 import { formatPlacementBoardActeLabel } from "@/lib/placement/placement-operation-board";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 export function PipeSuiviPlacementAvancement({ pipeId }: { pipeId: number }) {
   const [operations, setOperations] = useState<PlacementOperation[]>([]);
@@ -74,7 +75,7 @@ export function PipeSuiviPlacementAvancement({ pipeId }: { pipeId: number }) {
       toast.success("Renvoi partenaire enregistré — en attente de la réponse Stellium");
       await reload();
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer la relance partenaire"));
     } finally {
       setResentingId(null);
     }
@@ -90,7 +91,7 @@ export function PipeSuiviPlacementAvancement({ pipeId }: { pipeId: number }) {
       setDismissTarget(null);
       await reload();
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de masquer l'opération"));
     } finally {
       setDismissingId(null);
     }

@@ -71,6 +71,7 @@ import {
   stopWheelPropagation,
   useLockAppMainScroll,
 } from "@/lib/ui/nested-sheet-scroll";
+import { usePageLeaveGuard } from "@/lib/navigation/page-leave-guard";
 import { ContactPersonSearch } from "./ContactPersonSearch";
 import {
   formatSriWithDefinition,
@@ -377,6 +378,7 @@ export function ContactForm({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [dirty, setDirty] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  usePageLeaveGuard(open && dirty);
   const [addressFromFoyer, setAddressFromFoyer] = useState(false);
   const foyerAddressAppliedRef = useRef(false);
   const [investissementChoice, setInvestissementChoice] =
@@ -1686,14 +1688,17 @@ export function ContactForm({
       <AlertDialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
         <AlertDialogContent stacked={nestedSheet}>
           <AlertDialogHeader>
-            <AlertDialogTitle>Modifications non enregistrées</AlertDialogTitle>
-            <AlertDialogDescription>
-              Des changements n&apos;ont pas été sauvegardés. Voulez-vous vraiment fermer ?
-            </AlertDialogDescription>
+            <AlertDialogTitle>Quitter sans enregistrer ?</AlertDialogTitle>
+            <AlertDialogDescription>Vos modifications seront perdues.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Continuer l&apos;édition</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDiscard}>Quitter sans enregistrer</AlertDialogAction>
+            <AlertDialogAction
+              onClick={confirmDiscard}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Quitter sans enregistrer
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

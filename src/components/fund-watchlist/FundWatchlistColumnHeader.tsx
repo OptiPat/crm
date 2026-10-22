@@ -23,6 +23,8 @@ import { cn } from "@/lib/utils";
 interface FundWatchlistColumnHeaderProps {
   column: FundWatchlistTableColumnKey;
   label: string;
+  /** Infobulle explicative (sinon le libellé). */
+  description?: string;
   align?: "left" | "right" | "center";
   className?: string;
   style?: CSSProperties;
@@ -194,6 +196,7 @@ function FilterPopoverContent({
 export function FundWatchlistColumnHeader({
   column,
   label,
+  description,
   align = "left",
   className,
   style,
@@ -262,7 +265,7 @@ export function FundWatchlistColumnHeader({
           align === "center" && "items-center",
           align === "left" && "items-start"
         )}
-        title={isCompact ? label : undefined}
+        title={isCompact ? (description ?? label) : undefined}
       >
         {!isCompact && (
           <span
@@ -274,7 +277,7 @@ export function FundWatchlistColumnHeader({
                   ? "text-center whitespace-normal"
                   : "text-left"
             )}
-            title={label}
+            title={description ?? label}
           >
             {label}
           </span>

@@ -47,6 +47,7 @@ import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { cn } from "@/lib/utils";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 
 type FoyersProps = {
   onNavigate?: (page: string) => void;
@@ -58,6 +59,11 @@ export function Foyers({ onNavigate }: FoyersProps) {
     loadFoyersPagePreferences()
   );
   const [foyers, setFoyers] = useState<Foyer[]>([]);
+  // Liste déjà affichée : un échec de rechargement est signalé par un toast.
+  const foyersCountRef = useRef(0);
+  useEffect(() => {
+    foyersCountRef.current = foyers.length;
+  }, [foyers]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [patrimoineParFoyer, setPatrimoineParFoyer] = useState<Record<number, number>>(
     {}
@@ -69,6 +75,7 @@ export function Foyers({ onNavigate }: FoyersProps) {
     Record<number, Investissement[]>
   >({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [expandedFoyerId, setExpandedFoyerId] = useState<number | null>(
     () => loadFoyersPagePreferences().expandedFoyerId
   );
@@ -87,6 +94,7 @@ export function Foyers({ onNavigate }: FoyersProps) {
   }, []);
 
   const loadFoyers = useCallback(async () => {
+    setLoadError(false);
     try {
       await cleanupOrphanedData();
       const [foyersData, contactsData] = await Promise.all([
@@ -111,7 +119,8 @@ export function Foyers({ onNavigate }: FoyersProps) {
       setPatrimoineParFoyer(patrimoines);
     } catch (error) {
       console.error("Error loading foyers:", error);
-      toast.error("Impossible de charger les foyers");
+      setLoadError(true);
+      if (foyersCountRef.current > 0) toast.error("Impossible de recharger les foyers");
     } finally {
       setLoading(false);
     }
@@ -371,7 +380,7 @@ export function Foyers({ onNavigate }: FoyersProps) {
                   assertCanExport(canExport);
                   downloadFoyerMembersCsv(expandedRow);
                 } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "Export non autorisé");
+                  toast.error(userErrorMessage(e, "Export impossible"));
                 }
               }
             : undefined
@@ -390,7 +399,21 @@ export function Foyers({ onNavigate }: FoyersProps) {
         </CardHeader>
 
         <CardContent className="pt-0 space-y-3">
-          {filteredRows.length === 0 ? (
+          {loadError && foyers.length === 0 ? (
+            <div className="py-14 text-center space-y-3 rounded-xl border border-dashed border-border/80">
+              <p className="text-sm text-destructive">Impossible de charger les foyers.</p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setLoading(true);
+                  void loadFoyers();
+                }}
+              >
+                Réessayer
+              </Button>
+            </div>
+          ) : filteredRows.length === 0 ? (
             <div className="py-14 text-center rounded-xl border border-dashed border-border/80 bg-muted/15">
               <p className="font-medium text-foreground/90">
                 {prefs.searchQuery.trim() || prefs.statFilter || prefs.typeFilter !== "ALL"
@@ -402,12 +425,22 @@ export function Foyers({ onNavigate }: FoyersProps) {
                   ? "Modifiez la recherche ou les filtres."
                   : "Créez un foyer fiscal pour regrouper contacts et patrimoine commun."}
               </p>
-              {!prefs.searchQuery.trim() && !prefs.statFilter && prefs.typeFilter === "ALL" && (
+              {!prefs.searchQuery.trim() && !prefs.statFilter && prefs.typeFilter === "ALL" ? (
                 <Button onClick={() => setShowForm(true)} className="gap-2">
                   <Plus className="h-4 w-4" />
                   Créer un foyer
                 </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    updatePrefs({ searchQuery: "", statFilter: null, typeFilter: "ALL" })
+                  }
+                >
+                  Effacer la recherche et les filtres
+                </Button>
               )}
+
             </div>
           ) : (
             filteredRows.map((row) => {
