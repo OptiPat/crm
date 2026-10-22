@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  filterArchivedPlacementRowsForBoard,
   filterPlacementRowsForBoard,
   getPlacementBoardColumn,
   groupPlacementOperationsByBoardColumn,
@@ -11,6 +12,7 @@ import {
   formatPlacementBoardDateTime,
 } from "@/lib/placement/placement-operation-board";
 import type { PlacementOperationWithContact } from "@/lib/api/tauri-box-placement";
+import { placementOperationIsArchivable } from "@/lib/placement/placement-operation-tracking";
 
 const base = {
   pipe_timeline_entry_id: 5,
@@ -355,5 +357,48 @@ describe("placement-operation-board", () => {
     const formatted = formatPlacementBoardDateTime(1_721_086_400);
     expect(formatted).toMatch(/\d{2}\/\d{2}\/\d{4}/);
     expect(formatted).toMatch(/\d{2}:\d{2}/);
+  });
+  it("tableau : suivis archivés exclus par défaut, listés à part", () => {
+    const notified = row({
+      id: 10,
+      status: "CONFORME",
+      client_notified_at: 1_700_000_000,
+      contact_nom: "DUPONT",
+      contact_prenom: "Jean",
+    });
+    const archived = row({
+      id: 11,
+      status: "CONFORME",
+      client_notified_at: 1_700_000_000,
+      archived_at: 1_700_000_500,
+      contact_nom: "MARTIN",
+      contact_prenom: "Anne",
+    });
+    const archivedThenDismissed = row({
+      id: 12,
+      status: "CONFORME",
+      client_notified_at: 1_700_000_000,
+      archived_at: 1_700_000_500,
+      dismissed_at: 1_700_000_600,
+      contact_nom: "DURAND",
+      contact_prenom: "Paul",
+    });
+    const rows = [notified, archived, archivedThenDismissed];
+    expect(filterPlacementRowsForBoard(rows).map((r) => r.operation.id)).toEqual([10]);
+    expect(filterArchivedPlacementRowsForBoard(rows).map((r) => r.operation.id)).toEqual([11]);
+  });
+  it("carte « Mail client le … » ⇔ archivable (même champ client_notified_at)", () => {
+    const cases = [
+      { status: "CONFORME", client_notified_at: 1_760_968_860, email_received_at: 1_760_900_000 },
+      { status: "CONFORME", client_notified_at: null, email_received_at: 1_760_900_000 },
+      { status: "CONFORME", client_notified_at: 1_760_968_860, archived_at: 1_760_970_000 },
+    ];
+    for (const extra of cases) {
+      const r = row({ id: 20, ...extra, contact_nom: "DUPONT", contact_prenom: "Jean" });
+      const date = formatPlacementBoardCardDate(r.operation, "client_mail");
+      const showsMailClient = date?.prefix === "Mail client le";
+      const archived = (r.operation.archived_at ?? 0) > 0;
+      expect(placementOperationIsArchivable(r.operation)).toBe(showsMailClient && !archived);
+    }
   });
 });

@@ -415,6 +415,8 @@ fn main() {
             update_placement_operation_investissement_id,
             mark_placement_partner_resent,
             dismiss_placement_operation,
+            archive_placement_operation,
+            unarchive_placement_operation,
             mark_placement_client_notified,
             reserve_placement_client_notification,
             release_placement_client_notification,

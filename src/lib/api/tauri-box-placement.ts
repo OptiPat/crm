@@ -31,6 +31,8 @@ export interface PlacementOperation {
   type_produit?: string | null;
   investissement_id?: number | null;
   pv_manual?: number | null;
+  /** Suivi archivé (mail client envoyé) : masqué du tableau, toujours compté ailleurs. */
+  archived_at?: number | null;
 }
 
 export interface PlacementOperationWithContact {
@@ -110,6 +112,7 @@ function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWi
     type_produit,
     investissement_id,
     pv_manual,
+    archived_at,
   } = raw;
   return {
     operation: {
@@ -134,6 +137,7 @@ function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWi
       type_produit,
       investissement_id,
       pv_manual,
+      archived_at,
     },
     contact_nom,
     contact_prenom,
@@ -207,6 +211,14 @@ export async function markPlacementPartnerResent(id: number): Promise<PlacementO
 
 export async function dismissPlacementOperation(id: number): Promise<PlacementOperation> {
   return invoke<PlacementOperation>("dismiss_placement_operation", { id });
+}
+
+export async function archivePlacementOperation(id: number): Promise<PlacementOperation> {
+  return invoke<PlacementOperation>("archive_placement_operation", { id });
+}
+
+export async function unarchivePlacementOperation(id: number): Promise<PlacementOperation> {
+  return invoke<PlacementOperation>("unarchive_placement_operation", { id });
 }
 
 export async function markPlacementClientNotified(id: number): Promise<void> {

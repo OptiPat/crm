@@ -1860,6 +1860,10 @@ pub struct PlacementOperation {
     /// PV manuel (immo) — saisi dans l'onglet Rémunération.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pv_manual: Option<f64>,
+    /// Archivage d'un suivi terminé (mail client envoyé) : masqué du tableau / suivi actif,
+    /// mais toujours compté (rémunération, investissement, historique).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archived_at: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

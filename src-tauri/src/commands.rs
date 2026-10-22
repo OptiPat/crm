@@ -3801,6 +3801,30 @@ pub fn dismiss_placement_operation(
 }
 
 #[tauri::command]
+pub fn archive_placement_operation(
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<crate::database::models::PlacementOperation, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .archive_placement_operation(id)
+        .map_err(|e| format!("Échec archivage opération partenaire: {}", e))
+}
+
+#[tauri::command]
+pub fn unarchive_placement_operation(
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<crate::database::models::PlacementOperation, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .unarchive_placement_operation(id)
+        .map_err(|e| format!("Échec désarchivage opération partenaire: {}", e))
+}
+
+#[tauri::command]
 pub fn mark_placement_client_notified(db: State<'_, DbState>, id: i64) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;

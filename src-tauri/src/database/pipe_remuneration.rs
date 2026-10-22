@@ -319,6 +319,7 @@ mod tests {
     use crate::database::pipe::{PIPE_STAGE_GAGNEE, PIPE_STAGE_R3, PIPE_TYPE_AFFAIRE};
     use crate::database::placement_operations::{OP_SOUSCRIPTION, OP_VERSEMENT};
     use crate::database::Database;
+    use rusqlite::params;
 
     fn seed_contact(db: &Database) -> i64 {
         db.create_contact(NewContact {
@@ -496,6 +497,59 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].pipe_id, affaire.id);
         assert_eq!(rows[0].montant_centimes, 5_000_000);
+    }
+
+    #[test]
+    fn archived_placement_still_counts_for_remuneration_and_investissement() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        let affaire = db
+            .create_pipe(NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "SCPI archivée".into(),
+                stage: Some(PIPE_STAGE_R3.into()),
+                notes: None,
+            })
+            .unwrap();
+        let op = db
+            .create_placement_operation(NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(affaire.id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_SOUSCRIPTION.into(),
+                product_label: Some("Corum Origin".into()),
+                stellium_label: Some("Souscription".into()),
+                montant_centimes: Some(3_000_000),
+                type_produit: Some("SCPI".into()),
+                investissement_id: None,
+            })
+            .unwrap();
+        db.conn
+            .execute(
+                "UPDATE placement_operations SET status = 'CONFORME', client_notified_at = 1700000000 WHERE id = ?1",
+                params![op.id],
+            )
+            .unwrap();
+        let archived = db.archive_placement_operation(op.id).unwrap();
+        assert!(archived.archived_at.unwrap_or(0) > 0);
+
+        let found = db
+            .find_remuneration_placement_for_pipe(affaire.id)
+            .unwrap()
+            .expect("archivé toujours trouvé");
+        assert_eq!(found.id, op.id);
+
+        db.set_pipe_stage(affaire.id, PIPE_STAGE_GAGNEE, None, None)
+            .unwrap();
+        let after = db.get_placement_operation_by_id(op.id).unwrap();
+        assert!(after.investissement_id.unwrap_or(0) > 0, "investissement créé");
+        assert!(after.archived_at.unwrap_or(0) > 0, "reste archivé");
+
+        let rows = db.list_pipe_remuneration_rows().unwrap();
+        assert!(rows.iter().any(|r| r.pipe_id == affaire.id));
     }
 
     #[test]

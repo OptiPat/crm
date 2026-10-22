@@ -233,10 +233,11 @@ export function PipeBoard({
                   onPointerCancel={handlePointerCancel}
                   className={cn(
                     "touch-none rounded-md border bg-card p-1.5 shadow-sm transition-opacity sm:rounded-lg sm:p-2",
-                    "cursor-grab active:cursor-grabbing",
+                    // Pointeur classique (la main « grab » est quasi invisible sur fond blanc sous Windows).
+                    "cursor-pointer hover:border-primary/40 hover:bg-muted/30",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     selected && "border-primary ring-1 ring-primary/40",
-                    dragging && "opacity-50"
+                    dragging && "cursor-grabbing opacity-50"
                   )}
                 >
                   <div className="flex items-start gap-1 select-none">

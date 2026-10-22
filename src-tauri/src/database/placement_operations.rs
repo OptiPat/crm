@@ -111,6 +111,7 @@ fn map_placement_row(row: &Row<'_>) -> Result<super::models::PlacementOperation>
         type_produit: row.get(18)?,
         investissement_id: row.get(19)?,
         pv_manual: row.get(20)?,
+        archived_at: row.get(21)?,
     })
 }
 
@@ -118,10 +119,24 @@ const PLACEMENT_SELECT: &str = "po.id, po.contact_id, po.pipe_id, po.pipe_timeli
     po.operation_type, po.product_label, po.stellium_label, po.status,
     po.gmail_message_id, po.email_subject, po.email_received_at, po.created_at, po.updated_at,
     po.client_notified_at, po.non_conforme_at, po.partner_resent_at, po.dismissed_at,
-    po.montant_centimes, po.type_produit, po.investissement_id, po.pv_manual";
+    po.montant_centimes, po.type_produit, po.investissement_id, po.pv_manual, po.archived_at";
 
 pub fn placement_operation_is_dismissed(op: &super::models::PlacementOperation) -> bool {
     op.dismissed_at.map(|t| t > 0).unwrap_or(false)
+}
+
+/// Archivé : mail client envoyé, carte sortie du tableau / suivi actif.
+/// Contrairement au retrait (`dismissed_at`), l'opération continue de compter partout
+/// (rémunération, création d'investissement à la Gagnée, historique).
+pub fn placement_operation_is_archived(op: &super::models::PlacementOperation) -> bool {
+    op.archived_at.map(|t| t > 0).unwrap_or(false)
+}
+
+/// Archivable : mail client envoyé, ni retirée ni déjà archivée.
+pub fn placement_operation_is_archivable(op: &super::models::PlacementOperation) -> bool {
+    placement_ts(op.client_notified_at)
+        && !placement_operation_is_dismissed(op)
+        && !placement_operation_is_archived(op)
 }
 
 fn placement_ts(value: Option<i64>) -> bool {
@@ -147,7 +162,7 @@ pub fn placement_operation_is_suivi_draft(op: &super::models::PlacementOperation
 
 /// Bloque l'archivage du pipe suivi : acte encore en cours (pas un acte terminé non retiré).
 pub fn placement_operation_blocks_pipe_archive(op: &super::models::PlacementOperation) -> bool {
-    if placement_operation_is_dismissed(op) {
+    if placement_operation_is_dismissed(op) || placement_operation_is_archived(op) {
         return false;
     }
     if op.status == STATUS_NON_CONFORME {
@@ -383,6 +398,13 @@ impl super::Database {
                 [],
             )?;
             println!("✅ Migration: pv_manual sur placement_operations");
+        }
+        if !self.table_has_column("placement_operations", "archived_at")? {
+            self.conn.execute(
+                "ALTER TABLE placement_operations ADD COLUMN archived_at INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: archived_at sur placement_operations");
         }
         Ok(())
     }
@@ -636,9 +658,9 @@ impl super::Database {
             let operation = map_placement_row(row)?;
             Ok(super::models::PlacementOperationWithContact {
                 operation,
-                contact_nom: row.get(21)?,
-                contact_prenom: row.get(22)?,
-                pipe_titre: row.get(23)?,
+                contact_nom: row.get(22)?,
+                contact_prenom: row.get(23)?,
+                pipe_titre: row.get(24)?,
             })
         })?;
         let mut result = Vec::new();
@@ -850,11 +872,63 @@ impl super::Database {
         if placement_operation_is_dismissed(&op) {
             return Ok(op);
         }
+        if placement_operation_is_archived(&op) {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "retrait impossible sur une opération archivée — la désarchiver d'abord".into(),
+            ));
+        }
         let now = now_unix();
         self.conn.execute(
             "UPDATE placement_operations SET dismissed_at = ?1, updated_at = ?2
              WHERE id = ?3",
             params![now, now, id],
+        )?;
+        self.get_placement_operation_by_id(id)
+    }
+
+    /// Archive un suivi terminé (mail client envoyé). Idempotent.
+    /// L'opération reste comptée (rémunération, investissement, historique) :
+    /// seuls le tableau et le suivi actif la masquent (filtrage côté front).
+    pub fn archive_placement_operation(
+        &self,
+        id: i64,
+    ) -> Result<super::models::PlacementOperation> {
+        let op = self.get_placement_operation_by_id(id)?;
+        if placement_operation_is_archived(&op) {
+            return Ok(op);
+        }
+        if placement_operation_is_dismissed(&op) {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "archivage impossible : opération retirée du suivi".into(),
+            ));
+        }
+        if !placement_operation_is_archivable(&op) {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "archivage impossible : le mail client n'a pas encore été envoyé".into(),
+            ));
+        }
+        let now = now_unix();
+        self.conn.execute(
+            "UPDATE placement_operations SET archived_at = ?1, updated_at = ?1
+             WHERE id = ?2 AND (archived_at IS NULL OR archived_at <= 0)",
+            params![now, id],
+        )?;
+        self.get_placement_operation_by_id(id)
+    }
+
+    /// Désarchive : la carte revient dans le tableau. Idempotent.
+    pub fn unarchive_placement_operation(
+        &self,
+        id: i64,
+    ) -> Result<super::models::PlacementOperation> {
+        let op = self.get_placement_operation_by_id(id)?;
+        if !placement_operation_is_archived(&op) {
+            return Ok(op);
+        }
+        let now = now_unix();
+        self.conn.execute(
+            "UPDATE placement_operations SET archived_at = NULL, updated_at = ?1 WHERE id = ?2",
+            params![now, id],
         )?;
         self.get_placement_operation_by_id(id)
     }
@@ -896,7 +970,9 @@ impl super::Database {
     pub fn release_placement_client_notification(&self, id: i64) -> Result<bool> {
         let now = now_unix();
         let updated = self.conn.execute(
-            "UPDATE placement_operations SET client_notified_at = NULL, updated_at = ?1
+            // Jamais archivé sans mail client envoyé.
+            "UPDATE placement_operations SET client_notified_at = NULL, archived_at = NULL,
+             updated_at = ?1
              WHERE id = ?2",
             params![now, id],
         )?;
@@ -1669,6 +1745,103 @@ mod tests {
     }
 
     #[test]
+    fn archive_placement_operation_requires_client_notified() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        let contact = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let op = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                operation_type: OP_ARBITRAGE.into(),
+                product_label: Some("Cristalliance Avenir".into()),
+                stellium_label: Some("Arbitrage libre".into()),
+                ..Default::default()
+            })
+            .unwrap();
+        assert!(db.archive_placement_operation(op.id).is_err(), "pas de mail client");
+        assert!(db.get_placement_operation_by_id(op.id).unwrap().archived_at.is_none());
+
+        db.conn
+            .execute(
+                "UPDATE placement_operations SET status = ?1, client_notified_at = 1700000000 WHERE id = ?2",
+                params![STATUS_CONFORME, op.id],
+            )
+            .unwrap();
+        let archived = db.archive_placement_operation(op.id).unwrap();
+        assert!(placement_operation_is_archived(&archived));
+        assert!(!placement_operation_is_archivable(&archived));
+        let again = db.archive_placement_operation(op.id).unwrap();
+        assert_eq!(again.archived_at, archived.archived_at, "idempotent");
+        assert!(
+            db.dismiss_placement_operation(op.id).is_err(),
+            "retrait refusé sur un archivé"
+        );
+
+        let restored = db.unarchive_placement_operation(op.id).unwrap();
+        assert!(restored.archived_at.is_none());
+        assert!(placement_operation_is_archivable(&restored));
+        let restored_again = db.unarchive_placement_operation(op.id).unwrap();
+        assert!(restored_again.archived_at.is_none());
+
+        let listed = db.list_placement_operations_with_contacts(true).unwrap();
+        let row = listed.iter().find(|r| r.operation.id == op.id).unwrap();
+        assert_eq!(row.contact_nom, "Dupont", "index colonnes après archived_at");
+        assert_eq!(row.contact_prenom, "Jean");
+    }
+
+    #[test]
+    fn release_client_notification_clears_archive() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        let contact = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let op = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                operation_type: OP_ARBITRAGE.into(),
+                stellium_label: Some("Arbitrage libre".into()),
+                ..Default::default()
+            })
+            .unwrap();
+        db.conn
+            .execute(
+                "UPDATE placement_operations SET status = ?1, client_notified_at = 1700000000 WHERE id = ?2",
+                params![STATUS_CONFORME, op.id],
+            )
+            .unwrap();
+        db.archive_placement_operation(op.id).unwrap();
+        db.release_placement_client_notification(op.id).unwrap();
+        let released = db.get_placement_operation_by_id(op.id).unwrap();
+        assert!(released.client_notified_at.is_none());
+        assert!(released.archived_at.is_none(), "pas d'archivé sans mail client");
+    }
+
+    #[test]
+    fn archive_placement_operation_refused_when_dismissed() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        let contact = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let op = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                operation_type: OP_ARBITRAGE.into(),
+                stellium_label: Some("Arbitrage libre".into()),
+                ..Default::default()
+            })
+            .unwrap();
+        db.conn
+            .execute(
+                "UPDATE placement_operations SET status = ?1, client_notified_at = 1700000000 WHERE id = ?2",
+                params![STATUS_CONFORME, op.id],
+            )
+            .unwrap();
+        db.dismiss_placement_operation(op.id).unwrap();
+        assert!(db.archive_placement_operation(op.id).is_err());
+    }
+
+    #[test]
     fn archive_pipe_blocked_while_open_placement_ops_remain() {
         use crate::database::pipe::PIPE_TYPE_ACTE_GESTION;
 
@@ -1808,6 +1981,7 @@ mod tests {
             type_produit: None,
             investissement_id: None,
             pv_manual: None,
+            archived_at: None,
         };
 
         assert!(placement_operation_blocks_pipe_archive(&op), "brouillon suivi");
@@ -1836,6 +2010,10 @@ mod tests {
 
         op.dismissed_at = Some(1_700_000_200);
         assert!(!placement_operation_blocks_pipe_archive(&op), "retiré du tableau");
+
+        op.dismissed_at = None;
+        op.archived_at = Some(1_700_000_300);
+        assert!(!placement_operation_blocks_pipe_archive(&op), "archivé");
     }
 
     #[test]

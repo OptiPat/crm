@@ -11,6 +11,8 @@ import { placementOperationTypeLabel } from "@/lib/placement/placement-operation
 
 export {
   PLACEMENT_UNDECLARED_BOX_LABEL,
+  placementOperationIsArchivable,
+  placementOperationIsArchived,
   placementOperationIsAwaitingPartner,
   placementOperationIsClosed,
   placementOperationIsDeclaredInWorkflow,

@@ -4,7 +4,14 @@ import {
   getPlacementBoardActiveStepId,
   type PlacementStepperStepId,
 } from "@/lib/placement/placement-operation-stepper";
-import { placementOperationIsUndeclared, placementOperationIsDetachedSuiviDraft, placementOperationIsDeclaredInWorkflow, PLACEMENT_UNDECLARED_BOX_LABEL } from "@/lib/placement/placement-operation-tracking";
+import {
+  placementOperationIsArchived,
+  placementOperationIsDeclaredInWorkflow,
+  placementOperationIsDetachedSuiviDraft,
+  placementOperationIsDismissed,
+  placementOperationIsUndeclared,
+  PLACEMENT_UNDECLARED_BOX_LABEL,
+} from "@/lib/placement/placement-operation-tracking";
 import { placementOperationIsSuiviDraft } from "@/lib/placement/suivi-placement-draft";
 import { formatStelliumProductForDisplay } from "@/lib/placement/stellium-box-placement-products";
 
@@ -125,10 +132,12 @@ export function getPlacementBoardColumn(
 
 export { placementOperationIsDetachedSuiviDraft } from "@/lib/placement/placement-operation-tracking";
 
+/** Cartes actives du tableau (les suivis archivés sont exclus). */
 export function filterPlacementRowsForBoard(
   rows: PlacementOperationWithContact[]
 ): PlacementOperationWithContact[] {
   return rows.filter((row) => {
+    if (placementOperationIsArchived(row.operation)) return false;
     if (placementOperationIsDetachedSuiviDraft(row.operation)) return false;
     if (
       row.operation.status === "PENDING" &&
@@ -138,6 +147,23 @@ export function filterPlacementRowsForBoard(
     }
     return getPlacementBoardColumn(row.operation) != null;
   });
+}
+
+/** Suivis archivés (affichés à la demande dans la colonne Mail client), plus récents d'abord. */
+export function filterArchivedPlacementRowsForBoard(
+  rows: PlacementOperationWithContact[]
+): PlacementOperationWithContact[] {
+  return rows
+    .filter(
+      (row) =>
+        placementOperationIsArchived(row.operation) &&
+        !placementOperationIsDismissed(row.operation)
+    )
+    .sort(
+      (a, b) =>
+        (b.operation.archived_at ?? 0) - (a.operation.archived_at ?? 0) ||
+        b.operation.id - a.operation.id
+    );
 }
 
 export function groupPlacementOperationsByBoardColumn(

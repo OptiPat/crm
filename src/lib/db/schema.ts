@@ -527,6 +527,7 @@ export const placementOperations = sqliteTable("placement_operations", {
   typeProduit: text("type_produit"),
   investissementId: integer("investissement_id"),
   pvManual: real("pv_manual"),
+  archivedAt: integer("archived_at", { mode: "timestamp" }),
 });
 
 // ============================================

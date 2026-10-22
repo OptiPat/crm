@@ -13,6 +13,27 @@ export function placementOperationIsDismissed(
   return operation.dismissed_at != null && operation.dismissed_at > 0;
 }
 
+/**
+ * Suivi archivé : carte sortie du tableau, mais toujours comptée
+ * (rémunération, investissement, historique) — contrairement au retrait.
+ */
+export function placementOperationIsArchived(
+  operation: Pick<PlacementOperation, "archived_at">
+): boolean {
+  return placementTs(operation.archived_at);
+}
+
+/** Archivable : mail client envoyé, ni retiré ni déjà archivé. */
+export function placementOperationIsArchivable(
+  operation: Pick<PlacementOperation, "client_notified_at" | "dismissed_at" | "archived_at">
+): boolean {
+  return (
+    placementTs(operation.client_notified_at) &&
+    !placementOperationIsDismissed(operation) &&
+    !placementOperationIsArchived(operation)
+  );
+}
+
 export function placementOperationIsPipeTracked(
   operation: Pick<PlacementOperation, "pipe_timeline_entry_id">
 ): boolean {

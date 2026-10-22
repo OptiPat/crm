@@ -214,10 +214,10 @@ export function ParrainagePipeBoard({
                       onPointerCancel={handlePointerCancel}
                       className={cn(
                         "touch-none rounded-md border bg-card p-1.5 shadow-sm transition-opacity sm:rounded-lg sm:p-2",
-                        "cursor-grab active:cursor-grabbing",
+                        "cursor-pointer hover:border-primary/40 hover:bg-muted/30",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         selected && "border-primary ring-1 ring-primary/40",
-                        dragging && "opacity-50",
+                        dragging && "cursor-grabbing opacity-50",
                         outcomePending &&
                           "border-red-500 bg-red-50/60 ring-2 ring-red-400/50 animate-pulse dark:bg-red-950/30 dark:border-red-600"
                       )}

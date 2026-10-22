@@ -3,14 +3,17 @@ import { Briefcase, ClipboardList } from "lucide-react";
 import { listPipes, getPipeById, setPipeEtudeRealisee, type PipeRecord } from "@/lib/api/tauri-pipe";
 import { listPipeRdvEntriesForBoard, type PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import {
+  archivePlacementOperation,
   dismissPlacementOperation,
   getPlacementOpenCountsByPipe,
   listPlacementOperations,
   notifyPlacementOperationsChanged,
   PLACEMENT_OPERATIONS_CHANGED_EVENT,
+  unarchivePlacementOperation,
   type PlacementOperationWithContact,
   type PlacementPipeOpenCount,
 } from "@/lib/api/tauri-box-placement";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { subscribePipeChanged } from "@/lib/pipe/pipe-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
@@ -27,7 +30,10 @@ import {
   savePipeSection,
   type PipeSection,
 } from "@/lib/pipe/pipe-section";
-import { filterPlacementRowsForBoard } from "@/lib/placement/placement-operation-board";
+import {
+  filterArchivedPlacementRowsForBoard,
+  filterPlacementRowsForBoard,
+} from "@/lib/placement/placement-operation-board";
 import {
   filterPipesForList,
   loadPipeListFilters,
@@ -69,6 +75,7 @@ import { PipeList } from "@/components/pipe/PipeList";
 import { PipeListToolbar } from "@/components/pipe/PipeListToolbar";
 import { PipeBoard } from "@/components/pipe/PipeBoard";
 import { PipePlacementBoard } from "@/components/pipe/PipePlacementBoard";
+import { PipePlacementOrphanDetail } from "@/components/pipe/PipePlacementOrphanDetail";
 import { PipeRemunerationBoard } from "@/components/pipe/PipeRemunerationBoard";
 import { PipeFormPanel } from "@/components/pipe/PipeFormPanel";
 import { PipeDetailPanel } from "@/components/pipe/PipeDetailPanel";
@@ -138,11 +145,24 @@ export function Pipe() {
   const [placementBoardRows, setPlacementBoardRows] = useState<PlacementOperationWithContact[]>(
     []
   );
+  const [placementArchivedRows, setPlacementArchivedRows] = useState<
+    PlacementOperationWithContact[]
+  >([]);
   const [placementBoardLoading, setPlacementBoardLoading] = useState(false);
   const [selectedPlacementOperationId, setSelectedPlacementOperationId] = useState<number | null>(
     null
   );
+  // Lu dans les handlers async (archivage groupé) : évite une sélection périmée par closure.
+  const selectedPlacementOperationIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    selectedPlacementOperationIdRef.current = selectedPlacementOperationId;
+  }, [selectedPlacementOperationId]);
   const [dismissingPlacementId, setDismissingPlacementId] = useState<number | null>(null);
+  /** Carte sans suivi ouvrable : détail minimal (retrait de l'acte). */
+  const [placementOrphan, setPlacementOrphan] = useState<{
+    row: PlacementOperationWithContact;
+    message: string;
+  } | null>(null);
   const [detailExpanded, setDetailExpanded] = useState(false);
   const [boardSearch, setBoardSearch] = useState("");
   const formIsDirtyRef = useRef(false);
@@ -392,10 +412,14 @@ export function Pipe() {
         const rows = await listPlacementOperations(includeArchived);
         if (generation !== loadPlacementBoardRowsGenerationRef.current) return;
         setPlacementBoardRows(filterPlacementRowsForBoard(rows));
+        setPlacementArchivedRows(filterArchivedPlacementRowsForBoard(rows));
         placementBoardLoadedRef.current = true;
       } catch {
         if (generation !== loadPlacementBoardRowsGenerationRef.current) return;
-        if (!placementBoardLoadedRef.current) setPlacementBoardRows([]);
+        if (!placementBoardLoadedRef.current) {
+          setPlacementBoardRows([]);
+          setPlacementArchivedRows([]);
+        }
       } finally {
         if (generation === loadPlacementBoardRowsGenerationRef.current && !silent) {
           setPlacementBoardLoading(false);
@@ -551,9 +575,13 @@ export function Pipe() {
   const openPlacementOperation = async (row: PlacementOperationWithContact) => {
     if (!(await confirmLeaveForm())) return;
     setSelectedPlacementOperationId(row.operation.id);
+    setPlacementOrphan(null);
     const pipeId = row.operation.pipe_id;
     if (pipeId == null || pipeId <= 0) {
-      toast.warning("Aucun suivi lié — déclarez l'acte sur le suivi ou retirez-le du tableau.");
+      setPlacementOrphan({
+        row,
+        message: "Aucun suivi lié — déclarez l'acte sur un suivi, ou retirez-le du tableau.",
+      });
       setPanelMode("empty");
       setSelectedPipe(null);
       return;
@@ -573,29 +601,105 @@ export function Pipe() {
         setPanelMode("view");
         expandBoardDetailIfNeeded();
       } catch {
-        toast.warning("Suivi introuvable — actualisez la page.");
+        setPlacementOrphan({
+          row,
+          message: "Suivi introuvable — actualisez la page, ou retirez l'acte du tableau.",
+        });
         setPanelMode("empty");
         setSelectedPipe(null);
       }
     })();
   };
 
+  const clearPlacementSelectionIf = (operationId: number) => {
+    if (selectedPlacementOperationIdRef.current !== operationId) return;
+    selectedPlacementOperationIdRef.current = null;
+    setSelectedPlacementOperationId(null);
+    setSelectedPipe(null);
+    setPanelMode("empty");
+  };
+
+  /** Retrait du tableau (sans mail client) : l'opération ne compte plus. */
   const handleDismissPlacementOperation = async (row: PlacementOperationWithContact) => {
     setDismissingPlacementId(row.operation.id);
     try {
       await dismissPlacementOperation(row.operation.id);
+      clearPlacementSelectionIf(row.operation.id);
       notifyPlacementOperationsChanged();
-      if (selectedPlacementOperationId === row.operation.id) {
-        setSelectedPlacementOperationId(null);
-        setSelectedPipe(null);
-        setPanelMode("empty");
-      }
       await loadPlacementBoardRows({ silent: true });
       toast.success("Opération retirée du tableau");
+      return true;
     } catch (err) {
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible de retirer l'opération"));
+      return false;
     } finally {
       setDismissingPlacementId(null);
+    }
+  };
+
+  /** Archivage d'un suivi terminé (mail client envoyé) : toujours compté ailleurs. */
+  const handleArchivePlacementOperation = async (
+    row: PlacementOperationWithContact,
+    options?: { silent?: boolean }
+  ) => {
+    setDismissingPlacementId(row.operation.id);
+    try {
+      await archivePlacementOperation(row.operation.id);
+      clearPlacementSelectionIf(row.operation.id);
+      if (!options?.silent) {
+        notifyPlacementOperationsChanged();
+        await loadPlacementBoardRows({ silent: true });
+        toast.success("Suivi archivé", {
+          description: "Retrouvable via « Voir les archivés ».",
+          action: {
+            label: "Annuler",
+            onClick: () => void handleUnarchivePlacementOperation(row),
+          },
+        });
+      }
+      return true;
+    } catch (err) {
+      // Mode silencieux (archivage groupé) : un seul récapitulatif à la fin.
+      if (!options?.silent) {
+        toast.error(userErrorMessage(err, "Impossible d'archiver le suivi"));
+      }
+      return false;
+    } finally {
+      setDismissingPlacementId(null);
+    }
+  };
+
+  const handleUnarchivePlacementOperation = async (row: PlacementOperationWithContact) => {
+    setDismissingPlacementId(row.operation.id);
+    try {
+      await unarchivePlacementOperation(row.operation.id);
+      notifyPlacementOperationsChanged();
+      await loadPlacementBoardRows({ silent: true });
+      toast.success("Suivi désarchivé — la carte revient dans le tableau");
+      return true;
+    } catch (err) {
+      toast.error(userErrorMessage(err, "Impossible de désarchiver le suivi"));
+      return false;
+    } finally {
+      setDismissingPlacementId(null);
+    }
+  };
+
+  const handleArchiveManyPlacementDone = ({
+    archived,
+    failed,
+  }: {
+    archived: number;
+    failed: number;
+  }) => {
+    notifyPlacementOperationsChanged();
+    void loadPlacementBoardRows({ silent: true });
+    if (archived === 0 && failed === 0) return;
+    const archivedLabel = archived > 1 ? `${archived} suivis archivés` : `${archived} suivi archivé`;
+    if (failed > 0) {
+      toast.error(`${archivedLabel}, ${failed} en échec`);
+    } else {
+      toast.success(archivedLabel);
     }
   };
 
@@ -759,7 +863,22 @@ export function Pipe() {
         </div>
       )}
 
-      {panelMode === "empty" && section === "suivi_stellium" && (
+      {panelMode === "empty" &&
+        section === "suivi_stellium" &&
+        placementOrphan != null &&
+        placementOrphan.row.operation.id === selectedPlacementOperationId && (
+          <PipePlacementOrphanDetail
+            key={placementOrphan.row.operation.id}
+            row={placementOrphan.row}
+            message={placementOrphan.message}
+            onDismiss={handleDismissPlacementOperation}
+          />
+        )}
+
+      {panelMode === "empty" &&
+        section === "suivi_stellium" &&
+        (placementOrphan == null ||
+          placementOrphan.row.operation.id !== selectedPlacementOperationId) && (
         <div className="flex h-full flex-col items-center justify-center px-6 py-12 text-center">
           <ClipboardList className="h-10 w-10 text-muted-foreground/50 mb-4" />
           <p className="text-sm font-medium">Sélectionnez une opération Stellium</p>
@@ -860,10 +979,19 @@ export function Pipe() {
             ) : section === "suivi_stellium" ? (
               <PipePlacementBoard
                 rows={placementBoardRows}
+                archivedRows={placementArchivedRows}
                 selectedOperationId={selectedPlacementOperationId}
                 onSelect={(row) => void openPlacementOperation(row)}
-                onDismiss={handleDismissPlacementOperation}
-                dismissingOperationId={dismissingPlacementId}
+                onArchive={handleArchivePlacementOperation}
+                onClearSelection={() => {
+                  selectedPlacementOperationIdRef.current = null;
+                  setSelectedPlacementOperationId(null);
+                  setSelectedPipe(null);
+                  setPanelMode("empty");
+                }}
+                onUnarchive={handleUnarchivePlacementOperation}
+                onArchiveManyDone={handleArchiveManyPlacementDone}
+                busyOperationId={dismissingPlacementId}
               />
             ) : section === "remuneration" ? (
               <div className="p-4 overflow-auto">
