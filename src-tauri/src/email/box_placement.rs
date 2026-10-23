@@ -21,6 +21,8 @@ const SCAN_MAX_MESSAGE_IDS: usize = 100;
 /// Un `messages.get` coûte 20 unités. 6 000 / minute / compte : on reste loin du plafond.
 const GMAIL_GETS_PER_SCAN: usize = 40;
 const BOX_SCAN_STATE_KEY: &str = "box_placement_scan_v1";
+/// Au-delà, un mail en échec quitte la file prioritaire (retry) pour la fin de file (deferred).
+const BOX_MAX_FAILED_ATTEMPTS: u32 = 5;
 static BOX_SCAN_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -46,6 +48,23 @@ struct BoxPlacementScanState {
     /// Provider du dernier scan, pour ne jamais rejouer un ID Gmail dans Graph (ou inversement).
     #[serde(default, alias = "scanProvider")]
     scan_provider: Option<String>,
+    /// Échecs (lecture ou application) par mail, pour ne pas retenter sans fin.
+    #[serde(default, alias = "failedAttempts")]
+    failed_attempts: std::collections::BTreeMap<String, u32>,
+}
+
+/// Watermark : avance dès que la liste est épuisée et que tous les mails FRAIS (issus de la
+/// liste) ont été lus. Les mails en retry / deferred sont conservés explicitement par ID :
+/// leur lecture différée (plafond de lectures) ne doit pas bloquer le filigrane.
+fn box_list_fully_read(list_exhausted: bool, fresh_unread: bool) -> bool {
+    list_exhausted && !fresh_unread
+}
+
+/// Compte un échec ; `true` si le mail doit quitter la file retry (trop d'échecs).
+fn record_box_failure(attempts: &mut std::collections::BTreeMap<String, u32>, id: &str) -> bool {
+    let count = attempts.entry(id.to_string()).or_insert(0);
+    *count += 1;
+    *count >= BOX_MAX_FAILED_ATTEMPTS
 }
 
 /// Décision pure sur le filigrane et la pagination Box Placement.
@@ -70,6 +89,7 @@ fn next_box_scan_state(
             retry_message_ids,
             deferred_message_ids,
             scan_provider: Some(provider.to_string()),
+            failed_attempts: Default::default(),
         };
     }
     BoxPlacementScanState {
@@ -80,6 +100,7 @@ fn next_box_scan_state(
         retry_message_ids,
         deferred_message_ids,
         scan_provider: Some(provider.to_string()),
+        failed_attempts: Default::default(),
     }
 }
 
@@ -534,6 +555,151 @@ fn fetch_box_placement_message(
     })
 }
 
+#[derive(Default)]
+struct BoxApplyCounters {
+    updated: u32,
+    skipped: u32,
+    skipped_ambiguous_contacts: u32,
+    skipped_ambiguous_placements: u32,
+    new_conforme_ids: Vec<i64>,
+    /// Échecs cumulés par mail (persistés dans l'état du scan).
+    failed_attempts: std::collections::BTreeMap<String, u32>,
+}
+
+/// Applique les mails Box Placement lus. Une erreur sur un mail est isolée (retry au prochain scan).
+fn apply_fetched_box_placement_messages(
+    db: &crate::database::Database,
+    fetched_messages: Vec<(String, FetchedBoxPlacementMessage)>,
+    retry_message_ids: &mut HashSet<String>,
+    resolved_ids: &mut HashSet<String>,
+    unapplied_fetched: &mut Vec<String>,
+    counters: &mut BoxApplyCounters,
+) -> Result<(), String> {
+    for (message_id, fetched) in fetched_messages {
+        let subject = fetched.subject;
+        let body = fetched.body;
+        let received_at = fetched.received_at;
+        let Some(parsed) = parse_box_placement_email(&subject, &body) else {
+            counters.skipped += 1;
+            retry_message_ids.remove(&message_id);
+            unapplied_fetched.push(message_id);
+            continue;
+        };
+
+        let contact_id = db
+            .find_contact_id_by_name_if_unique(&parsed.contact_nom, &parsed.contact_prenom)
+            .map_err(|e| e.to_string())?;
+        let Some(contact_id) = contact_id else {
+            counters.skipped += 1;
+            retry_message_ids.remove(&message_id);
+            unapplied_fetched.push(message_id);
+            if db
+                .find_contact_by_name(&parsed.contact_nom, &parsed.contact_prenom)
+                .map_err(|e| e.to_string())?
+                .is_some()
+            {
+                counters.skipped_ambiguous_contacts += 1;
+            }
+            continue;
+        };
+
+        let operation_type = map_stellium_label_to_operation_type(&parsed.stellium_label);
+        let status = match parsed.kind {
+            BoxPlacementKind::Conforme => STATUS_CONFORME,
+            BoxPlacementKind::NonConforme => STATUS_NON_CONFORME,
+        };
+        let pipe_id_hint = db
+            .find_affaire_pipe_hint_for_box_placement_participant(contact_id)
+            .map_err(|e| e.to_string())?
+            .or(db
+                .find_latest_suivi_pipe_id_for_contact(contact_id)
+                .map_err(|e| e.to_string())?);
+
+        let matched = db
+            .find_placement_for_email_match(
+                contact_id,
+                &parsed.stellium_label,
+                status,
+                Some(&parsed.product_label),
+                received_at,
+                pipe_id_hint,
+            )
+            .map_err(|e| e.to_string())?;
+
+        let Some(_matched_op) = matched else {
+            counters.skipped += 1;
+            retry_message_ids.remove(&message_id);
+            unapplied_fetched.push(message_id);
+            let open_count = db
+                .count_open_placements_for_email_match(
+                    contact_id,
+                    &parsed.stellium_label,
+                    status,
+                    received_at,
+                )
+                .map_err(|e| e.to_string())?;
+            if open_count > 1 {
+                counters.skipped_ambiguous_placements += 1;
+            }
+            continue;
+        };
+
+        // Un mail en erreur ne bloque pas le scan : il sera relu au prochain passage.
+        let (_op, changed) = match db.apply_placement_email_update(
+            contact_id,
+            operation_type,
+            status,
+            Some(&parsed.stellium_label),
+            Some(&parsed.product_label),
+            &message_id,
+            Some(&subject),
+            received_at,
+            pipe_id_hint,
+        ) {
+            Ok(result) => result,
+            Err(error) => {
+                eprintln!("Box Placement application {message_id}: {error}");
+                counters.skipped += 1;
+                if record_box_failure(&mut counters.failed_attempts, &message_id) {
+                    // Trop d'échecs : fin de file (deferred), note une seule fois au journal.
+                    if counters.failed_attempts.get(&message_id) == Some(&BOX_MAX_FAILED_ATTEMPTS) {
+                        let reason = crate::database::placement_operations::placement_error_reason(&error);
+                        if let Err(journal_err) = db.journal_placement_note(
+                            &_matched_op,
+                            "Mail Stellium non appliqué",
+                            format!(
+                                "Mail Stellium « {subject} » non appliqué après {BOX_MAX_FAILED_ATTEMPTS} tentatives : {reason}. Vérifiez la souscription ; le mail sera relu en fin de file."
+                            ),
+                        ) {
+                            eprintln!("Box Placement journal {message_id}: {journal_err}");
+                        }
+                    }
+                    retry_message_ids.remove(&message_id);
+                    unapplied_fetched.push(message_id);
+                } else {
+                    retry_message_ids.insert(message_id);
+                }
+                continue;
+            }
+        };
+
+        counters.failed_attempts.remove(&message_id);
+        if !changed {
+            counters.skipped += 1;
+            retry_message_ids.remove(&message_id);
+            resolved_ids.insert(message_id);
+            continue;
+        }
+        retry_message_ids.remove(&message_id);
+        resolved_ids.insert(message_id.clone());
+        counters.updated += 1;
+        if status == STATUS_CONFORME && placement_operation_eligible_for_client_email(&_op) {
+            counters.new_conforme_ids.push(_op.id);
+        }
+    }
+    Ok(())
+}
+
 pub fn scan_box_placement_emails(
     app: &AppHandle,
     db_state: &DbState,
@@ -605,6 +771,9 @@ pub fn scan_box_placement_emails(
         (ids, list_exhausted, resume_page_token)
     };
 
+    // Mails issus de la liste (nouveaux) : seuls eux conditionnent l'avancée du filigrane.
+    let fresh_ids: HashSet<String> = all_ids.iter().cloned().collect();
+    let mut fresh_unread = false;
     let mut seen_ids: HashSet<String> = all_ids.iter().cloned().collect();
     for message_id in &retry_ids_for_provider {
         if seen_ids.insert(message_id.clone()) {
@@ -627,7 +796,7 @@ pub fn scan_box_placement_emails(
     }
     all_ids = order_box_message_ids(all_ids, &deferred_prev);
     let scanned = all_ids.len() as u32;
-    let mut updated = 0u32;
+    let updated = 0u32;
     let created = 0u32;
     let existing_ids = with_db(db_state, |db| {
         let mut ids = HashSet::new();
@@ -642,11 +811,15 @@ pub fn scan_box_placement_emails(
         Ok(ids)
     })?;
     let mut skipped = existing_ids.len() as u32;
-    let mut skipped_ambiguous_contacts = 0u32;
-    let mut skipped_ambiguous_placements = 0u32;
-    let mut new_conforme_ids: Vec<i64> = Vec::new();
     let mut resolved_ids = existing_ids.clone();
     let mut unapplied_fetched: Vec<String> = Vec::new();
+    let retry_before_scan: HashSet<String> = retry_ids_for_provider.iter().cloned().collect();
+    let deferred_before_scan: HashSet<String> = deferred_prev.iter().cloned().collect();
+    let mut failed_attempts = if provider_changed {
+        Default::default()
+    } else {
+        scan_state.failed_attempts.clone()
+    };
     let mut retry_message_ids: HashSet<String> = retry_ids_for_provider.into_iter().collect();
     for message_id in &existing_ids {
         retry_message_ids.remove(message_id);
@@ -667,7 +840,15 @@ pub fn scan_box_placement_emails(
                 );
             }
             rate_limited = true;
-            retry_message_ids.insert(message_id);
+            if fresh_ids.contains(&message_id) {
+                fresh_unread = true;
+            }
+            // Un mail déjà en fin de file (deferred) y reste : ne pas gonfler la file retry.
+            if retry_before_scan.contains(&message_id)
+                || !deferred_before_scan.contains(&message_id)
+            {
+                retry_message_ids.insert(message_id);
+            }
             skipped += 1;
             continue;
         }
@@ -689,128 +870,71 @@ pub fn scan_box_placement_emails(
                     "Box Placement : Gmail saturé (quota minute). Scan repris au prochain passage."
                 );
                 rate_limited = true;
-                retry_message_ids.insert(message_id);
+                if fresh_ids.contains(&message_id) {
+                    fresh_unread = true;
+                }
+                if retry_before_scan.contains(&message_id)
+                    || !deferred_before_scan.contains(&message_id)
+                {
+                    retry_message_ids.insert(message_id);
+                }
                 skipped += 1;
             }
             Err(error) => {
                 eprintln!("Box Placement fetch {message_id}: {error}");
-                retry_message_ids.insert(message_id);
+                if record_box_failure(&mut failed_attempts, &message_id) {
+                    retry_message_ids.remove(&message_id);
+                    unapplied_fetched.push(message_id);
+                } else {
+                    retry_message_ids.insert(message_id);
+                }
                 skipped += 1;
             }
         }
     }
 
     with_db(db_state, |db| {
-        for (message_id, fetched) in fetched_messages {
-            let subject = fetched.subject;
-            let body = fetched.body;
-            let received_at = fetched.received_at;
-            let Some(parsed) = parse_box_placement_email(&subject, &body) else {
-                skipped += 1;
-                retry_message_ids.remove(&message_id);
-                unapplied_fetched.push(message_id);
-                continue;
-            };
-
-            let contact_id = db
-                .find_contact_id_by_name_if_unique(&parsed.contact_nom, &parsed.contact_prenom)
-                .map_err(|e| e.to_string())?;
-            let Some(contact_id) = contact_id else {
-                skipped += 1;
-                retry_message_ids.remove(&message_id);
-                unapplied_fetched.push(message_id);
-                if db
-                    .find_contact_by_name(&parsed.contact_nom, &parsed.contact_prenom)
-                    .map_err(|e| e.to_string())?
-                    .is_some()
-                {
-                    skipped_ambiguous_contacts += 1;
-                }
-                continue;
-            };
-
-            let operation_type = map_stellium_label_to_operation_type(&parsed.stellium_label);
-            let status = match parsed.kind {
-                BoxPlacementKind::Conforme => STATUS_CONFORME,
-                BoxPlacementKind::NonConforme => STATUS_NON_CONFORME,
-            };
-            let pipe_id_hint = db
-                .find_affaire_pipe_hint_for_box_placement_participant(contact_id)
-                .map_err(|e| e.to_string())?
-                .or(db
-                    .find_latest_suivi_pipe_id_for_contact(contact_id)
-                    .map_err(|e| e.to_string())?);
-
-            let matched = db
-                .find_placement_for_email_match(
-                    contact_id,
-                    &parsed.stellium_label,
-                    status,
-                    Some(&parsed.product_label),
-                    received_at,
-                    pipe_id_hint,
-                )
-                .map_err(|e| e.to_string())?;
-
-            let Some(_matched_op) = matched else {
-                skipped += 1;
-                retry_message_ids.remove(&message_id);
-                unapplied_fetched.push(message_id);
-                let open_count = db
-                    .count_open_placements_for_email_match(
-                        contact_id,
-                        &parsed.stellium_label,
-                        status,
-                        received_at,
-                    )
-                    .map_err(|e| e.to_string())?;
-                if open_count > 1 {
-                    skipped_ambiguous_placements += 1;
-                }
-                continue;
-            };
-
-            let (_op, changed) = db
-                .apply_placement_email_update(
-                    contact_id,
-                    operation_type,
-                    status,
-                    Some(&parsed.stellium_label),
-                    Some(&parsed.product_label),
-                    &message_id,
-                    Some(&subject),
-                    received_at,
-                    pipe_id_hint,
-                )
-                .map_err(|e| e.to_string())?;
-
-            if !changed {
-                skipped += 1;
-                retry_message_ids.remove(&message_id);
-                resolved_ids.insert(message_id);
-                continue;
-            }
-            retry_message_ids.remove(&message_id);
-            resolved_ids.insert(message_id.clone());
-            updated += 1;
-            if status == STATUS_CONFORME && placement_operation_eligible_for_client_email(&_op) {
-                new_conforme_ids.push(_op.id);
-            }
-        }
-
+        let mut counters = BoxApplyCounters {
+            updated,
+            skipped,
+            failed_attempts: std::mem::take(&mut failed_attempts),
+            ..Default::default()
+        };
+        apply_fetched_box_placement_messages(
+            db,
+            fetched_messages,
+            &mut retry_message_ids,
+            &mut resolved_ids,
+            &mut unapplied_fetched,
+            &mut counters,
+        )?;
+        let BoxApplyCounters {
+            updated,
+            skipped,
+            skipped_ambiguous_contacts,
+            skipped_ambiguous_placements,
+            mut new_conforme_ids,
+            failed_attempts,
+        } = counters;
         new_conforme_ids.sort_unstable();
         new_conforme_ids.dedup();
 
         let next_deferred = rotate_deferred_ids(&deferred_prev, &unapplied_fetched, &resolved_ids);
-        let next_state = next_box_scan_state(
+        let kept: HashSet<&String> = retry_message_ids.iter().chain(next_deferred.iter()).collect();
+        let failed_attempts = failed_attempts
+            .into_iter()
+            .filter(|(id, _)| kept.contains(id))
+            .collect();
+        let mut next_state = next_box_scan_state(
             &scan_state,
             &provider,
-            list_exhausted && !rate_limited,
+            box_list_fully_read(list_exhausted, fresh_unread),
             resume_page_token,
             retry_message_ids.into_iter().collect(),
             next_deferred,
             scan_started_at,
         );
+        next_state.failed_attempts = failed_attempts;
         save_box_scan_state(db, &next_state)?;
 
         Ok(BoxPlacementScanResult {
@@ -981,6 +1105,182 @@ mod tests {
                 "a".to_string(),
                 "b".to_string()
             ]
+        );
+    }
+
+    #[test]
+    fn apply_error_on_one_mail_does_not_block_the_others() {
+        use crate::database::models::{NewContact, NewPlacementOperation};
+        let db = crate::database::Database::open_in_memory_for_tests().unwrap();
+        let mut op_ids = Vec::new();
+        for (nom, prenom) in [("DUPONT", "Jean"), ("MARTIN", "Paul")] {
+            let contact_id = db
+                .create_contact(NewContact {
+                    categorie: "CLIENT".into(),
+                    nom: nom.into(),
+                    prenom: prenom.into(),
+                    ..Default::default()
+                })
+                .unwrap()
+                .id
+                .unwrap();
+            let op = db
+                .create_placement_operation(NewPlacementOperation {
+                    contact_id,
+                    operation_type: "ARBITRAGE".into(),
+                    product_label: Some("Cristalliance Evoluvie".into()),
+                    stellium_label: Some("Arbitrage libre".into()),
+                    ..Default::default()
+                })
+                .unwrap();
+            op_ids.push(op.id);
+        }
+        // Erreur SQL forcée sur la première opération.
+        db.connection()
+            .execute_batch(&format!(
+                "CREATE TRIGGER boom BEFORE UPDATE ON placement_operations WHEN OLD.id = {}
+                 BEGIN SELECT RAISE(ABORT, 'boom'); END;",
+                op_ids[0]
+            ))
+            .unwrap();
+        let received_at = chrono::Utc::now().timestamp() + 60;
+        let mail = |nom_prenom: &str| FetchedBoxPlacementMessage {
+            subject: format!("Box placement - Envoi dossier d'opération - {nom_prenom}"),
+            body: CONFORME_BODY.replace("DUPONT Jean", nom_prenom),
+            received_at,
+        };
+        let mut retry = HashSet::new();
+        let mut resolved = HashSet::new();
+        let mut unapplied = Vec::new();
+        let mut counters = BoxApplyCounters::default();
+        apply_fetched_box_placement_messages(
+            &db,
+            vec![
+                ("msg-ko".into(), mail("DUPONT Jean")),
+                ("msg-ok".into(), mail("MARTIN Paul")),
+            ],
+            &mut retry,
+            &mut resolved,
+            &mut unapplied,
+            &mut counters,
+        )
+        .expect("le scan continue");
+        assert!(retry.contains("msg-ko"), "relu au prochain scan");
+        assert!(resolved.contains("msg-ok"));
+        assert_eq!(counters.updated, 1);
+        assert_eq!(counters.skipped, 1);
+        assert_eq!(
+            db.get_placement_operation_by_id(op_ids[1]).unwrap().status,
+            "CONFORME"
+        );
+        assert_eq!(
+            db.get_placement_operation_by_id(op_ids[0]).unwrap().status,
+            "PENDING"
+        );
+    }
+
+    #[test]
+    fn watermark_advances_when_only_retry_or_deferred_are_rate_limited() {
+        // 40 lectures consommées par les retry/deferred : tous les mails frais lus → avance.
+        assert!(box_list_fully_read(true, false));
+        assert!(!box_list_fully_read(true, true), "mail frais non lu : on attend");
+        assert!(!box_list_fully_read(false, false), "liste paginée : on attend");
+        let prev = BoxPlacementScanState {
+            last_scan_at: Some(1_000),
+            ..Default::default()
+        };
+        let next = next_box_scan_state(
+            &prev,
+            "google",
+            box_list_fully_read(true, false),
+            None,
+            vec!["retry-a".into()],
+            vec!["deferred-b".into()],
+            5_000,
+        );
+        assert_eq!(next.last_scan_at, Some(5_000));
+        assert_eq!(next.retry_message_ids, vec!["retry-a"]);
+        assert_eq!(next.deferred_message_ids, vec!["deferred-b"]);
+    }
+
+    #[test]
+    fn failing_mail_leaves_retry_after_max_attempts_with_journal() {
+        use crate::database::models::{NewContact, NewPipe, NewPlacementOperation};
+        let db = crate::database::Database::open_in_memory_for_tests().unwrap();
+        let contact_id = db
+            .create_contact(NewContact {
+                categorie: "CLIENT".into(),
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .unwrap();
+        let pipe = db
+            .create_pipe(NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: "ACTE_GESTION".into(),
+                parent_pipe_id: None,
+                titre: "Suivi".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+        let op = db
+            .create_placement_operation(NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(pipe.id),
+                operation_type: "ARBITRAGE".into(),
+                product_label: Some("Cristalliance Evoluvie".into()),
+                stellium_label: Some("Arbitrage libre".into()),
+                ..Default::default()
+            })
+            .unwrap();
+        db.connection()
+            .execute_batch(&format!(
+                "CREATE TRIGGER boom BEFORE UPDATE ON placement_operations WHEN OLD.id = {}
+                 BEGIN SELECT RAISE(ABORT, 'boom'); END;",
+                op.id
+            ))
+            .unwrap();
+        let received_at = chrono::Utc::now().timestamp() + 60;
+        let mut counters = BoxApplyCounters::default();
+        let mut retry = HashSet::new();
+        let mut unapplied = Vec::new();
+        for attempt in 1..=BOX_MAX_FAILED_ATTEMPTS {
+            let mut resolved = HashSet::new();
+            unapplied.clear();
+            apply_fetched_box_placement_messages(
+                &db,
+                vec![(
+                    "msg-ko".into(),
+                    FetchedBoxPlacementMessage {
+                        subject: CONFORME_SUBJECT.into(),
+                        body: CONFORME_BODY.into(),
+                        received_at,
+                    },
+                )],
+                &mut retry,
+                &mut resolved,
+                &mut unapplied,
+                &mut counters,
+            )
+            .unwrap();
+            if attempt < BOX_MAX_FAILED_ATTEMPTS {
+                assert!(retry.contains("msg-ko"));
+            }
+        }
+        assert!(!retry.contains("msg-ko"), "sorti de la file retry");
+        assert_eq!(unapplied, vec!["msg-ko".to_string()], "basculé en fin de file");
+        let notes = db.list_pipe_timeline_entries(pipe.id).unwrap();
+        assert_eq!(
+            notes
+                .iter()
+                .filter(|e| e.titre.as_deref() == Some("Mail Stellium non appliqué"))
+                .count(),
+            1
         );
     }
 }

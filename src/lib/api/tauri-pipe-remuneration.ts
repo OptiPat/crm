@@ -13,6 +13,15 @@ export interface PipeRemunerationRow {
   product_label?: string | null;
   investissement_id?: number | null;
   date_souscription?: number | null;
+  /** Exercice : date de validation partenaire (repli calculé côté SQL). */
+  date_exercice?: number | null;
+}
+
+/** Horodatage qui fixe l'exercice de rémunération (date de validation partenaire). */
+export function remunerationRowExerciceUnix(
+  row: Pick<PipeRemunerationRow, "date_exercice" | "date_souscription">
+): number {
+  return row.date_exercice ?? row.date_souscription ?? Math.floor(Date.now() / 1000);
 }
 
 export async function listPipeRemunerationRows(): Promise<PipeRemunerationRow[]> {

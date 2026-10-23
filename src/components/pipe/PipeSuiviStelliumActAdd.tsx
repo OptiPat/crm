@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Send } from "lucide-react";
+import { Pencil, Plus, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,6 +57,20 @@ import {
 } from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-types";
 import { resolveInvestissementIdForStelliumAct } from "@/lib/placement/resolve-investissement-for-stellium-act";
 import { userErrorMessage } from "@/lib/api/invoke-error";
+import { SouscriptionDetailsFields } from "@/components/pipe/SouscriptionDetailsFields";
+import { SouscriptionEditDialog } from "@/components/pipe/SouscriptionEditDialog";
+import { useSouscriptionHolderChoices } from "@/hooks/useSouscriptionHolderChoices";
+import { useUnsavedCloseGuard } from "@/hooks/useUnsavedCloseGuard";
+import {
+  EMPTY_SOUSCRIPTION_EXTRAS,
+  formatSouscriptionDetailsSummary,
+  placementSouscriptionIsEditable,
+  souscriptionExtrasToPayload,
+  souscriptionHolderFieldVisible,
+  souscriptionHolderPayload,
+  type SouscriptionExtrasValue,
+  type SouscriptionHolderKey,
+} from "@/lib/placement/souscription-details";
 
 async function resolveDraftInvestissementId(
   contactId: number,
@@ -102,7 +116,7 @@ const VARIANT_COPY: Record<
   affaire: {
     title: "Stellium — envoi partenaire",
     description:
-      "Souscription partenaire : choisissez le produit. Quand le dossier part chez Stellium, confirmez l'envoi pour passer en attente de réponse.",
+      "Choisissez le produit, puis confirmez l'envoi quand le dossier part chez Stellium. À la validation du partenaire, le placement est créé automatiquement dans le patrimoine du client, à la date du mail de validation (ou à la date du jour si vous marquez la souscription conforme vous-même).",
     addButton: "Souscription partenaire",
     createSuccess: "Souscription préparée — confirmez l'envoi Stellium quand le dossier part",
   },
@@ -156,6 +170,18 @@ export function PipeSuiviStelliumActAdd({
   >({});
   const [savingId, setSavingId] = useState<number | "new" | null>(null);
   const draftsLoadedRef = useRef(false);
+  /** Souscription affaire (hors versement) : titulaire, VP, réinvestissement. */
+  const isAffaireSouscription = variant === "affaire" && !isVersementChild;
+  const holderChoices = useSouscriptionHolderChoices(
+    pipe.contact_id,
+    pipe.secondary_contact_id,
+    isAffaireSouscription
+  );
+  const [newHolderKey, setNewHolderKey] = useState<SouscriptionHolderKey | null>(null);
+  const [newExtras, setNewExtras] = useState<SouscriptionExtrasValue>({
+    ...EMPTY_SOUSCRIPTION_EXTRAS,
+  });
+  const [editingSouscription, setEditingSouscription] = useState<PlacementOperation | null>(null);
 
   const newActNeedsMontant = placementOperationRequiresMontant({
     operationType: placementOperationTypeFromStelliumLabel(stelliumLabel.trim() || "AUTRE"),
@@ -284,6 +310,21 @@ export function PipeSuiviStelliumActAdd({
     }
   }, [showVersementInit]);
 
+  const closeNewActForm = () => {
+    setOpenNew(false);
+    setStelliumLabel(showVersementInit ? VERSEMENT_COMPLEMENTAIRE_ACT_LABEL : "");
+    setProductLabel("");
+    setMontantEuros("");
+    setNewActVpModification({ ...EMPTY_VP_MODIFICATION_ACT_VALUE });
+    setNewActVpMiseEnPlace({ ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE });
+    setNewHolderKey(null);
+    setNewExtras({ ...EMPTY_SOUSCRIPTION_EXTRAS });
+  };
+  const newActCloseGuard = useUnsavedCloseGuard({
+    open: openNew || showVersementInit,
+    onClose: closeNewActForm,
+  });
+
   const confirmStelliumSend = async (
     operation: PlacementOperation,
     options?: { occurredAt?: string; contenu?: string }
@@ -397,6 +438,25 @@ export function PipeSuiviStelliumActAdd({
       toast.error(validationError);
       return;
     }
+    let souscriptionDetails = {};
+    if (isAffaireSouscription) {
+      const extrasResult = souscriptionExtrasToPayload(
+        newExtras,
+        inferTypeProduitFromStelliumProductLabel(product)
+      );
+      if ("error" in extrasResult) {
+        toast.error(extrasResult.error);
+        return;
+      }
+      const holderVisible =
+        holderChoices != null && souscriptionHolderFieldVisible(holderChoices);
+      souscriptionDetails = {
+        ...extrasResult.payload,
+        ...souscriptionHolderPayload(
+          holderVisible ? (newHolderKey ?? holderChoices.defaultKey) : null
+        ),
+      };
+    }
     setSavingId("new");
     try {
       const vpMontantCentimes = newActIsVpModification
@@ -419,6 +479,7 @@ export function PipeSuiviStelliumActAdd({
         montant_centimes: remuneration.montant_centimes ?? vpMontantCentimes,
         type_produit: remuneration.type_produit,
         investissement_id: investissementId,
+        ...souscriptionDetails,
       });
       notifyPlacementOperationsChanged();
       toast.success(copy.createSuccess);
@@ -429,6 +490,9 @@ export function PipeSuiviStelliumActAdd({
       setMontantEuros("");
       setNewActVpModification({ ...EMPTY_VP_MODIFICATION_ACT_VALUE });
       setNewActVpMiseEnPlace({ ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE });
+      setNewHolderKey(null);
+      setNewExtras({ ...EMPTY_SOUSCRIPTION_EXTRAS });
+      newActCloseGuard.resetDirty();
     } catch (err) {
       console.error(err);
       toast.error(userErrorMessage(err, "Impossible de créer l'opération"));
@@ -465,7 +529,31 @@ export function PipeSuiviStelliumActAdd({
               isVersementComplementaireActLabel(draft.stellium_label?.trim() ?? "");
             return (
             <div key={draft.id} className="rounded-md border bg-card p-3 space-y-3">
-              <p className="text-sm font-medium">{formatDraftLabel(draft)}</p>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{formatDraftLabel(draft)}</p>
+                  {isAffaireSouscription &&
+                  formatSouscriptionDetailsSummary(draft, holderChoices) ? (
+                    <p className="text-xs text-muted-foreground">
+                      {formatSouscriptionDetailsSummary(draft, holderChoices)}
+                    </p>
+                  ) : null}
+                </div>
+                {isAffaireSouscription &&
+                placementSouscriptionIsEditable(draft, pipe.pipe_type) ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1 text-xs"
+                    disabled={savingId === draft.id}
+                    onClick={() => setEditingSouscription(draft)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Modifier
+                  </Button>
+                ) : null}
+              </div>
               {versementDraft ? (
                 <p className="text-[11px] text-muted-foreground leading-snug">
                   Ouvre une affaire rattachée avec suivi Stellium versement à la création.
@@ -585,7 +673,11 @@ export function PipeSuiviStelliumActAdd({
               {copy.addButton}
             </Button>
           ) : openNew || showVersementInit ? (
-            <form onSubmit={(e) => void handleCreateDraft(e)} className="space-y-3 rounded-md border p-3">
+            <form
+              onSubmit={(e) => void handleCreateDraft(e)}
+              className="space-y-3 rounded-md border p-3"
+              {...newActCloseGuard.trackDirtyProps}
+            >
               <StelliumPlacementActFields
                 suivi={variant === "suivi"}
                 affaire={variant === "affaire"}
@@ -604,7 +696,20 @@ export function PipeSuiviStelliumActAdd({
                 versementInit={showVersementInit}
               />
               {newActNeedsMontant || showVersementInit ? (
-                <PlacementMontantField value={montantEuros} onChange={setMontantEuros} />
+                <>
+                  <PlacementMontantField value={montantEuros} onChange={setMontantEuros} />
+                  {isAffaireSouscription && productLabel ? (
+                    <SouscriptionDetailsFields
+                      choices={holderChoices}
+                      holderKey={newHolderKey}
+                      onHolderChange={setNewHolderKey}
+                      typeProduit={inferTypeProduitFromStelliumProductLabel(productLabel)}
+                      extras={newExtras}
+                      onExtrasChange={setNewExtras}
+                      disabled={savingId === "new"}
+                    />
+                  ) : null}
+                </>
               ) : newActIsVpModification ? (
                 <VpModificationActFields
                   value={newActVpModification}
@@ -622,7 +727,7 @@ export function PipeSuiviStelliumActAdd({
                   onChange={setNewActVpMiseEnPlace}
                 />
               ) : null}
-              <div className="flex flex-wrap justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2" data-no-dirty>
                 {newActFicheEligible ? (
                   <ArbitrageFicheConseilButton
                     disabled={ficheDisabled || savingId === "new"}
@@ -650,14 +755,7 @@ export function PipeSuiviStelliumActAdd({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setOpenNew(false);
-                    setStelliumLabel(showVersementInit ? VERSEMENT_COMPLEMENTAIRE_ACT_LABEL : "");
-                    setProductLabel("");
-                    setMontantEuros("");
-                    setNewActVpModification({ ...EMPTY_VP_MODIFICATION_ACT_VALUE });
-      setNewActVpMiseEnPlace({ ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE });
-                  }}
+                  onClick={() => newActCloseGuard.requestClose()}
                 >
                   Annuler
                 </Button>
@@ -682,6 +780,16 @@ export function PipeSuiviStelliumActAdd({
         </div>
       )}
       <ArbitrageFicheConseilDialogs hook={ficheConseil} />
+      {newActCloseGuard.discardDialog}
+      <SouscriptionEditDialog
+        operation={editingSouscription}
+        pipeId={pipe.id}
+        contactId={pipe.contact_id}
+        secondaryContactId={pipe.secondary_contact_id}
+        onOpenChange={(open) => {
+          if (!open) setEditingSouscription(null);
+        }}
+      />
     </div>
   );
 }

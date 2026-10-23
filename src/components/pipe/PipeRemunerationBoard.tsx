@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import {
   listPipeRemunerationRows,
+  remunerationRowExerciceUnix,
   type PipeRemunerationRow,
 } from "@/lib/api/tauri-pipe-remuneration";
 import { updatePlacementOperationPvManual } from "@/lib/api/tauri-box-placement";
@@ -51,7 +52,7 @@ export function PipeRemunerationBoard() {
       const years = [
         ...new Set(
           data.map((r) =>
-            fiscalYearLabelForUnix(r.date_souscription ?? Math.floor(Date.now() / 1000))
+            fiscalYearLabelForUnix(remunerationRowExerciceUnix(r))
           )
         ),
       ];
@@ -93,7 +94,7 @@ export function PipeRemunerationBoard() {
     for (const row of rows) {
       const typeProduit = resolveTypeProduit(row);
       const fiscalYear = fiscalYearLabelForUnix(
-        row.date_souscription ?? Math.floor(Date.now() / 1000)
+        remunerationRowExerciceUnix(row)
       );
       const tpc = tpcByYear[fiscalYear];
       if (tpc == null) continue;
@@ -171,7 +172,7 @@ export function PipeRemunerationBoard() {
             {rows.map((row) => {
               const typeProduit = resolveTypeProduit(row);
               const fiscalYear = fiscalYearLabelForUnix(
-                row.date_souscription ?? Math.floor(Date.now() / 1000)
+                remunerationRowExerciceUnix(row)
               );
               const tpc = tpcByYear[fiscalYear] ?? null;
               const pvKind = remunerationPvKindForTypeProduit(typeProduit);

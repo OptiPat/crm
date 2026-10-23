@@ -124,7 +124,12 @@ import {
   normalizeNumeroContrat,
 } from "@/lib/investissements/investissement-display";
 import { isBiensMeublesType } from "@/lib/investissements/biens-meubles-types";
-import { isVersementComplementaireEligible } from "@/lib/investissements/investissement-versements";
+import {
+  acceptsReinvestissementDividendes,
+  acceptsVersementProgramme,
+  FREQUENCE_VERSEMENT_LABELS,
+  isVersementComplementaireEligible,
+} from "@/lib/investissements/investissement-versements";
 import {
   ContactFormExceltisSection,
   type ExceltisFormChoice,
@@ -380,17 +385,8 @@ export function InvestissementForm({
     !!contactId &&
     isExceltisEligibleProductType(typeProduit);
 
-  // Produits acceptant le versement programmé
-  const accepteVersementProgramme = [
-    "ASSURANCE_VIE", 
-    "CONTRAT_CAPITALISATION",
-    "PER", 
-    "EPARGNE_SALARIALE",
-    "SCPI"
-  ].includes(typeProduit);
-  
-  // SCPI accepte le réinvestissement des dividendes
-  const accepteReinvestissement = ["SCPI", "SCPI_FISCALE"].includes(typeProduit);
+  const accepteVersementProgramme = acceptsVersementProgramme(typeProduit);
+  const accepteReinvestissement = acceptsReinvestissementDividendes(typeProduit);
   const isPrevoyance = typeProduit === "PREVOYANCE";
   const isMeubles = isBiensMeublesType(typeProduit);
   const showArbitrageFields =
@@ -1712,10 +1708,11 @@ export function InvestissementForm({
                       <SelectValue placeholder="Sélectionnez" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="MENSUEL">Mensuel</SelectItem>
-                      <SelectItem value="TRIMESTRIEL">Trimestriel</SelectItem>
-                      <SelectItem value="SEMESTRIEL">Semestriel</SelectItem>
-                      <SelectItem value="ANNUEL">Annuel</SelectItem>
+                      {Object.entries(FREQUENCE_VERSEMENT_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

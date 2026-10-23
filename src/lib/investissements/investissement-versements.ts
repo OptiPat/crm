@@ -14,6 +14,30 @@ export const AV_PER_TYPES = ["ASSURANCE_VIE", "PER"] as const;
 
 export type AvPerType = (typeof AV_PER_TYPES)[number];
 
+/** Produits acceptant un versement programmé (formulaire investissement, souscription affaire). */
+export const VERSEMENT_PROGRAMME_TYPES = [
+  "ASSURANCE_VIE",
+  "CONTRAT_CAPITALISATION",
+  "PER",
+  "EPARGNE_SALARIALE",
+  "SCPI",
+] as const;
+
+/** Produits acceptant le réinvestissement des dividendes. */
+export const REINVESTISSEMENT_DIVIDENDES_TYPES = ["SCPI", "SCPI_FISCALE"] as const;
+
+export function acceptsVersementProgramme(typeProduit: string | null | undefined): boolean {
+  return !!typeProduit && (VERSEMENT_PROGRAMME_TYPES as readonly string[]).includes(typeProduit);
+}
+
+export function acceptsReinvestissementDividendes(
+  typeProduit: string | null | undefined
+): boolean {
+  return (
+    !!typeProduit && (REINVESTISSEMENT_DIVIDENDES_TYPES as readonly string[]).includes(typeProduit)
+  );
+}
+
 /** Libellés des fréquences de versement programmé (codes stockés en base). */
 export const FREQUENCE_VERSEMENT_LABELS: Record<string, string> = {
   MENSUEL: "Mensuel",

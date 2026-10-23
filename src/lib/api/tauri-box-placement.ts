@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
 
 export type PlacementOperationStatus = "PENDING" | "CONFORME" | "NON_CONFORME";
 
@@ -33,6 +34,25 @@ export interface PlacementOperation {
   pv_manual?: number | null;
   /** Suivi archivé (mail client envoyé) : masqué du tableau, toujours compté ailleurs. */
   archived_at?: number | null;
+  /** Souscription affaire : titulaire choisi (exclusif avec holder_foyer_id ; vide = règle par défaut). */
+  holder_contact_id?: number | null;
+  holder_foyer_id?: number | null;
+  /** Versement programmé déclaré à la souscription (repris sur le placement créé). */
+  vp_montant_centimes?: number | null;
+  vp_frequence?: string | null;
+  /** SCPI : % de réinvestissement des dividendes (vide = aucun). */
+  reinvest_dividendes_pct?: number | null;
+  /** Date de validation partenaire (mail CONFORME ou validation manuelle). */
+  conforme_at?: number | null;
+}
+
+/** Détails de souscription modifiables tant que l'opération n'est pas CONFORME. */
+export interface PlacementSouscriptionDetails {
+  holder_contact_id?: number | null;
+  holder_foyer_id?: number | null;
+  vp_montant_centimes?: number | null;
+  vp_frequence?: string | null;
+  reinvest_dividendes_pct?: number | null;
 }
 
 export interface PlacementOperationWithContact {
@@ -78,6 +98,11 @@ export interface NewPlacementOperationInput {
   montant_centimes?: number | null;
   type_produit?: string | null;
   investissement_id?: number | null;
+  holder_contact_id?: number | null;
+  holder_foyer_id?: number | null;
+  vp_montant_centimes?: number | null;
+  vp_frequence?: string | null;
+  reinvest_dividendes_pct?: number | null;
 }
 
 export const PLACEMENT_OPERATIONS_CHANGED_EVENT = "placement-operations-changed";
@@ -113,6 +138,12 @@ function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWi
     investissement_id,
     pv_manual,
     archived_at,
+    holder_contact_id,
+    holder_foyer_id,
+    vp_montant_centimes,
+    vp_frequence,
+    reinvest_dividendes_pct,
+    conforme_at,
   } = raw;
   return {
     operation: {
@@ -138,6 +169,12 @@ function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWi
       investissement_id,
       pv_manual,
       archived_at,
+      holder_contact_id,
+      holder_foyer_id,
+      vp_montant_centimes,
+      vp_frequence,
+      reinvest_dividendes_pct,
+      conforme_at,
     },
     contact_nom,
     contact_prenom,
@@ -146,7 +183,10 @@ function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWi
 }
 
 export async function scanBoxPlacementEmails(): Promise<BoxPlacementScanResult> {
-  return invoke<BoxPlacementScanResult>("scan_box_placement_emails");
+  const result = await invoke<BoxPlacementScanResult>("scan_box_placement_emails");
+  // Une souscription affaire validée crée son placement côté Rust.
+  if (result.updated > 0) notifyInvestissementsChanged();
+  return result;
 }
 
 export async function createPlacementOperation(
@@ -198,7 +238,36 @@ export async function updatePlacementOperationStatus(
   id: number,
   status: PlacementOperationStatus
 ): Promise<PlacementOperation> {
-  return invoke<PlacementOperation>("update_placement_operation_status", { id, status });
+  const op = await invoke<PlacementOperation>("update_placement_operation_status", { id, status });
+  if (status === "CONFORME" && op.investissement_id != null && op.investissement_id > 0) {
+    notifyInvestissementsChanged();
+  }
+  return op;
+}
+
+/** « Créer le placement » : souscription d'affaire validée restée sans placement (idempotent). */
+export async function createInvestissementFromConformeSouscription(
+  opId: number
+): Promise<{ id: number }> {
+  const inv = await invoke<{ id: number }>("create_investissement_from_conforme_souscription", {
+    opId,
+  });
+  notifyPlacementOperationsChanged();
+  notifyInvestissementsChanged();
+  return inv;
+}
+
+/** Titulaire / montant / VP / réinvestissement d'une souscription affaire non validée. */
+export async function updatePlacementSouscriptionDetails(
+  id: number,
+  input: PlacementSouscriptionDetails & { montant_centimes?: number | null }
+): Promise<PlacementOperation> {
+  const op = await invoke<PlacementOperation>("update_placement_souscription_details", {
+    id,
+    input,
+  });
+  notifyPlacementOperationsChanged();
+  return op;
 }
 
 export async function getPlacementOperation(id: number): Promise<PlacementOperation> {

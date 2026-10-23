@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Archive, ArchiveRestore, Send } from "lucide-react";
+import { Archive, ArchiveRestore, ExternalLink, Pencil, Plus, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +15,7 @@ import {
 import { PipePlacementStepper } from "@/components/pipe/PipePlacementStepper";
 import {
   archivePlacementOperation,
+  createInvestissementFromConformeSouscription,
   dismissPlacementOperation,
   listPlacementOperationsForPipe,
   markPlacementPartnerResent,
@@ -35,8 +36,66 @@ import {
 import { formatPlacementBoardActeLabel } from "@/lib/placement/placement-operation-board";
 import { toast } from "sonner";
 import { userErrorMessage } from "@/lib/api/invoke-error";
+import type { PipeRecord } from "@/lib/api/tauri-pipe";
+import { SouscriptionEditDialog } from "@/components/pipe/SouscriptionEditDialog";
+import { useSouscriptionHolderChoices } from "@/hooks/useSouscriptionHolderChoices";
+import { getInvestissementById } from "@/lib/api/tauri-investissements";
+import { getContactsByFoyer } from "@/lib/api/tauri-contacts";
+import { resolveInvestissementOwnerContactId } from "@/lib/investissements/open-investissement-owner";
+import {
+  formatSouscriptionDetailsSummary,
+  SOUSCRIPTION_PLACEMENT_MISSING_MESSAGE,
+  placementOperationIsAffaireSouscription,
+  placementSouscriptionIsEditable,
+  placementSouscriptionNeedsManualPlacement,
+  SOUSCRIPTION_PLACEMENT_ALREADY_CREATED_MESSAGE,
+} from "@/lib/placement/souscription-details";
 
-export function PipeSuiviPlacementAvancement({ pipeId }: { pipeId: number }) {
+interface PipeSuiviPlacementAvancementProps {
+  pipeId: number;
+  /** Affaire : souscription modifiable avant validation, lien vers le placement créé. */
+  pipe?: Pick<PipeRecord, "pipe_type" | "contact_id" | "secondary_contact_id">;
+  /** Ouvre la fiche contact (onglet Patrimoine) du titulaire du placement créé. */
+  onOpenContactPatrimoine?: (contactId: number) => void;
+}
+
+export function PipeSuiviPlacementAvancement({
+  pipeId,
+  pipe,
+  onOpenContactPatrimoine,
+}: PipeSuiviPlacementAvancementProps) {
+  const isAffaire = pipe?.pipe_type === "AFFAIRE";
+  const holderChoices = useSouscriptionHolderChoices(
+    pipe?.contact_id ?? 0,
+    pipe?.secondary_contact_id,
+    isAffaire
+  );
+  const [editingSouscription, setEditingSouscription] = useState<PlacementOperation | null>(null);
+  const [creatingPlacementId, setCreatingPlacementId] = useState<number | null>(null);
+
+  /** Ouvre la fiche du titulaire réel du placement (contact, ou membre du foyer commun). */
+  const handleOpenPlacement = async (operation: PlacementOperation) => {
+    if (!pipe || !onOpenContactPatrimoine || operation.investissement_id == null) return;
+    try {
+      const inv = await getInvestissementById(operation.investissement_id);
+      const owner = await resolveInvestissementOwnerContactId(inv, getContactsByFoyer);
+      onOpenContactPatrimoine(owner?.contactId ?? pipe.contact_id);
+    } catch (err) {
+      toast.error(userErrorMessage(err, "Placement introuvable dans le patrimoine"));
+    }
+  };
+
+  const handleCreatePlacement = async (operation: PlacementOperation) => {
+    setCreatingPlacementId(operation.id);
+    try {
+      await createInvestissementFromConformeSouscription(operation.id);
+      toast.success("Placement créé dans le patrimoine du client");
+    } catch (err) {
+      toast.error(userErrorMessage(err, "Impossible de créer le placement"));
+    } finally {
+      setCreatingPlacementId(null);
+    }
+  };
   const [operations, setOperations] = useState<PlacementOperation[]>([]);
   const [resentingId, setResentingId] = useState<number | null>(null);
   /** `archive` figé à l'ouverture du dialogue (pas recalculé après rechargement). */
@@ -148,10 +207,80 @@ export function PipeSuiviPlacementAvancement({ pipeId }: { pipeId: number }) {
         // Mail client envoyé : le suivi est terminé, on l'archive (toujours compté).
         const archivable = placementOperationIsArchivable(op);
         const canDismiss = !archived && !archivable && op.status !== "NON_CONFORME";
+        const affaireSouscription =
+          isAffaire && placementOperationIsAffaireSouscription(op, pipe?.pipe_type);
+        const canEditSouscription =
+          affaireSouscription && placementSouscriptionIsEditable(op, pipe?.pipe_type);
+        const placementCreated =
+          affaireSouscription &&
+          op.status === "CONFORME" &&
+          op.investissement_id != null &&
+          op.investissement_id > 0;
+        const needsManualPlacement =
+          isAffaire && placementSouscriptionNeedsManualPlacement(op, pipe?.pipe_type);
+        const placementAlreadyLinked =
+          affaireSouscription &&
+          op.status !== "CONFORME" &&
+          op.investissement_id != null &&
+          op.investissement_id > 0;
+        const souscriptionSummary = affaireSouscription
+          ? formatSouscriptionDetailsSummary(op, holderChoices)
+          : "";
         return (
           <div key={op.id} className={archived ? "space-y-2 opacity-70" : "space-y-2"}>
             <PipePlacementStepper operation={op} hideTitle={index > 0} />
+            {souscriptionSummary ? (
+              <p className="text-xs text-muted-foreground">{souscriptionSummary}</p>
+            ) : null}
+            {placementAlreadyLinked ? (
+              <p className="text-xs text-muted-foreground">
+                {SOUSCRIPTION_PLACEMENT_ALREADY_CREATED_MESSAGE}
+              </p>
+            ) : null}
+            {needsManualPlacement ? (
+              <p className="text-xs text-muted-foreground">
+                {SOUSCRIPTION_PLACEMENT_MISSING_MESSAGE}
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center gap-2">
+              {placementCreated ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={!onOpenContactPatrimoine || !pipe}
+                  onClick={() => void handleOpenPlacement(op)}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Placement créé — Voir
+                </Button>
+              ) : null}
+              {needsManualPlacement ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={creatingPlacementId != null}
+                  onClick={() => void handleCreatePlacement(op)}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {creatingPlacementId === op.id ? "Création…" : "Créer le placement"}
+                </Button>
+              ) : null}
+              {canEditSouscription ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setEditingSouscription(op)}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Modifier
+                </Button>
+              ) : null}
               {archived ? (
                 <Badge variant="outline" className="font-normal">
                   Archivé
@@ -213,6 +342,18 @@ export function PipeSuiviPlacementAvancement({ pipeId }: { pipeId: number }) {
           </div>
         );
       })}
+
+      {pipe ? (
+        <SouscriptionEditDialog
+          operation={editingSouscription}
+          pipeId={pipeId}
+          contactId={pipe.contact_id}
+          secondaryContactId={pipe.secondary_contact_id}
+          onOpenChange={(open) => {
+            if (!open) setEditingSouscription(null);
+          }}
+        />
+      ) : null}
 
       <AlertDialog
         open={dismissTarget != null}

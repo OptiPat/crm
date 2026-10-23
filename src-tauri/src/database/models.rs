@@ -1864,6 +1864,23 @@ pub struct PlacementOperation {
     /// mais toujours compté (rémunération, investissement, historique).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub archived_at: Option<i64>,
+    /// Souscription affaire : titulaire choisi (exclusif avec `holder_foyer_id`).
+    /// NULL des deux côtés = règle par défaut (couple même foyer → commun, sinon contact principal).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub holder_contact_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub holder_foyer_id: Option<i64>,
+    /// Versement programmé déclaré à la souscription (repris sur l'investissement).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vp_montant_centimes: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vp_frequence: Option<String>,
+    /// SCPI : % de réinvestissement des dividendes (NULL = aucun).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reinvest_dividendes_pct: Option<i64>,
+    /// Date de validation partenaire (mail CONFORME ou validation manuelle).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conforme_at: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1904,6 +1921,16 @@ pub struct NewPlacementOperation {
     pub type_produit: Option<String>,
     #[serde(default)]
     pub investissement_id: Option<i64>,
+    #[serde(default)]
+    pub holder_contact_id: Option<i64>,
+    #[serde(default)]
+    pub holder_foyer_id: Option<i64>,
+    #[serde(default)]
+    pub vp_montant_centimes: Option<i64>,
+    #[serde(default)]
+    pub vp_frequence: Option<String>,
+    #[serde(default)]
+    pub reinvest_dividendes_pct: Option<i64>,
 }
 
 impl Default for NewPlacementOperation {
@@ -1918,8 +1945,30 @@ impl Default for NewPlacementOperation {
             montant_centimes: None,
             type_produit: None,
             investissement_id: None,
+            holder_contact_id: None,
+            holder_foyer_id: None,
+            vp_montant_centimes: None,
+            vp_frequence: None,
+            reinvest_dividendes_pct: None,
         }
     }
+}
+
+/// Détails modifiables d'une souscription affaire tant qu'elle n'est pas validée (CONFORME).
+#[derive(Debug, Deserialize, Default, Clone)]
+pub struct PlacementSouscriptionDetailsInput {
+    #[serde(default)]
+    pub montant_centimes: Option<i64>,
+    #[serde(default)]
+    pub holder_contact_id: Option<i64>,
+    #[serde(default)]
+    pub holder_foyer_id: Option<i64>,
+    #[serde(default)]
+    pub vp_montant_centimes: Option<i64>,
+    #[serde(default)]
+    pub vp_frequence: Option<String>,
+    #[serde(default)]
+    pub reinvest_dividendes_pct: Option<i64>,
 }
 
 /// Ligne onglet Rémunération (affaire gagnée + placement).
@@ -1942,6 +1991,9 @@ pub struct PipeRemunerationRow {
     pub investissement_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub date_souscription: Option<i64>,
+    /// Exercice de rémunération : date de validation partenaire (repli SQL, jamais « maintenant »).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_exercice: Option<i64>,
 }
 
 /// Fonds surveillé (veille patrimoniale CGP — sans lien client).

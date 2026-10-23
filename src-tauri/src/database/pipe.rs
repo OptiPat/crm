@@ -551,10 +551,8 @@ impl super::Database {
         if updated == 0 {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
+        // La Gagnée ne crée plus de placement : il est créé à la validation partenaire (CONFORME).
         self.insert_avancement_timeline_entry(id, new_stage, notes, milestone_occurred_at)?;
-        if new_stage == PIPE_STAGE_GAGNEE {
-            self.maybe_create_investissement_from_gagnee_affaire(id, milestone_occurred_at)?;
-        }
         tx.commit()?;
         self.sync_contact_dates_from_pipe(id)?;
         self.get_pipe_by_id(id)

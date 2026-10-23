@@ -568,7 +568,13 @@ export function PipeDetailPanel({
             ) : (
               <>
                 {showAffairePlacementSection && (
-                  <PipeSuiviPlacementAvancement pipeId={pipe.id} />
+                  <PipeSuiviPlacementAvancement
+                    pipeId={pipe.id}
+                    pipe={pipe}
+                    onOpenContactPatrimoine={(contactId) =>
+                      void openContactWithTab(contactId, "patrimoine")
+                    }
+                  />
                 )}
                 {showClassicAffaireStelliumSouscription ? (
                   <PipeSuiviStelliumActAdd

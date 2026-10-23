@@ -680,6 +680,11 @@ impl super::Database {
         let inv = self.get_investissement_by_id(id).ok();
         self.conn
             .execute("DELETE FROM investissements WHERE id = ?1", params![id])?;
+        // Souscription partenaire liée : redevient « sans placement » (bouton « Créer le placement »).
+        self.conn.execute(
+            "UPDATE placement_operations SET investissement_id = NULL WHERE investissement_id = ?1",
+            params![id],
+        )?;
         if let Some(inv) = inv {
             self.sync_contacts_statut_suivi_after_investissement_change(
                 inv.contact_id,

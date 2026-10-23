@@ -3687,7 +3687,7 @@ pub fn create_placement_operation(
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
         .create_placement_operation(input)
-        .map_err(|e| format!("Échec création opération partenaire: {}", e))
+        .map_err(|e| crate::database::placement_operations::placement_error_reason(&e))
 }
 
 #[tauri::command]
@@ -3748,6 +3748,31 @@ pub fn list_pipe_remuneration_rows(
     database
         .list_pipe_remuneration_rows()
         .map_err(|e| format!("Échec liste rémunération pipe: {}", e))
+}
+
+#[tauri::command]
+pub fn update_placement_souscription_details(
+    db: State<'_, DbState>,
+    id: i64,
+    input: crate::database::models::PlacementSouscriptionDetailsInput,
+) -> Result<crate::database::models::PlacementOperation, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .update_placement_souscription_details(id, input)
+        .map_err(|e| crate::database::placement_operations::placement_error_reason(&e))
+}
+
+#[tauri::command]
+pub fn create_investissement_from_conforme_souscription(
+    db: State<'_, DbState>,
+    op_id: i64,
+) -> Result<Investissement, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .create_investissement_from_conforme_souscription(op_id)
+        .map_err(|e| crate::database::placement_operations::placement_error_reason(&e))
 }
 
 #[tauri::command]

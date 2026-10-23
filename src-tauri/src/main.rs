@@ -413,6 +413,8 @@ fn main() {
             list_pipe_remuneration_rows,
             update_placement_operation_pv_manual,
             update_placement_operation_investissement_id,
+            update_placement_souscription_details,
+            create_investissement_from_conforme_souscription,
             mark_placement_partner_resent,
             dismiss_placement_operation,
             archive_placement_operation,

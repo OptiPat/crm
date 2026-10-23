@@ -112,14 +112,25 @@ fn map_placement_row(row: &Row<'_>) -> Result<super::models::PlacementOperation>
         investissement_id: row.get(19)?,
         pv_manual: row.get(20)?,
         archived_at: row.get(21)?,
+        holder_contact_id: row.get(22)?,
+        holder_foyer_id: row.get(23)?,
+        vp_montant_centimes: row.get(24)?,
+        vp_frequence: row.get(25)?,
+        reinvest_dividendes_pct: row.get(26)?,
+        conforme_at: row.get(27)?,
     })
 }
+
+/// Nombre de colonnes de `PLACEMENT_SELECT` : index des colonnes jointes ajoutées après.
+const PLACEMENT_SELECT_COLUMNS: usize = 28;
 
 const PLACEMENT_SELECT: &str = "po.id, po.contact_id, po.pipe_id, po.pipe_timeline_entry_id,
     po.operation_type, po.product_label, po.stellium_label, po.status,
     po.gmail_message_id, po.email_subject, po.email_received_at, po.created_at, po.updated_at,
     po.client_notified_at, po.non_conforme_at, po.partner_resent_at, po.dismissed_at,
-    po.montant_centimes, po.type_produit, po.investissement_id, po.pv_manual, po.archived_at";
+    po.montant_centimes, po.type_produit, po.investissement_id, po.pv_manual, po.archived_at,
+    po.holder_contact_id, po.holder_foyer_id, po.vp_montant_centimes, po.vp_frequence,
+    po.reinvest_dividendes_pct, po.conforme_at";
 
 pub fn placement_operation_is_dismissed(op: &super::models::PlacementOperation) -> bool {
     op.dismissed_at.map(|t| t > 0).unwrap_or(false)
@@ -127,7 +138,7 @@ pub fn placement_operation_is_dismissed(op: &super::models::PlacementOperation) 
 
 /// Archivé : mail client envoyé, carte sortie du tableau / suivi actif.
 /// Contrairement au retrait (`dismissed_at`), l'opération continue de compter partout
-/// (rémunération, création d'investissement à la Gagnée, historique).
+/// (rémunération, placement créé à la validation partenaire, historique).
 pub fn placement_operation_is_archived(op: &super::models::PlacementOperation) -> bool {
     op.archived_at.map(|t| t > 0).unwrap_or(false)
 }
@@ -313,7 +324,344 @@ pub fn placement_operation_eligible_for_client_email(
     placement_conforme_needs_client_notify(op) && placement_operation_is_pipe_tracked(op)
 }
 
+/// Fréquences de versement programmé (mêmes codes que les investissements).
+pub const VP_FREQUENCES: &[&str] = &["MENSUEL", "TRIMESTRIEL", "SEMESTRIEL", "ANNUEL"];
+
+/// Plafond de saisie d'un montant de souscription / versement programmé (100 M€)
+/// — garde-fou contre les fautes de frappe.
+pub const PLACEMENT_MONTANT_MAX_CENTIMES: i64 = 10_000_000_000;
+
+/// Détails déclarés à la souscription affaire (titulaire, VP, réinvestissement).
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(crate) struct SouscriptionDetails {
+    pub holder_contact_id: Option<i64>,
+    pub holder_foyer_id: Option<i64>,
+    pub vp_montant_centimes: Option<i64>,
+    pub vp_frequence: Option<String>,
+    pub reinvest_dividendes_pct: Option<i64>,
+}
+
+impl SouscriptionDetails {
+    fn from_new_operation(input: &super::models::NewPlacementOperation) -> Self {
+        Self {
+            holder_contact_id: input.holder_contact_id,
+            holder_foyer_id: input.holder_foyer_id,
+            vp_montant_centimes: input.vp_montant_centimes,
+            vp_frequence: input.vp_frequence.clone(),
+            reinvest_dividendes_pct: input.reinvest_dividendes_pct,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.holder_contact_id.is_none()
+            && self.holder_foyer_id.is_none()
+            && self.vp_montant_centimes.is_none()
+            && self.vp_frequence.is_none()
+            && self.reinvest_dividendes_pct.is_none()
+    }
+}
+
+fn invalid_param(message: &str) -> rusqlite::Error {
+    rusqlite::Error::InvalidParameterName(message.into())
+}
+
+/// Raison lisible d'un échec (journal du pipe).
+pub(crate) fn placement_error_reason(err: &rusqlite::Error) -> String {
+    match err {
+        rusqlite::Error::InvalidParameterName(message) => message.clone(),
+        rusqlite::Error::QueryReturnedNoRows => {
+            "contact ou foyer introuvable (supprimé ?)".to_string()
+        }
+        other => other.to_string(),
+    }
+}
+
 impl super::Database {
+    /// Valide et normalise les détails de souscription (ids positifs, VP complet, % 1–100).
+    /// Réservé à une opération SOUSCRIPTION d'une affaire ; le titulaire doit appartenir à l'affaire.
+    pub(crate) fn normalize_souscription_details(
+        &self,
+        pipe: Option<&super::models::Pipe>,
+        operation_type: &str,
+        raw: SouscriptionDetails,
+    ) -> Result<SouscriptionDetails> {
+        let details = SouscriptionDetails {
+            holder_contact_id: raw.holder_contact_id.filter(|id| *id > 0),
+            holder_foyer_id: raw.holder_foyer_id.filter(|id| *id > 0),
+            vp_montant_centimes: raw.vp_montant_centimes.filter(|m| *m > 0),
+            vp_frequence: raw
+                .vp_frequence
+                .map(|f| f.trim().to_uppercase())
+                .filter(|f| !f.is_empty()),
+            reinvest_dividendes_pct: raw.reinvest_dividendes_pct.filter(|p| *p != 0),
+        };
+        if details.is_empty() {
+            return Ok(details);
+        }
+        let Some(pipe) = pipe.filter(|p| {
+            p.pipe_type == PIPE_TYPE_AFFAIRE && operation_type == OP_SOUSCRIPTION
+        }) else {
+            return Err(invalid_param(
+                "titulaire / versement programmé réservés à la souscription d'une affaire",
+            ));
+        };
+        if details.holder_contact_id.is_some() && details.holder_foyer_id.is_some() {
+            return Err(invalid_param("titulaire : contact ou foyer, pas les deux"));
+        }
+        let mut participants = vec![pipe.contact_id];
+        if let Some(secondary) = pipe.secondary_contact_id.filter(|id| *id > 0) {
+            participants.push(secondary);
+        }
+        if let Some(holder) = details.holder_contact_id {
+            if !participants.contains(&holder) {
+                return Err(invalid_param("titulaire : contact hors de l'affaire"));
+            }
+        }
+        if let Some(foyer_id) = details.holder_foyer_id {
+            match self.souscription_commun_foyer_allowed(pipe, foyer_id) {
+                Ok(true) => {}
+                Ok(false) => {
+                    return Err(invalid_param(
+                        "titulaire : « Commun » réservé au foyer partagé par le couple de l'affaire",
+                    ))
+                }
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
+                    return Err(invalid_param(
+                        "contact de l'affaire introuvable (supprimé ?) — vérifiez le co-contact",
+                    ))
+                }
+                Err(err) => return Err(err),
+            }
+        }
+        match (details.vp_montant_centimes, details.vp_frequence.as_deref()) {
+            (None, None) => {}
+            (Some(montant), Some(frequence)) => {
+                if montant > PLACEMENT_MONTANT_MAX_CENTIMES {
+                    return Err(invalid_param("versement programmé : montant trop élevé"));
+                }
+                if !VP_FREQUENCES.contains(&frequence) {
+                    return Err(invalid_param("versement programmé : fréquence invalide"));
+                }
+            }
+            _ => {
+                return Err(invalid_param(
+                    "versement programmé : montant et fréquence requis",
+                ))
+            }
+        }
+        if let Some(pct) = details.reinvest_dividendes_pct {
+            if !(1..=100).contains(&pct) {
+                return Err(invalid_param(
+                    "réinvestissement des dividendes : % entre 1 et 100",
+                ));
+            }
+        }
+        Ok(details)
+    }
+
+    /// Titulaire « Commun » autorisé : avec co-contact, les deux sont dans ce foyer ;
+    /// sans co-contact, c'est le foyer du contact et il compte au moins 2 membres.
+    /// (Même règle que `buildSouscriptionHolderChoices` côté front.)
+    pub(crate) fn souscription_commun_foyer_allowed(
+        &self,
+        pipe: &super::models::Pipe,
+        foyer_id: i64,
+    ) -> Result<bool> {
+        let primary = self.get_contact_by_id(pipe.contact_id)?;
+        if primary.foyer_id != Some(foyer_id) {
+            return Ok(false);
+        }
+        if let Some(secondary_id) = pipe.secondary_contact_id.filter(|id| *id > 0) {
+            let secondary = self.get_contact_by_id(secondary_id)?;
+            return Ok(secondary.foyer_id == Some(foyer_id));
+        }
+        let members: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE foyer_id = ?1",
+            params![foyer_id],
+            |row| row.get(0),
+        )?;
+        Ok(members >= 2)
+    }
+
+    fn write_souscription_details(&self, id: i64, details: &SouscriptionDetails) -> Result<()> {
+        self.conn.execute(
+            "UPDATE placement_operations SET holder_contact_id = ?1, holder_foyer_id = ?2,
+             vp_montant_centimes = ?3, vp_frequence = ?4, reinvest_dividendes_pct = ?5,
+             updated_at = ?6 WHERE id = ?7",
+            params![
+                details.holder_contact_id,
+                details.holder_foyer_id,
+                details.vp_montant_centimes,
+                details.vp_frequence,
+                details.reinvest_dividendes_pct,
+                now_unix(),
+                id
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Modifie montant / titulaire / VP / réinvestissement d'une souscription affaire non validée.
+    /// Remplacement complet des détails (champ absent = règle par défaut / aucun VP).
+    pub fn update_placement_souscription_details(
+        &self,
+        id: i64,
+        input: super::models::PlacementSouscriptionDetailsInput,
+    ) -> Result<super::models::PlacementOperation> {
+        let op = self.get_placement_operation_by_id(id)?;
+        if placement_operation_is_dismissed(&op) {
+            return Err(invalid_param("souscription retirée du suivi"));
+        }
+        if op.status == STATUS_CONFORME {
+            return Err(invalid_param(
+                "souscription déjà validée par le partenaire — modifiez le placement créé",
+            ));
+        }
+        if self.linked_investissement_id(&op)?.is_some() {
+            return Err(invalid_param(
+                "Le placement a déjà été créé : modifiez-le dans le patrimoine",
+            ));
+        }
+        let pipe = match op.pipe_id.filter(|id| *id > 0) {
+            Some(pipe_id) => Some(self.get_pipe_by_id(pipe_id)?),
+            None => None,
+        };
+        if op.operation_type != OP_SOUSCRIPTION
+            || pipe.as_ref().map(|p| p.pipe_type.as_str()) != Some(PIPE_TYPE_AFFAIRE)
+        {
+            return Err(invalid_param(
+                "modification réservée à la souscription d'une affaire",
+            ));
+        }
+        let details = self.normalize_souscription_details(
+            pipe.as_ref(),
+            &op.operation_type,
+            SouscriptionDetails {
+                holder_contact_id: input.holder_contact_id,
+                holder_foyer_id: input.holder_foyer_id,
+                vp_montant_centimes: input.vp_montant_centimes,
+                vp_frequence: input.vp_frequence,
+                reinvest_dividendes_pct: input.reinvest_dividendes_pct,
+            },
+        )?;
+        if let Some(montant) = input.montant_centimes {
+            if montant <= 0 {
+                return Err(invalid_param("montant souscrit requis"));
+            }
+            if montant > PLACEMENT_MONTANT_MAX_CENTIMES {
+                return Err(invalid_param("montant souscrit trop élevé"));
+            }
+        }
+        self.with_placement_savepoint(|| {
+            if let Some(montant) = input.montant_centimes {
+                self.conn.execute(
+                    "UPDATE placement_operations SET montant_centimes = ?1, updated_at = ?2
+                     WHERE id = ?3",
+                    params![montant, now_unix(), id],
+                )?;
+            }
+            self.write_souscription_details(id, &details)
+        })?;
+        self.get_placement_operation_by_id(id)
+    }
+
+    /// Exécute `f` dans un SAVEPOINT (imbricable, contrairement à `BEGIN`).
+    pub(crate) fn with_placement_savepoint<T>(&self, f: impl FnOnce() -> Result<T>) -> Result<T> {
+        self.with_named_savepoint("placement_op", f)
+    }
+
+    /// `name` : identifiant SQL fixe (jamais une saisie utilisateur).
+    fn with_named_savepoint<T>(&self, name: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
+        self.conn.execute_batch(&format!("SAVEPOINT {name}"))?;
+        match f() {
+            Ok(value) => {
+                self.conn.execute_batch(&format!("RELEASE {name}"))?;
+                Ok(value)
+            }
+            Err(err) => {
+                let _ = self
+                    .conn
+                    .execute_batch(&format!("ROLLBACK TO {name}; RELEASE {name}"));
+                Err(err)
+            }
+        }
+    }
+
+    /// Note de journal sur le pipe de l'opération (sans effet si pas de pipe).
+    pub(crate) fn journal_placement_note(
+        &self,
+        op: &super::models::PlacementOperation,
+        titre: &str,
+        contenu: String,
+    ) -> Result<()> {
+        let Some(pipe_id) = op.pipe_id.filter(|id| *id > 0) else {
+            return Ok(());
+        };
+        self.create_pipe_timeline_entry(super::models::NewPipeTimelineEntry {
+            pipe_id,
+            entry_type: "NOTE".into(),
+            titre: Some(titre.into()),
+            contenu: Some(contenu),
+            occurred_at: Some(now_unix()),
+        })?;
+        Ok(())
+    }
+
+    /// Transition vers CONFORME : crée le placement de la souscription affaire (une seule fois).
+    /// Une opération déjà CONFORME ne déclenche rien (pas de création rétroactive).
+    /// Un échec de création n'annule pas la validation : il est journalisé sur le pipe
+    /// (le CGP peut ensuite utiliser « Créer le placement »).
+    fn after_placement_became_conforme(
+        &self,
+        previous_status: &str,
+        op_id: i64,
+        validated_at: i64,
+    ) -> Result<()> {
+        if previous_status == STATUS_CONFORME {
+            return Ok(());
+        }
+        // Date de validation partenaire conservée (création manuelle ultérieure, exercice).
+        self.conn.execute(
+            "UPDATE placement_operations SET conforme_at = ?1 WHERE id = ?2",
+            params![validated_at, op_id],
+        )?;
+        let created = self.with_named_savepoint("placement_auto_inv", || {
+            self.maybe_create_investissement_from_conforme_souscription(op_id)
+        });
+        if let Err(err) = created {
+            let reason = placement_error_reason(&err);
+            eprintln!("Placement auto non créé (souscription #{op_id}) : {reason}");
+            // Le journal ne doit jamais annuler la validation.
+            let journaled = self.get_placement_operation_by_id(op_id).and_then(|op| {
+                self.journal_placement_note(
+                    &op,
+                    "Placement non créé",
+                    format!("Placement non créé : {reason}. Utilisez « Créer le placement »."),
+                )
+            });
+            if let Err(journal_err) = journaled {
+                eprintln!("Journal placement non créé (souscription #{op_id}) : {journal_err}");
+            }
+        }
+        Ok(())
+    }
+
+    /// Placement lié encore présent (un placement supprimé = non lié).
+    pub(crate) fn linked_investissement_id(
+        &self,
+        op: &super::models::PlacementOperation,
+    ) -> Result<Option<i64>> {
+        let Some(inv_id) = op.investissement_id.filter(|id| *id > 0) else {
+            return Ok(None);
+        };
+        let exists: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM investissements WHERE id = ?1)",
+            params![inv_id],
+            |row| row.get(0),
+        )?;
+        Ok(exists.then_some(inv_id))
+    }
+
     pub fn migrate_placement_operations_table(&self) -> Result<()> {
         self.conn.execute_batch(
             "
@@ -406,6 +754,42 @@ impl super::Database {
             )?;
             println!("✅ Migration: archived_at sur placement_operations");
         }
+        for (column, sql_type) in [
+            ("holder_contact_id", "INTEGER"),
+            ("holder_foyer_id", "INTEGER"),
+            ("vp_montant_centimes", "INTEGER"),
+            ("vp_frequence", "TEXT"),
+            ("reinvest_dividendes_pct", "INTEGER"),
+            ("conforme_at", "INTEGER"),
+        ] {
+            if !self.table_has_column("placement_operations", column)? {
+                self.conn.execute(
+                    &format!("ALTER TABLE placement_operations ADD COLUMN {column} {sql_type}"),
+                    [],
+                )?;
+                println!("✅ Migration: {column} sur placement_operations");
+            }
+        }
+        // Lien vers un placement supprimé : on le traite comme non lié (idempotent).
+        let has_investissements: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'investissements')",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_investissements {
+            let repaired = self.conn.execute(
+                "UPDATE placement_operations SET investissement_id = NULL
+                 WHERE investissement_id IS NOT NULL AND investissement_id > 0
+                   AND NOT EXISTS (
+                     SELECT 1 FROM investissements i
+                     WHERE i.id = placement_operations.investissement_id
+                   )",
+                [],
+            )?;
+            if repaired > 0 {
+                println!("✅ Migration: {repaired} lien(s) placement orphelin(s) remis à NULL");
+            }
+        }
         Ok(())
     }
 
@@ -465,6 +849,15 @@ impl super::Database {
                 self.find_pending_placement_for_pipe(pipe_id, &input.operation_type)?
             };
         }
+        let pipe_for_details = match input.pipe_id.filter(|id| *id > 0) {
+            Some(pipe_id) => Some(self.get_pipe_by_id(pipe_id)?),
+            None => None,
+        };
+        let details = self.normalize_souscription_details(
+            pipe_for_details.as_ref(),
+            &input.operation_type,
+            SouscriptionDetails::from_new_operation(&input),
+        )?;
         let requires_montant = placement_operation_requires_montant(
             &input.operation_type,
             input.stellium_label.as_deref(),
@@ -505,11 +898,19 @@ impl super::Database {
         if let Some(pipe_id) = input.pipe_id {
             if pipe_id > 0 {
                 if let Some(existing) = existing_to_link {
+                    if !details.is_empty() && existing.status == STATUS_CONFORME {
+                        return Err(invalid_param(
+                            "souscription déjà validée par le partenaire : titulaire, versement programmé et réinvestissement ne sont plus modifiables ici",
+                        ));
+                    }
                     merge_placement_remuneration_fields_on_existing(
                         &self.conn,
                         existing.id,
                         &input,
                     )?;
+                    if !details.is_empty() {
+                        self.write_souscription_details(existing.id, &details)?;
+                    }
                     if let Some(entry_id) = input.pipe_timeline_entry_id.filter(|id| *id > 0) {
                         if existing.pipe_timeline_entry_id != Some(entry_id) {
                             let now = now_unix();
@@ -519,11 +920,8 @@ impl super::Database {
                                  WHERE id = ?3",
                                 params![entry_id, now, existing.id],
                             )?;
-                            self.maybe_create_investissement_from_gagnee_affaire(pipe_id, None)?;
-                            return self.get_placement_operation_by_id(existing.id);
                         }
                     }
-                    self.maybe_create_investissement_from_gagnee_affaire(pipe_id, None)?;
                     return self.get_placement_operation_by_id(existing.id);
                 }
             }
@@ -533,8 +931,10 @@ impl super::Database {
             "INSERT INTO placement_operations (
                 contact_id, pipe_id, pipe_timeline_entry_id, operation_type,
                 product_label, stellium_label, status, created_at, updated_at,
-                montant_centimes, type_produit, investissement_id
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                montant_centimes, type_produit, investissement_id,
+                holder_contact_id, holder_foyer_id, vp_montant_centimes, vp_frequence,
+                reinvest_dividendes_pct
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 input.contact_id,
                 input.pipe_id,
@@ -548,12 +948,14 @@ impl super::Database {
                 input.montant_centimes,
                 input.type_produit,
                 input.investissement_id,
+                details.holder_contact_id,
+                details.holder_foyer_id,
+                details.vp_montant_centimes,
+                details.vp_frequence,
+                details.reinvest_dividendes_pct,
             ],
         )?;
         let id = self.conn.last_insert_rowid();
-        if let Some(pipe_id) = input.pipe_id.filter(|id| *id > 0) {
-            self.maybe_create_investissement_from_gagnee_affaire(pipe_id, None)?;
-        }
         self.get_placement_operation_by_id(id)
     }
 
@@ -658,9 +1060,9 @@ impl super::Database {
             let operation = map_placement_row(row)?;
             Ok(super::models::PlacementOperationWithContact {
                 operation,
-                contact_nom: row.get(22)?,
-                contact_prenom: row.get(23)?,
-                pipe_titre: row.get(24)?,
+                contact_nom: row.get(PLACEMENT_SELECT_COLUMNS)?,
+                contact_prenom: row.get(PLACEMENT_SELECT_COLUMNS + 1)?,
+                pipe_titre: row.get(PLACEMENT_SELECT_COLUMNS + 2)?,
             })
         })?;
         let mut result = Vec::new();
@@ -823,11 +1225,19 @@ impl super::Database {
                 "status invalide".into(),
             ));
         }
+        let previous = self.get_placement_operation_by_id(id)?;
         let now = now_unix();
-        self.conn.execute(
-            "UPDATE placement_operations SET status = ?1, updated_at = ?2 WHERE id = ?3",
-            params![status, now, id],
-        )?;
+        self.with_placement_savepoint(|| {
+            self.conn.execute(
+                "UPDATE placement_operations SET status = ?1, updated_at = ?2 WHERE id = ?3",
+                params![status, now, id],
+            )?;
+            if status == STATUS_CONFORME {
+                // Validation manuelle : date de validation = maintenant.
+                self.after_placement_became_conforme(&previous.status, id, now)?;
+            }
+            Ok(())
+        })?;
         self.get_placement_operation_by_id(id)
     }
 
@@ -1508,57 +1918,63 @@ impl super::Database {
 
         let now = now_unix();
         if let Some(op) = pending {
-            let pipe_id_to_set = if op.pipe_id.filter(|id| *id > 0).is_some() {
-                None
-            } else {
-                pipe_id_hint.filter(|id| *id > 0)
-            };
-            let product_to_set: Option<&str> = if op
-                .product_label
-                .as_ref()
-                .map(|s| !s.trim().is_empty())
-                .unwrap_or(false)
-            {
-                None
-            } else {
-                product_label
-            };
-            self.conn.execute(
-                "UPDATE placement_operations SET
-                    status = ?1,
-                    stellium_label = COALESCE(?2, stellium_label),
-                    product_label = COALESCE(?3, product_label),
-                    gmail_message_id = ?4,
-                    email_subject = ?5,
-                    email_received_at = ?6,
-                    pipe_id = COALESCE(?7, pipe_id),
-                    non_conforme_at = CASE
-                        WHEN ?1 = 'NON_CONFORME' AND (non_conforme_at IS NULL OR non_conforme_at <= 0)
-                        THEN ?6
-                        ELSE non_conforme_at
-                    END,
-                    updated_at = ?8
-                 WHERE id = ?9",
-                params![
+            return self.with_placement_savepoint(|| {
+                let pipe_id_to_set = if op.pipe_id.filter(|id| *id > 0).is_some() {
+                    None
+                } else {
+                    pipe_id_hint.filter(|id| *id > 0)
+                };
+                let product_to_set: Option<&str> = if op
+                    .product_label
+                    .as_ref()
+                    .map(|s| !s.trim().is_empty())
+                    .unwrap_or(false)
+                {
+                    None
+                } else {
+                    product_label
+                };
+                self.conn.execute(
+                    "UPDATE placement_operations SET
+                        status = ?1,
+                        stellium_label = COALESCE(?2, stellium_label),
+                        product_label = COALESCE(?3, product_label),
+                        gmail_message_id = ?4,
+                        email_subject = ?5,
+                        email_received_at = ?6,
+                        pipe_id = COALESCE(?7, pipe_id),
+                        non_conforme_at = CASE
+                            WHEN ?1 = 'NON_CONFORME' AND (non_conforme_at IS NULL OR non_conforme_at <= 0)
+                            THEN ?6
+                            ELSE non_conforme_at
+                        END,
+                        updated_at = ?8
+                     WHERE id = ?9",
+                    params![
+                        status,
+                        stellium_label,
+                        product_to_set,
+                        gmail_message_id,
+                        email_subject,
+                        email_received_at,
+                        pipe_id_to_set,
+                        now,
+                        op.id,
+                    ],
+                )?;
+                if status == STATUS_CONFORME {
+                    // Validation par mail : date de validation = date du mail CONFORME.
+                    self.after_placement_became_conforme(&op.status, op.id, email_received_at)?;
+                }
+                let updated = self.get_placement_operation_by_id(op.id)?;
+                self.journal_placement_partner_email_response(
+                    &updated,
                     status,
-                    stellium_label,
-                    product_to_set,
-                    gmail_message_id,
-                    email_subject,
                     email_received_at,
-                    pipe_id_to_set,
-                    now,
-                    op.id,
-                ],
-            )?;
-            let updated = self.get_placement_operation_by_id(op.id)?;
-            self.journal_placement_partner_email_response(
-                &updated,
-                status,
-                email_received_at,
-                email_subject,
-            )?;
-            return Ok((updated, true));
+                    email_subject,
+                )?;
+                Ok((updated, true))
+            });
         }
 
         Err(rusqlite::Error::InvalidParameterName(
@@ -1982,6 +2398,12 @@ mod tests {
             investissement_id: None,
             pv_manual: None,
             archived_at: None,
+            holder_contact_id: None,
+            holder_foyer_id: None,
+            vp_montant_centimes: None,
+            vp_frequence: None,
+            reinvest_dividendes_pct: None,
+            conforme_at: None,
         };
 
         assert!(placement_operation_blocks_pipe_archive(&op), "brouillon suivi");
