@@ -19,7 +19,11 @@ describe("buildConventionRtoPreview", () => {
     cgp_siren: "843 139 148",
     cgp_siren_compact: "843139148",
     cgp_orias: "19000736",
-    cgp_anacofi_numero: "E011507",
+    cgp_association: "l'Anacofi CIF",
+    cgp_association_adhesion: "enregistré sous le n°E011507 auprès de l'Anacofi CIF",
+    cgp_association_aupres: "auprès de l'Anacofi CIF (n° E011507)",
+    cgp_association_membre: "membre n° E011507 de l'ANACOFI – CIF",
+    cgp_association_numero: "E011507",
     cgp_representant_legal: "Jean DUPONT en qualité de gérant",
   };
 

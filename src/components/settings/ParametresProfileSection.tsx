@@ -1,4 +1,11 @@
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   ProfileHeroCard,
@@ -15,6 +22,11 @@ import {
   getSetupChecklist,
 } from "@/lib/settings/parametres-completion";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
+import {
+  ASSOCIATION_CIF_DEFAUT,
+  ASSOCIATIONS_CIF,
+  resolveAssociationCif,
+} from "@/lib/souscription-cif/association-cif";
 
 type ParametresProfileSectionProps = {
   cgpConfig: CgpConfig;
@@ -174,14 +186,37 @@ export function ParametresProfileSection({
               onChange={(e) => onConfigChange({ cif_rcs_ville: e.target.value })}
             />
           </SettingsRow>
-          <SettingsRow label="N° Anacofi CIF" htmlFor="cif_anacofi_numero">
-            <Input
-              id="cif_anacofi_numero"
-              placeholder="E011507"
-              value={cgpConfig.cif_anacofi_numero || ""}
-              onChange={(e) => onConfigChange({ cif_anacofi_numero: e.target.value })}
-            />
+          <SettingsRow
+            label="Association professionnelle"
+            hint="Association CIF agréée par l'AMF citée dans vos documents"
+            htmlFor="cif_association"
+          >
+            <Select
+              value={cgpConfig.cif_association || ASSOCIATION_CIF_DEFAUT}
+              onValueChange={(v) => onConfigChange({ cif_association: v })}
+            >
+              <SelectTrigger id="cif_association">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(ASSOCIATIONS_CIF).map(([id, association]) => (
+                  <SelectItem key={id} value={id}>
+                    {association.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </SettingsRow>
+          {resolveAssociationCif(cgpConfig.cif_association).avecNumero && (
+            <SettingsRow label="N° adhérent" htmlFor="cif_association_numero">
+              <Input
+                id="cif_association_numero"
+                placeholder="E011507"
+                value={cgpConfig.cif_association_numero || ""}
+                onChange={(e) => onConfigChange({ cif_association_numero: e.target.value })}
+              />
+            </SettingsRow>
+          )}
           <SettingsRow label="N° ORIAS" htmlFor="cif_orias">
             <Input
               id="cif_orias"
@@ -192,7 +227,7 @@ export function ParametresProfileSection({
           </SettingsRow>
           <SettingsRow
             label="Pied de page personnalisé"
-            hint="Optionnel — remplace le modèle par défaut. Vous pouvez utiliser {{cgp_orias}}, {{cgp_siren}}, etc."
+            hint="Optionnel — remplace le modèle par défaut. Vous pouvez utiliser {{cgp_orias}}, {{cgp_siren}}, {{cgp_association_membre}}, {{cgp_association}}, etc."
             htmlFor="cif_pied_de_page"
           >
             <Textarea

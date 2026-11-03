@@ -5,7 +5,7 @@ export const SCPI_LM_PAGE1_BODY_AFTER_TITLE = `Je vous ai transmis lors de notre
 - D'appréhender vos connaissances et expériences des marchés financiers ;
 - De recueillir vos objectifs afin d'adapter ma mission de conseil à votre profil et à vos attentes.
 
-La présente lettre de mission est, en conséquence, établie sur la base des éléments susvisés avec pour objet, conformément aux normes d'exercice professionnel édictées par l'Anacofi CIF, association à laquelle je suis adhérent, de vous proposer une étude patrimoniale et des préconisations de solutions patrimoniales afin d'identifier les problématiques et attentes patrimoniales à partir des informations que vous avez bien voulu me communiquer.
+La présente lettre de mission est, en conséquence, établie sur la base des éléments susvisés avec pour objet, conformément aux normes d'exercice professionnel édictées par {{cgp_association}}, association à laquelle je suis adhérent, de vous proposer une étude patrimoniale et des préconisations de solutions patrimoniales afin d'identifier les problématiques et attentes patrimoniales à partir des informations que vous avez bien voulu me communiquer.
 C'est dans ces circonstances que le Client et le Conseiller se sont ensuite rapprochés en vue de définir par la présente lettre de mission (la « Lettre de Mission »), les termes de la mission confiée au Conseiller au titre de l'exécution des Prestations convenues entre les Parties.
 
 [u]Identification des intervenants :[/u]
@@ -23,14 +23,14 @@ ET
 immatriculé au RCS de {{cgp_rcs_ville}} sous le numéro {{cgp_siren}}
 dont le siège est situé {{cgp_adresse_ligne}} – {{cgp_cp_ville}}
 est titulaire du statut de Conseiller en Investissements Financiers
-enregistré sous le n°{{cgp_anacofi_numero}} auprès de l'Anacofi CIF
+{{cgp_association_adhesion}}
 Association agréée par l'Autorité des Marchés Financiers
 
 Ci-après désigné « le Conseiller ».`;
 
 /** @deprecated Corps complet — préférer SCPI_LM_PAGE1_BODY_AFTER_TITLE + en-tête structuré. */
 export const SCPI_LM_PAGE1_BODY = SCPI_LM_PAGE1_BODY_AFTER_TITLE;
-export const SCPI_LM_PAGE1_FOOTER_DEFAULT = `Conseiller en Investissements Financiers, membre n° {{cgp_anacofi_numero}} de l'ANACOFI – CIF - Association agréée par l'Autorité des Marchés Financiers-Mandataire d'intermédiaire en Assurance de Stellium Courtage - ORIAS n°{{cgp_orias}} www.orias.fr, sous le contrôle de l'Autorité de Contrôle Prudentiel et de Résolution (ACPR) 04 Place de Budapest – 75436 Paris Cedex 09
+export const SCPI_LM_PAGE1_FOOTER_DEFAULT = `Conseiller en Investissements Financiers, {{cgp_association_membre}} - Association agréée par l'Autorité des Marchés Financiers-Mandataire d'intermédiaire en Assurance de Stellium Courtage - ORIAS n°{{cgp_orias}} www.orias.fr, sous le contrôle de l'Autorité de Contrôle Prudentiel et de Résolution (ACPR) 04 Place de Budapest – 75436 Paris Cedex 09
 Mandataire d'intermédiaire en Opérations de Banque et en Services de Paiement de Stellium Financement sous le contrôle de l'ACPR (Autorité de Contrôle Prudentiel et de Résolution), 4 Place de Budapest, CS 92459, 75436 Paris Cedex 09
 Attestation de collaborateur de Stellium Immobilier n° CPI 3101 2015 000 001 813 délivrée par la CCI de Toulouse
 Assurance Responsabilité Civile Professionnelle conforme au code des Assurances auprès de ZURICH INSURANCE PLC, 112 Avenue de Wagram, 75017 Paris-N° SIREN {{cgp_siren_compact}} RSAC {{cgp_rcs_ville}}- Siège social : {{cgp_adresse_ligne}}, {{cgp_cp_ville}}`;
@@ -78,6 +78,11 @@ export const SOUSCRIPTION_VARIABLE_LABELS: Record<string, string> = {
   cgp_siren_compact: "N° SIREN (sans espaces)",
   cgp_adresse_ligne: "Adresse du siège",
   cgp_cp_ville: "Code postal & ville siège",
-  cgp_anacofi_numero: "N° Anacofi CIF",
+  cgp_association: "Association professionnelle CIF",
+  cgp_association_adhesion: "N° adhérent association CIF",
+  cgp_association_aupres: "N° adhérent association CIF",
+  cgp_association_membre: "N° adhérent association CIF",
+  cgp_association_numero: "N° adhérent association CIF",
+  cgp_anacofi_numero: "N° adhérent association CIF",
   cgp_orias: "N° ORIAS",
 };

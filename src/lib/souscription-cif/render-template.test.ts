@@ -23,7 +23,8 @@ describe("buildScpiLettreMissionPreview", () => {
       date_qpi: null,
       objectifs_client: "Optimiser la rentabilité de l'épargne",
       cgp_nom_complet: "Jean DUPONT",
-      cgp_anacofi_numero: "E011507",
+      cgp_association: "la CNCEF Patrimoine",
+      cgp_association_adhesion: "adhérent de la CNCEF Patrimoine",
     });
 
     expect(preview.pages).toHaveLength(7);
@@ -38,6 +39,8 @@ describe("buildScpiLettreMissionPreview", () => {
     expect(page1Text).toContain("Jean Dupont");
     expect(page1Text).toContain("13/06/2026");
     expect(page1Text).toContain("Jean DUPONT");
+    expect(page1Text).toContain("édictées par la CNCEF Patrimoine, association");
+    expect(page1Text).toContain("Financiers\nadhérent de la CNCEF Patrimoine\nAssociation agréée");
 
     const page2Text = preview.pages[1].bodySegments.map(segText).join("");
     expect(page2Text).toContain("Optimiser la rentabilité de l'épargne");

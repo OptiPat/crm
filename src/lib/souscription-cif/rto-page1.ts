@@ -17,7 +17,7 @@ ET
 La société {{cgp_nom_complet}}
 ayant son siège social au {{cgp_adresse_ligne}} – {{cgp_cp_ville}}
 immatriculée au Registre du Commerce et des Sociétés (RCS) de {{cgp_rcs_ville}} sous le n°{{cgp_siren}}
-immatriculée sur le registre unique tenu par l'ORIAS sous le n°{{cgp_orias}} enregistré(e) en qualité de Conseiller en Investissements Financiers auprès de l'Anacofi CIF (n° {{cgp_anacofi_numero}}) représentée aux présentes par {{cgp_nom_complet}} en qualité de gérant.
+immatriculée sur le registre unique tenu par l'ORIAS sous le n°{{cgp_orias}} enregistré(e) en qualité de Conseiller en Investissements Financiers {{cgp_association_aupres}} représentée aux présentes par {{cgp_nom_complet}} en qualité de gérant.
 
 Ci-après désigné « le Conseiller ».
 

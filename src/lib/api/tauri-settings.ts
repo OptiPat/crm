@@ -41,8 +41,10 @@ export interface CgpConfig {
   cif_siren?: string | null;
   /** Ville du greffe RCS (ex. Montpellier). */
   cif_rcs_ville?: string | null;
-  /** N° adhérent Anacofi CIF (ex. E011507). */
-  cif_anacofi_numero?: string | null;
+  /** Association professionnelle CIF (`anacofi`, `cncef`) — absente = Anacofi. */
+  cif_association?: string | null;
+  /** N° adhérent auprès de l'association CIF (ex. E011507). */
+  cif_association_numero?: string | null;
   /** N° ORIAS. */
   cif_orias?: string | null;
   /** Pied de page légal CIF personnalisé (remplace le modèle par défaut si renseigné). */

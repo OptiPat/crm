@@ -135,6 +135,15 @@ describe("synthese-patrimoniale-pdf", () => {
     ]);
   });
 
+  it("cite l'association CIF choisie, Anacofi par défaut", () => {
+    expect(legalLinesFromCgpConfig({ cif_association_numero: "E011507" })).toEqual([
+      "Conseiller en Investissements Financiers, membre n° E011507 de l'ANACOFI – CIF",
+    ]);
+    expect(
+      legalLinesFromCgpConfig({ cif_association: "cncef" })
+    ).toEqual(["Conseiller en Investissements Financiers, membre de la CNCEF Patrimoine"]);
+  });
+
   it("ne duplique pas l'identité déjà présente dans la signature", () => {
     expect(
       legalLinesFromCgpConfig({

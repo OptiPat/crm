@@ -1,6 +1,10 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Document } from "@/lib/api/tauri-documents";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
+import {
+  associationCifMentions,
+  resolveAssociationCif,
+} from "@/lib/souscription-cif/association-cif";
 import { latestQpiExperienceInvestissement } from "@/lib/documents/qpi-document-utils";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { formatDateInputFr } from "@/lib/souscription-cif/format-date-input-fr";
@@ -47,6 +51,12 @@ export function buildSouscriptionVariables(
 ): Record<string, string | null> {
   const sirenRaw = cgp?.cif_siren?.trim() || null;
   const sirenCompact = sirenRaw ? sirenRaw.replace(/\s+/g, "") : null;
+  const association = resolveAssociationCif(cgp?.cif_association);
+  // Numéro conservé en config au changement d'association, mais jamais cité pour la CNCEF.
+  const associationNumero = association.avecNumero
+    ? cgp?.cif_association_numero?.trim() || null
+    : null;
+  const associationMentions = associationCifMentions(cgp?.cif_association, associationNumero);
 
   return {
     client_nom_prenom: contact
@@ -91,7 +101,13 @@ export function buildSouscriptionVariables(
     cgp_siren_compact: sirenCompact,
     cgp_adresse_ligne: cgp?.adresse?.trim() || null,
     cgp_cp_ville: cgp ? joinCpVille(cgp.code_postal, cgp.ville) : null,
-    cgp_anacofi_numero: cgp?.cif_anacofi_numero?.trim() || null,
+    cgp_association: association.nom,
+    cgp_association_adhesion: associationMentions.adhesion,
+    cgp_association_aupres: associationMentions.aupres,
+    cgp_association_membre: associationMentions.membre,
+    cgp_association_numero: associationNumero,
+    /** Ancien nom, conservé pour les pieds de page personnalisés existants. */
+    cgp_anacofi_numero: associationNumero,
     cgp_orias: cgp?.cif_orias?.trim() || null,
   };
 }

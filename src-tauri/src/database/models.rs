@@ -1334,9 +1334,12 @@ pub struct CgpConfig {
     /// Ville du greffe RCS.
     #[serde(default)]
     pub cif_rcs_ville: Option<String>,
-    /// N° adhérent Anacofi CIF.
+    /// Association professionnelle CIF (`anacofi`, `cncef`) — absente = `anacofi`.
     #[serde(default)]
-    pub cif_anacofi_numero: Option<String>,
+    pub cif_association: Option<String>,
+    /// N° adhérent auprès de l'association CIF (ancienne clé : `cif_anacofi_numero`).
+    #[serde(default, alias = "cif_anacofi_numero")]
+    pub cif_association_numero: Option<String>,
     /// N° ORIAS.
     #[serde(default)]
     pub cif_orias: Option<String>,

@@ -1,6 +1,7 @@
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { Partenaire } from "@/lib/api/tauri-partenaires";
 import { getEffectiveEncoursCentimes } from "@/lib/investissements/investissement-encours";
+import { associationCifMentions } from "@/lib/souscription-cif/association-cif";
 import { distributeIntegerPercents } from "@/lib/patrimoine/chart-percents";
 import {
   getPatrimoineCategorie,
@@ -153,7 +154,8 @@ export function legalLinesFromCgpConfig(cgp: {
   ville?: string | null;
   cif_siren?: string | null;
   cif_orias?: string | null;
-  cif_anacofi_numero?: string | null;
+  cif_association?: string | null;
+  cif_association_numero?: string | null;
   email_signature?: string | null;
 }): string[] {
   const identity = [cgp.prenom?.trim(), cgp.nom?.trim()]
@@ -180,10 +182,9 @@ export function legalLinesFromCgpConfig(cgp: {
       `Inscrit à l'ORIAS sous le n° ${cgp.cif_orias.trim()} (www.orias.fr)`
     );
   }
-  if (cgp.cif_anacofi_numero?.trim()) {
-    lines.push(
-      `Conseiller en Investissements Financiers, membre de l'ANACOFI-CIF n° ${cgp.cif_anacofi_numero.trim()}`
-    );
+  const { membre } = associationCifMentions(cgp.cif_association, cgp.cif_association_numero);
+  if (membre) {
+    lines.push(`Conseiller en Investissements Financiers, ${membre}`);
   }
   return lines;
 }

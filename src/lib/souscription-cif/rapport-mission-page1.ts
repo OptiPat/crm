@@ -15,7 +15,7 @@ ET
 immatriculé au RCS de {{cgp_rcs_ville}} sous le numéro {{cgp_siren}}
 dont le siège est situé {{cgp_adresse_ligne}} – {{cgp_cp_ville}}
 est titulaire du statut de Conseiller en Investissements Financiers
-enregistré sous le n°{{cgp_anacofi_numero}} auprès de l'Anacofi CIF
+{{cgp_association_adhesion}}
 Association agréée par l'Autorité des Marchés Financiers
 
 Ci-après désigné « le Conseiller ».`;

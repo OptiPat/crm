@@ -111,6 +111,10 @@ const CGP_PROFILE_KEYS = new Set([
   "cgp_siren_compact",
   "cgp_adresse_ligne",
   "cgp_cp_ville",
+  "cgp_association_adhesion",
+  "cgp_association_aupres",
+  "cgp_association_membre",
+  "cgp_association_numero",
   "cgp_anacofi_numero",
   "cgp_orias",
 ]);
@@ -518,10 +522,13 @@ export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProp
           : lettreMissionPreview;
 
   const missingProfileLabels = useMemo(
-    () =>
-      preview.missingKeys
-        .filter((k) => CGP_PROFILE_KEYS.has(k))
-        .map((k) => SOUSCRIPTION_VARIABLE_LABELS[k] ?? k),
+    () => [
+      ...new Set(
+        preview.missingKeys
+          .filter((k) => CGP_PROFILE_KEYS.has(k))
+          .map((k) => SOUSCRIPTION_VARIABLE_LABELS[k] ?? k)
+      ),
+    ],
     [preview.missingKeys]
   );
 

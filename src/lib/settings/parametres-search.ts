@@ -39,7 +39,7 @@ export const PARAMETRES_SEARCH_INDEX: ParametresSearchItem[] = [
   {
     id: "profil-cif",
     label: "Documents CIF (SIREN, ORIAS)",
-    keywords: ["cif", "siren", "orias", "anacofi", "rcs", "légal", "mission"],
+    keywords: ["cif", "siren", "orias", "anacofi", "cncef", "association", "rcs", "légal", "mission"],
     section: "profil",
     scrollToId: "parametres-documents-cif",
   },

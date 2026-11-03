@@ -28,7 +28,8 @@ const EMPTY_CGP = {
   ville: "",
   cif_siren: "",
   cif_rcs_ville: "",
-  cif_anacofi_numero: "",
+  cif_association: "",
+  cif_association_numero: "",
   cif_orias: "",
   cif_pied_de_page: "",
 };

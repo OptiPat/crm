@@ -129,3 +129,21 @@ impl super::Database {
         self.save_cgp_config(&config)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::models::CgpConfig;
+
+    #[test]
+    fn cgp_config_relit_l_ancien_numero_anacofi() {
+        let config: CgpConfig =
+            serde_json::from_str(r#"{"wizard_completed":true,"wizard_step":0,"cif_anacofi_numero":"E011507"}"#)
+                .unwrap();
+        assert_eq!(config.cif_association_numero.as_deref(), Some("E011507"));
+        assert_eq!(config.cif_association, None);
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains(r#""cif_association_numero":"E011507""#));
+        assert!(!json.contains("cif_anacofi_numero"));
+    }
+}
