@@ -331,9 +331,24 @@ export type PlacementImportPreviewLine = PlacementCommandeRow & {
   foyerId?: number;
   partenaireId?: number;
   investissementId?: number;
+  /** Ligne importée qui a créé son investissement (jamais rapproché par une autre ligne). */
+  investissementCree?: boolean;
   contactLabel?: string;
   coContactLabel?: string;
 };
+
+/** Ids des investissements créés par les lignes déjà importées de cet aperçu. */
+export function placementCreatedInvestissementIds(
+  lines: readonly PlacementImportPreviewLine[]
+): Set<number> {
+  const ids = new Set<number>();
+  for (const line of lines) {
+    if (line.status === "imported" && line.investissementCree && line.investissementId != null) {
+      ids.add(line.investissementId);
+    }
+  }
+  return ids;
+}
 
 export type PlacementImportPreviewSummary = {
   total: number;
@@ -405,7 +420,7 @@ export function cleanPlacementLibelleProduit(raw: string): string {
 const NON_DEFINI_SCPI_RENDEMENT = ["ficoma", "cifocoma"];
 const NON_DEFINI_SCPI_FISCALE = [
   "credit mutuel pierre",
-  "primo 1",
+  "primo 1 ",
   "corum patrimoine residentiel",
   "pierre investissement",
   "uffi habitat",
@@ -424,8 +439,9 @@ export function mapPlacementTypeProduit(typeProduit: string, libelleProduit = ""
   const k = normalizePlacementTypeLabel(typeProduit);
   if (!k) return null;
   if (k === "non defini") {
-    const lib = normalizePlacementTypeLabel(libelleProduit);
-    if (/\b(fip|fcpi)\b/.test(lib)) return "FIP_FCPI";
+    // Espace final : « primo 1 » ne doit pas reconnaître « Primo 10 ».
+    const lib = `${normalizePlacementTypeLabel(libelleProduit)} `;
+    if (/(^|[^a-z])(fip|fcpi)(?![a-z])/.test(lib)) return "FIP_FCPI";
     if (lib.includes("g3f") || lib.includes("girardin")) return "G3F";
     if (NON_DEFINI_SCPI_RENDEMENT.some((n) => lib.includes(n))) return "SCPI";
     if (NON_DEFINI_SCPI_FISCALE.some((n) => lib.includes(n))) return "SCPI_FISCALE";
@@ -1130,6 +1146,16 @@ export function resolvePlacementPreviewExistingInvestissement(
   return findExistingPlacementInvestissement(investissements, line, owner).match;
 }
 
+/** Types reclassés (Girardin, « Non défini », SCPI fiscale) : un import antérieur les a
+ * enregistrés en AUTRE ou SCPI — on les retrouve quand même au réimport. */
+const RECLASSIFIED_FROM_AUTRE = new Set(["G3F", "FIP_FCPI", "SCPI", "SCPI_FISCALE"]);
+
+function placementTypeMatchesExisting(existingType: string, rowType: string): boolean {
+  if (existingType === rowType) return true;
+  if (existingType === "AUTRE" && RECLASSIFIED_FROM_AUTRE.has(rowType)) return true;
+  return existingType === "SCPI" && rowType === "SCPI_FISCALE";
+}
+
 export function findExistingPlacementInvestissement(
   investissements: Investissement[],
   row: Pick<
@@ -1150,7 +1176,7 @@ export function findExistingPlacementInvestissement(
 
   const candidates = investissements.filter((inv) => {
     if (!samePlacementInvestmentOwner(inv, owner)) return false;
-    return inv.type_produit === row.typeProduit;
+    return placementTypeMatchesExisting(inv.type_produit, row.typeProduit);
   });
   if (candidates.length === 0) return {};
 
@@ -1975,6 +2001,7 @@ export async function applyPlacementCommandeImportLine(
               ? "Investissement mis à jour"
               : "Investissement créé",
         investissementId: saved.id,
+        investissementCree: !wasEnrich && !existing,
         foyerId,
         partenaireId,
       },
@@ -1992,7 +2019,8 @@ export async function applyPlacementCommandesImport(
   const foyersCache = await getAllFoyers();
   const investissementsCache = await getAllInvestissements();
   const partenairesCache = await getAllPartenaires();
-  const createdInBatchIds = new Set<number>();
+  // Inclut les créations d'un clic « Importer » précédent sur le même aperçu.
+  const createdInBatchIds = placementCreatedInvestissementIds(lines);
   let applied = 0;
   let failed = 0;
   const updated = [...lines];

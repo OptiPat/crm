@@ -52,8 +52,10 @@ import {
   buildPlacementCommandesImportPreview,
   defaultSelectedPlacementLineKeys,
   parsePlacementCommandeRows,
+  placementCreatedInvestissementIds,
 } from "./placement-commandes-import";
 import { getAllContacts } from "@/lib/api/tauri-contacts";
+import { getAllInvestissements } from "@/lib/api/tauri-investissements";
 
 describe("applyPlacementCommandesImport", () => {
   beforeEach(() => {
@@ -79,6 +81,42 @@ describe("applyPlacementCommandesImport", () => {
       defaultSelectedPlacementLineKeys(lines)
     );
     expect(result.applied).toBe(2);
+    expect(created).toHaveLength(2);
+    expect(updated).toHaveLength(0);
+  });
+
+  it("2e clic « Importer » : la ligne restante ne capte pas la souscription créée au 1er", async () => {
+    const row = (date: string) => ({
+      "Nom complet Investisseur": "LEGRAND Christian",
+      "Type Produit": "Girardin Industriel",
+      "Libellé Produit": "G3F",
+      "Date Effet": "",
+      "Date du dernier Mouvement VC": date,
+      "Type du dernier Mouvement VC": "Versement initial",
+      "Montant du dernier Mouvement VC": 10000,
+      "Etat Commande": "En-cours",
+    });
+    const contacts = await getAllContacts();
+    const lines = buildPlacementCommandesImportPreview(
+      parsePlacementCommandeRows([row("31/01/2023"), row("30/06/2023")]),
+      contacts,
+      []
+    );
+    const first = await applyPlacementCommandesImport(lines, new Set([lines[0]!.lineKey]));
+    expect(created).toHaveLength(1);
+
+    // Comme le dialog : on relit la base (qui contient la 1re), moins les créations de l'aperçu.
+    const createdIds = placementCreatedInvestissementIds(first.lines);
+    const remaining = buildPlacementCommandesImportPreview(
+      parsePlacementCommandeRows([row("30/06/2023")]),
+      contacts,
+      created.filter((i) => !createdIds.has(i.id))
+    );
+    expect(remaining[0]!.status).toBe("ready");
+
+    vi.mocked(getAllInvestissements).mockResolvedValueOnce([...created]);
+    const second = await applyPlacementCommandesImport(first.lines, new Set([first.lines[1]!.lineKey]));
+    expect(second.applied).toBe(1);
     expect(created).toHaveLength(2);
     expect(updated).toHaveLength(0);
   });

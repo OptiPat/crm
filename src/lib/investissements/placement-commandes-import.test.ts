@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Contact } from "@/lib/api/tauri-contacts";
+import type { Investissement } from "@/lib/api/tauri-investissements";
 import { PLACEMENT_COMMANDES_SAMPLE_ROWS } from "./__fixtures__/placement-commandes-fixture";
 import {
   buildPlacementCommandesImportPreview,
@@ -71,6 +72,41 @@ describe("placement-commandes-import", () => {
     expect(mapPlacementTypeProduit("Non défini", "UFFI Habitat BBC")).toBe("SCPI_FISCALE");
     expect(mapPlacementTypeProduit("Non défini", "Multihabitation 9")).toBe("SCPI_FISCALE");
     expect(mapPlacementTypeProduit("Non défini", "Produit inconnu")).toBe("AUTRE");
+    expect(mapPlacementTypeProduit("Non défini", "FCPI10 Innovation")).toBe("FIP_FCPI");
+    expect(mapPlacementTypeProduit("Non défini", "Primo 10")).toBe("AUTRE");
+    expect(mapPlacementTypeProduit("Non défini", "Fipavie Premium")).toBe("AUTRE");
+  });
+
+  it("réimport : retrouve un placement importé avant le reclassement (AUTRE / SCPI)", () => {
+    const owner = { contactId: 1 };
+    const inv = (id: number, type_produit: string, nom_produit: string) =>
+      ({
+        id,
+        contact_id: 1,
+        type_produit,
+        nom_produit,
+        montant_initial: 10_000_00,
+        versement_programme: false,
+        reinvestissement_dividendes: false,
+        origine: "MON_CONSEIL",
+        created_at: 0,
+        updated_at: 0,
+      }) as Investissement;
+    const row = (typeProduit: string, nomProduit: string) => ({
+      typeProduit,
+      nomProduit,
+      montantCentimes: 10_000_00,
+    });
+    expect(
+      findExistingPlacementInvestissement([inv(5, "AUTRE", "G3F")], row("G3F", "G3F"), owner).match?.id
+    ).toBe(5);
+    expect(
+      findExistingPlacementInvestissement([inv(6, "SCPI", "Primo 1")], row("SCPI_FISCALE", "Primo 1"), owner)
+        .match?.id
+    ).toBe(6);
+    expect(
+      findExistingPlacementInvestissement([inv(7, "AUTRE", "G3F")], row("ASSURANCE_VIE", "G3F"), owner).match
+    ).toBeUndefined();
   });
 
   it("SCPI fiscale : même fusion que les SCPI (souscriptions cumulées)", () => {

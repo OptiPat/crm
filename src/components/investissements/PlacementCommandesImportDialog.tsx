@@ -29,6 +29,7 @@ import {
   parsePlacementCommandeRows,
   patchPlacementPreviewLines,
   pickPlacementCommandesSheetName,
+  placementCreatedInvestissementIds,
   PLACEMENT_COMMANDES_SHEET_NAME,
   reassessPlacementPreviewLine,
   resolvePlacementPreviewExistingInvestissement,
@@ -214,10 +215,13 @@ export function PlacementCommandesImportDialog({
         selected
       );
       if (applied > 0) {
-        const [loadedContacts, loadedInvestissements] = await Promise.all([
+        const [loadedContacts, allInvestissements] = await Promise.all([
           getAllContacts(),
           getAllInvestissements(),
         ]);
+        // Les placements créés par cet aperçu ne doivent pas capter les lignes restantes.
+        const createdIds = placementCreatedInvestissementIds(updatedLines);
+        const loadedInvestissements = allInvestissements.filter((i) => !createdIds.has(i.id));
         setContacts(loadedContacts);
         setInvestissements(loadedInvestissements);
         const seenInFile = buildPlacementPreviewSeenInFileFromLines(updatedLines);
