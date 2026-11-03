@@ -255,6 +255,143 @@ fn build_rfc2822_html(from: &str, to: &str, subject: &str, body_html: &str) -> S
     )
 }
 
+/// Image de signature (ou de corps) intégrée en `data:` URI. Outlook / Exchange (et Gmail)
+/// ne l'affichent pas — le nom de l'image apparaît à la place : elle part en pièce « en
+/// ligne » (`Content-ID`) référencée par `cid:` dans le HTML.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct InlineImage {
+    pub cid: String,
+    pub mime_type: String,
+    pub data: Vec<u8>,
+}
+
+fn inline_image_extension(mime_type: &str) -> &'static str {
+    match mime_type {
+        "image/png" => "png",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        _ => "jpg",
+    }
+}
+
+/// Guillemet ouvrant si `before` se termine par `src="` / `src='` (espaces tolérés).
+fn img_src_quote_before(before: &str) -> Option<char> {
+    let quote = before.chars().last().filter(|c| *c == '"' || *c == '\'')?;
+    let attr = before[..before.len() - 1].trim_end().strip_suffix('=')?.trim_end();
+    let name_start = attr.len().checked_sub(3)?;
+    let name = attr.get(name_start..)?;
+    let boundary_ok = attr[..name_start]
+        .chars()
+        .last()
+        .is_some_and(|c| c.is_ascii_whitespace());
+    (name.eq_ignore_ascii_case("src") && boundary_ok).then_some(quote)
+}
+
+/// Remplace chaque `src="data:image/...;base64,..."` du HTML par `cid:` (même image = même
+/// cid). Seule la valeur entière d'un attribut `src` est convertie : texte, `srcset` ou CSS
+/// contenant une data URI restent tels quels.
+pub(crate) fn extract_inline_images(html: &str) -> (String, Vec<InlineImage>) {
+    const PREFIX: &str = "data:image/";
+    let nonce = chrono::Utc::now().timestamp_millis();
+    let mut out = String::with_capacity(html.len());
+    let mut images: Vec<InlineImage> = Vec::new();
+    let mut rest = html;
+    while let Some(pos) = rest.find(PREFIX) {
+        let after = &rest[pos + PREFIX.len()..];
+        let parsed = img_src_quote_before(&rest[..pos]).and_then(|quote| {
+            let (raw_subtype, tail) = after.split_once(";base64,")?;
+            let subtype = raw_subtype.to_ascii_lowercase();
+            if subtype.is_empty()
+                || !subtype
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
+            {
+                return None;
+            }
+            // La valeur doit se terminer exactement au guillemet fermant.
+            let len = tail.find(quote)?;
+            let value = &tail[..len];
+            if !value
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "+/=".contains(c) || c.is_ascii_whitespace())
+            {
+                return None;
+            }
+            let cleaned: String = value.chars().filter(|c| !c.is_ascii_whitespace()).collect();
+            let data = base64::engine::general_purpose::STANDARD.decode(cleaned).ok()?;
+            let consumed = PREFIX.len() + raw_subtype.len() + ";base64,".len() + len;
+            Some((format!("image/{subtype}"), data, consumed))
+        });
+        let Some((mime_type, data, consumed)) = parsed.filter(|(_, d, _)| !d.is_empty()) else {
+            out.push_str(&rest[..pos + PREFIX.len()]);
+            rest = &rest[pos + PREFIX.len()..];
+            continue;
+        };
+        let cid = match images.iter().find(|img| img.data == data) {
+            Some(existing) => existing.cid.clone(),
+            None => {
+                let cid = format!(
+                    "crm-img{}-{nonce}.{}@crm",
+                    images.len() + 1,
+                    inline_image_extension(&mime_type)
+                );
+                images.push(InlineImage {
+                    cid: cid.clone(),
+                    mime_type,
+                    data,
+                });
+                cid
+            }
+        };
+        out.push_str(&rest[..pos]);
+        out.push_str("cid:");
+        out.push_str(&cid);
+        rest = &rest[pos + consumed..];
+    }
+    out.push_str(rest);
+    (out, images)
+}
+
+fn push_base64_lines(message: &mut String, data: &[u8]) {
+    let b64 = base64::engine::general_purpose::STANDARD.encode(data);
+    for chunk in b64.as_bytes().chunks(76) {
+        message.push_str(std::str::from_utf8(chunk).unwrap_or(""));
+        message.push_str("\r\n");
+    }
+}
+
+/// Corps d'une partie `multipart/related` : le HTML puis ses images en ligne.
+fn related_parts(boundary: &str, html: &str, images: &[InlineImage]) -> String {
+    let mut out = format!(
+        "--{boundary}\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{html}\r\n"
+    );
+    for img in images {
+        let name = format!("image.{}", inline_image_extension(&img.mime_type));
+        out.push_str(&format!(
+            "--{boundary}\r\nContent-Type: {}; name=\"{name}\"\r\nContent-Transfer-Encoding: base64\r\nContent-ID: <{}>\r\nContent-Disposition: inline; filename=\"{name}\"\r\n\r\n",
+            img.mime_type, img.cid
+        ));
+        push_base64_lines(&mut out, &img.data);
+    }
+    out.push_str(&format!("--{boundary}--\r\n"));
+    out
+}
+
+/// HTML avec images en ligne, sans pièce jointe.
+fn build_rfc2822_html_related(
+    from: &str,
+    to: &str,
+    subject: &str,
+    body_html: &str,
+    images: &[InlineImage],
+) -> String {
+    let boundary = format!("crm_related_{}", chrono::Utc::now().timestamp_millis());
+    format!(
+        "From: {from}\r\nTo: {to}\r\nSubject: {subject}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/related; type=\"text/html\"; boundary=\"{boundary}\"\r\n\r\n{}",
+        related_parts(&boundary, body_html, images)
+    )
+}
+
 #[derive(Debug, Clone)]
 pub struct OutgoingEmailAttachment {
     pub filename: String,
@@ -285,6 +422,7 @@ fn build_rfc2822_with_attachments(
     subject: &str,
     body: &str,
     body_html: Option<&str>,
+    inline_images: &[InlineImage],
     attachments: &[OutgoingEmailAttachment],
 ) -> String {
     let boundary = format!("crm_boundary_{}", chrono::Utc::now().timestamp_millis());
@@ -294,9 +432,17 @@ fn build_rfc2822_with_attachments(
     );
 
     let body_part = if let Some(html) = body_html.filter(|h| !h.trim().is_empty()) {
-        format!(
-            "--{boundary}\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{html}\r\n"
-        )
+        if inline_images.is_empty() {
+            format!(
+                "--{boundary}\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{html}\r\n"
+            )
+        } else {
+            let related = format!("crm_related_{}", chrono::Utc::now().timestamp_millis());
+            format!(
+                "--{boundary}\r\nContent-Type: multipart/related; type=\"text/html\"; boundary=\"{related}\"\r\n\r\n{}\r\n",
+                related_parts(&related, html, inline_images)
+            )
+        }
     } else {
         format!(
             "--{boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{body}\r\n"
@@ -310,17 +456,13 @@ fn build_rfc2822_with_attachments(
                 .unwrap_or_else(|_| "attachment".to_string());
         let mime_type = crate::template_email_attachments::sanitize_mime_type(&att.mime_type)
             .unwrap_or_else(|_| "application/octet-stream".to_string());
-        let b64 = base64::engine::general_purpose::STANDARD.encode(&att.data);
         let disp = encode_content_disposition_filename(&filename);
         message.push_str(&format!(
             "--{boundary}\r\nContent-Type: {}; name=\"{}\"\r\nContent-Disposition: attachment; {disp}\r\nContent-Transfer-Encoding: base64\r\n\r\n",
             mime_type,
             filename.replace('"', "_"),
         ));
-        for chunk in b64.as_bytes().chunks(76) {
-            message.push_str(std::str::from_utf8(chunk).unwrap_or(""));
-            message.push_str("\r\n");
-        }
+        push_base64_lines(&mut message, &att.data);
         message.push('\r');
         message.push('\n');
     }
@@ -407,16 +549,45 @@ fn build_rfc2822(
 ) -> String {
     let (from, to) = format_addresses(from_email, from_name, to_email, to_name);
     let subject_hdr = encode_mime_subject(subject);
+    let (html_cid, inline_images) = match body_html.filter(|h| !h.trim().is_empty()) {
+        Some(html) => {
+            let (h, imgs) = extract_inline_images(html);
+            (Some(h), imgs)
+        }
+        None => (None, vec![]),
+    };
+    let body_html = html_cid.as_deref();
     let core = if attachments.is_empty() {
-        if let Some(html) = body_html.filter(|h| !h.trim().is_empty()) {
-            build_rfc2822_html(&from, &to, &subject_hdr, html)
-        } else {
-            build_rfc2822_plain(&from, &to, &subject_hdr, body)
+        match body_html {
+            Some(html) if !inline_images.is_empty() => {
+                build_rfc2822_html_related(&from, &to, &subject_hdr, html, &inline_images)
+            }
+            Some(html) => build_rfc2822_html(&from, &to, &subject_hdr, html),
+            None => build_rfc2822_plain(&from, &to, &subject_hdr, body),
         }
     } else {
-        build_rfc2822_with_attachments(&from, &to, &subject_hdr, body, body_html, attachments)
+        build_rfc2822_with_attachments(
+            &from,
+            &to,
+            &subject_hdr,
+            body,
+            body_html,
+            &inline_images,
+            attachments,
+        )
     };
     append_reply_headers(&core, reply)
+}
+
+/// Message HTML avec image en ligne + pièce jointe (tests du réencodage SMTP).
+#[cfg(test)]
+pub(crate) fn build_rfc2822_with_inline_image_for_tests(body_html: &str) -> String {
+    let att = OutgoingEmailAttachment {
+        filename: "doc.pdf".into(),
+        mime_type: "application/pdf".into(),
+        data: b"%PDF".to_vec(),
+    };
+    build_rfc2822("a@b.fr", None, "c@d.fr", None, "Objet", "", Some(body_html), None, &[att])
 }
 
 /// Message HTML d'une ligne avec en-têtes de réponse / désinscription (tests SMTP).
@@ -501,11 +672,18 @@ fn send_via_microsoft(
     attachments: &[OutgoingEmailAttachment],
 ) -> Result<(), String> {
     let display_name = to_name.unwrap_or(to_email);
-    let (content_type, content) = match body_html.filter(|h| !h.trim().is_empty()) {
+    let (html_cid, inline_images) = match body_html.filter(|h| !h.trim().is_empty()) {
+        Some(html) => {
+            let (h, imgs) = extract_inline_images(html);
+            (Some(h), imgs)
+        }
+        None => (None, vec![]),
+    };
+    let (content_type, content) = match html_cid.as_deref() {
         Some(html) => ("HTML", html),
         None => ("Text", body),
     };
-    let graph_attachments: Vec<serde_json::Value> = attachments
+    let mut graph_attachments: Vec<serde_json::Value> = attachments
         .iter()
         .map(|att| {
             serde_json::json!({
@@ -516,6 +694,16 @@ fn send_via_microsoft(
             })
         })
         .collect();
+    graph_attachments.extend(inline_images.iter().map(|img| {
+        serde_json::json!({
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            "name": format!("image.{}", inline_image_extension(&img.mime_type)),
+            "contentType": img.mime_type,
+            "contentBytes": base64::engine::general_purpose::STANDARD.encode(&img.data),
+            "isInline": true,
+            "contentId": img.cid,
+        })
+    }));
     let mut message = serde_json::json!({
         "subject": subject,
         "body": { "contentType": content_type, "content": content },
@@ -938,6 +1126,101 @@ mod tests {
             &[],
         );
         assert!(raw.starts_with("From: Jean DUPONT <cgp@example.com>"));
+    }
+
+    const PNG_1PX: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+    #[test]
+    fn data_uri_images_become_cid_references() {
+        let html = format!(
+            "<p>Sig</p><img src=\"data:image/png;base64,{PNG_1PX}\" alt=\"photo.jpg\"><img src='data:image/png;base64,{PNG_1PX}'><img src=\"https://x.fr/a.png\">"
+        );
+        let (out, images) = extract_inline_images(&html);
+        assert_eq!(images.len(), 1, "même image = une seule pièce");
+        assert_eq!(images[0].mime_type, "image/png");
+        assert!(!out.contains("data:image"));
+        assert_eq!(out.matches(&format!("cid:{}", images[0].cid)).count(), 2);
+        assert!(out.contains("https://x.fr/a.png"));
+    }
+
+    #[test]
+    fn malformed_data_uri_is_left_untouched() {
+        let html = "<img src=\"data:image/png;base64,@@@\">";
+        let (out, images) = extract_inline_images(html);
+        assert!(images.is_empty());
+        assert_eq!(out, html);
+    }
+
+    #[test]
+    fn data_uri_outside_img_src_value_is_left_untouched() {
+        for html in [
+            format!("<p>data:image/png;base64,{PNG_1PX} ok go</p>"),
+            format!("<img srcset=\"data:image/png;base64,{PNG_1PX} 100w\">"),
+            format!("<div style=\"background:url(data:image/png;base64,{PNG_1PX})\"></div>"),
+            format!("<img src=\"data:image/png;base64,{PNG_1PX} 100w\">"),
+            format!("<img data-src=\"data:image/png;base64,{PNG_1PX}\">"),
+        ] {
+            let (out, images) = extract_inline_images(&html);
+            assert!(images.is_empty(), "{html}");
+            assert_eq!(out, html);
+        }
+    }
+
+    #[test]
+    fn src_attribute_variants_are_converted() {
+        let html = format!("<IMG SRC = 'data:image/png;base64,{PNG_1PX}' alt=x>");
+        let (out, images) = extract_inline_images(&html);
+        assert_eq!(images.len(), 1);
+        assert_eq!(out, format!("<IMG SRC = 'cid:{}' alt=x>", images[0].cid));
+    }
+
+    #[test]
+    fn related_message_keeps_reply_and_unsubscribe_headers() {
+        let html = format!("<img src=\"data:image/png;base64,{PNG_1PX}\">");
+        let reply = GmailThreadReply {
+            thread_id: None,
+            in_reply_to_message_id: Some("crm.1.abc@cabinet.fr".into()),
+            list_unsubscribe_email: Some("moi@cabinet.fr".into()),
+        };
+        let raw = build_rfc2822("a@b.fr", None, "c@d.fr", None, "Objet", "", Some(&html), Some(&reply), &[]);
+        let parsed = mailparse::parse_mail(raw.as_bytes()).unwrap();
+        use mailparse::MailHeaderMap;
+        assert_eq!(parsed.ctype.mimetype, "multipart/related");
+        assert_eq!(
+            parsed.headers.get_first_value("In-Reply-To").as_deref(),
+            Some("<crm.1.abc@cabinet.fr>")
+        );
+        assert!(parsed.headers.get_first_value("List-Unsubscribe").is_some());
+        assert_eq!(parsed.subparts.len(), 2);
+    }
+
+    #[test]
+    fn html_with_inline_image_is_multipart_related() {
+        let html = format!("<p>Bonjour</p><img src=\"data:image/png;base64,{PNG_1PX}\">");
+        let raw = build_rfc2822("a@b.fr", None, "c@d.fr", None, "Objet", "", Some(&html), None, &[]);
+        assert!(raw.contains("Content-Type: multipart/related; type=\"text/html\""));
+        assert!(raw.contains("Content-ID: <crm-img1-"));
+        assert!(raw.contains("Content-Disposition: inline"));
+        assert!(raw.contains("src=\"cid:crm-img1-"));
+        assert!(!raw.contains("data:image"));
+    }
+
+    #[test]
+    fn attachments_keep_inline_images_in_nested_related_part() {
+        let html = format!("<img src=\"data:image/png;base64,{PNG_1PX}\">");
+        let att = OutgoingEmailAttachment {
+            filename: "doc.pdf".into(),
+            mime_type: "application/pdf".into(),
+            data: b"%PDF".to_vec(),
+        };
+        let raw = build_rfc2822("a@b.fr", None, "c@d.fr", None, "Objet", "", Some(&html), None, &[att]);
+        assert!(raw.contains("multipart/mixed"));
+        assert!(raw.contains("Content-Type: multipart/related"));
+        assert!(raw.contains("Content-ID: <crm-img1-"));
+        assert!(raw.contains("Content-Disposition: attachment; filename=\"doc.pdf\""));
+        let parsed = mailparse::parse_mail(raw.as_bytes()).unwrap();
+        assert_eq!(parsed.subparts.len(), 2, "corps related + pièce jointe");
+        assert_eq!(parsed.subparts[0].subparts.len(), 2, "HTML + image");
     }
 
     #[test]

@@ -473,11 +473,17 @@ fn smtp_safe_body_encoding(raw: &str) -> String {
     use base64::Engine;
     // En-tête cherché seul : In-Reply-To / List-Unsubscribe peuvent être insérés après lui.
     const MARK: &str = "Content-Transfer-Encoding: 8bit\r\n";
-    let headers_end = raw.find("\r\n\r\n").unwrap_or(raw.len());
-    let boundary = raw[..headers_end]
-        .split_once("boundary=\"")
-        .and_then(|(_, rest)| rest.split_once('"'))
-        .map(|(b, _)| format!("\r\n--{b}"));
+    // Toutes les frontières (multipart/related imbriqué dans multipart/mixed) : le contenu
+    // d'une partie s'arrête à la première frontière rencontrée, quelle qu'elle soit.
+    // Frontières générées par le CRM uniquement (`crm_…`) : un « boundary="" » écrit dans le
+    // corps HTML ne doit pas couper une partie.
+    let boundaries: Vec<String> = raw
+        .match_indices("boundary=\"")
+        .filter_map(|(i, m)| raw[i + m.len()..].split_once('"'))
+        .map(|(b, _)| b)
+        .filter(|b| b.starts_with("crm_"))
+        .map(|b| format!("\r\n--{b}"))
+        .collect();
     let mut out = String::with_capacity(raw.len() * 4 / 3);
     let mut rest = raw;
     while let Some(pos) = rest.find(MARK) {
@@ -487,9 +493,10 @@ fn smtp_safe_body_encoding(raw: &str) -> String {
             break;
         };
         let content_start = after_mark - 2 + headers_end + 4;
-        let content_len = boundary
-            .as_deref()
-            .and_then(|b| rest[content_start..].find(b))
+        let content_len = boundaries
+            .iter()
+            .filter_map(|b| rest[content_start..].find(b.as_str()))
+            .min()
             .unwrap_or(rest.len() - content_start);
         out.push_str(&rest[..pos]);
         out.push_str("Content-Transfer-Encoding: base64\r\n");
@@ -926,16 +933,16 @@ mod tests {
         assert_eq!(decode(body), format!("<p>{long}</p>\n-- \nSignature"));
 
         let multi = concat!(
-            "From: a@b.fr\r\nContent-Type: multipart/mixed; boundary=\"bnd\"\r\n\r\n",
-            "--bnd\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\nBonjour\n-- \nMoi\r\n",
-            "--bnd\r\nContent-Type: application/pdf; name=\"a.pdf\"\r\nContent-Transfer-Encoding: base64\r\n\r\nQUJD\r\n\r\n",
-            "--bnd--\r\n"
+            "From: a@b.fr\r\nContent-Type: multipart/mixed; boundary=\"crm_bnd\"\r\n\r\n",
+            "--crm_bnd\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\nBonjour\n-- \nMoi\r\n",
+            "--crm_bnd\r\nContent-Type: application/pdf; name=\"a.pdf\"\r\nContent-Transfer-Encoding: base64\r\n\r\nQUJD\r\n\r\n",
+            "--crm_bnd--\r\n"
         );
         let out = smtp_safe_body_encoding(multi);
         let (_, after) = out.split_once("Content-Transfer-Encoding: base64\r\n\r\n").unwrap();
-        let (encoded, tail) = after.split_once("\r\n--bnd").unwrap();
+        let (encoded, tail) = after.split_once("\r\n--crm_bnd").unwrap();
         assert_eq!(decode(encoded), "Bonjour\n-- \nMoi");
-        assert!(tail.contains("QUJD") && tail.ends_with("--bnd--\r\n"));
+        assert!(tail.contains("QUJD") && tail.ends_with("--crm_bnd--\r\n"));
     }
 
     #[test]
@@ -958,6 +965,28 @@ mod tests {
             .decode(body.replace("\r\n", ""))
             .unwrap();
         assert!(String::from_utf8(decoded).unwrap().ends_with("Signature"));
+    }
+
+    #[test]
+    fn smtp_reencoding_handles_nested_related_part() {
+        use base64::Engine;
+        let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+        let raw = super::super::oauth_send::build_rfc2822_with_inline_image_for_tests(
+            &format!("<p>{}</p><img src=\"data:image/png;base64,{png}\">", "x".repeat(1500)),
+        );
+        let out = smtp_safe_body_encoding(&raw);
+        assert!(out.lines().all(|l| l.len() <= 998));
+        let parsed = mailparse::parse_mail(out.as_bytes()).unwrap();
+        let related = &parsed.subparts[0];
+        assert_eq!(related.subparts.len(), 2, "HTML + image intactes");
+        let html = related.subparts[0].get_body().unwrap();
+        assert!(html.starts_with("<p>xxx") && html.contains("cid:crm-img1-"));
+        let img = related.subparts[1].get_body_raw().unwrap();
+        assert_eq!(
+            img,
+            base64::engine::general_purpose::STANDARD.decode(png).unwrap(),
+            "image non réencodée"
+        );
     }
 
     #[test]
