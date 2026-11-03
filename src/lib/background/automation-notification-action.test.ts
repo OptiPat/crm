@@ -1,5 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { handleAutomationNotificationAction } from "@/lib/background/automation-notification-action";
+import {
+  handleAutomationNotificationAction,
+  handlePluginNotificationAction,
+} from "@/lib/background/automation-notification-action";
 import { persistPendingAutomationNav } from "@/lib/background/automation-notification-pending";
 import { applyAutomationNotificationTarget } from "@/lib/background/automation-notification-nav";
 
@@ -45,5 +48,39 @@ describe("handleAutomationNotificationAction", () => {
       { authenticated: true, skipFocus: true }
     );
     expect(applyAutomationNotificationTarget).toHaveBeenCalledWith({ page: "pipe" }, setPage);
+  });
+});
+
+describe("handlePluginNotificationAction", () => {
+  beforeEach(() => {
+    vi.mocked(applyAutomationNotificationTarget).mockReset();
+  });
+
+  it("lit la nav dans event.notification.extra (format plugin ≥ 2.6)", () => {
+    const setPage = vi.fn();
+    handlePluginNotificationAction(
+      {
+        notification: {
+          id: 1,
+          title: "Rappel",
+          groupSummary: false,
+          data: {},
+          extra: { nav: '{"page":"agenda"}' },
+          attachments: [],
+        },
+      },
+      setPage,
+      { authenticated: true, skipFocus: true }
+    );
+    expect(applyAutomationNotificationTarget).toHaveBeenCalledWith({ page: "agenda" }, setPage);
+  });
+
+  it("ouvre le tableau de bord si la plateforme ne transmet pas la notification", () => {
+    const setPage = vi.fn();
+    handlePluginNotificationAction({ notification: null }, setPage, {
+      authenticated: true,
+      skipFocus: true,
+    });
+    expect(applyAutomationNotificationTarget).toHaveBeenCalledWith({ page: "dashboard" }, setPage);
   });
 });

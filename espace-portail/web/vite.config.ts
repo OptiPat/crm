@@ -3,7 +3,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-const webRoot = path.resolve(__dirname);
+const webRoot = path.resolve(import.meta.dirname);
 
 /** Build via le lockfile racine (`npm run build:espace-portail`) — pas de npm install ici. */
 export default defineConfig({

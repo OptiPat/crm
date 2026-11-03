@@ -1,9 +1,8 @@
 //! Jeton SharePoint REST (audience `{hostname}`) distinct du jeton Graph.
 
-use crate::email::oauth_client::build_basic_client;
+use crate::email::oauth_client::{build_basic_client, oauth_http_client};
 use crate::email::oauth_store::EmailOAuthStore;
 use crate::workspace::oauth::{microsoft_team_flow_provider, sharepoint_rest_scope};
-use oauth2::reqwest::http_client;
 use oauth2::{RefreshToken, Scope, TokenResponse};
 use tauri::AppHandle;
 
@@ -49,7 +48,7 @@ pub fn exchange_sharepoint_rest_token(
         .exchange_refresh_token(&RefreshToken::new(refresh))
         .add_scope(Scope::new(scope))
         .add_scope(Scope::new("offline_access".into()))
-        .request(http_client)
+        .request(&oauth_http_client()?)
         .map_err(|error| map_sharepoint_token_error(&error.to_string()))?;
     Ok(token.access_token().secret().clone())
 }

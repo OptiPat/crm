@@ -1,4 +1,4 @@
-﻿use super::oauth_client::build_basic_client;
+﻿use super::oauth_client::{build_basic_client, oauth_http_client};
 use super::oauth_store::{EmailOAuthConnection, EmailOAuthStore};
 use super::response_sync::parse_gmail_send_response;
 use super::signature_html::{
@@ -8,7 +8,6 @@ use super::signature_html::{
 use crate::commands::DbState;
 use crate::database::models::CgpConfig;
 use base64::Engine;
-use oauth2::reqwest::http_client;
 use oauth2::{RefreshToken, TokenResponse};
 use tauri::{AppHandle, Manager};
 
@@ -177,7 +176,7 @@ pub fn refresh_oauth_connection_if_needed(
 
     let token = client
         .exchange_refresh_token(&RefreshToken::new(refresh))
-        .request(http_client)
+        .request(&oauth_http_client()?)
         .map_err(|e| format!("Rafraîchissement du token: {}", e))?;
 
     conn.access_token = token.access_token().secret().clone();

@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { onAction } from "@tauri-apps/plugin-notification";
-import { handleAutomationNotificationAction } from "@/lib/background/automation-notification-action";
+import {
+  handleAutomationNotificationAction,
+  handlePluginNotificationAction,
+} from "@/lib/background/automation-notification-action";
 import { consumePendingAutomationNotificationNav } from "@/lib/background/automation-notification-pending";
 import { AUTOMATION_NOTIFICATION_ACTIVATED_EVENT } from "@/lib/background/automation-notification-events";
 import { registerAutomationNotificationActions } from "@/lib/background/background-automation-notify";
@@ -39,12 +42,10 @@ export function useAutomationNotificationListener(
 
     void (async () => {
       await registerAutomationNotificationActions();
-      const actionListener = await onAction((notification) => {
-        handleAutomationNotificationAction(
-          notification.extra as Record<string, unknown> | undefined,
-          setCurrentPage,
-          { authenticated: isAuthenticatedRef.current }
-        );
+      const actionListener = await onAction((event) => {
+        handlePluginNotificationAction(event, setCurrentPage, {
+          authenticated: isAuthenticatedRef.current,
+        });
       });
       if (cancelled) {
         await actionListener.unregister();

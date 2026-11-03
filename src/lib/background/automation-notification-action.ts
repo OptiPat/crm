@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ActionPerformed } from "@tauri-apps/plugin-notification";
 import {
   applyAutomationNotificationTarget,
   parseAutomationNotificationTarget,
@@ -40,4 +41,13 @@ export function handleAutomationNotificationAction(
 
   clearPendingAutomationNavLocal();
   applyAutomationNotificationTarget(target, setCurrentPage);
+}
+
+/** Clic reçu via `onAction` du plugin notification (≥ 2.6 : `{ actionId, notification }`). */
+export function handlePluginNotificationAction(
+  event: Pick<ActionPerformed, "notification">,
+  setCurrentPage: (page: string) => void,
+  options: AutomationNotificationActionOptions = {}
+): void {
+  handleAutomationNotificationAction(event.notification?.extra, setCurrentPage, options);
 }

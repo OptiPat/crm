@@ -1,7 +1,6 @@
-use super::oauth_client::build_basic_client;
+use super::oauth_client::{build_basic_client, oauth_http_client};
 use super::oauth_store::{EmailOAuthConnection, EmailOAuthStore, OAUTH_REDIRECT_URI};
 use crate::workspace::oauth::{microsoft_team_flow_provider, microsoft_team_oauth_scopes};
-use oauth2::reqwest::http_client;
 use oauth2::{
     AuthorizationCode, CsrfToken, PkceCodeChallenge, RedirectUrl, RequestTokenError, Scope,
     TokenResponse,
@@ -337,7 +336,7 @@ pub fn run_oauth_connect(
     let token = oauth_client
         .exchange_code(AuthorizationCode::new(code))
         .set_pkce_verifier(pkce_verifier)
-        .request(http_client)
+        .request(&oauth_http_client()?)
         .map_err(|e| match &e {
             RequestTokenError::ServerResponse(resp) => format_oauth_server_error(
                 &resp.error().to_string(),
