@@ -1721,6 +1721,9 @@ pub fn scan_stellium_exceltis_emails(
         next_fetch_retries.sort();
         state.fetch_retry_message_ids = next_fetch_retries;
 
+        // État enregistré AVANT la planification : elle relit les signaux depuis la base
+        // (sinon un remboursement détecté à ce scan n'arrive dans « Prêts » qu'au suivant).
+        save_state(db, &state)?;
         if let Ok(etiquettes) = db.get_all_etiquettes() {
             for etiquette in etiquettes {
                 if is_exceltis_etiquette_nom(&etiquette.nom) {
@@ -1728,8 +1731,6 @@ pub fn scan_stellium_exceltis_emails(
                 }
             }
         }
-
-        save_state(db, &state)?;
         Ok(StelliumExceltisScanResult {
             scanned,
             new_signals,
