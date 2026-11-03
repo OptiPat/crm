@@ -304,4 +304,77 @@ describe("finzzle-clients-import", () => {
     expect(selected.has(preview.find((l) => l.nom === "BERNARD")!.lineKey)).toBe(false);
     expect(selected.size).toBe(2);
   });
+
+  it("reconnait l'en-tete « Taux Marginal d'Imposition (TMI) »", () => {
+    const rows = parseFinzzleClientRows([
+      { Statut: "Client", Nom: "DUPONT", "Prénom": "Marie", "Taux Marginal d'Imposition (TMI)": "30 %" },
+    ]);
+    expect(rows[0]!.tmi).toBe("30 %");
+  });
+
+  it("email ou telephone partages ne sont pas des doublons fichier", () => {
+    const parsed = parseFinzzleClientRows([
+      { Statut: "Client", Nom: "MARTIN", "Prénom": "Paul", Email: "famille@example.com", "Téléphone": "0600000001" },
+      { Statut: "Client", Nom: "MARTIN", "Prénom": "Julie", Email: "famille@example.com", "Téléphone": "0600000001" },
+    ]);
+    const preview = buildFinzzleClientsImportPreview(parsed, []);
+    expect(preview.map((l) => l.status)).toEqual(["ready", "ready"]);
+  });
+
+  it("doublon nom+prenom : garde la ligne Client, distingue les dates de naissance", () => {
+    const parsed = parseFinzzleClientRows([
+      { Statut: "Contact", Nom: "NATTON", "Prénom": "Lucas", "Date de naissance": "06/07/2001" },
+      { Statut: "Client", Nom: "NATTON", "Prénom": "Lucas", "Date de naissance": "06/07/2001" },
+      { Statut: "Client", Nom: "BAUDHUIN", "Prénom": "Antoine", "Date de naissance": "22/01/1976" },
+      { Statut: "Contact", Nom: "BAUDHUIN", "Prénom": "Antoine", "Date de naissance": "28/03/2014" },
+    ]);
+    const preview = buildFinzzleClientsImportPreview(parsed, []);
+    expect(preview.map((l) => l.status)).toEqual(["duplicate_csv", "ready", "ready", "ready"]);
+    expect(preview[0]!.duplicateCsvRefRow).toBe(3);
+  });
+
+  it("ligne sans date rattachee a la meilleure ligne datee, homonymes dates conserves", () => {
+    const parsed = parseFinzzleClientRows([
+      { Statut: "Prospect", Nom: "X", "Prénom": "A", "Date de naissance": "" },
+      { Statut: "Client", Nom: "X", "Prénom": "A", "Date de naissance": "22/01/1976" },
+      { Statut: "Contact", Nom: "X", "Prénom": "A", "Date de naissance": "28/03/2014" },
+      { Statut: "Client", Nom: "X", "Prénom": "A", "Date de naissance": "28/03/2014" },
+    ]);
+    const preview = buildFinzzleClientsImportPreview(parsed, []);
+    expect(preview.map((l) => l.status)).toEqual(["duplicate_csv", "ready", "duplicate_csv", "ready"]);
+    expect(preview[0]!.duplicateCsvRefRow).toBe(3);
+    expect(preview[2]!.duplicateCsvRefRow).toBe(5);
+  });
+
+  it("sans aucune date, garde la meilleure categorie puis la premiere ligne", () => {
+    const parsed = parseFinzzleClientRows([
+      { Statut: "Contact", Nom: "Y", "Prénom": "B" },
+      { Statut: "Client", Nom: "Y", "Prénom": "B" },
+      { Statut: "Client", Nom: "Y", "Prénom": "B" },
+    ]);
+    const preview = buildFinzzleClientsImportPreview(parsed, []);
+    expect(preview.map((l) => l.status)).toEqual(["duplicate_csv", "ready", "duplicate_csv"]);
+    expect(preview[2]!.duplicateCsvRefRow).toBe(3);
+  });
+
+  it("n'enrichit pas une fiche existante dont la date de naissance differe", () => {
+    const parsed = parseFinzzleClientRows([
+      { Statut: "Client", Nom: "BAUDHUIN", "Prénom": "Antoine", "Date de naissance": "28/03/2014" },
+      { Statut: "Client", Nom: "BAUDHUIN", "Prénom": "Antoine", "Date de naissance": "22/01/1976" },
+    ]);
+    const existing = {
+      id: 1,
+      nom: "BAUDHUIN",
+      prenom: "Antoine",
+      date_naissance: Date.UTC(1976, 0, 22) / 1000,
+      categorie: "CLIENT",
+      statut_suivi: "ACTIF",
+      created_at: 0,
+      updated_at: 0,
+    } as Contact;
+    const preview = buildFinzzleClientsImportPreview(parsed, [existing]);
+    expect(preview.map((l) => l.status)).toEqual(["duplicate_homonym", "enrich"]);
+    const merged = buildFinzzleClientsImportPreview(parsed, [existing], "merge");
+    expect(merged[0]!.status).toBe("ready");
+  });
 });

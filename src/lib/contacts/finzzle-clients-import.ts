@@ -233,7 +233,7 @@ const COLUMN_ALIASES = {
   ville: ["^ville$"],
   pays: ["^pays$"],
   sourceLead: ["origine du contact", "source du contact", "source lead", "origine contact"],
-  tmi: ["^tmi$", "tranche marginale"],
+  tmi: ["^tmi$", "tranche marginale", "taux marginal"],
 } as const;
 
 export type FinzzleClientRow = {
@@ -284,8 +284,6 @@ export type FinzzleClientImportPreviewSummary = {
 
 export type FinzzleClientFileDuplicateIndex = {
   names: Map<string, number>;
-  emails: Map<string, number>;
-  phones: Map<string, number>;
 };
 
 function normalizeHeader(header: string): string {
@@ -359,8 +357,6 @@ export function buildFinzzleClientFileDuplicateIndex(
   lines: FinzzleClientPreviewLine[]
 ): FinzzleClientFileDuplicateIndex {
   const names = new Map<string, number>();
-  const emails = new Map<string, number>();
-  const phones = new Map<string, number>();
 
   for (const line of lines) {
     if (line.status === "imported") continue;
@@ -368,50 +364,59 @@ export function buildFinzzleClientFileDuplicateIndex(
     if (line.nom.trim() && line.prenom.trim()) {
       names.set(nameKey, (names.get(nameKey) ?? 0) + 1);
     }
-    const emailKey = normalizeEmail(line.email);
-    if (emailKey) emails.set(emailKey, (emails.get(emailKey) ?? 0) + 1);
-    const phoneKey = normalizePhone(line.telephone);
-    if (phoneKey.length >= 9) phones.set(phoneKey, (phones.get(phoneKey) ?? 0) + 1);
   }
-  return { names, emails, phones };
+  return { names };
 }
 
+function birthDay(iso: string | undefined): string | undefined {
+  return iso ? iso.slice(0, 10) : undefined;
+}
+
+function pickBestCsvLine(lines: FinzzleClientPreviewLine[]): FinzzleClientPreviewLine {
+  return lines.reduce((best, l) => {
+    const rank = CLIENT_CATEGORY_RANK[l.categorie] ?? 0;
+    const bestRank = CLIENT_CATEGORY_RANK[best.categorie] ?? 0;
+    if (rank !== bestRank) return rank > bestRank ? l : best;
+    return l.rowIndex < best.rowIndex ? l : best;
+  });
+}
+
+/** Date de naissance CRM (unix s) vs ligne : conflit si toutes deux connues et écart > 1 jour. */
+function birthDateConflict(existingUnix: number | undefined | null, lineIso: string | undefined): boolean {
+  if (!existingUnix || !lineIso) return false;
+  const lineMs = new Date(lineIso).getTime();
+  if (Number.isNaN(lineMs)) return false;
+  return Math.abs(existingUnix * 1000 - lineMs) > 36 * 3600 * 1000;
+}
+
+/**
+ * Doublon fichier = même nom + prénom et même date de naissance (dates différentes =
+ * personnes distinctes). Email / téléphone partagés (couple, enfant) ne bloquent pas.
+ * Par date, la ligne conservée est celle de catégorie la plus haute (Client > Prospect >
+ * Contact), puis la première ; une ligne sans date est rattachée à la meilleure ligne datée.
+ */
 function findCsvDuplicateRef(
   line: FinzzleClientPreviewLine,
   index: FinzzleClientFileDuplicateIndex,
   allLines: FinzzleClientPreviewLine[]
 ): number | undefined {
   const nameKey = contactNameKeyCanonical(line.nom, line.prenom);
-  if (line.nom.trim() && line.prenom.trim() && (index.names.get(nameKey) ?? 0) > 1) {
-    const first = allLines.find(
-      (l) =>
-        l.lineKey !== line.lineKey &&
-        l.status !== "imported" &&
-        contactNameKeyCanonical(l.nom, l.prenom) === nameKey
-    );
-    return first?.rowIndex;
+  if (!line.nom.trim() || !line.prenom.trim() || (index.names.get(nameKey) ?? 0) <= 1) {
+    return undefined;
   }
-  const emailKey = normalizeEmail(line.email);
-  if (emailKey && (index.emails.get(emailKey) ?? 0) > 1) {
-    const first = allLines.find(
-      (l) =>
-        l.lineKey !== line.lineKey &&
-        l.status !== "imported" &&
-        normalizeEmail(l.email) === emailKey
-    );
-    return first?.rowIndex;
-  }
-  const phoneKey = normalizePhone(line.telephone);
-  if (phoneKey.length >= 9 && (index.phones.get(phoneKey) ?? 0) > 1) {
-    const first = allLines.find(
-      (l) =>
-        l.lineKey !== line.lineKey &&
-        l.status !== "imported" &&
-        normalizePhone(l.telephone) === phoneKey
-    );
-    return first?.rowIndex;
-  }
-  return undefined;
+  const group = allLines.filter(
+    (l) => l.status !== "imported" && contactNameKeyCanonical(l.nom, l.prenom) === nameKey
+  );
+  if (group.length <= 1) return undefined;
+  const day = birthDay(line.dateNaissanceIso);
+  const dated = group.filter((l) => birthDay(l.dateNaissanceIso));
+  const candidates = day
+    ? group.filter((l) => birthDay(l.dateNaissanceIso) === day)
+    : dated.length > 0
+      ? dated
+      : group;
+  const keeper = pickBestCsvLine(candidates);
+  return keeper.lineKey === line.lineKey ? undefined : keeper.rowIndex;
 }
 
 function findExistingContactForLine(
@@ -576,6 +581,9 @@ export function reassessFinzzleClientPreviewLine(
 
   const { contact, match } = existingMatch;
   const conflictReasons = getPairIdentityConflictMessages(lineIdentity(line), contact);
+  if (birthDateConflict(contact.date_naissance, line.dateNaissanceIso)) {
+    conflictReasons.push("date de naissance différente");
+  }
   const identityConflict = conflictReasons.length > 0;
 
   if (identityConflict && duplicateAction !== "merge") {
