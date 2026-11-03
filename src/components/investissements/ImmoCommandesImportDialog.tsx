@@ -61,7 +61,8 @@ function readImmoWorkbookRows(
   file: File
 ): Promise<{ rows: Record<string, unknown>[]; missingSheet: boolean }> {
   return file.arrayBuffer().then((data) => {
-    const workbook = XLSX.read(data, { type: "array", cellDates: false });
+    // dateNF : sinon les dates au format Excel par défaut sortent en m/j/aa (lues à l'envers).
+    const workbook = XLSX.read(data, { type: "array", cellDates: false, dateNF: "dd/mm/yyyy" });
     const sheetName = pickImmoCommandesSheetName(workbook.SheetNames);
     if (!sheetName) return { rows: [] as Record<string, unknown>[], missingSheet: true };
     const normalized = workbook.SheetNames.map((n) => n.trim().toLowerCase());

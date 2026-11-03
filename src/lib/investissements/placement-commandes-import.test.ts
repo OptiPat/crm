@@ -55,6 +55,41 @@ describe("placement-commandes-import", () => {
     expect(mapPlacementTypeProduit("Capital investissement")).toBe("FIP_FCPI");
     expect(mapPlacementTypeProduit("Contrat de capitalisation")).toBe("CONTRAT_CAPITALISATION");
     expect(mapPlacementTypeProduit("G3F")).toBe("G3F");
+    expect(mapPlacementTypeProduit("Girardin Industriel", "G3F")).toBe("G3F");
+    expect(mapPlacementTypeProduit("SCPI fiscale")).toBe("SCPI_FISCALE");
+  });
+
+  it("mapPlacementTypeProduit — « Non défini » classé par libellé", () => {
+    expect(mapPlacementTypeProduit("Non défini", "FIP Energies Nouvelles II")).toBe("FIP_FCPI");
+    expect(mapPlacementTypeProduit("Non défini", "FCPI Développement 2007")).toBe("FIP_FCPI");
+    expect(mapPlacementTypeProduit("Non défini", "Ficoma")).toBe("SCPI");
+    expect(mapPlacementTypeProduit("Non défini", "Cifocoma 4")).toBe("SCPI");
+    expect(mapPlacementTypeProduit("Non défini", "Crédit Mutuel Pierre 1")).toBe("SCPI_FISCALE");
+    expect(mapPlacementTypeProduit("Non défini", "Primo 1")).toBe("SCPI_FISCALE");
+    expect(mapPlacementTypeProduit("Non défini", "Corum Patrimoine Résidentiel 1")).toBe("SCPI_FISCALE");
+    expect(mapPlacementTypeProduit("Non défini", "Pierre Investissement 7")).toBe("SCPI_FISCALE");
+    expect(mapPlacementTypeProduit("Non défini", "UFFI Habitat BBC")).toBe("SCPI_FISCALE");
+    expect(mapPlacementTypeProduit("Non défini", "Multihabitation 9")).toBe("SCPI_FISCALE");
+    expect(mapPlacementTypeProduit("Non défini", "Produit inconnu")).toBe("AUTRE");
+  });
+
+  it("SCPI fiscale : même fusion que les SCPI (souscriptions cumulées)", () => {
+    const row = (date: string) => ({
+      "Nom complet Investisseur": "DUPONT Jean",
+      "Type Produit": "Non défini",
+      "Libellé Produit": "Primo 1",
+      "Date Effet": "",
+      "Date du dernier Mouvement VC": date,
+      "Type du dernier Mouvement VC": "Versement initial",
+      "Montant du dernier Mouvement VC": 5000,
+      "Montant Versement VC cumulé de la commande": 5000,
+      "Etat Commande": "En-cours",
+    });
+    const rows = parsePlacementCommandeRows([row("10/01/2000"), row("10/01/2001")]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.typeProduit).toBe("SCPI_FISCALE");
+    expect(rows[0]!.montantCentimes).toBe(10_000_00);
+    expect(rows[0]!.dateEffetIso?.slice(0, 10)).toBe("2000-01-10");
   });
 
   it("isPlacementContratVpMerge inclut capitalisation", () => {
@@ -336,6 +371,44 @@ describe("placement-commandes-import", () => {
         { dateEffet: "Date Effet" }
       )
     ).toBeUndefined();
+  });
+
+  it("resolvePlacementDateEffetIso — repli sur la date du versement initial", () => {
+    const keys = {
+      dateEffet: "Date Effet",
+      typeDernierMv: "Type du dernier Mouvement VC",
+      dateDernierMv: "Date du dernier Mouvement VC",
+    };
+    expect(
+      resolvePlacementDateEffetIso(
+        {
+          "Date Effet": "",
+          "Type du dernier Mouvement VC": "Versement initial",
+          "Date du dernier Mouvement VC": "18/12/2024",
+        },
+        keys
+      )
+    ).toBe("2024-12-18T00:00:00.000Z");
+    expect(
+      resolvePlacementDateEffetIso(
+        {
+          "Date Effet": "",
+          "Type du dernier Mouvement VC": "Versement complémentaire",
+          "Date du dernier Mouvement VC": "18/12/2024",
+        },
+        keys
+      )
+    ).toBeUndefined();
+    expect(
+      resolvePlacementDateEffetIso(
+        {
+          "Date Effet": "15/06/2024",
+          "Type du dernier Mouvement VC": "Versement initial",
+          "Date du dernier Mouvement VC": "18/12/2024",
+        },
+        keys
+      )
+    ).toBe("2024-06-15T00:00:00.000Z");
   });
 
   it("mergePlacementVpByContract — VP sur ligne VI même contrat", () => {
@@ -1005,5 +1078,83 @@ describe("placement-commandes-import", () => {
     );
     expect(updated[0]!.nomProduit).toBe("Corum Origine");
     expect(updated[0]!.status).toBe("ready");
+  });
+
+  it("souscriptions annuelles même montant (Girardin, sans Date Effet) ≠ doublons fichier", () => {
+    const row = (date: string) => ({
+      "Nom complet Investisseur": "LEGRAND Christian",
+      "Type Produit": "Girardin Industriel",
+      "Libellé Produit": "G3F",
+      "Date Effet": "",
+      "Date du dernier Mouvement VC": date,
+      "Type du dernier Mouvement VC": "Versement initial",
+      "Montant du dernier Mouvement VC": 10000,
+      "Etat Commande": "En-cours",
+    });
+    const parsed = parsePlacementCommandeRows([row("31/01/2023"), row("30/06/2023"), row("30/06/2023")]);
+    const lines = buildPlacementCommandesImportPreview(
+      parsed,
+      [
+        {
+          id: 1,
+          nom: "LEGRAND",
+          prenom: "Christian",
+          categorie: "CLIENT",
+          statut_suivi: "ACTIF",
+          created_at: 0,
+          updated_at: 0,
+        } as Contact,
+      ],
+      []
+    );
+    expect(lines.map((l) => l.status)).toEqual(["ready", "ready", "duplicate_csv"]);
+    expect(lines[0]!.dateEffetIso?.slice(0, 10)).toBe("2023-01-31");
+
+    // Correction de la date du doublon dans l'aperçu : il redevient importable.
+    const fixed = patchPlacementPreviewLines(
+      lines,
+      lines[2]!.lineKey,
+      { dateEffetIso: "2024-06-30T00:00:00.000Z" },
+      [{ id: 1, nom: "LEGRAND", prenom: "Christian", categorie: "CLIENT", statut_suivi: "ACTIF", created_at: 0, updated_at: 0 } as Contact],
+      [],
+      { reassessAll: false }
+    );
+    expect(fixed.map((l) => l.status)).toEqual(["ready", "ready", "ready"]);
+
+    // Inverse : aligner la date sur une autre ligne la repasse en doublon, l'autre reste prête.
+    const dup = patchPlacementPreviewLines(
+      fixed,
+      fixed[0]!.lineKey,
+      { dateEffetIso: "2023-06-30T00:00:00.000Z" },
+      [{ id: 1, nom: "LEGRAND", prenom: "Christian", categorie: "CLIENT", statut_suivi: "ACTIF", created_at: 0, updated_at: 0 } as Contact],
+      [],
+      { reassessAll: false }
+    );
+    expect(dup.map((l) => l.status).filter((s) => s === "duplicate_csv")).toHaveLength(1);
+  });
+
+  it("SCPI : souscriptions multiples cumulées, date = première ; VP seul sans repli de date", () => {
+    const vi = (date: string, montant: number) => ({
+      "Nom complet Investisseur": "DUPONT Jean",
+      "Type Produit": "SCPI rendement",
+      "Libellé Produit": "Comète",
+      "Date Effet": "",
+      "Date du dernier Mouvement VC": date,
+      "Type du dernier Mouvement VC": "Versement initial",
+      "Montant du dernier Mouvement VC": montant,
+      "Montant Versement VC cumulé de la commande": montant,
+      "Etat Commande": "En-cours",
+    });
+    const rows = parsePlacementCommandeRows([vi("15/03/2025", 15000), vi("22/07/2026", 15000)]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.montantCentimes).toBe(30_000_00);
+    expect(rows[0]!.dateEffetIso?.slice(0, 10)).toBe("2025-03-15");
+
+    const vpOnly = parsePlacementCommandeRows([
+      { ...vi("30/10/2026", 200), "Montant Versement VC cumulé de la commande": 4800 },
+    ]);
+    expect(vpOnly).toHaveLength(1);
+    expect(vpOnly[0]!.versementProgramme).toBe(true);
+    expect(vpOnly[0]!.dateEffetIso).toBeUndefined();
   });
 });

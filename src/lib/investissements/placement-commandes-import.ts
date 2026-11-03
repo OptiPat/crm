@@ -59,6 +59,7 @@ const COLUMN_ALIASES = {
   viEncours: ["dont versement initial en-cours"],
   viExercice: ["dont versement initial sur ex"],
   typeDernierMv: ["type du dernier mouvement vc"],
+  dateDernierMv: ["date du dernier mouvement vc"],
   montantDernierMv: ["montant du dernier mouvement vc"],
   vcCumulPeriode: [
     "montant versement vc cumule sur la periode",
@@ -127,7 +128,7 @@ export function isPlacementAvOrPer(typeProduit: string): boolean {
 
 /** SCPI, FIP/FCPI, G3F — le n° contrat n'est pas obligatoire à l'import. */
 export function isPlacementSansContratObligatoire(typeProduit: string): boolean {
-  return typeProduit === "SCPI" || typeProduit === "FIP_FCPI" || typeProduit === "G3F";
+  return isPlacementScpiType(typeProduit) || typeProduit === "FIP_FCPI" || typeProduit === "G3F";
 }
 
 /** VI, VP, réinv. dividendes et date souscription éditables en preview (export incomplet). */
@@ -138,7 +139,12 @@ export function isPlacementPreviewViVpEditable(typeProduit: string): boolean {
 }
 
 export function isPlacementPreviewScpiReinvestEditable(typeProduit: string): boolean {
-  return typeProduit === "SCPI";
+  return isPlacementScpiType(typeProduit);
+}
+
+/** SCPI de rendement ou fiscale : mêmes règles d'import (fusion, VP, dividendes). */
+export function isPlacementScpiType(typeProduit: string): boolean {
+  return typeProduit === "SCPI" || typeProduit === "SCPI_FISCALE";
 }
 
 /**
@@ -158,7 +164,7 @@ export function placementContratVpNeedsReview(
   >
 ): boolean {
   if (isPlacementContratVpMerge(line.typeProduit)) return line.montantCentimes === 0;
-  if (line.typeProduit === "SCPI") return line.montantCentimes === 0;
+  if (isPlacementScpiType(line.typeProduit)) return line.montantCentimes === 0;
   return false;
 }
 
@@ -174,7 +180,7 @@ export function placementScpiMergeKey(
     | "nomProduit"
   >
 ): string | undefined {
-  if (row.typeProduit !== "SCPI") return undefined;
+  if (!isPlacementScpiType(row.typeProduit)) return undefined;
   const coKey =
     row.coInvestorNom && row.coInvestorPrenom
       ? contactNameKeyCanonical(row.coInvestorNom, row.coInvestorPrenom)
@@ -395,14 +401,39 @@ export function cleanPlacementLibelleProduit(raw: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
-export function mapPlacementTypeProduit(typeProduit: string): string | null {
-  const k = typeProduit
+/** \u00ab Non d\u00e9fini \u00bb Stellium : SCPI reconnues par leur libell\u00e9 (classement valid\u00e9 m\u00e9tier). */
+const NON_DEFINI_SCPI_RENDEMENT = ["ficoma", "cifocoma"];
+const NON_DEFINI_SCPI_FISCALE = [
+  "credit mutuel pierre",
+  "primo 1",
+  "corum patrimoine residentiel",
+  "pierre investissement",
+  "uffi habitat",
+  "multihabitation",
+];
+
+function normalizePlacementTypeLabel(raw: string): string {
+  return raw
     .trim()
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+export function mapPlacementTypeProduit(typeProduit: string, libelleProduit = ""): string | null {
+  const k = normalizePlacementTypeLabel(typeProduit);
   if (!k) return null;
+  if (k === "non defini") {
+    const lib = normalizePlacementTypeLabel(libelleProduit);
+    if (/\b(fip|fcpi)\b/.test(lib)) return "FIP_FCPI";
+    if (lib.includes("g3f") || lib.includes("girardin")) return "G3F";
+    if (NON_DEFINI_SCPI_RENDEMENT.some((n) => lib.includes(n))) return "SCPI";
+    if (NON_DEFINI_SCPI_FISCALE.some((n) => lib.includes(n))) return "SCPI_FISCALE";
+    return "AUTRE";
+  }
+  if (k.includes("girardin")) return "G3F";
   if (k.includes("assurance") && k.includes("vie")) return "ASSURANCE_VIE";
+  if (k.includes("scpi") && k.includes("fiscal")) return "SCPI_FISCALE";
   if (k.includes("scpi")) return "SCPI";
   if (k.includes("epargne") && k.includes("retraite")) return "PER";
   if (k.includes("capitalisation")) return "CONTRAT_CAPITALISATION";
@@ -463,13 +494,20 @@ export function resolvePlacementMontantInitialCentimes(
   return null;
 }
 
-/** Date de souscription = colonne Date Effet uniquement. */
+/**
+ * Date de souscription = colonne Date Effet. Si vide (SCPI, Girardin… non renseignés
+ * par Stellium), repli sur la date du dernier mouvement quand c'est le versement initial.
+ */
 export function resolvePlacementDateEffetIso(
   raw: Record<string, unknown>,
-  keys: { dateEffet?: string }
+  keys: { dateEffet?: string; typeDernierMv?: string; dateDernierMv?: string }
 ): string | undefined {
-  if (!keys.dateEffet) return undefined;
-  return parseImportDate(raw[keys.dateEffet]);
+  const effet = keys.dateEffet ? parseImportDate(raw[keys.dateEffet]) : undefined;
+  if (effet) return effet;
+  if (!keys.typeDernierMv || !keys.dateDernierMv) return undefined;
+  const typeMv = normalizeMovementTypeLabel(cellStr(raw[keys.typeDernierMv]));
+  if (!/versement\s+initial\b/.test(typeMv)) return undefined;
+  return parseImportDate(raw[keys.dateDernierMv]);
 }
 
 export type PlacementParsedRow = Omit<PlacementCommandeRow, "montantCentimes"> & {
@@ -586,8 +624,36 @@ export function mergePlacementScpiByInvestorProduct(
   const merged: PlacementCommandeRow[] = [];
   const mergedKeys = new Set<string>();
 
+  // Plusieurs souscriptions (VI) d'une même SCPI : une seule position, montants cumulés,
+  // date = première souscription.
+  const viRows: (PlacementParsedRow & { montantCentimes: number })[] = [];
+  const viByKey = new Map<string, PlacementParsedRow & { montantCentimes: number }>();
   for (const row of rows) {
     if (row.montantCentimes == null) continue;
+    const key = placementScpiMergeKey(row);
+    const existing = key ? viByKey.get(key) : undefined;
+    if (!existing) {
+      const copy = { ...row, montantCentimes: row.montantCentimes };
+      viRows.push(copy);
+      if (key) viByKey.set(key, copy);
+      continue;
+    }
+    existing.montantCentimes += row.montantCentimes;
+    if (row.dateEffetIso && (!existing.dateEffetIso || row.dateEffetIso < existing.dateEffetIso)) {
+      existing.dateEffetIso = row.dateEffetIso;
+    }
+    if (row.versementProgramme && !existing.versementProgramme) {
+      existing.versementProgramme = true;
+      existing.montantVpCentimes = row.montantVpCentimes;
+      existing.frequenceVp = row.frequenceVp;
+    }
+    if (row.reinvestissementDividendes && !existing.reinvestissementDividendes) {
+      existing.reinvestissementDividendes = true;
+      existing.pourcentageReinvestissement = row.pourcentageReinvestissement;
+    }
+  }
+
+  for (const row of viRows) {
     const key = placementScpiMergeKey(row);
     const attachedVp =
       key && !row.versementProgramme ? vpByKey.get(key) : undefined;
@@ -742,6 +808,7 @@ function resolveColumnKeys(
     viEncours: findColumnKey(sampleRow, COLUMN_ALIASES.viEncours),
     viExercice: findColumnKey(sampleRow, COLUMN_ALIASES.viExercice),
     typeDernierMv: findColumnKey(sampleRow, COLUMN_ALIASES.typeDernierMv),
+    dateDernierMv: findColumnKey(sampleRow, COLUMN_ALIASES.dateDernierMv),
     montantDernierMv: findColumnKey(sampleRow, COLUMN_ALIASES.montantDernierMv),
     vcCumulPeriode: findColumnKey(sampleRow, COLUMN_ALIASES.vcCumulPeriode),
     vpFrequence: findColumnKey(sampleRow, COLUMN_ALIASES.vpFrequence),
@@ -763,8 +830,8 @@ function parsePlacementParsedRows(
       : "";
     const investor = parsePlacementInvestorName(investorFull);
     const typeRaw = keys.typeProduit ? cellStr(raw[keys.typeProduit]) : "";
-    const typeProduit = mapPlacementTypeProduit(typeRaw);
     const libelleRaw = keys.libelleProduit ? cellStr(raw[keys.libelleProduit]) : "";
+    const typeProduit = mapPlacementTypeProduit(typeRaw, libelleRaw);
     const nomProduit = cleanPlacementLibelleProduit(libelleRaw);
     const numeroContrat = keys.numeroContrat
       ? cellStr(raw[keys.numeroContrat]) || undefined
@@ -781,7 +848,7 @@ function parsePlacementParsedRows(
       frequenceVp?: string;
     };
 
-    if (typeProduit === "SCPI") {
+    if (typeProduit && isPlacementScpiType(typeProduit)) {
       const scpi = resolvePlacementScpiRowAmounts(raw, {
         montantDernierMv: keys.montantDernierMv,
         vcCumulPeriode: keys.vcCumulPeriode,
@@ -829,7 +896,7 @@ function parsePlacementParsedRows(
     const etatRaw = keys.etatCommande ? cellStr(raw[keys.etatCommande]) : "";
     const etatCommande = parsePlacementEtatCommande(etatRaw);
     if (!etatCommande || etatCommande === "NON_CONFORME") return;
-    if (typeProduit === "SCPI" && etatCommande === "CLOSE") return;
+    if (typeProduit && isPlacementScpiType(typeProduit) && etatCommande === "CLOSE") return;
 
     if (!investor || !typeProduit || !nomProduit) return;
     if (montantCentimes == null && !isVpOnlyRow && !isReinvestOnlyRow) return;
@@ -851,7 +918,17 @@ function parsePlacementParsedRows(
       nomProduit,
       numeroContrat,
       montantCentimes,
-      dateEffetIso: resolvePlacementDateEffetIso(raw, { dateEffet: keys.dateEffet }),
+      // SCPI VP / réinvestissement seuls : le dernier mouvement est une mensualité, pas la souscription.
+      dateEffetIso: resolvePlacementDateEffetIso(
+        raw,
+        isVpOnlyRow || isReinvestOnlyRow
+          ? { dateEffet: keys.dateEffet }
+          : {
+              dateEffet: keys.dateEffet,
+              typeDernierMv: keys.typeDernierMv,
+              dateDernierMv: keys.dateDernierMv,
+            }
+      ),
       dateSortieIso: keys.dateSortie ? parseImportDate(raw[keys.dateSortie]) : undefined,
       etatCommande,
       versementProgramme: vp.versementProgramme,
@@ -869,8 +946,8 @@ export function parsePlacementCommandeRows(
   rawRows: Record<string, unknown>[]
 ): PlacementCommandeRow[] {
   const parsed = parsePlacementParsedRows(rawRows);
-  const scpiRows = parsed.filter((r) => r.typeProduit === "SCPI");
-  const otherRows = parsed.filter((r) => r.typeProduit !== "SCPI");
+  const scpiRows = parsed.filter((r) => isPlacementScpiType(r.typeProduit));
+  const otherRows = parsed.filter((r) => !isPlacementScpiType(r.typeProduit));
   const scpiMerged = mergePlacementScpiByInvestorProduct(scpiRows);
   const otherMerged = mergePlacementVpByContract(otherRows);
 
@@ -1105,7 +1182,8 @@ function businessLineKey(row: PlacementCommandeRow): string {
     row.coInvestorNom && row.coInvestorPrenom
       ? contactNameKeyCanonical(row.coInvestorNom, row.coInvestorPrenom)
       : "";
-  return `${contactNameKeyCanonical(row.investorNom, row.investorPrenom)}|${coKey}|${row.nomProduit.toUpperCase()}|${row.montantCentimes}`;
+  // Date incluse : souscriptions annuelles au même montant (Girardin G3F, Ficoma…) ≠ doublons.
+  return `${contactNameKeyCanonical(row.investorNom, row.investorPrenom)}|${coKey}|${row.nomProduit.toUpperCase()}|${row.montantCentimes}|${row.dateEffetIso?.slice(0, 10) ?? ""}`;
 }
 
 type PlacementPreviewContext = {
@@ -1142,7 +1220,8 @@ function assessPlacementImportLine(
       ...row,
       lineKey,
       status: "invalid",
-      statusMessage: "Date de souscription manquante ou illisible (Date Effet)",
+      statusMessage:
+        "Date de souscription manquante ou illisible (Date Effet / date du versement initial)",
       contactId: contact?.id,
       coContactId: coContact?.id,
       contactLabel,
@@ -1428,9 +1507,21 @@ export function patchPlacementPreviewLines(
   );
   const seenInFile = buildPlacementPreviewSeenInFileFromLines(withPatch);
   const reassessAll = opts?.reassessAll ?? true;
+  // La date fait partie de la clé doublon : réévaluer aussi les lignes de l'ancienne / nouvelle clé.
+  const before = lines.find((l) => l.lineKey === lineKey);
+  const after = withPatch.find((l) => l.lineKey === lineKey);
+  const touchedKeys = new Set(
+    [before, after].filter((l) => l != null).map((l) => businessLineKey(l))
+  );
   return withPatch.map((line) => {
     if (line.status === "imported") return line;
-    if (!reassessAll && line.lineKey !== lineKey) return line;
+    if (
+      !reassessAll &&
+      line.lineKey !== lineKey &&
+      !touchedKeys.has(businessLineKey(line))
+    ) {
+      return line;
+    }
     return reassessPlacementPreviewLine(line, contacts, investissements, seenInFile);
   });
 }
@@ -1593,6 +1684,7 @@ export function formatPlacementProduitLabel(line: PlacementImportPreviewLine): s
   if (line.typeProduit === "PER") return `${line.nomProduit} (PER)`;
   if (line.typeProduit === "CONTRAT_CAPITALISATION") return `${line.nomProduit} (Cap.)`;
   if (line.typeProduit === "SCPI") return `${line.nomProduit} (SCPI)`;
+  if (line.typeProduit === "SCPI_FISCALE") return `${line.nomProduit} (SCPI fiscale)`;
   if (line.typeProduit === "FIP_FCPI") return `${line.nomProduit} (FIP)`;
   if (line.typeProduit === "G3F") return `${line.nomProduit} (G3F)`;
   return line.nomProduit;
@@ -1794,6 +1886,8 @@ export async function applyPlacementCommandeImportLine(
     foyersCache?: Foyer[];
     investissementsCache?: Investissement[];
     partenairesCache?: Partenaire[];
+    /** Investissements créés par ce même import : jamais rapprochés (souscriptions distinctes). */
+    createdInBatchIds?: Set<number>;
   }
 ): Promise<ApplyPlacementImportResult> {
   if (!isPlacementImportLineApplicable(line)) {
@@ -1840,8 +1934,13 @@ export async function applyPlacementCommandeImportLine(
     const existing =
       wasEnrich && line.investissementId
         ? investissements.find((i) => i.id === line.investissementId)
-        : findExistingPlacementInvestissement(investissements, line, { contactId, foyerId })
-            .match;
+        : findExistingPlacementInvestissement(
+            ctx?.createdInBatchIds
+              ? investissements.filter((i) => !ctx.createdInBatchIds!.has(i.id))
+              : investissements,
+            line,
+            { contactId, foyerId }
+          ).match;
 
     let saved: Investissement;
     if (existing) {
@@ -1851,6 +1950,7 @@ export async function applyPlacementCommandeImportLine(
     } else {
       saved = await createInvestissement(payload, IMPORT_SAVE_OPTS);
       investissements.push(saved);
+      ctx?.createdInBatchIds?.add(saved.id);
     }
 
     if (line.etatCommande === "CLOSE" && line.dateSortieIso) {
@@ -1892,6 +1992,7 @@ export async function applyPlacementCommandesImport(
   const foyersCache = await getAllFoyers();
   const investissementsCache = await getAllInvestissements();
   const partenairesCache = await getAllPartenaires();
+  const createdInBatchIds = new Set<number>();
   let applied = 0;
   let failed = 0;
   const updated = [...lines];
@@ -1906,6 +2007,7 @@ export async function applyPlacementCommandesImport(
       foyersCache,
       investissementsCache,
       partenairesCache,
+      createdInBatchIds,
     });
     if (result.ok) {
       updated[i] = result.line;
