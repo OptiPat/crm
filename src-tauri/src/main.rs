@@ -493,6 +493,8 @@ fn main() {
             disconnect_email_oauth,
             connect_google_calendar_oauth,
             disconnect_google_calendar_oauth_cmd,
+            suggest_imap_mailbox_servers,
+            connect_imap_mailbox,
             test_email_connection,
             fetch_gmail_signature_for_cgp,
             import_email_signature_from_file_cmd,

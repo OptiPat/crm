@@ -1,7 +1,7 @@
 # Module email — feuille de route
 
 Guide produit et technique pour le module mail du CRM Patrimoine.  
-État actuel : **OAuth Gmail / Microsoft** + templates + file Suivi → Envois (confirmation manuelle). L’ancienne connexion SMTP a été retirée.
+État actuel : **OAuth Gmail / Microsoft**, **SMTP / IMAP** pour les autres messageries (OVH, Ionos…) + templates + file Suivi → Envois (confirmation manuelle). L’ancienne connexion SMTP a été retirée.
 
 ---
 
@@ -24,6 +24,7 @@ Pas d’envoi en arrière-plan tant qu’on n’a pas explicitement ajouté un s
 | Brique | Fichiers / écrans |
 |--------|-------------------|
 | Connexion OAuth Gmail / Outlook | `EmailOAuthConnect`, `src-tauri/src/email/oauth_*` |
+| Connexion autre messagerie (SMTP / IMAP) | `EmailImapConnectForm`, `src-tauri/src/email/imap_mailbox.rs` |
 | Templates | `templates_email`, page Templates email |
 | Variables + aperçu | `etiquette-email-preview.ts` |
 | File d’envoi | `EtiquetteEnvoisTab`, `get_etiquette_email_queue` |

@@ -419,6 +419,33 @@ fn build_rfc2822(
     append_reply_headers(&core, reply)
 }
 
+/// Message HTML d'une ligne avec en-têtes de réponse / désinscription (tests SMTP).
+#[cfg(test)]
+pub(crate) fn build_rfc2822_for_tests(
+    from_email: &str,
+    to_email: &str,
+    body_html: &str,
+    in_reply_to: Option<&str>,
+    list_unsubscribe_email: Option<&str>,
+) -> String {
+    let reply = GmailThreadReply {
+        thread_id: None,
+        in_reply_to_message_id: in_reply_to.map(str::to_string),
+        list_unsubscribe_email: list_unsubscribe_email.map(str::to_string),
+    };
+    build_rfc2822(
+        from_email,
+        None,
+        to_email,
+        None,
+        "Objet",
+        "",
+        Some(body_html),
+        Some(&reply),
+        &[],
+    )
+}
+
 fn send_via_gmail(
     conn: &EmailOAuthConnection,
     from_name: Option<&str>,
@@ -525,6 +552,44 @@ pub struct OAuthSendResult {
     pub gmail_thread_id: Option<String>,
 }
 
+/// Boîte SMTP / IMAP : le Message-ID tient lieu d'identifiant de message et de fil
+/// (la synchro des réponses cherche ce Message-ID dans In-Reply-To / References).
+fn send_via_smtp(
+    app: &AppHandle,
+    conn: &EmailOAuthConnection,
+    from_name: Option<&str>,
+    to_email: &str,
+    to_name: Option<&str>,
+    subject: &str,
+    body: &str,
+    body_html: Option<&str>,
+    reply: Option<&GmailThreadReply>,
+    attachments: &[OutgoingEmailAttachment],
+) -> Result<OAuthSendResult, String> {
+    let raw = build_rfc2822(
+        &conn.email,
+        from_name,
+        to_email,
+        to_name,
+        subject,
+        body,
+        body_html,
+        reply,
+        attachments,
+    );
+    let message_id = super::imap_mailbox::send_raw_message(app, to_email, &raw)?;
+    let thread_id = reply
+        .and_then(|r| r.thread_id.as_deref())
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| message_id.clone());
+    Ok(OAuthSendResult {
+        gmail_message_id: Some(message_id),
+        gmail_thread_id: Some(thread_id),
+    })
+}
+
 pub fn send_with_resolved_identity(
     app: &AppHandle,
     identity: &crate::workspace::mailbox::ResolvedSendIdentity,
@@ -595,6 +660,18 @@ pub fn send_with_resolved_identity(
                     )?;
                     Ok(OAuthSendResult::default())
                 }
+                super::imap_mailbox::IMAP_PROVIDER => send_via_smtp(
+                    app,
+                    &conn,
+                    from_name.as_deref(),
+                    to_email,
+                    to_name,
+                    subject,
+                    body,
+                    body_html,
+                    reply,
+                    attachments,
+                ),
                 _ => Err("Fournisseur OAuth non supporté".into()),
             }
         }
@@ -674,6 +751,18 @@ pub fn send_with_oauth(
             )?;
             Ok(OAuthSendResult::default())
         }
+        super::imap_mailbox::IMAP_PROVIDER => send_via_smtp(
+            app,
+            &conn,
+            from_name.as_deref(),
+            to_email,
+            to_name,
+            subject,
+            body,
+            body_html,
+            reply,
+            attachments,
+        ),
         _ => Err("Fournisseur OAuth non supporté".into()),
     }
 }
@@ -752,7 +841,7 @@ pub fn send_test_to_self(app: &AppHandle) -> Result<String, String> {
         .as_ref()
         .ok_or("Aucun compte OAuth connecté")?;
     let cgp = load_cgp_config(app);
-    const MESSAGE: &str = "Ceci est un email de test envoyé via votre compte connecté (Gmail ou Microsoft).\n\nSi vous le recevez, la connexion fonctionne.";
+    const MESSAGE: &str = "Ceci est un email de test envoyé via votre boîte connectée au CRM.\n\nSi vous le recevez, la connexion fonctionne.";
     let (body, body_html) = build_outgoing_email_bodies(
         MESSAGE,
         cgp.email_signature.as_deref(),
@@ -762,7 +851,7 @@ pub fn send_test_to_self(app: &AppHandle) -> Result<String, String> {
         app,
         &conn.email,
         None,
-        "Test CRM W.Y.S — connexion OAuth",
+        "Test CRM W.Y.S — connexion de la boîte mail",
         &body,
         body_html.as_deref(),
         None,

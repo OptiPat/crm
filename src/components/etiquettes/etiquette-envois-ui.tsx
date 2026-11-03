@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { AlertTriangle, ChevronDown, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { mailProviderLabel } from "@/lib/emails/mail-provider";
 
 export function EnvoisQueueStats({
   ready,
@@ -206,7 +207,7 @@ export function EnvoisEmailConnectionBanner({
 
   return (
     <p className="text-xs text-green-900 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-      Boîte connectée ({provider === "google" ? "Google" : "Microsoft"}
+      Boîte connectée ({mailProviderLabel(provider) ?? "Microsoft"}
       {email ? ` — ${email}` : ""})
     </p>
   );

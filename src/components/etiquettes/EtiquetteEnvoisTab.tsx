@@ -126,6 +126,7 @@ import {
 } from "@/lib/emails/campaign-messaging-relance";
 import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 import { userErrorMessage } from "@/lib/api/invoke-error";
+import { supportsCampaignReplySync } from "@/lib/emails/mail-provider";
 
 type EnvoisSubTab =
   | "ready"
@@ -216,8 +217,7 @@ export function EtiquetteEnvoisTab({
 
   const runAutoSync = useCallback(async () => {
     const mailReady =
-      emailStatus?.connected &&
-      (emailStatus.provider === "google" || emailStatus.provider === "microsoft");
+      emailStatus?.connected && supportsCampaignReplySync(emailStatus.provider);
     const calendarReady = emailStatus?.google_calendar_connected;
     if (!mailReady && !calendarReady) return;
     try {
@@ -1346,8 +1346,7 @@ export function EtiquetteEnvoisTab({
                   const assigned = await runFullEtiquettesRecalc();
                   if (
                     emailStatus?.connected &&
-                    (emailStatus.provider === "google" ||
-                      emailStatus.provider === "microsoft")
+                    supportsCampaignReplySync(emailStatus.provider)
                   ) {
                     await runAutoSync();
                   } else if (emailStatus?.google_calendar_connected) {

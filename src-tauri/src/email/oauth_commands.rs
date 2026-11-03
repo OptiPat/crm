@@ -1,5 +1,6 @@
 use crate::auth::session::{require_ui_session, UiSessionState};
 use super::google_calendar_probe::probe_google_calendar_access;
+use super::imap_mailbox::{connect_mailbox, suggest_servers, ImapMailboxServers, ImapServerSuggestion};
 use super::oauth_flow::{disconnect_google_calendar_oauth, disconnect_oauth, run_oauth_connect};
 use super::oauth_send::{
     fetch_gmail_signature, send_test_to_self, send_with_resolved_identity,
@@ -29,6 +30,8 @@ pub struct OAuthAppSettings {
     pub google_client_id: Option<String>,
     pub google_client_secret_configured: bool,
     pub microsoft_client_id: Option<String>,
+    /// Derniers serveurs SMTP / IMAP utilisés (préremplissage à la reconnexion).
+    pub imap_servers: Option<ImapMailboxServers>,
 }
 
 #[derive(serde::Deserialize)]
@@ -83,6 +86,7 @@ pub fn get_oauth_app_settings(
             .as_ref()
             .is_some_and(|s| !s.trim().is_empty()),
         microsoft_client_id: store.microsoft_client_id,
+        imap_servers: store.imap_servers,
     })
 }
 
@@ -173,6 +177,35 @@ pub async fn connect_google_calendar_oauth(
     })
     .await
     .map_err(|e| format!("OAuth Agenda interrompu: {}", e))?
+}
+
+#[tauri::command]
+pub async fn suggest_imap_mailbox_servers(
+    session: State<'_, UiSessionState>,
+    email: String,
+) -> Result<ImapServerSuggestion, String> {
+    require_ui_session(&session)?;
+    tauri::async_runtime::spawn_blocking(move || suggest_servers(&email))
+        .await
+        .map_err(|e| format!("Détection des serveurs interrompue: {}", e))
+}
+
+/// Boîte hors Google / Microsoft 365 : `servers` absent = serveurs détectés depuis l'adresse.
+#[tauri::command]
+pub async fn connect_imap_mailbox(
+    app_handle: AppHandle,
+    session: State<'_, UiSessionState>,
+    email: String,
+    password: String,
+    servers: Option<ImapMailboxServers>,
+) -> Result<EmailConnectionStatus, String> {
+    require_ui_session(&session)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        connect_mailbox(&app_handle, &email, &password, servers)?;
+        get_email_connection_status(app_handle)
+    })
+    .await
+    .map_err(|e| format!("Connexion interrompue: {}", e))?
 }
 
 #[tauri::command]

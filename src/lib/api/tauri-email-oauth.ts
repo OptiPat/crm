@@ -13,6 +13,25 @@ export interface OAuthAppSettings {
   google_client_id: string | null;
   google_client_secret_configured: boolean;
   microsoft_client_id: string | null;
+  /** Derniers serveurs de la boîte « autre messagerie » (préremplissage). */
+  imap_servers: ImapMailboxServers | null;
+}
+
+/** Boîte hors Google / Microsoft 365 (OVH, Ionos…) : SMTP + IMAP. */
+export interface ImapMailboxServers {
+  imap_host: string;
+  imap_port: number;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_security: "starttls" | "tls";
+  /** Vide ou null = l'adresse email. */
+  username?: string | null;
+}
+
+export interface ImapServerSuggestion {
+  provider_label: string | null;
+  candidates: ImapMailboxServers[];
+  hint: string | null;
 }
 
 export interface OAuthAppSettingsInput {
@@ -64,6 +83,23 @@ export async function connectGoogleCalendarOAuth(
 
 export async function disconnectGoogleCalendarOAuth(): Promise<void> {
   return invoke<void>("disconnect_google_calendar_oauth_cmd");
+}
+
+export async function suggestImapMailboxServers(email: string): Promise<ImapServerSuggestion> {
+  return invoke<ImapServerSuggestion>("suggest_imap_mailbox_servers", { email });
+}
+
+/** `servers` absent = serveurs détectés depuis l'adresse (essayés dans l'ordre). */
+export async function connectImapMailbox(
+  email: string,
+  password: string,
+  servers?: ImapMailboxServers | null
+): Promise<EmailConnectionStatus> {
+  return invoke<EmailConnectionStatus>("connect_imap_mailbox", {
+    email,
+    password,
+    servers: servers ?? null,
+  });
 }
 
 export async function testEmailConnection(): Promise<string> {

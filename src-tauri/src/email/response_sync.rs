@@ -625,6 +625,21 @@ fn gmail_find_reply_message_id(
 }
 
 /// Ligne relancée : même contrôle sur le fil et la date du 1er envoi (archivé).
+/// Envoi parti par SMTP (Message-ID « …@domaine ») puis boîte passée sur Gmail / Outlook :
+/// identifiants inconnus de l'API, retirés pour retomber sur la recherche par expéditeur.
+fn without_smtp_message_ids(item: &PendingCampaignResponseCheck) -> PendingCampaignResponseCheck {
+    let native = |v: &Option<String>| v.clone().filter(|id| !id.contains('@'));
+    PendingCampaignResponseCheck {
+        email_gmail_thread_id: native(&item.email_gmail_thread_id),
+        email_gmail_message_id: native(&item.email_gmail_message_id),
+        first_send_thread: item
+            .first_send_thread
+            .clone()
+            .filter(|(thread, _)| !thread.contains('@')),
+        ..item.clone()
+    }
+}
+
 pub(crate) fn first_send_check_item(
     item: &PendingCampaignResponseCheck,
 ) -> Option<PendingCampaignResponseCheck> {
@@ -864,6 +879,17 @@ pub fn sync_email_campaign_responses(
 
     // Agenda connecté mais illisible : pas de relance automatique (un RDV pris ne serait pas vu).
     let calendar_unavailable = calendar_error.is_some();
+    // Boîte IMAP : une seule connexion pour tous les envois vérifiés.
+    // Échec (mot de passe changé…) : signalé une fois, pas de contrôle mail ni de relance auto.
+    let mut imap_reader = None;
+    if mail_conn.provider == super::imap_mailbox::IMAP_PROVIDER && !pending.is_empty() {
+        match super::imap_mailbox::ImapMailboxReader::open(app) {
+            Ok(reader) => imap_reader = Some(reader),
+            Err(e) => result.errors.push(format!(
+                "Messagerie : {e} Vérifiez le mot de passe dans Paramètres → Emails & envois → Connexion."
+            )),
+        }
+    }
     for item in pending {
         let mut calendar_ok = !calendar_unavailable;
         if let Some(ref cal_token) = calendar_token {
@@ -895,8 +921,16 @@ pub fn sync_email_campaign_responses(
         }
 
         let mail_result = match mail_conn.provider.as_str() {
-            "google" => gmail_find_contact_reply(&client, &mail_conn.access_token, &item),
-            "microsoft" => outlook_find_contact_reply(&client, &mail_conn.access_token, &item)
+            "google" => gmail_find_contact_reply(
+                &client,
+                &mail_conn.access_token,
+                &without_smtp_message_ids(&item),
+            ),
+            "microsoft" => outlook_find_contact_reply(
+                &client,
+                &mail_conn.access_token,
+                &without_smtp_message_ids(&item),
+            )
                 .map(|opt| {
                     opt.map(|reply| GmailReplyFound {
                         message_id: reply.message_id,
@@ -904,6 +938,16 @@ pub fn sync_email_campaign_responses(
                         subject: reply.subject,
                     })
                 }),
+            super::imap_mailbox::IMAP_PROVIDER => match imap_reader.as_mut() {
+                Some(reader) => reader.find_contact_reply(&item).map(|opt| {
+                    opt.map(|reply| GmailReplyFound {
+                        message_id: reply.message_id,
+                        body_text: reply.body_text,
+                        subject: reply.subject,
+                    })
+                }),
+                None => continue,
+            },
             other => Err(format!("Fournisseur email non supporté pour la détection: {other}")),
         };
 
@@ -933,10 +977,10 @@ pub fn sync_email_campaign_responses(
                 break;
             }
             Err(e) if result.errors.len() < 3 => {
-                let label = if mail_conn.provider == "microsoft" {
-                    "Outlook"
-                } else {
-                    "Gmail"
+                let label = match mail_conn.provider.as_str() {
+                    "microsoft" => "Outlook",
+                    super::imap_mailbox::IMAP_PROVIDER => "Messagerie",
+                    _ => "Gmail",
                 };
                 result
                     .errors
@@ -1067,6 +1111,10 @@ pub fn fetch_newsletter_unsubscribe_requests(
             NEWSLETTER_UNSUBSCRIBE_LOOKBACK_DAYS,
             known,
         ),
+        super::imap_mailbox::IMAP_PROVIDER => {
+            super::imap_mailbox::ImapMailboxReader::open(app)?
+                .list_newsletter_unsubscribe_requests(NEWSLETTER_UNSUBSCRIBE_LOOKBACK_DAYS, known)
+        }
         _ => Ok(vec![]),
     }
 }
@@ -1074,6 +1122,32 @@ pub fn fetch_newsletter_unsubscribe_requests(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn smtp_message_ids_are_dropped_for_gmail_and_outlook() {
+        let item = PendingCampaignResponseCheck {
+            contact_etiquette_id: 1,
+            contact_email: "a@example.com".into(),
+            email_date_envoi: 1_700_000_000,
+            email_gmail_thread_id: Some("crm.1.abc@cabinet.fr".into()),
+            email_gmail_message_id: Some("crm.1.abc@cabinet.fr".into()),
+            queue_row_kind: "etiquette".into(),
+            first_send_thread: Some(("crm.0.def@cabinet.fr".into(), 1)),
+        };
+        let native = without_smtp_message_ids(&item);
+        assert!(!gmail_reply_has_thread_scope(&native));
+        assert!(native.first_send_thread.is_none());
+
+        let gmail = PendingCampaignResponseCheck {
+            email_gmail_thread_id: Some("18c2f0a1b2".into()),
+            first_send_thread: None,
+            ..item
+        };
+        assert_eq!(
+            without_smtp_message_ids(&gmail).email_gmail_thread_id.as_deref(),
+            Some("18c2f0a1b2")
+        );
+    }
 
     #[test]
     fn gmail_reply_has_thread_scope_with_thread_or_message_id() {

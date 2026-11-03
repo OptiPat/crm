@@ -32,6 +32,9 @@ pub struct EmailOAuthStore {
     pub microsoft_onedrive_connection: Option<EmailOAuthConnection>,
     /// Microsoft 365 organisations — mode équipe SharePoint (distinct de mail/OneDrive perso).
     pub microsoft_team_connection: Option<EmailOAuthConnection>,
+    /// Serveurs SMTP / IMAP de la boîte « autre messagerie » (provider `imap`, mot de passe
+    /// chiffré dans `connection.access_token`). Conservés après déconnexion pour la reconnexion.
+    pub imap_servers: Option<super::imap_mailbox::ImapMailboxServers>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -49,6 +52,8 @@ struct PersistedOAuthStore {
     microsoft_onedrive_connection: Option<PersistedOAuthConnection>,
     #[serde(default)]
     microsoft_team_connection: Option<PersistedOAuthConnection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    imap_servers: Option<super::imap_mailbox::ImapMailboxServers>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -172,6 +177,7 @@ impl EmailOAuthStore {
             google_calendar_connection,
             microsoft_onedrive_connection,
             microsoft_team_connection,
+            imap_servers: persisted.imap_servers,
         })
     }
 
@@ -217,6 +223,7 @@ impl EmailOAuthStore {
             google_calendar_connection,
             microsoft_onedrive_connection,
             microsoft_team_connection,
+            imap_servers: self.imap_servers.clone(),
         })
     }
 

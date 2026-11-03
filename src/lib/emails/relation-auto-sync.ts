@@ -4,6 +4,7 @@ import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
 import { notifyContactsChanged } from "@/lib/contacts/contact-events";
 import { notifyPipeChanged } from "@/lib/pipe/pipe-events";
+import { supportsCampaignReplySync } from "@/lib/emails/mail-provider";
 
 export interface RelationAutoSyncResult {
   skipped: boolean;
@@ -23,9 +24,7 @@ export interface RelationAutoSyncResult {
  */
 export async function runRelationAutoSync(): Promise<RelationAutoSyncResult> {
   const status = await getEmailConnectionStatus();
-  const mailReady =
-    status.connected &&
-    (status.provider === "google" || status.provider === "microsoft");
+  const mailReady = status.connected && supportsCampaignReplySync(status.provider);
   const calendarReady = status.google_calendar_connected;
   if (!mailReady && !calendarReady) {
     return {

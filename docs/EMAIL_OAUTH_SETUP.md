@@ -36,6 +36,45 @@ Pour **OneDrive dossiers clients** (avec Gmail pour les mails), ajoutez aussi : 
 
 ---
 
+## Autre messagerie (OVH, Ionos, Orange…) — SMTP / IMAP
+
+Pour les boîtes **hors Google et Microsoft 365** : OVH Email Pro / MX Plan, Ionos, Gandi,
+Infomaniak, Orange, Free, SFR, La Poste… Exemple typique : webmail Outlook sur
+`pro2.mail.ovh.net` — c'est de l'Exchange hébergé par OVH, **pas** Microsoft 365, le bouton
+Microsoft ne fonctionne pas.
+
+Pour l'utilisateur :
+
+1. **Paramètres → Emails & envois → Connexion** → tuile **Autre messagerie**.
+2. Adresse email + mot de passe de la messagerie (celui du webmail).
+3. L'hébergeur est détecté (domaine public ou serveurs MX du domaine) ; pour OVH, le CRM
+   essaie `pro1` → `pro2` → `pro3.mail.ovh.net` puis `ssl0.ovh.net` et garde celui qui accepte.
+4. **Connecter** : vérifie la réception (IMAP) et l'envoi (SMTP), puis **Tester**.
+
+Serveurs à saisir à la main (« Serveurs (avancé) ») si l'hébergeur n'est pas reconnu :
+
+| Hébergeur | IMAP | SMTP |
+|-----------|------|------|
+| OVH Email Pro | `proN.mail.ovh.net` : 993 | `proN.mail.ovh.net` : 587 STARTTLS |
+| OVH MX Plan | `ssl0.ovh.net` : 993 | `ssl0.ovh.net` : 465 SSL |
+| Ionos | `imap.ionos.fr` : 993 | `smtp.ionos.fr` : 465 SSL |
+
+Comportement :
+
+- Envoi SMTP ; copie déposée dans **Éléments envoyés** (IMAP), visible dans le webmail.
+- Détection des réponses campagnes : boîte de réception, réponses portant le Message-ID de
+  l'envoi (In-Reply-To / References). Désinscriptions newsletter : idem Gmail / Outlook.
+- Pas de détection RDV (connecter Google Agenda en complément), pas d'historique contact,
+  pas de scans Stellium / box placement (Google / Microsoft uniquement).
+- Mot de passe chiffré comme les tokens OAuth ; s'il change chez l'hébergeur → **Changer le
+  mot de passe** dans Connexion.
+- IMAP en SSL/TLS (port 993) uniquement ; SMTP en STARTTLS (587) ou SSL/TLS (465).
+- Chaque envoi ouvre une connexion SMTP et une connexion IMAP (copie dans Envoyés). Les
+  hébergeurs limitent le volume (OVH : ~200 emails / heure / compte) : attention aux grosses
+  newsletters, aucun étalement automatique n'est fait par le CRM.
+
+---
+
 ## OneDrive dossiers clients (Microsoft Graph)
 
 Même application Azure que ci-dessus (ou une app dédiée) :
@@ -64,8 +103,8 @@ Déconnexion : bouton **Déconnecter** (ne supprime pas les Client ID).
 
 | Donnée | Fichier | Protection |
 |--------|---------|------------|
-| Client ID Google / Microsoft | `email_oauth.json` | En clair (identifiants publics d’application) |
-| Tokens d’accès / refresh | `email_oauth.json` | **Chiffrés et authentifiés** (XChaCha20-Poly1305, clé maître protégée par DPAPI sous Windows ou le Trousseau sous macOS) |
+| Client ID Google / Microsoft, serveurs SMTP / IMAP | `email_oauth.json` | En clair (identifiants publics d’application) |
+| Tokens d’accès / refresh, mot de passe « autre messagerie » | `email_oauth.json` | **Chiffrés et authentifiés** (XChaCha20-Poly1305, clé maître protégée par DPAPI sous Windows ou le Trousseau sous macOS) |
 
 Les tokens OAuth ne sont **pas** stockés en clair. Les anciens formats en clair ou XOR sont
 **re-sauvegardés automatiquement** au chargement. Sur un autre poste, la base reste récupérable,
@@ -89,4 +128,7 @@ Recommandations : poste verrouillé, sauvegardes du dossier App Data protégées
 | `invalid_grant` à l'échange | Ne pas recharger la page de succès ; une seule tentative — recliquer **Connecter Google** après 5 s |
 | `client_secret is missing` | Collez le **code secret** Google (Clients → CRM Bureau) dans Paramètres → Emails & envois → Connexion, puis **Enregistrer** |
 
-Seule la connexion OAuth (Google / Microsoft) est supportée dans le CRM.
+| « Adresse ou mot de passe refusé » (autre messagerie) | Mot de passe du webmail ; Yahoo / iCloud exigent un mot de passe d'application |
+| « Serveur … injoignable » | Pare-feu / antivirus bloquant les ports 993, 587 ou 465 |
+
+Connexions supportées : OAuth Google / Microsoft, et SMTP / IMAP pour les autres messageries.

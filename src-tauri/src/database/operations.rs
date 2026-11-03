@@ -248,6 +248,18 @@ mod database_integration_tests {
         Database::open_in_memory_for_tests().expect("in-memory db")
     }
 
+    /// Mois de début d'une période « PERIODE_ANNEE » qui finit ce mois-ci et couvre encore
+    /// `days_ago` : sinon un envoi d'il y a 10 jours tombe dans l'occurrence précédente
+    /// (et est remplacé) pendant les premiers jours du mois.
+    fn period_start_month_covering(days_ago: i64) -> u32 {
+        use chrono::Datelike;
+        let ts = chrono::Utc::now().timestamp() - (days_ago + 1) * 86_400;
+        chrono::DateTime::from_timestamp(ts, 0)
+            .unwrap()
+            .with_timezone(&chrono::Local)
+            .month()
+    }
+
     fn sample_contact(nom: &str, prenom: &str) -> NewContact {
         NewContact {
             categorie: "CLIENT".into(),
@@ -4396,8 +4408,9 @@ mod database_integration_tests {
             .unwrap()
             .as_secs() as i64;
         let (_, current_month) = crate::database::Database::auto_etiquette_now_and_month();
+        let mois_debut = period_start_month_covering(10);
         let trigger_vars = format!(
-            r#"{{"email_trigger":{{"enabled":true,"condition_type":"PERIODE_ANNEE","condition_config":"{{\"mois_debut\":{current_month},\"mois_fin\":{current_month}}}","categories":["CLIENT"],"delai_jours":3}}}}"#
+            r#"{{"email_trigger":{{"enabled":true,"condition_type":"PERIODE_ANNEE","condition_config":"{{\"mois_debut\":{mois_debut},\"mois_fin\":{current_month}}}","categories":["CLIENT"],"delai_jours":3}}}}"#
         );
         let tpl = db
             .create_template_email(NewTemplateEmail {
@@ -4473,9 +4486,10 @@ mod database_integration_tests {
             .unwrap()
             .as_secs() as i64;
         let (_, current_month) = crate::database::Database::auto_etiquette_now_and_month();
+        let mois_debut = period_start_month_covering(10);
         let vars = |excluded: &str| {
             format!(
-                r#"{{"email_trigger":{{"enabled":true,"condition_type":"PERIODE_ANNEE","condition_config":"{{\"mois_debut\":{current_month},\"mois_fin\":{current_month}}}","categories":["CLIENT"],"delai_jours":3,"excluded_contact_ids":[{excluded}]}}}}"#
+                r#"{{"email_trigger":{{"enabled":true,"condition_type":"PERIODE_ANNEE","condition_config":"{{\"mois_debut\":{mois_debut},\"mois_fin\":{current_month}}}","categories":["CLIENT"],"delai_jours":3,"excluded_contact_ids":[{excluded}]}}}}"#
             )
         };
         let new_tpl = |v: String| NewTemplateEmail {

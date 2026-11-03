@@ -35,6 +35,7 @@ import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { requestOpenParametres } from "@/lib/navigation/app-navigation";
 import { ArrowRight, AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, Copy, Mail, MessageCircle, Paperclip, Pencil, RefreshCw, Tag, Trash2, X, Zap, Reply } from "lucide-react";
 import { PARAMETRES_PATH } from "@/lib/settings/parametres-labels";
+import { mailProviderLabel } from "@/lib/emails/mail-provider";
 
 /** Statut boîte mail discret (barre d’actions Modèles email). */
 export function TemplatesEmailMailboxStatus({
@@ -47,12 +48,7 @@ export function TemplatesEmailMailboxStatus({
   currentPage?: string;
 }) {
   const connected = Boolean(emailStatus?.connected && emailStatus.method === "oauth");
-  const providerLabel =
-    emailStatus?.provider === "google"
-      ? "Google"
-      : emailStatus?.provider === "microsoft"
-        ? "Microsoft"
-        : null;
+  const providerLabel = mailProviderLabel(emailStatus?.provider);
 
   if (!connected) {
     if (!onNavigate) {

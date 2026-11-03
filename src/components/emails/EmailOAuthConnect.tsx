@@ -13,6 +13,7 @@ import {
   ExternalLink,
   ChevronDown,
   CheckCircle2,
+  KeyRound,
 } from "lucide-react";
 import {
   connectEmailOAuth,
@@ -24,7 +25,10 @@ import {
   saveOAuthAppSettings,
   testEmailConnection,
   type EmailConnectionStatus,
+  type ImapMailboxServers,
 } from "@/lib/api/tauri-email-oauth";
+import { IMAP_MAIL_PROVIDER, mailProviderLabel } from "@/lib/emails/mail-provider";
+import { EmailImapConnectForm } from "@/components/emails/EmailImapConnectForm";
 import { toast } from "sonner";
 import { userErrorMessage } from "@/lib/api/invoke-error";
 import { cn } from "@/lib/utils";
@@ -43,6 +47,8 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
   const [connecting, setConnecting] = useState<"google" | "microsoft" | "google_calendar" | null>(null);
   const [testing, setTesting] = useState(false);
   const [showReplaceGoogleSecret, setShowReplaceGoogleSecret] = useState(false);
+  const [showImapForm, setShowImapForm] = useState(false);
+  const [imapServers, setImapServers] = useState<ImapMailboxServers | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -54,6 +60,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
       setGoogleClientId(settings.google_client_id ?? "");
       setGoogleSecretConfigured(settings.google_client_secret_configured);
       setMicrosoftClientId(settings.microsoft_client_id ?? "");
+      setImapServers(settings.imap_servers ?? null);
       setShowReplaceGoogleSecret(false);
     } catch (e) {
       console.error(e);
@@ -147,6 +154,21 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
   };
 
   const oauthConnected = status?.method === "oauth" && status.connected;
+  const imapConnected = oauthConnected && status?.provider === IMAP_MAIL_PROVIDER;
+  const providerLabel = mailProviderLabel(status?.provider) ?? "Microsoft";
+
+  const imapForm = (
+    <EmailImapConnectForm
+      initialEmail={imapConnected ? status?.email : null}
+      savedServers={imapServers}
+      onConnected={(st) => {
+        setStatus(st);
+        setShowImapForm(false);
+        void refresh();
+      }}
+      onCancel={() => setShowImapForm(false)}
+    />
+  );
 
   const body = loading ? (
     <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
@@ -162,13 +184,13 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
             <div className="min-w-0">
               <p className="font-medium text-emerald-950">Boîte connectée</p>
               <p className="text-sm text-emerald-800/90 truncate">
-                {status?.provider === "google" ? "Google" : "Microsoft"} — {status?.email}
+                {providerLabel} — {status?.email}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 Prêt pour Suivi → Envois. « Tester » vérifie l&apos;envoi
                 {status?.provider === "google" || status?.google_calendar_connected
                   ? " et Google Agenda."
-                  : status?.provider === "microsoft"
+                  : status?.provider === "microsoft" || imapConnected
                     ? ". Connectez Google Agenda ci-dessous pour la détection RDV."
                     : "."}
               </p>
@@ -190,6 +212,12 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
                 Reconnecter Google
               </Button>
             )}
+            {imapConnected && !showImapForm && (
+              <Button variant="outline" size="sm" onClick={() => setShowImapForm(true)}>
+                <KeyRound className="h-4 w-4 mr-1" />
+                Changer le mot de passe
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => void handleTest()} disabled={testing}>
               {testing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -206,7 +234,9 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
         </div>
       ) : null}
 
-      {oauthConnected && status?.provider === "microsoft" && (
+      {imapConnected && showImapForm ? imapForm : null}
+
+      {oauthConnected && (status?.provider === "microsoft" || imapConnected) && (
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-white p-4">
           <div className="flex-1 min-w-0">
             <p className="font-medium text-blue-950">Google Agenda (optionnel)</p>
@@ -266,8 +296,10 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
         </div>
       )}
 
-      {!oauthConnected ? (
-        <div className="grid gap-3 sm:grid-cols-2">
+      {!oauthConnected && showImapForm ? imapForm : null}
+
+      {!oauthConnected && !showImapForm ? (
+        <div className="grid gap-3 sm:grid-cols-3">
           <button
             type="button"
             disabled={
@@ -301,12 +333,27 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
             )}
           >
             <span className="text-sm font-semibold">Microsoft / Outlook</span>
-            <span className="text-xs text-muted-foreground">Client ID Azure requis</span>
+            <span className="text-xs text-muted-foreground">Microsoft 365, outlook.com — Client ID Azure requis</span>
             {connecting === "microsoft" ? (
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
             ) : (
               <ExternalLink className="h-4 w-4 text-primary" />
             )}
+          </button>
+          <button
+            type="button"
+            disabled={!!connecting}
+            onClick={() => setShowImapForm(true)}
+            className={cn(
+              "flex flex-col items-start gap-2 rounded-xl border-2 border-border p-4 text-left transition-all",
+              "hover:border-primary/50 hover:bg-muted/30 disabled:opacity-50 disabled:pointer-events-none"
+            )}
+          >
+            <span className="text-sm font-semibold">Autre messagerie</span>
+            <span className="text-xs text-muted-foreground">
+              OVH, Ionos, Orange, Free… — adresse et mot de passe
+            </span>
+            <Mail className="h-4 w-4 text-primary" />
           </button>
         </div>
       ) : null}
@@ -400,7 +447,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
         </div>
       </details>
 
-      {!oauthConnected && variant === "card" && (
+      {!oauthConnected && !showImapForm && variant === "card" && (
         <div className="flex flex-wrap gap-2">
           <Button
             onClick={() => void handleConnect("google")}
@@ -438,7 +485,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
     return (
       <SettingsPanel
         title="Connexion boîte mail"
-        description="Gmail ou Outlook — requis pour les envois depuis Suivi."
+        description="Gmail, Outlook ou autre messagerie — requis pour les envois depuis Suivi."
         action={
           oauthConnected ? (
             <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 font-normal">
@@ -464,12 +511,12 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
           <CardTitle>Connexion email</CardTitle>
           {oauthConnected && (
             <Badge variant="secondary" className="font-normal">
-              {status?.provider === "google" ? "Google" : "Microsoft"} — {status?.email}
+              {providerLabel} — {status?.email}
             </Badge>
           )}
         </div>
         <CardDescription>
-          Connectez votre boîte Gmail ou Outlook. Guide :{" "}
+          Connectez votre boîte Gmail, Outlook ou autre messagerie (OVH, Ionos…). Guide :{" "}
           <code className="text-xs">docs/EMAIL_OAUTH_SETUP.md</code>
         </CardDescription>
       </CardHeader>

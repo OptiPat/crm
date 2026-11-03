@@ -41,6 +41,13 @@ hkdf = "0.12"
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 atomic-write-file = "0.3.0"
 open = { version = "5.4.0", features = ["shellexecute-on-windows"] }
+# Boîtes hors Google / Microsoft 365 (OVH, Ionos…) : SMTP + IMAP en rustls (ring), sans OpenSSL.
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "rustls", "ring", "webpki-roots", "hostname"] }
+imap = { version = "3.0.0-alpha.15", default-features = false }
+imap-proto = "0.16"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+webpki-roots = "1"
+mailparse = "0.16"
 
 [profile.dev]
 # debug = 0 — evite LNK1318 ; codegen-units reduisent le pic memoire LLVM sous Windows.
