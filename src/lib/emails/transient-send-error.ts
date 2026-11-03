@@ -1,5 +1,7 @@
 /** Quota / rate-limit Gmail ou Graph — un nouvel essai une minute plus tard a du sens. */
 export function isTransientEmailSendError(message: string): boolean {
+  // Quota horaire de la boîte SMTP (pause d'une heure au plus) : pas un essai à 1 min.
+  if (message.includes("Limite d'envoi atteinte")) return false;
   const lower = message.toLowerCase();
   return (
     lower.includes("ratelimitexceeded") ||

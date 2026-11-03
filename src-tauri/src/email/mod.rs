@@ -16,6 +16,7 @@ pub mod response_sync_outlook;
 pub mod google_api_errors;
 pub mod google_calendar_probe;
 pub mod imap_mailbox;
+pub mod smtp_quota;
 pub mod calendar_ops;
 pub mod stellium_exceltis;
 pub mod box_placement;

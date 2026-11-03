@@ -8,6 +8,11 @@ import { sendEmail } from "@/lib/api/tauri-email";
 import { buildSendEmailAttachmentsFromTemplate } from "@/lib/emails/template-email-attachments";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import {
+  SMTP_PAUSE_INTERRUPTED_MESSAGE,
+  sendWithSmtpQuotaRetry,
+  waitForSmtpSendSlot,
+} from "@/lib/emails/smtp-send-quota";
+import {
   getAgendaLinkSendBlockReason,
   renderEtiquetteEmailPreview,
 } from "@/lib/etiquettes/etiquette-email-preview";
@@ -28,6 +33,8 @@ export interface EtiquetteBatchSendProgress {
   /** Relances non envoyées : plus à envoyer (ignorée, déjà envoyée ou annulée entre-temps). */
   skippedNotPending: string[];
   batchId: string;
+  /** Pause « limite d'envoi de l'hébergeur » (boîte SMTP) : heure de reprise estimée. */
+  pausedUntilMs?: number;
   /** Dernier envoi réussi (refresh incrémental UI). */
   lastSent?: {
     item: EtiquetteEmailQueueItem;
@@ -66,6 +73,14 @@ export async function sendEtiquetteBatch(input: {
     batchId,
   };
   input.onProgress?.(progress);
+
+  const smtpWait = {
+    signal: input.signal,
+    onPause: (resumeAtMs: number | null) => {
+      progress.pausedUntilMs = resumeAtMs ?? undefined;
+      input.onProgress?.({ ...progress });
+    },
+  };
 
   for (const item of input.items) {
     if (input.signal?.aborted) break;
@@ -115,6 +130,15 @@ export async function sendEtiquetteBatch(input: {
       continue;
     }
 
+    // Boîte SMTP : étalement selon la limite horaire de l'hébergeur (avant le contrôle
+    // de réponse, qui reste ainsi à jour après une longue pause).
+    const slot = await waitForSmtpSendSlot(smtpWait);
+    if (input.signal?.aborted) break;
+    if (slot === "interrupted") {
+      progress.errors.push(SMTP_PAUSE_INTERRUPTED_MESSAGE);
+      break;
+    }
+
     if (item.email_is_relance) {
       // Relance : le client a-t-il répondu depuis la préparation ? (contrôle impossible = on envoie)
       const check = await checkCampaignResponseBeforeSend(
@@ -134,14 +158,18 @@ export async function sendEtiquetteBatch(input: {
 
     try {
       const preview = renderEtiquetteEmailPreview(item, cgp);
-      const sent = await sendEmail({
-        to_email: item.contact_email,
-        to_name: name,
-        subject: preview.subject,
-        body: preview.body,
-        body_html: preview.body_html ?? undefined,
-        attachments: buildSendEmailAttachmentsFromTemplate(item.template_variables),
-      });
+      const sent = await sendWithSmtpQuotaRetry(
+        () =>
+          sendEmail({
+            to_email: item.contact_email ?? "",
+            to_name: name,
+            subject: preview.subject,
+            body: preview.body,
+            body_html: preview.body_html ?? undefined,
+            attachments: buildSendEmailAttachmentsFromTemplate(item.template_variables),
+          }),
+        smtpWait
+      );
       const mark = () =>
         markEtiquetteEmailSent(
           item.contact_etiquette_id,

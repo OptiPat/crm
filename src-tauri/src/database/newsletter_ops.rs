@@ -760,7 +760,7 @@ impl Database {
              SET status = 'sending', send_started_at = ?1
              WHERE id = ?2
                AND (
-                 status IN ('prepared', 'partial')
+                 status IN ('prepared', 'partial', 'sending')
                  OR (status = 'completed' AND sent_count < queued_count)
                )",
             params![started_at, edition_id],

@@ -102,6 +102,26 @@ export async function connectImapMailbox(
   });
 }
 
+/** Quota horaire des envois SMTP (boîte « autre messagerie »). */
+export interface SmtpSendQuota {
+  /** false pour Google / Microsoft : aucun étalement. */
+  applies: boolean;
+  hourly_limit: number;
+  sent_last_hour: number;
+  /** Attente avant le prochain envoi unitaire autorisé (0 = tout de suite). */
+  wait_seconds: number;
+  /** Attente pour un envoi groupé (pause plus tôt : marge laissée aux envois unitaires). */
+  batch_wait_seconds: number;
+}
+
+export async function getSmtpSendQuota(): Promise<SmtpSendQuota> {
+  return invoke<SmtpSendQuota>("get_smtp_send_quota");
+}
+
+export async function setSmtpHourlyLimit(limit: number): Promise<SmtpSendQuota> {
+  return invoke<SmtpSendQuota>("set_smtp_hourly_limit", { limit });
+}
+
 export async function testEmailConnection(): Promise<string> {
   return invoke<string>("test_email_connection");
 }

@@ -51,6 +51,7 @@ import {
   sendableCorrectionTargets,
 } from "@/lib/emails/template-email-correction";
 import { userErrorMessage } from "@/lib/api/invoke-error";
+import { SMTP_PAUSE_INTERRUPTED_MESSAGE, sendWithSmtpQuotaRetry, smtpPauseLabel, waitForSmtpSendSlot } from "@/lib/emails/smtp-send-quota";
 
 /** Pause entre deux envois (quota Gmail, envoi progressif). */
 const SEND_DELAY_MS = 1200;
@@ -69,6 +70,8 @@ interface Progress {
   total: number;
   errors: string[];
   recordWarnings: string[];
+  /** Pause « limite d'envoi de l'hébergeur » (boîte SMTP). */
+  pausedUntilMs?: number;
 }
 
 export function TemplateEmailCorrectionDialog({
@@ -189,23 +192,44 @@ export function TemplateEmailCorrectionDialog({
     setSending(true);
     const state: Progress = { sent: 0, total: list.length, errors: [], recordWarnings: [] };
     setProgress({ ...state });
+    // Boîte SMTP : même étalement que les autres envois groupés (« Arrêter » coupe la pause).
+    const abort = new AbortController();
+    const stopPoll = window.setInterval(() => {
+      if (stopRef.current) abort.abort();
+    }, 500);
+    const smtpWait = {
+      signal: abort.signal,
+      onPause: (resumeAtMs: number | null) => {
+        state.pausedUntilMs = resumeAtMs ?? undefined;
+        setProgress({ ...state });
+      },
+    };
     for (const t of list) {
+      if (stopRef.current) break;
+      if ((await waitForSmtpSendSlot(smtpWait)) === "interrupted") {
+        state.errors.push(SMTP_PAUSE_INTERRUPTED_MESSAGE);
+        break;
+      }
       if (stopRef.current) break;
       const name = `${t.contact_prenom} ${t.contact_nom}`.trim();
       const plain = textFor(t);
       const subject = correctionSubject(t.sent_subject);
       try {
         const { body, body_html } = bodiesFor(plain);
-        await sendEmail({
-          to_email: t.contact_email!.trim(),
-          to_name: name,
-          subject,
-          body,
-          body_html,
-          thread_id: t.gmail_thread_id,
-          in_reply_to_message_id: t.gmail_message_id,
-          audit_contact_id: t.contact_id,
-        });
+        await sendWithSmtpQuotaRetry(
+          () =>
+            sendEmail({
+              to_email: t.contact_email!.trim(),
+              to_name: name,
+              subject,
+              body,
+              body_html,
+              thread_id: t.gmail_thread_id,
+              in_reply_to_message_id: t.gmail_message_id,
+              audit_contact_id: t.contact_id,
+            }),
+          smtpWait
+        );
         state.sent += 1;
         try {
           await recordTemplateCorrectionSent({
@@ -225,6 +249,7 @@ export function TemplateEmailCorrectionDialog({
       setProgress({ ...state });
       if (!stopRef.current) await sleep(SEND_DELAY_MS);
     }
+    window.clearInterval(stopPoll);
     setSending(false);
     await loadTargets();
     if (state.recordWarnings.length > 0) {
@@ -365,6 +390,11 @@ export function TemplateEmailCorrectionDialog({
                   {progress.sent} / {progress.total} envoyé(s)
                   {progress.errors.length > 0 ? ` · ${progress.errors.length} erreur(s)` : ""}
                 </p>
+                {progress.pausedUntilMs ? (
+                  <p className="text-xs text-amber-800 dark:text-amber-300">
+                    {smtpPauseLabel(progress.pausedUntilMs)}
+                  </p>
+                ) : null}
                 {progress.errors.length > 0 && (
                   <ul className="text-xs text-destructive max-h-24 overflow-y-auto">
                     {progress.errors.map((e) => (

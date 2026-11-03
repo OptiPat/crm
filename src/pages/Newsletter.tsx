@@ -235,7 +235,11 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
   const activeEditionIdRef = useRef(activeEditionId);
   activeEditionIdRef.current = activeEditionId;
   const [batchSending, setBatchSending] = useState(false);
-  const [batchProgress, setBatchProgress] = useState<{ sent: number; total: number } | null>(
+  const [batchProgress, setBatchProgress] = useState<{
+    sent: number;
+    total: number;
+    pausedUntilMs?: number;
+  } | null>(
     null
   );
   const [sendConfirmOpen, setSendConfirmOpen] = useState(false);
@@ -1044,7 +1048,8 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         sendDelayMs,
         cgp,
         signal: batchAbortRef.current.signal,
-        onProgress: (p) => setBatchProgress({ sent: p.sent, total: p.total }),
+        onProgress: (p) =>
+          setBatchProgress({ sent: p.sent, total: p.total, pausedUntilMs: p.pausedUntilMs }),
       });
       const remaining = await countNewsletterReady(etiquetteInfo.id, activeEditionId);
       setPreparedQueueCount(remaining > 0 ? remaining : null);

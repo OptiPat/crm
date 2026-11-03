@@ -244,7 +244,11 @@ export function startIndividualEtiquetteEmailSend(input: {
         errorMessage: invokeErrorMessage(error),
         sendMode: "individual",
       }).catch(() => {});
-      toast.error(hint.includes("connexion") ? hint : `${hint} (Paramètres → Emails & envois → Connexion)`);
+      toast.error(
+        hint.toLowerCase().includes("connexion")
+          ? hint
+          : `${hint} (Paramètres → Emails & envois → Connexion)`
+      );
     } finally {
       unlockQueueItem(item);
       individualRunning = false;

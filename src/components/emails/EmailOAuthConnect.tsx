@@ -29,6 +29,7 @@ import {
 } from "@/lib/api/tauri-email-oauth";
 import { IMAP_MAIL_PROVIDER, mailProviderLabel } from "@/lib/emails/mail-provider";
 import { EmailImapConnectForm } from "@/components/emails/EmailImapConnectForm";
+import { SmtpSendLimitSetting } from "@/components/emails/SmtpSendLimitSetting";
 import { toast } from "sonner";
 import { userErrorMessage } from "@/lib/api/invoke-error";
 import { cn } from "@/lib/utils";
@@ -235,6 +236,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
       ) : null}
 
       {imapConnected && showImapForm ? imapForm : null}
+      {imapConnected && !showImapForm ? <SmtpSendLimitSetting /> : null}
 
       {oauthConnected && (status?.provider === "microsoft" || imapConnected) && (
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-white p-4">

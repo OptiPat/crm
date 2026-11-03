@@ -15,6 +15,7 @@ import {
   Send,
   Undo2,
 } from "lucide-react";
+import { smtpPauseLabel } from "@/lib/emails/smtp-send-quota";
 
 type NewsletterCampaignReadyCardProps = {
   preparedEditionQueuedCount: number;
@@ -32,7 +33,7 @@ type NewsletterCampaignReadyCardProps = {
   brevoCampaignName: string | null;
   activeEditionBrevoCampaignId: number | null;
   batchSending: boolean;
-  batchProgress: { sent: number; total: number } | null;
+  batchProgress: { sent: number; total: number; pausedUntilMs?: number } | null;
   emailConnected: boolean;
   /** Boîte d'envoi connectée (« Gmail », « Outlook », « votre boîte mail »). */
   mailboxLabel: string;
@@ -166,6 +167,11 @@ export function NewsletterCampaignReadyCard({
                 <Loader2 className="h-4 w-4 animate-spin shrink-0" />
               : null}
               Envoi en cours… {batchProgress.sent}/{batchProgress.total}
+            </p>
+          : null}
+          {batchProgress?.pausedUntilMs ?
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              {smtpPauseLabel(batchProgress.pausedUntilMs)} (laissez le CRM ouvert)
             </p>
           : null}
 

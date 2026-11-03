@@ -13,6 +13,11 @@ import {
 import { parseNewsletterTemplateMeta } from "@/lib/newsletter/newsletter-html";
 import { sendEmail } from "@/lib/api/tauri-email";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
+import {
+  SMTP_PAUSE_INTERRUPTED_MESSAGE,
+  sendWithSmtpQuotaRetry,
+  waitForSmtpSendSlot,
+} from "@/lib/emails/smtp-send-quota";
 import { renderEtiquetteEmailPreview } from "@/lib/etiquettes/etiquette-email-preview";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
 
@@ -21,6 +26,8 @@ export interface NewsletterBatchSendProgress {
   total: number;
   currentName?: string;
   errors: string[];
+  /** Pause « limite d'envoi de l'hébergeur » (boîte SMTP) : heure de reprise estimée. */
+  pausedUntilMs?: number;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -57,6 +64,20 @@ export async function sendNewsletterBatch(input: {
   };
   input.onProgress?.(progress);
 
+  const smtpWait = {
+    signal: input.signal,
+    onPause: (resumeAtMs: number | null) => {
+      progress.pausedUntilMs = resumeAtMs ?? undefined;
+      input.onProgress?.({ ...progress });
+    },
+  };
+
+  // Quota déjà plein : attendre avant de passer l'édition « en cours d'envoi », pour qu'un
+  // arrêt pendant cette pause laisse l'édition préparée intacte.
+  const firstSlot = await waitForSmtpSendSlot(smtpWait);
+  if (input.signal?.aborted) return progress;
+  if (firstSlot === "interrupted") throw new Error(SMTP_PAUSE_INTERRUPTED_MESSAGE);
+
   await startNewsletterEditionSend(input.editionId);
 
   for (const item of queue) {
@@ -76,6 +97,14 @@ export async function sendNewsletterBatch(input: {
     progress.currentName = `${item.contact_prenom} ${item.contact_nom}`.trim();
     input.onProgress?.({ ...progress });
 
+    // Boîte SMTP : étalement selon la limite horaire de l'hébergeur.
+    // Session verrouillée pendant la pause : arrêt sans clôturer l'édition (base fermée),
+    // qui reste « en cours d'envoi » et se relance après déverrouillage.
+    if ((await waitForSmtpSendSlot(smtpWait)) === "interrupted") {
+      throw new Error(SMTP_PAUSE_INTERRUPTED_MESSAGE);
+    }
+    if (input.signal?.aborted) break;
+
     // Désinscrit depuis le début du lot (synchro mail, fiche contact) : pas d'envoi.
     const unsubscribedAt = await getContactNewsletterUnsubscribedAt(item.contact_id).catch(
       () => null
@@ -87,7 +116,10 @@ export async function sendNewsletterBatch(input: {
     }
 
     try {
-      const gmailMessageId = await sendNewsletterQueueItem(item, cgp);
+      const gmailMessageId = await sendWithSmtpQuotaRetry(
+        () => sendNewsletterQueueItem(item, cgp),
+        smtpWait
+      );
       progress.sent += 1;
       await recordNewsletterEditionSend({
         editionId: input.editionId,

@@ -28,6 +28,7 @@ import {
 } from "@/components/etiquettes/etiquette-batch-send-split";
 import { getEtiquetteQueueItemKey } from "@/lib/etiquettes/etiquette-queue-item-key";
 import { userErrorMessage } from "@/lib/api/invoke-error";
+import { smtpPauseLabel } from "@/lib/emails/smtp-send-quota";
 
 export function EtiquetteBatchSendDialog({
   items,
@@ -107,6 +108,11 @@ export function EtiquetteBatchSendDialog({
               {progress.sent + progress.errors.length} / {progress.total}
               {progress.currentName ? ` — ${progress.currentName}` : ""}
             </p>
+            {progress.pausedUntilMs ? (
+              <p className="text-xs text-amber-800 dark:text-amber-300">
+                {smtpPauseLabel(progress.pausedUntilMs)}
+              </p>
+            ) : null}
           </div>
         ) : (
           <div className="space-y-2 py-2">

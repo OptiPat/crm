@@ -6,6 +6,7 @@ import {
   subscribeEtiquetteEmailSendActivity,
   type EtiquetteEmailSendActivity,
 } from "@/lib/etiquettes/etiquette-email-send-runner";
+import { smtpPauseLabel } from "@/lib/emails/smtp-send-quota";
 
 /** Bannière globale — envoi groupé ou individuel en arrière-plan. */
 export function EtiquetteEmailSendBanner() {
@@ -73,7 +74,11 @@ export function EtiquetteEmailSendBanner() {
           style={{ width: `${pct}%` }}
         />
       </div>
-      {progress?.currentName ? (
+      {progress?.pausedUntilMs ? (
+        <p className="text-xs text-amber-800 dark:text-amber-300">
+          {smtpPauseLabel(progress.pausedUntilMs)}
+        </p>
+      ) : progress?.currentName ? (
         <p className="text-xs text-muted-foreground truncate">{progress.currentName}</p>
       ) : null}
     </div>

@@ -511,6 +511,7 @@ fn smtp_safe_body_encoding(raw: &str) -> String {
 /// Envoie un message RFC 2822 déjà construit ; renvoie son Message-ID (sans chevrons).
 pub fn send_raw_message(app: &AppHandle, to_email: &str, raw: &str) -> Result<String, String> {
     let (conn, servers) = connected_mailbox(app)?;
+    super::smtp_quota::ensure_can_send(app)?;
     let message_id = new_message_id(&conn.email);
     let full = with_transport_headers(&smtp_safe_body_encoding(raw), &message_id);
     let envelope = Envelope::new(
@@ -521,6 +522,9 @@ pub fn send_raw_message(app: &AppHandle, to_email: &str, raw: &str) -> Result<St
     smtp_transport(&servers, &conn.email, &conn.access_token)?
         .send_raw(&envelope, full.as_bytes())
         .map_err(|e| smtp_error(&servers, e))?;
+    if let Err(e) = super::smtp_quota::record_send(app) {
+        eprintln!("[smtp] envoi non compté dans le quota horaire : {e}");
+    }
     // Copie dans « Éléments envoyés » : l'email est parti même si ce dépôt échoue.
     if let Err(e) = append_to_sent(&servers, &conn, full.as_bytes()) {
         eprintln!("[imap] copie dans les éléments envoyés impossible : {e}");

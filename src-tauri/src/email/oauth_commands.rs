@@ -1,6 +1,7 @@
 use crate::auth::session::{require_ui_session, UiSessionState};
 use super::google_calendar_probe::probe_google_calendar_access;
 use super::imap_mailbox::{connect_mailbox, suggest_servers, ImapMailboxServers, ImapServerSuggestion};
+use super::smtp_quota::{quota_status, set_hourly_limit, SmtpSendQuota};
 use super::oauth_flow::{disconnect_google_calendar_oauth, disconnect_oauth, run_oauth_connect};
 use super::oauth_send::{
     fetch_gmail_signature, send_test_to_self, send_with_resolved_identity,
@@ -206,6 +207,29 @@ pub async fn connect_imap_mailbox(
     })
     .await
     .map_err(|e| format!("Connexion interrompue: {}", e))?
+}
+
+/// Appelée avant chaque envoi d'un lot et pendant les pauses : hors thread principal.
+#[tauri::command]
+pub async fn get_smtp_send_quota(
+    app_handle: AppHandle,
+    session: State<'_, UiSessionState>,
+) -> Result<SmtpSendQuota, String> {
+    require_ui_session(&session)?;
+    tauri::async_runtime::spawn_blocking(move || quota_status(&app_handle))
+        .await
+        .map_err(|e| format!("Quota d'envoi indisponible: {}", e))?
+}
+
+#[tauri::command]
+pub fn set_smtp_hourly_limit(
+    app_handle: AppHandle,
+    session: State<'_, UiSessionState>,
+    limit: u32,
+) -> Result<SmtpSendQuota, String> {
+    require_ui_session(&session)?;
+    set_hourly_limit(&app_handle, limit)?;
+    quota_status(&app_handle)
 }
 
 #[tauri::command]

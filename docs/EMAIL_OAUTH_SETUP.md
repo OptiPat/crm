@@ -69,9 +69,21 @@ Comportement :
 - Mot de passe chiffré comme les tokens OAuth ; s'il change chez l'hébergeur → **Changer le
   mot de passe** dans Connexion.
 - IMAP en SSL/TLS (port 993) uniquement ; SMTP en STARTTLS (587) ou SSL/TLS (465).
-- Chaque envoi ouvre une connexion SMTP et une connexion IMAP (copie dans Envoyés). Les
-  hébergeurs limitent le volume (OVH : ~200 emails / heure / compte) : attention aux grosses
-  newsletters, aucun étalement automatique n'est fait par le CRM.
+- Chaque envoi ouvre une connexion SMTP et une connexion IMAP (copie dans Envoyés).
+- **Étalement automatique** : les hébergeurs limitent le volume (OVH : ~200 emails / heure /
+  compte). Le CRM compte les envois SMTP de la dernière heure (fenêtre glissante, tous envois
+  confondus, fichier `smtp_send_quota.json`) ; limite par défaut **150 / heure**, réglable dans
+  **Connexion → Limite d'envoi de l'hébergeur**. Les envois groupés (newsletter, Suivi →
+  Envois, correction d'un modèle envoyé) se mettent en pause à 90 % de la limite (10 % restent
+  aux emails isolés : rappels RDV, réponses, confirmations) — « Pause : limite d'envoi de
+  l'hébergeur — reprise vers HH h MM » — puis reprennent seuls ; « Arrêter l'envoi » coupe la
+  pause. Un email d'un lot refusé pour quota est réessayé (pas compté en erreur). Un email
+  isolé au-delà de la limite complète est refusé avec l'heure de reprise. Google / Microsoft
+  ne sont pas concernés.
+- Envoi long : le CRM doit rester **ouvert et déverrouillé**. Si le verrouillage automatique
+  intervient pendant une pause, le lot s'arrête proprement ; relancer l'envoi après
+  déverrouillage (les destinataires déjà servis ne reçoivent rien de plus ; une édition
+  newsletter restée « en cours d'envoi » est relançable).
 
 ---
 
