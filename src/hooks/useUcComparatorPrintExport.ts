@@ -7,6 +7,9 @@ import {
   buildUcComparatorPdfFilenameStem,
 } from "@/lib/fund-watchlist/uc-comparator-pdf-filename";
 import type { UcComparatorPrintDocument } from "@/lib/fund-watchlist/uc-comparator-print";
+import { downloadBlobFile } from "@/lib/export/download-file";
+import { renderElementToPdf } from "@/lib/pdf/element-pdf-capture";
+import { isMacPrintPlatform } from "@/lib/souscription-cif/cif-print-dialog";
 
 const UC_PRINT_HTML_CLASS = "uc-comparator-printing";
 const UC_PRINT_TOAST_ID = "uc-comparator-print";
@@ -95,10 +98,13 @@ export function useUcComparatorPrintExport() {
     const printTitle = buildUcComparatorPdfFilenameStem(fundNames, generatedAt);
     const filename = buildUcComparatorPdfFilename(fundNames, generatedAt);
 
-    toast.info(`Choisissez « Enregistrer au format PDF » — nom proposé : ${filename}.`, {
-      id: UC_PRINT_TOAST_ID,
-      duration: Infinity,
-    });
+    const macPdf = isMacPrintPlatform(navigator);
+    toast.info(
+      macPdf
+        ? `Préparation de ${filename}…`
+        : `Choisissez « Enregistrer au format PDF » — nom proposé : ${filename}.`,
+      { id: UC_PRINT_TOAST_ID, duration: Infinity }
+    );
 
     try {
       flushSync(() => setPrintBundle({ response, generatedAt }));
@@ -106,7 +112,13 @@ export function useUcComparatorPrintExport() {
       globalThis.document.documentElement.classList.add(UC_PRINT_HTML_CLASS);
       await waitForUcComparatorPrintPortalReady();
       await waitForNextFrame();
-      await waitForPrintDialogClose();
+      if (macPdf) {
+        const portal = globalThis.document.getElementById("uc-comparator-print-portal");
+        if (!portal) throw new Error("Document introuvable.");
+        downloadBlobFile(filename, await renderElementToPdf(portal));
+      } else {
+        await waitForPrintDialogClose();
+      }
     } catch (error) {
       console.error("Erreur export PDF comparatif UC:", error);
       toast.error("Échec de l'export PDF. Réessayez.");

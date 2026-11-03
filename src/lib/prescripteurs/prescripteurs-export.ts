@@ -1,3 +1,4 @@
+import { downloadBlobFile } from "@/lib/export/download-file";
 import type { PrescripteurNode } from "@/lib/prescripteurs/prescripteur-tree";
 import {
   getContactDisplayName,
@@ -47,14 +48,9 @@ export function downloadPrescripteurNetworkCsv(
 ): void {
   const csv = buildPrescripteurNetworkCsv(root, foyersInfo);
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
   const safeName = getContactDisplayName(root.contact, foyersInfo)
     .replace(/[^\w\s-]/g, "")
     .trim()
     .slice(0, 40);
-  anchor.href = url;
-  anchor.download = `prescripteur-${safeName || "reseau"}.csv`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  downloadBlobFile(`prescripteur-${safeName || "reseau"}.csv`, blob);
 }

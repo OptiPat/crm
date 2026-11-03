@@ -1,5 +1,7 @@
 /** Export CSV UTF-8 avec BOM pour Excel (séparateur ; en locale FR). */
 
+import { downloadBlobFile } from "@/lib/export/download-file";
+
 function escapeCell(value: string | number | null | undefined): string {
   if (value == null) return "";
   const s = String(value);
@@ -30,11 +32,5 @@ export function rowsToCsv(
 }
 
 export function downloadCsvFile(filename: string, csv: string): void {
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadBlobFile(filename, new Blob([csv], { type: "text/csv;charset=utf-8" }));
 }

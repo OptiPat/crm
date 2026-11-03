@@ -36,4 +36,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+
+  // Cible figée : sur Mac, l'interface tourne dans le WebKit du système (Safari 16.4 minimum,
+  // comme Tailwind 4). Une mise à jour de Vite ne doit pas relever ce plancher en silence.
+  build: {
+    target: ["safari16.4", "chrome111", "edge111"],
+  },
 });

@@ -703,8 +703,8 @@ fn main() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app_handle, event| {
-            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+        .run(|app_handle, event| match event {
+            tauri::RunEvent::ExitRequested { api, .. } => {
                 let prefs = load_runtime_prefs(app_handle);
                 if prefs.close_to_tray && !is_force_quit_requested() {
                     api.prevent_exit();
@@ -716,5 +716,27 @@ fn main() {
                     api.prevent_exit();
                 }
             }
+            // macOS : ⌘Q, « Quitter » du Dock, déconnexion ou arrêt passent par `terminate:` —
+            // aucun ExitRequested, la sortie ne peut plus être annulée. On scelle quand même
+            // le cache équipe ; sans effet si la base est déjà fermée (quitter via le tray).
+            tauri::RunEvent::Exit => {
+                if let Err(error) = crate::auth::commands::close_database(
+                    app_handle,
+                    app_handle.state::<DbState>().inner(),
+                ) {
+                    eprintln!("⚠️ Fermeture de la base à l'arrêt impossible : {error}");
+                }
+            }
+            // macOS : clic sur le Dock (ou double-clic dans le Finder) alors que la fenêtre
+            // est cachée dans le tray.
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen {
+                has_visible_windows, ..
+            } => {
+                if !has_visible_windows {
+                    focus_main_window(app_handle);
+                }
+            }
+            _ => {}
         });
 }

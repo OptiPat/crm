@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import { downloadBlobFile } from "@/lib/export/download-file";
 import { formatShortEuro } from "@/components/contacts/client-preview/client-preview-format";
 import {
   buildSynthesePdfDownloadFilename,
@@ -312,17 +313,7 @@ function uint8ToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 export function triggerPdfDownload(bytes: Uint8Array, filename: string): void {
-  const blob = new Blob([uint8ToArrayBuffer(bytes)], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.target = "_blank";
-  link.rel = "noopener";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  downloadBlobFile(filename, new Blob([uint8ToArrayBuffer(bytes)], { type: "application/pdf" }));
 }
 
 export function isShareCancellation(error: unknown): boolean {

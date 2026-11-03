@@ -7,6 +7,9 @@ import {
   buildFundWatchlistCoachPdfFilenameStem,
 } from "@/lib/fund-watchlist/fund-watchlist-coach-pdf-filename";
 import type { FundWatchlistCoachPrintDocument } from "@/lib/fund-watchlist/fund-watchlist-coach-print";
+import { downloadBlobFile } from "@/lib/export/download-file";
+import { renderElementToPdf } from "@/lib/pdf/element-pdf-capture";
+import { isMacPrintPlatform } from "@/lib/souscription-cif/cif-print-dialog";
 
 const COACH_PRINT_HTML_CLASS = "coach-printing";
 const COACH_PRINT_TOAST_ID = "fund-watchlist-coach-print";
@@ -98,8 +101,11 @@ export function useFundWatchlistCoachPrintExport() {
     const printTitle = buildFundWatchlistCoachPdfFilenameStem(report.generated_at);
     const filename = buildFundWatchlistCoachPdfFilename(report.generated_at);
 
+    const macPdf = isMacPrintPlatform(navigator);
     toast.info(
-      `Choisissez « Enregistrer au format PDF » — nom proposé : ${filename}.`,
+      macPdf
+        ? `Préparation de ${filename}…`
+        : `Choisissez « Enregistrer au format PDF » — nom proposé : ${filename}.`,
       { id: COACH_PRINT_TOAST_ID, duration: Infinity }
     );
 
@@ -109,7 +115,13 @@ export function useFundWatchlistCoachPrintExport() {
       globalThis.document.documentElement.classList.add(COACH_PRINT_HTML_CLASS);
       await waitForCoachPrintPortalReady();
       await waitForNextFrame();
-      await waitForPrintDialogClose();
+      if (macPdf) {
+        const portal = globalThis.document.getElementById("coach-print-portal");
+        if (!portal) throw new Error("Document introuvable.");
+        downloadBlobFile(filename, await renderElementToPdf(portal));
+      } else {
+        await waitForPrintDialogClose();
+      }
     } catch (error) {
       console.error("Erreur export PDF rapport Coach:", error);
       toast.error("Échec de l'export PDF. Réessayez.");

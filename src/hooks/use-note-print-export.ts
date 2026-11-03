@@ -3,6 +3,9 @@ import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import { buildNotePdfFilename, buildNotePdfFilenameStem } from "@/lib/notes/note-pdf-filename";
 import type { NotePrintDocument } from "@/lib/notes/note-print";
+import { downloadBlobFile } from "@/lib/export/download-file";
+import { renderElementToPdf } from "@/lib/pdf/element-pdf-capture";
+import { isMacPrintPlatform } from "@/lib/souscription-cif/cif-print-dialog";
 
 const NOTE_PRINT_HTML_CLASS = "note-printing";
 const NOTE_PRINT_TOAST_ID = "note-print-export";
@@ -75,8 +78,11 @@ export function useNotePrintExport() {
     const printTitle = buildNotePdfFilenameStem(noteDoc.title);
     const filename = buildNotePdfFilename(noteDoc.title);
 
+    const macPdf = isMacPrintPlatform(navigator);
     toast.info(
-      `Choisissez « Enregistrer au format PDF » — nom proposé : ${filename}.`,
+      macPdf
+        ? `Préparation de ${filename}…`
+        : `Choisissez « Enregistrer au format PDF » — nom proposé : ${filename}.`,
       { id: NOTE_PRINT_TOAST_ID, duration: Infinity }
     );
 
@@ -86,7 +92,13 @@ export function useNotePrintExport() {
       document.documentElement.classList.add(NOTE_PRINT_HTML_CLASS);
       await waitForNextFrame();
       await waitForNextFrame();
-      await waitForPrintDialogClose();
+      if (macPdf) {
+        const portal = document.getElementById("note-print-portal");
+        if (!portal) throw new Error("Document introuvable.");
+        downloadBlobFile(filename, await renderElementToPdf(portal));
+      } else {
+        await waitForPrintDialogClose();
+      }
     } catch (error) {
       console.error("Erreur export PDF note:", error);
       toast.error("Échec du téléchargement PDF. Réessayez.");

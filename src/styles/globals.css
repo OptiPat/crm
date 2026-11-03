@@ -676,3 +676,35 @@ html.cif-pdf-capture #cif-print-portal mark {
     page-break-inside: avoid;
   }
 }
+
+/* Capture PDF Mac (notes, Coach, comparatif UC) : la capture ne passe pas par le média
+ * print — portail rendu visible hors écran, marges latérales identiques à l'impression
+ * (les marges haut/bas sont ajoutées page par page dans le PDF). */
+html.pdf-capture #note-print-portal,
+html.pdf-capture #coach-print-portal,
+html.pdf-capture #uc-comparator-print-portal {
+  position: absolute;
+  left: -120vw;
+  top: 0;
+  width: 210mm;
+  opacity: 1;
+  visibility: visible;
+  z-index: 0;
+  background: #fff;
+}
+
+html.pdf-capture #note-print-portal *,
+html.pdf-capture #coach-print-portal *,
+html.pdf-capture #uc-comparator-print-portal * {
+  overflow: visible !important;
+  max-height: none !important;
+}
+
+html.pdf-capture .note-print-doc,
+html.pdf-capture .coach-print-doc {
+  padding: 0 15mm;
+}
+
+html.pdf-capture .uc-comparator-print-doc {
+  padding: 0 12mm;
+}

@@ -1,3 +1,4 @@
+import { downloadBlobFile } from "@/lib/export/download-file";
 import type { FamilleGroup } from "@/lib/familles/famille-types";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 
@@ -39,10 +40,8 @@ export function buildFamilleMembersCsv(famille: FamilleGroup): string {
 export function downloadFamilleMembersCsv(famille: FamilleGroup): void {
   const csv = buildFamilleMembersCsv(famille);
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `famille-${famille.nom.slice(0, 40).replace(/[^\w-]/g, "") || "membres"}.csv`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  downloadBlobFile(
+    `famille-${famille.nom.slice(0, 40).replace(/[^\w-]/g, "") || "membres"}.csv`,
+    blob
+  );
 }

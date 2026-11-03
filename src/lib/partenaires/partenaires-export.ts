@@ -1,3 +1,4 @@
+import { downloadBlobFile } from "@/lib/export/download-file";
 import type { PartenaireRow } from "@/lib/partenaires/partenaires-search";
 import { getPartenaireTypeInfo } from "@/lib/partenaires/partenaire-display";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
@@ -66,10 +67,8 @@ export function downloadPartenaireProductsCsv(
 ): void {
   const csv = buildPartenaireProductsCsv(row, contactLabelById, foyerLabelById);
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `partenaire-${row.partenaire.raison_sociale.slice(0, 40).replace(/[^\w-]/g, "") || "produits"}.csv`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  downloadBlobFile(
+    `partenaire-${row.partenaire.raison_sociale.slice(0, 40).replace(/[^\w-]/g, "") || "produits"}.csv`,
+    blob
+  );
 }

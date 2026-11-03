@@ -1,3 +1,4 @@
+import { downloadBlobFile } from "@/lib/export/download-file";
 import type { FoyerRow } from "@/lib/foyers/foyers-search";
 import { getFoyerTypeLabel } from "@/lib/foyers/foyer-display";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
@@ -58,10 +59,8 @@ export function buildFoyerMembersCsv(row: FoyerRow): string {
 export function downloadFoyerMembersCsv(row: FoyerRow): void {
   const csv = buildFoyerMembersCsv(row);
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `foyer-${row.foyer.nom.slice(0, 40).replace(/[^\w-]/g, "") || "membres"}.csv`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  downloadBlobFile(
+    `foyer-${row.foyer.nom.slice(0, 40).replace(/[^\w-]/g, "") || "membres"}.csv`,
+    blob
+  );
 }

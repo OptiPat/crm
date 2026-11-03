@@ -38,6 +38,21 @@ describe("replaceModernColorFunctions", () => {
     expect(out).toBe("a{color:#112233} b{background:#112233}");
     expect(out.includes("oklch")).toBe(false);
   });
+
+  it("garde le caractère qui précède et ignore les noms de propriétés", () => {
+    const css = "color(srgb 1 0 0);a{border-color:red;fill:lab(50% 0 0)}";
+    const out = replaceModernColorFunctions(css, () => "#000");
+    expect(out).toBe("#000;a{border-color:red;fill:#000}");
+  });
+});
+
+describe("compatibilité Safari < 16.4", () => {
+  it("n'utilise pas d'assertion arrière dans les regex (écran blanc sur Mac anciens)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync("src/lib/souscription-cif/cif-pdf-download.ts", "utf8");
+    expect(source.includes("(?<!")).toBe(false);
+    expect(source.includes("(?<=")).toBe(false);
+  });
 });
 describe("a4SliceCount", () => {
   it("garde une page A4 et découpe un flux plus long", () => {

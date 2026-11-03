@@ -6,6 +6,7 @@ import type {
   ComptaEncaissement,
 } from "@/lib/api/tauri-compta";
 import { formatComptaMoneyPdf } from "@/lib/compta/compta-money";
+import { downloadBlobFile } from "@/lib/export/download-file";
 import { formatComptaDateFr, formatComptaMonthLabel } from "@/lib/compta/compta-month";
 
 export interface ComptaPdfExportInput {
@@ -267,5 +268,5 @@ export function exportComptaJournalPdf(input: ComptaPdfExportInput): void {
   }
 
   const filename = `Journal Comptable - ${input.ownerLabel} - ${monthTitle.replace(" ", "_")}.pdf`;
-  doc.save(filename);
+  downloadBlobFile(filename, doc.output("blob"));
 }

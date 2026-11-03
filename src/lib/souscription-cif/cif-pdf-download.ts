@@ -18,7 +18,9 @@ export function listCifPdfPageElements(root: ParentNode): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(CIF_PDF_PAGE_SELECTOR));
 }
 
-const COLOR_FN = /(?<![\w-])(?:oklch|oklab|color-mix|light-dark|lab|lch|color)\(/gi;
+// Pas d'assertion arrière (lookbehind) : Safari < 16.4 refuse de charger tout le bundle (écran blanc).
+// Le groupe 1 capture le caractère qui précède ; il est conservé tel quel.
+const COLOR_FN = /(^|[^\w-])(?:oklch|oklab|color-mix|light-dark|lab|lch|color)\(/gi;
 
 /** Remplace oklch / color-mix (Tailwind 4) : html2canvas 1.4 plante dessus. */
 export function replaceModernColorFunctions(
@@ -29,10 +31,10 @@ export function replaceModernColorFunctions(
   let result = "";
   let last = 0;
   for (const match of css.matchAll(COLOR_FN)) {
-    const start = match.index ?? 0;
+    const start = (match.index ?? 0) + (match[1]?.length ?? 0);
     if (start < last) continue;
     let depth = 1;
-    let cursor = start + match[0].length;
+    let cursor = (match.index ?? 0) + match[0].length;
     while (cursor < css.length && depth > 0) {
       if (css[cursor] === "(") depth += 1;
       else if (css[cursor] === ")") depth -= 1;
@@ -58,7 +60,7 @@ function rgbFromCssColor(fn: string, ctx: CanvasRenderingContext2D | null): stri
 }
 
 const HAS_MODERN_COLOR =
-  /oklch\(|oklab\(|color-mix\(|light-dark\(|(?<![\w-])(?:lab|lch|color)\(/i;
+  /oklch\(|oklab\(|color-mix\(|light-dark\(|(?:^|[^\w-])(?:lab|lch|color)\(/i;
 
 /** Pose en style inline toute valeur calculée que html2canvas ne sait pas lire. */
 export function inlineModernColors(root: HTMLElement): void {
