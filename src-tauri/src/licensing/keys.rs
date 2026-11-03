@@ -62,7 +62,9 @@ pub fn validate_license_key(key: &str, secret: &str) -> Result<ValidatedLicense,
     }
     for part in &parts {
         if part.len() != 4 || !part.chars().all(|c| c.is_ascii_alphanumeric()) {
-            return Err("Chaque segment de la clé doit contenir 4 caractères alphanumériques.".to_string());
+            return Err(
+                "Chaque segment de la clé doit contenir 4 caractères alphanumériques.".to_string(),
+            );
         }
     }
 

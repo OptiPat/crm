@@ -53,8 +53,7 @@ fn license_authorizer(ctx: AuthContext<'_>) -> Authorization {
     };
     if table_name == "settings" {
         Authorization::Allow
-    } else if WRITE_ALLOWED.load(Ordering::SeqCst)
-        && WORKSPACE_WRITE_ALLOWED.load(Ordering::SeqCst)
+    } else if WRITE_ALLOWED.load(Ordering::SeqCst) && WORKSPACE_WRITE_ALLOWED.load(Ordering::SeqCst)
     {
         Authorization::Allow
     } else {
