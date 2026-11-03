@@ -139,6 +139,10 @@ fn placement_validation_ts(op: &super::models::PlacementOperation) -> Option<i64
 }
 
 impl super::Database {
+    /// Souscription retenue pour la rémunération d'une affaire (même règle que
+    /// `list_pipe_remuneration_rows`). Plus utilisée hors tests depuis la création du
+    /// placement à la validation CONFORME.
+    #[cfg(test)]
     pub fn find_remuneration_placement_for_pipe(
         &self,
         pipe_id: i64,
