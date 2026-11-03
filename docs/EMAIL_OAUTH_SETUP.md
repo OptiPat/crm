@@ -64,8 +64,14 @@ Comportement :
 - Envoi SMTP ; copie déposée dans **Éléments envoyés** (IMAP), visible dans le webmail.
 - Détection des réponses campagnes : boîte de réception, réponses portant le Message-ID de
   l'envoi (In-Reply-To / References). Désinscriptions newsletter : idem Gmail / Outlook.
-- Pas de détection RDV (connecter Google Agenda en complément), pas d'historique contact,
-  pas de scans Stellium / box placement (Google / Microsoft uniquement).
+- Scans **Stellium / Exceltis** et **Box Placement**, **historique des emails** de la fiche
+  contact : lus en IMAP dans **tous les dossiers** de la boîte (rangements par règle compris ;
+  hors brouillons, corbeille, indésirables ; éléments envoyés inclus pour l'historique). Chaque
+  scan relit les en-têtes de toute sa fenêtre (400 j Stellium, 120 j Box Placement) et ne
+  télécharge que les nouveaux messages. Historique : corps enregistré à la synchro, pas de
+  pièces jointes ni de bouton « Ouvrir » (pas de lien webmail).
+- Détection des RDV : via **Google Agenda** connecté en complément (par ex. l'agenda où
+  Calendly crée les rendez-vous) — n'importe quel compte Google, pas forcément la même adresse.
 - Mot de passe chiffré comme les tokens OAuth ; s'il change chez l'hébergeur → **Changer le
   mot de passe** dans Connexion.
 - IMAP en SSL/TLS (port 993) uniquement ; SMTP en STARTTLS (587) ou SSL/TLS (465).

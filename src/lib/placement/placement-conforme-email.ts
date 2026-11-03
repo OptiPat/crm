@@ -155,7 +155,7 @@ export async function maybeSendPlacementConformeEmailForOperation(
   if (!emailStatus.connected) {
     if (!options?.quiet) {
       toast.warning(
-        "Email Box Placement non envoyé — connectez Gmail ou Outlook dans Paramètres."
+        "Email Box Placement non envoyé — connectez votre boîte mail dans Paramètres."
       );
     }
     return { outcome: "skipped", emailsSent: 0 };

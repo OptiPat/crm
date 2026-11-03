@@ -65,6 +65,7 @@ import { toast } from "sonner";
 import { useConfirmDialog } from "@/components/pipe/useConfirmDialog";
 import { cn } from "@/lib/utils";
 import { userErrorMessage } from "@/lib/api/invoke-error";
+import { canReadMailbox } from "@/lib/emails/mail-provider";
 
 interface ContactInteractionsPanelProps {
   contactId: number;
@@ -209,8 +210,8 @@ export function ContactInteractionsPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<ContactMailSyncProgress | null>(null);
-  const [mailProvider, setMailProvider] = useState<"google" | "microsoft" | null>(null);
-  const mailConnected = mailProvider === "google" || mailProvider === "microsoft";
+  const [mailProvider, setMailProvider] = useState<string | null>(null);
+  const mailConnected = canReadMailbox(mailProvider);
   const [lastSyncLabel, setLastSyncLabel] = useState<string | null>(null);
   /** Dernière sync auto par contact (évite spam, permet re-sync à la réouverture de l’onglet). */
   const lastAutoSyncRef = useRef<Map<number, number>>(new Map());
@@ -255,7 +256,7 @@ export function ContactInteractionsPanel({
   useEffect(() => {
     getEmailConnectionStatus()
       .then((s) => {
-        if (s.connected && (s.provider === "google" || s.provider === "microsoft")) {
+        if (s.connected && canReadMailbox(s.provider)) {
           setMailProvider(s.provider);
         } else {
           setMailProvider(null);
@@ -303,7 +304,7 @@ export function ContactInteractionsPanel({
         return;
       }
       if (!mailConnected) {
-        toast.error("Connectez Google ou Microsoft dans Paramètres → Emails & envois → Connexion.");
+        toast.error("Connectez votre boîte mail dans Paramètres → Emails & envois → Connexion.");
         return;
       }
       syncLockRef.current = true;
@@ -340,7 +341,7 @@ export function ContactInteractionsPanel({
         await load();
         if (quiet) return;
         if (totalImported === 0 && complete) {
-          toast.info("Boîte mail à jour (5 dernières années).");
+          toast.info("Boîte mail à jour.");
         } else if (totalImported > 0) {
           toast.success(
             `${totalImported} message${totalImported > 1 ? "s" : ""} importé${totalImported > 1 ? "s" : ""}${

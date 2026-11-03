@@ -405,6 +405,14 @@ pub fn sync_contact_mail_history(
             lightweight,
         );
     }
+    if provider == crate::email::imap_mailbox::IMAP_PROVIDER {
+        return crate::email::contact_imap_sync::sync_contact_imap_history(
+            app,
+            db_state,
+            contact_id,
+            lightweight,
+        );
+    }
     sync_contact_gmail_history_google(app, db_state, contact_id, lightweight)
 }
 
@@ -691,12 +699,27 @@ pub fn fetch_contact_gmail_message_body(
     db_state: &DbState,
     message_row_id: i64,
 ) -> Result<FetchedContactMailBody, String> {
-    let (gmail_id, existing_att) = with_db(db_state, |db| {
-        let row = db
-            .get_contact_gmail_message_by_id(message_row_id)
-            .map_err(|e| e.to_string())?;
-        Ok((row.gmail_message_id, row.attachments_json))
+    let row = with_db(db_state, |db| {
+        db.get_contact_gmail_message_by_id(message_row_id)
+            .map_err(|e| e.to_string())
     })?;
+    // Boîte IMAP : corps enregistré à la synchro (pas d'API pour le relire par identifiant).
+    if row.provider == crate::email::imap_mailbox::IMAP_PROVIDER {
+        let body = row
+            .body_text
+            .clone()
+            .or_else(|| row.snippet.clone())
+            .unwrap_or_default();
+        with_db(db_state, |db| {
+            db.update_contact_gmail_message_body(message_row_id, &body)
+                .map_err(|e| e.to_string())
+        })?;
+        return Ok(FetchedContactMailBody {
+            body,
+            attachments_json: row.attachments_json,
+        });
+    }
+    let (gmail_id, existing_att) = (row.gmail_message_id, row.attachments_json);
 
     let store = EmailOAuthStore::load(app)?;
     let mut conn = store

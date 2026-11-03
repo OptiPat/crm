@@ -24,7 +24,7 @@ pub const IMAP_PROVIDER: &str = "imap";
 const NO_EXPIRY: i64 = 253_402_300_799;
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(30);
 /// Messages examinés au maximum par recherche (en-têtes seuls ; corps lu pour la réponse).
-const MAX_HEADER_CANDIDATES: usize = 300;
+pub const MAX_HEADER_CANDIDATES: usize = 300;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -601,6 +601,100 @@ struct FetchedHeaders {
 pub struct ImapMailboxReader {
     session: ImapSession,
     own_email: String,
+    /// Dossier ouvert (lecture seule) : réponses dans INBOX, scans dans tous les dossiers.
+    selected: String,
+}
+
+/// Message trouvé par une recherche multi-dossiers (en-têtes seuls).
+#[derive(Debug, Clone)]
+pub struct ImapListedMessage {
+    pub folder: String,
+    pub uid: u32,
+    /// Message-ID (sans chevrons) : identifiant stable, quel que soit le dossier.
+    pub message_id: String,
+    pub subject: String,
+    pub from: String,
+    pub received_at: i64,
+    /// Premier message du fil (References / In-Reply-To), sinon le message lui-même.
+    pub thread_id: String,
+}
+
+/// Contenu lu d'un message listé.
+#[derive(Debug, Clone)]
+pub struct ImapFetchedMessage {
+    pub subject: String,
+    pub body_text: String,
+}
+
+/// Dossiers jamais parcourus par les scans (noms IMAP en UTF-7 modifié, comparés en minuscules).
+const SKIPPED_FOLDER_NAMES: [&str; 22] = [
+    "drafts",
+    "brouillons",
+    "trash",
+    "corbeille",
+    "deleted items",
+    "&amk-l&aok-ments supprim&aok-s",
+    "junk",
+    "junk email",
+    "junk e-mail",
+    "spam",
+    "courrier ind&aok-sirable",
+    "outbox",
+    "bo&ao4-te d'envoi",
+    "calendar",
+    "calendrier",
+    "contacts",
+    "tasks",
+    "t&aoi-ches",
+    "notes",
+    "journal",
+    "sync issues",
+    "probl&aog-mes de synchronisation",
+];
+const SENT_FOLDER_NAMES: [&str; 4] = [
+    "sent",
+    "sent items",
+    "&amk-l&aok-ments envoy&aok-s",
+    "envoy&aok-s",
+];
+/// Plafond de dossiers parcourus par recherche (boîtes très arborescentes).
+const MAX_SCAN_FOLDERS: usize = 80;
+
+fn folder_leaf(name: &str, delimiter: Option<&str>) -> String {
+    let leaf = match delimiter.filter(|d| !d.is_empty()) {
+        Some(d) => name.rsplit(d).next().unwrap_or(name),
+        None => name,
+    };
+    leaf.to_ascii_lowercase()
+}
+
+/// Dossier à parcourir : ni brouillons, corbeille, indésirables ni dossiers non-mail ;
+/// les éléments envoyés seulement si `include_sent`.
+fn scan_folder_wanted(
+    attributes: &[imap_proto::NameAttribute],
+    leaf: &str,
+    include_sent: bool,
+) -> bool {
+    use imap_proto::NameAttribute as A;
+    if attributes.iter().any(|a| {
+        matches!(a, A::NoSelect | A::Drafts | A::Trash | A::Junk | A::All)
+    }) {
+        return false;
+    }
+    let is_sent = attributes.contains(&A::Sent) || SENT_FOLDER_NAMES.contains(&leaf);
+    if is_sent {
+        return include_sent;
+    }
+    !SKIPPED_FOLDER_NAMES.contains(&leaf)
+}
+
+/// Premier identifiant de `References`, sinon `In-Reply-To` : racine du fil.
+fn headers_thread_root(headers: &[MailHeader]) -> Option<String> {
+    ["References", "In-Reply-To"].iter().find_map(|h| {
+        headers
+            .get_first_value(h)
+            .and_then(|v| header_ids(&v).next().map(str::to_string))
+    })
 }
 
 fn imap_date(ts: i64) -> String {
@@ -675,7 +769,8 @@ fn sent_message_refs(item: &PendingCampaignResponseCheck) -> Vec<String> {
 /// Recherche IMAP : valeur entre guillemets, sans caractère qui casserait la commande.
 fn imap_quoted(value: &str) -> Option<String> {
     let v = value.trim();
-    (!v.is_empty() && !v.chars().any(|c| c == '"' || c == '\\' || c.is_control()))
+    // ASCII seulement : SEARCH sans CHARSET (un caractère accentué = commande refusée).
+    (!v.is_empty() && v.is_ascii() && !v.chars().any(|c| c == '"' || c == '\\' || c.is_control()))
         .then(|| format!("\"{v}\""))
 }
 
@@ -684,15 +779,151 @@ impl ImapMailboxReader {
         let (conn, servers) = connected_mailbox(app)?;
         let mut session =
             open_imap(&servers, &conn.email, &conn.access_token).map_err(|e| e.message)?;
-        session.select("INBOX").map_err(|e| format!("Boîte de réception : {e}"))?;
+        session.examine("INBOX").map_err(|e| format!("Boîte de réception : {e}"))?;
         Ok(Self {
             session,
             own_email: conn.email,
+            selected: "INBOX".into(),
         })
+    }
+
+    pub fn own_email(&self) -> &str {
+        &self.own_email
+    }
+
+    /// Ouvre `folder` en lecture seule (EXAMINE) s'il n'est pas déjà ouvert.
+    fn ensure_folder(&mut self, folder: &str) -> Result<(), String> {
+        if self.selected != folder {
+            if let Err(e) = self.session.examine(folder) {
+                // RFC 3501 : un EXAMINE refusé ne laisse aucun dossier ouvert.
+                self.selected.clear();
+                return Err(format!("Dossier « {folder} » : {e}"));
+            }
+            self.selected = folder.to_string();
+        }
+        Ok(())
+    }
+
+    fn scan_folders(&mut self, include_sent: bool) -> Result<Vec<String>, String> {
+        let names = self
+            .session
+            .list(None, Some("*"))
+            .map_err(|e| format!("Liste des dossiers : {e}"))?;
+        let mut folders: Vec<(u8, String)> = names
+            .iter()
+            .filter_map(|n| {
+                let leaf = folder_leaf(n.name(), n.delimiter());
+                if !scan_folder_wanted(n.attributes(), &leaf, include_sent) {
+                    return None;
+                }
+                let is_sent = n.attributes().contains(&imap_proto::NameAttribute::Sent)
+                    || SENT_FOLDER_NAMES.contains(&leaf.as_str());
+                // Réception puis éléments envoyés d'abord : jamais coupés par le plafond.
+                let rank = if n.name().eq_ignore_ascii_case("INBOX") {
+                    0
+                } else if is_sent {
+                    1
+                } else {
+                    2
+                };
+                Some((rank, n.name().to_string()))
+            })
+            .collect();
+        folders.sort_by_key(|(rank, _)| *rank);
+        folders.truncate(MAX_SCAN_FOLDERS);
+        Ok(folders.into_iter().map(|(_, name)| name).collect())
+    }
+
+    /// Recherche `query` dans tous les dossiers utiles (rangements par règle compris).
+    /// Doublons (même Message-ID dans deux dossiers) retirés, plus récents d'abord.
+    pub fn search_all_folders(
+        &mut self,
+        query: &str,
+        include_sent: bool,
+        max: usize,
+    ) -> Result<Vec<ImapListedMessage>, String> {
+        let mut out: Vec<ImapListedMessage> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut searched_any = false;
+        let mut last_error = None;
+        for folder in self.scan_folders(include_sent)? {
+            // Dossier illisible (droits, dossier partagé) : on passe au suivant.
+            if self.ensure_folder(&folder).is_err() {
+                continue;
+            }
+            let found = match self.fetch_headers_capped(query, max) {
+                Ok(found) => {
+                    searched_any = true;
+                    found
+                }
+                Err(e) => {
+                    eprintln!("[imap] recherche dans « {folder} » : {e}");
+                    last_error = Some(e);
+                    continue;
+                }
+            };
+            for msg in found {
+                let Ok((headers, _)) = mailparse::parse_headers(&msg.raw) else {
+                    continue;
+                };
+                let message_id = headers
+                    .get_first_value("Message-ID")
+                    .and_then(|v| header_ids(&v).next().map(str::to_string))
+                    .unwrap_or_else(|| format!("imap-{folder}-{}", msg.uid));
+                if !seen.insert(message_id.clone()) {
+                    continue;
+                }
+                out.push(ImapListedMessage {
+                    folder: folder.clone(),
+                    uid: msg.uid,
+                    thread_id: headers_thread_root(&headers).unwrap_or_else(|| message_id.clone()),
+                    message_id,
+                    subject: headers.get_first_value("Subject").unwrap_or_default(),
+                    from: headers.get_first_value("From").unwrap_or_default(),
+                    received_at: msg
+                        .received_at
+                        .or_else(|| headers_timestamp(&headers))
+                        .unwrap_or(0),
+                });
+            }
+        }
+        // Aucun dossier lisible (connexion coupée…) : erreur plutôt qu'une liste vide trompeuse.
+        if !searched_any {
+            if let Some(e) = last_error {
+                return Err(e);
+            }
+        }
+        out.sort_by(|a, b| b.received_at.cmp(&a.received_at));
+        out.truncate(max);
+        Ok(out)
+    }
+
+    /// Corps texte d'un message listé (`None` : supprimé ou déplacé depuis la recherche).
+    pub fn fetch_listed(
+        &mut self,
+        listed: &ImapListedMessage,
+    ) -> Result<Option<ImapFetchedMessage>, String> {
+        self.ensure_folder(&listed.folder)?;
+        let Some(raw) = self.fetch_full(listed.uid)? else {
+            return Ok(None);
+        };
+        let mail = mailparse::parse_mail(&raw).map_err(|e| format!("Message illisible : {e}"))?;
+        Ok(Some(ImapFetchedMessage {
+            subject: mail.headers.get_first_value("Subject").unwrap_or_default(),
+            body_text: mail_body_text(&mail),
+        }))
     }
 
     /// En-têtes et date de réception (INTERNALDATE) des messages trouvés, plus récents d'abord.
     fn fetch_headers(&mut self, query: &str) -> Result<Vec<FetchedHeaders>, String> {
+        self.fetch_headers_capped(query, MAX_HEADER_CANDIDATES)
+    }
+
+    fn fetch_headers_capped(
+        &mut self,
+        query: &str,
+        max: usize,
+    ) -> Result<Vec<FetchedHeaders>, String> {
         let mut uids: Vec<u32> = self
             .session
             .uid_search(query)
@@ -703,7 +934,7 @@ impl ImapMailboxReader {
             return Ok(vec![]);
         }
         uids.sort_unstable_by(|a, b| b.cmp(a));
-        uids.truncate(MAX_HEADER_CANDIDATES);
+        uids.truncate(max);
         let set = uids.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
         let fetches = self
             .session
@@ -738,6 +969,7 @@ impl ImapMailboxReader {
         let Some(from) = imap_quoted(&item.contact_email) else {
             return Ok(None);
         };
+        self.ensure_folder("INBOX")?;
         let since = imap_date(item.email_date_envoi - 86_400);
         let refs = sent_message_refs(item);
         // En-têtes seuls pour tous les messages du contact : la réponse au fil n'est pas
@@ -802,6 +1034,7 @@ impl ImapMailboxReader {
         lookback_days: i64,
         known: &HashSet<String>,
     ) -> Result<Vec<NewsletterUnsubscribeRequest>, String> {
+        self.ensure_folder("INBOX")?;
         let since_ts = chrono::Utc::now().timestamp() - lookback_days * 86_400;
         // Sous-chaîne commune à « Désinscription » et « Desinscription » (recherche ASCII).
         let query = format!(
@@ -842,9 +1075,63 @@ impl Drop for ImapMailboxReader {
     }
 }
 
+/// Requête IMAP « depuis `since_ts`, expéditeur et objet contenant… » (valeurs sûres).
+pub fn imap_scan_query(since_ts: i64, from: &str, subject: &str) -> Option<String> {
+    Some(format!(
+        "SINCE {} FROM {} SUBJECT {}",
+        imap_date(since_ts),
+        imap_quoted(from)?,
+        imap_quoted(subject)?
+    ))
+}
+
+/// Requête IMAP des échanges avec `contact_email` (expéditeur ou destinataire).
+pub fn imap_contact_query(contact_email: &str) -> Option<String> {
+    let q = imap_quoted(contact_email)?;
+    Some(format!("OR FROM {q} OR TO {q} CC {q}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scan_skips_drafts_trash_junk_and_optionally_sent() {
+        use imap_proto::NameAttribute as A;
+        assert!(scan_folder_wanted(&[], "inbox", false));
+        assert!(scan_folder_wanted(&[], "stellium", false), "dossier rangé par règle");
+        assert!(!scan_folder_wanted(&[A::NoSelect], "archives", false));
+        assert!(!scan_folder_wanted(&[A::Trash], "poubelle", false));
+        assert!(!scan_folder_wanted(&[], "deleted items", false));
+        assert!(!scan_folder_wanted(&[], "courrier ind&aok-sirable", false));
+        assert!(!scan_folder_wanted(&[A::Sent], "sent items", false));
+        assert!(scan_folder_wanted(&[A::Sent], "sent items", true));
+        assert!(scan_folder_wanted(&[], "&amk-l&aok-ments envoy&aok-s", true));
+        assert_eq!(folder_leaf("INBOX/Stellium", Some("/")), "stellium");
+        assert_eq!(folder_leaf("Sent Items", None), "sent items");
+    }
+
+    #[test]
+    fn thread_root_prefers_first_reference() {
+        let raw = b"References: <a@x> <b@x>\r\nIn-Reply-To: <b@x>\r\n\r\n";
+        let (headers, _) = mailparse::parse_headers(raw).unwrap();
+        assert_eq!(headers_thread_root(&headers).as_deref(), Some("a@x"));
+        let raw = b"In-Reply-To: <b@x>\r\n\r\n";
+        let (headers, _) = mailparse::parse_headers(raw).unwrap();
+        assert_eq!(headers_thread_root(&headers).as_deref(), Some("b@x"));
+    }
+
+    #[test]
+    fn scan_queries_are_quoted() {
+        let q = imap_scan_query(1_800_000_000, "no-reply@stellium.fr", "Box placement").unwrap();
+        assert_eq!(q, "SINCE 15-Jan-2027 FROM \"no-reply@stellium.fr\" SUBJECT \"Box placement\"");
+        assert_eq!(
+            imap_contact_query("a@b.fr").as_deref(),
+            Some("OR FROM \"a@b.fr\" OR TO \"a@b.fr\" CC \"a@b.fr\"")
+        );
+        assert!(imap_contact_query("a\"@b.fr").is_none());
+        assert!(imap_contact_query("andré@b.fr").is_none(), "SEARCH sans CHARSET");
+    }
 
     fn item(thread: Option<&str>, message: Option<&str>) -> PendingCampaignResponseCheck {
         PendingCampaignResponseCheck {

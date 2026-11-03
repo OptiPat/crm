@@ -1,6 +1,7 @@
-//! Détection des emails Stellium « Remboursement Exceltis … » (Gmail).
+//! Détection des emails Stellium « Remboursement Exceltis … » (Gmail, Outlook, IMAP).
 
 use super::contact_gmail_sync::{list_message_ids, with_db};
+use super::imap_mailbox::{imap_scan_query, ImapListedMessage, ImapMailboxReader, IMAP_PROVIDER};
 use super::oauth_send::refresh_connection_if_needed;
 use super::oauth_store::EmailOAuthStore;
 use crate::commands::DbState;
@@ -893,6 +894,11 @@ fn known_stellium_message_ids(state: &StelliumExceltisState) -> HashSet<String> 
     let mut ids = HashSet::new();
     for signal in &state.signals {
         ids.insert(signal.gmail_message_id.clone());
+        // Signal = `message::clé` : le mail lui-même est connu (sinon relu et renotifié à
+        // chaque scan quand la liste repart de toute la fenêtre — IMAP, Graph).
+        if let Some((message_id, _)) = signal.gmail_message_id.split_once("::") {
+            ids.insert(message_id.to_string());
+        }
     }
     for id in &state.dismissed_message_ids {
         ids.insert(id.clone());
@@ -1323,14 +1329,54 @@ struct StelliumFetchedMessage {
     mark_dismissed: bool,
 }
 
+/// Boîte IMAP : messages Stellium listés (tous dossiers) et session pour lire leur corps.
+struct ImapStelliumSource {
+    reader: ImapMailboxReader,
+    listed: HashMap<String, ImapListedMessage>,
+}
+
+impl ImapStelliumSource {
+    fn open(app: &AppHandle) -> Result<Self, String> {
+        let mut reader = ImapMailboxReader::open(app)?;
+        // Même périmètre que Gmail / Graph : « Remboursement(s) Exceltis » seulement (une
+        // annonce de nouveau millésime ne doit pas créer de signal).
+        let query = imap_scan_query(stellium_recency_cutoff_unix(), GMAIL_FROM, "Exceltis")
+            .map(|q| format!("{q} SUBJECT \"Rembours\""))
+            .ok_or("Recherche Stellium invalide.")?;
+        let listed = reader
+            .search_all_folders(&query, false, super::imap_mailbox::MAX_HEADER_CANDIDATES)?
+            .into_iter()
+            .filter(|m| !is_complementaires_subject(&m.subject))
+            .map(|m| (m.message_id.clone(), m))
+            .collect();
+        Ok(Self { reader, listed })
+    }
+}
+
 fn fetch_stellium_message_keys(
     client: &reqwest::blocking::Client,
     access_token: &str,
     message_id: &str,
     dismissed: &HashSet<String>,
     provider: &str,
+    mut imap: Option<&mut ImapStelliumSource>,
 ) -> Result<Option<StelliumFetchedMessage>, String> {
-    let (subject, from, received_at, snippet) = if provider == "microsoft" {
+    // IMAP : message hors de la fenêtre listée (supprimé, trop ancien) = rien à faire.
+    let imap_listed = match imap.as_deref() {
+        Some(source) => match source.listed.get(message_id) {
+            Some(listed) => Some(listed.clone()),
+            None => return Ok(None),
+        },
+        None => None,
+    };
+    let (subject, from, received_at, snippet) = if let Some(listed) = &imap_listed {
+        (
+            listed.subject.clone(),
+            listed.from.to_lowercase(),
+            listed.received_at,
+            String::new(),
+        )
+    } else if provider == "microsoft" {
         fetch_graph_message_meta(client, access_token, message_id)
             .map_err(|e| format!("Stellium meta {message_id}: {e}"))?
     } else {
@@ -1373,7 +1419,13 @@ fn fetch_stellium_message_keys(
 
     let mut keys = keys_for_stellium_message(&subject, &parse_text, None);
     if keys.is_empty() {
-        let full = if provider == "microsoft" {
+        let full = if let (Some(listed), Some(source)) = (&imap_listed, imap.as_deref_mut()) {
+            source
+                .reader
+                .fetch_listed(listed)
+                .map_err(|e| format!("Stellium body {message_id}: {e}"))?
+                .map(|m| m.body_text)
+        } else if provider == "microsoft" {
             let (body, _) = super::response_sync_outlook::outlook_fetch_message_body_and_subject(
                 client,
                 access_token,
@@ -1429,9 +1481,9 @@ pub fn scan_stellium_exceltis_emails(
     let conn = store
         .connection
         .as_ref()
-        .ok_or("Aucun compte email connecté. Paramètres → Emails & envois → Connexion : connectez Google ou Microsoft.")?;
-    if conn.provider != "google" && conn.provider != "microsoft" {
-        return Err("La détection Stellium / Exceltis nécessite Gmail ou Outlook connecté.".into());
+        .ok_or("Aucun compte email connecté. Paramètres → Emails & envois → Connexion.")?;
+    if !matches!(conn.provider.as_str(), "google" | "microsoft" | IMAP_PROVIDER) {
+        return Err("Détection Stellium / Exceltis : boîte mail non prise en charge.".into());
     }
 
     let mut oauth_conn = conn.clone();
@@ -1460,7 +1512,26 @@ pub fn scan_stellium_exceltis_emails(
 
     let provider_changed = stellium_provider_changed(&scan_state, &provider);
     let start_cursor = stellium_scan_cursor(&scan_state, &provider);
-    let (mut all_ids, list_exhausted, resume_page_token) = if provider == "microsoft" {
+    let mut imap_source = if provider == IMAP_PROVIDER {
+        Some(ImapStelliumSource::open(app)?)
+    } else {
+        None
+    };
+    let (mut all_ids, list_exhausted, resume_page_token) = if let Some(source) = &imap_source {
+        // En-têtes seuls sur toute la fenêtre : pas de curseur, les retries y sont inclus.
+        let mut ids: Vec<(i64, String)> = source
+            .listed
+            .values()
+            .filter(|m| !known_ids.contains(&m.message_id))
+            .map(|m| (m.received_at, m.message_id.clone()))
+            .collect();
+        ids.sort_by(|a, b| b.0.cmp(&a.0));
+        (
+            ids.into_iter().map(|(_, id)| id).collect::<Vec<_>>(),
+            true,
+            None,
+        )
+    } else if provider == "microsoft" {
         let (ids, exhausted, next_link) =
             list_graph_stellium_message_ids(&client, &access_token, start_cursor.as_deref())?;
         (
@@ -1506,6 +1577,9 @@ pub fn scan_stellium_exceltis_emails(
     };
 
     let mut seen_ids: HashSet<String> = all_ids.iter().cloned().collect();
+    let imap_listed_ids: Option<HashSet<String>> = imap_source
+        .as_ref()
+        .map(|s| s.listed.keys().cloned().collect());
     if !provider_changed {
         for message_id in scan_state.parse_retry_by_message_id.keys() {
             if seen_ids.insert(message_id.clone()) {
@@ -1537,6 +1611,7 @@ pub fn scan_stellium_exceltis_emails(
             message_id,
             &dismissed,
             &provider,
+            imap_source.as_mut(),
         ) {
             Ok(Some(item)) => {
                 fetch_retry_message_ids.remove(message_id);
@@ -1568,6 +1643,11 @@ pub fn scan_stellium_exceltis_emails(
             state.fetch_retry_message_ids.clear();
         }
         state.scan_provider = Some(provider.clone());
+        if let Some(listed) = &imap_listed_ids {
+            // IMAP : mail sorti de la fenêtre (supprimé, trop ancien) = plus de nouvel essai.
+            state.parse_retry_by_message_id.retain(|id, _| listed.contains(id));
+            state.fetch_retry_message_ids.retain(|id| listed.contains(id));
+        }
         sanitize_stellium_state(&mut state);
         let dismissed: HashSet<String> = state.dismissed_message_ids.iter().cloned().collect();
 

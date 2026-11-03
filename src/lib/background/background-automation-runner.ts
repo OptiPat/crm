@@ -53,6 +53,7 @@ import {
   persistTrayDigestNotifyState,
 } from "@/lib/background/tray-digest-notify";
 import { isCrmWindowHidden } from "@/lib/background/crm-window-visibility";
+import { canReadMailbox } from "@/lib/emails/mail-provider";
 
 export type AutomationSurface = "foreground" | "tray";
 
@@ -337,10 +338,7 @@ async function runPipeRdvJob(surface: AutomationSurface): Promise<number> {
 
 async function isMailProviderReady(): Promise<boolean> {
   const status = await getEmailConnectionStatus();
-  return (
-    status.connected &&
-    (status.provider === "google" || status.provider === "microsoft")
-  );
+  return status.connected && canReadMailbox(status.provider);
 }
 
 function isBenignMailSetupError(msg: string): boolean {

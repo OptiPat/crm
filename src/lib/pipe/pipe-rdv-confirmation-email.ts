@@ -346,7 +346,7 @@ export async function maybeSendPipeRdvConfirmationEmail(
   if (!emailStatus.connected) {
     if (!options.quiet) {
       toast.warning(
-        "Email RDV Pipe non envoyé — connectez Gmail ou Outlook dans Paramètres."
+        "Email RDV Pipe non envoyé — connectez votre boîte mail dans Paramètres."
       );
     }
     return { sent: 0, errors: ["Connexion email absente"] };

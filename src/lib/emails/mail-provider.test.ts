@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mailProviderLabel, supportsCampaignReplySync } from "./mail-provider";
+import { canReadMailbox, mailProviderLabel, supportsCampaignReplySync } from "./mail-provider";
 
 describe("mail-provider", () => {
   it("labels each connected mailbox kind", () => {
@@ -14,5 +14,11 @@ describe("mail-provider", () => {
     expect(supportsCampaignReplySync("microsoft")).toBe(true);
     expect(supportsCampaignReplySync("imap")).toBe(true);
     expect(supportsCampaignReplySync(null)).toBe(false);
+  });
+
+  it("reads Gmail, Outlook and IMAP mailboxes for scans and history", () => {
+    for (const p of ["google", "microsoft", "imap"]) expect(canReadMailbox(p)).toBe(true);
+    expect(canReadMailbox(null)).toBe(false);
+    expect(canReadMailbox("other")).toBe(false);
   });
 });

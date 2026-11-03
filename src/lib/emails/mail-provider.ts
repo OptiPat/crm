@@ -17,5 +17,13 @@ export function mailProviderLabel(provider: string | null | undefined): string |
 
 /** Détection des réponses campagnes (Suivi → Envois) disponible pour cette boîte. */
 export function supportsCampaignReplySync(provider: string | null | undefined): boolean {
+  return canReadMailbox(provider);
+}
+
+/**
+ * Boîte lisible par le CRM : réponses campagnes, scans Stellium / Exceltis et Box Placement,
+ * historique des emails de la fiche contact (Gmail, Outlook 365, IMAP).
+ */
+export function canReadMailbox(provider: string | null | undefined): boolean {
   return provider === "google" || provider === "microsoft" || provider === IMAP_MAIL_PROVIDER;
 }

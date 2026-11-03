@@ -299,7 +299,7 @@ export function ParametresBackgroundSection() {
             <AutomationToggle
               id="pref-bg-stellium"
               label="Scan Stellium Exceltis"
-              description="Remboursements millésimes (Gmail ou Outlook ; inactif en mode Manuel uniquement)."
+              description="Remboursements millésimes (boîte mail connectée ; inactif en mode Manuel uniquement)."
               checked={prefs.background_stellium_scan}
               disabled={automationsDisabled}
               onCheckedChange={(checked) => void patch({ background_stellium_scan: checked })}

@@ -14,6 +14,7 @@ import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { stelliumExceltisHeadline } from "@/lib/etiquettes/stellium-signal-ui";
 import { PARAMETRES_PATH } from "@/lib/settings/parametres-labels";
 import { toast } from "sonner";
+import { canReadMailbox } from "@/lib/emails/mail-provider";
 
 export function StelliumExceltisSettingsPanel() {
   const [scanningStellium, setScanningStellium] = useState(false);
@@ -40,11 +41,9 @@ export function StelliumExceltisSettingsPanel() {
     setScanningStellium(true);
     try {
       const status = await getEmailConnectionStatus();
-      const mailReady =
-        status.connected &&
-        (status.provider === "google" || status.provider === "microsoft");
+      const mailReady = status.connected && canReadMailbox(status.provider);
       if (!mailReady) {
-        toast.error(`Connectez Gmail ou Outlook dans ${PARAMETRES_PATH.emailConnexion}.`);
+        toast.error(`Connectez votre boîte mail dans ${PARAMETRES_PATH.emailConnexion}.`);
         return;
       }
       const result = await scanStelliumExceltisEmails();
@@ -80,9 +79,7 @@ export function StelliumExceltisSettingsPanel() {
     try {
       await resetStelliumExceltisDismissed();
       const status = await getEmailConnectionStatus();
-      const mailReady =
-        status.connected &&
-        (status.provider === "google" || status.provider === "microsoft");
+      const mailReady = status.connected && canReadMailbox(status.provider);
       if (mailReady) {
         await scanStelliumExceltisEmails();
       }

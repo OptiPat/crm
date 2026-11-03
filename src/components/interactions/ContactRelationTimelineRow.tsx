@@ -41,6 +41,7 @@ import {
 } from "@/lib/api/tauri-contact-gmail";
 import { toast } from "sonner";
 import { userErrorMessage } from "@/lib/api/invoke-error";
+import { IMAP_MAIL_PROVIDER } from "@/lib/emails/mail-provider";
 
 const TYPE_ICONS: Record<string, typeof Phone> = {
   APPEL: Phone,
@@ -192,7 +193,7 @@ function MailboxMessageBody({
     <div className="mt-2 border-t border-border/50 pt-2">
       {attachmentItems.length > 0 ? (
         <AttachmentsList items={attachmentItems} />
-      ) : (
+      ) : message.provider === IMAP_MAIL_PROVIDER ? null : (
         <p className="text-xs text-muted-foreground italic mt-1">
           Pièces jointes : cliquez sur « Lire le message » ou relancez Sync boîte mail.
         </p>
@@ -212,20 +213,22 @@ function MailboxMessageBody({
           {loadingBody ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
           {expanded ? "Masquer" : "Lire le message"}
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs gap-1"
-          onClick={() =>
-            void openGmailMessage(message.gmail_message_id, message.gmail_thread_id).catch((e) =>
-              toast.error(userErrorMessage(e, "Impossible d'ouvrir le message"))
-            )
-          }
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-          Ouvrir
-        </Button>
+        {message.provider !== IMAP_MAIL_PROVIDER ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs gap-1"
+            onClick={() =>
+              void openGmailMessage(message.gmail_message_id, message.gmail_thread_id).catch((e) =>
+                toast.error(userErrorMessage(e, "Impossible d'ouvrir le message"))
+              )
+            }
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Ouvrir
+          </Button>
+        ) : null}
       </div>
       {expanded && body && (
         <div className="mt-2 max-h-48 overflow-y-auto rounded bg-muted/40 p-3 text-sm leading-relaxed text-foreground whitespace-pre-wrap">

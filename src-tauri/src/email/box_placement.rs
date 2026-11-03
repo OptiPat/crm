@@ -1,6 +1,7 @@
-//! Scan Gmail / Outlook des mails Stellium Box Placement (no-reply@stellium.fr).
+//! Scan Gmail / Outlook / IMAP des mails Stellium Box Placement (no-reply@stellium.fr).
 
 use super::contact_gmail_sync::{list_message_ids, with_db};
+use super::imap_mailbox::{imap_scan_query, ImapListedMessage, ImapMailboxReader, IMAP_PROVIDER};
 use super::oauth_send::refresh_connection_if_needed;
 use super::oauth_store::EmailOAuthStore;
 use super::response_sync::gmail_fetch_message_text;
@@ -531,6 +532,48 @@ fn outlook_fetch_message_received_at(
         .unwrap_or_else(|| chrono::Utc::now().timestamp()))
 }
 
+/// Boîte IMAP : mails Box Placement listés (tous dossiers) et session pour lire leur corps.
+struct ImapBoxSource {
+    reader: ImapMailboxReader,
+    listed: std::collections::HashMap<String, ImapListedMessage>,
+}
+
+impl ImapBoxSource {
+    fn open(app: &AppHandle) -> Result<Self, String> {
+        let mut reader = ImapMailboxReader::open(app)?;
+        let since = chrono::Utc::now().timestamp() - i64::from(GMAIL_QUERY_RECENCY_DAYS) * 86_400;
+        let query = imap_scan_query(since, GMAIL_FROM, "Box placement")
+            .ok_or("Recherche Box Placement invalide.")?;
+        let listed = reader
+            .search_all_folders(&query, false, super::imap_mailbox::MAX_HEADER_CANDIDATES)?
+            .into_iter()
+            .map(|m| (m.message_id.clone(), m))
+            .collect();
+        Ok(Self { reader, listed })
+    }
+
+    fn fetch(&mut self, message_id: &str) -> Result<FetchedBoxPlacementMessage, String> {
+        let listed = self
+            .listed
+            .get(message_id)
+            .cloned()
+            .ok_or_else(|| format!("mail {message_id} introuvable dans la boîte"))?;
+        let fetched = self
+            .reader
+            .fetch_listed(&listed)?
+            .ok_or_else(|| format!("mail {message_id} déplacé ou supprimé"))?;
+        Ok(FetchedBoxPlacementMessage {
+            subject: if fetched.subject.is_empty() {
+                listed.subject
+            } else {
+                fetched.subject
+            },
+            body: fetched.body_text,
+            received_at: listed.received_at,
+        })
+    }
+}
+
 fn fetch_box_placement_message(
     client: &reqwest::blocking::Client,
     token: &str,
@@ -709,13 +752,10 @@ pub fn scan_box_placement_emails(
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let store = EmailOAuthStore::load(app)?;
     let conn = store.connection.as_ref().ok_or(
-        "Aucun compte email connecté. Paramètres → Emails & envois → Connexion : connectez Google ou Microsoft.",
+        "Aucun compte email connecté. Paramètres → Emails & envois → Connexion.",
     )?;
-    if conn.provider != "google" && conn.provider != "microsoft" {
-        return Err(
-            "Le scan Box Placement nécessite Gmail ou Outlook connecté (no-reply@stellium.fr)."
-                .into(),
-        );
+    if !matches!(conn.provider.as_str(), "google" | "microsoft" | IMAP_PROVIDER) {
+        return Err("Scan Box Placement : boîte mail non prise en charge.".into());
     }
 
     let mut oauth_conn = conn.clone();
@@ -734,9 +774,37 @@ pub fn scan_box_placement_emails(
         Ok(state)
     })?;
 
-    let (last_scan_at, start_cursor, retry_ids_for_provider) =
+    let (last_scan_at, start_cursor, mut retry_ids_for_provider) =
         box_scan_resume(&scan_state, &provider);
-    let (mut all_ids, list_exhausted, resume_page_token) = if provider == "microsoft" {
+    let mut imap_source = if provider == IMAP_PROVIDER {
+        Some(ImapBoxSource::open(app)?)
+    } else {
+        None
+    };
+    if let Some(source) = &imap_source {
+        // Hors de la fenêtre listée (supprimé, trop ancien) : plus rien à relire.
+        retry_ids_for_provider.retain(|id| source.listed.contains_key(id));
+    }
+    let imap_watermark = (!scan_state
+        .scan_provider
+        .as_deref()
+        .is_some_and(|previous| previous != provider))
+    .then_some(last_scan_at)
+    .flatten()
+    .filter(|ts| *ts > 0);
+    let (mut all_ids, list_exhausted, resume_page_token) = if let Some(source) = &imap_source {
+        // Filigrane comme Gmail (`after:`, 1 j de marge) : un mail déjà traité n'est jamais
+        // réappliqué (un ancien NON CONFORME ne doit pas viser une autre opération). Retries
+        // et mails en attente sont ajoutés plus bas.
+        let mut ids: Vec<(i64, String)> = source
+            .listed
+            .values()
+            .filter(|m| imap_watermark.is_none_or(|wm| m.received_at >= wm - 86_400))
+            .map(|m| (m.received_at, m.message_id.clone()))
+            .collect();
+        ids.sort_by(|a, b| b.0.cmp(&a.0));
+        (ids.into_iter().map(|(_, id)| id).collect(), true, None)
+    } else if provider == "microsoft" {
         list_graph_box_placement_message_ids(&client, &access_token, start_cursor.as_deref())?
     } else {
         let q = gmail_box_placement_query(last_scan_at);
@@ -784,11 +852,14 @@ pub fn scan_box_placement_emails(
         .scan_provider
         .as_deref()
         .is_some_and(|previous| previous != provider);
-    let deferred_prev = if provider_changed {
+    let mut deferred_prev = if provider_changed {
         Vec::new()
     } else {
         scan_state.deferred_message_ids.clone()
     };
+    if let Some(source) = &imap_source {
+        deferred_prev.retain(|id| source.listed.contains_key(id));
+    }
     for message_id in &deferred_prev {
         if seen_ids.insert(message_id.clone()) {
             all_ids.push(message_id.clone());
@@ -858,7 +929,11 @@ pub fn scan_box_placement_emails(
         std::thread::sleep(std::time::Duration::from_millis(
             super::contact_gmail_sync::METADATA_DELAY_MS,
         ));
-        match fetch_box_placement_message(&client, &access_token, &message_id, &provider) {
+        let fetched = match imap_source.as_mut() {
+            Some(source) => source.fetch(&message_id),
+            None => fetch_box_placement_message(&client, &access_token, &message_id, &provider),
+        };
+        match fetched {
             Ok(fetched) => {
                 retry_message_ids.remove(&message_id);
                 fetched_messages.push((message_id, fetched));
