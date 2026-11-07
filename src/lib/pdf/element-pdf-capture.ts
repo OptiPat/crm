@@ -1,6 +1,8 @@
 import { jsPDF } from "jspdf";
 import {
+  applyWebKitTextMetricsFix,
   inlineModernColors,
+  isWebKitCapture,
   neutralizeModernColorSheets,
 } from "@/lib/souscription-cif/cif-pdf-download";
 
@@ -102,6 +104,7 @@ export async function renderElementToPdf(root: HTMLElement): Promise<Blob> {
       windowHeight: Math.max(heightPx, window.innerHeight),
       onclone: (clonedDocument, clonedElement) => {
         neutralizeModernColorSheets(clonedDocument);
+        if (isWebKitCapture()) applyWebKitTextMetricsFix(clonedDocument);
         if (clonedElement instanceof HTMLElement) inlineModernColors(clonedElement);
       },
     });

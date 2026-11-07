@@ -46,14 +46,31 @@ export function replaceModernColorFunctions(
   return result + css.slice(last);
 }
 
-function rgbFromCssColor(fn: string, ctx: CanvasRenderingContext2D | null): string {
+const MODERN_SERIALIZED = /okl|\blab\(|\blch\(|color-mix|light-dark|\bcolor\(/i;
+
+/**
+ * Couleur moderne → `rgb()` lisible par html2canvas. Chromium (Windows) renvoie déjà
+ * `#rrggbb` dans `fillStyle` ; WebKit (Mac) garde `oklch(…)` / `color(srgb …)` : on lit
+ * alors le pixel peint (sinon repli noir = fonds gris `bg-neutral-50` en noir plein).
+ */
+export function rgbFromCssColor(
+  fn: string,
+  ctx: Pick<
+    CanvasRenderingContext2D,
+    "fillStyle" | "clearRect" | "fillRect" | "getImageData"
+  > | null
+): string {
   if (!ctx) return "#000000";
   try {
     ctx.fillStyle = "#000000";
     ctx.fillStyle = fn;
     const out = String(ctx.fillStyle);
-    if (/okl|\blab\(|\blch\(|color-mix|light-dark|\bcolor\(/i.test(out)) return "#000000";
-    return out;
+    if (!MODERN_SERIALIZED.test(out)) return out;
+    ctx.clearRect(0, 0, 1, 1);
+    ctx.fillRect(0, 0, 1, 1);
+    const [r = 0, g = 0, b = 0, a = 255] = ctx.getImageData(0, 0, 1, 1).data;
+    if (a === 255) return `rgb(${r}, ${g}, ${b})`;
+    return `rgba(${r}, ${g}, ${b}, ${Number((a / 255).toFixed(3))})`;
   } catch {
     return "#000000";
   }
@@ -120,6 +137,33 @@ export function neutralizeModernColorSheets(doc: Document): void {
   }
 }
 
+/** WKWebView (Mac) : pas Chromium / Edge (WebView2 sous Windows). */
+export function isWebKitCapture(userAgent: string = navigator.userAgent): boolean {
+  return /AppleWebKit/i.test(userAgent) && !/Chrome|Chromium|Edg\//i.test(userAgent);
+}
+
+export const WEBKIT_TEXT_METRICS_STYLE_ID = "cif-webkit-text-metrics";
+
+/**
+ * Mac : html2canvas mesure chaque mot dans la page (crénage et ligatures appliqués par
+ * WebKit) puis le redessine avec `fillText`, sans crénage → mot plus large que sa place,
+ * l'espace suivant disparaît (« Avantageset »). Sur la copie capturée uniquement, la mise
+ * en page est faite sans crénage ni ligatures pour que mesure et dessin coïncident.
+ */
+export function applyWebKitTextMetricsFix(doc: Document): void {
+  if (doc.getElementById(WEBKIT_TEXT_METRICS_STYLE_ID)) return;
+  const style = doc.createElement("style");
+  style.id = WEBKIT_TEXT_METRICS_STYLE_ID;
+  style.dataset.cifColorSafe = "true";
+  style.textContent = `*, *::before, *::after {
+  font-kerning: none !important;
+  font-variant-ligatures: none !important;
+  font-feature-settings: "kern" 0, "liga" 0, "clig" 0 !important;
+  text-rendering: optimizeSpeed !important;
+}`;
+  (doc.head ?? doc.documentElement).appendChild(style);
+}
+
 /** Même rendu que l'impression Windows : pas de surlignage ambre des variables manquantes. */
 function clearMissingVariableMarks(root: HTMLElement): void {
   root.querySelectorAll("mark").forEach((node) => {
@@ -182,6 +226,7 @@ export async function renderCifPortalPdf(root: HTMLElement): Promise<Uint8Array>
         useCORS: true,
         onclone: (clonedDocument, clonedElement) => {
           neutralizeModernColorSheets(clonedDocument);
+          if (isWebKitCapture()) applyWebKitTextMetricsFix(clonedDocument);
           if (!(clonedElement instanceof HTMLElement)) return;
           clearMissingVariableMarks(clonedElement);
           inlineModernColors(clonedElement);

@@ -5,7 +5,48 @@ import {
   listCifPdfPageElements,
   renderCifPortalPdf,
   replaceModernColorFunctions,
+  rgbFromCssColor,
+  applyWebKitTextMetricsFix,
+  isWebKitCapture,
+  WEBKIT_TEXT_METRICS_STYLE_ID,
 } from "@/lib/souscription-cif/cif-pdf-download";
+
+/** Contexte 2D factice : `serialize` simule ce que le navigateur renvoie dans fillStyle. */
+function fakeCtx(serialize: (value: string) => string, pixel: [number, number, number, number]) {
+  let fill = "#000000";
+  return {
+    get fillStyle() {
+      return fill;
+    },
+    set fillStyle(value: string) {
+      fill = serialize(value);
+    },
+    clearRect: () => {},
+    fillRect: () => {},
+    getImageData: () => ({ data: Uint8ClampedArray.from(pixel) }) as unknown as ImageData,
+  } as unknown as CanvasRenderingContext2D;
+}
+
+describe("rgbFromCssColor", () => {
+  const neutral50 = "oklch(98.5% 0 0)";
+
+  it("garde la couleur déjà convertie par Chromium (Windows)", () => {
+    const ctx = fakeCtx((v) => (v === neutral50 ? "#fafafa" : v), [0, 0, 0, 255]);
+    expect(rgbFromCssColor(neutral50, ctx)).toBe("#fafafa");
+  });
+
+  it("lit le pixel peint quand WebKit (Mac) garde oklch : jamais de fond noir", () => {
+    const ctx = fakeCtx((v) => v, [250, 250, 250, 255]);
+    expect(rgbFromCssColor(neutral50, ctx)).toBe("rgb(250, 250, 250)");
+  });
+
+  it("conserve la transparence et gère color(srgb …)", () => {
+    const ctx = fakeCtx(() => "color(srgb 0.2 0.4 0.6 / 0.5)", [51, 102, 153, 128]);
+    expect(rgbFromCssColor("color-mix(in oklab, red 50%, transparent)", ctx)).toBe(
+      "rgba(51, 102, 153, 0.502)"
+    );
+  });
+});
 
 describe("listCifPdfPageElements", () => {
   it("cible les pages figées, Paged.js et le repli", () => {
@@ -67,5 +108,35 @@ describe("renderCifPortalPdf", () => {
     await expect(renderCifPortalPdf(root as unknown as HTMLElement)).rejects.toThrow(
       /Aucune page/
     );
+  });
+});
+
+describe("capture Mac (WebKit) : espaces entre les mots", () => {
+  const macTauri =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)";
+  const windowsWebView2 =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0";
+
+  it("ne cible que WKWebView (Mac), pas WebView2 (Windows)", () => {
+    expect(isWebKitCapture(macTauri)).toBe(true);
+    expect(isWebKitCapture(`${macTauri} Safari/605.1.15`)).toBe(true);
+    expect(isWebKitCapture(windowsWebView2)).toBe(false);
+  });
+
+  it("désactive crénage et ligatures dans la copie capturée, une seule fois", () => {
+    type FakeStyle = { id: string; textContent: string; dataset: Record<string, string> };
+    const appended: FakeStyle[] = [];
+    const doc = {
+      getElementById: (id: string) => appended.find((el) => el.id === id) ?? null,
+      createElement: () => ({ id: "", textContent: "", dataset: {} }) as FakeStyle,
+      head: { appendChild: (el: FakeStyle) => appended.push(el) },
+    } as unknown as Document;
+    applyWebKitTextMetricsFix(doc);
+    applyWebKitTextMetricsFix(doc);
+    expect(appended).toHaveLength(1);
+    expect(appended[0]!.id).toBe(WEBKIT_TEXT_METRICS_STYLE_ID);
+    expect(appended[0]!.textContent).toContain("font-kerning: none !important");
+    expect(appended[0]!.textContent).toContain("font-variant-ligatures: none !important");
+    expect(appended[0]!.dataset.cifColorSafe).toBe("true");
   });
 });
