@@ -36,12 +36,32 @@ function findAsset(pattern) {
   return assets.find((asset) => pattern.test(asset.name));
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Signature `.sig` d'un asset. Endpoint API (`assets/{id}` en octet-stream) d'abord :
+ * le lien public `releases/download/…` peut renvoyer 504 pendant des heures (v0.5.70).
+ * Plusieurs essais, lien public en dernier recours.
+ */
 async function readSignature(sigAsset) {
-  const res = await fetch(sigAsset.browser_download_url, { headers });
-  if (!res.ok) {
-    throw new Error(`Impossible de lire ${sigAsset.name} (${res.status})`);
+  const sources = [
+    { url: sigAsset.url, headers: { ...headers, Accept: "application/octet-stream" } },
+    { url: sigAsset.browser_download_url, headers },
+  ];
+  let lastStatus = "réseau";
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    for (const source of sources) {
+      try {
+        const res = await fetch(source.url, { headers: source.headers });
+        if (res.ok) return (await res.text()).trim();
+        lastStatus = res.status;
+      } catch (error) {
+        lastStatus = error instanceof Error ? error.message : String(error);
+      }
+    }
+    if (attempt < 4) await sleep(attempt * 5_000);
   }
-  return (await res.text()).trim();
+  throw new Error(`Impossible de lire ${sigAsset.name} (${lastStatus})`);
 }
 
 function addPlatform(platforms, key, url, signature) {
