@@ -79,9 +79,32 @@ export function rgbFromCssColor(
 const HAS_MODERN_COLOR =
   /oklch\(|oklab\(|color-mix\(|light-dark\(|(?:^|[^\w-])(?:lab|lch|color)\(/i;
 
+/**
+ * Conversion mémorisée : quelques couleurs seulement, mais appelées pour chaque élément ×
+ * propriété. Sur Mac chaque conversion relit un pixel (synchronisation GPU) : sans cache,
+ * le téléchargement CIF semblait bloqué plusieurs minutes.
+ */
+export function cachedColorConverter(doc: Document): (fn: string) => string {
+  const canvas = doc.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const cache = new Map<string, string>();
+  return (fn) => {
+    let rgb = cache.get(fn);
+    if (rgb === undefined) {
+      rgb = rgbFromCssColor(fn, ctx);
+      cache.set(fn, rgb);
+    }
+    return rgb;
+  };
+}
+
 /** Pose en style inline toute valeur calculée que html2canvas ne sait pas lire. */
-export function inlineModernColors(root: HTMLElement): void {
-  const ctx = root.ownerDocument.createElement("canvas").getContext("2d");
+export function inlineModernColors(
+  root: HTMLElement,
+  toRgb: (fn: string) => string = cachedColorConverter(root.ownerDocument)
+): void {
   const view = root.ownerDocument.defaultView;
   if (!view) return;
   const nodes = [root, ...root.querySelectorAll<HTMLElement>("*")];
@@ -94,7 +117,7 @@ export function inlineModernColors(root: HTMLElement): void {
       if (!value || !HAS_MODERN_COLOR.test(value)) continue;
       node.style.setProperty(
         prop,
-        replaceModernColorFunctions(value, (fn) => rgbFromCssColor(fn, ctx)),
+        replaceModernColorFunctions(value, toRgb),
         "important"
       );
     }
@@ -102,9 +125,10 @@ export function inlineModernColors(root: HTMLElement): void {
 }
 
 /** Réécrit le CSS brut et désactive les feuilles liées qui contiennent encore oklch. */
-export function neutralizeModernColorSheets(doc: Document): void {
-  const ctx = doc.createElement("canvas").getContext("2d");
-  const toRgb = (fn: string) => rgbFromCssColor(fn, ctx);
+export function neutralizeModernColorSheets(
+  doc: Document,
+  toRgb: (fn: string) => string = cachedColorConverter(doc)
+): void {
   const rewrite = (css: string) => replaceModernColorFunctions(css, toRgb);
 
   doc.querySelectorAll("style").forEach((style) => {
@@ -214,6 +238,8 @@ export async function renderCifPortalPdf(root: HTMLElement): Promise<Uint8Array>
   const html2canvas = (await import("html2canvas")).default;
   const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
   const isFirst = { value: true };
+  // Une conversion par couleur pour tout le document (10 pages capturées une à une).
+  const toRgb = cachedColorConverter(document);
   const previousClass = document.documentElement.classList.contains(CAPTURE_CLASS);
   document.documentElement.classList.add(CAPTURE_CLASS);
   try {
@@ -225,11 +251,11 @@ export async function renderCifPortalPdf(root: HTMLElement): Promise<Uint8Array>
         logging: false,
         useCORS: true,
         onclone: (clonedDocument, clonedElement) => {
-          neutralizeModernColorSheets(clonedDocument);
+          neutralizeModernColorSheets(clonedDocument, toRgb);
           if (isWebKitCapture()) applyWebKitTextMetricsFix(clonedDocument);
           if (!(clonedElement instanceof HTMLElement)) return;
           clearMissingVariableMarks(clonedElement);
-          inlineModernColors(clonedElement);
+          inlineModernColors(clonedElement, toRgb);
         },
       });
       appendCanvasPages(doc, canvas, isFirst);

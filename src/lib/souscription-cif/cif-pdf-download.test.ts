@@ -6,6 +6,7 @@ import {
   renderCifPortalPdf,
   replaceModernColorFunctions,
   rgbFromCssColor,
+  cachedColorConverter,
   applyWebKitTextMetricsFix,
   isWebKitCapture,
   WEBKIT_TEXT_METRICS_STYLE_ID,
@@ -138,5 +139,27 @@ describe("capture Mac (WebKit) : espaces entre les mots", () => {
     expect(appended[0]!.textContent).toContain("font-kerning: none !important");
     expect(appended[0]!.textContent).toContain("font-variant-ligatures: none !important");
     expect(appended[0]!.dataset.cifColorSafe).toBe("true");
+  });
+});
+
+describe("cachedColorConverter", () => {
+  it("ne relit le pixel qu'une fois par couleur (Mac : téléchargement bloqué sinon)", () => {
+    let reads = 0;
+    const ctx = {
+      fillStyle: "#000000",
+      clearRect: () => {},
+      fillRect: () => {},
+      getImageData: () => {
+        reads += 1;
+        return { data: Uint8ClampedArray.from([250, 250, 250, 255]) } as unknown as ImageData;
+      },
+    };
+    const doc = {
+      createElement: () => ({ width: 0, height: 0, getContext: () => ctx }),
+    } as unknown as Document;
+    const toRgb = cachedColorConverter(doc);
+    for (let i = 0; i < 5_000; i++) expect(toRgb("oklch(98.5% 0 0)")).toBe("rgb(250, 250, 250)");
+    expect(toRgb("oklch(20% 0 0)")).toBe("rgb(250, 250, 250)");
+    expect(reads).toBe(2);
   });
 });

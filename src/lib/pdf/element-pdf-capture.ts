@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import {
   applyWebKitTextMetricsFix,
+  cachedColorConverter,
   inlineModernColors,
   isWebKitCapture,
   neutralizeModernColorSheets,
@@ -103,9 +104,10 @@ export async function renderElementToPdf(root: HTMLElement): Promise<Blob> {
       height: heightPx,
       windowHeight: Math.max(heightPx, window.innerHeight),
       onclone: (clonedDocument, clonedElement) => {
-        neutralizeModernColorSheets(clonedDocument);
+        const toRgb = cachedColorConverter(clonedDocument);
+        neutralizeModernColorSheets(clonedDocument, toRgb);
         if (isWebKitCapture()) applyWebKitTextMetricsFix(clonedDocument);
-        if (clonedElement instanceof HTMLElement) inlineModernColors(clonedElement);
+        if (clonedElement instanceof HTMLElement) inlineModernColors(clonedElement, toRgb);
       },
     });
 
