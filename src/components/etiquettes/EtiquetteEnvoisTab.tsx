@@ -880,7 +880,8 @@ export function EtiquetteEnvoisTab({
               id={`envoi-row-${rowKey}`}
               key={rowKey}
               className={cn(
-                "p-4 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center gap-3 justify-between",
+                // Boutons à côté du texte s'il reste ≥ 18rem, sinon dessous (bandeau latéral ouvert).
+                "p-4 border rounded-lg bg-card flex flex-wrap items-center gap-3 justify-between",
                 highlightRowKey === rowKey && "ring-2 ring-primary/40",
                 batchLocked && "opacity-60"
               )}
@@ -897,7 +898,7 @@ export function EtiquetteEnvoisTab({
                   aria-label={`Sélectionner ${item.contact_prenom} ${item.contact_nom}`}
                 />
               )}
-              <div className="space-y-1 min-w-0 flex-1">
+              <div className="space-y-1 min-w-[min(18rem,100%)] flex-1 basis-[18rem]">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">
                     {item.contact_prenom} {item.contact_nom}
@@ -1043,7 +1044,7 @@ export function EtiquetteEnvoisTab({
                   </p>
                 )}
               </div>
-              <div className="flex flex-wrap gap-2 shrink-0">
+              <div className="flex flex-wrap gap-2 max-w-full">
                 {options.mode === "ready" && (
                   <>
                     <Button
