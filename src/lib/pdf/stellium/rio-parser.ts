@@ -1,6 +1,11 @@
 import type { BienImmobilier, ExtractedData } from "../types";
 import { mapRioStatutOccupationLogement } from "@/lib/contacts/contact-occupation";
-import { extractAmountAfterLabel, parseStelliumAmount, AMOUNT_CAPTURE } from "./amounts";
+import {
+  extractAmountAfterLabel,
+  parseStelliumAmount,
+  AMOUNT_CAPTURE,
+  ROW_AMOUNT_CAPTURE,
+} from"./amounts";
 import { computeStelliumConfidence } from "./confidence";
 import { parseAdressesPostales, parsePaysResidenceFiscale, parseStatutOccupationLogement } from "./rio-adresse";
 import { normalizeStelliumText, sanitizeStelliumFieldValue } from "./normalize";
@@ -24,6 +29,7 @@ import {
   cleanStelliumActifLabel,
   registerFinancialActifLine,
   hasEpargneBancaireDetail,
+  computeEpargneTotal,
 } from "./financial-contracts";
 import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
 import { applyFiscaliteToExtractedData, parseStelliumFiscalite } from "./fiscalite";
@@ -92,7 +98,7 @@ function parseActifLines(patrimoineSection: string): ParsedActifLine[] {
   // de l'immobilier locatif « Classique ».
   const patternWithDash =
     new RegExp(
-      `(Assurance vie|Autre épargne|Compte courant|Compte sur livret|Livret(?:\\s+[A-Za-zÀ-ÿ]+)?|LDD|LDDS|PEL|CEL|PERECO|PERCOL|PERCO|PERO|PEE|PEI|PEG|PER|PERP|PEA|Compte titres(?:\\s*\\(CTO\\))?|SCI ou SARL de famille|SCPI|${STELLIUM_IMMO_ACTIF_PREFIXES})\\s*[-–—]\\s*(.+?)\\s+([\\d\\s,]+)\\s*€`,
+      `(Assurance vie|Autre épargne|Compte courant|Compte sur livret|Livret(?:\\s+[A-Za-zÀ-ÿ]+)?|LDD|LDDS|PEL|CEL|PERECO|PERCOL|PERCO|PERO|PEE|PEI|PEG|PER|PERP|PEA|Compte titres(?:\\s*\\(CTO\\))?|SCI ou SARL de famille|SCPI|${STELLIUM_IMMO_ACTIF_PREFIXES})\\s*[-–—]\\s*(.+?)\\s+${ROW_AMOUNT_CAPTURE}\\s*€`,
       "gi",
     );
 
@@ -192,21 +198,7 @@ function parsePatrimoine(patrimoineSection: string, data: ExtractedData): void {
     new RegExp(`\\bImmobilier\\s+${AMOUNT_CAPTURE}\\s*€`, "i")
   );
 
-  const epargneParts = [
-    data.compteCourant,
-    data.livretA,
-    data.ldd,
-    data.assuranceVie,
-    data.per,
-    data.pea,
-    data.compteTitres,
-    data.scpi,
-  ].filter((v): v is number => typeof v === "number" && v > 0);
-
-  data.epargneTotal =
-    epargneParts.length > 0
-      ? epargneParts.reduce((sum, value) => sum + value, 0)
-      : financierTotal;
+  data.epargneTotal = computeEpargneTotal(data) ?? financierTotal;
 
   if (!data.patrimoineTotal && immobilierTotal && financierTotal) {
     data.patrimoineTotal = immobilierTotal + financierTotal;

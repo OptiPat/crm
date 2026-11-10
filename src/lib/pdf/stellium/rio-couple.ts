@@ -6,6 +6,7 @@ import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
 import {
   cleanStelliumActifLabel,
   registerFinancialActifLine,
+  computeEpargneTotal,
   hasEpargneBancaireDetail,
 } from "./financial-contracts";
 import {
@@ -704,20 +705,7 @@ export function parseCouplePatrimoine(
     const totals = parseTrailingAmounts(totalLine[1]);
     data.patrimoineTotal = pickFoyerAmount(totals, hasCommunColumn, true);
     const [p1, p2] = pickPersonAmounts(totals, hasCommunColumn);
-    const epargneParts = [
-      data.compteCourant,
-      data.livretA,
-      data.ldd,
-      data.assuranceVie,
-      data.per,
-      data.pea,
-      data.compteTitres,
-      data.scpi,
-    ].filter((v): v is number => typeof v === "number" && v > 0);
-    data.epargneTotal =
-      epargneParts.length > 0
-        ? epargneParts.reduce((sum, value) => sum + value, 0)
-        : undefined;
+    data.epargneTotal = computeEpargneTotal(data);
     return { person1Total: p1, person2Total: p2 };
   }
 

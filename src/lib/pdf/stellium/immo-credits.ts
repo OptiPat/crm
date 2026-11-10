@@ -1,6 +1,7 @@
 import type { BienImmobilier } from "../types";
 import { mapDispositifFiscalToTypeProduit } from "@/lib/investissements/immo-commandes-import";
 import { STELLIUM_IMMO_CREDIT_PRODUCT_TYPES } from "./immo-scheme-label";
+import { ROW_AMOUNT_CAPTURE } from "./amounts";
 
 export interface StelliumMortgageCredit {
   /** Libellé lu dans la désignation (« Primo MTP », « Pinel sète », « RP », …). */
@@ -426,8 +427,12 @@ function applyCreditsFromMensualiteLines(
   biens: BienImmobilier[],
   credits: StelliumMortgageCredit[]
 ): void {
-  const pattern =
-    /Mensualit[ée]\s+de\s+cr[ée]dit\s*[-–—]\s*([^\d\n]+?)\s+([\d\s,]+)\s*€/gi;
+  const pattern = new RegExp(
+    String.raw`Mensualit[ée]\s+de\s+cr[ée]dit\s*[-–—]\s*([^\t\n]+?)\s+` +
+      ROW_AMOUNT_CAPTURE +
+      String.raw`\s*€`,
+    "gi"
+  );
 
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(fullText)) !== null) {
@@ -436,6 +441,11 @@ function applyCreditsFromMensualiteLines(
       .replace(/\s+/g, " ")
       .trim();
     if (!label || /^(Cr[ée]dits immobilier|SCPI)\b/i.test(label)) continue;
+
+    // Ligne déjà rattachée à un bien financé (« LMNP 1 ») : ne pas la redonner
+    // à un autre bien du même type via le repli ci-dessous.
+    const financed = biens.find((b) => b.creditCRD && namesMatch(label, b.nom));
+    if (financed && normalizeNom(financed.nom) === normalizeNom(label)) continue;
 
     const bien = findBienForLabel(
       label,
@@ -478,9 +488,23 @@ function applyCreditsFromMensualiteLines(
   }
 }
 
+/** Numéros dans un libellé (« LMNP 2 » → ["2"]) : discriminent des biens homonymes. */
+function numericTokens(value: string): string[] {
+  return value.match(/\d+/g) ?? [];
+}
+
+function sameNumericTokens(a: string[], b: string[]): boolean {
+  if (a.length === 0 || b.length === 0) return true;
+  return a.length === b.length && a.every((n, i) => n === b[i]);
+}
+
 function applyStelliumRentalIncome(fullText: string, biens: BienImmobilier[]): void {
-  const pattern =
-    /Revenu\s+foncier(?:\s+ou\s+BIC)?\s*[-–—]\s*([^\d\n]+?)\s+([\d\s,]+)\s*€/gi;
+  const pattern = new RegExp(
+    String.raw`Revenu\s+foncier(?:\s+ou\s+BIC)?\s*[-–—]\s*([^\t\n]+?)\s+` +
+      ROW_AMOUNT_CAPTURE +
+      String.raw`\s*€`,
+    "gi"
+  );
 
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(fullText)) !== null) {
@@ -489,13 +513,15 @@ function applyStelliumRentalIncome(fullText: string, biens: BienImmobilier[]): v
     if (!label || loyer == null) continue;
 
     const labelNorm = normalizeNom(label);
+    const labelNumbers = numericTokens(label);
     let bestBien: BienImmobilier | undefined;
     let bestScore = 0;
 
     for (const bien of biens) {
       const bienNorm = normalizeNom(bien.nom);
       let score = 0;
-      if (labelNorm === bienNorm) score = 100;
+      if (labelNorm === bienNorm) score = 101;
+      else if (!sameNumericTokens(labelNumbers, numericTokens(bien.nom))) continue;
       else {
         const labelWords = label.split(/[\s-]+/).map(normalizeNom).filter((w) => w.length >= 3);
         const bienWords = bien.nom.split(/[\s-]+/).map(normalizeNom).filter((w) => w.length >= 3);

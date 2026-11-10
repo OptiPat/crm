@@ -209,6 +209,29 @@ export function registerFinancialActifLine(
   applyFinancialProductAggregate(data, category, montant);
 }
 
+/**
+ * Épargne totale = somme de toutes les lignes financières lues (Autre épargne,
+ * CSL, PEL, épargne salariale… comprises), comme le sous-total « Financier » Stellium.
+ * Repli sur les agrégats historiques si aucun contrat n'a été lu.
+ */
+export function computeEpargneTotal(data: ExtractedData): number | undefined {
+  const contrats = data.contratsFinanciers ?? [];
+  const fromContrats = contrats.reduce((sum, c) => sum + (c.montant > 0 ? c.montant : 0), 0);
+  if (fromContrats > 0) return fromContrats;
+
+  const parts = [
+    data.compteCourant,
+    data.livretA,
+    data.ldd,
+    data.assuranceVie,
+    data.per,
+    data.pea,
+    data.compteTitres,
+    data.scpi,
+  ].filter((v): v is number => typeof v === "number" && v > 0);
+  return parts.length > 0 ? parts.reduce((sum, value) => sum + value, 0) : undefined;
+}
+
 export function hasEpargneBancaireDetail(data: ExtractedData): boolean {
   return (
     (data.livretA ?? 0) > 0 ||

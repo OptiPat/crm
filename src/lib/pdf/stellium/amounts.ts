@@ -34,5 +34,11 @@ export function extractAmountAfterLabel(
   return parseStelliumAmount(match[1]);
 }
 
+/**
+ * Montant en fin de ligne « libellé  montant € » : groupes de milliers stricts,
+ * pour qu'un libellé finissant par un chiffre (« LMNP 3  7200 € ») garde son chiffre.
+ */
+export const ROW_AMOUNT_CAPTURE = String.raw`(\d+(?:[ \t]+\d{3})*(?:,\d+)?)`;
+
 /** Fragment regex pour un montant monétaire (espaces internes tolérés). */
 export const AMOUNT_CAPTURE = String.raw`([\d\s,]+)`;

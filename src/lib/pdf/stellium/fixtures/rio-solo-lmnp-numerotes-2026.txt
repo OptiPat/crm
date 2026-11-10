@@ -1,0 +1,49 @@
+Recueil d’informations
+Consultant : Paul CONSEIL
+Investisseur : Jean TEST
+Identité
+Civilité	Monsieur
+Nom d’usage / prénom	TEST Jean
+Relations
+Situation matrimoniale	Célibataire
+Patrimoine
+Actifs
+Désignation	-
+Financier	215883 €
+Épargne bancaire	100000 €
+Livret A - LA	100000 €
+Épargne financière	115883 €
+Autre épargne - CSL	100028 €
+Autre épargne - Parts sociales	15855 €
+Immobilier	347500 €
+Immobilier locatif	347500 €
+LMNP Classique - LMNP 1	140000 €
+LMNP Classique - LMNP 2	120000 €
+LMNP Classique - LMNP 3	87500 €
+TOTAL	563383 €
+Passifs
+Désignation	Emprunteur	Echéance par an	CRD   Date d’échéance
+Crédits immobilier	15612 €	237902 €
+Crédit immobilier - Amortissable -
+7859 €	112193 €	10/06/2043
+LMNP 1	Jean TEST
+Crédit immobilier - Amortissable -
+7753 €	125709 €	05/11/2048
+LMNP 2	Jean TEST
+TOTAL	15612 €	237902 €
+Revenus et charges
+Revenus
+Désignation	Jean TEST
+Immobilier	22920 €
+Revenu foncier ou BIC - LMNP 1	8400 €
+Revenu foncier ou BIC - LMNP 2	7320 €
+Revenu foncier ou BIC - LMNP 3	7200 €
+TOTAL	22920 €
+Charges
+Désignation	Jean TEST
+Charges fixes	15612 €
+Mensualité de crédit - LMNP 1	7859 €
+Mensualité de crédit - LMNP 2	7753 €
+TOTAL	15612 €
+Fiscalité
+Recueil d’informations - Jean TEST et – 10/11/2026	4/7
