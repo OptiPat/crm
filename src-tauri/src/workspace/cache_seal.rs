@@ -320,7 +320,8 @@ fn backup_sqlite_file_into_memory(source: &Path) -> Result<Connection, String> {
     memory
         .execute("PRAGMA foreign_keys = ON", [])
         .map_err(|error| format!("Activation des clés étrangères du cache équipe : {error}"))?;
-    crate::licensing::install_authorizer(&memory);
+    crate::licensing::install_authorizer(&mut memory)
+        .map_err(|error| format!("Garde-fou licence du cache équipe : {error}"))?;
     Ok(memory)
 }
 

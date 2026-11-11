@@ -37,8 +37,9 @@ pub fn bypass_authorizer<R>(f: impl FnOnce() -> R) -> R {
     result
 }
 
-pub fn install_authorizer(conn: &Connection) {
-    conn.authorizer(Some(license_authorizer));
+/// Pose le garde-fou d'écriture licence ; une erreur ici doit bloquer l'ouverture.
+pub fn install_authorizer(conn: &mut Connection) -> rusqlite::Result<()> {
+    conn.authorizer(Some(license_authorizer))
 }
 
 fn license_authorizer(ctx: AuthContext<'_>) -> Authorization {
@@ -85,7 +86,7 @@ mod tests {
             return;
         }
 
-        let connection = Connection::open_in_memory().unwrap();
+        let mut connection = Connection::open_in_memory().unwrap();
         connection
             .execute_batch(
                 "CREATE TABLE contacts (id INTEGER PRIMARY KEY, nom TEXT);
@@ -94,7 +95,7 @@ mod tests {
             .unwrap();
         WRITE_ALLOWED.store(true, Ordering::SeqCst);
         WORKSPACE_WRITE_ALLOWED.store(false, Ordering::SeqCst);
-        install_authorizer(&connection);
+        install_authorizer(&mut connection).unwrap();
 
         assert!(connection
             .execute("INSERT INTO contacts (nom) VALUES ('DUPONT')", [])

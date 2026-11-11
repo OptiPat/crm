@@ -624,9 +624,9 @@ fn failure_result(
 impl Database {
     /// Schéma CRM en SQLite mémoire — aucune lecture/écriture disque prod.
     pub(crate) fn open_in_memory_workspace_cache() -> Result<Self> {
-        let conn = Connection::open_in_memory()?;
+        let mut conn = Connection::open_in_memory()?;
         conn.execute("PRAGMA foreign_keys = ON", [])?;
-        crate::licensing::install_authorizer(&conn);
+        crate::licensing::install_authorizer(&mut conn)?;
         let db = Database { conn };
         db.init_tables()?;
         Ok(db)

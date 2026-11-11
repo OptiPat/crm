@@ -160,9 +160,9 @@ impl Database {
             }
         }
 
-        let conn = Connection::open(&db_path)?;
+        let mut conn = Connection::open(&db_path)?;
         conn.execute("PRAGMA foreign_keys = ON", [])?;
-        crate::licensing::install_authorizer(&conn);
+        crate::licensing::install_authorizer(&mut conn)?;
 
         let db = Database { conn };
         db.init_tables().map_err(|e| {
@@ -267,8 +267,8 @@ impl Database {
     }
 
     pub(crate) fn backup_into_memory(&self) -> Result<Self> {
-        let conn = self.snapshot_connection()?;
-        crate::licensing::install_authorizer(&conn);
+        let mut conn = self.snapshot_connection()?;
+        crate::licensing::install_authorizer(&mut conn)?;
         Ok(Database { conn })
     }
 
@@ -276,9 +276,9 @@ impl Database {
         app_handle: &AppHandle,
         db_path: &std::path::Path,
     ) -> Result<Self> {
-        let conn = Connection::open(db_path)?;
+        let mut conn = Connection::open(db_path)?;
         conn.execute("PRAGMA foreign_keys = ON", [])?;
-        crate::licensing::install_authorizer(&conn);
+        crate::licensing::install_authorizer(&mut conn)?;
         let db = Database { conn };
         db.init_tables()?;
         let workspace_config = db.get_workspace_config()?;
@@ -293,9 +293,9 @@ impl Database {
         db_path: &std::path::Path,
         workspace_config: &workspace::WorkspaceConfig,
     ) -> Result<Self> {
-        let conn = Connection::open(db_path)?;
+        let mut conn = Connection::open(db_path)?;
         conn.execute("PRAGMA foreign_keys = ON", [])?;
-        crate::licensing::install_authorizer(&conn);
+        crate::licensing::install_authorizer(&mut conn)?;
         let db = Database { conn };
         db.init_tables()?;
         db.save_workspace_config(workspace_config)?;
@@ -2919,10 +2919,10 @@ impl Database {
         static TEMPLATE: std::sync::OnceLock<std::sync::Mutex<Connection>> =
             std::sync::OnceLock::new();
         TEMPLATE.get_or_init(|| {
-            let conn = Connection::open_in_memory().expect("base modèle de test");
+            let mut conn = Connection::open_in_memory().expect("base modèle de test");
             conn.execute("PRAGMA foreign_keys = ON", [])
                 .expect("foreign_keys sur la base modèle");
-            crate::licensing::install_authorizer(&conn);
+            crate::licensing::install_authorizer(&mut conn).expect("authorizer licence");
             let db = Database { conn };
             db.init_tables().expect("migrations de la base modèle");
             crate::licensing::seed_in_memory_test_license(&db);
@@ -2949,7 +2949,7 @@ impl Database {
 
         // Réglages portés par la connexion, pas par le fichier : à reposer.
         conn.execute("PRAGMA foreign_keys = ON", [])?;
-        crate::licensing::install_authorizer(&conn);
+        crate::licensing::install_authorizer(&mut conn)?;
         Ok(Database { conn })
     }
 

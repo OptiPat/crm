@@ -83,7 +83,7 @@ impl Database {
                 batch_base,
                 now,
             ],
-            |row| row.get(0),
+            |row| row.get::<_, i64>(0).map(|n| n.max(0) as u64),
         )
     }
 
@@ -99,7 +99,7 @@ impl Database {
                 STELLIUM_PERF_TEMPLATE_TU_NOM,
                 batch_base,
             ],
-            |row| row.get(0),
+            |row| row.get::<_, i64>(0).map(|n| n.max(0) as u64),
         )
     }
 

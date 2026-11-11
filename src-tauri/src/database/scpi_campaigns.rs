@@ -1626,7 +1626,7 @@ impl Database {
                 batch_key,
                 now,
             ],
-            |row| row.get(0),
+            |row| row.get::<_, i64>(0).map(|n| n.max(0) as u64),
         )
     }
 
@@ -1643,7 +1643,7 @@ impl Database {
                 SCPI_BULLETIN_TEMPLATE_TU_NOM,
                 batch_key,
             ],
-            |row| row.get(0),
+            |row| row.get::<_, i64>(0).map(|n| n.max(0) as u64),
         )
     }
 
