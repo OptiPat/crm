@@ -92,7 +92,7 @@ fn start_of_today_unix() -> i64 {
         .timestamp()
 }
 
-fn add_months_to_timestamp(ts: i64, months: u32) -> i64 {
+pub(crate) fn add_months_to_timestamp(ts: i64, months: u32) -> i64 {
     chrono::DateTime::from_timestamp(ts, 0)
         .map(|dt| {
             dt.date_naive()
@@ -512,7 +512,7 @@ impl super::Database {
         Ok(())
     }
 
-    fn advance_investissement_arbitrage_dates(
+    pub(crate) fn advance_investissement_arbitrage_dates(
         &self,
         investissement_id: i64,
         date_dernier_arbitrage: Option<i64>,

@@ -56,7 +56,12 @@ export function shouldTrackVersementAffaireOnPipeCreate(
 /** Brouillon VERSEMENT sur l'affaire enfant (étape 1 du stepper — confirmé via Stellium). */
 export async function trackVersementAffaireOnPipeCreate(
   pipe: PipeRecord,
-  options?: { productLabel?: string | null; montantCentimes?: number | null }
+  options?: {
+    productLabel?: string | null;
+    montantCentimes?: number | null;
+    /** Contrat crédité du versement à la validation partenaire. */
+    investissementId?: number | null;
+  }
 ): Promise<boolean> {
   if (!pipe.parent_pipe_id || pipe.parent_pipe_id <= 0) return false;
   const parent = await getPipeById(pipe.parent_pipe_id);
@@ -79,6 +84,7 @@ export async function trackVersementAffaireOnPipeCreate(
     product_label: productLabel,
     montant_centimes: montantCentimes,
     type_produit: typeProduit,
+    investissement_id: options?.investissementId ?? null,
   });
   notifyPlacementOperationsChanged();
   return true;

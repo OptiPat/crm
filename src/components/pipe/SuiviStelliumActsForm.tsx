@@ -1,6 +1,9 @@
+import { useLayoutEffect, useRef } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StelliumPlacementActFields } from "@/components/pipe/StelliumPlacementActFields";
+import { PlacementContractSelect } from "@/components/pipe/PlacementContractSelect";
+import { stelliumActUpdatesContract } from "@/lib/placement/placement-contract-link";
 import { PlacementMontantField } from "@/components/pipe/PlacementMontantField";
 import { VpModificationActFields } from "@/components/pipe/VpModificationActFields";
 import { VpMiseEnPlaceActFields } from "@/components/pipe/VpMiseEnPlaceActFields";
@@ -33,6 +36,10 @@ export interface SuiviStelliumActRow {
   montantEuros: string;
   vpModification: VpModificationActValue;
   vpMiseEnPlace: VpMiseEnPlaceActValue;
+  /** Contrat mis à jour à la validation (versement, VP, arbitrage libre). */
+  investissementId: number | null;
+  /** Au moins un contrat éligible : le choix du contrat est obligatoire. */
+  contractRequired: boolean;
 }
 
 function newActRow(): SuiviStelliumActRow {
@@ -43,6 +50,8 @@ function newActRow(): SuiviStelliumActRow {
     montantEuros: "",
     vpModification: { ...EMPTY_VP_MODIFICATION_ACT_VALUE },
     vpMiseEnPlace: { ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE },
+    investissementId: null,
+    contractRequired: false,
   };
 }
 
@@ -74,16 +83,31 @@ export function SuiviStelliumActsForm({
   onFicheConseil,
   ficheConseilDisabled = false,
 }: SuiviStelliumActsFormProps) {
+  const latestActsRef = useRef(acts);
+  useLayoutEffect(() => {
+    latestActsRef.current = acts;
+  }, [acts]);
+
   const updateAct = (
     key: string,
     patch: Partial<
       Pick<
         SuiviStelliumActRow,
-        "productLabel" | "actLabel" | "montantEuros" | "vpModification" | "vpMiseEnPlace"
+        | "productLabel"
+        | "actLabel"
+        | "montantEuros"
+        | "vpModification"
+        | "vpMiseEnPlace"
+        | "investissementId"
+        | "contractRequired"
       >
     >
   ) => {
-    onChange(acts.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+    // Plusieurs mises à jour dans le même rendu (ex. contrat pré-sélectionné + obligation) :
+    // partir de la dernière liste émise, pas de la prop encore périmée.
+    const next = latestActsRef.current.map((row) => (row.key === key ? { ...row, ...patch } : row));
+    latestActsRef.current = next;
+    onChange(next);
   };
 
   const removeAct = (key: string) => {
@@ -128,6 +152,10 @@ export function SuiviStelliumActsForm({
             onStelliumLabelChange={(actLabel) => {
               updateAct(row.key, {
                 actLabel,
+                // Acte non reporté sur une fiche : ne pas garder un contrat choisi pour l'acte précédent.
+                ...(stelliumActUpdatesContract(actLabel)
+                  ? {}
+                  : { investissementId: null, contractRequired: false }),
                 vpModification: isVpModificationStelliumAct(actLabel)
                   ? row.vpModification
                   : { ...EMPTY_VP_MODIFICATION_ACT_VALUE },
@@ -164,6 +192,16 @@ export function SuiviStelliumActsForm({
               onChange={(vpMiseEnPlace) => {
                 updateAct(row.key, { vpMiseEnPlace });
               }}
+            />
+          ) : null}
+          {contactId && stelliumActUpdatesContract(row.actLabel) ? (
+            <PlacementContractSelect
+              contactId={contactId}
+              productLabel={row.productLabel}
+              value={row.investissementId}
+              onChange={(investissementId) => updateAct(row.key, { investissementId })}
+              onRequiredChange={(contractRequired) => updateAct(row.key, { contractRequired })}
+              disabled={disabled}
             />
           ) : null}
           {contactId &&

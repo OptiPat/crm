@@ -8,6 +8,10 @@ import {
   placementOperationTypeFromStelliumLabel,
 } from "@/lib/placement/stellium-box-placement-labels";
 import { trackVersementAffaireOnPipeCreate } from "@/lib/placement/pipe-placement-tracking";
+import {
+  stelliumActUpdatesContract,
+  vpFrequenceFromStelliumAct,
+} from "@/lib/placement/placement-contract-link";
 import { resolveInvestissementIdForStelliumAct } from "@/lib/placement/resolve-investissement-for-stellium-act";
 import { isVpModificationStelliumAct, isVpMiseEnPlaceStelliumAct } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
 import {
@@ -32,6 +36,10 @@ export interface SuiviStelliumActInput {
   actLabel: string;
   montantCentimes?: number | null;
   investissementId?: number | null;
+  /** Fréquence VP (mise en place / modification de périodicité) reportée sur le contrat. */
+  vpFrequence?: string | null;
+  /** Contrat à choisir (au moins un contrat éligible) pour un acte reporté sur la fiche. */
+  contractRequired?: boolean;
 }
 
 /** Ligne de saisie formulaire (euros) — à mapper avant validation / persistance. */
@@ -41,6 +49,8 @@ export interface SuiviStelliumActFormRow {
   montantEuros: string;
   vpModification?: VpModificationActValue;
   vpMiseEnPlace?: VpMiseEnPlaceActValue;
+  investissementId?: number | null;
+  contractRequired?: boolean;
 }
 
 export function mapSuiviStelliumActRowToInput(
@@ -49,6 +59,9 @@ export function mapSuiviStelliumActRowToInput(
   return {
     productLabel: row.productLabel,
     actLabel: row.actLabel,
+    investissementId: row.investissementId ?? null,
+    contractRequired: Boolean(row.contractRequired) && stelliumActUpdatesContract(row.actLabel),
+    vpFrequence: vpFrequenceFromStelliumAct(row.actLabel, row.vpModification, row.vpMiseEnPlace),
     montantCentimes: isVpModificationStelliumAct(row.actLabel)
       ? vpModificationMontantCentimesFromAct(row.vpModification)
       : isVpMiseEnPlaceStelliumAct(row.actLabel)
@@ -70,6 +83,9 @@ export function validateSuiviStelliumActInput(
   if (!actLabel) return "Acte Stellium requis.";
   // Produit(s) et montants se saisissent ensuite sur l'affaire enfant (une ou plusieurs souscriptions).
   if (isNouvelleSouscriptionActLabel(actLabel)) return null;
+  if (act.contractRequired && !(act.investissementId != null && act.investissementId > 0)) {
+    return "Choisissez le contrat concerné (sa fiche sera mise à jour à la validation).";
+  }
   if (isVersementComplementaireActLabel(actLabel)) {
     if (act.productLabel.trim() && !isStelliumLabelAllowedForProduct(actLabel, act.productLabel, { suivi: true })) {
       return "Versement complémentaire non applicable aux SCPI.";
@@ -104,7 +120,11 @@ export type SuiviVersementAffaireSource = Pick<
 
 export async function createVersementAffaireFromSuivi(
   suivi: SuiviVersementAffaireSource,
-  options?: { productLabel?: string | null; montantCentimes?: number | null }
+  options?: {
+    productLabel?: string | null;
+    montantCentimes?: number | null;
+    investissementId?: number | null;
+  }
 ): Promise<PipeRecord> {
   const child = await createPipe({
     contact_id: suivi.contact_id,
@@ -153,6 +173,7 @@ export async function applySuiviStelliumActsAfterPipeCreate(
         await createVersementAffaireFromSuivi(suivi, {
           productLabel: act.productLabel.trim() || null,
           montantCentimes: act.montantCentimes ?? null,
+          investissementId: act.investissementId ?? null,
         })
       );
       continue;
@@ -172,6 +193,7 @@ export async function applySuiviStelliumActsAfterPipeCreate(
       montant_centimes: isVpModificationStelliumAct(actLabel) || isVpMiseEnPlaceStelliumAct(actLabel)
         ? act.montantCentimes ?? null
         : null,
+      vp_frequence: act.vpFrequence ?? null,
     });
   }
   notifyPlacementOperationsChanged();

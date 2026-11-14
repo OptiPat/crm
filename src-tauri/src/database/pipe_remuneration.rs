@@ -109,7 +109,7 @@ fn type_produit_accepts_reinvestissement(type_produit: &str) -> bool {
 
 /// Date de souscription comme le formulaire investissement : jour calendaire local,
 /// stocké à minuit UTC (cf. `dateFieldToIso`).
-fn unix_to_souscription_date_rfc3339(ts: i64) -> String {
+pub(crate) fn unix_to_souscription_date_rfc3339(ts: i64) -> String {
     let local_day = Local
         .timestamp_opt(ts, 0)
         .single()
@@ -124,7 +124,7 @@ fn unix_to_souscription_date_rfc3339(ts: i64) -> String {
 /// Date de validation partenaire d'une souscription CONFORME.
 /// `conforme_at` (mail CONFORME ou validation manuelle) ; pour une validation antérieure à
 /// cette colonne : date du dernier mail s'il est postérieur au dernier « non conforme ».
-fn placement_validation_ts(op: &super::models::PlacementOperation) -> Option<i64> {
+pub(crate) fn placement_validation_ts(op: &super::models::PlacementOperation) -> Option<i64> {
     if let Some(ts) = op.conforme_at.filter(|t| *t > 0) {
         return Some(ts);
     }

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
+import { notifyAlertesChanged } from "@/lib/alertes/alert-events";
 
 export type PlacementOperationStatus = "PENDING" | "CONFORME" | "NON_CONFORME";
 
@@ -185,7 +186,10 @@ function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWi
 export async function scanBoxPlacementEmails(): Promise<BoxPlacementScanResult> {
   const result = await invoke<BoxPlacementScanResult>("scan_box_placement_emails");
   // Une souscription affaire validée crée son placement côté Rust.
-  if (result.updated > 0) notifyInvestissementsChanged();
+  if (result.updated > 0) {
+    notifyInvestissementsChanged();
+    notifyAlertesChanged();
+  }
   return result;
 }
 
@@ -241,6 +245,8 @@ export async function updatePlacementOperationStatus(
   const op = await invoke<PlacementOperation>("update_placement_operation_status", { id, status });
   if (status === "CONFORME" && op.investissement_id != null && op.investissement_id > 0) {
     notifyInvestissementsChanged();
+    // Arbitrage libre validé : l'alerte d'arbitrage du contrat peut être clôturée côté Rust.
+    notifyAlertesChanged();
   }
   return op;
 }

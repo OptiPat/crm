@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MoneyInput } from "@/components/ui/money-input";
@@ -45,6 +46,8 @@ export function InvestissementVersementsPanel({
 
   useEffect(() => {
     void load();
+    // Versement ajouté à la validation d'un acte Stellium (pipe) pendant que la fiche est ouverte.
+    return subscribeInvestissementsChanged(() => void load());
   }, [load]);
 
   const handleAdd = async () => {

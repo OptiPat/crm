@@ -80,6 +80,7 @@ describe("trackVersementAffaireOnPipeCreate", () => {
     const tracked = await trackVersementAffaireOnPipeCreate(versementChild, {
       productLabel: "Cristalliance Avenir",
       montantCentimes: 50_000_00,
+      investissementId: 42,
     });
 
     expect(tracked).toBe(true);
@@ -91,6 +92,7 @@ describe("trackVersementAffaireOnPipeCreate", () => {
       product_label: "Cristalliance Avenir",
       montant_centimes: 50_000_00,
       type_produit: "ASSURANCE_VIE",
+      investissement_id: 42,
     });
   });
 

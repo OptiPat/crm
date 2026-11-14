@@ -35,6 +35,11 @@ import {
   VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
 } from "@/lib/pipe/pipe-suivi";
 import { StelliumPlacementActFields } from "@/components/pipe/StelliumPlacementActFields";
+import { PlacementContractSelect } from "@/components/pipe/PlacementContractSelect";
+import {
+  stelliumActUpdatesContract,
+  vpFrequenceFromStelliumAct,
+} from "@/lib/placement/placement-contract-link";
 import { PlacementMontantField } from "@/components/pipe/PlacementMontantField";
 import { toast } from "sonner";
 import {
@@ -192,6 +197,9 @@ export function PipeSuiviStelliumActAdd({
     ...EMPTY_SOUSCRIPTION_EXTRAS,
   });
   const [editingSouscription, setEditingSouscription] = useState<PlacementOperation | null>(null);
+  /** Contrat mis à jour à la validation (versement complémentaire, VP, arbitrage libre). */
+  const [newContractId, setNewContractId] = useState<number | null>(null);
+  const [newContractAvailable, setNewContractAvailable] = useState(false);
 
   const newActNeedsMontant = placementOperationRequiresMontant({
     operationType: placementOperationTypeFromStelliumLabel(stelliumLabel.trim() || "AUTRE"),
@@ -202,6 +210,9 @@ export function PipeSuiviStelliumActAdd({
     variant === "suivi" && isNouvelleSouscriptionActLabel(stelliumLabel);
   const newActIsVpModification = isVpModificationStelliumAct(stelliumLabel);
   const newActIsVpMiseEnPlace = isVpMiseEnPlaceStelliumAct(stelliumLabel);
+  const newActNeedsContract =
+    (variant === "suivi" || isVersementChild) && stelliumActUpdatesContract(stelliumLabel);
+  const newActContractRequired = newActNeedsContract && newContractAvailable;
 
   const buildRemunerationPayload = (product: string, montantRaw: string) => {
     const montant_centimes = parseMontantEurosToCentimes(montantRaw);
@@ -234,7 +245,17 @@ export function PipeSuiviStelliumActAdd({
     setDraftVpModification((prev) => {
       const next: Record<number, VpModificationActValue> = {};
       for (const draft of nextDrafts) {
-        const existing = prev[draft.id] ?? { ...EMPTY_VP_MODIFICATION_ACT_VALUE };
+        // Première synchro : reprendre la périodicité saisie à la création de l'acte.
+        const storedFrequence = draft.vp_frequence?.trim();
+        const existing =
+          prev[draft.id] ??
+          (storedFrequence && isVpModificationStelliumAct(draft.stellium_label ?? "")
+            ? {
+                ...EMPTY_VP_MODIFICATION_ACT_VALUE,
+                kinds: ["periodicite" as const],
+                frequence: storedFrequence,
+              }
+            : { ...EMPTY_VP_MODIFICATION_ACT_VALUE });
         if (
           draft.montant_centimes != null &&
           draft.montant_centimes > 0 &&
@@ -254,7 +275,12 @@ export function PipeSuiviStelliumActAdd({
     setDraftVpMiseEnPlace((prev) => {
       const next: Record<number, VpMiseEnPlaceActValue> = {};
       for (const draft of nextDrafts) {
-        const existing = prev[draft.id] ?? { ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE };
+        // Première synchro : fréquence saisie à la création (sinon « Confirmer l'envoi »
+        // réécrirait la valeur par défaut MENSUEL).
+        const existing = prev[draft.id] ?? {
+          ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE,
+          frequence: draft.vp_frequence?.trim() || EMPTY_VP_MISE_EN_PLACE_ACT_VALUE.frequence,
+        };
         if (
           isVpMiseEnPlaceStelliumAct(draft.stellium_label ?? "") &&
           draft.montant_centimes != null &&
@@ -331,6 +357,7 @@ export function PipeSuiviStelliumActAdd({
     setNewActVpMiseEnPlace({ ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE });
     setNewHolderKey(null);
     setNewExtras({ ...EMPTY_SOUSCRIPTION_EXTRAS });
+    setNewContractId(null);
   };
   const newActCloseGuard = useUnsavedCloseGuard({
     open: openNew || showVersementInit,
@@ -365,6 +392,7 @@ export function PipeSuiviStelliumActAdd({
         await createVersementAffaireFromSuivi(pipe, {
           productLabel: product || null,
           montantCentimes: operation.montant_centimes ?? null,
+          investissementId: operation.investissement_id ?? null,
         });
         await dismissPlacementOperation(operation.id);
         notifyPlacementOperationsChanged();
@@ -396,6 +424,12 @@ export function PipeSuiviStelliumActAdd({
           product_label: product || null,
           montant_centimes: vpMontantCentimes ?? operation.montant_centimes ?? null,
           investissement_id: investissementId,
+          // Champs VP initialisés depuis l'acte (montant, fréquence) : valeur saisie ou retouchée.
+          vp_frequence: vpFrequenceFromStelliumAct(
+            label,
+            draftVpModification[operation.id],
+            draftVpMiseEnPlace[operation.id]
+          ),
         });
         notifyPlacementOperationsChanged();
         toast.success(
@@ -458,6 +492,8 @@ export function PipeSuiviStelliumActAdd({
             productLabel: product,
             actLabel: label,
             montantCentimes: parseMontantEurosToCentimes(montantEuros),
+            investissementId: newContractId,
+            contractRequired: newActContractRequired,
           })
         : variant === "affaire" && !isVersementChild
           ? !product || !isStelliumLabelAllowedForProduct(label, product, { affaire: true })
@@ -470,7 +506,9 @@ export function PipeSuiviStelliumActAdd({
               ? "Produit requis pour le versement complémentaire."
               : !parseMontantEurosToCentimes(montantEuros)
                 ? "Montant souscrit requis."
-                : null
+                : newActContractRequired && newContractId == null
+                  ? "Choisissez le contrat concerné (sa fiche sera mise à jour à la validation)."
+                  : null
           : !product || !isStelliumLabelAllowedForProduct(label, product)
             ? "Produit et acte requis."
             : !parseMontantEurosToCentimes(montantEuros)
@@ -507,11 +545,9 @@ export function PipeSuiviStelliumActAdd({
           ? vpMiseEnPlaceMontantCentimesFromAct(newActVpMiseEnPlace)
           : null;
       const remuneration = buildRemunerationPayload(product, montantEuros);
-      const investissementId = await resolveDraftInvestissementId(
-        pipe.contact_id,
-        label,
-        product
-      );
+      const investissementId = newActNeedsContract
+        ? newContractId
+        : await resolveDraftInvestissementId(pipe.contact_id, label, product);
       await createPlacementOperation({
         contact_id: pipe.contact_id,
         pipe_id: pipe.id,
@@ -521,6 +557,7 @@ export function PipeSuiviStelliumActAdd({
         montant_centimes: remuneration.montant_centimes ?? vpMontantCentimes,
         type_produit: remuneration.type_produit,
         investissement_id: investissementId,
+        vp_frequence: vpFrequenceFromStelliumAct(label, newActVpModification, newActVpMiseEnPlace),
         ...souscriptionDetails,
       });
       notifyPlacementOperationsChanged();
@@ -534,6 +571,7 @@ export function PipeSuiviStelliumActAdd({
       setNewActVpMiseEnPlace({ ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE });
       setNewHolderKey(null);
       setNewExtras({ ...EMPTY_SOUSCRIPTION_EXTRAS });
+      setNewContractId(null);
       newActCloseGuard.resetDirty();
     } catch (err) {
       console.error(err);
@@ -728,6 +766,7 @@ export function PipeSuiviStelliumActAdd({
                 onProductChange={setProductLabel}
                 onStelliumLabelChange={(label) => {
                   setStelliumLabel(label);
+                  if (!stelliumActUpdatesContract(label)) setNewContractId(null);
                   if (!isVpModificationStelliumAct(label)) {
                     setNewActVpModification({ ...EMPTY_VP_MODIFICATION_ACT_VALUE });
                   }
@@ -737,6 +776,16 @@ export function PipeSuiviStelliumActAdd({
                 }}
                 versementInit={showVersementInit}
               />
+              {newActNeedsContract ? (
+                <PlacementContractSelect
+                  contactId={pipe.contact_id}
+                  productLabel={productLabel}
+                  value={newContractId}
+                  onChange={setNewContractId}
+                  onRequiredChange={setNewContractAvailable}
+                  disabled={savingId === "new"}
+                />
+              ) : null}
               {newActNeedsMontant || showVersementInit ? (
                 <>
                   <PlacementMontantField value={montantEuros} onChange={setMontantEuros} />

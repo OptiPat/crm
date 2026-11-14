@@ -64,6 +64,7 @@ pub mod pipe_rdv_scheduled_emails;
 pub mod pipe_remuneration;
 pub mod pipe_timeline;
 pub mod placement_operations;
+pub mod placement_investissement_effects;
 pub mod scpi_campaigns;
 pub mod souscription_event_condition;
 pub mod souscription_event_recipients;

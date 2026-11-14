@@ -571,7 +571,7 @@ impl super::Database {
     }
 
     /// `name` : identifiant SQL fixe (jamais une saisie utilisateur).
-    fn with_named_savepoint<T>(&self, name: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
+    pub(crate) fn with_named_savepoint<T>(&self, name: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
         self.conn.execute_batch(&format!("SAVEPOINT {name}"))?;
         match f() {
             Ok(value) => {
@@ -628,6 +628,8 @@ impl super::Database {
         let created = self.with_named_savepoint("placement_auto_inv", || {
             self.maybe_create_investissement_from_conforme_souscription(op_id)
         });
+        // Versement complémentaire / VP / arbitrage : report sur le contrat lié (journalisé).
+        self.apply_conforme_effects_to_investissement_journaled(op_id);
         if let Err(err) = created {
             let reason = placement_error_reason(&err);
             eprintln!("Placement auto non créé (souscription #{op_id}) : {reason}");
@@ -770,6 +772,22 @@ impl super::Database {
                 println!("✅ Migration: {column} sur placement_operations");
             }
         }
+        // Effet sur le contrat (versement, VP, arbitrage) déjà appliqué : jamais deux fois.
+        // Les actes antérieurs à cette fonctionnalité ont été reportés à la main sur les fiches :
+        // ils sont marqués traités dès l'ajout de la colonne (aucun effet, aucune note).
+        if !self.table_has_column("placement_operations", "investissement_applied_at")? {
+            self.conn.execute(
+                "ALTER TABLE placement_operations ADD COLUMN investissement_applied_at INTEGER",
+                [],
+            )?;
+            let legacy = self.conn.execute(
+                "UPDATE placement_operations SET investissement_applied_at = ?1",
+                params![now_unix()],
+            )?;
+            println!(
+                "✅ Migration: investissement_applied_at sur placement_operations ({legacy} acte(s) existant(s) ignoré(s))"
+            );
+        }
         // Lien vers un placement supprimé : on le traite comme non lié (idempotent).
         let has_investissements: bool = self.conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'investissements')",
@@ -793,7 +811,7 @@ impl super::Database {
         Ok(())
     }
 
-    fn investissement_belongs_to_placement_contact(
+    pub(crate) fn investissement_belongs_to_placement_contact(
         &self,
         inv: &super::models::Investissement,
         contact_id: i64,
@@ -853,10 +871,23 @@ impl super::Database {
             Some(pipe_id) => Some(self.get_pipe_by_id(pipe_id)?),
             None => None,
         };
+        // Acte « Versements programmés : … » : seule la fréquence est retenue (le montant est
+        // `montant_centimes`), reportée sur le contrat à la validation partenaire.
+        let vp_act_frequence = super::placement_investissement_effects::vp_act_frequence_from_input(
+            input.stellium_label.as_deref(),
+            input.vp_frequence.as_deref(),
+        )?;
+        let mut raw_details = SouscriptionDetails::from_new_operation(&input);
+        if super::placement_investissement_effects::is_vp_stellium_act_label(
+            input.stellium_label.as_deref(),
+        ) {
+            raw_details.vp_frequence = None;
+            raw_details.vp_montant_centimes = None;
+        }
         let details = self.normalize_souscription_details(
             pipe_for_details.as_ref(),
             &input.operation_type,
-            SouscriptionDetails::from_new_operation(&input),
+            raw_details,
         )?;
         let requires_montant = placement_operation_requires_montant(
             &input.operation_type,
@@ -911,6 +942,13 @@ impl super::Database {
                     if !details.is_empty() {
                         self.write_souscription_details(existing.id, &details)?;
                     }
+                    if let Some(frequence) = vp_act_frequence.as_ref() {
+                        self.conn.execute(
+                            "UPDATE placement_operations SET vp_frequence = ?1, updated_at = ?2
+                             WHERE id = ?3",
+                            params![frequence, now_unix(), existing.id],
+                        )?;
+                    }
                     if let Some(entry_id) = input.pipe_timeline_entry_id.filter(|id| *id > 0) {
                         if existing.pipe_timeline_entry_id != Some(entry_id) {
                             let now = now_unix();
@@ -951,7 +989,7 @@ impl super::Database {
                 details.holder_contact_id,
                 details.holder_foyer_id,
                 details.vp_montant_centimes,
-                details.vp_frequence,
+                details.vp_frequence.clone().or(vp_act_frequence),
                 details.reinvest_dividendes_pct,
             ],
         )?;
@@ -2774,11 +2812,14 @@ mod tests {
             .into_iter()
             .filter(|e| e.entry_type == "NOTE")
             .collect();
-        assert_eq!(notes.len(), 1);
+        let titres: Vec<_> = notes.iter().filter_map(|e| e.titre.as_deref()).collect();
         assert_eq!(
-            notes[0].titre.as_deref(),
-            Some("Réponse Stellium — Conforme")
+            titres.iter().filter(|t| **t == "Réponse Stellium — Conforme").count(),
+            1
         );
+        // Arbitrage libre sans contrat relié : la fiche est signalée à mettre à jour à la main.
+        assert!(titres.contains(&"Fiche placement non mise à jour"));
+        assert_eq!(notes.len(), 2);
     }
 
     #[test]
