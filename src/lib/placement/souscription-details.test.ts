@@ -101,21 +101,21 @@ describe("holder payload", () => {
 describe("souscriptionExtrasToPayload", () => {
   it("SCPI : VP + réinvestissement", () => {
     const result = souscriptionExtrasToPayload(
-      { vpEnabled: true, vpMontantEuros: "200.50", vpFrequence: "MENSUEL", reinvestPct: "50" },
+      { vpEnabled: true, vpMontantEuros: "200.50", vpFrequence: "MENSUEL", reinvestPct: "50", partenaireId: null },
       "SCPI"
     );
     expect(result).toEqual({
-      payload: { vp_montant_centimes: 20050, vp_frequence: "MENSUEL", reinvest_dividendes_pct: 50 },
+      payload: { vp_montant_centimes: 20050, vp_frequence: "MENSUEL", reinvest_dividendes_pct: 50, partenaire_id: null },
     });
   });
 
   it("AV : réinvestissement ignoré", () => {
     const result = souscriptionExtrasToPayload(
-      { vpEnabled: true, vpMontantEuros: "100", vpFrequence: "ANNUEL", reinvestPct: "100" },
+      { vpEnabled: true, vpMontantEuros: "100", vpFrequence: "ANNUEL", reinvestPct: "100", partenaireId: null },
       "ASSURANCE_VIE"
     );
     expect(result).toEqual({
-      payload: { vp_montant_centimes: 10000, vp_frequence: "ANNUEL", reinvest_dividendes_pct: null },
+      payload: { vp_montant_centimes: 10000, vp_frequence: "ANNUEL", reinvest_dividendes_pct: null, partenaire_id: null },
     });
   });
 
@@ -124,13 +124,13 @@ describe("souscriptionExtrasToPayload", () => {
       souscriptionExtrasToPayload({ ...EMPTY_SOUSCRIPTION_EXTRAS, vpEnabled: true }, "PER")
     ).toHaveProperty("error");
     expect(
-      souscriptionExtrasToPayload({ ...EMPTY_SOUSCRIPTION_EXTRAS, reinvestPct: "150" }, "SCPI")
+      souscriptionExtrasToPayload({ ...EMPTY_SOUSCRIPTION_EXTRAS, reinvestPct: "150", partenaireId: null }, "SCPI")
     ).toHaveProperty("error");
   });
 
   it("vide = aucun", () => {
     expect(souscriptionExtrasToPayload(EMPTY_SOUSCRIPTION_EXTRAS, "SCPI")).toEqual({
-      payload: { vp_montant_centimes: null, vp_frequence: null, reinvest_dividendes_pct: null },
+      payload: { vp_montant_centimes: null, vp_frequence: null, reinvest_dividendes_pct: null, partenaire_id: null },
     });
   });
 
@@ -145,6 +145,7 @@ describe("souscriptionExtrasToPayload", () => {
       vpMontantEuros: "150",
       vpFrequence: "TRIMESTRIEL",
       reinvestPct: "30",
+      partenaireId: null,
     });
   });
 });

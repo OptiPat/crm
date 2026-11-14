@@ -1884,6 +1884,9 @@ pub struct PlacementOperation {
     /// Date de validation partenaire (mail CONFORME ou validation manuelle).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conforme_at: Option<i64>,
+    /// Souscription affaire : partenaire (société de gestion / assureur) repris sur le placement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub partenaire_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1934,6 +1937,8 @@ pub struct NewPlacementOperation {
     pub vp_frequence: Option<String>,
     #[serde(default)]
     pub reinvest_dividendes_pct: Option<i64>,
+    #[serde(default)]
+    pub partenaire_id: Option<i64>,
 }
 
 impl Default for NewPlacementOperation {
@@ -1953,6 +1958,7 @@ impl Default for NewPlacementOperation {
             vp_montant_centimes: None,
             vp_frequence: None,
             reinvest_dividendes_pct: None,
+            partenaire_id: None,
         }
     }
 }
@@ -1972,6 +1978,8 @@ pub struct PlacementSouscriptionDetailsInput {
     pub vp_frequence: Option<String>,
     #[serde(default)]
     pub reinvest_dividendes_pct: Option<i64>,
+    #[serde(default)]
+    pub partenaire_id: Option<i64>,
 }
 
 /// Ligne onglet Rémunération (affaire gagnée + placement).

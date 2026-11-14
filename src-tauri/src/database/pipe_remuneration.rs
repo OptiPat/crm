@@ -343,11 +343,24 @@ impl super::Database {
             None => origin_note,
         };
 
+        // Partenaire choisi à la souscription (ignoré s'il a été supprimé entre-temps).
+        let partenaire_id = match op.partenaire_id.filter(|id| *id > 0) {
+            Some(id) => self
+                .conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM partenaires WHERE id = ?1)",
+                    params![id],
+                    |row| row.get::<_, bool>(0),
+                )?
+                .then_some(id),
+            None => None,
+        };
+
         let inv = self.create_investissement(super::models::NewInvestissement {
             contact_id,
             foyer_id,
             type_produit,
-            partenaire_id: None,
+            partenaire_id,
             nom_produit,
             numero_contrat: None,
             montant_initial: Some(montant),
@@ -724,6 +737,43 @@ mod tests {
         assert!(inv.versement_programme);
         assert_eq!(inv.frequence_versement.as_deref(), Some("TRIMESTRIEL"));
         assert!(!inv.reinvestissement_dividendes);
+    }
+
+    #[test]
+    fn partenaire_choisi_repris_sur_le_placement() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        let affaire = seed_affaire(&db, contact_id, None, PIPE_STAGE_R3);
+        db.conn
+            .execute(
+                "INSERT INTO partenaires (type_partenaire, raison_sociale) VALUES ('SCPI', 'Corum')",
+                [],
+            )
+            .unwrap();
+        let partenaire_id = db.conn.last_insert_rowid();
+        let op = db
+            .create_placement_operation(NewPlacementOperation {
+                partenaire_id: Some(partenaire_id),
+                ..souscription(contact_id, affaire, "Corum Origin", "SCPI", 1_000_000)
+            })
+            .unwrap();
+        assert_eq!(op.partenaire_id, Some(partenaire_id));
+        let updated = db
+            .update_placement_operation_status(op.id, STATUS_CONFORME)
+            .unwrap();
+        let inv = db
+            .get_investissement_by_id(updated.investissement_id.unwrap())
+            .unwrap();
+        assert_eq!(inv.partenaire_id, Some(partenaire_id));
+
+        // Partenaire inexistant (supprimé) : ignoré, la souscription s'enregistre quand même.
+        let sans = db
+            .create_placement_operation(NewPlacementOperation {
+                partenaire_id: Some(9_999),
+                ..souscription(contact_id, affaire, "Comete", "SCPI", 500_000)
+            })
+            .unwrap();
+        assert_eq!(sans.partenaire_id, None);
     }
 
     #[test]

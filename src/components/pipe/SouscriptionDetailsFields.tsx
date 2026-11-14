@@ -1,4 +1,5 @@
-import { useId } from "react";
+import { useId, useLayoutEffect, useRef } from "react";
+import { SouscriptionPartenaireField } from "@/components/pipe/SouscriptionPartenaireField";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,8 @@ interface SouscriptionDetailsFieldsProps {
   extras: SouscriptionExtrasValue;
   onExtrasChange: (value: SouscriptionExtrasValue) => void;
   disabled?: boolean;
+  /** Produit Stellium : affiche le champ Partenaire (pré-rempli depuis le produit). */
+  productLabel?: string;
 }
 
 /** Titulaire + versement programmé + réinvestissement des dividendes (souscription affaire). */
@@ -43,12 +46,23 @@ export function SouscriptionDetailsFields({
   extras,
   onExtrasChange,
   disabled = false,
+  productLabel,
 }: SouscriptionDetailsFieldsProps) {
   const showHolder = choices != null && souscriptionHolderFieldVisible(choices);
   const selectedHolder = resolveSouscriptionHolderKey(holderKey, choices);
   const showVp = acceptsVersementProgramme(typeProduit);
   const showReinvest = acceptsReinvestissementDividendes(typeProduit);
-  const patch = (next: Partial<SouscriptionExtrasValue>) => onExtrasChange({ ...extras, ...next });
+  // Dernière saisie connue : un pré-remplissage asynchrone (partenaire) ne doit pas annuler
+  // une frappe faite entre-temps (VP, %).
+  const latestExtrasRef = useRef(extras);
+  useLayoutEffect(() => {
+    latestExtrasRef.current = extras;
+  }, [extras]);
+  const patch = (next: Partial<SouscriptionExtrasValue>) => {
+    const merged = { ...latestExtrasRef.current, ...next };
+    latestExtrasRef.current = merged;
+    onExtrasChange(merged);
+  };
   const uid = useId();
   const holderLabelId = `${uid}-titulaire`;
   const vpCheckboxId = `${uid}-vp`;
@@ -59,6 +73,15 @@ export function SouscriptionDetailsFields({
 
   return (
     <>
+      {productLabel != null ? (
+        <SouscriptionPartenaireField
+          productLabel={productLabel}
+          value={extras.partenaireId}
+          onChange={(partenaireId) => patch({ partenaireId })}
+          disabled={disabled}
+        />
+      ) : null}
+
       {showHolder ? (
         <div className="space-y-2">
           <Label id={holderLabelId}>Titulaire</Label>

@@ -43,6 +43,8 @@ export interface PlacementOperation {
   vp_frequence?: string | null;
   /** SCPI : % de réinvestissement des dividendes (vide = aucun). */
   reinvest_dividendes_pct?: number | null;
+  /** Souscription affaire : partenaire repris sur le placement créé. */
+  partenaire_id?: number | null;
   /** Date de validation partenaire (mail CONFORME ou validation manuelle). */
   conforme_at?: number | null;
 }
@@ -54,6 +56,8 @@ export interface PlacementSouscriptionDetails {
   vp_montant_centimes?: number | null;
   vp_frequence?: string | null;
   reinvest_dividendes_pct?: number | null;
+  /** Souscription affaire : partenaire repris sur le placement créé. */
+  partenaire_id?: number | null;
 }
 
 export interface PlacementOperationWithContact {
@@ -104,6 +108,8 @@ export interface NewPlacementOperationInput {
   vp_montant_centimes?: number | null;
   vp_frequence?: string | null;
   reinvest_dividendes_pct?: number | null;
+  /** Souscription affaire : partenaire repris sur le placement créé. */
+  partenaire_id?: number | null;
 }
 
 export const PLACEMENT_OPERATIONS_CHANGED_EVENT = "placement-operations-changed";
@@ -145,6 +151,7 @@ function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWi
     vp_frequence,
     reinvest_dividendes_pct,
     conforme_at,
+    partenaire_id,
   } = raw;
   return {
     operation: {
@@ -176,6 +183,7 @@ function normalizePlacementRow(raw: PlacementOperationRow): PlacementOperationWi
       vp_frequence,
       reinvest_dividendes_pct,
       conforme_at,
+      partenaire_id,
     },
     contact_nom,
     contact_prenom,

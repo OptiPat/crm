@@ -798,6 +798,7 @@ export function PipeSuiviStelliumActAdd({
                       extras={newExtras}
                       onExtrasChange={setNewExtras}
                       disabled={savingId === "new"}
+                      productLabel={productLabel}
                     />
                   ) : null}
                 </>

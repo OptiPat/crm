@@ -134,6 +134,8 @@ export interface SouscriptionExtrasValue {
   vpFrequence: string;
   /** % de réinvestissement (vide = aucun). */
   reinvestPct: string;
+  /** Partenaire (société de gestion / assureur) repris sur le placement créé. */
+  partenaireId: number | null;
 }
 
 export const EMPTY_SOUSCRIPTION_EXTRAS: SouscriptionExtrasValue = {
@@ -141,10 +143,14 @@ export const EMPTY_SOUSCRIPTION_EXTRAS: SouscriptionExtrasValue = {
   vpMontantEuros: "",
   vpFrequence: "MENSUEL",
   reinvestPct: "",
+  partenaireId: null,
 };
 
 export function souscriptionExtrasFromOperation(
-  op: Pick<PlacementOperation, "vp_montant_centimes" | "vp_frequence" | "reinvest_dividendes_pct">
+  op: Pick<
+    PlacementOperation,
+    "vp_montant_centimes" | "vp_frequence" | "reinvest_dividendes_pct" | "partenaire_id"
+  >
 ): SouscriptionExtrasValue {
   const vpEnabled = op.vp_montant_centimes != null && op.vp_montant_centimes > 0;
   return {
@@ -155,12 +161,13 @@ export function souscriptionExtrasFromOperation(
       op.reinvest_dividendes_pct != null && op.reinvest_dividendes_pct > 0
         ? String(op.reinvest_dividendes_pct)
         : "",
+    partenaireId: op.partenaire_id != null && op.partenaire_id > 0 ? op.partenaire_id : null,
   };
 }
 
 export type SouscriptionExtrasPayload = Pick<
   PlacementSouscriptionDetails,
-  "vp_montant_centimes" | "vp_frequence" | "reinvest_dividendes_pct"
+  "vp_montant_centimes" | "vp_frequence" | "reinvest_dividendes_pct" | "partenaire_id"
 >;
 
 /**
@@ -175,6 +182,7 @@ export function souscriptionExtrasToPayload(
     vp_montant_centimes: null,
     vp_frequence: null,
     reinvest_dividendes_pct: null,
+    partenaire_id: value.partenaireId != null && value.partenaireId > 0 ? value.partenaireId : null,
   };
   if (acceptsVersementProgramme(typeProduit) && value.vpEnabled) {
     const montant = parseMontantEurosToCentimes(value.vpMontantEuros);

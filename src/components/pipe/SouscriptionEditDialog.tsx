@@ -139,6 +139,7 @@ export function SouscriptionEditDialog({
             extras={extras}
             onExtrasChange={setExtras}
             disabled={saving}
+            productLabel={operation?.product_label ?? ""}
           />
         </div>
         <DialogFooter data-no-dirty>

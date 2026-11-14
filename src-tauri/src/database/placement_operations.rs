@@ -118,11 +118,12 @@ fn map_placement_row(row: &Row<'_>) -> Result<super::models::PlacementOperation>
         vp_frequence: row.get(25)?,
         reinvest_dividendes_pct: row.get(26)?,
         conforme_at: row.get(27)?,
+        partenaire_id: row.get(28)?,
     })
 }
 
 /// Nombre de colonnes de `PLACEMENT_SELECT` : index des colonnes jointes ajoutées après.
-const PLACEMENT_SELECT_COLUMNS: usize = 28;
+const PLACEMENT_SELECT_COLUMNS: usize = 29;
 
 const PLACEMENT_SELECT: &str = "po.id, po.contact_id, po.pipe_id, po.pipe_timeline_entry_id,
     po.operation_type, po.product_label, po.stellium_label, po.status,
@@ -130,7 +131,7 @@ const PLACEMENT_SELECT: &str = "po.id, po.contact_id, po.pipe_id, po.pipe_timeli
     po.client_notified_at, po.non_conforme_at, po.partner_resent_at, po.dismissed_at,
     po.montant_centimes, po.type_produit, po.investissement_id, po.pv_manual, po.archived_at,
     po.holder_contact_id, po.holder_foyer_id, po.vp_montant_centimes, po.vp_frequence,
-    po.reinvest_dividendes_pct, po.conforme_at";
+    po.reinvest_dividendes_pct, po.conforme_at, po.partenaire_id";
 
 pub fn placement_operation_is_dismissed(op: &super::models::PlacementOperation) -> bool {
     op.dismissed_at.map(|t| t > 0).unwrap_or(false)
@@ -339,6 +340,7 @@ pub(crate) struct SouscriptionDetails {
     pub vp_montant_centimes: Option<i64>,
     pub vp_frequence: Option<String>,
     pub reinvest_dividendes_pct: Option<i64>,
+    pub partenaire_id: Option<i64>,
 }
 
 impl SouscriptionDetails {
@@ -349,6 +351,7 @@ impl SouscriptionDetails {
             vp_montant_centimes: input.vp_montant_centimes,
             vp_frequence: input.vp_frequence.clone(),
             reinvest_dividendes_pct: input.reinvest_dividendes_pct,
+            partenaire_id: input.partenaire_id,
         }
     }
 
@@ -358,6 +361,7 @@ impl SouscriptionDetails {
             && self.vp_montant_centimes.is_none()
             && self.vp_frequence.is_none()
             && self.reinvest_dividendes_pct.is_none()
+            && self.partenaire_id.is_none()
     }
 }
 
@@ -394,6 +398,21 @@ impl super::Database {
                 .map(|f| f.trim().to_uppercase())
                 .filter(|f| !f.is_empty()),
             reinvest_dividendes_pct: raw.reinvest_dividendes_pct.filter(|p| *p != 0),
+            partenaire_id: raw.partenaire_id.filter(|id| *id > 0),
+        };
+        // Partenaire supprimé (localement ou par un collègue) : simplement oublié, sans bloquer
+        // l'enregistrement du reste de la souscription.
+        let details = match details.partenaire_id {
+            Some(partenaire_id)
+                if !self.conn.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM partenaires WHERE id = ?1)",
+                    params![partenaire_id],
+                    |row| row.get::<_, bool>(0),
+                )? =>
+            {
+                SouscriptionDetails { partenaire_id: None, ..details }
+            }
+            _ => details,
         };
         if details.is_empty() {
             return Ok(details);
@@ -487,13 +506,14 @@ impl super::Database {
         self.conn.execute(
             "UPDATE placement_operations SET holder_contact_id = ?1, holder_foyer_id = ?2,
              vp_montant_centimes = ?3, vp_frequence = ?4, reinvest_dividendes_pct = ?5,
-             updated_at = ?6 WHERE id = ?7",
+             partenaire_id = ?6, updated_at = ?7 WHERE id = ?8",
             params![
                 details.holder_contact_id,
                 details.holder_foyer_id,
                 details.vp_montant_centimes,
                 details.vp_frequence,
                 details.reinvest_dividendes_pct,
+                details.partenaire_id,
                 now_unix(),
                 id
             ],
@@ -542,6 +562,7 @@ impl super::Database {
                 vp_montant_centimes: input.vp_montant_centimes,
                 vp_frequence: input.vp_frequence,
                 reinvest_dividendes_pct: input.reinvest_dividendes_pct,
+                partenaire_id: input.partenaire_id,
             },
         )?;
         if let Some(montant) = input.montant_centimes {
@@ -763,6 +784,7 @@ impl super::Database {
             ("vp_frequence", "TEXT"),
             ("reinvest_dividendes_pct", "INTEGER"),
             ("conforme_at", "INTEGER"),
+            ("partenaire_id", "INTEGER"),
         ] {
             if !self.table_has_column("placement_operations", column)? {
                 self.conn.execute(
@@ -971,8 +993,8 @@ impl super::Database {
                 product_label, stellium_label, status, created_at, updated_at,
                 montant_centimes, type_produit, investissement_id,
                 holder_contact_id, holder_foyer_id, vp_montant_centimes, vp_frequence,
-                reinvest_dividendes_pct
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                reinvest_dividendes_pct, partenaire_id
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
             params![
                 input.contact_id,
                 input.pipe_id,
@@ -991,6 +1013,7 @@ impl super::Database {
                 details.vp_montant_centimes,
                 details.vp_frequence.clone().or(vp_act_frequence),
                 details.reinvest_dividendes_pct,
+                details.partenaire_id,
             ],
         )?;
         let id = self.conn.last_insert_rowid();
@@ -2442,6 +2465,7 @@ mod tests {
             vp_frequence: None,
             reinvest_dividendes_pct: None,
             conforme_at: None,
+            partenaire_id: None,
         };
 
         assert!(placement_operation_blocks_pipe_archive(&op), "brouillon suivi");

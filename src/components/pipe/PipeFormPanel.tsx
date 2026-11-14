@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Briefcase, ClipboardList, PhoneCall } from "lucide-react";
+import { notifyPlacementOperationsChanged } from "@/lib/api/tauri-box-placement";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,18 +45,18 @@ import {
   type PipeType,
 } from "@/lib/pipe/pipe-types";
 import { isPipeRdvStage, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
-import { defaultSuiviPipeTitre } from "@/lib/pipe/pipe-suivi";
+import { defaultSuiviPipeTitre, isNouvelleSouscriptionAffaire } from "@/lib/pipe/pipe-suivi";
 import {
   isPipeFormDirty,
   mergePipeFormOnReload,
   type PipeFormSnapshot,
 } from "@/lib/pipe/pipe-form-dirty";
 import { PipeContactSelect } from "@/components/pipe/PipeContactSelect";
+import { SuiviStelliumActsForm } from "@/components/pipe/SuiviStelliumActsForm";
 import {
   createInitialSuiviStelliumActs,
-  SuiviStelliumActsForm,
   type SuiviStelliumActRow,
-} from "@/components/pipe/SuiviStelliumActsForm";
+} from "@/lib/placement/suivi-stellium-act-rows";
 import {
   applySuiviStelliumActsAfterPipeCreate,
   mapSuiviStelliumActRowsToInputs,
@@ -508,11 +510,30 @@ export function PipeFormPanel({
       const saved = pipe
         ? await updatePipe(pipe.id, payload)
         : await createPipe(payload);
+      // Nouvelle souscription : ouvrir directement l'affaire créée (souscriptions déjà saisies).
+      let toOpen = saved;
       if (isSuiviCreate) {
-        await applySuiviStelliumActsAfterPipeCreate(saved, stelliumActs);
+        try {
+          const children = await applySuiviStelliumActsAfterPipeCreate(saved, stelliumActs);
+          toOpen = children.find(isNouvelleSouscriptionAffaire) ?? saved;
+        } catch (actsErr) {
+          // Le Suivi existe déjà : l'ouvrir (pas de 2ᵉ création en cliquant à nouveau sur Enregistrer).
+          console.error(actsErr);
+          notifyPlacementOperationsChanged();
+          toast.warning(
+            `Suivi créé, mais un acte n'a pas pu être enregistré : ${userErrorMessage(
+              actsErr,
+              "erreur inconnue"
+            )}. Complétez-le depuis la fiche.`
+          );
+          onSuccess(saved);
+          return;
+        }
       }
-      toast.success(pipe ? "Enregistré" : "Pipe créé");
-      onSuccess(saved);
+      toast.success(
+        toOpen !== saved ? "Suivi et affaire souscription créés" : pipe ? "Enregistré" : "Pipe créé"
+      );
+      onSuccess(toOpen);
     } catch (err) {
       console.error(err);
       toast.error(String(err));
@@ -666,8 +687,9 @@ export function PipeFormPanel({
             <div>
               <p className="text-sm font-medium">Actes Stellium</p>
               <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-                Un ou plusieurs actes avec le suivi. Versement complémentaire ouvre une affaire
-                rattachée. Confirmez l&apos;envoi Stellium depuis la fiche une fois le dossier prêt.
+                Un ou plusieurs actes avec le suivi. Versement complémentaire et nouvelle souscription
+                créent automatiquement l&apos;affaire du client. Confirmez l&apos;envoi Stellium
+                depuis la fiche une fois le dossier prêt.
               </p>
             </div>
             <SuiviStelliumActsForm

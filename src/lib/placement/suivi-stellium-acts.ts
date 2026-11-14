@@ -12,6 +12,11 @@ import {
   stelliumActUpdatesContract,
   vpFrequenceFromStelliumAct,
 } from "@/lib/placement/placement-contract-link";
+import {
+  buildNouvelleSouscriptionOperationInputs,
+  validateNouvelleSouscriptionDrafts,
+  type NouvelleSouscriptionDraft,
+} from "@/lib/placement/nouvelle-souscription-inline";
 import { resolveInvestissementIdForStelliumAct } from "@/lib/placement/resolve-investissement-for-stellium-act";
 import { isVpModificationStelliumAct, isVpMiseEnPlaceStelliumAct } from "@/lib/pdf/arbitrage-fiche-conseil/fiche-conseil-stellium";
 import {
@@ -40,6 +45,8 @@ export interface SuiviStelliumActInput {
   vpFrequence?: string | null;
   /** Contrat à choisir (au moins un contrat éligible) pour un acte reporté sur la fiche. */
   contractRequired?: boolean;
+  /** « Nouvelle souscription » : souscriptions créées sur l'affaire enfant. */
+  souscriptions?: NouvelleSouscriptionDraft[];
 }
 
 /** Ligne de saisie formulaire (euros) — à mapper avant validation / persistance. */
@@ -51,6 +58,7 @@ export interface SuiviStelliumActFormRow {
   vpMiseEnPlace?: VpMiseEnPlaceActValue;
   investissementId?: number | null;
   contractRequired?: boolean;
+  souscriptions?: NouvelleSouscriptionDraft[];
 }
 
 export function mapSuiviStelliumActRowToInput(
@@ -60,6 +68,7 @@ export function mapSuiviStelliumActRowToInput(
     productLabel: row.productLabel,
     actLabel: row.actLabel,
     investissementId: row.investissementId ?? null,
+    souscriptions: row.souscriptions,
     contractRequired: Boolean(row.contractRequired) && stelliumActUpdatesContract(row.actLabel),
     vpFrequence: vpFrequenceFromStelliumAct(row.actLabel, row.vpModification, row.vpMiseEnPlace),
     montantCentimes: isVpModificationStelliumAct(row.actLabel)
@@ -81,8 +90,10 @@ export function validateSuiviStelliumActInput(
 ): string | null {
   const actLabel = act.actLabel.trim();
   if (!actLabel) return "Acte Stellium requis.";
-  // Produit(s) et montants se saisissent ensuite sur l'affaire enfant (une ou plusieurs souscriptions).
-  if (isNouvelleSouscriptionActLabel(actLabel)) return null;
+  // Souscriptions saisies ici (facultatives) ou ensuite sur l'affaire enfant.
+  if (isNouvelleSouscriptionActLabel(actLabel)) {
+    return validateNouvelleSouscriptionDrafts(act.souscriptions);
+  }
   if (act.contractRequired && !(act.investissementId != null && act.investissementId > 0)) {
     return "Choisissez le contrat concerné (sa fiche sera mise à jour à la validation).";
   }
@@ -164,7 +175,14 @@ export async function applySuiviStelliumActsAfterPipeCreate(
     if (!actLabel) continue;
 
     if (isNouvelleSouscriptionActLabel(actLabel)) {
-      versementAffaires.push(await createNouvelleSouscriptionAffaireFromSuivi(suivi));
+      const affaire = await createNouvelleSouscriptionAffaireFromSuivi(suivi);
+      for (const input of buildNouvelleSouscriptionOperationInputs(act.souscriptions, {
+        contactId: suivi.contact_id,
+        pipeId: affaire.id,
+      })) {
+        await createPlacementOperation(input);
+      }
+      versementAffaires.push(affaire);
       continue;
     }
 

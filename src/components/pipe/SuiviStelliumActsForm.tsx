@@ -3,6 +3,14 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StelliumPlacementActFields } from "@/components/pipe/StelliumPlacementActFields";
 import { PlacementContractSelect } from "@/components/pipe/PlacementContractSelect";
+import { NouvelleSouscriptionInlineFields } from "@/components/pipe/NouvelleSouscriptionInlineFields";
+import {
+  newSuiviStelliumActRow,
+  type SuiviStelliumActRow,
+} from "@/lib/placement/suivi-stellium-act-rows";
+import {
+  newNouvelleSouscriptionDraft,
+} from "@/lib/placement/nouvelle-souscription-inline";
 import { stelliumActUpdatesContract } from "@/lib/placement/placement-contract-link";
 import { PlacementMontantField } from "@/components/pipe/PlacementMontantField";
 import { VpModificationActFields } from "@/components/pipe/VpModificationActFields";
@@ -17,47 +25,16 @@ import { loadVpModificationMontantEurosPrefill } from "@/lib/pdf/arbitrage-fiche
 import {
   EMPTY_VP_MODIFICATION_ACT_VALUE,
   toVpModificationPdfFillInput,
-  type VpModificationActValue,
 } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
 import {
   EMPTY_VP_MISE_EN_PLACE_ACT_VALUE,
   toVpMiseEnPlacePdfFillInput,
-  type VpMiseEnPlaceActValue,
 } from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-types";
 import {
+  isNouvelleSouscriptionActLabel,
   isSuiviChildAffaireActLabel,
   isVersementComplementaireActLabel,
 } from "@/lib/pipe/pipe-suivi";
-
-export interface SuiviStelliumActRow {
-  key: string;
-  productLabel: string;
-  actLabel: string;
-  montantEuros: string;
-  vpModification: VpModificationActValue;
-  vpMiseEnPlace: VpMiseEnPlaceActValue;
-  /** Contrat mis à jour à la validation (versement, VP, arbitrage libre). */
-  investissementId: number | null;
-  /** Au moins un contrat éligible : le choix du contrat est obligatoire. */
-  contractRequired: boolean;
-}
-
-function newActRow(): SuiviStelliumActRow {
-  return {
-    key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    productLabel: "",
-    actLabel: "",
-    montantEuros: "",
-    vpModification: { ...EMPTY_VP_MODIFICATION_ACT_VALUE },
-    vpMiseEnPlace: { ...EMPTY_VP_MISE_EN_PLACE_ACT_VALUE },
-    investissementId: null,
-    contractRequired: false,
-  };
-}
-
-export function createInitialSuiviStelliumActs(): SuiviStelliumActRow[] {
-  return [newActRow()];
-}
 
 interface SuiviStelliumActsFormProps {
   acts: SuiviStelliumActRow[];
@@ -100,6 +77,7 @@ export function SuiviStelliumActsForm({
         | "vpMiseEnPlace"
         | "investissementId"
         | "contractRequired"
+        | "souscriptions"
       >
     >
   ) => {
@@ -116,7 +94,7 @@ export function SuiviStelliumActsForm({
   };
 
   const addAct = () => {
-    onChange([...acts, newActRow()]);
+    onChange([...acts, newSuiviStelliumActRow()]);
   };
 
   return (
@@ -156,6 +134,12 @@ export function SuiviStelliumActsForm({
                 ...(stelliumActUpdatesContract(actLabel)
                   ? {}
                   : { investissementId: null, contractRequired: false }),
+                // Nouvelle souscription : une première ligne de souscription prête à remplir.
+                souscriptions: isNouvelleSouscriptionActLabel(actLabel)
+                  ? row.souscriptions.length > 0
+                    ? row.souscriptions
+                    : [newNouvelleSouscriptionDraft()]
+                  : [],
                 vpModification: isVpModificationStelliumAct(actLabel)
                   ? row.vpModification
                   : { ...EMPTY_VP_MODIFICATION_ACT_VALUE },
@@ -192,6 +176,14 @@ export function SuiviStelliumActsForm({
               onChange={(vpMiseEnPlace) => {
                 updateAct(row.key, { vpMiseEnPlace });
               }}
+            />
+          ) : null}
+          {isNouvelleSouscriptionActLabel(row.actLabel) ? (
+            <NouvelleSouscriptionInlineFields
+              contactId={contactId ?? 0}
+              drafts={row.souscriptions}
+              onChange={(souscriptions) => updateAct(row.key, { souscriptions })}
+              disabled={disabled}
             />
           ) : null}
           {contactId && stelliumActUpdatesContract(row.actLabel) ? (

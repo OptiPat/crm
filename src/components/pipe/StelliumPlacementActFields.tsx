@@ -160,8 +160,8 @@ export function StelliumPlacementActFields({
           </p>
         ) : nouvelleSouscription ? (
           <p className="text-[11px] text-muted-foreground leading-snug">
-            Ouvre une affaire rattachée, sans RDV R1 → R3 : vous y ajoutez ensuite une ou
-            plusieurs souscriptions partenaire (produit et montant).
+            Crée automatiquement une affaire pour ce client, sans RDV R1 → R3, avec ses
+            souscriptions partenaire (produit et montant).
           </p>
         ) : affaire ? (
           <p className="text-[11px] text-muted-foreground leading-snug">
