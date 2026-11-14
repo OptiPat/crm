@@ -34,7 +34,13 @@ import { PipeSuiviStelliumActAdd } from "@/components/pipe/PipeSuiviStelliumActA
 import { PipeSuiviSection } from "@/components/pipe/PipeSuiviSection";
 import { PipeSuiviPlacementAvancement } from "@/components/pipe/PipeSuiviPlacementAvancement";
 import { PipeTimelineQuickAdd } from "@/components/pipe/PipeTimelineQuickAdd";
-import { isSuiviPipe, isVersementComplementaireAffaire } from "@/lib/pipe/pipe-suivi";
+import {
+  isNouvelleSouscriptionAffaire,
+  isSuiviChildAffaire,
+  isSuiviPipe,
+} from "@/lib/pipe/pipe-suivi";
+import { PLACEMENT_OPERATIONS_CHANGED_EVENT } from "@/lib/api/tauri-box-placement";
+import { maybeAdvanceNouvelleSouscriptionAffaireToGagnee } from "@/lib/placement/pipe-placement-tracking";
 import { shouldShowR1DocumentChecklist } from "@/lib/pipe/r1-document-checklist";
 import { shouldShowR3DocumentChecklist } from "@/lib/pipe/r3-document-checklist";
 import { shouldShowR3ImmoDocumentChecklist } from "@/lib/pipe/r3-immo-document-checklist";
@@ -161,7 +167,8 @@ export function PipeDetailPanel({
     }
   };
 
-  const isVersementAffaire = isVersementComplementaireAffaire(pipe);
+  /** Affaire enfant de Suivi (versement / nouvelle souscription) : hors cycle R1→R3. */
+  const isVersementAffaire = isSuiviChildAffaire(pipe);
 
   const showStageStepper =
     isPipeType(pipe.pipe_type) &&
@@ -264,6 +271,22 @@ export function PipeDetailPanel({
     if (!focusHistoriqueToken) return;
     setActiveTab("historique");
   }, [focusHistoriqueToken]);
+
+  // Affaire « Nouvelle souscription » : Gagnée aussi après retrait d'une souscription restante
+  // (pas seulement au mail client). setPipeStage notifie le pipe → rechargement de la page.
+  const nouvelleSouscriptionAffaire = isNouvelleSouscriptionAffaire(pipe);
+  useEffect(() => {
+    if (!nouvelleSouscriptionAffaire || pipe.stage === "GAGNEE") return;
+    const evaluate = () => {
+      void maybeAdvanceNouvelleSouscriptionAffaireToGagnee(pipe).catch((err) => {
+        console.error(err);
+      });
+    };
+    evaluate();
+    window.addEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, evaluate);
+    return () => window.removeEventListener(PLACEMENT_OPERATIONS_CHANGED_EVENT, evaluate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- réévaluer par affaire / étape
+  }, [nouvelleSouscriptionAffaire, pipe.id, pipe.stage]);
 
   useEffect(() => {
     if (pipe.contact_id <= 0) {
@@ -531,7 +554,14 @@ export function PipeDetailPanel({
               </div>
             )}
 
-            {isVersementAffaire ? (
+            {isNouvelleSouscriptionAffaire(pipe) ? (
+              <p className="text-xs text-muted-foreground leading-snug">
+                Nouvelle souscription (client existant, sans RDV R1 → R3) : ajoutez une ou plusieurs
+                souscriptions partenaire. L&apos;affaire passe à{" "}
+                <span className="font-medium text-foreground">Gagnée</span> quand toutes sont
+                conformes et le mail client envoyé.
+              </p>
+            ) : isVersementAffaire ? (
               <p className="text-xs text-muted-foreground leading-snug">
                 Versement complémentaire : suivi partenaire et chiffre d&apos;affaires. L&apos;affaire
                 passe à <span className="font-medium text-foreground">Gagnée</span> après le mail
@@ -552,7 +582,18 @@ export function PipeDetailPanel({
               </>
             ) : isVersementAffaire ? (
               <>
-                <PipeSuiviPlacementAvancement pipeId={pipe.id} />
+                {isNouvelleSouscriptionAffaire(pipe) ? (
+                  // Souscriptions d'affaire : titulaire/VP, Modifier, « Créer le placement », lien placement.
+                  <PipeSuiviPlacementAvancement
+                    pipeId={pipe.id}
+                    pipe={pipe}
+                    onOpenContactPatrimoine={(contactId) =>
+                      void openContactWithTab(contactId, "patrimoine")
+                    }
+                  />
+                ) : (
+                  <PipeSuiviPlacementAvancement pipeId={pipe.id} />
+                )}
                 <PipeSuiviQuickAdd
                   timeline={timeline}
                   pipe={pipe}

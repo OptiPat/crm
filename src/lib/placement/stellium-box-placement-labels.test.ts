@@ -84,8 +84,7 @@ describe("stellium-box-placement-labels", () => {
     expect(versementsGroup?.items[0]).toBe("Versement complémentaire");
 
     const scpiSuiviGroups = stelliumSuiviActLabelGroups("Comète");
-    expect(scpiSuiviGroups).toHaveLength(1);
-    expect(scpiSuiviGroups[0]?.id).toBe("scpi");
+    expect(scpiSuiviGroups.map((g) => g.id)).toEqual(["nouvelle-souscription", "scpi"]);
     expect(scpiSuiviGroups.flatMap((g) => g.items)).not.toContain("Versement complémentaire");
     expect(
       isStelliumLabelAllowedForProduct("Versement complémentaire", "Comète", { suivi: true })

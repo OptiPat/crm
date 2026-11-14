@@ -21,7 +21,10 @@ import {
   toVpMiseEnPlacePdfFillInput,
   type VpMiseEnPlaceActValue,
 } from "@/lib/pdf/arbitrage-fiche-conseil/vp-mise-en-place-types";
-import { isVersementComplementaireActLabel } from "@/lib/pipe/pipe-suivi";
+import {
+  isSuiviChildAffaireActLabel,
+  isVersementComplementaireActLabel,
+} from "@/lib/pipe/pipe-suivi";
 
 export interface SuiviStelliumActRow {
   key: string;
@@ -99,7 +102,7 @@ export function SuiviStelliumActsForm({
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-medium text-muted-foreground">
               Acte {index + 1}
-              {isVersementComplementaireActLabel(row.actLabel) ? " — affaire enfant" : ""}
+              {isSuiviChildAffaireActLabel(row.actLabel) ? " — affaire enfant" : ""}
             </p>
             {acts.length > 1 ? (
               <Button

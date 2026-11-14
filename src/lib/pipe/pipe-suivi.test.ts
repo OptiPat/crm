@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildNouvelleSouscriptionAffaireTitre,
   buildVersementAffaireTitre,
   defaultVersementComplementaireAffaireStage,
+  formatSuiviChildAffaireStageLabel,
   formatSuiviRdvDisplayLabel,
   formatVersementComplementaireAffaireStageLabel,
+  isNouvelleSouscriptionAffaire,
+  isSuiviChildAffaire,
+  isSuiviChildAffaireActLabel,
   isSuiviPipe,
   isSuiviRdvEntry,
   isVersementComplementaireAffaire,
+  NOUVELLE_SOUSCRIPTION_ACT_LABEL,
+  NOUVELLE_SOUSCRIPTION_AFFAIRE_STAGE_LABEL,
   SUIVI_RDV_TITRE,
   VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
   VERSEMENT_COMPLEMENTAIRE_AFFAIRE_STAGE_LABEL,
@@ -80,5 +87,46 @@ describe("pipe-suivi", () => {
     expect(formatVersementComplementaireAffaireStageLabel({ ...pipe, stage: "GAGNEE" })).toBe(
       "Gagnée"
     );
+  });
+});
+
+describe("pipe-suivi — nouvelle souscription", () => {
+  const child = {
+    pipe_type: "AFFAIRE" as const,
+    parent_pipe_id: 12,
+    titre: `${NOUVELLE_SOUSCRIPTION_ACT_LABEL} — Jean DUPONT`,
+    stage: "PROSPECTION",
+  };
+
+  it("titre l'affaire enfant avec le contact", () => {
+    expect(
+      buildNouvelleSouscriptionAffaireTitre({
+        contact_prenom: "Jean",
+        contact_nom: "DUPONT",
+        titre: "DUPONT Jean — suivi mai 2026",
+      })
+    ).toBe("Nouvelle souscription — Jean DUPONT");
+  });
+
+  it("reconnait l'affaire enfant, hors cycle R1→R3", () => {
+    expect(isNouvelleSouscriptionAffaire(child)).toBe(true);
+    expect(isSuiviChildAffaire(child)).toBe(true);
+    expect(isVersementComplementaireAffaire(child)).toBe(false);
+    expect(isNouvelleSouscriptionAffaire({ ...child, parent_pipe_id: null })).toBe(false);
+    expect(isSuiviChildAffaire({ ...child, titre: "SCPI Corum 50 k€" })).toBe(false);
+  });
+
+  it("badge souscription en cours puis Gagnée", () => {
+    expect(formatSuiviChildAffaireStageLabel(child)).toBe(NOUVELLE_SOUSCRIPTION_AFFAIRE_STAGE_LABEL);
+    expect(formatSuiviChildAffaireStageLabel({ ...child, stage: "GAGNEE" })).toBe("Gagnée");
+    expect(
+      formatSuiviChildAffaireStageLabel({ ...child, titre: "Versement complémentaire — Jean DUPONT" })
+    ).toBe(VERSEMENT_COMPLEMENTAIRE_AFFAIRE_STAGE_LABEL);
+  });
+
+  it("acte Suivi ouvrant une affaire enfant", () => {
+    expect(isSuiviChildAffaireActLabel(NOUVELLE_SOUSCRIPTION_ACT_LABEL)).toBe(true);
+    expect(isSuiviChildAffaireActLabel(VERSEMENT_COMPLEMENTAIRE_ACT_LABEL)).toBe(true);
+    expect(isSuiviChildAffaireActLabel("Arbitrage")).toBe(false);
   });
 });

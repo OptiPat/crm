@@ -1,7 +1,9 @@
 import type { PlacementOperation, PlacementOperationType } from "@/lib/api/tauri-box-placement";
 import { stelliumProductFamilyIdForProduct } from "@/lib/placement/stellium-box-placement-products";
 import {
+  isNouvelleSouscriptionActLabel,
   isVersementComplementaireActLabel,
+  NOUVELLE_SOUSCRIPTION_ACT_LABEL,
   VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
 } from "@/lib/pipe/pipe-suivi";
 
@@ -317,6 +319,15 @@ function injectSuiviVersementComplementaire(
   ];
 }
 
+export const SUIVI_NOUVELLE_SOUSCRIPTION_GROUP_ID = "nouvelle-souscription";
+
+/** Suivi : nouveau produit (tout produit, y compris SCPI) — ouvre une affaire enfant. */
+const SUIVI_NOUVELLE_SOUSCRIPTION_GROUP: StelliumBoxPlacementLabelGroup = {
+  id: SUIVI_NOUVELLE_SOUSCRIPTION_GROUP_ID,
+  label: "Nouveau produit",
+  items: [NOUVELLE_SOUSCRIPTION_ACT_LABEL],
+};
+
 /** Actes proposés selon la famille du produit (SCPI vs assurance-vie / PER / capi). */
 export function stelliumLabelGroupsForProduct(
   product: string,
@@ -330,7 +341,7 @@ export function stelliumLabelGroupsForProduct(
         ? STELLIUM_BOX_PLACEMENT_LABEL_GROUPS.filter((group) => group.id === "scpi")
         : STELLIUM_BOX_PLACEMENT_LABEL_GROUPS.filter((group) => group.id !== "scpi");
   if (!options?.suivi) return base;
-  return injectSuiviVersementComplementaire(base, product);
+  return [SUIVI_NOUVELLE_SOUSCRIPTION_GROUP, ...injectSuiviVersementComplementaire(base, product)];
 }
 
 export function stelliumSuiviActLabelGroups(
@@ -397,6 +408,7 @@ export function isStelliumLabelAllowedForProduct(
   options?: { suivi?: boolean; affaire?: boolean }
 ): boolean {
   if (options?.affaire) return isStelliumLabelAllowedForAffaire(label);
+  if (options?.suivi && isNouvelleSouscriptionActLabel(label)) return true;
   if (options?.suivi && isVersementComplementaireActLabel(label)) {
     return isSuiviVersementComplementaireAllowedForProduct(product);
   }

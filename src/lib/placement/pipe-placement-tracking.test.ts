@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import {
+  maybeAdvanceNouvelleSouscriptionAffaireToGagnee,
   maybeAdvanceVersementAffaireToGagneeAfterClientMail,
   shouldTrackVersementAffaireOnPipeCreate,
   trackVersementAffaireOnPipeCreate,
@@ -15,11 +16,16 @@ vi.mock("@/lib/api/tauri-pipe", () => ({
 vi.mock("@/lib/api/tauri-box-placement", () => ({
   createPlacementOperation: vi.fn(),
   getPlacementOperation: vi.fn(),
+  listPlacementOperationsForPipe: vi.fn(),
   notifyPlacementOperationsChanged: vi.fn(),
 }));
 
 import { getPipeById, setPipeStage } from "@/lib/api/tauri-pipe";
-import { createPlacementOperation, getPlacementOperation } from "@/lib/api/tauri-box-placement";
+import {
+  createPlacementOperation,
+  getPlacementOperation,
+  listPlacementOperationsForPipe,
+} from "@/lib/api/tauri-box-placement";
 
 const versementChild: PipeRecord = {
   id: 10,
@@ -175,6 +181,88 @@ describe("maybeAdvanceVersementAffaireToGagneeAfterClientMail", () => {
       status: "CONFORME",
     });
 
+    expect(setPipeStage).not.toHaveBeenCalled();
+  });
+});
+
+describe("maybeAdvanceVersementAffaireToGagneeAfterClientMail — nouvelle souscription", () => {
+  const souscriptionChild: PipeRecord = {
+    ...versementChild,
+    id: 11,
+    titre: "Nouvelle souscription — DUPONT Jean",
+  };
+  const op = (id: number, patch: Record<string, unknown> = {}) => ({
+    id,
+    contact_id: 1,
+    pipe_id: 11,
+    pipe_timeline_entry_id: null,
+    operation_type: "SOUSCRIPTION",
+    product_label: "Corum Origin",
+    stellium_label: "Souscription",
+    status: "CONFORME",
+    gmail_message_id: null,
+    email_subject: null,
+    email_received_at: 100,
+    created_at: 1,
+    updated_at: 1,
+    client_notified_at: 200,
+    ...patch,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getPipeById).mockResolvedValue(souscriptionChild);
+    vi.mocked(getPlacementOperation).mockResolvedValue(op(1) as never);
+  });
+
+  it("reste en cours tant qu'une autre souscription n'est pas notifiée", async () => {
+    vi.mocked(listPlacementOperationsForPipe).mockResolvedValue([
+      op(1),
+      op(2, { status: "PENDING", client_notified_at: null }),
+    ] as never);
+    await maybeAdvanceVersementAffaireToGagneeAfterClientMail({ id: 1, pipe_id: 11, status: "CONFORME" });
+    expect(setPipeStage).not.toHaveBeenCalled();
+  });
+
+  it("passe en Gagnée quand toutes les souscriptions actives sont notifiées", async () => {
+    vi.mocked(listPlacementOperationsForPipe).mockResolvedValue([
+      op(1),
+      op(2),
+      op(3, { status: "PENDING", client_notified_at: null, dismissed_at: 50 }),
+    ] as never);
+    await maybeAdvanceVersementAffaireToGagneeAfterClientMail({ id: 1, pipe_id: 11, status: "CONFORME" });
+    expect(setPipeStage).toHaveBeenCalledWith(11, "GAGNEE");
+  });
+});
+
+describe("maybeAdvanceNouvelleSouscriptionAffaireToGagnee", () => {
+  const child = {
+    id: 11,
+    pipe_type: "AFFAIRE",
+    parent_pipe_id: 5,
+    titre: "Nouvelle souscription — DUPONT Jean",
+    stage: "PROSPECTION",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("passe en Gagnée après retrait de la dernière souscription non notifiée", async () => {
+    vi.mocked(listPlacementOperationsForPipe).mockResolvedValue([
+      { id: 1, status: "CONFORME", client_notified_at: 200 },
+      { id: 2, status: "PENDING", client_notified_at: null, dismissed_at: 300 },
+    ] as never);
+    await expect(maybeAdvanceNouvelleSouscriptionAffaireToGagnee(child)).resolves.toBe(true);
+    expect(setPipeStage).toHaveBeenCalledWith(11, "GAGNEE");
+  });
+
+  it("ignore une affaire sans souscription ou hors nouvelle souscription", async () => {
+    vi.mocked(listPlacementOperationsForPipe).mockResolvedValue([] as never);
+    await expect(maybeAdvanceNouvelleSouscriptionAffaireToGagnee(child)).resolves.toBe(false);
+    await expect(
+      maybeAdvanceNouvelleSouscriptionAffaireToGagnee({ ...child, titre: "SCPI Corum" })
+    ).resolves.toBe(false);
     expect(setPipeStage).not.toHaveBeenCalled();
   });
 });

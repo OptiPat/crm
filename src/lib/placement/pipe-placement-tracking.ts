@@ -1,6 +1,7 @@
 import {
   createPlacementOperation,
   getPlacementOperation,
+  listPlacementOperationsForPipe,
   notifyPlacementOperationsChanged,
   type PlacementOperation,
   type PlacementOperationType,
@@ -12,6 +13,7 @@ import {
   placementOperationTypeForPartenaireJournal,
 } from "@/lib/placement/pipe-placement-partenaire-types";
 import {
+  isNouvelleSouscriptionAffaire,
   isVersementComplementaireAffaire,
   VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
 } from "@/lib/pipe/pipe-suivi";
@@ -82,17 +84,48 @@ export async function trackVersementAffaireOnPipeCreate(
   return true;
 }
 
-/** Affaire versement : Gagnée uniquement après mail client (étape 6). */
+function isPlacementConformeAndClientNotified(
+  op: Pick<PlacementOperation, "status" | "client_notified_at">
+): boolean {
+  return op.status === "CONFORME" && op.client_notified_at != null && op.client_notified_at > 0;
+}
+
+/**
+ * Affaire enfant de Suivi : Gagnée uniquement après mail client (étape 6).
+ * - versement complémentaire : dès que le versement est notifié ;
+ * - nouvelle souscription : quand toutes les souscriptions actives de l'affaire le sont.
+ */
 export async function maybeAdvanceVersementAffaireToGagneeAfterClientMail(
   operation: Pick<PlacementOperation, "id" | "pipe_id" | "status">
 ): Promise<void> {
   if (!operation.pipe_id || operation.pipe_id <= 0) return;
   if (operation.status !== "CONFORME") return;
   const op = await getPlacementOperation(operation.id);
-  if (!op.client_notified_at || op.client_notified_at <= 0) return;
+  if (!isPlacementConformeAndClientNotified(op)) return;
   const pipe = await getPipeById(operation.pipe_id);
-  if (!isVersementComplementaireAffaire(pipe) || pipe.stage === "GAGNEE") return;
-  await setPipeStage(operation.pipe_id, "GAGNEE");
+  if (pipe.stage === "GAGNEE") return;
+  if (isVersementComplementaireAffaire(pipe)) {
+    await setPipeStage(operation.pipe_id, "GAGNEE");
+    return;
+  }
+  await maybeAdvanceNouvelleSouscriptionAffaireToGagnee(pipe);
+}
+
+/**
+ * Affaire « Nouvelle souscription » : Gagnée quand toutes les souscriptions actives (hors retirées /
+ * archivées) sont conformes et notifiées au client. Réévaluée aussi après un retrait d'acte.
+ * Renvoie `true` si l'affaire vient de passer en Gagnée.
+ */
+export async function maybeAdvanceNouvelleSouscriptionAffaireToGagnee(
+  pipe: Pick<PipeRecord, "id" | "pipe_type" | "parent_pipe_id" | "titre" | "stage">
+): Promise<boolean> {
+  if (pipe.stage === "GAGNEE" || !isNouvelleSouscriptionAffaire(pipe)) return false;
+  const active = (await listPlacementOperationsForPipe(pipe.id)).filter(
+    (row) => !row.dismissed_at && !row.archived_at
+  );
+  if (active.length === 0 || !active.every(isPlacementConformeAndClientNotified)) return false;
+  await setPipeStage(pipe.id, "GAGNEE");
+  return true;
 }
 
 export async function journalAffairePartenairePlacement(options: {

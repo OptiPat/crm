@@ -23,10 +23,17 @@ import {
 import { formatStelliumProductForDisplay } from "@/lib/placement/stellium-box-placement-products";
 import { placementOperationIsSuiviDraft } from "@/lib/placement/suivi-placement-draft";
 import {
+  createNouvelleSouscriptionAffaireFromSuivi,
   createVersementAffaireFromSuivi,
   validateSuiviStelliumActInput,
 } from "@/lib/placement/suivi-stellium-acts";
-import { isVersementComplementaireActLabel, isVersementComplementaireAffaire, VERSEMENT_COMPLEMENTAIRE_ACT_LABEL } from "@/lib/pipe/pipe-suivi";
+import {
+  isNouvelleSouscriptionActLabel,
+  isSuiviChildAffaireActLabel,
+  isVersementComplementaireActLabel,
+  isVersementComplementaireAffaire,
+  VERSEMENT_COMPLEMENTAIRE_ACT_LABEL,
+} from "@/lib/pipe/pipe-suivi";
 import { StelliumPlacementActFields } from "@/components/pipe/StelliumPlacementActFields";
 import { PlacementMontantField } from "@/components/pipe/PlacementMontantField";
 import { toast } from "sonner";
@@ -100,6 +107,8 @@ interface PipeSuiviStelliumActAddProps {
   >;
   onAdded?: () => void;
   variant?: PipeStelliumActAddVariant;
+  /** Suivi : affaire enfant créée (nouvelle souscription) — l'ouvrir pour saisir les souscriptions. */
+  onChildAffaireCreated?: (affaire: PipeRecord) => void;
 }
 
 const VARIANT_COPY: Record<
@@ -142,6 +151,7 @@ export function PipeSuiviStelliumActAdd({
   pipe,
   onAdded,
   variant = "suivi",
+  onChildAffaireCreated,
 }: PipeSuiviStelliumActAddProps) {
   const copy = VARIANT_COPY[variant];
   const isVersementChild = variant === "affaire" && isVersementComplementaireAffaire(pipe);
@@ -188,6 +198,8 @@ export function PipeSuiviStelliumActAdd({
     stelliumLabel,
     pipeType: pipe.pipe_type,
   });
+  const newActIsNouvelleSouscription =
+    variant === "suivi" && isNouvelleSouscriptionActLabel(stelliumLabel);
   const newActIsVpModification = isVpModificationStelliumAct(stelliumLabel);
   const newActIsVpMiseEnPlace = isVpMiseEnPlaceStelliumAct(stelliumLabel);
 
@@ -409,6 +421,36 @@ export function PipeSuiviStelliumActAdd({
     const label = stelliumLabel.trim();
     const product = productLabel.trim();
     if (!label || pipe.contact_id <= 0) return;
+
+    if (variant === "suivi" && isNouvelleSouscriptionActLabel(label)) {
+      setSavingId("new");
+      try {
+        // Affaire d'abord : pas de note orpheline dans le Suivi si la création échoue.
+        const affaire = await createNouvelleSouscriptionAffaireFromSuivi(pipe);
+        await timeline
+          .addEntry({
+            entry_type: "NOTE",
+            titre: label,
+            contenu: null,
+            occurred_at: datetimeLocalToUnix(unixToDatetimeLocalInput()),
+          })
+          .catch((err) => console.error(err));
+        toast.success("Affaire souscription créée — ajoutez-y les souscriptions partenaire");
+        setOpenNew(false);
+        setStelliumLabel("");
+        setProductLabel("");
+        setMontantEuros("");
+        newActCloseGuard.resetDirty();
+        onAdded?.();
+        onChildAffaireCreated?.(affaire);
+      } catch (err) {
+        console.error(err);
+        toast.error(userErrorMessage(err, "Impossible de créer l'affaire souscription"));
+      } finally {
+        setSavingId(null);
+      }
+      return;
+    }
 
     const validationError =
       variant === "suivi"
@@ -769,10 +811,16 @@ export function PipeSuiviStelliumActAdd({
                       ? !productLabel || !parseMontantEurosToCentimes(montantEuros)
                       : variant === "affaire"
                         ? !productLabel
-                        : !isVersementComplementaireActLabel(stelliumLabel) && !productLabel)
+                        : !isSuiviChildAffaireActLabel(stelliumLabel) && !productLabel)
                   }
                 >
-                  {savingId === "new" ? "Enregistrement…" : showVersementInit ? "Activer le suivi" : "Ajouter l'acte"}
+                  {savingId === "new"
+                    ? "Enregistrement…"
+                    : showVersementInit
+                      ? "Activer le suivi"
+                      : newActIsNouvelleSouscription
+                        ? "Créer l'affaire souscription"
+                        : "Ajouter l'acte"}
                 </Button>
               </div>
             </form>

@@ -28,7 +28,12 @@ export function PipeSuiviSection({
         onAdded={onJournalAdded}
       />
 
-      <PipeSuiviStelliumActAdd timeline={timeline} pipe={pipe} onAdded={onJournalAdded} />
+      <PipeSuiviStelliumActAdd
+        timeline={timeline}
+        pipe={pipe}
+        onAdded={onJournalAdded}
+        onChildAffaireCreated={onOpenChildAffaire}
+      />
 
       {childAffaires.length > 0 && (
         <div className="space-y-2">

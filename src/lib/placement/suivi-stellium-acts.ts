@@ -20,8 +20,10 @@ import {
 } from "@/lib/pdf/arbitrage-fiche-conseil/vp-modification-types";
 import { parseMontantEurosToCentimes } from "@/lib/pipe/placement-montant";
 import {
+  buildNouvelleSouscriptionAffaireTitre,
   buildVersementAffaireTitre,
   defaultVersementComplementaireAffaireStage,
+  isNouvelleSouscriptionActLabel,
   isVersementComplementaireActLabel,
 } from "@/lib/pipe/pipe-suivi";
 
@@ -66,6 +68,8 @@ export function validateSuiviStelliumActInput(
 ): string | null {
   const actLabel = act.actLabel.trim();
   if (!actLabel) return "Acte Stellium requis.";
+  // Produit(s) et montants se saisissent ensuite sur l'affaire enfant (une ou plusieurs souscriptions).
+  if (isNouvelleSouscriptionActLabel(actLabel)) return null;
   if (isVersementComplementaireActLabel(actLabel)) {
     if (act.productLabel.trim() && !isStelliumLabelAllowedForProduct(actLabel, act.productLabel, { suivi: true })) {
       return "Versement complémentaire non applicable aux SCPI.";
@@ -115,6 +119,21 @@ export async function createVersementAffaireFromSuivi(
   return child;
 }
 
+/** Affaire enfant « Nouvelle souscription » : hors R1→R3, souscriptions partenaire ajoutées ensuite. */
+export async function createNouvelleSouscriptionAffaireFromSuivi(
+  suivi: SuiviVersementAffaireSource
+): Promise<PipeRecord> {
+  return createPipe({
+    contact_id: suivi.contact_id,
+    secondary_contact_id: suivi.secondary_contact_id ?? null,
+    pipe_type: "AFFAIRE",
+    parent_pipe_id: suivi.id,
+    titre: buildNouvelleSouscriptionAffaireTitre(suivi),
+    stage: defaultVersementComplementaireAffaireStage(),
+    notes: null,
+  });
+}
+
 export async function applySuiviStelliumActsAfterPipeCreate(
   suivi: PipeRecord,
   acts: SuiviStelliumActInput[]
@@ -123,6 +142,11 @@ export async function applySuiviStelliumActsAfterPipeCreate(
   for (const act of acts) {
     const actLabel = act.actLabel.trim();
     if (!actLabel) continue;
+
+    if (isNouvelleSouscriptionActLabel(actLabel)) {
+      versementAffaires.push(await createNouvelleSouscriptionAffaireFromSuivi(suivi));
+      continue;
+    }
 
     if (isVersementComplementaireActLabel(actLabel)) {
       versementAffaires.push(

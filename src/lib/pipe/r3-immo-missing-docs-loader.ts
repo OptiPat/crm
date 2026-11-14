@@ -4,7 +4,7 @@ import { getPipeR1DocumentChecklist } from "@/lib/api/tauri-pipe-r1-checklist";
 import { getPipeR3ImmoDocumentChecklist } from "@/lib/api/tauri-pipe-r3-immo-checklist";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import { listPipeTimelineEntries } from "@/lib/api/tauri-pipe-timeline";
-import { isVersementComplementaireAffaire } from "@/lib/pipe/pipe-suivi";
+import { isSuiviChildAffaire } from "@/lib/pipe/pipe-suivi";
 import { loadR3ImmoChecklistTemplate } from "@/lib/pipe/r3-immo-checklist-template";
 import {
   buildR3ImmoChecklistContext,
@@ -38,7 +38,7 @@ export async function computeR3ImmoMissingLabelsForPipe(
   pipe: PipeRecord
 ): Promise<string[] | null> {
   if (pipe.pipe_type !== "AFFAIRE" || pipe.contact_id <= 0) return null;
-  if (isVersementComplementaireAffaire(pipe)) return null;
+  if (isSuiviChildAffaire(pipe)) return null;
 
   const entries = await listPipeTimelineEntries(pipe.id);
   if (!shouldShowR3ImmoDocumentChecklist(entries)) return null;
@@ -73,7 +73,7 @@ export async function reloadR3ImmoMissingDocsForPipes(
   pipes: readonly PipeRecord[]
 ): Promise<Record<number, string[]>> {
   const affaires = pipes.filter(
-    (pipe) => pipe.pipe_type === "AFFAIRE" && !isVersementComplementaireAffaire(pipe)
+    (pipe) => pipe.pipe_type === "AFFAIRE" && !isSuiviChildAffaire(pipe)
   );
 
   const rows = await Promise.all(

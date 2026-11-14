@@ -262,6 +262,8 @@ fn default_pipe_r1_document_checklist(pipe_id: i64) -> PipeR1DocumentChecklist {
 }
 
 const VERSEMENT_COMPLEMENTAIRE_ACT_LABEL: &str = "Versement complémentaire";
+/// Affaire enfant de Suivi « Nouvelle souscription » (client existant, hors R1→R3).
+const NOUVELLE_SOUSCRIPTION_ACT_LABEL: &str = "Nouvelle souscription";
 
 fn is_versement_complementaire_affaire(
     pipe_type: &str,
@@ -275,8 +277,9 @@ fn is_versement_complementaire_affaire(
         return false;
     }
     let titre = titre.trim();
-    titre == VERSEMENT_COMPLEMENTAIRE_ACT_LABEL
-        || titre.starts_with(&format!("{VERSEMENT_COMPLEMENTAIRE_ACT_LABEL} —"))
+    [VERSEMENT_COMPLEMENTAIRE_ACT_LABEL, NOUVELLE_SOUSCRIPTION_ACT_LABEL]
+        .iter()
+        .any(|label| titre == *label || titre.starts_with(&format!("{label} —")))
 }
 
 fn map_timeline_entry_row(row: &Row<'_>) -> Result<PipeTimelineEntry> {

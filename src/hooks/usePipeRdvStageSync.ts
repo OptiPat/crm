@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
-import { isVersementComplementaireAffaire } from "@/lib/pipe/pipe-suivi";
+import { isSuiviChildAffaire } from "@/lib/pipe/pipe-suivi";
 import { applyDueRdvStageAdvance } from "@/lib/pipe/pipe-rdv-stage";
 
 /** Applique le rang commercial dès qu'un RDV R1/R2/R3 est enregistré (même futur). */
@@ -13,7 +13,7 @@ export function usePipeRdvStageSync(
   const lastAppliedKey = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!pipe || loading || pipe.pipe_type !== "AFFAIRE" || isVersementComplementaireAffaire(pipe)) {
+    if (!pipe || loading || pipe.pipe_type !== "AFFAIRE" || isSuiviChildAffaire(pipe)) {
       return;
     }
 

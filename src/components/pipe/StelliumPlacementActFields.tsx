@@ -18,7 +18,10 @@ import {
   stelliumLabelGroupsForProduct,
 } from "@/lib/placement/stellium-box-placement-labels";
 import { STELLIUM_BOX_PLACEMENT_PRODUCT_GROUPS } from "@/lib/placement/stellium-box-placement-products";
-import { isVersementComplementaireActLabel } from "@/lib/pipe/pipe-suivi";
+import {
+  isNouvelleSouscriptionActLabel,
+  isVersementComplementaireActLabel,
+} from "@/lib/pipe/pipe-suivi";
 
 /** Espacement homogène dans les listes groupées (produit + acte Stellium). */
 const STELLIUM_SELECT_GROUP_LABEL =
@@ -75,6 +78,7 @@ export function StelliumPlacementActFields({
   versementInit = false,
 }: StelliumPlacementActFieldsProps) {
   const versementComplementaire = isVersementComplementaireActLabel(stelliumLabel);
+  const nouvelleSouscription = suivi && isNouvelleSouscriptionActLabel(stelliumLabel);
   const labelGroups = useMemo(() => {
     if (suivi) return stelliumSuiviActLabelGroups(productLabel);
     if (affaire) return stelliumAffaireActLabelGroups();
@@ -101,6 +105,7 @@ export function StelliumPlacementActFields({
 
   return (
     <>
+      {nouvelleSouscription ? null : (
       <div className="space-y-2">
         <Label>
           Produit / contrat Stellium
@@ -121,6 +126,7 @@ export function StelliumPlacementActFields({
           </SelectContent>
         </Select>
       </div>
+      )}
       {versementInit ? (
         <p className="text-[11px] text-muted-foreground leading-snug">
           Acte : {stelliumLabel || "Versement complémentaire"}
@@ -151,6 +157,11 @@ export function StelliumPlacementActFields({
         {suivi && versementComplementaire ? (
           <p className="text-[11px] text-muted-foreground leading-snug">
             Ouvre une affaire rattachée avec suivi Stellium versement à la création.
+          </p>
+        ) : nouvelleSouscription ? (
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            Ouvre une affaire rattachée, sans RDV R1 → R3 : vous y ajoutez ensuite une ou
+            plusieurs souscriptions partenaire (produit et montant).
           </p>
         ) : affaire ? (
           <p className="text-[11px] text-muted-foreground leading-snug">

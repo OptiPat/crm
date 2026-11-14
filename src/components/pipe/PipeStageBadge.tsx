@@ -10,7 +10,7 @@ import {
   getPipeStageBadgeClasses,
 } from "@/lib/pipe/pipe-stage-colors";
 import {
-  formatVersementComplementaireAffaireStageLabel,
+  formatSuiviChildAffaireStageLabel,
   versementComplementaireAffaireStageBadgeClasses,
 } from "@/lib/pipe/pipe-suivi";
 import { isPipeStage, PIPE_STAGE_LABELS } from "@/lib/pipe/pipe-types";
@@ -25,7 +25,7 @@ export function PipeStageBadge({
   pipe?: Pick<PipeRecord, "pipe_type" | "parent_pipe_id" | "titre" | "stage">;
   timelineEntries?: PipeTimelineEntryRecord[];
 }) {
-  const versementLabel = pipe ? formatVersementComplementaireAffaireStageLabel(pipe) : null;
+  const versementLabel = pipe ? formatSuiviChildAffaireStageLabel(pipe) : null;
   if (versementLabel && pipe) {
     return (
       <Badge

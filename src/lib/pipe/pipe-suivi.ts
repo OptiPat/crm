@@ -44,6 +44,56 @@ export function defaultVersementComplementaireAffaireStage(): PipeStage {
   return "PROSPECTION";
 }
 
+/**
+ * Option UI Suivi : nouveau produit pour un client existant (pas un libellé mail Stellium).
+ * Ouvre une affaire enfant sans cycle R1→R3 ; les souscriptions partenaire s'y ajoutent.
+ */
+export const NOUVELLE_SOUSCRIPTION_ACT_LABEL = "Nouvelle souscription";
+
+export function isNouvelleSouscriptionActLabel(label: string): boolean {
+  return label.trim() === NOUVELLE_SOUSCRIPTION_ACT_LABEL;
+}
+
+/** Acte Suivi qui ouvre une affaire enfant (versement complémentaire ou nouvelle souscription). */
+export function isSuiviChildAffaireActLabel(label: string): boolean {
+  return isVersementComplementaireActLabel(label) || isNouvelleSouscriptionActLabel(label);
+}
+
+/** Affaire enfant d'un Suivi ouverte via « Nouvelle souscription » (client existant, sans R1→R3). */
+export function isNouvelleSouscriptionAffaire(
+  pipe: Pick<PipeRecord, "pipe_type" | "parent_pipe_id" | "titre">
+): boolean {
+  if (pipe.pipe_type !== "AFFAIRE") return false;
+  if (pipe.parent_pipe_id == null || pipe.parent_pipe_id <= 0) return false;
+  const titre = pipe.titre.trim();
+  return (
+    titre === NOUVELLE_SOUSCRIPTION_ACT_LABEL ||
+    titre.startsWith(`${NOUVELLE_SOUSCRIPTION_ACT_LABEL} —`)
+  );
+}
+
+/** Affaire enfant d'un Suivi, hors cycle commercial R1→R3 (versement ou nouvelle souscription). */
+export function isSuiviChildAffaire(
+  pipe: Pick<PipeRecord, "pipe_type" | "parent_pipe_id" | "titre">
+): boolean {
+  return isVersementComplementaireAffaire(pipe) || isNouvelleSouscriptionAffaire(pipe);
+}
+
+/** Libellé badge tant que l'affaire nouvelle souscription n'est pas « Gagnée ». */
+export const NOUVELLE_SOUSCRIPTION_AFFAIRE_STAGE_LABEL = "Souscription en cours";
+
+/** Libellé badge d'une affaire enfant de Suivi (versement ou souscription), sinon `null`. */
+export function formatSuiviChildAffaireStageLabel(
+  pipe: Pick<PipeRecord, "pipe_type" | "parent_pipe_id" | "titre" | "stage">
+): string | null {
+  if (isNouvelleSouscriptionAffaire(pipe)) {
+    return pipe.stage === "GAGNEE"
+      ? PIPE_STAGE_LABELS.GAGNEE
+      : NOUVELLE_SOUSCRIPTION_AFFAIRE_STAGE_LABEL;
+  }
+  return formatVersementComplementaireAffaireStageLabel(pipe);
+}
+
 /** Libellé badge tant que l'affaire versement n'est pas « Gagnée » (mail client). */
 export const VERSEMENT_COMPLEMENTAIRE_AFFAIRE_STAGE_LABEL = "Versement en cours";
 
@@ -118,6 +168,15 @@ export function buildVersementAffaireTitre(
   return contact !== "Contact"
     ? `Versement complémentaire — ${contact}`
     : "Versement complémentaire";
+}
+
+export function buildNouvelleSouscriptionAffaireTitre(
+  suivi: Pick<PipeRecord, "contact_prenom" | "contact_nom" | "titre">
+): string {
+  const contact = formatPipeContactLabel(suivi);
+  return contact !== "Contact"
+    ? `${NOUVELLE_SOUSCRIPTION_ACT_LABEL} — ${contact}`
+    : NOUVELLE_SOUSCRIPTION_ACT_LABEL;
 }
 
 export function suiviTimelineTypeLabel(type: SuiviTimelineType): string {
