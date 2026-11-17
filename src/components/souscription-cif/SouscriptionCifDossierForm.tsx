@@ -341,7 +341,7 @@ export function SouscriptionCifDossierForm({
               {productType === "scpi"
                 ? "Conseil, préconisations et fiches produits (catalogue)."
                 : productType === "capital-investissement"
-                  ? "Conseil, souscriptions FCPI/FIP, taux EMT (DICI), préconisations, quote-part CIF et fiches produit."
+                  ? "Conseil, souscriptions FCPI JEI / FIP Outre-Mer, taux EMT (DIC), préconisations, quote-part CIF et fiches produit."
                   : productType === "g3f"
                     ? "Conseil, rendement Girardin et champs spécifiques au dispositif."
                     : "Conseil et champs annexes."}

@@ -114,16 +114,22 @@ export function ScpiLmBodyContent({
           />
         )}
 
-      {page.bodySegmentsBeforeCapitalInvestFiscaliteTable &&
-        page.bodySegmentsBeforeCapitalInvestFiscaliteTable.length > 0 && (
-          <CifProse
-            className={cn("mt-[3mm]", cifDocumentBodyProseClass)}
-            segments={page.bodySegmentsBeforeCapitalInvestFiscaliteTable}
-            onMissingVariableClick={onMissingVariableClick}
-          />
-        )}
+      {/* Intro « Investissement soumis : » + tableau : gardés ensemble à la pagination. */}
+      {(page.showCapitalInvestFiscaliteTable ||
+        (page.bodySegmentsBeforeCapitalInvestFiscaliteTable?.length ?? 0) > 0) && (
+        <div className="cif-capital-invest-fiscalite-block">
+          {page.bodySegmentsBeforeCapitalInvestFiscaliteTable &&
+            page.bodySegmentsBeforeCapitalInvestFiscaliteTable.length > 0 && (
+              <CifProse
+                className={cn("mt-[3mm]", cifDocumentBodyProseClass)}
+                segments={page.bodySegmentsBeforeCapitalInvestFiscaliteTable}
+                onMissingVariableClick={onMissingVariableClick}
+              />
+            )}
 
-      {page.showCapitalInvestFiscaliteTable && <CapitalInvestFiscaliteTable />}
+          {page.showCapitalInvestFiscaliteTable && <CapitalInvestFiscaliteTable />}
+        </div>
+      )}
 
       {page.bodySegmentsAfterCapitalInvestFiscaliteTable &&
         page.bodySegmentsAfterCapitalInvestFiscaliteTable.length > 0 && (

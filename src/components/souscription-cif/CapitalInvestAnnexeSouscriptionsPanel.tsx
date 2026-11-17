@@ -16,6 +16,7 @@ import {
   computeCapitalInvestMontantSouscrit,
   computeCapitalInvestTotalVerse,
   DEFAULT_CAPITAL_INVEST_DROIT_ENTREE_PCT,
+  isCapitalInvestTypeCoveredByAnnexe,
   type CapitalInvestAnnexeSouscription,
   type CapitalInvestAnnexeType,
 } from "@/lib/souscription-cif/capital-invest-annexe-souscriptions";
@@ -40,14 +41,14 @@ export function CapitalInvestAnnexeSouscriptionsPanel({
   return (
     <div id="cif-capital-invest-souscriptions" className="space-y-2 scroll-mt-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Label>Souscriptions (FCPI, FIP, FCPR…)</Label>
+        <Label>Souscriptions (FCPI JEI, FIP Outre-Mer…)</Label>
         <Button type="button" variant="outline" size="sm" onClick={onAdd}>
           <Plus className="mr-1 h-3.5 w-3.5" />
           Ajouter une souscription
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        Une ligne par fonds — vous pouvez combiner plusieurs types (ex. un FCPI et un FIP). Saisir le
+        Une ligne par fonds — vous pouvez combiner plusieurs types (ex. un FCPI JEI et un FIP Outre-Mer). Saisir le
         nombre de parts et le prix de part ; le montant souscrit est calculé (parts × prix). Droit
         d&apos;entrée par défaut : {DEFAULT_CAPITAL_INVEST_DROIT_ENTREE_PCT} %, en sus du montant
         souscrit. Les taux EMT (07110 / 07130 / 07140) se reprennent du fichier EMT — distincts du
@@ -111,6 +112,12 @@ export function CapitalInvestAnnexeSouscriptionsPanel({
                         ))}
                       </SelectContent>
                     </Select>
+                    {!isCapitalInvestTypeCoveredByAnnexe(row.type) && (
+                      <p className="text-xs text-amber-700 dark:text-amber-400" role="alert">
+                        L&apos;annexe ne décrit que le FCPI JEI et le FIP Outre-Mer (seuls fonds
+                        ouvrant droit à réduction d&apos;impôt) : vérifier le type de ce fonds.
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">

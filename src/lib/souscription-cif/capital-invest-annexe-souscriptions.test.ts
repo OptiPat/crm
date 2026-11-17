@@ -6,6 +6,7 @@ import {
   computeCapitalInvestTotalVerse,
   ensureUniqueCapitalInvestAnnexeSouscriptionIds,
   formatCapitalInvestFundPhrase,
+  isCapitalInvestTypeCoveredByAnnexe,
   newCapitalInvestAnnexeSouscription,
   normalizeCapitalInvestAnnexeSouscriptions,
 } from "@/lib/souscription-cif/capital-invest-annexe-souscriptions";
@@ -14,11 +15,38 @@ describe("capital-invest-annexe-souscriptions", () => {
   it("formate la phrase produit selon le type", () => {
     expect(formatCapitalInvestFundPhrase("fcpr", "Alpha")).toBe("du FCPR Alpha");
     expect(formatCapitalInvestFundPhrase("fcpi", "Odyssée")).toBe("du FCPI Odyssée");
+    expect(formatCapitalInvestFundPhrase("fcpi-jei", "Innovation")).toBe(
+      "du FCPI JEI Innovation"
+    );
     expect(formatCapitalInvestFundPhrase("fpci", "Odysée M2")).toBe("du FPCI Odysée M2");
     expect(formatCapitalInvestFundPhrase("fip", "Proximité")).toBe("du FIP Proximité");
     expect(formatCapitalInvestFundPhrase("fip-outre-mer", "Horizon")).toBe(
       "du FIP Outre-Mer Horizon"
     );
+  });
+
+  it("crée une nouvelle souscription en FCPI JEI par défaut", () => {
+    expect(newCapitalInvestAnnexeSouscription({ id: "ci-1" }).type).toBe("fcpi-jei");
+    expect(newCapitalInvestAnnexeSouscription({ id: "ci-2", type: "fcpi" }).type).toBe("fcpi");
+  });
+
+  it("conserve le type des anciens dossiers et met FCPI JEI si le type est absent", () => {
+    const [legacy, missing, invalid] = normalizeCapitalInvestAnnexeSouscriptions([
+      { id: "a", type: "fcpi" },
+      { id: "b" },
+      { id: "c", type: "inconnu" },
+    ]);
+    expect(legacy?.type).toBe("fcpi");
+    expect(missing?.type).toBe("fcpi-jei");
+    expect(invalid?.type).toBe("fcpi-jei");
+  });
+
+  it("ne couvre que FCPI JEI et FIP Outre-Mer dans l'annexe", () => {
+    expect(isCapitalInvestTypeCoveredByAnnexe("fcpi-jei")).toBe(true);
+    expect(isCapitalInvestTypeCoveredByAnnexe("fip-outre-mer")).toBe(true);
+    expect(isCapitalInvestTypeCoveredByAnnexe("fcpi")).toBe(false);
+    expect(isCapitalInvestTypeCoveredByAnnexe("fip")).toBe(false);
+    expect(isCapitalInvestTypeCoveredByAnnexe("fcpr")).toBe(false);
   });
 
   it("calcule montant = nb parts × prix de part, droit d'entrée en sus", () => {

@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import {
+  ANNEXES_CAPITAL_INVEST_PROS_CONS_ROWS,
+  ANNEXES_CAPITAL_INVEST_SECTION5_RISKS_BODY,
+} from "@/lib/souscription-cif/annexes-capital-invest-pros-cons-table";
 import { ANNEXES_CAPITAL_INVEST_CARACTERISTIQUES_OPERATION_SECTIONS } from "@/lib/souscription-cif/annexes-capital-invest-caracteristiques-operation-table";
 import {
   ANNEXES_CAPITAL_INVEST_OBJECTIFS_PATRIMONIAUX_ROWS,
@@ -44,5 +48,18 @@ describe("annexes-capital-invest-caracteristiques-operation-table", () => {
     });
     expect(inconv?.rows[3]?.label).toBe("Fiscalité et plus-values");
     expect(inconv?.rows[3]?.placementsFinanciers).toEqual({ kind: "check", checked: true });
+  });
+});
+
+describe("annexes-capital-invest-pros-cons-table", () => {
+  it("ne contient plus de mentions obsolètes (ETI, 7 ans, FIP et FCPI)", () => {
+    const text = [
+      ...ANNEXES_CAPITAL_INVEST_PROS_CONS_ROWS.flatMap((r) => [r.advantages, r.disadvantages]),
+      ANNEXES_CAPITAL_INVEST_SECTION5_RISKS_BODY,
+    ].join(" ");
+    expect(text).not.toContain("ETI");
+    expect(text).not.toContain("7 ans");
+    expect(text).not.toContain("FIP et FCPI");
+    expect(text).toContain("10 ans, prorogeable par la société de gestion");
   });
 });

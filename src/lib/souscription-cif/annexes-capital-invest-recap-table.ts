@@ -21,12 +21,12 @@ export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_DUREE_TITLE =
   "La durée d'investissement est conforme à la situation particulière du client ?";
 
 export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_DUREE_CONTENT =
-  "Oui. La durée recommandée est de 7 à 10 ans minimum, selon les millésimes souscrits. Cette durée peut être prorogée par la Société de gestion du Fonds.";
+  "Oui. La durée recommandée est de 10 ans. Cette durée peut être prorogée par la Société de gestion du Fonds.";
 
 export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_CONNAISSANCES_TITLE =
   "La recommandation est adaptée aux connaissances et à l'expérience du client ?";
 
-export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_CONNAISSANCES_CONTENT = `Oui. Aux termes du Questionnaire Profil Investisseur, le Client est classé « {{niveau_experience_qpi}} » en matière de connaissances et d'expérience financière. L'ensemble des informations relatives aux Fonds recommandés, à leurs particularités et à leur fonctionnement lui a été expliqué ; la documentation précontractuelle obligatoire (DICI, note d'information et documents réglementaires du ou des Fonds) lui a été remise.`;
+export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_CONNAISSANCES_CONTENT = `Oui. Aux termes du Questionnaire Profil Investisseur, le Client est classé « {{niveau_experience_qpi}} » en matière de connaissances et d'expérience financière. L'ensemble des informations relatives aux Fonds recommandés, à leurs particularités et à leur fonctionnement lui a été expliqué ; la documentation précontractuelle obligatoire (DIC, règlement et documents réglementaires du ou des Fonds) lui a été remise.`;
 
 export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_RISQUE_TITLE =
   "La recommandation est adaptée au client vis-à-vis de son attitude à l'égard du risque et de sa capacité à subir des pertes ?";
@@ -48,6 +48,7 @@ const RECAP_PRODUIT_LABEL_BY_TYPE: Record<
   (name: string) => string
 > = {
   fcpi: (name) => `le FCPI ${name}`,
+  "fcpi-jei": (name) => `le FCPI JEI ${name}`,
   fcpr: (name) => `le FCPR ${name}`,
   fpci: (name) => `le FPCI ${name}`,
   fip: (name) => `le FIP ${name}`,
@@ -99,9 +100,9 @@ export function buildCapitalInvestRecapObjectifsContent(
 ): string {
   const clause = buildCapitalInvestRecapObjectifsProduitsClause(souscriptions);
   if (!clause) {
-    return `Oui. L'objectif déclaré est de bénéficier d'une réduction d'impôt. Ainsi {{${PRODUITS_CAPITAL_INVEST_CIBLES_VARIABLE}}} permet de bénéficier d'une réduction d'impôt en contrepartie d'un engagement de conservation des parts pendant la durée de blocage du Fonds.`;
+    return `Oui. L'objectif déclaré est de bénéficier d'une réduction d'impôt. Ainsi {{${PRODUITS_CAPITAL_INVEST_CIBLES_VARIABLE}}} permet de bénéficier d'une réduction d'impôt en contrepartie d'un engagement de conservation des parts jusqu'au 31 décembre de la cinquième année suivant celle de la souscription.`;
   }
-  return `Oui. L'objectif déclaré est de bénéficier d'une réduction d'impôt. Ainsi ${clause.produitsPhrase} ${clause.verbe} de bénéficier d'une réduction d'impôt en contrepartie d'un engagement de conservation des parts pendant la durée de blocage du Fonds.`;
+  return `Oui. L'objectif déclaré est de bénéficier d'une réduction d'impôt. Ainsi ${clause.produitsPhrase} ${clause.verbe} de bénéficier d'une réduction d'impôt en contrepartie d'un engagement de conservation des parts jusqu'au 31 décembre de la cinquième année suivant celle de la souscription.`;
 }
 
 export function buildProduitsCapitalInvestCiblesVariable(

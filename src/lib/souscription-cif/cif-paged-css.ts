@@ -114,6 +114,10 @@ export function buildCifPagedCss(): string {
   break-inside: avoid;
 }
 
+.cif-capital-invest-fiscalite-block {
+  break-inside: avoid;
+}
+
 /* Pas de titre orphelin en bas de page. */
 .cif-paged-flow h2,
 .cif-paged-flow h3 {

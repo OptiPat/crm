@@ -56,7 +56,7 @@ export function CapitalInvestLifecycleDiagram({ className }: CapitalInvestLifecy
           <div className="w-[13%]" aria-hidden />
           <div className="flex w-[38%] items-center justify-center gap-[1mm] whitespace-nowrap text-[#8b2635]">
             <span aria-hidden>◀</span>
-            <span>5 ans de détention minimum des titres (condition fiscale)</span>
+            <span>Conservation jusqu'au 31/12 de N+5 (condition fiscale)</span>
             <span aria-hidden>▶</span>
           </div>
           <div className="flex w-[49%] items-center justify-center gap-[1mm] whitespace-nowrap text-neutral-600">
@@ -106,7 +106,7 @@ export function CapitalInvestLifecycleDiagram({ className }: CapitalInvestLifecy
         <div className="mt-[1.5mm] grid grid-cols-11" aria-hidden>
           {YEARS.map((year, index) => (
             <div key={year} className="flex justify-center">
-              {index >= 7 && (
+              {index >= 10 && (
                 <span className="inline-flex h-[4mm] w-[4mm] items-center justify-center rounded-full border border-neutral-300 bg-neutral-50 text-[6pt] font-semibold text-neutral-600">
                   €
                 </span>

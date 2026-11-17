@@ -432,9 +432,9 @@ describe("buildAnnexesRapportPreview", () => {
       "capital-investissement",
       {
         conseil:
-          "Je vous propose de souscrire à un FCPI afin de bénéficier d'une réduction d'impôt sur l'IR.",
+          "Je vous propose de souscrire à un FCPI JEI afin de bénéficier d'une réduction d'impôt sur l'IR.",
         mes_preconisations:
-          "Mes préconisations portent sur un investissement global de 9 975 € (montants souscrits et droits d'entrée inclus), répartis ainsi :\n\nLa souscription de parts du FCPI Odyssée au comptant pour un montant de 9 975 €, soit 105 € la part x 95 parts = montant total souscrit de 9 975 €. Dont 5 % de droit d'entrée, soit 498,75 €.",
+          "Mes préconisations portent sur un investissement global de 9 975 € (montants souscrits et droits d'entrée inclus), répartis ainsi :\n\nLa souscription de parts du FCPI JEI Odyssée au comptant pour un montant de 9 975 €, soit 105 € la part x 95 parts = montant total souscrit de 9 975 €. Dont 5 % de droit d'entrée, soit 498,75 €.",
         niveau_experience_qpi: "Expérimenté",
       },
       {
@@ -443,7 +443,7 @@ describe("buildAnnexesRapportPreview", () => {
           {
             id: "ci-test",
             nomFonds: "Odysée M2",
-            type: "fcpi",
+            type: "fcpi-jei",
             nbParts: "95",
             partPriceEur: "105",
             droitEntreePct: "5",
@@ -464,6 +464,25 @@ describe("buildAnnexesRapportPreview", () => {
     expect(page1.showAnnexesProsConsTable).toBe(true);
     expect(page1.showAmfRiskScale).toBeUndefined();
     expect(page1.bodySegmentsAfterProsConsTable).toBeUndefined();
+    const segText = (segs: typeof page1.bodySegments | undefined) =>
+      (segs ?? [])
+        .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
+        .join("");
+    const page1Text = [
+      segText(page1.bodySegmentsContinuation),
+      segText(page1.bodySegmentsAfterCapitalInvestLifecycleDiagram),
+      segText(page1.bodySegmentsBeforeCapitalInvestFiscaliteTable),
+      segText(page1.bodySegmentsAfterCapitalInvestFiscaliteTable),
+    ].join(" ");
+    expect(page1.showCapitalInvestFiscaliteTable).toBe(true);
+    expect(page1Text).toContain("- FCPI JEI : Fonds Communs de Placement dans l'Innovation");
+    expect(page1Text).toContain("FCPI JEI : 30 % des versements hors droits d'entrée");
+    expect(page1Text).toContain("27 % (30 % × 90 %)");
+    expect(page1Text).toContain("plafond spécifique de réduction d'impôt de 50 000 €");
+    expect(page1Text).toContain("soumise à la flat-tax");
+    expect(page1Text).not.toContain("25 %");
+    expect(page1Text).not.toContain("supplémentaires en FCPI");
+    expect(page1Text).not.toContain("PME / ETI");
 
     const page2 = preview.pages[1]!;
     expect(page2.pageNumber).toBe(2);
@@ -474,12 +493,15 @@ describe("buildAnnexesRapportPreview", () => {
     expect(risques).toContain("5. Les risques");
     expect(page2.showAmfRiskScale).toBe(true);
     expect(page2.amfRiskHighlightLevel).toBe(6);
-    expect(page2.amfRiskInvestmentHorizon).toBe("> 10 ans");
+    expect(page2.amfRiskInvestmentHorizon).toBe("10 ans");
 
     const risksBody = (page2.bodySegmentsAfterTable ?? [])
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
-    expect(risksBody).toContain("L'investissement en FIP et FCPI comporte des risques");
+    expect(risksBody).toContain("L'investissement en FCPI JEI et FIP Outre-Mer comporte des risques");
+    expect(risksBody).toContain("- Risque spécifique aux JEI");
+    expect(risksBody).toContain("produit dit complexe");
+    expect(risksBody).toContain("Document d'Informations Clés (DIC)");
     expect(risksBody).toContain("- Risque de perte en capital");
     expect(risksBody).toContain("- Risque fiscal");
     expect(risksBody).toContain("Le Client déclare avoir pris connaissance");
@@ -490,7 +512,7 @@ describe("buildAnnexesRapportPreview", () => {
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
     expect(preco).toContain("Mes préconisations portent sur un investissement global");
-    expect(preco).toContain("du FCPI Odyssée");
+    expect(preco).toContain("du FCPI JEI Odyssée");
 
     const page4 = preview.pages[3]!;
     expect(page4.pageNumber).toBe(4);
@@ -499,7 +521,8 @@ describe("buildAnnexesRapportPreview", () => {
     const objectifsCell = page4.rapportRecapRows?.[1].contentSegments
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
-    expect(objectifsCell).toContain("le FCPI Odysée M2 permet de bénéficier");
+    expect(objectifsCell).toContain("le FCPI JEI Odysée M2 permet de bénéficier");
+    expect(objectifsCell).toContain("jusqu'au 31 décembre de la cinquième année");
     const adaptationCell = page4.rapportRecapRows?.[0].contentSegments
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
@@ -507,13 +530,13 @@ describe("buildAnnexesRapportPreview", () => {
     const dureeCell = page4.rapportRecapRows?.[2].contentSegments
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
-    expect(dureeCell).toContain("de 7 à 10 ans minimum, selon les millésimes souscrits");
+    expect(dureeCell).toContain("La durée recommandée est de 10 ans.");
     expect(dureeCell).toContain("prorogée par la Société de gestion");
     const connaissancesCell = page4.rapportRecapRows?.[3].contentSegments
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
     expect(connaissancesCell).toContain("Expérimenté");
-    expect(connaissancesCell).toContain("DICI");
+    expect(connaissancesCell).toContain("DIC, règlement et documents réglementaires");
     expect(preview.missingKeys).not.toContain("niveau_experience_qpi");
     const risqueCell = page4.rapportRecapRows?.[4].contentSegments
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))

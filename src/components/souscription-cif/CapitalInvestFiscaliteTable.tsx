@@ -1,4 +1,6 @@
 import {
+  CAPITAL_INVEST_FISCALITE_FCPI_HEADER,
+  CAPITAL_INVEST_FISCALITE_FIP_OM_HEADER,
   CAPITAL_INVEST_FISCALITE_TABLE_ROWS,
   formatCapitalInvestFiscaliteCheck,
   type CapitalInvestFiscaliteTableRow,
@@ -84,13 +86,13 @@ export function CapitalInvestFiscaliteTable({
             className="border border-neutral-400 px-1.5 py-1.5 text-center align-top font-semibold text-white [text-align-last:center]"
             style={{ backgroundColor: FCPI_HEADER }}
           >
-            FCPI
+            {CAPITAL_INVEST_FISCALITE_FCPI_HEADER}
           </th>
           <th
             className="border border-neutral-400 px-1.5 py-1.5 text-center align-top font-semibold text-white [text-align-last:center]"
             style={{ backgroundColor: FIP_HEADER }}
           >
-            FIP OUTRE-MER
+            {CAPITAL_INVEST_FISCALITE_FIP_OM_HEADER}
           </th>
         </tr>
       </thead>

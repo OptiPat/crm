@@ -1,7 +1,13 @@
 import { formatEuroAmountCif, parseEuroInput } from "@/lib/souscription-cif/build-annexes-scpi-costs";
 import { parsePercentInput } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
 
-export type CapitalInvestAnnexeType = "fcpr" | "fcpi" | "fpci" | "fip" | "fip-outre-mer";
+export type CapitalInvestAnnexeType =
+  | "fcpr"
+  | "fcpi"
+  | "fcpi-jei"
+  | "fpci"
+  | "fip"
+  | "fip-outre-mer";
 
 export type CapitalInvestAnnexeSouscription = {
   id: string;
@@ -28,12 +34,27 @@ export const CAPITAL_INVEST_TYPE_OPTIONS: ReadonlyArray<{
   value: CapitalInvestAnnexeType;
   label: string;
 }> = [
-  { value: "fcpr", label: "FCPR" },
-  { value: "fcpi", label: "FCPI" },
-  { value: "fpci", label: "FPCI" },
-  { value: "fip", label: "FIP" },
+  { value: "fcpi-jei", label: "FCPI JEI" },
   { value: "fip-outre-mer", label: "FIP Outre-Mer" },
+  { value: "fcpi", label: "FCPI classique (sans réduction d'impôt)" },
+  { value: "fip", label: "FIP métropole (sans réduction d'impôt)" },
+  { value: "fcpr", label: "FCPR" },
+  { value: "fpci", label: "FPCI" },
 ];
+
+/** Types ouvrant droit à réduction d'IR et décrits par l'annexe (LF 2026). */
+const CAPITAL_INVEST_REDUCTION_ELIGIBLE_TYPES: ReadonlySet<CapitalInvestAnnexeType> = new Set([
+  "fcpi-jei",
+  "fip-outre-mer",
+]);
+
+/** `true` si le type est décrit par l'annexe (FCPI JEI / FIP Outre-Mer). */
+export function isCapitalInvestTypeCoveredByAnnexe(type: CapitalInvestAnnexeType): boolean {
+  return CAPITAL_INVEST_REDUCTION_ELIGIBLE_TYPES.has(type);
+}
+
+/** Type par défaut d'une nouvelle souscription (seuls FCPI JEI / FIP OM ouvrent droit à réduction). */
+export const DEFAULT_CAPITAL_INVEST_ANNEXE_TYPE: CapitalInvestAnnexeType = "fcpi-jei";
 
 const CAPITAL_INVEST_TYPE_SET = new Set<string>(CAPITAL_INVEST_TYPE_OPTIONS.map((o) => o.value));
 
@@ -41,6 +62,7 @@ const CAPITAL_INVEST_TYPE_SET = new Set<string>(CAPITAL_INVEST_TYPE_OPTIONS.map(
 const CAPITAL_INVEST_FUND_PHRASE_BY_TYPE: Record<CapitalInvestAnnexeType, string> = {
   fcpr: "du FCPR",
   fcpi: "du FCPI",
+  "fcpi-jei": "du FCPI JEI",
   fpci: "du FPCI",
   fip: "du FIP",
   "fip-outre-mer": "du FIP Outre-Mer",
@@ -86,7 +108,7 @@ export function parseNbPartsInput(raw: string): number | null {
 export function normalizeCapitalInvestAnnexeType(raw: unknown): CapitalInvestAnnexeType {
   return typeof raw === "string" && CAPITAL_INVEST_TYPE_SET.has(raw)
     ? (raw as CapitalInvestAnnexeType)
-    : "fcpi";
+    : DEFAULT_CAPITAL_INVEST_ANNEXE_TYPE;
 }
 
 /** Montant souscrit hors droit d'entrée = nb parts × prix de part. */

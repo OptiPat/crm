@@ -13,6 +13,9 @@ import { newCapitalInvestAnnexeSouscription } from "@/lib/souscription-cif/capit
 describe("annexes-capital-invest-recap-table", () => {
   it("formate le libellé récap par type", () => {
     expect(formatCapitalInvestProduitRecapLabel("fcpi", "Odysée M2")).toBe("le FCPI Odysée M2");
+    expect(formatCapitalInvestProduitRecapLabel("fcpi-jei", "Innovation")).toBe(
+      "le FCPI JEI Innovation"
+    );
     expect(formatCapitalInvestProduitRecapLabel("fcpr", "Odysée M2")).toBe("le FCPR Odysée M2");
   });
 
@@ -55,9 +58,9 @@ describe("annexes-capital-invest-recap-table", () => {
     expect(text).toContain("{{produits_capital_invest_cibles}}");
   });
 
-  it("fixe la ligne durée à 7–10 ans selon millésimes", () => {
+  it("fixe la ligne durée à 10 ans", () => {
     expect(ANNEXES_CAPITAL_INVEST_RECAP_ROW_DUREE_CONTENT).toContain(
-      "de 7 à 10 ans minimum, selon les millésimes souscrits"
+      "La durée recommandée est de 10 ans."
     );
     expect(ANNEXES_CAPITAL_INVEST_RECAP_ROW_DUREE_CONTENT).toContain(
       "prorogée par la Société de gestion"
@@ -68,7 +71,7 @@ describe("annexes-capital-invest-recap-table", () => {
     expect(ANNEXES_CAPITAL_INVEST_RECAP_ROW_CONNAISSANCES_CONTENT).toContain(
       "{{niveau_experience_qpi}}"
     );
-    expect(ANNEXES_CAPITAL_INVEST_RECAP_ROW_CONNAISSANCES_CONTENT).toContain("DICI");
+    expect(ANNEXES_CAPITAL_INVEST_RECAP_ROW_CONNAISSANCES_CONTENT).toContain("DIC, règlement et documents réglementaires");
   });
 
   it("fixe les lignes risque et réexamen (fonds fermés)", () => {
