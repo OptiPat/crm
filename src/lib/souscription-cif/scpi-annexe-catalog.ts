@@ -36,7 +36,7 @@ Principaux frais :
   {
     key: "transitions_europe",
     label: "Transitions Europe",
-    partPriceEur: 202,
+    partPriceEur: 204,
     description: `— TRANSITIONS EUROPE —
 
 Arkea Transition Europe accompagne les transitions du marché de l'immobilier en investissant dans un portefeuille d'actifs diversifiés. Elle investit en Europe ( Espagne, Pays-Bas, République d'Irlande…) pour bénéficier des opportunités des différents cycles immobilier, très majoritairement dans des actifs d'immobilier d'entreprise (bureaux, santé, éducation, logistique, activités, hébergement géré…).

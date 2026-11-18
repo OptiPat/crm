@@ -1,6 +1,9 @@
 # Build Windows + macOS, release GitHub + latest.json (updater) au push d'un tag v*.*
 # Prérequis : secret TAURI_SIGNING_PRIVATE_KEY (contenu du fichier .key)
-# macOS d'abord, puis Windows : évite la course sur latest.json (tauri-action #1270).
+# Builds macOS et Windows EN PARALLÈLE. La release reste créée par le seul job macOS
+# (tauri-action) ; l'installateur Windows n'y est envoyé qu'ensuite (publish-windows) :
+# pas de course à la création de release ni sur latest.json (tauri-action #1270).
+# Test Trousseau macOS : job séparé, hors chemin critique.
 
 name: Release CRM W.Y.S
 
@@ -60,10 +63,6 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-
-      - name: Test Trousseau macOS
-        working-directory: src-tauri
-        run: cargo test email::secret_storage::macos_tests
 
       - name: Importer le certificat Developer ID
         env:
@@ -147,7 +146,7 @@ jobs:
           fi
 
       # latest.json macOS dès la fin du build : évite 404 sur /releases/latest/download/
-      # pendant le build Windows (~20 min). finalize-updater-json le régénère ensuite complet.
+      # le temps que l'installateur Windows soit envoyé. finalize-updater-json le régénère complet.
       - name: Publier latest.json macOS (MAJ auto Mac avant build Windows)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -157,8 +156,8 @@ jobs:
           node scripts/ci-merge-latest-json.mjs
           gh release upload "${{ github.ref_name }}" latest.json --clobber
 
-  publish-windows:
-    needs: publish-macos
+  # Build seul (pas de publication) : tourne en même temps que publish-macos.
+  build-windows:
     runs-on: windows-latest
     timeout-minutes: 90
 
@@ -201,10 +200,9 @@ jobs:
           echo "C:\Program Files\NASM" >> $env:GITHUB_PATH
         shell: pwsh
 
-      - name: Build & publish release (Windows)
-        uses: tauri-apps/tauri-action@v0
+      - name: Build Windows (installateur NSIS signé updater)
+        shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           LICENSE_REGISTRY_URL: ${{ secrets.LICENSE_REGISTRY_URL }}
@@ -212,15 +210,75 @@ jobs:
           LICENSE_SIGNING_SECRET: ${{ secrets.LICENSE_SIGNING_SECRET }}
           NOTES_REGISTRY_URL: ${{ secrets.NOTES_REGISTRY_URL }}
           NOTES_REGISTRY_TOKEN: ${{ secrets.NOTES_REGISTRY_TOKEN }}
+        run: npm run tauri build -- --bundles nsis
+
+      - name: Conserver l'installateur
+        uses: actions/upload-artifact@v4
         with:
-          projectPath: src-tauri
-          tagName: ${{ github.ref_name }}
-          releaseDraft: false
-          prerelease: false
-          includeUpdaterJson: false
-          retryAttempts: 3
-          tauriScript: npm run tauri
-          args: --bundles nsis
+          name: windows-nsis
+          path: |
+            src-tauri/target/release/bundle/nsis/*_x64-setup.exe
+            src-tauri/target/release/bundle/nsis/*_x64-setup.exe.sig
+          if-no-files-found: error
+          retention-days: 7
+
+  # Envoi sur la release une fois celle-ci créée par publish-macos.
+  publish-windows:
+    needs: [publish-macos, build-windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Récupérer l'installateur
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-nsis
+          path: nsis
+
+      - name: Publier sur la release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          shopt -s nullglob
+          files=()
+          for f in nsis/*; do
+            # Même nom que tauri-action (espaces → points), attendu par ci-merge-latest-json.mjs.
+            target="nsis/$(basename "$f" | tr ' ' '.')"
+            if [ "$f" != "$target" ]; then mv "$f" "$target"; fi
+            files+=("$target")
+          done
+          test "${#files[@]}" -eq 2
+          gh release upload "${{ github.ref_name }}" "${files[@]}" --clobber
+
+  # Hors chemin critique : ne retarde plus la release (~5 min de compilation en mode test).
+  test-macos-keychain:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Test Trousseau macOS
+        working-directory: src-tauri
+        run: cargo test email::secret_storage::macos_tests
 
   finalize-updater-json:
     needs: [publish-macos, publish-windows]
