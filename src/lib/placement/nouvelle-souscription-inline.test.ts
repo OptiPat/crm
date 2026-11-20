@@ -52,10 +52,15 @@ describe("nouvelle souscription saisie à la création du Suivi", () => {
   });
 });
 
-describe("nouvelle souscription — doublons", () => {
-  it("refuse le même produit sur deux lignes", () => {
-    expect(
-      validateNouvelleSouscriptionDrafts([draft("Corum Origin", "10000"), draft("Corum Origin", "5000")])
-    ).toMatch(/deux fois/);
+describe("nouvelle souscription — même produit deux fois", () => {
+  it("accepte deux lignes du même produit, chacune créée à part (force_new)", () => {
+    const drafts = [
+      draft("Cristalliance Avenir", "70000"),
+      draft("Cristalliance Avenir", "50"),
+    ];
+    expect(validateNouvelleSouscriptionDrafts(drafts)).toBeNull();
+    const inputs = buildNouvelleSouscriptionOperationInputs(drafts, { contactId: 3, pipeId: 42 });
+    expect(inputs.map((i) => i.montant_centimes)).toEqual([7_000_000, 5_000]);
+    expect(inputs.every((i) => i.force_new === true)).toBe(true);
   });
 });

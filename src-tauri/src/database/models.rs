@@ -1939,6 +1939,14 @@ pub struct NewPlacementOperation {
     pub reinvest_dividendes_pct: Option<i64>,
     #[serde(default)]
     pub partenaire_id: Option<i64>,
+    /// Toujours créer une nouvelle ligne (pas de fusion avec une opération en attente du même
+    /// acte/produit) : ex. deux assurances-vie identiques souscrites dans la même affaire.
+    #[serde(default)]
+    pub force_new: bool,
+    /// Opération en attente précise à compléter (confirmation d'envoi d'un brouillon) au lieu
+    /// d'une recherche par acte/produit, ambiguë quand deux brouillons ont le même produit.
+    #[serde(default)]
+    pub target_operation_id: Option<i64>,
 }
 
 impl Default for NewPlacementOperation {
@@ -1959,6 +1967,8 @@ impl Default for NewPlacementOperation {
             vp_frequence: None,
             reinvest_dividendes_pct: None,
             partenaire_id: None,
+            force_new: false,
+            target_operation_id: None,
         }
     }
 }

@@ -44,13 +44,9 @@ function isEmptyDraft(draft: NouvelleSouscriptionDraft): boolean {
 export function validateNouvelleSouscriptionDrafts(
   drafts: readonly NouvelleSouscriptionDraft[] | undefined
 ): string | null {
+  // Même produit plusieurs fois autorisé (ex. une AV pour soi, une pour son enfant) :
+  // chaque ligne est créée à part (`force_new`).
   const filled = (drafts ?? []).filter((d) => !isEmptyDraft(d));
-  // Même produit deux fois : le serveur fusionnerait les lignes (montant de la 1ʳᵉ perdu).
-  const products = filled.map((d) => d.productLabel.trim()).filter(Boolean);
-  const duplicate = products.find((p, i) => products.indexOf(p) !== i);
-  if (duplicate) {
-    return `« ${duplicate} » est saisi deux fois : regroupez le montant sur une seule souscription.`;
-  }
   for (const [index, draft] of filled.entries()) {
     const n = filled.length > 1 ? ` ${index + 1}` : "";
     if (!draft.productLabel.trim()) return `Souscription${n} : produit requis.`;
@@ -87,6 +83,7 @@ export function buildNouvelleSouscriptionOperationInputs(
         type_produit: typeProduit,
         ...("payload" in extras ? extras.payload : {}),
         ...souscriptionHolderPayload(draft.holderKey),
+        force_new: true,
       };
     });
 }

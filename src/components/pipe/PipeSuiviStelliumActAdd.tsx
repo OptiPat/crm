@@ -419,6 +419,8 @@ export function PipeSuiviStelliumActAdd({
           contact_id: pipe.contact_id,
           pipe_id: pipe.id,
           pipe_timeline_entry_id: entry.id,
+          // Ce brouillon-ci : deux brouillons du même produit ne doivent pas se confondre.
+          target_operation_id: operation.id,
           operation_type: placementOperationTypeFromStelliumLabel(label),
           stellium_label: label,
           product_label: product || null,
@@ -559,6 +561,8 @@ export function PipeSuiviStelliumActAdd({
         investissement_id: investissementId,
         vp_frequence: vpFrequenceFromStelliumAct(label, newActVpModification, newActVpMiseEnPlace),
         ...souscriptionDetails,
+        // Souscription partenaire : une ligne par souscription, même produit compris.
+        ...(isAffaireSouscription ? { force_new: true } : {}),
       });
       notifyPlacementOperationsChanged();
       toast.success(copy.createSuccess);

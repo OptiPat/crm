@@ -673,6 +673,108 @@ mod tests {
     }
 
     #[test]
+    fn force_new_cree_deux_souscriptions_meme_produit_et_deux_contrats() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        let affaire = seed_affaire(&db, contact_id, None, PIPE_STAGE_R3);
+        let first = db
+            .create_placement_operation(NewPlacementOperation {
+                force_new: true,
+                ..souscription(contact_id, affaire, "Cristalliance Avenir", "ASSURANCE_VIE", 7_000_000)
+            })
+            .unwrap();
+        let second = db
+            .create_placement_operation(NewPlacementOperation {
+                force_new: true,
+                ..souscription(contact_id, affaire, "Cristalliance Avenir", "ASSURANCE_VIE", 5_000)
+            })
+            .unwrap();
+        assert_ne!(first.id, second.id);
+        assert_eq!(
+            db.get_placement_operation_by_id(first.id).unwrap().montant_centimes,
+            Some(7_000_000)
+        );
+        assert_eq!(second.montant_centimes, Some(5_000));
+
+        db.update_placement_operation_status(first.id, STATUS_CONFORME)
+            .unwrap();
+        db.update_placement_operation_status(second.id, STATUS_CONFORME)
+            .unwrap();
+        let mut montants: Vec<_> = db
+            .get_investissements_by_contact(contact_id)
+            .unwrap()
+            .into_iter()
+            .map(|inv| inv.montant_initial)
+            .collect();
+        montants.sort();
+        assert_eq!(montants, vec![Some(5_000), Some(7_000_000)]);
+    }
+
+    #[test]
+    fn sans_force_new_meme_produit_fusionne_toujours() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        let affaire = seed_affaire(&db, contact_id, None, PIPE_STAGE_R3);
+        let first = db
+            .create_placement_operation(souscription(contact_id, affaire, "Comete", "SCPI", 100_000))
+            .unwrap();
+        let again = db
+            .create_placement_operation(souscription(contact_id, affaire, "Comete", "SCPI", 200_000))
+            .unwrap();
+        assert_eq!(first.id, again.id);
+    }
+
+    #[test]
+    fn target_operation_id_complete_le_brouillon_vise() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        let affaire = seed_affaire(&db, contact_id, None, PIPE_STAGE_R3);
+        let first = db
+            .create_placement_operation(NewPlacementOperation {
+                force_new: true,
+                ..souscription(contact_id, affaire, "Cristalliance Avenir", "ASSURANCE_VIE", 7_000_000)
+            })
+            .unwrap();
+        let second = db
+            .create_placement_operation(NewPlacementOperation {
+                force_new: true,
+                ..souscription(contact_id, affaire, "Cristalliance Avenir", "ASSURANCE_VIE", 5_000)
+            })
+            .unwrap();
+        // Confirmation d'envoi de la 1ʳᵉ (la recherche par produit prendrait la plus récente).
+        let confirmed = db
+            .create_placement_operation(NewPlacementOperation {
+                target_operation_id: Some(first.id),
+                montant_centimes: Some(7_000_000),
+                type_produit: None,
+                ..souscription(contact_id, affaire, "Cristalliance Avenir", "ASSURANCE_VIE", 7_000_000)
+            })
+            .unwrap();
+        assert_eq!(confirmed.id, first.id);
+        assert_eq!(
+            db.get_placement_operation_by_id(second.id).unwrap().montant_centimes,
+            Some(5_000)
+        );
+
+        // Cible hors de l'affaire ou déjà traitée : refus.
+        let other = seed_affaire(&db, contact_id, None, PIPE_STAGE_R3);
+        assert!(db
+            .create_placement_operation(NewPlacementOperation {
+                target_operation_id: Some(first.id),
+                ..souscription(contact_id, other, "Cristalliance Avenir", "ASSURANCE_VIE", 7_000_000)
+            })
+            .is_err());
+        db.update_placement_operation_status(second.id, STATUS_CONFORME)
+            .unwrap();
+        assert!(db
+            .create_placement_operation(NewPlacementOperation {
+                target_operation_id: Some(second.id),
+                ..souscription(contact_id, affaire, "Cristalliance Avenir", "ASSURANCE_VIE", 5_000)
+            })
+            .is_err());
+    }
+
+    #[test]
     fn email_conforme_uses_partner_date_and_copies_vp_reinvest() {
         let db = Database::open_in_memory_for_tests().unwrap();
         let contact_id = seed_contact(&db);

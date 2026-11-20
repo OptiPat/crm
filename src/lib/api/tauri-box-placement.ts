@@ -110,6 +110,13 @@ export interface NewPlacementOperationInput {
   reinvest_dividendes_pct?: number | null;
   /** Souscription affaire : partenaire repris sur le placement créé. */
   partenaire_id?: number | null;
+  /**
+   * Toujours créer une nouvelle ligne, sans fusion avec une opération en attente du même
+   * acte/produit (ex. deux assurances-vie identiques dans la même affaire).
+   */
+  force_new?: boolean;
+  /** Brouillon précis à compléter (confirmation d'envoi), au lieu d'une recherche par produit. */
+  target_operation_id?: number | null;
 }
 
 export const PLACEMENT_OPERATIONS_CHANGED_EVENT = "placement-operations-changed";

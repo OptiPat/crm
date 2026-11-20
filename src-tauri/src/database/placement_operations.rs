@@ -871,11 +871,35 @@ impl super::Database {
             }
         }
 
+        let target_operation_id = input.target_operation_id.filter(|id| *id > 0);
+        if target_operation_id.is_some() && input.pipe_id.filter(|id| *id > 0).is_none() {
+            return Err(invalid_param("opération ciblée : pipe requis"));
+        }
         let mut pipe_type: Option<String> = None;
         let mut existing_pending: Option<super::models::PlacementOperation> = None;
+        // Brouillon ciblé déjà répondu par Stellium (course mail / confirmation) : rattaché
+        // au journal d'envoi plus bas, comme `find_placement_for_workflow_journal_link`.
+        let mut targeted_answered: Option<super::models::PlacementOperation> = None;
         if let Some(pipe_id) = input.pipe_id.filter(|id| *id > 0) {
             pipe_type = Some(self.get_pipe_by_id(pipe_id)?.pipe_type);
-            existing_pending = if let Some(label) = input
+            existing_pending = if let Some(target_id) = target_operation_id {
+                // Pas de contrôle du contact : le contact du pipe peut avoir changé depuis
+                // la création du brouillon (non répercuté sur les opérations).
+                let target = self.get_placement_operation_by_id(target_id)?;
+                if target.pipe_id != Some(pipe_id) || placement_operation_is_dismissed(&target) {
+                    return Err(invalid_param(
+                        "opération ciblée introuvable sur cette affaire",
+                    ));
+                }
+                if target.status == STATUS_PENDING {
+                    Some(target)
+                } else {
+                    targeted_answered = Some(target);
+                    None
+                }
+            } else if input.force_new {
+                None
+            } else if let Some(label) = input
                 .stellium_label
                 .as_ref()
                 .filter(|s| !s.trim().is_empty())
@@ -919,6 +943,7 @@ impl super::Database {
         let has_montant = input.montant_centimes.filter(|m| *m > 0).is_some()
             || existing_pending
                 .as_ref()
+                .or(targeted_answered.as_ref())
                 .and_then(|op| op.montant_centimes)
                 .filter(|m| *m > 0)
                 .is_some();
@@ -929,7 +954,14 @@ impl super::Database {
         }
 
         let mut existing_to_link = existing_pending;
-        if existing_to_link.is_none() {
+        if let Some(target) = targeted_answered {
+            let linking_journal = input.pipe_timeline_entry_id.filter(|id| *id > 0).is_some();
+            let already_journaled = target.pipe_timeline_entry_id.filter(|id| *id > 0).is_some();
+            if !linking_journal || already_journaled {
+                return Err(invalid_param("opération ciblée déjà traitée sur cette affaire"));
+            }
+            existing_to_link = Some(target);
+        } else if existing_to_link.is_none() && !input.force_new && target_operation_id.is_none() {
             if let (Some(pipe_id), Some(_)) = (
                 input.pipe_id.filter(|id| *id > 0),
                 input.pipe_timeline_entry_id.filter(|id| *id > 0),
@@ -2916,6 +2948,100 @@ mod tests {
         assert_eq!(linked.id, draft.id);
         assert_eq!(linked.status, STATUS_CONFORME);
         assert_eq!(linked.pipe_timeline_entry_id, Some(journal.id));
+    }
+
+    #[test]
+    fn target_operation_id_rattache_le_journal_meme_apres_reponse_stellium() {
+        use super::super::models::NewPipeTimelineEntry;
+
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        db.migrate_pipes_table().unwrap();
+        db.migrate_pipe_timeline_table().unwrap();
+        let contact_id = db.create_contact(sample_contact("Gillodes", "Lea")).unwrap().id.unwrap();
+        let other_contact_id = db.create_contact(sample_contact("Martin", "Paul")).unwrap().id.unwrap();
+        let pipe = db
+            .create_pipe(super::super::models::NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
+                parent_pipe_id: None,
+                titre: "Suivi".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+        let arbitrage = |pipe_timeline_entry_id: Option<i64>, target: i64, contact: i64| {
+            super::super::models::NewPlacementOperation {
+                contact_id: contact,
+                pipe_id: Some(pipe.id),
+                pipe_timeline_entry_id,
+                target_operation_id: Some(target),
+                operation_type: OP_ARBITRAGE.into(),
+                product_label: Some("Cristalliance Evoluvie".into()),
+                stellium_label: Some("Arbitrage libre".into()),
+                ..Default::default()
+            }
+        };
+        let draft = db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(pipe.id),
+                operation_type: OP_ARBITRAGE.into(),
+                product_label: Some("Cristalliance Evoluvie".into()),
+                stellium_label: Some("Arbitrage libre".into()),
+                ..Default::default()
+            })
+            .unwrap();
+        let received_at = email_received_after_operation(&draft);
+        db.apply_placement_email_update(
+            contact_id,
+            OP_ARBITRAGE,
+            STATUS_CONFORME,
+            Some("Arbitrage libre"),
+            Some("Cristalliance Evoluvie"),
+            "msg-target",
+            Some("subject"),
+            received_at,
+            Some(pipe.id),
+        )
+        .unwrap();
+        let journal = |titre: &str| {
+            db.create_pipe_timeline_entry(NewPipeTimelineEntry {
+                pipe_id: pipe.id,
+                entry_type: "NOTE".into(),
+                titre: Some(titre.into()),
+                contenu: None,
+                occurred_at: Some(received_at + 30),
+            })
+            .unwrap()
+            .id
+        };
+
+        // Sans journal d'envoi, un brouillon déjà répondu n'est pas « re-confirmable ».
+        assert!(db.create_placement_operation(arbitrage(None, draft.id, contact_id)).is_err());
+
+        // Contact du pipe changé depuis : la cible suffit (même pipe).
+        let first_journal = journal("Envoi 1");
+        let linked = db
+            .create_placement_operation(arbitrage(Some(first_journal), draft.id, other_contact_id))
+            .unwrap();
+        assert_eq!(linked.id, draft.id);
+        assert_eq!(linked.status, STATUS_CONFORME);
+        assert_eq!(linked.pipe_timeline_entry_id, Some(first_journal));
+
+        // Déjà rattachée à un journal : refus.
+        assert!(db
+            .create_placement_operation(arbitrage(Some(journal("Envoi 2")), draft.id, contact_id))
+            .is_err());
+
+        // Cible sans pipe : refus explicite.
+        assert!(db
+            .create_placement_operation(super::super::models::NewPlacementOperation {
+                pipe_id: None,
+                ..arbitrage(None, draft.id, contact_id)
+            })
+            .is_err());
     }
 
     #[test]
