@@ -436,21 +436,42 @@ impl super::Database {
                     )
              FROM pipes p
              INNER JOIN contacts c ON c.id = p.contact_id
-             INNER JOIN placement_operations po ON po.id = (
-                 SELECT po2.id FROM placement_operations po2
-                 WHERE po2.pipe_id = p.id
-                   AND po2.dismissed_at IS NULL
-                   AND po2.montant_centimes IS NOT NULL
-                   AND po2.montant_centimes > 0
-                   AND po2.operation_type IN (?3, ?4)
-                 ORDER BY CASE po2.operation_type WHEN ?3 THEN 0 WHEN ?4 THEN 1 ELSE 2 END,
-                          po2.id DESC
-                 LIMIT 1
-             )
+             INNER JOIN placement_operations po
+                ON po.pipe_id = p.id
+               AND po.dismissed_at IS NULL
+               AND po.montant_centimes IS NOT NULL
+               AND po.montant_centimes > 0
+               AND (
+                 -- Une ligne par souscription (ex. deux AV du même produit dans l'affaire).
+                 po.operation_type = ?3
+                 -- Affaire versement (sans souscription) : le versement le plus récent.
+                 OR (
+                   po.operation_type = ?4
+                   AND NOT EXISTS (
+                     SELECT 1 FROM placement_operations s
+                     WHERE s.pipe_id = p.id
+                       AND s.dismissed_at IS NULL
+                       AND s.montant_centimes IS NOT NULL
+                       AND s.montant_centimes > 0
+                       AND s.operation_type = ?3
+                   )
+                   AND po.id = (
+                     SELECT v.id FROM placement_operations v
+                     WHERE v.pipe_id = p.id
+                       AND v.dismissed_at IS NULL
+                       AND v.montant_centimes IS NOT NULL
+                       AND v.montant_centimes > 0
+                       AND v.operation_type = ?4
+                     ORDER BY v.id DESC
+                     LIMIT 1
+                   )
+                 )
+               )
              LEFT JOIN investissements i ON i.id = po.investissement_id
              WHERE p.pipe_type = ?1
                AND p.stage = ?2
-             ORDER BY COALESCE(i.date_souscription, po.conforme_at, po.updated_at) DESC, p.id DESC",
+             ORDER BY COALESCE(i.date_souscription, po.conforme_at, po.updated_at) DESC,
+                      p.id DESC, po.id ASC",
         )?;
         let rows = stmt.query_map(
             params![PIPE_TYPE_AFFAIRE, PIPE_STAGE_GAGNEE, OP_SOUSCRIPTION, OP_VERSEMENT],
@@ -1080,6 +1101,58 @@ mod tests {
             assert!(updated.investissement_id.is_none());
         }
         assert!(db.get_investissements_by_contact(contact_id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn list_pipe_remuneration_rows_une_ligne_par_souscription() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        // Deux AV identiques + une SCPI : trois lignes.
+        let affaire = seed_affaire(&db, contact_id, None, PIPE_STAGE_GAGNEE);
+        for montant in [7_000_000, 5_000] {
+            db.create_placement_operation(NewPlacementOperation {
+                force_new: true,
+                ..souscription(contact_id, affaire, "Cristalliance Avenir", "ASSURANCE_VIE", montant)
+            })
+            .unwrap();
+        }
+        db.create_placement_operation(souscription(contact_id, affaire, "Comete", "SCPI", 100_000))
+            .unwrap();
+        // Affaire versement seule : son versement le plus récent.
+        let versement_affaire = seed_affaire(&db, contact_id, None, PIPE_STAGE_GAGNEE);
+        for montant in [200_000, 300_000] {
+            db.create_placement_operation(NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(versement_affaire),
+                operation_type: OP_VERSEMENT.into(),
+                product_label: Some("Cristalliance Avenir".into()),
+                montant_centimes: Some(montant),
+                type_produit: Some("ASSURANCE_VIE".into()),
+                force_new: true,
+                ..Default::default()
+            })
+            .unwrap();
+        }
+        // Affaire non gagnée : ignorée.
+        let en_cours = seed_affaire(&db, contact_id, None, PIPE_STAGE_R3);
+        db.create_placement_operation(souscription(contact_id, en_cours, "Comete", "SCPI", 1))
+            .unwrap();
+
+        let rows = db.list_pipe_remuneration_rows().unwrap();
+        let mut on_affaire: Vec<_> = rows
+            .iter()
+            .filter(|r| r.pipe_id == affaire)
+            .map(|r| r.montant_centimes)
+            .collect();
+        on_affaire.sort();
+        assert_eq!(on_affaire, vec![5_000, 100_000, 7_000_000]);
+        let on_versement: Vec<_> = rows
+            .iter()
+            .filter(|r| r.pipe_id == versement_affaire)
+            .map(|r| r.montant_centimes)
+            .collect();
+        assert_eq!(on_versement, vec![300_000]);
+        assert!(rows.iter().all(|r| r.pipe_id != en_cours));
     }
 
     #[test]

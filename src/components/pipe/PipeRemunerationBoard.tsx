@@ -11,6 +11,7 @@ import { updatePlacementOperationPvManual } from "@/lib/api/tauri-box-placement"
 import { PLACEMENT_OPERATIONS_CHANGED_EVENT } from "@/lib/api/tauri-box-placement";
 import { subscribePipeChanged } from "@/lib/pipe/pipe-events";
 import { computeRemunerationCentimes } from "@/lib/pipe/remuneration-calc";
+import { remunerationFraisDeduitsPct } from "@/lib/pipe/remuneration-scpi-frais";
 import { fiscalYearLabelForUnix } from "@/lib/pipe/remuneration-fiscal-year";
 import {
   defaultPvForTypeProduit,
@@ -104,6 +105,7 @@ export function PipeRemunerationBoard() {
         tpcPercent: tpc,
         cifEnabled,
         pvManual: row.pv_manual,
+        productLabel: row.product_label,
       });
       if (amount != null) sum += amount;
     }
@@ -152,7 +154,9 @@ export function PipeRemunerationBoard() {
           <strong className="text-foreground">{formatEuroCentimes(totalRemuneration)}</strong>
         </span>
         {cifEnabled ? (
-          <span className="rounded-md bg-muted px-2 py-0.5 text-xs">CIF actif (PV SCPI 0,5)</span>
+          <span className="rounded-md bg-muted px-2 py-0.5 text-xs">
+            CIF actif (PV SCPI 0,5)
+          </span>
         ) : null}
       </div>
 
@@ -162,6 +166,7 @@ export function PipeRemunerationBoard() {
             <tr className="border-b bg-muted/40 text-left text-muted-foreground">
               <th className="px-3 py-2 font-medium">Affaire</th>
               <th className="px-3 py-2 font-medium">Client</th>
+              <th className="px-3 py-2 font-medium">Produit</th>
               <th className="px-3 py-2 font-medium text-right">Montant souscrit</th>
               <th className="px-3 py-2 font-medium text-right">PV</th>
               <th className="px-3 py-2 font-medium text-right">TPC</th>
@@ -185,8 +190,13 @@ export function PipeRemunerationBoard() {
                       tpcPercent: tpc,
                       cifEnabled,
                       pvManual: row.pv_manual,
+                      productLabel: row.product_label,
                     })
                   : null;
+              const fraisDeduitsPct = remunerationFraisDeduitsPct({
+                typeProduit,
+                productLabel: row.product_label,
+              });
               const pvDraft =
                 pvDrafts[row.placement_operation_id] ??
                 (row.pv_manual != null ? String(row.pv_manual).replace(".", ",") : "");
@@ -200,8 +210,18 @@ export function PipeRemunerationBoard() {
                       contact_nom: row.contact_nom,
                     })}
                   </td>
+                  <td className="px-3 py-2">
+                    {row.product_label?.trim() || (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {formatEuroCentimes(row.montant_centimes)}
+                    {fraisDeduitsPct != null ? (
+                      <span className="block text-xs text-muted-foreground">
+                        − {String(fraisDeduitsPct).replace(".", ",")} % frais
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-3 py-2 text-right">
                     {pvKind === "immo_manual" ? (

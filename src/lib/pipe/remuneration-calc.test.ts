@@ -24,11 +24,60 @@ describe("remuneration-calc", () => {
     expect(
       computeRemunerationCentimes({
         montantCentimes: 5_000_000,
-        typeProduit: "SCPI",
+        typeProduit: "PER",
         tpcPercent: 7,
         cifEnabled: false,
       })
     ).toBe(140_000);
+  });
+
+  it("AV / PER / capitalisation : montant × 0,4 × TPC, même en CIF", () => {
+    // 70 000 € × 0,4 × 7 % = 1 960 €
+    expect(
+      computeRemunerationCentimes({
+        montantCentimes: 7_000_000,
+        typeProduit: "ASSURANCE_VIE",
+        tpcPercent: 7,
+        cifEnabled: true,
+        productLabel: "Cristalliance Avenir",
+      })
+    ).toBe(196_000);
+  });
+
+  it("SCPI en CIF : (montant − frais de la fiche) × 0,5 × TPC", () => {
+    // Comète, 10 % : (50 000 − 5 000) × 0,5 × 7 % = 1 575 €
+    expect(
+      computeRemunerationCentimes({
+        montantCentimes: 5_000_000,
+        typeProduit: "SCPI",
+        tpcPercent: 7,
+        cifEnabled: true,
+        productLabel: "Comète",
+      })
+    ).toBe(157_500);
+    // Osmo Energie, 12 % : 44 000 × 0,5 × 7 % = 1 540 €
+    expect(
+      computeRemunerationCentimes({
+        montantCentimes: 5_000_000,
+        typeProduit: "SCPI",
+        tpcPercent: 7,
+        cifEnabled: true,
+        productLabel: "Osmo Energie",
+      })
+    ).toBe(154_000);
+  });
+
+  it("SCPI hors CIF : (montant − frais de la fiche) × 0,4 × TPC", () => {
+    // Osmo Energie, 12 % : 44 000 × 0,4 × 7 % = 1 232 €
+    expect(
+      computeRemunerationCentimes({
+        montantCentimes: 5_000_000,
+        typeProduit: "SCPI",
+        tpcPercent: 7,
+        cifEnabled: false,
+        productLabel: "Osmo Energie",
+      })
+    ).toBe(123_200);
   });
 
   it("utilise le PV manuel immo", () => {
