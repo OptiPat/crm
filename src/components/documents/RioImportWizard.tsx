@@ -17,8 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { File, FileText, Loader2, Upload, X } from "lucide-react";
-import { uploadDocument, type NewDocument } from "@/lib/api/tauri-documents";
+import { File, FileText, Loader2, X } from "lucide-react";
+import {
+  uploadDocument,
+  stageDocumentFromPath,
+  type NewDocument,
+} from "@/lib/api/tauri-documents";
+import { useDocumentsPageDragDrop } from "@/hooks/useDocumentsPageDragDrop";
+import { FileDropZone } from "./FileDropZone";
 import { extractTextFromPDFPath, parseAuto, isNativeTextPDF, type ExtractedData } from "@/lib/pdf";
 import { getContactById, getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import type { NewInvestissement } from "@/lib/api/tauri-investissements";
@@ -81,7 +87,7 @@ export interface RioImportWizardProps {
   /** Sans Dialog externe (intégré dans DocumentUpload). */
   embedded?: boolean;
   /** Retour vers les autres types de document (mode embedded). */
-  onRequestGenericImport?: () => void;
+  onRequestGenericImport?: (typeDocument?: string) => void;
   /** Le PDF est enregistré en base (avant le tri du patrimoine) : l'import compte comme fait. */
   onDocumentCreated?: () => void;
 }
@@ -364,23 +370,58 @@ export function RioImportWizard({
     handleExtractText,
   ]);
 
+  const applyPickedPdf = async (file: PickedFile) => {
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      toast.error("Sélectionnez un fichier PDF Stellium (RIO ou QPI).");
+      return;
+    }
+    setUploadedFile(file);
+    setFormData((prev) => ({ ...prev, nom_fichier: file.name }));
+    if (autoExtract) {
+      await handleExtractText(file.path);
+    }
+  };
+
   const handleFileSelect = async () => {
     try {
       const file = await uploadDocument();
       if (!file) return;
-      if (!file.name.toLowerCase().endsWith(".pdf")) {
-        toast.error("Sélectionnez un fichier PDF Stellium (RIO ou QPI).");
-        return;
-      }
-      setUploadedFile(file);
-      setFormData((prev) => ({ ...prev, nom_fichier: file.name }));
-      if (autoExtract) {
-        await handleExtractText(file.path);
-      }
+      await applyPickedPdf(file);
     } catch (error) {
       toast.error(userErrorMessage(error, "Impossible de sélectionner le fichier"));
     }
   };
+
+  // Glisser-déposer d’un PDF RIO / QPI.
+  const applyPickedPdfRef = useRef(applyPickedPdf);
+  useEffect(() => {
+    applyPickedPdfRef.current = applyPickedPdf;
+  });
+  const hasFileRef = useRef(false);
+  hasFileRef.current = uploadedFile != null;
+  const handleDroppedPaths = useCallback((paths: string[]) => {
+    if (hasFileRef.current) {
+      toast.info("Retirez d’abord le fichier sélectionné pour en déposer un autre.");
+      return;
+    }
+    const path = paths.find((p) => p.toLowerCase().endsWith(".pdf"));
+    if (!path) {
+      toast.error("Déposez un fichier PDF Stellium (RIO ou QPI).");
+      return;
+    }
+    if (paths.length > 1) toast.info("Un seul fichier à la fois : le premier PDF est utilisé.");
+    void (async () => {
+      try {
+        await applyPickedPdfRef.current(await stageDocumentFromPath(path));
+      } catch (error) {
+        toast.error(userErrorMessage(error, "Impossible d’importer le fichier déposé"));
+      }
+    })();
+  }, []);
+  const { isDragging: isDraggingFile } = useDocumentsPageDragDrop(handleDroppedPaths, {
+    enabled: open,
+    claim: true,
+  });
 
   const finishRioImport = async (
     data: ExtractedData,
@@ -560,6 +601,11 @@ export function RioImportWizard({
                 <Select
                   value={formData.type_document}
                   onValueChange={(value) => {
+                    // Autre type que RIO / QPI : bascule sur le formulaire d’import générique.
+                    if (value !== "PATRIMOINE" && value !== "QPI" && embedded && onRequestGenericImport) {
+                      onRequestGenericImport(value);
+                      return;
+                    }
                     setFormData({ ...formData, type_document: value });
                     setExtractedData(null);
                     setImportAssessment(null);
@@ -570,8 +616,14 @@ export function RioImportWizard({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="PATRIMOINE">{getDocumentTypeLabel("PATRIMOINE")}</SelectItem>
-                    <SelectItem value="QPI">{getDocumentTypeLabel("QPI")}</SelectItem>
+                    {(embedded && onRequestGenericImport
+                      ? ["PATRIMOINE", "QPI", "IDENTITE", "FISCAL", "CONTRAT", "RELEVE", "AUTRE"]
+                      : ["PATRIMOINE", "QPI"]
+                    ).map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {getDocumentTypeLabel(type)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -603,10 +655,13 @@ export function RioImportWizard({
                     </Button>
                   </div>
                 ) : (
-                  <Button type="button" variant="outline" className="w-full gap-2" onClick={handleFileSelect}>
-                    <Upload className="h-4 w-4" />
-                    Choisir un PDF
-                  </Button>
+                  <FileDropZone
+                    isDragging={isDraggingFile}
+                    onSelect={() => void handleFileSelect()}
+                    label="Glissez le PDF ici"
+                    buttonLabel="Choisir un PDF"
+                    hint="RIO ou QPI Stellium"
+                  />
                 )}
               </div>
 
@@ -644,18 +699,7 @@ export function RioImportWizard({
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
-                {embedded && onRequestGenericImport ? (
-                  <Button
-                    type="button"
-                    variant="link"
-                    className="h-auto p-0 text-muted-foreground"
-                    onClick={onRequestGenericImport}
-                  >
-                    ← Autre type de document
-                  </Button>
-                ) : (
-                  <span />
-                )}
+                <span />
                 <div className="flex gap-2 ml-auto">
                   <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                     Annuler

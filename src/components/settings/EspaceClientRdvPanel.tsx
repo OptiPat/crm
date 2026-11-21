@@ -73,7 +73,7 @@ export function EspaceClientRdvPanel() {
               value={lienId}
               onChange={(event) => void enregistrer(event.target.value)}
               disabled={chargement || !portalUrl}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
             >
               <option value="">Aucun bouton</option>
               {liens.map((lien) => (

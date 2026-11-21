@@ -1,11 +1,26 @@
 import { useEffect, useState } from "react";
+import { claimFileDrop, isFileDropClaimed } from "@/lib/documents/file-drop-claim";
 
-export function useDocumentsPageDragDrop(onFilesDropped: (paths: string[]) => void) {
+/**
+ * Écoute le dépôt de fichiers sur la fenêtre (Tauri).
+ * - `claim: false` (page) : ignore le dépôt si une fenêtre d'import l'a réservé.
+ * - `claim: true` (fenêtre d'import) : réserve le dépôt tant que `enabled` est vrai.
+ */
+export function useDocumentsPageDragDrop(
+  onFilesDropped: (paths: string[]) => void,
+  { enabled = true, claim = false }: { enabled?: boolean; claim?: boolean } = {}
+) {
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
+    if (!enabled) {
+      setIsDragging(false);
+      return;
+    }
     let mounted = true;
     let unlisten: (() => void) | undefined;
+    const release = claim ? claimFileDrop() : undefined;
+    const ignored = () => !claim && isFileDropClaimed();
 
     void (async () => {
       try {
@@ -13,6 +28,10 @@ export function useDocumentsPageDragDrop(onFilesDropped: (paths: string[]) => vo
         const webview = getCurrentWebview();
         unlisten = await webview.onDragDropEvent((event) => {
           if (!mounted) return;
+          if (ignored()) {
+            setIsDragging(false);
+            return;
+          }
           if (event.payload.type === "over") {
             setIsDragging(true);
           } else if (event.payload.type === "drop") {
@@ -32,8 +51,9 @@ export function useDocumentsPageDragDrop(onFilesDropped: (paths: string[]) => vo
     return () => {
       mounted = false;
       unlisten?.();
+      release?.();
     };
-  }, [onFilesDropped]);
+  }, [onFilesDropped, enabled, claim]);
 
   return { isDragging };
 }

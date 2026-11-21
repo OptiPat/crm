@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -357,9 +357,6 @@ export function Etiquettes({ onNavigate }: { onNavigate?: (page: string) => void
     <Card className="border-border/80 shadow-sm h-full flex flex-col min-h-0">
       <CardHeader className="pb-3 shrink-0">
         <CardTitle className="text-lg">Liste des étiquettes</CardTitle>
-        <CardDescription>
-          Cliquez sur une étiquette pour afficher ses contacts.
-        </CardDescription>
         <div className="flex flex-wrap gap-2 pt-3">
           {PAGE_FILTERS.map((f) => (
             <FilterPill
@@ -525,31 +522,30 @@ export function Etiquettes({ onNavigate }: { onNavigate?: (page: string) => void
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-end gap-4">
-        <div className="flex flex-wrap gap-2 shrink-0">
-          <Button type="button"
-            variant="outline"
-            className="gap-2"
-            onClick={() => void handleSync()}
-            disabled={syncing}
-            title="Après import massif ou si les compteurs semblent incohérents"
-          >
-            <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
-            Recalculer les règles
-          </Button>
-          <EtiquetteCreateMenu onClassic={openClassicForm} onExceltis={openExceltisForm} />
-        </div>
-      </div>
-
       <Tabs
         value={pageTab}
         onValueChange={(v) => setPageTab(v as "etiquettes" | "segments")}
         className="space-y-4"
       >
-        <TabsList>
-          <TabsTrigger value="etiquettes">Étiquettes</TabsTrigger>
-          <TabsTrigger value="segments">Groupes de contacts</TabsTrigger>
-        </TabsList>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList>
+            <TabsTrigger value="etiquettes">Étiquettes</TabsTrigger>
+            <TabsTrigger value="segments">Groupes de contacts</TabsTrigger>
+          </TabsList>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Button type="button"
+              variant="outline"
+              className="gap-2"
+              onClick={() => void handleSync()}
+              disabled={syncing}
+              title="Après import massif ou si les compteurs semblent incohérents"
+            >
+              <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+              Recalculer les règles
+            </Button>
+            <EtiquetteCreateMenu onClassic={openClassicForm} onExceltis={openExceltisForm} />
+          </div>
+        </div>
 
         <TabsContent value="etiquettes" className="mt-0 space-y-6">
       <section className="space-y-2" aria-label="Synthèse des étiquettes">

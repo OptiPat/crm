@@ -239,7 +239,7 @@ export function EspaceClientBroadcastPanel() {
               id="broadcast-echeance-rdv"
               value={rdvLienId}
               onChange={(event) => setRdvLienId(event.target.value)}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm"
             >
               <option value="">Aucun</option>
               {liens.map((lien) => (

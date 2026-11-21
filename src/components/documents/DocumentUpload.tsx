@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,7 +19,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Upload, File, X, FileText } from "lucide-react";
-import { uploadDocument, createDocument, type NewDocument } from "@/lib/api/tauri-documents";
+import {
+  uploadDocument,
+  createDocument,
+  stageDocumentFromPath,
+  type NewDocument,
+} from "@/lib/api/tauri-documents";
+import { DOCUMENT_IMPORT_EXTENSIONS } from "@/lib/documents/document-import-queue";
+import { useDocumentsPageDragDrop } from "@/hooks/useDocumentsPageDragDrop";
+import { FileDropZone } from "./FileDropZone";
 import { discardUnreferencedStagedFiles } from "@/lib/documents/discard-staged-import";
 import { extractTextFromPDFPath, parseAuto, isNativeTextPDF, type ExtractedData } from "@/lib/pdf";
 import { ExtractedDataPreviewAdvanced } from "./ExtractedDataPreviewAdvanced";
@@ -309,50 +317,90 @@ export function DocumentUpload({
     try {
       const file = await uploadDocument();
       if (!file) return;
-
-      if (file) {
-        const nextType =
-          isImageFile(file.name) && (formData.type_document ?? "AUTRE") === "AUTRE"
-            ? "IDENTITE"
-            : formData.type_document ?? "AUTRE";
-
-        setUploadedFile(file);
-        setFormData((prev) => ({
-          ...prev,
-          nom_fichier: file.name,
-          type_document: nextType,
-        }));
-
-        if (identityImport.identityImportMode === "two_files") {
-          if (
-            autoExtract &&
-            identityImport.uploadedVersoFile &&
-            isIdentityFilePath(file.path) &&
-            isIdentityFilePath(identityImport.uploadedVersoFile.path)
-          ) {
-            await identityImport.runDualIdentityExtract(
-              file,
-              identityImport.uploadedVersoFile,
-              identityTextCallbacks
-            );
-          }
-          return;
-        }
-
-        if (!autoExtract) return;
-
-        if (identityImport.shouldUseIdentityPipeline(file.name, nextType)) {
-          if (!isIdentityFilePath(file.path)) return;
-          await identityImport.extractIdentity(file.path, identityTextCallbacks);
-        } else if (file.name.toLowerCase().endsWith(".pdf")) {
-          await handleExtractText(file.path);
-        }
-      }
+      await applyPickedFile(file);
     } catch (error) {
       console.error("Error selecting file:", error);
       toast.error(userErrorMessage(error, "Impossible de sélectionner le fichier"));
     }
   };
+
+  /** Fichier choisi (sélecteur ou glisser-déposer) : enregistre et lance l’analyse auto. */
+  const applyPickedFile = async (file: PickedFile) => {
+    const nextType =
+      isImageFile(file.name) && (formData.type_document ?? "AUTRE") === "AUTRE"
+        ? "IDENTITE"
+        : formData.type_document ?? "AUTRE";
+
+    setUploadedFile(file);
+    setFormData((prev) => ({
+      ...prev,
+      nom_fichier: file.name,
+      type_document: nextType,
+    }));
+
+    if (identityImport.identityImportMode === "two_files") {
+      if (
+        autoExtract &&
+        identityImport.uploadedVersoFile &&
+        isIdentityFilePath(file.path) &&
+        isIdentityFilePath(identityImport.uploadedVersoFile.path)
+      ) {
+        await identityImport.runDualIdentityExtract(
+          file,
+          identityImport.uploadedVersoFile,
+          identityTextCallbacks
+        );
+      }
+      return;
+    }
+
+    if (!autoExtract) return;
+
+    if (identityImport.shouldUseIdentityPipeline(file.name, nextType)) {
+      if (!isIdentityFilePath(file.path)) return;
+      await identityImport.extractIdentity(file.path, identityTextCallbacks);
+    } else if (file.name.toLowerCase().endsWith(".pdf")) {
+      await handleExtractText(file.path);
+    }
+  };
+
+  // Glisser-déposer : la fenêtre réserve le dépôt tant qu’elle est ouverte.
+  const applyPickedFileRef = useRef(applyPickedFile);
+  useEffect(() => {
+    applyPickedFileRef.current = applyPickedFile;
+  });
+  const uploadedFileRef = useRef(uploadedFile);
+  useEffect(() => {
+    uploadedFileRef.current = uploadedFile;
+  }, [uploadedFile]);
+  const handleDroppedPaths = useCallback((paths: string[]) => {
+    if (uploadedFileRef.current) {
+      toast.info("Retirez d’abord le fichier sélectionné pour en déposer un autre.");
+      return;
+    }
+    const path = paths.find((p) =>
+      (DOCUMENT_IMPORT_EXTENSIONS as readonly string[]).includes(
+        p.split(".").pop()?.toLowerCase() ?? ""
+      )
+    );
+    if (!path) {
+      toast.error("Format non pris en charge (PDF, Word, Excel, texte ou image).");
+      return;
+    }
+    if (paths.length > 1) toast.info("Un seul fichier à la fois : le premier est utilisé.");
+    void (async () => {
+      try {
+        const file = await stageDocumentFromPath(path);
+        await applyPickedFileRef.current(file);
+      } catch (error) {
+        toast.error(userErrorMessage(error, "Impossible d’importer le fichier déposé"));
+      }
+    })();
+  }, []);
+  const { isDragging: isDraggingFile } = useDocumentsPageDragDrop(handleDroppedPaths, {
+    enabled: open && !isStelliumWizardMode,
+    claim: true,
+  });
 
   const handleExtractText = async (filePath: string) => {
     setExtracting(true);
@@ -363,10 +411,17 @@ export function DocumentUpload({
       const result = await extractTextFromPDFPath(filePath);
       setExtractedText(result.text);
 
+      // Un RIO / QPI contient date et lieu de naissance : ne pas le prendre pour une pièce d’identité.
+      const detectedType = parseAuto(result.text).typeDocument;
+      const isStelliumText =
+        detectedType === "RIO" ||
+        detectedType === "QPI" ||
+        formData.type_document === "PATRIMOINE" ||
+        formData.type_document === "QPI";
       const isIdentityCandidate =
         isIdentityMode ||
-        looksLikeIdentityDocument(result.text) ||
-        isLikelyIdentityFileName(filePath);
+        (!isStelliumText &&
+          (looksLikeIdentityDocument(result.text) || isLikelyIdentityFileName(filePath)));
 
       if (isIdentityCandidate) {
         if (!identityImport.requireContactForIdentity()) return;
@@ -616,8 +671,8 @@ export function DocumentUpload({
             contactPrenom={contactLocked ? contactPrenom : linkedContact?.prenom}
             initialFormDate={formData.date_document}
             initialFormNotes={formData.notes}
-            onRequestGenericImport={() =>
-              setFormData((prev) => ({ ...prev, type_document: "AUTRE" }))
+            onRequestGenericImport={(typeDocument) =>
+              setFormData((prev) => ({ ...prev, type_document: typeDocument ?? "AUTRE" }))
             }
             {...stelliumBootstrap}
           />
@@ -638,7 +693,7 @@ export function DocumentUpload({
             ) : effectiveContactId ? (
               <>
                 Document lié à ce client. Pour un RIO, choisissez le type{" "}
-                <strong>RIO / relevé patrimonial</strong>.
+                <strong>RIO / recueil d&apos;informations et objectifs</strong>.
               </>
             ) : (
               <>Choisissez le type de document et le client concerné.</>
@@ -820,10 +875,7 @@ export function DocumentUpload({
                 </div>
               </div>
             ) : (
-              <Button type="button" variant="outline" className="w-full" onClick={handleFileSelect}>
-                <Upload className="h-4 w-4 mr-2" />
-                Sélectionner un fichier
-              </Button>
+              <FileDropZone isDragging={isDraggingFile} onSelect={() => void handleFileSelect()} />
             )}
 
             {isExtracting && (

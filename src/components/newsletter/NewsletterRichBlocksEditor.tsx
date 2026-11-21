@@ -104,7 +104,7 @@ export function NewsletterRichBlocksEditor({
                   </Button>
                 </div>
                 <select
-                  className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
+                  className="flex h-9 w-full rounded-md border border-input bg-card px-2 text-xs"
                   value={placementKey(block.placement)}
                   onChange={(e) =>
                     updateBlock(index, {

@@ -86,7 +86,7 @@ export function FinzzleClientImportPreviewLine({
         >
           {editable ? (
             <select
-              className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+              className="h-8 w-full rounded-md border border-input bg-card px-2 text-xs"
               value={line.categorie}
               onChange={(e) =>
                 onEdit({
@@ -111,7 +111,7 @@ export function FinzzleClientImportPreviewLine({
         >
           {editable ? (
             <select
-              className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+              className="h-8 w-full rounded-md border border-input bg-card px-2 text-xs"
               value={line.civilite}
               onChange={(e) => onEdit({ civilite: e.target.value })}
             >

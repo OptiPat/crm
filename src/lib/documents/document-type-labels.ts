@@ -1,8 +1,8 @@
 /** Libellés UI des valeurs `type_document` (code DB inchangé). */
 export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   IDENTITE: "Pièce d'identité / Passeport",
-  FISCAL: "Document fiscal",
-  PATRIMOINE: "RIO / relevé patrimonial",
+  FISCAL: "Avis d'imposition",
+  PATRIMOINE: "RIO / recueil d'informations et objectifs",
   QPI: "Profil investisseur (QPI)",
   CONTRAT: "Contrat",
   RELEVE: "Relevé",

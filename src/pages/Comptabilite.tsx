@@ -171,13 +171,8 @@ export function Comptabilite() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            Journal mensuel — dépenses, encaissements et déplacements
-          </p>
-        </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center rounded-md border bg-background">
             <Button

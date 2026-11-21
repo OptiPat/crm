@@ -130,7 +130,7 @@ export function ImmoImportPreviewLine({
         >
           {editable ? (
             <select
-              className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+              className="h-8 w-full rounded-md border border-input bg-card px-2 text-xs"
               value={line.typeProduit}
               onChange={(e) => onPatch({ typeProduit: e.target.value })}
             >

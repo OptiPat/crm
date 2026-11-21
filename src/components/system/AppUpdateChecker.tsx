@@ -25,7 +25,7 @@ export function CheckForUpdatesButton() {
       )}
       <button
         type="button"
-        className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent"
+        className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium hover:bg-accent"
         onClick={handleClick}
         disabled={checking}
       >

@@ -94,7 +94,7 @@ export function NewsletterPlacedImagesEditor({
               />
               <div className="flex-1 min-w-0 space-y-2">
                 <select
-                  className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
+                  className="flex h-9 w-full rounded-md border border-input bg-card px-2 text-xs"
                   value={placementKey(image.placement)}
                   onChange={(e) => {
                     const next = [...images];

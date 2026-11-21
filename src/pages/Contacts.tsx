@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Select,
@@ -843,6 +842,17 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const selectedSegment = segmentsDisponibles.find(
     (s) => s.id.toString() === segmentFilter
   );
+  // Total affiché sous le titre : tous les clients et filleuls (somme des deux onglets).
+  const totalContactsCount =
+    categoryCounts.CLIENT +
+    categoryCounts.CLIENT_ANCIEN +
+    categoryCounts.PROSPECT_CLIENT +
+    categoryCounts.SUSPECT_CLIENT +
+    categoryCounts.FILLEUL +
+    categoryCounts.PROSPECT_FILLEUL +
+    categoryCounts.SUSPECT_FILLEUL +
+    categoryCounts.FILLEUL_DESINSCRIT;
+
   const hasExtraFilters =
     statutFilter !== "ALL" ||
     etiquetteFilter !== "ALL" ||
@@ -908,8 +918,9 @@ export function Contacts({ onNavigate }: ContactsProps) {
             <div>
               <CardTitle className="font-serif">Liste des contacts</CardTitle>
               <CardDescription>
-                {filteredContacts.length} résultat
-                {filteredContacts.length > 1 ? "s" : ""}
+                {hasExtraFilters || pipelineStageFilter
+                  ? `${filteredContacts.length} résultat${filteredContacts.length > 1 ? "s" : ""}`
+                  : `${totalContactsCount} contact${totalContactsCount > 1 ? "s" : ""}`}
                 {pipelineStageFilter
                   ? ` · ${CONTACTS_PIPELINE_STAGE_LABELS[pipelineStageFilter]}`
                   : ""}
@@ -925,24 +936,24 @@ export function Contacts({ onNavigate }: ContactsProps) {
               }}
               className="w-full"
             >
-              <TabsList className="grid w-full grid-cols-2 h-auto">
-                <TabsTrigger value="clients" className="gap-2 py-2.5">
+              <TabsList className="h-auto w-auto justify-start gap-8 rounded-none border-b border-border/70 bg-transparent p-0">
+                <TabsTrigger value="clients" className="gap-2 rounded-none border-b-2 border-transparent px-1 pb-3 pt-0 text-base font-semibold data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none">
                   Clients
-                  <Badge variant="secondary" className="ml-1 tabular-nums">
+                  <span className="tabular-nums text-muted-foreground font-normal">
                     {categoryCounts.CLIENT +
                       categoryCounts.CLIENT_ANCIEN +
                       categoryCounts.PROSPECT_CLIENT +
                       categoryCounts.SUSPECT_CLIENT}
-                  </Badge>
+                  </span>
                 </TabsTrigger>
-                <TabsTrigger value="filleuls" className="gap-2 py-2.5">
+                <TabsTrigger value="filleuls" className="gap-2 rounded-none border-b-2 border-transparent px-1 pb-3 pt-0 text-base font-semibold data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none">
                   Filleuls
-                  <Badge variant="secondary" className="ml-1 tabular-nums">
+                  <span className="tabular-nums text-muted-foreground font-normal">
                     {categoryCounts.FILLEUL +
                       categoryCounts.PROSPECT_FILLEUL +
                       categoryCounts.SUSPECT_FILLEUL +
                       categoryCounts.FILLEUL_DESINSCRIT}
-                  </Badge>
+                  </span>
                 </TabsTrigger>
               </TabsList>
 
@@ -955,30 +966,30 @@ export function Contacts({ onNavigate }: ContactsProps) {
                     setClientSubTab(value as ClientSubTab);
                   }}
                 >
-                  <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="CLIENT" className="gap-2">
+                  <TabsList className="h-auto w-auto flex-wrap justify-start gap-1.5 bg-transparent p-0">
+                    <TabsTrigger value="CLIENT" className="gap-2 rounded-full border border-border/80 bg-card px-4 py-1.5 text-sm data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">
                       Clients
-                      <Badge variant="secondary" className="bg-green-50 text-green-700 border border-green-200">
+                      <span className="tabular-nums opacity-70">
                         {categoryCounts.CLIENT}
-                      </Badge>
+                      </span>
                     </TabsTrigger>
-                    <TabsTrigger value="PROSPECT_CLIENT" className="gap-2">
+                    <TabsTrigger value="PROSPECT_CLIENT" className="gap-2 rounded-full border border-border/80 bg-card px-4 py-1.5 text-sm data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">
                       Prospects
-                      <Badge variant="secondary" className="bg-blue-50 text-blue-700 border border-blue-200">
+                      <span className="tabular-nums opacity-70">
                         {categoryCounts.PROSPECT_CLIENT}
-                      </Badge>
+                      </span>
                     </TabsTrigger>
-                    <TabsTrigger value="SUSPECT_CLIENT" className="gap-2">
+                    <TabsTrigger value="SUSPECT_CLIENT" className="gap-2 rounded-full border border-border/80 bg-card px-4 py-1.5 text-sm data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">
                       Suspects
-                      <Badge variant="secondary" className="bg-yellow-50 text-yellow-700 border border-yellow-200">
+                      <span className="tabular-nums opacity-70">
                         {categoryCounts.SUSPECT_CLIENT}
-                      </Badge>
+                      </span>
                     </TabsTrigger>
-                    <TabsTrigger value="CLIENT_ANCIEN" className="gap-2">
+                    <TabsTrigger value="CLIENT_ANCIEN" className="gap-2 rounded-full border border-border/80 bg-card px-4 py-1.5 text-sm data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">
                       Anciens clients
-                      <Badge variant="secondary" className="bg-gray-50 text-gray-700 border border-gray-200">
+                      <span className="tabular-nums opacity-70">
                         {categoryCounts.CLIENT_ANCIEN}
-                      </Badge>
+                      </span>
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>
@@ -993,30 +1004,30 @@ export function Contacts({ onNavigate }: ContactsProps) {
                     setFilleulSubTab(value as FilleulSubTab);
                   }}
                 >
-                  <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="FILLEUL" className="gap-2">
+                  <TabsList className="h-auto w-auto flex-wrap justify-start gap-1.5 bg-transparent p-0">
+                    <TabsTrigger value="FILLEUL" className="gap-2 rounded-full border border-border/80 bg-card px-4 py-1.5 text-sm data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">
                       Filleuls
-                      <Badge variant="secondary" className="bg-purple-50 text-purple-700 border border-purple-200">
+                      <span className="tabular-nums opacity-70">
                         {categoryCounts.FILLEUL}
-                      </Badge>
+                      </span>
                     </TabsTrigger>
-                    <TabsTrigger value="PROSPECT_FILLEUL" className="gap-2">
+                    <TabsTrigger value="PROSPECT_FILLEUL" className="gap-2 rounded-full border border-border/80 bg-card px-4 py-1.5 text-sm data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">
                       Prospects
-                      <Badge variant="secondary" className="bg-cyan-50 text-cyan-700 border border-cyan-200">
+                      <span className="tabular-nums opacity-70">
                         {categoryCounts.PROSPECT_FILLEUL}
-                      </Badge>
+                      </span>
                     </TabsTrigger>
-                    <TabsTrigger value="SUSPECT_FILLEUL" className="gap-2">
+                    <TabsTrigger value="SUSPECT_FILLEUL" className="gap-2 rounded-full border border-border/80 bg-card px-4 py-1.5 text-sm data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">
                       Suspects
-                      <Badge variant="secondary" className="bg-orange-50 text-orange-700 border border-orange-200">
+                      <span className="tabular-nums opacity-70">
                         {categoryCounts.SUSPECT_FILLEUL}
-                      </Badge>
+                      </span>
                     </TabsTrigger>
-                    <TabsTrigger value="FILLEUL_DESINSCRIT" className="gap-2">
+                    <TabsTrigger value="FILLEUL_DESINSCRIT" className="gap-2 rounded-full border border-border/80 bg-card px-4 py-1.5 text-sm data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">
                       Désinscrits
-                      <Badge variant="secondary" className="bg-gray-50 text-gray-700 border border-gray-200">
+                      <span className="tabular-nums opacity-70">
                         {categoryCounts.FILLEUL_DESINSCRIT}
-                      </Badge>
+                      </span>
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>
@@ -1089,16 +1100,18 @@ export function Contacts({ onNavigate }: ContactsProps) {
                   </Select>
                 )}
 
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
                 <Button type="button"
                   variant={groupByFoyer ? "default" : "outline"}
+                  size="sm"
                   onClick={() => setGroupByFoyer(!groupByFoyer)}
-                  className="gap-2 whitespace-nowrap"
+                  className="h-8 gap-2 whitespace-nowrap"
                 >
                   <Users2 className="h-4 w-4" />
                   {groupByFoyer ? "Vue liste" : "Par foyer"}
                 </Button>
-              </div>
-
               <ContactsActiveFilters
                 searchQuery={searchQuery}
                 onClearSearch={() => setSearchQuery("")}
@@ -1127,6 +1140,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
                 }
                 onClearPipelineStage={() => setPipelineStageFilter(null)}
               />
+              </div>
             </div>
           </div>
         </CardHeader>

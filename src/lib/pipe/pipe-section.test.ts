@@ -36,10 +36,15 @@ describe("pipe-section", () => {
     expect(storage.get(PIPE_BOARD_TAB_KEY)).toBe("affaires");
   });
 
-  it("migre viewMode list vers liste", () => {
+  it("migre viewMode list vers affaires (liste retirée)", () => {
     storage.set(PIPE_VIEW_MODE_KEY, "list");
     storage.set(PIPE_BOARD_TAB_KEY, "affaires");
-    expect(loadPipeSection()).toBe("liste");
+    expect(loadPipeSection()).toBe("affaires");
+  });
+
+  it("ancienne section liste mémorisée → affaires", () => {
+    storage.set(PIPE_SECTION_KEY, "liste");
+    expect(loadPipeSection()).toBe("affaires");
   });
 
   it("migre boardTab actes vers suivi_stellium", () => {

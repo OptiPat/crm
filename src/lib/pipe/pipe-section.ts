@@ -10,12 +10,8 @@ export const PIPE_SECTION_KEY = "crm:pipe-section";
 /** Destination unique dans la page Pipe (remplace Tableau/Liste + onglets board). */
 export type PipeSection = "affaires" | "suivi_stellium" | "remuneration" | "liste";
 
-export const PIPE_SECTIONS: PipeSection[] = [
-  "affaires",
-  "suivi_stellium",
-  "liste",
-  "remuneration",
-];
+/** Onglets affichés (« Liste complète » retirée : les tableaux couvrent l’usage). */
+export const PIPE_SECTIONS: PipeSection[] = ["affaires", "suivi_stellium", "remuneration"];
 
 export const PIPE_SECTION_LABELS: Record<PipeSection, string> = {
   affaires: "Affaires",
@@ -43,7 +39,7 @@ function legacyBoardTabFromSection(section: PipeSection): PipeBoardTab {
 }
 
 function sectionFromLegacy(viewMode: PipeViewMode, boardTab: PipeBoardTab): PipeSection {
-  if (viewMode === "list") return "liste";
+  if (viewMode === "list") return "affaires";
   if (boardTab === "actes") return "suivi_stellium";
   if (boardTab === "remuneration") return "remuneration";
   return "affaires";
@@ -52,14 +48,11 @@ function sectionFromLegacy(viewMode: PipeViewMode, boardTab: PipeBoardTab): Pipe
 export function loadPipeSection(): PipeSection {
   try {
     const raw = localStorage.getItem(PIPE_SECTION_KEY);
-    if (
-      raw === "affaires" ||
-      raw === "suivi_stellium" ||
-      raw === "remuneration" ||
-      raw === "liste"
-    ) {
+    if (raw === "affaires" || raw === "suivi_stellium" || raw === "remuneration") {
       return raw;
     }
+    // Ancien choix « Liste complète » : on revient sur les affaires.
+    if (raw === "liste") return "affaires";
 
     const viewMode = localStorage.getItem(PIPE_VIEW_MODE_KEY);
     const boardTab = localStorage.getItem(PIPE_BOARD_TAB_KEY);

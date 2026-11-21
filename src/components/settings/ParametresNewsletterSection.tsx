@@ -433,7 +433,7 @@ export function ParametresNewsletterSection({
               <Label htmlFor="param-llm-provider">Fournisseur</Label>
               <select
                 id="param-llm-provider"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={llmProvider}
                 onChange={(e) => {
                   const next = e.target.value as NewsletterLlmProvider;
@@ -634,7 +634,7 @@ export function ParametresNewsletterSection({
             </div>
             <select
               id="param-brevo-template"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
               value={defaultBrevoTemplateId}
               onChange={(e) => setDefaultBrevoTemplateId(e.target.value)}
               disabled={!settings?.brevoApiKeyConfigured || brevoTemplates.length === 0}
@@ -765,7 +765,7 @@ export function ParametresNewsletterSection({
             {agendaLinks.length > 0 ? (
               <select
                 id="param-nl-agenda-link"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={agendaLinkId || agendaLinks[0]!.id}
                 onChange={(e) => setAgendaLinkId(e.target.value)}
               >
@@ -852,7 +852,7 @@ export function ParametresNewsletterSection({
             <Label htmlFor="param-nl-default-layout">Mise en page par défaut</Label>
             <select
               id="param-nl-default-layout"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
               value={defaultLayout}
               onChange={(e) => setDefaultLayout(e.target.value as NewsletterLayout)}
             >
@@ -871,7 +871,7 @@ export function ParametresNewsletterSection({
               <Label htmlFor="param-nl-body-font">Police du corps</Label>
               <select
                 id="param-nl-body-font"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={bodyFont}
                 onChange={(e) => setBodyFont(e.target.value as NewsletterBodyFont)}
               >
@@ -886,7 +886,7 @@ export function ParametresNewsletterSection({
               <Label htmlFor="param-nl-title-font">Police des titres</Label>
               <select
                 id="param-nl-title-font"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={titleFont}
                 onChange={(e) => setTitleFont(e.target.value as NewsletterTitleFont)}
               >
@@ -901,7 +901,7 @@ export function ParametresNewsletterSection({
               <Label htmlFor="param-nl-font-size">Taille du texte</Label>
               <select
                 id="param-nl-font-size"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={bodyFontSize}
                 onChange={(e) => setBodyFontSize(e.target.value as NewsletterBodyFontSize)}
               >
@@ -916,7 +916,7 @@ export function ParametresNewsletterSection({
               <Label htmlFor="param-nl-line-height">Interlignage</Label>
               <select
                 id="param-nl-line-height"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={lineHeight}
                 onChange={(e) => setLineHeight(e.target.value as NewsletterLineHeight)}
               >
@@ -931,7 +931,7 @@ export function ParametresNewsletterSection({
               <Label htmlFor="param-nl-section-spacing">Espacement entre sections</Label>
               <select
                 id="param-nl-section-spacing"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
                 value={sectionSpacing}
                 onChange={(e) => setSectionSpacing(e.target.value as NewsletterSectionSpacing)}
               >

@@ -1198,7 +1198,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-muted-foreground text-sm">
           Génération IA, envoi à toute la base (sauf désinscrits et exclusions)
@@ -1312,7 +1312,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                 <Label htmlFor="newsletter-structure">Format du numéro</Label>
                 <select
                   id="newsletter-structure"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
                   value={structurePresetId}
                   onChange={(e) => setStructurePresetId(e.target.value)}
                 >

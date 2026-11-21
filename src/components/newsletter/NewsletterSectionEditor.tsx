@@ -86,7 +86,7 @@ export function NewsletterSectionEditor({
             <Label htmlFor="nl-layout">Mise en page de ce numéro</Label>
             <select
               id="nl-layout"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
               value={draft.layout ?? "magazine"}
               onChange={(e) => update({ layout: e.target.value as NewsletterLayout })}
             >

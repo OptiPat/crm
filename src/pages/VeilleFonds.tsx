@@ -760,7 +760,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
 
   if (view === "compare") {
     return (
-      <div className="space-y-6 p-6">
+      <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <Button type="button" variant="ghost" size="sm" className="mb-2 -ml-2" onClick={() => setView("table")}>

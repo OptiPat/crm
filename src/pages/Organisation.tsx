@@ -448,7 +448,7 @@ export function Organisation({ onNavigate }: OrganisationProps) {
     selectedDossierContactId != null || contactDetailOpen;
 
   return (
-    <div className="space-y-4 p-3 sm:p-4">
+    <div className="space-y-4">
       {organisationDrillDownOpen ? <DashboardDrillDownBackdrop /> : null}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
         <div className="flex flex-wrap items-center gap-2">

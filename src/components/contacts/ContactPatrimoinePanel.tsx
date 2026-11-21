@@ -453,7 +453,7 @@ export function ContactPatrimoinePanel({
               <Building2 className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
               <p className="text-sm font-medium">Aucun investissement enregistré</p>
               <p className="text-xs text-muted-foreground mt-1 mb-4 max-w-md mx-auto">
-                Importez un RIO ou relevé patrimonial pour préremplir la fiche et le patrimoine,
+                Importez un RIO (recueil d&apos;informations et objectifs) pour préremplir la fiche et le patrimoine,
                 ou saisissez un investissement manuellement.
               </p>
               <div className="flex flex-wrap justify-center gap-2">

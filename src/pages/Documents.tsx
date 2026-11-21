@@ -601,7 +601,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
           const recognized =
             plan.kind === "stellium_qpi"
               ? "Profil investisseur reconnu — vérifiez les informations avant d'importer."
-              : "Relevé patrimonial reconnu — vérifiez les informations avant d'importer.";
+              : "RIO reconnu — vérifiez les informations avant d'importer.";
           toast.info(label ? `${label} : ${recognized}` : recognized);
           return;
         }
@@ -847,7 +847,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
             <Upload className="h-10 w-10 mx-auto text-primary mb-2" />
             <p className="text-sm font-medium">Déposez un ou plusieurs fichiers pour les importer</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Importés l&apos;un après l&apos;autre — relevé patrimonial, profil investisseur ou pièce d&apos;identité reconnus automatiquement
+              Importés l&apos;un après l&apos;autre — RIO, profil investisseur ou pièce d&apos;identité reconnus automatiquement
             </p>
           </div>
         </div>
@@ -1117,7 +1117,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
               <Upload className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
               <p className="text-sm font-medium">Aucun document</p>
               <p className="text-xs text-muted-foreground mt-1 mb-4 max-w-md mx-auto">
-                Importez un RIO ou relevé patrimonial pour alimenter les fiches, une pièce
+                Importez un RIO (recueil d&apos;informations et objectifs) pour alimenter les fiches, une pièce
                 d&apos;identité pour préremplir l&apos;état civil, ou tout autre document client.
               </p>
               <div className="flex flex-wrap justify-center gap-2">
@@ -1128,7 +1128,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
                   onClick={() => openUpload("PATRIMOINE")}
                 >
                   <FileText className="h-4 w-4" />
-                  Importer un RIO / relevé patrimonial
+                  Importer un RIO
                 </Button>
                 <Button
                   type="button"

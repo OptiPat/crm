@@ -53,9 +53,9 @@ export function PipePageToolbar({
   const [createOpen, setCreateOpen] = useState(false);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-wrap items-end justify-between gap-3">
       <div
-        className="inline-flex max-w-full flex-wrap rounded-lg border bg-muted/30 p-1"
+        className="inline-flex max-w-full flex-wrap gap-6 border-b border-border/70"
         role="tablist"
         aria-label="Sections Pipe"
       >
@@ -68,15 +68,16 @@ export function PipePageToolbar({
               type="button"
               role="tab"
               aria-selected={active}
-              variant={active ? "secondary" : "ghost"}
-              size="sm"
+              variant="ghost"
               className={cn(
-                "h-8 gap-1.5 px-3 text-xs sm:text-sm",
-                active && "shadow-sm"
+                "-mb-px h-auto gap-2 rounded-none border-b-2 px-1 pb-3 pt-0 text-base font-semibold hover:bg-transparent",
+                active
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               )}
               onClick={() => onSectionChange(key)}
             >
-              <Icon className="h-3.5 w-3.5 shrink-0" />
+              <Icon className="h-4 w-4 shrink-0" />
               <span className="truncate">{PIPE_SECTION_LABELS[key]}</span>
             </Button>
           );

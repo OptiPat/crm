@@ -12,6 +12,6 @@ describe("document-type-labels", () => {
 
   it("couvre les types standards", () => {
     expect(DOCUMENT_TYPE_LABELS.RELEVE).toBe("Relevé");
-    expect(DOCUMENT_TYPE_LABELS.FISCAL).toBe("Document fiscal");
+    expect(DOCUMENT_TYPE_LABELS.FISCAL).toBe("Avis d'imposition");
   });
 });

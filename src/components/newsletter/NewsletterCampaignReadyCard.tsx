@@ -185,7 +185,7 @@ export function NewsletterCampaignReadyCard({
               </ol>
               <div className="flex flex-col sm:flex-row gap-2">
                 <select
-                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                  className="flex h-9 w-full rounded-md border border-input bg-card px-3 py-1 text-sm"
                   value={selectedBrevoTemplateId}
                   onChange={(e) => onSelectedBrevoTemplateIdChange(e.target.value)}
                   disabled={loadingBrevoTemplates || brevoTemplates.length === 0}
