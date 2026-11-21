@@ -16,7 +16,6 @@ import {
   FileDown,
   FileUp,
   Layers,
-  LineChart,
   RefreshCw,
   Scale,
   Search,
@@ -57,6 +56,7 @@ import {
   collectFundWatchlistAnnualYears,
   fundWatchlistAnnualPerf,
 } from "@/lib/fund-watchlist/fund-watchlist-annual-years";
+import { coachReportStatus } from "@/lib/fund-watchlist/fund-watchlist-coach-status";
 import { subscribeFundWatchlistChanged } from "@/lib/fund-watchlist/fund-watchlist-events";
 import { FUND_WATCHLIST_COACH_TOAST_ID } from "@/lib/fund-watchlist/fund-watchlist-coach-events";
 import { formatCoachProgressLabel } from "@/lib/fund-watchlist/fund-watchlist-coach-progress";
@@ -529,6 +529,15 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       ? "Voir rapport Coach"
       : "Rapport Coach";
 
+  const coachStatus =
+    coachReport && !coachGenerating
+      ? coachReportStatus({
+          generatedAt: coachReport.generated_at,
+          favoriteCount: coachReport.favorite_count,
+          currentFavorites: stats.favorites,
+        })
+      : null;
+
   const renderFundWatchlistCell = (entry: FundWatchlistEntry, column: FundWatchlistColumnId) => {
     const alignClass = fundWatchlistCellAlignClass(column);
     if (column === "favorite") {
@@ -830,30 +839,22 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
   return (
     <div className="space-y-6 p-6">
       <div className="rounded-2xl border border-border/70 bg-gradient-to-br from-primary/8 via-card to-amber-500/10 dark:from-primary/15 dark:via-card dark:to-amber-500/10 p-4 sm:p-5 space-y-5 shadow-sm">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-center gap-3">
-            <span className="w-1 h-7 rounded-full bg-primary/80 shrink-0" aria-hidden />
-            <LineChart className="h-6 w-6 text-primary shrink-0" aria-hidden />
-            <p className="text-muted-foreground max-w-2xl">
-              Classement par score court terme (1 semaine, 1 mois, 3 mois, depuis le 1er
-              janvier).
-            </p>
-          </div>
-          <div className="flex flex-col items-start gap-1 sm:items-end">
-            <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => void runCompare()}
-              disabled={selectedCompareCount < 2 || compareLoading}
-            >
-              <Scale className="h-4 w-4 mr-2" />
-              Comparer ({selectedCompareCount}/{MAX_UC_COMPARE})
-            </Button>
-            {selectedCompareCount > 0 && (
-              <Button variant="ghost" size="sm" onClick={clearCompareSelection}>
-                Tout décocher ({selectedCompareCount})
-              </Button>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 text-sm">
+            {coachStatus ? (
+              <>
+                <p className="text-muted-foreground">{coachStatus.label}</p>
+                {coachStatus.staleHint ? (
+                  <p className="text-xs text-amber-700 dark:text-amber-400">{coachStatus.staleHint}</p>
+                ) : null}
+              </>
+            ) : (
+              <p className="text-muted-foreground">
+                Épinglez vos fonds favoris pour générer le rapport Coach.
+              </p>
             )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
             <Button
               variant="secondary"
               onClick={() => {
@@ -870,7 +871,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
             </Button>
             {!coachGenerating && coachReport && (
               <Button variant="outline" onClick={() => void startCoachReport()} disabled={stats.favorites === 0}>
-                Régénérer
+                Mettre à jour le rapport
               </Button>
             )}
             <Popover open={importMenuOpen} onOpenChange={setImportMenuOpen}>
@@ -918,14 +919,6 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                 </Button>
               </PopoverContent>
             </Popover>
-            </div>
-          {coachReport && !coachGenerating && (
-            <p className="text-xs text-muted-foreground text-left sm:text-right">
-              Dernier rapport Coach :{" "}
-              {new Date(coachReport.generated_at * 1000).toLocaleString("fr-FR")} (
-              {coachReport.favorite_count} fonds)
-            </p>
-          )}
           </div>
         </div>
 
@@ -1010,6 +1003,32 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                   </Button>
                 )}
               </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
+              {selectedCompareCount > 0 ? (
+                <>
+                  <span className="font-medium">
+                    {selectedCompareCount} fonds sélectionné{selectedCompareCount > 1 ? "s" : ""} (max.{" "}
+                    {MAX_UC_COMPARE})
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void runCompare()}
+                    disabled={selectedCompareCount < 2 || compareLoading}
+                  >
+                    <Scale className="h-4 w-4 mr-2" />
+                    Comparer
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={clearCompareSelection}>
+                    Tout décocher
+                  </Button>
+                </>
+              ) : (
+                <span className="text-muted-foreground">
+                  Cochez 2 à {MAX_UC_COMPARE} fonds pour les comparer.
+                </span>
+              )}
             </div>
             <div className="relative w-full max-w-xl">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
