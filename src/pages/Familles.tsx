@@ -528,7 +528,7 @@ export function Familles({ onNavigate }: FamillesProps) {
           <CardDescription>
             {prefs.searchQuery.trim()
               ? `${filteredFamilles.length} résultat(s)`
-              : "Cliquez sur une carte pour déplier les membres"}
+              : null}
           </CardDescription>
         </CardHeader>
 
@@ -592,13 +592,14 @@ export function Familles({ onNavigate }: FamillesProps) {
                     isExpanded && "ring-1 ring-primary/20"
                   )}
                 >
-                  <div className="p-1">
+                  <div>
                     <FamilleSummaryCard
+                      embedded
                       famille={famille}
                       memberCount={coreMemberCount(famille)}
                       selected={isExpanded}
                       onClick={() => toggleFamille(famille)}
-                      actionHint={isExpanded ? "Replier les membres" : "Voir les membres"}
+                      actionHint=""
                     />
                   </div>
 

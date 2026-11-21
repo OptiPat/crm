@@ -25,6 +25,7 @@ const buttonVariants = cva(
         sm: "h-9 rounded-md px-3",
         lg: "h-11 rounded-md px-8",
         icon: "h-10 w-10",
+        "icon-sm": "h-9 w-9",
       },
     },
     defaultVariants: {
@@ -49,7 +50,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const tooltip =
       typeof title === "string" && title.trim()
         ? title
-        : size === "icon" && typeof ariaLabel === "string"
+        : (size === "icon" || size === "icon-sm") && typeof ariaLabel === "string"
           ? ariaLabel
           : undefined
     const button = (
@@ -57,14 +58,22 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         {...props}
-        aria-label={ariaLabel ?? (size === "icon" ? tooltip : undefined)}
+        aria-label={ariaLabel ?? (size === "icon" || size === "icon-sm" ? tooltip : undefined)}
         title={tooltip ? undefined : title}
       />
     )
     if (!tooltip) return button
     return (
       <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipTrigger
+          asChild
+          onFocus={(event) => {
+            // Focus automatique (ouverture d'un panneau) : pas d'infobulle. Seulement au clavier.
+            if (!event.currentTarget.matches(":focus-visible")) event.preventDefault()
+          }}
+        >
+          {button}
+        </TooltipTrigger>
         <TooltipContent>{tooltip}</TooltipContent>
       </Tooltip>
     )

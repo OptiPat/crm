@@ -333,7 +333,7 @@ export function ContactOneDriveActions({
   if (link) {
     return (
       <>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center">
           <Button
             type="button"
             variant="outline"

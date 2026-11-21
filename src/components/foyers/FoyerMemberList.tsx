@@ -173,7 +173,6 @@ export function FoyerMemberList({
   membres,
   highlightContactId,
   onMemberClick,
-  showTitle = true,
 }: FoyerMemberListProps) {
   useEffect(() => {
     if (highlightContactId == null) return;
@@ -193,13 +192,6 @@ export function FoyerMemberList({
 
   return (
     <div className="space-y-3">
-      {showTitle && (
-        <p className="text-xs text-muted-foreground">
-          Dépliez les investissements sous chaque membre. Bouton{" "}
-          <strong className="font-medium text-foreground/80">Fiche</strong> pour ouvrir le
-          contact.
-        </p>
-      )}
       {membres.map((membre) => (
         <MemberCard
           key={membre.contact.id}

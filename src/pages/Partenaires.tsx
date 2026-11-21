@@ -432,7 +432,7 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
           <CardDescription>
             {prefs.searchQuery.trim() || prefs.typeFilter !== "ALL" || prefs.statFilter
               ? `${filteredRows.length} résultat(s)`
-              : "Cliquez sur une carte pour déplier les produits liés"}
+              : null}
           </CardDescription>
         </CardHeader>
 
@@ -481,13 +481,14 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
                     isExpanded && "ring-1 ring-primary/20"
                   )}
                 >
-                  <div className="p-1">
+                  <div>
                     <PartenaireSummaryCard
+                      embedded
                       partenaire={partenaire}
                       meta={meta}
                       selected={isExpanded}
                       onClick={() => togglePartenaire(partenaire)}
-                      actionHint={isExpanded ? "Replier les produits" : "Voir les produits liés"}
+                      actionHint=""
                     />
                   </div>
 

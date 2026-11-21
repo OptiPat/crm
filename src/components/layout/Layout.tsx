@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useRef } from "react";
 import { LicenseStatusBanner } from "@/components/system/LicenseStatusBanner";
 import { AppUpdateBanner } from "@/components/system/AppUpdateBanner";
 import { AppNotificationsBar } from "@/components/notifications/AppNotificationsBar";
@@ -22,13 +22,19 @@ interface LayoutProps {
 export function Layout({ children, currentPage, onPageChange, onBack, onLogout }: LayoutProps) {
   useBackgroundSync();
   useAlertesBackgroundGeneration();
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Seule la zone de contenu défile : on la remet en haut à chaque changement de page.
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [currentPage]);
 
   return (
     <ContactDetailSheetProvider onNavigate={onPageChange}>
-      <div className="min-h-screen bg-background flex">
+      <div className="flex h-screen overflow-hidden bg-background">
         <Sidebar currentPage={currentPage} onPageChange={onPageChange} />
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <Header
             onLogout={onLogout}
             currentPage={currentPage}
@@ -41,7 +47,7 @@ export function Layout({ children, currentPage, onPageChange, onBack, onLogout }
           <AppUpdateBanner />
           <LicenseStatusBanner onOpenSettings={() => onPageChange("parametres")} />
 
-          <main className="flex-1 p-6 overflow-auto">{children}</main>
+          <main ref={mainRef} className="min-h-0 flex-1 overflow-auto p-6">{children}</main>
         </div>
       </div>
     </ContactDetailSheetProvider>

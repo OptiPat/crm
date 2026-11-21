@@ -11,6 +11,8 @@ export type PartenaireListMeta = {
 };
 
 type PartenaireSummaryCardProps = {
+  /** Intégrée dans un conteneur qui porte déjà le cadre (liste de la page). */
+  embedded?: boolean;
   partenaire: Partenaire;
   meta?: PartenaireListMeta;
   selected?: boolean;
@@ -25,6 +27,7 @@ export function PartenaireSummaryCard({
   selected = false,
   compact = false,
   actionHint,
+  embedded = false,
   onClick,
 }: PartenaireSummaryCardProps) {
   const typeInfo = getPartenaireTypeInfo(partenaire.type_partenaire);
@@ -37,12 +40,16 @@ export function PartenaireSummaryCard({
     <button
       type="button"
       onClick={onClick}
+      aria-expanded={embedded ? selected : undefined}
       className={cn(
-        "w-full text-left rounded-xl border transition-all duration-200 group",
-        "border-border/70 bg-card hover:bg-muted/40 hover:border-primary/30 hover:shadow-sm",
+        "w-full text-left rounded-xl transition-all duration-200 group",
+        embedded
+          ? "bg-transparent hover:bg-muted/40"
+          : "border border-border/70 bg-card hover:bg-muted/40 hover:border-primary/30 hover:shadow-sm",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         compact ? "p-3" : "p-4",
         selected &&
+          !embedded &&
           "ring-2 ring-primary/45 border-primary/35 bg-primary/[0.04] shadow-sm"
       )}
     >
@@ -110,7 +117,7 @@ export function PartenaireSummaryCard({
             className={cn(
               "h-5 w-5 text-muted-foreground/40 transition-all",
               "group-hover:text-primary group-hover:translate-x-0.5",
-              selected && "text-primary translate-x-0.5"
+              selected && (embedded ? "text-primary rotate-90" : "text-primary translate-x-0.5")
             )}
           />
         </div>

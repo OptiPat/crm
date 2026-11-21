@@ -395,12 +395,6 @@ export function PrescripteurTreeView({
   return (
     <>
       <div>
-        <p className="text-xs text-muted-foreground mb-3">
-          Clic sur le nom → déplier ou replier la branche. Bouton{" "}
-          <strong className="font-medium text-foreground/80">Fiche</strong> pour ouvrir le contact.{" "}
-          <Unlink2 className="inline h-3 w-3 -mt-0.5" aria-hidden /> retirer du réseau,{" "}
-          <Trash2 className="inline h-3 w-3 -mt-0.5" aria-hidden /> supprimer.
-        </p>
         <TreeNode
           node={root}
           foyersInfo={foyersInfo}

@@ -186,37 +186,23 @@ export function AppNotificationsBar({
       role="region"
       aria-label="Notifications"
       className={cn(
-        "border-b px-6 py-2.5",
+        "border-b px-6 py-1.5",
         hasUrgent
           ? "border-red-200/80 bg-gradient-to-r from-red-50/90 to-orange-50/50"
           : "border-amber-200/60 bg-amber-50/40"
       )}
     >
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex items-center gap-2 min-w-0 shrink-0">
-          <span
-            className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-lg shrink-0",
-              hasUrgent ? "bg-red-100" : "bg-amber-100"
-            )}
-          >
-            {hasUrgent ? (
-              <Mail className="h-4 w-4 text-red-700" />
-            ) : (
-              <Bell className="h-4 w-4 text-amber-800" />
-            )}
-          </span>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground leading-tight">
-              {displayTotal} action{displayTotal > 1 ? "s" : ""} en attente
-            </p>
-            <p className="text-xs text-muted-foreground hidden sm:block">
-              Mise à jour automatique
-            </p>
-          </div>
-        </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <p className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-foreground">
+          {hasUrgent ? (
+            <Mail className="h-3.5 w-3.5 text-red-700" aria-hidden />
+          ) : (
+            <Bell className="h-3.5 w-3.5 text-amber-800" aria-hidden />
+          )}
+          {displayTotal} action{displayTotal > 1 ? "s" : ""} en attente
+        </p>
 
-        <div className="flex flex-1 flex-wrap items-center gap-2 min-w-0">
+        <div className="flex flex-1 flex-wrap items-center gap-1.5 min-w-0">
           {displayItems.map((item) => (
             <NotificationPill
               key={item.id}
@@ -291,25 +277,25 @@ function NotificationPill({
       <button
         type="button"
         onClick={onClick}
-        className="inline-flex items-center gap-1.5 px-3 py-1 hover:opacity-90"
+        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 hover:opacity-90"
       >
         <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", styles.dot)} />
         <span className="tabular-nums font-semibold">{item.count}</span>
         <span>{item.label}</span>
-        <ChevronRight className="h-3.5 w-3.5 opacity-70" />
+        <ChevronRight className="h-3 w-3 opacity-60" />
       </button>
       {onDismiss ? (
         <button
           type="button"
           title="Masquer cette annonce (ne supprime pas les étiquettes ni la file Prêt à envoyer)"
           aria-label="Masquer cette annonce Stellium"
-          className="px-1.5 py-1 border-l border-current/20 hover:bg-black/10"
+          className="px-1.5 py-0.5 border-l border-current/20 hover:bg-black/5"
           onClick={(e) => {
             e.stopPropagation();
             void onDismiss();
           }}
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="h-3 w-3" />
         </button>
       ) : null}
     </div>

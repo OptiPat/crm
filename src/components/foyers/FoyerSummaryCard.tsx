@@ -13,6 +13,8 @@ import { ContactInitialsAvatar } from "@/components/contacts/contacts-ui";
 import { cn } from "@/lib/utils";
 
 type FoyerSummaryCardProps = {
+  /** Intégrée dans un conteneur qui porte déjà le cadre (liste Foyers / Familles). */
+  embedded?: boolean;
   foyer: Foyer;
   membres: Contact[];
   patrimoineAvecMoi?: number;
@@ -29,6 +31,7 @@ export function FoyerSummaryCard({
   selected = false,
   compact = false,
   actionHint = "Voir les membres",
+  embedded = false,
   onClick,
 }: FoyerSummaryCardProps) {
   const preview = membres.slice(0, compact ? 2 : 3);
@@ -37,12 +40,16 @@ export function FoyerSummaryCard({
     <button
       type="button"
       onClick={onClick}
+      aria-expanded={embedded ? selected : undefined}
       className={cn(
-        "w-full text-left rounded-xl border transition-all duration-200 group",
-        "border-border/70 bg-card hover:bg-muted/40 hover:border-primary/30 hover:shadow-sm",
+        "w-full text-left rounded-xl transition-all duration-200 group",
+        embedded
+          ? "bg-transparent hover:bg-muted/40"
+          : "border border-border/70 bg-card hover:bg-muted/40 hover:border-primary/30 hover:shadow-sm",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         compact ? "p-3" : "p-4",
         selected &&
+          !embedded &&
           "ring-2 ring-primary/45 border-primary/35 bg-primary/[0.04] shadow-sm"
       )}
     >
@@ -95,7 +102,7 @@ export function FoyerSummaryCard({
                 </span>
               )}
               {!compact && (
-                <span className="text-xs text-muted-foreground ml-2 truncate hidden sm:inline max-w-[200px]">
+                <span className="text-xs text-muted-foreground ml-2 truncate hidden sm:inline min-w-0">
                   {preview
                     .map((c) => formatFoyerMemberLabel(c, c.role_foyer))
                     .join(" · ")}
@@ -149,7 +156,7 @@ export function FoyerSummaryCard({
             className={cn(
               "h-5 w-5 text-muted-foreground/40 transition-all",
               "group-hover:text-primary group-hover:translate-x-0.5",
-              selected && "text-primary translate-x-0.5"
+              selected && (embedded ? "text-primary rotate-90" : "text-primary translate-x-0.5")
             )}
           />
         </div>

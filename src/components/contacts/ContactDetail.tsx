@@ -872,7 +872,7 @@ export function ContactDetail({
           <Button
             type="button"
             variant="outline"
-            size="icon"
+            size="icon-sm"
             onClick={() => openEditForm()}
             title="Modifier le contact"
             aria-label="Modifier le contact"
@@ -882,7 +882,7 @@ export function ContactDetail({
           <Button
             type="button"
             variant="outline"
-            size="icon"
+            size="icon-sm"
             onClick={() => setShowDeleteContactDialog(true)}
             className="text-destructive hover:text-destructive hover:bg-destructive/10"
             title="Supprimer le contact"
@@ -894,7 +894,7 @@ export function ContactDetail({
             <Button
               type="button"
               variant="ghost"
-              size="icon"
+              size="icon-sm"
               onClick={() => onOpenChange(false)}
               title="Fermer la fiche"
               aria-label="Fermer la fiche"

@@ -391,7 +391,7 @@ export function Foyers({ onNavigate }: FoyersProps) {
           <CardDescription>
             {prefs.searchQuery.trim() || prefs.typeFilter !== "ALL" || prefs.statFilter
               ? `${filteredRows.length} résultat(s)`
-              : "Cliquez sur une carte pour déplier les membres"}
+              : null}
           </CardDescription>
         </CardHeader>
 
@@ -451,14 +451,15 @@ export function Foyers({ onNavigate }: FoyersProps) {
                     isExpanded && "ring-1 ring-primary/20"
                   )}
                 >
-                  <div className="p-1">
+                  <div>
                     <FoyerSummaryCard
+                      embedded
                       foyer={foyer}
                       membres={membres}
                       patrimoineAvecMoi={patrimoineAvecMoi}
                       selected={isExpanded}
                       onClick={() => toggleFoyer(foyer)}
-                      actionHint={isExpanded ? "Replier les membres" : "Voir les membres"}
+                      actionHint=""
                     />
                   </div>
 

@@ -121,13 +121,7 @@ export function PipeSuiviQuickAdd({
 
   return (
     <div className="space-y-3">
-      <div>
-        <p className="text-sm font-medium">Journal du suivi</p>
-        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
-          Appel, note ou RDV de suivi. Les actes envoyés chez Stellium se déclarent dans la section
-          ci-dessous.
-        </p>
-      </div>
+      <p className="text-sm font-medium">Journal du suivi</p>
 
       <div className="flex flex-wrap gap-1.5">
         {SUIVI_QUICK_ADD_TYPES.map((type) => {

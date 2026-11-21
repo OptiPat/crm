@@ -554,21 +554,6 @@ export function PipeDetailPanel({
               </div>
             )}
 
-            {isNouvelleSouscriptionAffaire(pipe) ? (
-              <p className="text-xs text-muted-foreground leading-snug">
-                Nouvelle souscription (client existant, sans RDV R1 → R3) : ajoutez une ou plusieurs
-                souscriptions partenaire. L&apos;affaire passe à{" "}
-                <span className="font-medium text-foreground">Gagnée</span> quand toutes sont
-                conformes et le mail client envoyé.
-              </p>
-            ) : isVersementAffaire ? (
-              <p className="text-xs text-muted-foreground leading-snug">
-                Versement complémentaire : suivi partenaire et chiffre d&apos;affaires. L&apos;affaire
-                passe à <span className="font-medium text-foreground">Gagnée</span> après le mail
-                client (étape 6).
-              </p>
-            ) : null}
-
             {showSuiviSection && onOpenChildAffaire ? (
               <>
                 <PipeSuiviPlacementAvancement pipeId={pipe.id} />

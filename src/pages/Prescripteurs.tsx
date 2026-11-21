@@ -513,7 +513,7 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
           <CardDescription>
             {prefs.searchQuery.trim()
               ? `${filteredPrescripteurs.length} résultat(s) dans le réseau`
-              : "Cliquez sur une carte pour déplier son arbre"}
+              : null}
           </CardDescription>
         </CardHeader>
 
@@ -569,13 +569,14 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
                     isExpanded && "ring-1 ring-primary/20"
                   )}
                 >
-                  <div className="p-1">
+                  <div>
                     <PrescripteurSummaryCard
+                      embedded
                       stats={prescripteur}
                       foyersInfo={foyersInfo}
                       selected={isExpanded}
                       onClick={() => togglePrescripteurTree(prescripteur)}
-                      actionHint={isExpanded ? "Replier l'arbre" : "Voir le réseau"}
+                      actionHint=""
                     />
                   </div>
 
