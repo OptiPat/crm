@@ -454,9 +454,6 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border/60 pb-6">
         <div>
           <p className="text-xs font-medium text-muted-foreground capitalize">{today}</p>
-          <h2 className="text-3xl font-serif font-bold text-primary tracking-tight mt-1">
-            Prescripteurs
-          </h2>
           <p className="text-muted-foreground mt-1 text-sm max-w-xl">
             Réseaux de recommandations —{" "}
             <span className="tabular-nums text-foreground/80">

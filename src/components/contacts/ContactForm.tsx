@@ -63,6 +63,7 @@ import {
   type InvestissementFormChoice,
 } from "@/components/contacts/ContactFormInvestissementSection";
 import { toast } from "sonner";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { cn } from "@/lib/utils";
 import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
@@ -712,7 +713,7 @@ export function ContactForm({
       setFormData(getEmptyForm(createContext));
       setInvestissementChoice({ addAfterCreate: false });
     } catch (error) {
-      toast.error("Erreur lors de l'enregistrement: " + String(error));
+      toast.error(userErrorMessage(error, "Impossible d'enregistrer le contact"));
     } finally {
       setLoading(false);
     }

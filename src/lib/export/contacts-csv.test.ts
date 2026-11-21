@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { InvestissementWithDetails } from "@/lib/api/tauri-investissements";
 import {
+  buildContactsCsv,
+  statutSuiviCsvLabel,
   buildClientsContactsCsv,
   buildClientsExportHeaders,
   buildContactsExportFilename,
@@ -176,9 +178,11 @@ describe("contacts-csv clients export", () => {
   it("formate VP et réinvestissement", () => {
     const cells = investissementAvecMoiDetailCells(inv(), "CLIENT");
     expect(cells).toHaveLength(8);
-    expect(cells[4]).toBe("1000.00");
-    expect(cells[5]).toBe("50.00");
-    expect(cells[6]).toBe("MENSUEL");
+    // Excel en français : virgule décimale ; libellés lisibles, pas de codes internes.
+    expect(cells[1]).toBe("Assurance Vie");
+    expect(cells[4]).toBe("1000,00");
+    expect(cells[5]).toBe("50,00");
+    expect(cells[6]).toBe("Mensuel");
     expect(cells[7]).toBe("Oui");
   });
 
@@ -333,5 +337,27 @@ describe("contacts-csv clients export", () => {
     expect(csv).not.toContain("Nom du parrain");
     expect(csv).not.toContain("Paul MARTIN");
     expect(csv).not.toContain("Étoile");
+  });
+});
+
+describe("export CSV de segment", () => {
+  it("statut en libellé et patrimoine avec virgule décimale", () => {
+    const csv = buildContactsCsv(
+      [contact({ id: 7, statut_suivi: "EN_PAUSE" })],
+      [],
+      { contact_7: 1234.5 },
+      { contact_7: 1000 },
+      {}
+    );
+    const cells = csv.replace(/^﻿/, "").split("\r\n")[1]?.split(";") ?? [];
+    expect(cells[5]).toBe("Ancien client");
+    expect(cells[7]).toBe("1234,50");
+    expect(cells[8]).toBe("1000,00");
+  });
+
+  it("libellés de statut", () => {
+    expect(statutSuiviCsvLabel("ACTIF")).toBe("Actif");
+    expect(statutSuiviCsvLabel("ARCHIVE")).toBe("Archivé");
+    expect(statutSuiviCsvLabel(null)).toBe("");
   });
 });

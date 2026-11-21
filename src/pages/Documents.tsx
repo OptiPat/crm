@@ -853,9 +853,6 @@ export function Documents({ onNavigate }: DocumentsProps) {
       )}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-3xl font-serif font-bold text-primary mb-2">
-            Documents
-          </h2>
           <p className="text-muted-foreground">
             Gérez les documents de vos clients
           </p>

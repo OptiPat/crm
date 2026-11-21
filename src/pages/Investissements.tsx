@@ -742,9 +742,6 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-serif font-bold text-primary mb-2">
-            Investissements
-          </h2>
           <p className="text-muted-foreground">
             Vue portefeuille — tous les clients
           </p>

@@ -91,9 +91,6 @@ export function SuiviPageHeader({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-medium text-muted-foreground capitalize">{today}</p>
-          <h2 className="text-3xl font-serif font-bold text-primary tracking-tight mt-1">
-            Suivi &amp; alertes
-          </h2>
           <p className="text-muted-foreground mt-1 text-sm max-w-xl">
             Priorités de relance, contacts étiquetés et file d&apos;envoi email.
           </p>

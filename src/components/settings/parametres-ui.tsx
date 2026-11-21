@@ -100,12 +100,11 @@ export function SettingsShell({
   );
 }
 
+/** Bandeau sous l'en-tête global (qui porte déjà le titre « Paramètres »). */
 export function SettingsPageHeader({
-  title,
   description,
   badge,
 }: {
-  title: string;
   description: string;
   badge?: ReactNode;
 }) {
@@ -113,8 +112,7 @@ export function SettingsPageHeader({
     <header className="border-b border-border/60 pb-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-3xl font-serif font-bold text-primary tracking-tight">{title}</h2>
-          <p className="text-muted-foreground mt-1 max-w-2xl">{description}</p>
+          <p className="text-muted-foreground max-w-2xl">{description}</p>
         </div>
         {badge}
       </div>

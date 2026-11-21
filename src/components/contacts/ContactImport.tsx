@@ -1,4 +1,5 @@
 import { normalizeImportAmount } from "@/lib/contacts/import-amount";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { useState } from "react";
 import { inferTypeProduitFromImportProduitLabel } from "@/lib/investissements/infer-type-produit-from-import-label";
 import { Button } from "@/components/ui/button";
@@ -997,7 +998,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               updatedRows[i] = { ...row, status: "success", message };
             }
           } catch (error) {
-            updatedRows[i] = { ...row, status: "error", message: `Erreur consolidation: ${String(error)}` };
+            updatedRows[i] = { ...row, status: "error", message: userErrorMessage(error, "Consolidation impossible") };
           }
           setImportRows([...updatedRows]);
           continue; // Passer au suivant
@@ -2028,7 +2029,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         updatedRows[idx] = {
           ...updatedRows[idx],
           status: "error",
-          message: `Erreur investissement couple: ${String(error)}`,
+          message: userErrorMessage(error, "Investissement du couple non créé"),
         };
       }
     }

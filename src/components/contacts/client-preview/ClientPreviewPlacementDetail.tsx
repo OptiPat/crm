@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { userErrorMessage } from "@/lib/api/invoke-error";
 import { X } from "lucide-react";
 import { createPortal } from "react-dom";
 import type { Investissement } from "@/lib/api/tauri-investissements";
@@ -260,11 +261,7 @@ export function ClientPreviewPlacementDetail({
                               await onRetirerAvoir?.(inv.id);
                               onClose();
                             } catch (error) {
-                              setRetirerError(
-                                error instanceof Error
-                                  ? error.message
-                                  : "Retrait impossible"
-                              );
+                              setRetirerError(userErrorMessage(error, "Retrait impossible"));
                             }
                           })();
                         }}

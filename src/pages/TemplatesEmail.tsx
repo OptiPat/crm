@@ -490,7 +490,6 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-serif font-bold text-primary mb-1">Modèles email</h2>
           <p className="text-muted-foreground max-w-xl text-sm">
             Bibliothèque de messages — déclencheur auto, campagnes étiquette ou relance, envoi
             depuis{" "}

@@ -536,7 +536,7 @@ export function PipeFormPanel({
       onSuccess(toOpen);
     } catch (err) {
       console.error(err);
-      toast.error(String(err));
+      toast.error(userErrorMessage(err, "Impossible d'enregistrer le pipe"));
     } finally {
       setLoading(false);
     }

@@ -527,7 +527,6 @@ export function Etiquettes({ onNavigate }: { onNavigate?: (page: string) => void
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-serif font-bold text-primary mb-2">Étiquettes</h2>
           <p className="text-muted-foreground max-w-2xl">
             Règles automatiques, tags manuels et campagnes email. Les attributions se
             mettent à jour à chaque modification ; recalcul complet après import massif.

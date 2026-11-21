@@ -6,12 +6,17 @@ import type { ContactEtiquetteDetails } from "@/lib/api/tauri-etiquettes";
 import type { Foyer } from "@/lib/api/tauri-foyers";
 import type { InvestissementWithDetails } from "@/lib/api/tauri-investissements";
 import {
+  formatStatutSuiviLabel,
   getClientLabel,
   getFilleulLabel,
 } from "@/lib/contacts/contact-form-utils";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
-import { rowsToCsv } from "@/lib/export/csv-export";
-import { hasActiveVersementProgramme } from "@/lib/investissements/investissement-versements";
+import { formatCsvDecimal, rowsToCsv } from "@/lib/export/csv-export";
+import { formatNomProduit } from "@/lib/investissements/investissement-display";
+import {
+  getFrequenceVersementLabel,
+  hasActiveVersementProgramme,
+} from "@/lib/investissements/investissement-versements";
 import {
   getFilleulQualificationLabel,
   getFilleulTitreLabel,
@@ -182,7 +187,16 @@ export function buildContactsExportFilename(
 
 function euroFromCentimes(centimes?: number | null): string {
   if (centimes == null) return "";
-  return (centimes / 100).toFixed(2);
+  return formatCsvDecimal(centimes / 100);
+}
+
+function csvDecimalOrEmpty(value?: number | null): string {
+  return value != null && Number.isFinite(value) ? formatCsvDecimal(value) : "";
+}
+
+/** Statut de suivi en libellé du formulaire contact (vide si non renseigné). */
+export function statutSuiviCsvLabel(statut?: string | null): string {
+  return statut ? formatStatutSuiviLabel(statut) : "";
 }
 
 function formatContactExportDate(ts?: number | null): string {
@@ -238,12 +252,12 @@ export function investissementAvecMoiDetailCells(
     ...(clientSubTab === "CLIENT_ANCIEN"
       ? [inv.date_cloture ? formatCalendarDateFr(inv.date_cloture) : ""]
       : []),
-    inv.type_produit,
+    formatNomProduit(inv.type_produit),
     inv.partenaire_nom ?? "",
     inv.nom_produit,
     euroFromCentimes(inv.montant_initial),
     hasVp ? euroFromCentimes(inv.montant_versement_programme) : "",
-    hasVp ? inv.frequence_versement ?? "" : "",
+    hasVp ? getFrequenceVersementLabel(inv.frequence_versement) : "",
     inv.reinvestissement_dividendes ? "Oui" : "Non",
   ];
 }
@@ -454,10 +468,10 @@ export function buildContactsCsv(
       [getClientLabel(c.categorie), getFilleulLabel(c.filleul_categorie)]
         .filter(Boolean)
         .join(" · ") || c.categorie,
-      c.statut_suivi,
+      statutSuiviCsvLabel(c.statut_suivi),
       c.foyer_id != null ? foyerById.get(c.foyer_id) ?? String(c.foyer_id) : "",
-      patrimoines[`contact_${c.id}`]?.toFixed(2) ?? "",
-      patrimoinesAvecMoi[`contact_${c.id}`]?.toFixed(2) ?? "",
+      csvDecimalOrEmpty(patrimoines[`contact_${c.id}`]),
+      csvDecimalOrEmpty(patrimoinesAvecMoi[`contact_${c.id}`]),
       etiqs,
       c.ville ?? "",
       c.code_postal ?? "",
