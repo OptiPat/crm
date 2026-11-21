@@ -17,7 +17,7 @@ import {
   stelliumSuiviActLabelGroups,
   stelliumLabelGroupsForProduct,
 } from "@/lib/placement/stellium-box-placement-labels";
-import { STELLIUM_BOX_PLACEMENT_PRODUCT_GROUPS } from "@/lib/placement/stellium-box-placement-products";
+import { stelliumProductGroupsForSelect } from "@/lib/placement/stellium-box-placement-products";
 import {
   isNouvelleSouscriptionActLabel,
   isVersementComplementaireActLabel,
@@ -122,7 +122,7 @@ export function StelliumPlacementActFields({
             <SelectValue placeholder="Sélectionner le produit…" />
           </SelectTrigger>
           <SelectContent className="max-h-[min(24rem,70vh)]">
-            <StelliumSelectOptionGroups groups={STELLIUM_BOX_PLACEMENT_PRODUCT_GROUPS} />
+            <StelliumSelectOptionGroups groups={stelliumProductGroupsForSelect(productLabel)} />
           </SelectContent>
         </Select>
       </div>

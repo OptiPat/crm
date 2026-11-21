@@ -15,7 +15,7 @@ import {
 import { PlacementMontantField } from "@/components/pipe/PlacementMontantField";
 import { SouscriptionDetailsFields } from "@/components/pipe/SouscriptionDetailsFields";
 import { useSouscriptionHolderChoices } from "@/hooks/useSouscriptionHolderChoices";
-import { STELLIUM_BOX_PLACEMENT_PRODUCT_GROUPS } from "@/lib/placement/stellium-box-placement-products";
+import { stelliumProductGroupsForSelect } from "@/lib/placement/stellium-box-placement-products";
 import { inferTypeProduitFromStelliumProductLabel } from "@/lib/pipe/remuneration-type-produit";
 import {
   newNouvelleSouscriptionDraft,
@@ -99,7 +99,7 @@ export function NouvelleSouscriptionInlineFields({
                   <SelectValue placeholder="Sélectionner le produit…" />
                 </SelectTrigger>
                 <SelectContent className="max-h-[min(24rem,70vh)]">
-                  {STELLIUM_BOX_PLACEMENT_PRODUCT_GROUPS.map((group, groupIndex) => (
+                  {stelliumProductGroupsForSelect(draft.productLabel).map((group, groupIndex) => (
                     <Fragment key={group.id}>
                       {groupIndex > 0 ? <SelectSeparator /> : null}
                       <SelectGroup>

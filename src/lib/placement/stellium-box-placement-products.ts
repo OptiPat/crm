@@ -76,6 +76,40 @@ export const STELLIUM_BOX_PLACEMENT_PRODUCT_GROUPS: readonly StelliumBoxPlacemen
 export const STELLIUM_BOX_PLACEMENT_PRODUCTS: readonly StelliumBoxPlacementProduct[] =
   STELLIUM_BOX_PLACEMENT_PRODUCT_GROUPS.flatMap((g) => g.items);
 
+/**
+ * Produits plus commercialisés : retirés des menus de choix, mais toujours connus
+ * (affaires existantes : type de produit, rémunération, mails Stellium).
+ */
+export const STELLIUM_BOX_PLACEMENT_RETIRED_PRODUCTS: readonly string[] = ["LF Avenir Santé"];
+
+function isRetiredStelliumProduct(item: string): boolean {
+  const normalized = normalizeStelliumBoxPlacementProduct(item);
+  return STELLIUM_BOX_PLACEMENT_RETIRED_PRODUCTS.some(
+    (retired) => normalizeStelliumBoxPlacementProduct(retired) === normalized
+  );
+}
+
+/**
+ * Groupes du menu « Produit » : sans les produits retirés, sauf celui déjà choisi
+ * (`currentValue`, ex. acte existant) pour ne pas afficher une sélection vide.
+ */
+export function stelliumProductGroupsForSelect(currentValue?: string | null): Array<{
+  id: StelliumBoxPlacementProductGroup["id"];
+  label: string;
+  items: string[];
+}> {
+  const current = currentValue?.trim() ? normalizeStelliumBoxPlacementProduct(currentValue) : null;
+  return STELLIUM_BOX_PLACEMENT_PRODUCT_GROUPS.map((group) => ({
+    id: group.id,
+    label: group.label,
+    items: group.items.filter(
+      (item) =>
+        !isRetiredStelliumProduct(item) ||
+        (current != null && normalizeStelliumBoxPlacementProduct(item) === current)
+    ),
+  })).filter((group) => group.items.length > 0);
+}
+
 const ALPSI_CIF_SUFFIX_RE = /\s*(?:\((?:alpsi|cif)\)|(?:alpsi|cif))\s*$/i;
 
 export function normalizeStelliumBoxPlacementProduct(value: string): string {
