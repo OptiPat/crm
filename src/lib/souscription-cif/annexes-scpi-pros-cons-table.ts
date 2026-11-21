@@ -48,7 +48,7 @@ export const ANNEXES_SCPI_PROS_CONS_FISCAL_ROWS: ReadonlyArray<AnnexesScpiProsCo
   {
     advantages: "Déductibilité des intérêts d'emprunt pour l'acquisition des parts de SCPI.",
     disadvantages:
-      "Revenus soumis à l'impôt sur le revenu au barème progressif et aux prélèvements sociaux au taux global de 17,2 % (excepté pour les revenus encaissés hors de France).",
+      "Revenus fonciers de source française soumis au barème progressif de l'impôt sur le revenu et aux prélèvements sociaux de 17,2 % ; revenus financiers soumis au prélèvement forfaitaire unique de 31,4 % ; revenus de source étrangère imposés selon les conventions fiscales.",
   },
   {
     advantages:

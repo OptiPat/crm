@@ -23,7 +23,7 @@ export const SCPI_ANNEXE_PRODUCT_FICHES: ReadonlyArray<ScpiAnnexeProductFiche> =
 La SCPI Comète vise à se constituer un patrimoine diversifié dans l'immobilier tertiaire (bureaux commerces, hôtellerie, santé, éducation, logistique et locaux d'activité). La stratégie géographique est d'investir au sein de l'Union Européenne (seule la logistique sera exclue de l'UE) et pourra également se positionner en Amérique du Nord, en Australie et en Nouvelle Zélande en cas d'opportunités.
 
 Données clés 2025
-Capitalisation : 519,6M€ ; Actifs : 27 ; Baux : 77; Taux de distribution : 9% brut de fiscalité ; TOF : 93,6%; Durée min : 10 ans; Risque : 3/7
+Capitalisation : 519,6M€ ; Actifs : 27 ; Baux : 77; Taux de distribution : 9% brut de fiscalité ; TOF : 93,6%; Durée de placement recommandée : 10 ans minimum; Risque : 3/7
 Les performances du passé ne préjugent pas des performances futures.
 
 Principaux frais :
@@ -42,7 +42,7 @@ Principaux frais :
 Arkea Transition Europe accompagne les transitions du marché de l'immobilier en investissant dans un portefeuille d'actifs diversifiés. Elle investit en Europe ( Espagne, Pays-Bas, République d'Irlande…) pour bénéficier des opportunités des différents cycles immobilier, très majoritairement dans des actifs d'immobilier d'entreprise (bureaux, santé, éducation, logistique, activités, hébergement géré…).
 
 Données clés 2025
-Capitalisation : 1,25Md€ ; Actifs : 54 ; Baux : 313; Taux de distribution : 8,25% ; TOF : 98,5% ; Durée min : 10 ans ; Risque : 3/7
+Capitalisation : 1,25Md€ ; Actifs : 54 ; Baux : 313; Taux de distribution : 8,25% ; TOF : 98,5% ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
 Les performances du passé ne préjugent pas des performances futures.
 
 Principaux frais :
@@ -61,7 +61,7 @@ Principaux frais :
 Epargne Pierre Europe accompagne les projets d'avenir de la 3ème puissance mondiale. Elle vous permet d'accéder à un patrimoine immobilier diversifié tant sur le plan sectoriel (bureaux, commerces, ou locaux d'activité) que géographique, en bénéficiant des différences de cycles économique entre les pays de la zone euro.
 
 Données clés 2025
-Capitalisation : 2 803M€ ; Actifs : 44 ; Baux : 1020 ; Taux de distribution : 5,28% ; TOF : 100% ; Durée min : 10 ans ; Risque : 3/7
+Capitalisation : 2 803M€ ; Actifs : 44 ; Baux : 1020 ; Taux de distribution : 5,28% ; TOF : 100% ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
 Les performances du passé ne préjugent pas des performances futures.
 
 Principaux frais :
@@ -80,7 +80,7 @@ Principaux frais :
 Épargne Pierre déploie une stratégie recherchant le rendement en se positionnant sur toutes les typologies d'actifs : bureaux, commerces et locaux d'activités pour profiter des opportunités de marché. La stratégie privilégie les grandes métropoles régionales afin de bénéficier d'un bon mix géographique sur le territoire et cible des actifs d'une valeur unitaire entre 1 et 50 M€. Epargne Pierre bénéficie du label ISR et prend en compte les critères environnementaux, sociétaux et de gouvernance (ESG) dans le cadre de la mise en œuvre de sa stratégie d'investissement et dans sa gestion des actifs. La capitalisation importante permet une large diversification et mutualisation du risque immobilier grâce à la variété d'actifs et des locataires (principalement grands utilisateurs publics ou privés).
 
 Données clés 2025
-Capitalisation : 2 811 M€ ; Actifs : 414 ; Baux : 1020 ; Taux de distribution : 5,28% ; TOF : 94,41% ; Durée min : 10 ans ; Risque : 3/7
+Capitalisation : 2 811 M€ ; Actifs : 414 ; Baux : 1020 ; Taux de distribution : 5,28% ; TOF : 94,41% ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
 Les performances du passé ne préjugent pas des performances futures.
 
 Principaux frais :
@@ -99,7 +99,7 @@ Principaux frais :
 Alta Convictions est une SCPI agile et conçue pour s'adapter au nouveau cycle immobilier, tant d'un point de vue sectoriel, privilégiant au lancement des commerces, des écoles et de la logistique principalement ; que géographique, avec des investissements dans les métropoles françaises et jusqu'à 20% du portefeuille immobilier en Europe.
 
 Données clés 2025
-Capitalisation : 62,6M€ ; Actifs : 16 ; Baux :37; Taux de distribution : 6,5% ; TOF : 96%; Durée min : 10 ans; Risque : 3/7
+Capitalisation : 62,6M€ ; Actifs : 16 ; Baux :37; Taux de distribution : 6,5% ; TOF : 96%; Durée de placement recommandée : 10 ans minimum; Risque : 3/7
 Les performances du passé ne préjugent pas des performances futures.
 
 Principaux frais :
@@ -118,7 +118,7 @@ Principaux frais :
 La SCPI Osmo Energie a pour objectif d'acheter des biens immobiliers en France et en Europe afin d'améliorer leur performance énergétique et financière. Grâce à des outils de mesure et une meilleure maîtrise des consommations, elle souhaite positionner le patrimoine immobilier sur une trajectoire de sobriété énergétique et de décarbonation.
 
 Données clés 2025
-Capitalisation : 100,45M€ ; Actifs : 24 ; Baux : 36; Taux de distribution : 7% ; TOF : 100%; Durée min : 10 ans; Risque : 3/7
+Capitalisation : 100,45M€ ; Actifs : 24 ; Baux : 36; Taux de distribution : 7% ; TOF : 100%; Durée de placement recommandée : 10 ans minimum; Risque : 3/7
 Les performances du passé ne préjugent pas des performances futures.
 
 Principaux frais :
@@ -137,7 +137,7 @@ Principaux frais :
 Une SCPI diversifiée déployant une stratégie dynamique et opportuniste privilégiant la recherche de rendement en contrepartie d'un risque plus élevé. La politique d'investissement vise principalement l'acquisition d'actifs de petites tailles en régions afin de sortir des zones de marché les plus tendues et privilégier les zones moins concurrentielles. La SCPI bénéficie d'un patrimoine diversifié sur les bureaux, commerces et locaux d'activités afin de tirer profit des opportunités sur tous les segments. La capitalisation de la SCPI offre une mutualisation plus limitée avec un portefeuille d'actifs plus concentré.
 
 Données clés 2025
-Capitalisation : 1084M€ ; Actifs : 178 ; Baux : 430 ; Taux distribution: 5,72% ; TOF : 91,7% ; Durée min: 10 ans ; Risque : 3/7
+Capitalisation : 1084M€ ; Actifs : 178 ; Baux : 430 ; Taux distribution: 5,72% ; TOF : 91,7% ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
 Les performances du passé ne préjugent pas des performances futures.
 
 Principaux frais :
@@ -156,7 +156,7 @@ Principaux frais :
 La SCPI Corum Origin construit un patrimoine diversifié (bureaux, commerces, hôtels) en saisissant des opportunités selon les cycles économiques. Elle investit exclusivement en zone euro, répartissant ses actifs dans de nombreux pays européens pour optimiser le rendement et la fiscalité.
 
 Données clés 2025
-Capitalisation : 3.794 Milliards € ; Actifs : 167 ; Baux : 412 ; Taux de distribution : 6.5% ; TOF : 96.2% ; Durée min : 10 ans ; Risque : 3/7
+Capitalisation : 3.794 Milliards € ; Actifs : 167 ; Baux : 412 ; Taux de distribution : 6.5% ; TOF : 96.2% ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
 Les performances du passé ne préjugent pas des performances futures.
 
 Principaux frais :
@@ -175,7 +175,7 @@ Principaux frais :
 La SCPI Corum Eurion investit dans un patrimoine immobilier récent et durable (bureaux, logistique) répondant aux dernières normes environnementales. Sa stratégie mise sur des locataires solides à travers toute la zone euro. Elle vise un rendement attractif en conciliant performance financière et critères socialement responsables (ISR).
 
 Données clés 2025
-Capitalisation : 1,507 Milliards € ; Actifs : 52 ; Baux : 120 ; Taux de distribution : 5,73 % ; TOF : 99,92% ; Durée min : 10 ans ; Risque : 3/7
+Capitalisation : 1,507 Milliards € ; Actifs : 52 ; Baux : 120 ; Taux de distribution : 5,73 % ; TOF : 99,92% ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
 Les performances du passé ne préjugent pas des performances futures.
 
 Principaux frais :
@@ -194,7 +194,7 @@ Principaux frais :
 Immorente a pour objet l'acquisition d'un parc immobilier locatif, situé principalement dans les grandes métropoles françaises, de l'Espace Economique Européen, du Royaume-Uni et de la Suisse, et à titre accessoire dans les autres villes de la même zone. Elle investit de manière diversifiée dans les principales typologies d'actifs immobiliers : bureaux, murs de commerces, hôtellerie et loisirs, logistique et activités, santé et résidentiel. Cette SCPI attache une importance à la diversification et mutualisation du risque, notamment en diversifiant le secteur géographique (25% à l'étranger), la typologie d'actifs, les secteurs d'activité et la qualité des locataires.
 
 Données clés 2025
-Capitalisation : 4 391M€ ; Actifs : 994 ; Baux : 2963 ; Taux de distribution : 5,00% ; TOF : 91,21% ; Durée min : 10 ans ; Risque : 3/7
+Capitalisation : 4 391M€ ; Actifs : 994 ; Baux : 2963 ; Taux de distribution : 5,00% ; TOF : 91,21% ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
 Les performances du passé ne préjugent pas des performances futures.
 
 Principaux frais :
@@ -213,7 +213,7 @@ Principaux frais :
 Activimmo est une SCPI spécialisée ciblant les actifs à usage de locaux d'activités, d'entrepôts et de logistique urbaine ou du « dernier kilomètre », situés en périphéries des villes, à proximité des axes routiers ou au sein même des bassins d'emploi et de consommation. Les locaux pourront abriter diverses activités permettant de répondre aux besoins immobiliers : des PME / PMI et ETI, jusqu'aux filiales de grands groupes, ou encore des entreprises à la recherche de bâtiments pour assurer leur service de logistique notamment du dernier kilomètre, dernier ou avant-dernier maillon précédant la livraison au consommateur final. A titre de diversification, la SCPI pourra investir en bureaux et commerces.
 
 Données clés 2025
-Capitalisation : 1 400 M€ ; Actifs : 179 ; Baux : 463 ; Taux de distribution : 5,50% ; TOF : 92,6% ; Durée min : 10 ans ; Risque : 3/7
+Capitalisation : 1 400 M€ ; Actifs : 179 ; Baux : 463 ; Taux de distribution : 5,50% ; TOF : 92,6% ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
 Les performances du passé ne préjugent pas des performances futures.
 
 Principaux frais :
@@ -232,7 +232,7 @@ Principaux frais :
 LF Avenir Santé est une SCPI spécialisée dans l'immobilier de santé, centrée sur la médecine de proximité (médecins généralistes, ophtalmologues, dentistes, radiologues, etc.). Elle bénéficie de tendances démographiques favorables, notamment le vieillissement de la population et la forte demande d'accès aux soins dans les secteurs public et privé. À titre de diversification, elle investit également dans les soins alternatifs (cures thermales, balnéothérapie) et l'habitat senior (résidences seniors et coliving). La répartition géographique vise un partage 50/50 entre la France et l'étranger (Allemagne, Royaume-Uni, Irlande, Belgique, Pays-Bas, Luxembourg et Espagne).
 
 Données clés 2025
-Capitalisation : 273,4 M€ ; Actifs : 33 ; Baux : NC ; Taux de distribution : 5,05% ; TOF : 100% ; Durée min : 10 ans ; Risque : 3/7
+Capitalisation : 273,4 M€ ; Actifs : 33 ; Baux : NC ; Taux de distribution : 5,05% ; TOF : 100% ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
 Les performances du passé ne préjugent pas des performances futures.
 
 Principaux frais :

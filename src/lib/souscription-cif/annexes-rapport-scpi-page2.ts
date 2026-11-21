@@ -4,9 +4,7 @@ export const ANNEXES_SCPI_PAGE2_BODY = `[u]2. Fiscalité[/u]
 
 2.1. Imposition des revenus
 
-Les revenus locatifs sont soumis au barème de l'impôt sur le revenu dans la catégorie des revenus fonciers. Accessoirement, les revenus liés à la rémunération des disponibilités de la SCPI sont fiscalisés dans la catégorie des revenus de capitaux mobiliers.
-
-L'intégralité de ces revenus est également soumise aux prélèvements sociaux au taux global de 17,2 %.
+Les revenus locatifs de source française sont soumis au barème progressif de l'impôt sur le revenu dans la catégorie des revenus fonciers et aux prélèvements sociaux au taux global de 17,2 %. Accessoirement, les revenus financiers issus du placement de la trésorerie de la SCPI relèvent des revenus de capitaux mobiliers : ils sont soumis au prélèvement forfaitaire unique de 12,8 % (ou, sur option, au barème progressif) et aux prélèvements sociaux au taux global de 18,6 %, soit 31,4 % au total.
 
 Les revenus locatifs générés hors de France seront soumis aux régimes fiscaux en vigueur dans les pays où se trouveront les immeubles détenus. En pratique, les épargnants français ayant un taux marginal d'imposition élevé pourraient bénéficier d'une fiscalité plus légère qu'avec une SCPI qui investit en France. Tout cela reste toutefois à apprécier en fonction de votre situation fiscale personnelle.
 
