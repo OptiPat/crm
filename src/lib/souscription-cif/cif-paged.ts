@@ -13,7 +13,7 @@ const PAGED_STYLESHEET_HREF = "cif-paged.css";
  * Fragmente un noeud source (flux continu) en pages A4 via Paged.js (CSS Paged Media).
  *
  * - Attend `document.fonts.ready` : les hauteurs de ligne dépendent de la police chargée
- *   (Comfortaa) — sans ça la pagination serait calculée sur la police de repli.
+ *   (Plus Jakarta Sans) — sans ça la pagination serait calculée sur la police de repli.
  * - Import dynamique : Paged.js touche `window`/`document`, on évite de le charger en SSR/tests.
  * - Renvoie un `cleanup` car chaque rendu injecte des `<style>` globaux (à retirer avant un nouveau rendu).
  */

@@ -50,9 +50,12 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --font-sans: "Plus Jakarta Sans", sans-serif;
-  --font-serif: "Playfair Display", serif;
-  --font-comfortaa: "Comfortaa", sans-serif;
+  /* Une seule police, sobre et lisible (montants compris) : titres (`font-serif`, h1–h6)
+     et documents CIF (`font-comfortaa`) utilisent aussi Plus Jakarta Sans. Les noms de
+     tokens sont gardés pour ne pas toucher les ~50 composants qui les référencent. */
+  --font-sans: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif;
+  --font-serif: var(--font-sans);
+  --font-comfortaa: var(--font-sans);
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -148,9 +151,9 @@ html.cif-pdf-capture #cif-print-portal mark {
   background-color: #fcd34d;
 }
 
-/** Police document CIF — hex / @font-face (aperçu + capture PDF). */
+/** Police document CIF (aperçu + capture PDF) : même police que l'app, sobre et lisible. */
 .cif-document-comfortaa {
-  font-family: "Comfortaa", sans-serif;
+  font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif;
 }
 
 /** Aperçu paginé Paged.js (écran) — feuilles A4 centrées avec ombre. */
@@ -218,8 +221,20 @@ html.cif-pdf-capture #cif-print-portal mark {
     margin: 0;
   }
 
-  html.cif-printing #root {
+  /* Seul le document s'imprime : ni l'app, ni une fenêtre / un menu rendu en portail
+     (ex. confirmation « champs à compléter » encore en fermeture). */
+  html.cif-printing body > :not(#cif-print-portal) {
     display: none !important;
+  }
+
+  /* Fond blanc : sinon le gris clair de l'app (--background) passe derrière les pages,
+     les couleurs de fond étant imprimées (print-color-adjust: exact). */
+  html.cif-printing,
+  html.cif-printing body,
+  html.cif-printing #cif-print-portal,
+  html.cif-printing #cif-print-portal .pagedjs_pages,
+  html.cif-printing #cif-print-portal .pagedjs_page {
+    background: #fff !important;
   }
 
   html.cif-printing #cif-print-portal {

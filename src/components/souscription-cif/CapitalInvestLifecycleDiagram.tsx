@@ -40,7 +40,7 @@ function PhaseChevron({ label, sublabel, variant, className, nowrap }: PhaseChev
   );
 }
 
-/** Schéma de vie FCPI / FIP — mise en page document CIF (Comfortaa, primary navy). */
+/** Schéma de vie FCPI / FIP — mise en page document CIF (police du document, primary navy). */
 export function CapitalInvestLifecycleDiagram({ className }: CapitalInvestLifecycleDiagramProps) {
   return (
     <figure

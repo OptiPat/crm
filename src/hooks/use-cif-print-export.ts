@@ -30,6 +30,28 @@ function waitForNextFrame(): Promise<void> {
   });
 }
 
+/** Délai max d'attente de la fermeture d'une fenêtre de confirmation avant capture. */
+const DIALOG_CLOSE_TIMEOUT_MS = 1_000;
+
+/**
+ * Attend qu'aucune fenêtre de confirmation (« N champs à compléter ») ne soit affichée,
+ * animation de fermeture comprise : sinon elle se retrouve dans le PDF.
+ */
+function waitForConfirmDialogsClosed(): Promise<void> {
+  const start = performance.now();
+  return new Promise((resolve) => {
+    const check = () => {
+      const open = document.querySelector('[role="alertdialog"]');
+      if (!open || performance.now() - start > DIALOG_CLOSE_TIMEOUT_MS) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(check);
+    };
+    check();
+  });
+}
+
 /** Délai max d'attente de la pagination Paged.js avant impression (filet anti-blocage). */
 const PAGED_READY_TIMEOUT_MS = 10_000;
 
@@ -91,6 +113,7 @@ export function useCifPrintExport() {
         ? buildCifPdfFilenameStem(documents[0].label, clientName)
         : previousTitle;
 
+      await waitForConfirmDialogsClosed();
       flushSync(() => setPrintBundle(documents));
       document.title = printTitle;
       document.documentElement.classList.add(CIF_PRINT_HTML_CLASS);
