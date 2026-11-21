@@ -172,6 +172,12 @@ mod tests {
 
     const TEST_SECRET: &str = "test-secret-licence-crm";
 
+    /// Valeur témoin (hmac 0.12 / sha2 0.10) : les clés de licence déjà émises doivent rester valides.
+    #[test]
+    fn license_signature_known_answer() {
+        assert_eq!(compute_signature(TEST_SECRET, "LIFE-0000-TEMOIN"), "6A1B");
+    }
+
     #[test]
     fn annual_key_roundtrip() {
         let key = generate_license_key("annual", Some("2706"), TEST_SECRET).unwrap();

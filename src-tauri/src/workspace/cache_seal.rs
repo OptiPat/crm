@@ -505,6 +505,25 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
 
+    /// Valeur témoin (sha2 0.10, rand 0.8) : un cache équipe scellé avant la mise à jour
+    /// des bibliothèques doit rester lisible.
+    #[test]
+    fn sealed_cache_known_answer_still_decrypts() {
+        const SEALED_HEX: &str = "43524d5445414d4442563100001000000000000000000013f4b165ccc8ed7ab0385295b96a20388d00000023b086b74cf970a80e1d4b7f13761e02574df5c2c66fbdda7f68f003152205bf5d27a281";
+        let dir = temp_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        let sealed = dir.join("workspace-team-cache.db.sealed");
+        let plain = dir.join("workspace-team-cache.db.plain");
+        let bytes: Vec<u8> = (0..SEALED_HEX.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&SEALED_HEX[i..i + 2], 16).unwrap())
+            .collect();
+        std::fs::write(&sealed, bytes).unwrap();
+        decrypt_database_file(&sealed, &plain, &[5u8; 32]).unwrap();
+        assert_eq!(std::fs::read(&plain).unwrap(), b"cache-equipe-temoin");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn temp_dir() -> PathBuf {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         std::env::temp_dir().join(format!(
