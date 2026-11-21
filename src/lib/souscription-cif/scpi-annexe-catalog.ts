@@ -10,7 +10,17 @@ export type ScpiAnnexeProductFiche = {
   description: string;
   /** Prix de souscription d'une part (€) — alimente « soit X € la part x N parts ». */
   partPriceEur?: number;
+  /**
+   * `false` : plus commercialisée — masquée des nouveaux dossiers CIF, mais gardée pour les
+   * dossiers existants et le calcul de rémunération (frais de souscription).
+   */
+  commercialisee?: boolean;
 };
+
+/** SCPI proposées dans un nouveau dossier CIF (hors celles plus commercialisées). */
+export function isScpiAnnexeCommercialisee(fiche: Pick<ScpiAnnexeProductFiche, "commercialisee">): boolean {
+  return fiche.commercialisee !== false;
+}
 
 /** Fiches SCPI de rendement — textes annexes CIF (format compact). */
 export const SCPI_ANNEXE_PRODUCT_FICHES: ReadonlyArray<ScpiAnnexeProductFiche> = [
@@ -227,6 +237,7 @@ Principaux frais :
     key: "lf_avenir_sante",
     label: "LF Avenir Santé",
     partPriceEur: 300,
+    commercialisee: false,
     description: `— LF AVENIR SANTÉ —
 
 LF Avenir Santé est une SCPI spécialisée dans l'immobilier de santé, centrée sur la médecine de proximité (médecins généralistes, ophtalmologues, dentistes, radiologues, etc.). Elle bénéficie de tendances démographiques favorables, notamment le vieillissement de la population et la forte demande d'accès aux soins dans les secteurs public et privé. À titre de diversification, elle investit également dans les soins alternatifs (cures thermales, balnéothérapie) et l'habitat senior (résidences seniors et coliving). La répartition géographique vise un partage 50/50 entre la France et l'étranger (Allemagne, Royaume-Uni, Irlande, Belgique, Pays-Bas, Luxembourg et Espagne).

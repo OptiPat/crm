@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDescriptionsScpiFromKeys,
+  isScpiAnnexeCommercialisee,
   SCPI_ANNEXE_PRODUCT_FICHES,
 } from "@/lib/souscription-cif/scpi-annexe-catalog";
 
@@ -33,5 +34,16 @@ describe("scpi-annexe-catalog", () => {
       "activimmo",
       "lf_avenir_sante",
     ]);
+  });
+});
+
+describe("SCPI plus commercialisées", () => {
+  it("LF Avenir Santé est masquée des nouveaux dossiers mais reste au catalogue", () => {
+    const lf = SCPI_ANNEXE_PRODUCT_FICHES.find((p) => p.key === "lf_avenir_sante");
+    expect(lf).toBeDefined();
+    expect(isScpiAnnexeCommercialisee(lf!)).toBe(false);
+    const proposees = SCPI_ANNEXE_PRODUCT_FICHES.filter(isScpiAnnexeCommercialisee);
+    expect(proposees).toHaveLength(11);
+    expect(proposees.some((p) => p.key === "comete")).toBe(true);
   });
 });

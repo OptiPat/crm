@@ -19,7 +19,10 @@ import {
   getRapportMissionAnalyseExamples,
   RM_ANALYSE_SITUATION_INTRO,
 } from "@/lib/souscription-cif/rapport-mission-analyse-hints";
-import { SCPI_ANNEXE_PRODUCT_FICHES } from "@/lib/souscription-cif/scpi-annexe-catalog";
+import {
+  isScpiAnnexeCommercialisee,
+  SCPI_ANNEXE_PRODUCT_FICHES,
+} from "@/lib/souscription-cif/scpi-annexe-catalog";
 import {
   addCapitalInvestAnnexeSouscription,
   buildMesPreconisationsFromCapitalInvestSouscriptions,
@@ -511,7 +514,10 @@ export function SouscriptionCifDossierForm({
               </p>
               {SCPI_ANNEXE_PRODUCT_FICHES.length > 0 && (
                 <div className="divide-y rounded-md border">
-                  {SCPI_ANNEXE_PRODUCT_FICHES.map((product) => {
+                  {SCPI_ANNEXE_PRODUCT_FICHES.filter(
+                    // Plus commercialisée : visible seulement si déjà cochée dans ce dossier.
+                    (product) => isScpiAnnexeCommercialisee(product) || isScpiSelected(product.key)
+                  ).map((product) => {
                     const selected = isScpiSelected(product.key);
                     const row = souscriptionForScpi(product.key);
                     return (
