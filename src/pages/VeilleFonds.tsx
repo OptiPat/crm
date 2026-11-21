@@ -882,11 +882,11 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                   <ChevronDown className="ml-1 h-4 w-4" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent align="end" className="w-72 p-1">
+              <PopoverContent align="end" className="w-80 p-1">
                 <Button
                   type="button"
                   variant="ghost"
-                  className="h-auto w-full justify-start py-2 text-left"
+                  className="h-auto w-full justify-start whitespace-normal py-2 text-left"
                   onClick={() => {
                     setImportMenuOpen(false);
                     setImportOpen(true);
@@ -903,7 +903,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                 <Button
                   type="button"
                   variant="ghost"
-                  className="h-auto w-full justify-start py-2 text-left"
+                  className="h-auto w-full justify-start whitespace-normal py-2 text-left"
                   onClick={() => {
                     setImportMenuOpen(false);
                     setPositionsImportOpen(true);
