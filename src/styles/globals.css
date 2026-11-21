@@ -17,7 +17,8 @@
   --secondary: hsl(210 40% 96.1%);
   --secondary-foreground: hsl(222.2 47.4% 11.2%);
   /* Survol discret (listes, boutons ghost) — pas de doré plein écran */
-  --accent: hsl(220 16% 96%);
+  /* Survol / sélection : assez contrasté avec --background (97 %) pour être visible. */
+  --accent: hsl(214 32% 91%);
   --accent-foreground: hsl(221 50% 20%);
   --border: hsl(214.3 31.8% 91.4%);
   --input: hsl(214.3 31.8% 91.4%);
@@ -81,6 +82,23 @@
   h5,
   h6 {
     @apply font-serif;
+  }
+
+  /* Tailwind 4 ne met plus la main sur les boutons : tout élément cliquable l'affiche
+     au survol (sauf désactivé). */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([data-disabled]),
+  [role="menuitem"]:not([data-disabled]),
+  [role="option"]:not([data-disabled]),
+  [role="checkbox"]:not([data-disabled]),
+  [role="radio"]:not([data-disabled]),
+  [role="switch"]:not([data-disabled]),
+  a[href],
+  summary,
+  label[for],
+  select:not(:disabled) {
+    cursor: pointer;
   }
 }
 
