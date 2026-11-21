@@ -2,10 +2,9 @@ pub mod commands;
 pub mod session;
 
 use argon2::{
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{phc::PasswordHash, PasswordHasher, PasswordVerifier},
     Argon2,
 };
-use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -274,9 +273,9 @@ impl AuthManager {
     }
 
     fn hash_password(password: &str) -> Result<String, String> {
-        let salt = SaltString::generate(&mut OsRng);
+        // argon2 0.6 : sel aléatoire (générateur système) tiré par hash_password.
         Ok(Argon2::default()
-            .hash_password(password.as_bytes(), &salt)
+            .hash_password(password.as_bytes())
             .map_err(|e| format!("Failed to hash password: {}", e))?
             .to_string())
     }

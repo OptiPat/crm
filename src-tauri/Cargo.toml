@@ -16,8 +16,8 @@ rusqlite = { version = "0.41", features = ["bundled", "backup", "hooks"] }
 # SQLite simple (non chiffre) compile depuis les sources (bundled).
 # Aucune dependance OpenSSL ni outil de build (NASM/Perl) requis.
 anyhow = "1.0"
-argon2 = "0.5"
-rand = "0.8"
+argon2 = "0.6"
+rand = "0.10"
 chrono = "0.4"
 tauri-plugin-dialog = "2.8"
 tauri-plugin-fs = "2.7"
@@ -29,16 +29,16 @@ url = "2"
 walkdir = "2"
 zip = { version = "9.3", default-features = false, features = ["deflate"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
-hmac = "0.12"
-sha2 = "0.10"
+hmac = "0.13"
+sha2 = "0.11"
 ico = "0.6"
 tauri-plugin-autostart = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-biometry = "0.2.8"
 chacha20poly1305 = "0.11.0"
-hkdf = "0.12"
-x25519-dalek = { version = "2", features = ["static_secrets"] }
+hkdf = "0.13"
+x25519-dalek = { version = "3", features = ["static_secrets"] }
 atomic-write-file = "0.3.0"
 open = { version = "5.4.0", features = ["shellexecute-on-windows"] }
 # Boîtes hors Google / Microsoft 365 (OVH, Ionos…) : SMTP + IMAP en rustls (ring), sans OpenSSL.

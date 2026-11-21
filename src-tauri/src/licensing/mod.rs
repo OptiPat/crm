@@ -19,7 +19,7 @@ pub use state::{
 use crate::database::Database;
 use gate::bypass_authorizer;
 use keys::{attach_state_integrity, signing_secret, validate_license_key, verify_state_integrity};
-use rand::Rng;
+use rand::RngExt;
 use registry::{is_registry_configured, os_label, post_registry_event, RegistryPayload};
 use registry_sync::try_sync_and_apply;
 use state::{mask_license_key, MAX_TRIAL_RESTARTS, TRIAL_DAYS, TRIAL_OPEN_ACCESS};
@@ -71,14 +71,14 @@ fn persist_and_refresh_gate(db: &Database, state: &LicenseState) -> Result<(), S
 }
 
 fn new_installation_id() -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     format!(
         "{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
-        rng.gen::<u32>(),
-        rng.gen::<u16>(),
-        rng.gen::<u16>() | 0x4000,
-        rng.gen::<u16>() | 0x8000,
-        rng.gen::<u64>() & 0x0000_FFFF_FFFF_FFFF
+        rng.random::<u32>(),
+        rng.random::<u16>(),
+        rng.random::<u16>() | 0x4000,
+        rng.random::<u16>() | 0x8000,
+        rng.random::<u64>() & 0x0000_FFFF_FFFF_FFFF
     )
 }
 

@@ -12,7 +12,7 @@ use chacha20poly1305::{
     aead::{Aead, KeyInit, Payload},
     XChaCha20Poly1305, XNonce,
 };
-use rand::{rngs::OsRng, RngCore};
+use rand::{rand_core::UnwrapErr, rngs::SysRng, Rng};
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
@@ -103,7 +103,7 @@ fn encrypt_database_file(source: &Path, destination: &Path, key: &[u8; 32]) -> R
         return Err("Le cache équipe à sceller est vide.".into());
     }
     let mut prefix = [0_u8; 16];
-    OsRng.fill_bytes(&mut prefix);
+    UnwrapErr(SysRng).fill_bytes(&mut prefix);
     let mut header = Vec::with_capacity(HEADER_SIZE);
     header.extend_from_slice(MAGIC);
     header.extend_from_slice(&(CHUNK_SIZE as u32).to_be_bytes());

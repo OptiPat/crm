@@ -7,7 +7,7 @@ use super::settings::{
 use super::telegram::send_telegram_message;
 use crate::commands::DbState;
 use crate::database::birthdays::{list_birthdays_today_from_connection, BirthdayContactToday};
-use rand::thread_rng;
+use rand::rng;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -115,7 +115,7 @@ fn send_pending_messages(
         });
     }
 
-    let mut rng = thread_rng();
+    let mut rng = rng();
     let mut messages_sent = 0u32;
     let message_settings = with_open_database(db_state, |db| load_birthday_message_settings(db))?;
 

@@ -76,11 +76,11 @@ pub fn file_sha256(path: &Path) -> Result<String, String> {
         }
         digest.update(&buffer[..read]);
     }
-    Ok(format!("{:x}", digest.finalize()))
+    Ok(crate::hex_util::to_hex(&digest.finalize()))
 }
 
 pub fn bytes_sha256(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    crate::hex_util::to_hex(&Sha256::digest(bytes))
 }
 
 pub fn ensure_local_document(

@@ -12,7 +12,7 @@
 //! des données réelles deviendraient illisibles.
 #![cfg(test)]
 
-use argon2::password_hash::{PasswordHash, PasswordVerifier};
+use argon2::password_hash::{phc::PasswordHash, PasswordVerifier};
 use argon2::Argon2;
 
 /// Empreinte Argon2id du mot de passe fictif `MotDePasse-Temoin-1!` (format stocké dans auth.json).

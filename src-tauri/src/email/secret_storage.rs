@@ -1,4 +1,4 @@
-use rand::RngCore;
+use rand::Rng;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -89,7 +89,7 @@ pub fn load_or_create_key(
     } else {
         let key = legacy_auth_key.unwrap_or_else(|| {
             let mut key = [0u8; 32];
-            rand::thread_rng().fill_bytes(&mut key);
+            rand::rng().fill_bytes(&mut key);
             key
         });
         (key, false)

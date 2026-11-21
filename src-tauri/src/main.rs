@@ -3,6 +3,7 @@
 
 mod arbitrage_fiche_templates;
 mod cif_print_pdf;
+mod hex_util;
 #[cfg(test)]
 mod crypto_compat_tests;
 mod app_branding;

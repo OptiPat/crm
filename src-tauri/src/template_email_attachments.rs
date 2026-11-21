@@ -2,10 +2,10 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use rand::Rng;
+use rand::RngExt;
 
 fn new_attachment_id() -> String {
-    format!("{:016x}", rand::thread_rng().gen::<u64>())
+    format!("{:016x}", rand::rng().random::<u64>())
 }
 
 pub const MAX_ATTACHMENT_BYTES: u64 = 25 * 1024 * 1024;

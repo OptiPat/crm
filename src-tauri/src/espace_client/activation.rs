@@ -1,10 +1,10 @@
-use rand::Rng;
+use rand::RngExt;
 
 use super::push::sign_espace_sync_body;
 
 /// Code à six chiffres pour activation orale ou connexion.
 pub fn generate_six_digit_code() -> String {
-    let n = rand::thread_rng().gen_range(100_000..1_000_000);
+    let n = rand::rng().random_range(100_000..1_000_000);
     format!("{n:06}")
 }
 

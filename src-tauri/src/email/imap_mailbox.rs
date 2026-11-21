@@ -450,9 +450,9 @@ pub fn connect_mailbox(
 // --- Envoi --------------------------------------------------------------------------------
 
 fn new_message_id(from_email: &str) -> String {
-    use rand::Rng;
+    use rand::RngExt;
     let domain = email_domain(from_email).unwrap_or_else(|| "crm.local".into());
-    let nonce: u64 = rand::thread_rng().gen();
+    let nonce: u64 = rand::rng().random();
     format!(
         "crm.{}.{nonce:016x}@{domain}",
         chrono::Utc::now().timestamp_millis()

@@ -316,7 +316,7 @@ pub fn snapshot_checksum(snapshot: &TeamMigrationSnapshot) -> String {
     }))
     .expect("snapshot JSON serialization must succeed");
     let digest = Sha256::digest(canonical.as_bytes());
-    format!("{:x}", digest)
+    crate::hex_util::to_hex(&digest)
 }
 
 fn collect_migration_warnings(conn: &Connection) -> Result<Vec<String>> {

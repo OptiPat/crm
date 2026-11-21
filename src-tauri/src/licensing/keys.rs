@@ -1,4 +1,4 @@
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -155,12 +155,12 @@ fn parse_yymm_expiry(yymm: &str) -> Result<i64, String> {
 
 #[cfg(test)]
 fn random_segment() -> String {
-    use rand::Rng;
+    use rand::RngExt;
     const CHARS: &[u8] = b"0123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     (0..4)
         .map(|_| {
-            let idx = rng.gen_range(0..CHARS.len());
+            let idx = rng.random_range(0..CHARS.len());
             CHARS[idx] as char
         })
         .collect()

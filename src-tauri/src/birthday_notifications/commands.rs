@@ -14,7 +14,7 @@ use crate::commands::DbState;
 use crate::database::birthdays::{
     get_birthday_contact_today_by_id, list_birthdays_today_from_connection, BirthdayContactToday,
 };
-use rand::thread_rng;
+use rand::rng;
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
@@ -43,7 +43,7 @@ pub fn generate_birthday_message_draft_cmd(
         .map_err(|e| e.to_string())?
         .ok_or("Contact introuvable ou pas anniversaire aujourd'hui.")?;
     let settings = load_birthday_message_settings(database)?;
-    let draft = generate_draft(&contact, &mut thread_rng(), &settings);
+    let draft = generate_draft(&contact, &mut rng(), &settings);
     Ok(BirthdayMessageDraftPayload {
         contact_id,
         message: draft.message,

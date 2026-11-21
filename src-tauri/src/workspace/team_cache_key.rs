@@ -9,7 +9,7 @@ use crate::workspace::sharepoint::{
     TEAM_WORKSPACE_LISTS,
 };
 use crate::workspace::team_connection::resolve_microsoft_team_connection;
-use rand::{rngs::OsRng, RngCore};
+use rand::{rand_core::UnwrapErr, rngs::SysRng, Rng};
 use serde_json::{json, Value};
 use std::sync::{Mutex, OnceLock};
 use tauri::AppHandle;
@@ -133,7 +133,7 @@ pub fn fetch_or_create_team_cache_dek(
         return dek_from_secret_items(&matches);
     }
     let mut key = [0_u8; 32];
-    OsRng.fill_bytes(&mut key);
+    UnwrapErr(SysRng).fill_bytes(&mut key);
     client.create_list_item_blocking(
         access_token,
         site_id,

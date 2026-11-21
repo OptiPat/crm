@@ -1,6 +1,6 @@
 //! Modèles PDF fiche conseil arbitrage AV / PER (bibliothèque locale sous AppData).
 
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -110,7 +110,7 @@ fn legacy_template_path(app_data_dir: &Path) -> PathBuf {
 }
 
 fn new_template_id() -> String {
-    let suffix: u32 = rand::thread_rng().gen();
+    let suffix: u32 = rand::rng().random();
     format!("{}_{suffix:08x}", chrono::Utc::now().timestamp_millis())
 }
 
@@ -322,7 +322,7 @@ mod tests {
     fn temp_app_data() -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
             "crm-arbitrage-templates-{}",
-            rand::thread_rng().gen::<u32>()
+            rand::rng().random::<u32>()
         ));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();

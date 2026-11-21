@@ -9,7 +9,9 @@
 //!
 //! Format : `ESPD1` | clé publique éphémère (32) | nonce (24) | chiffré.
 //!
-//! ⚠️ Ce module doit rester identique à `espace-portail/src/depot_crypto.rs`.
+//! ⚠️ Ce module doit rester compatible avec `espace-portail/src/depot_crypto.rs` : même
+//! format et mêmes algorithmes. Seuls les appels au générateur aléatoire diffèrent
+//! (rand 0.10 ici, 0.8 côté portail). Garanti par `crypto_compat_tests` (dépôt témoin).
 //! Le CRM ne fait que desceller : `seal` n'existe ici que pour que les tests
 //! vérifient le format des deux côtés.
 
@@ -55,7 +57,7 @@ pub fn parse_public_key(encoded: &str) -> Result<[u8; 32], String> {
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn seal(plaintext: &[u8], recipient_public: &[u8; 32]) -> Result<Vec<u8>, String> {
     let recipient = PublicKey::from(*recipient_public);
-    let ephemeral_secret = EphemeralSecret::random_from_rng(rand::thread_rng());
+    let ephemeral_secret = EphemeralSecret::random_from_rng(&mut rand::rng());
     let ephemeral_public = PublicKey::from(&ephemeral_secret);
     let shared = ephemeral_secret.diffie_hellman(&recipient);
 
@@ -65,8 +67,8 @@ pub fn seal(plaintext: &[u8], recipient_public: &[u8; 32]) -> Result<Vec<u8>, St
 
     let mut nonce_bytes = [0u8; NONCE_LEN];
     {
-        use rand::RngCore;
-        rand::thread_rng().fill_bytes(&mut nonce_bytes);
+        use rand::Rng;
+        rand::rng().fill_bytes(&mut nonce_bytes);
     }
     let nonce = XNonce::try_from(&nonce_bytes[..])
         .map_err(|_| "Nonce de scellement invalide".to_string())?;
@@ -119,7 +121,7 @@ pub fn unseal(sealed: &[u8], recipient_secret: &[u8; 32]) -> Result<Vec<u8>, Str
 /// Génère une paire de clés : la privée reste sur le poste du conseiller,
 /// chiffrée au repos ; seule la publique part vers le portail.
 pub fn generate_keypair() -> ([u8; 32], [u8; 32]) {
-    let secret = StaticSecret::random_from_rng(rand::thread_rng());
+    let secret = StaticSecret::random_from_rng(&mut rand::rng());
     let public = PublicKey::from(&secret);
     (secret.to_bytes(), public.to_bytes())
 }
@@ -152,7 +154,7 @@ mod tests {
     use super::*;
 
     fn keypair() -> ([u8; 32], [u8; 32]) {
-        let secret = StaticSecret::random_from_rng(rand::thread_rng());
+        let secret = StaticSecret::random_from_rng(&mut rand::rng());
         let public = PublicKey::from(&secret);
         (secret.to_bytes(), public.to_bytes())
     }

@@ -1,7 +1,7 @@
 //! Génération des brouillons SMS anniversaire (port de `scripts/n8n-anniversaires-templates.js`).
 
 use crate::database::birthdays::BirthdayContactToday;
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 
 use super::message_settings::{BirthdayMessageProfileBodies, BirthdayMessageSettingsPayload};
 

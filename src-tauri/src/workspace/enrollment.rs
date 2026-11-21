@@ -6,7 +6,7 @@
 use crate::database::workspace::WorkspaceConfig;
 use crate::email::oauth_secrets::{decrypt_secret, encrypt_secret, load_storage_key};
 use crate::workspace::mode::WorkspaceMode;
-use rand::RngCore;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -59,7 +59,7 @@ fn normalize_path(value: &str) -> String {
 
 fn random_workspace_id() -> String {
     let mut bytes = [0_u8; 16];
-    rand::thread_rng().fill_bytes(&mut bytes);
+    rand::rng().fill_bytes(&mut bytes);
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 

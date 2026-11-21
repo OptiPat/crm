@@ -4,7 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use tauri::{AppHandle, Emitter, Manager};
-use rand::RngCore;
+use rand::Rng;
 
 use crate::auth::session::{UiSessionState, UiSessionLockedPayload, UI_SESSION_LOCKED_EVENT};
 use crate::commands::DbState;
@@ -24,7 +24,7 @@ static AUTOMATION_INSTANCE_ID: OnceLock<String> = OnceLock::new();
 fn automation_instance_id() -> &'static str {
     AUTOMATION_INSTANCE_ID.get_or_init(|| {
         let mut value = [0_u8; 16];
-        rand::thread_rng().fill_bytes(&mut value);
+        rand::rng().fill_bytes(&mut value);
         value.iter().map(|byte| format!("{byte:02x}")).collect()
     })
 }
