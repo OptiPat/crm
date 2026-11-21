@@ -4,7 +4,7 @@ import type { AnnexesScpiProsConsRow } from "@/lib/souscription-cif/annexes-scpi
 
 export const ANNEXES_CAPITAL_INVEST_PROS_CONS_ROWS: ReadonlyArray<AnnexesScpiProsConsRow> = [
   {
-    advantages: "Placement souple et accessible même avec de faibles montants.",
+    advantages: "Placement accessible même avec de faibles montants.",
     disadvantages: "Aucune garantie en capital ni en rendement.",
   },
   {

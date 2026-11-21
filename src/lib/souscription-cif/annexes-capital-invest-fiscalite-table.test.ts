@@ -27,7 +27,7 @@ describe("annexes-capital-invest-fiscalite-table", () => {
 
   it("indique la fiscalité de sortie de chaque fonds", () => {
     expect(row("Produits et plus-values à la sortie")).toMatchObject({
-      fcpi: "Flat-tax",
+      fcpi: "Prélèvement forfaitaire unique (flat tax) de 31,4 %",
       fipOm: "0 % d'IR (prélèvements sociaux uniquement)",
     });
   });

@@ -82,7 +82,7 @@ export const CAPITAL_INVEST_FISCALITE_TABLE_ROWS: ReadonlyArray<CapitalInvestFis
   {
     kind: "data",
     label: "Produits et plus-values à la sortie",
-    fcpi: "Flat-tax",
+    fcpi: "Prélèvement forfaitaire unique (flat tax) de 31,4 %",
     fipOm: "0 % d'IR (prélèvements sociaux uniquement)",
   },
   {

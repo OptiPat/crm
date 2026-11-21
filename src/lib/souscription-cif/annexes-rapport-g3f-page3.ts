@@ -13,7 +13,7 @@ const ANNEXES_G3F_SECTION6_PARAGRAPHS = [
 - Total de l'apport : environ {{g3f_total_apport}} €`,
   "[u]Recalcul du plafond :[/u]",
   `Le montant d'investissement proposé a été déterminé de façon à respecter le plafond global des niches fiscales, compte tenu des autres avantages fiscaux dont vous bénéficiez, et permet en même temps de baisser votre impôt.`,
-  `Vous avez été informé qu'en application de la loi de finances pour {{g3f_annee_loi_finances}} que les souscriptions réalisées en {{g3f_annee_souscription}} pour des opérations en LODEOM seront prises en compte lors de la déclaration de revenus {{g3f_annee_declaration_revenus}} faite en avril/mai {{g3f_annee_declaration_revenus}} et restituées à l'été {{g3f_annee_declaration_revenus}} et tenant compte de l'éventuel impôt dû sur les revenus exceptionnels.`,
+  `Vous avez été informé qu'en application de la loi de finances pour {{g3f_annee_loi_finances}}, les souscriptions réalisées en {{g3f_annee_souscription}} pour des opérations en LODEOM seront prises en compte lors de la déclaration de revenus {{g3f_annee_declaration_revenus}} faite en avril/mai {{g3f_annee_declaration_revenus}} et restituées à l'été {{g3f_annee_declaration_revenus}} et tenant compte de l'éventuel impôt dû sur les revenus exceptionnels.`,
   `Vous reconnaissez que si le montant du revenu imposable pouvant bénéficier de la réduction d'impôt susvisée est inférieur, il ne sera pas possible de demander la révision du montant de la souscription de façon rétroactive. Enfin, si le montant de la réduction d'impôt excède l'impôt dû, l'excédent pourra être reporté sur l'impôt sur le revenu des cinq années suivantes ; il ne donne lieu à aucun remboursement.`,
 ] as const;
 

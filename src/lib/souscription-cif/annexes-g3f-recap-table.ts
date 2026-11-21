@@ -8,7 +8,7 @@ export const ANNEXES_G3F_RECAP_ROW_ADAPTATION_TITLE =
   "La recommandation formulée est adaptée au client ?";
 
 export const ANNEXES_G3F_RECAP_ROW_ADAPTATION_CONTENT =
-  "Oui, elle répond tant aux objectifs du Client, son profil, son horizon.";
+  "Oui, elle répond tant aux objectifs du Client qu'à son profil et à son horizon.";
 
 export const ANNEXES_G3F_RECAP_ROW_OBJECTIFS_TITLE =
   "La recommandation est conforme aux objectifs ?";

@@ -737,7 +737,8 @@ describe("buildAnnexesRapportPreview", () => {
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
     expect(body).toContain("1. Caractéristiques de l'investissement en Girardin industriel");
-    expect(body).toContain("Société en Nom Commercial (SNC)");
+    expect(body).toContain("société en nom collectif (SNC)");
+    expect(body).not.toContain("Nom Commercial");
     expect(body).toContain("Outre-Mer");
     expect(body).toContain("2. Mécanisme de la réduction d'impôt");
     expect(body).toContain("3. La rentabilité");

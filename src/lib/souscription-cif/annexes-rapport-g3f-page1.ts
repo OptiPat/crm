@@ -8,7 +8,7 @@ export const ANNEXES_G3F_PAGE1_BODY_AFTER_SECTION = `[u]1. Caractéristiques de 
 
 L'opération d'investissement en Girardin industriel consiste à financer via une SNC (société de portage) un « portefeuille » d'investissements en matériels industriels, véhicules, ainsi que tout autre bien éligible au dispositif.
 Ces biens sont donnés en location à des entreprises situées en Outre-Mer pour une durée de 5 ans.
-Ce type d'investissement, destiné à soutenir l'activité économique en Outre-Mer, bénéficie d'un dispositif d'incitation fiscale puisque les articles 199 undecies B et 217 undecies du Code général des impôts prévoient une réduction d'impôt égale au montant de votre investissement augmenté de sa rentabilité.
+Ce type d'investissement, destiné à soutenir l'activité économique en Outre-Mer, bénéficie d'un dispositif d'incitation fiscale puisque l'article 199 undecies B du Code général des impôts prévoit, pour les contribuables soumis à l'impôt sur le revenu, une réduction d'impôt égale au montant de votre investissement augmenté de sa rentabilité.
 
 [u]2. Mécanisme de la réduction d'impôt[/u]
 
@@ -21,12 +21,12 @@ La réduction d'impôt acquise par un contribuable au titre de son investissemen
 
 [u]3. La rentabilité[/u]
 
-Votre investissement vous permet de percevoir une réduction d'impôt égale au montant investi + {{g3f_rendement}}, soit une rentabilité de {{g3f_rendement}}.
+Votre investissement vous permet de percevoir une réduction d'impôt égale au montant investi + {{g3f_rendement}}, soit une rentabilité de {{g3f_rendement}}. Cette rentabilité est fiscale, calculée hors frais d'enregistrement, et n'est pas garantie : elle suppose le respect de toutes les conditions légales pendant la durée d'exploitation.
 Dans le cas où le montant d'impôt serait inférieur à notre estimation, l'excédent de réduction d'impôt sera reportable sur les 5 années suivantes, jusqu'à épuisement.
 
 [u]4. Le schéma du montage[/u]
 
-La Société en Nom Commercial (SNC) est la société de portage autorisée pour les opérations Girardin industrielles de plein droit pour les projets inférieurs à 250 000 €.
+La société en nom collectif (SNC) porte les opérations Girardin industriel de plein droit, c'est-à-dire celles dont le montant par programme n'excède pas 250 000 € (au-delà, un agrément préalable est requis).
 La société de portage achète un matériel industriel et le loue à une entreprise ultramarine éligible au dispositif Girardin pendant une période de 5 ans minimum. Cette entreprise qui exploite le bien dans les DOM-COM en devient locataire et verse un loyer environ 30 % inférieur au remboursement d'un crédit classique, grâce à la partie de l'avantage fiscal qui lui est rétrocédée.
 Trois intervenants participent au financement du projet industriel : l'entreprise ultramarine grâce à un apport initial d'environ 10 % du prix du matériel, un organisme financier pour environ la moitié et les investisseurs fiscaux via leur apport à fonds perdus correspondant à 40 % de la valeur du bien.
 Au terme de la période locative de 5 ans, le matériel devient propriété de l'entreprise ultramarine, après liquidation de la société de portage.`;

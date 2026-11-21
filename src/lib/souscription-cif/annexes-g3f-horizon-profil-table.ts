@@ -11,9 +11,9 @@ import {
 
 /** Horizon type G3F — « de 3 à 8 ans » coché. */
 const ANNEXES_G3F_HORIZON_OPTIONS: ReadonlyArray<{ label: string; checked: boolean }> = [
-  { label: "< à 3 ans", checked: false },
+  { label: "< 3 ans", checked: false },
   { label: "de 3 à 8 ans", checked: true },
-  { label: "+ de 10 ans", checked: false },
+  { label: "+ de 8 ans", checked: false },
 ];
 
 export function buildAnnexesG3fHorizonProfilRowViews(
