@@ -1,6 +1,6 @@
 import { useMemo } from "react";
+import { ContactNotesLog } from "@/components/contacts/ContactNotesLog";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
 import { FilleulDossierDateField } from "@/components/organisation/FilleulDossierDateField";
 import type { Contact } from "@/lib/api/tauri-contacts";
@@ -146,19 +146,12 @@ export function OrganisationMemberDossierNetworkSection({
         <Label htmlFor="dossier-notes" className="text-xs text-muted-foreground">
           Notes dossier
         </Label>
-        <Textarea
-          id="dossier-notes"
-          className="min-h-[72px] text-sm"
-          defaultValue={dossier.notes ?? ""}
-          disabled={!canEdit || saving}
-          key={`notes-${dossier.updatedAt}`}
+        <ContactNotesLog
+          notes={dossier.notes}
+          onChange={(notes) => saveDossierPatch({ notes })}
+          busy={!canEdit || saving}
+          emptyLabel="Aucune note pour ce dossier"
           placeholder="Notes internes réseau (hors fiche contact)"
-          onBlur={(event) => {
-            const next = event.target.value.trim();
-            const current = (dossier.notes ?? "").trim();
-            if (next === current) return;
-            saveDossierPatch({ notes: event.target.value });
-          }}
         />
       </div>
 

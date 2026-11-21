@@ -28,4 +28,17 @@ describe("identity-status-messages", () => {
     });
     expect(msg).toContain("Verso");
   });
+
+
+  it("MRZ vérifiée : aucune mention du lieu de naissance", () => {
+    const msg = resolveIdentityUserMessage({
+      mrzVerified: true,
+      mrz: undefined,
+      dateNaissanceFr: ANONYMOUS_CNI_BIRTH_FR,
+      lieuNaissance: undefined,
+      layout: "two_pages",
+      documentKind: "cni",
+    });
+    expect(msg.toLowerCase()).not.toContain("lieu");
+  });
 });

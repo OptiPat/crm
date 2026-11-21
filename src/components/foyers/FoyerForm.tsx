@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { ContactNotesLog } from "@/components/contacts/ContactNotesLog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -316,13 +317,10 @@ export function FoyerForm({
           {/* Notes */}
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
-            <Textarea
-              id="notes"
-              value={formData.notes || ""}
-              onChange={(e) =>
-                setFormData({ ...formData, notes: e.target.value })
-              }
-              rows={3}
+            <ContactNotesLog
+              notes={formData.notes}
+              onChange={(notes) => setFormData((prev) => ({ ...prev, notes }))}
+              emptyLabel="Aucune note pour ce foyer"
             />
           </div>
 

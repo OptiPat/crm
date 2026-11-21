@@ -1,4 +1,5 @@
 import { mrzCheckDigitValid } from "@/lib/identity/mrz-checksum";
+import { repairMrzLines } from "@/lib/identity/mrz-repair";
 import {
   isPlausiblePersonName,
   sanitizePersonName,
@@ -325,9 +326,43 @@ function finalizeMrz(parsed: ParsedMrz | null): ParsedMrz | null {
   return adjusted;
 }
 
+function verifiedCheckCount(mrz: ParsedMrz | null): number {
+  if (!mrz) return -1;
+  const c = mrz.checksVerified;
+  return Number(c.documentNumber) + Number(c.birthDate) + Number(c.expiryDate);
+}
+
+/** Lignes ramenées à la longueur canonique (30 / 36 / 44) avant correction. */
+function canonicalMrzLines(normalized: string[]): string[] {
+  if (normalized.length >= 3 && normalized.every((l) => l.length <= 32)) {
+    return normalized.slice(-3).map((l) => l.padEnd(30, "<").slice(0, 30));
+  }
+  return normalized.slice(-2).map((l) => {
+    if (l.length >= 42) return l.padEnd(44, "<").slice(0, 44);
+    return l.padEnd(36, "<").slice(0, 36);
+  });
+}
+
+/**
+ * Lit la MRZ ; si des clés de contrôle échouent, tente une version corrigée des
+ * confusions OCR (O/0, I/1, B/8…) et ne la garde que si elle valide plus de clés.
+ */
 export function parseMrzLines(lines: string[]): ParsedMrz | null {
   const normalized = lines.map((l) => normalizeMrzLine(l)).filter(Boolean);
   if (normalized.length < 2) return null;
+
+  const original = parseMrzLinesAsIs(normalized);
+  if (verifiedCheckCount(original) === 3) return original;
+
+  const canonical = canonicalMrzLines(normalized);
+  const repairedLines = repairMrzLines(canonical);
+  if (repairedLines.join("|") === canonical.join("|")) return original;
+
+  const repaired = parseMrzLinesAsIs(repairedLines);
+  return verifiedCheckCount(repaired) > verifiedCheckCount(original) ? repaired : original;
+}
+
+function parseMrzLinesAsIs(normalized: string[]): ParsedMrz | null {
 
   if (normalized.length >= 3 && normalized.every((l) => l.length <= 32)) {
     const td1 = finalizeMrz(parseTd1(normalized.slice(-3)));

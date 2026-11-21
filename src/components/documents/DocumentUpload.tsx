@@ -634,9 +634,8 @@ export function DocumentUpload({
           className={nestedStackedDialogClass(
             cn(
               "max-h-[90vh] transition-[max-width] duration-200 ease-out",
-              isStelliumWizardMode
-                ? "flex h-[90vh] max-w-6xl flex-col overflow-hidden p-6"
-                : "flex max-w-2xl flex-col overflow-hidden"
+              // Même fenêtre pour tous les types (pas de saut de taille en changeant de type).
+              "flex h-[90vh] max-w-6xl flex-col overflow-hidden p-6"
             ),
             nestedSheet
           )}
@@ -677,7 +676,7 @@ export function DocumentUpload({
             {...stelliumBootstrap}
           />
         ) : (
-          <>
+          <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
         <DialogHeader>
           <DialogTitle>Importer un document</DialogTitle>
           <DialogDescription>
@@ -1001,7 +1000,7 @@ export function DocumentUpload({
           </DialogFooter>
         </form>
         </div>
-          </>
+          </div>
         )}
         </PortalLayerProvider>
       </DialogContent>

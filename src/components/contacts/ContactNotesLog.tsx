@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { DictationTextarea } from "@/components/ui/dictation-textarea";
 import {
   appendContactNote,
   deleteContactNote,
@@ -12,10 +13,20 @@ type ContactNotesLogProps = {
   notes?: string | null;
   onChange: (nextNotes: string) => void | Promise<void>;
   busy?: boolean;
+  /** Texte quand le journal est vide. */
+  emptyLabel?: string;
+  /** Exemple affiché dans la zone de saisie. */
+  placeholder?: string;
 };
 
 /** Journal de notes : ajout, modification et suppression. */
-export function ContactNotesLog({ notes, onChange, busy = false }: ContactNotesLogProps) {
+export function ContactNotesLog({
+  notes,
+  onChange,
+  busy = false,
+  emptyLabel = "Aucune note pour ce contact",
+  placeholder = "Nouvelle note",
+}: ContactNotesLogProps) {
   const [draft, setDraft] = useState("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
@@ -52,18 +63,18 @@ export function ContactNotesLog({ notes, onChange, busy = false }: ContactNotesL
 
   return (
     <div className="space-y-3">
-      <Textarea
+      <DictationTextarea
         value={draft}
-        onChange={(event) => setDraft(event.target.value)}
+        onChange={setDraft}
         rows={3}
-        placeholder="Nouvelle note"
+        placeholder={placeholder}
         disabled={busy || editingIndex != null}
       />
       <Button type="button" size="sm" onClick={add} disabled={!canAdd}>
         {busy && editingIndex == null && confirmDeleteIndex == null ? "Ajout…" : "Ajouter"}
       </Button>
       {entries.length === 0 ? (
-        <p className="text-sm text-muted-foreground italic">Aucune note pour ce contact</p>
+        <p className="text-sm text-muted-foreground italic">{emptyLabel}</p>
       ) : (
         <ul className="space-y-2">
           {entries.map((entry) => {

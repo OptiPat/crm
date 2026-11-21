@@ -1,4 +1,5 @@
 import { parseMrzFromText, isMrzFullyVerified, type ParsedMrz } from "@/lib/identity/mrz-parser";
+import { estimateFrenchLegacyCniExpiry } from "@/lib/identity/french-legacy-cni-expiry";
 import type {
   IdentityDocumentKind,
   IdentityDocumentLayout,
@@ -194,6 +195,14 @@ export function parseIdentityFromRegions(input: {
   ) {
     dateExpirationFr = mrz.dateExpiration;
     provenance.dateExpiration = "mrz_unverified";
+  } else if (mrz?.format === "FRA_LEGACY" && mrz.checksVerified.documentNumber) {
+    //  4. Ancienne CNI sans verso : la MRZ n'a pas d'expiration ; estimation à partir
+    //     du mois de délivrance (n° de carte vérifié) et de l'âge — à faire vérifier.
+    const estimated = estimateFrenchLegacyCniExpiry(mrz.documentNumber, dateNaissanceFr);
+    if (estimated) {
+      dateExpirationFr = estimated;
+      provenance.dateExpiration = "mrz_unverified";
+    }
   }
 
   if (visual.lieuNaissance) {

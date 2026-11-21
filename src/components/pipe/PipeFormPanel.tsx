@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ContactNotesLog } from "@/components/contacts/ContactNotesLog";
 import { Briefcase, ClipboardList, PhoneCall } from "lucide-react";
 import { notifyPlacementOperationsChanged } from "@/lib/api/tauri-box-placement";
 import { userErrorMessage } from "@/lib/api/invoke-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DictationTextarea } from "@/components/ui/dictation-textarea";
 import {
   Select,
   SelectContent,
@@ -770,13 +770,15 @@ export function PipeFormPanel({
           </div>
         )}
 
-        <DictationTextarea
-          label="Notes"
-          value={form.notes}
-          onChange={(notes) => setForm((prev) => ({ ...prev, notes }))}
-          rows={3}
-          placeholder="Contexte, prochaine étape…"
-        />
+        <div className="space-y-2">
+          <Label>Notes</Label>
+          <ContactNotesLog
+            notes={form.notes}
+            onChange={(notes) => setForm((prev) => ({ ...prev, notes }))}
+            emptyLabel="Aucune note pour cette affaire"
+            placeholder="Contexte, prochaine étape…"
+          />
+        </div>
       </div>
 
       <div className="border-t px-5 py-4 flex justify-end gap-2">

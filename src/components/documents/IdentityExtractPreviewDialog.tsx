@@ -22,7 +22,7 @@ import {
   summarizeMrzTrust,
 } from "@/lib/identity/identity-status-messages";
 import { normalizeIdentityDate } from "@/lib/identity/visual-identity-parser";
-import { contactHasStoredBirthPlace, contactHasStoredTimestamp } from "@/lib/identity/merge-identity-fields";
+import { contactHasStoredTimestamp } from "@/lib/identity/merge-identity-fields";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -161,7 +161,6 @@ export function IdentityExtractPreviewDialog({
   contactNom,
   contactPrenom,
   contactDateNaissance,
-  contactLieuNaissance,
   rectoPreviewPath,
   versoPreviewPath,
   nestedSheet = false,
@@ -186,7 +185,8 @@ export function IdentityExtractPreviewDialog({
   const showNameFields =
     !contactHasName && Boolean(nom || prenom || extracted?.nom || extracted?.prenom);
   const showDateNaissanceField = !contactHasStoredTimestamp(contactDateNaissance);
-  const showLieuNaissanceField = !contactHasStoredBirthPlace(contactLieuNaissance);
+  // Lieu de naissance non utilisé pour l'import de pièce d'identité (jamais lu ni écrit).
+  const showLieuNaissanceField = false;
 
   const hasSomethingToApply =
     (showDateNaissanceField && dateNaissanceFr.trim() !== "") ||
@@ -196,6 +196,11 @@ export function IdentityExtractPreviewDialog({
     prenom.trim() !== "";
 
   const statusMessage = resolveIdentityUserMessage(extracted);
+  // Champs absents de la fenêtre car déjà renseignés sur la fiche (jamais écrasés).
+  const keptFromContact = [
+    !showNameFields && contactHasName ? "nom et prénom" : null,
+    !showDateNaissanceField ? "date de naissance" : null,
+  ].filter(Boolean) as string[];
   const mrzTrust = summarizeMrzTrust(extracted);
   const hasPreview = Boolean(rectoPreviewPath || versoPreviewPath);
 
@@ -242,6 +247,12 @@ export function IdentityExtractPreviewDialog({
               <p className="font-medium">{mrzTrust}</p>
               <p className="mt-1">{statusMessage}</p>
             </div>
+
+            {keptFromContact.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Déjà renseignés sur la fiche, conservés tels quels : {keptFromContact.join(", ")}.
+              </p>
+            )}
 
             {extracted?.expiryMayBeExtended && (
               <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">

@@ -527,13 +527,15 @@ fn enrich_week_events_with_pipe_links(
     Ok(())
 }
 
-pub fn list_google_calendar_week_with_pipe_sync(
+/// Étape locale après la récupération Google de la semaine (appelée sous verrou de la base).
+/// L'appel réseau (`list_google_calendar_week_events`) se fait avant, **sans** tenir le verrou.
+pub fn finish_google_calendar_week(
     app: &AppHandle,
     db: &Database,
     week_start_at: i64,
     sync_pipe: bool,
+    mut events: Vec<GoogleCalendarWeekEvent>,
 ) -> Result<AgendaWeekListResult, String> {
-    let mut events = list_google_calendar_week_events(app, week_start_at)?;
     let sync = if sync_pipe {
         sync_pipe_rdv_from_google_week(app, db, week_start_at, &events)?
     } else {

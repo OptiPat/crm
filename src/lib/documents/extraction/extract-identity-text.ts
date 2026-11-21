@@ -1,5 +1,6 @@
 import { readPdfFile } from "@/lib/api/tauri-pdf";
-import { cropImageDataUrl } from "@/lib/documents/extraction/image-crop";
+import { cropImageDataUrl, type CropRegion } from "@/lib/documents/extraction/image-crop";
+import { sweepMrz } from "@/lib/documents/extraction/mrz-sweep";
 import {
   inferIdentityDocumentKindFromPath,
   refineIdentityDocumentKind,
@@ -108,6 +109,48 @@ async function ocrPdfRegions(
   };
 }
 
+function cropDataUrlToRegion(dataUrl: string, region: CropRegion): Promise<string> {
+  return cropImageDataUrl(dataUrl, { page: 1, scale: 1, mode: "mrz", role: "mrz", region });
+}
+
+/** Balayage de secours (orientations × zones) sur une image entière. */
+function sweepMrzOnImage(dataUrl: string): Promise<{ text: string; score: number }> {
+  return sweepMrz(dataUrl, {
+    rotate: rotateDataUrl,
+    crop: cropDataUrlToRegion,
+    recognizeMrz: recognizeMrzDataUrl,
+    score: scoreMrzOcrText,
+    verifiedScore: MRZ_VERIFIED_SCORE,
+  });
+}
+
+function documentKindFromMrzText(text: string, fallback: IdentityDocumentKind): IdentityDocumentKind {
+  if (/^P</m.test(text)) return "passport";
+  if (/^(ID|I<)/m.test(text)) return "cni";
+  return fallback;
+}
+
+/**
+ * Si aucune MRZ vérifiée : balaye les pages du PDF (rendu entier, 2 pages max)
+ * et remplace la MRZ seulement si le balayage fait mieux.
+ */
+async function improveMrzWithPdfSweep(
+  filePath: string,
+  pageCount: number,
+  versoText: string
+): Promise<string | null> {
+  const currentScore = scoreMrzOcrText(versoText);
+  if (currentScore >= MRZ_VERIFIED_SCORE) return null;
+  let best: { text: string; score: number } = { text: "", score: currentScore };
+  for (let page = 1; page <= Math.min(pageCount, 2); page++) {
+    const pageImage = await renderPdfPageToDataUrl(filePath, page, 3);
+    const found = await sweepMrzOnImage(pageImage);
+    if (found.score > best.score) best = found;
+    if (best.score >= MRZ_VERIFIED_SCORE) break;
+  }
+  return best.score > currentScore ? best.text : null;
+}
+
 function combineIdentityText(rectoText: string, versoText: string): string {
   return [rectoText, versoText].filter(Boolean).join("\n\n");
 }
@@ -180,6 +223,18 @@ async function ocrImageWithStrategies(
       }
     }
     if (scoreMrzOcrText(best.versoText) >= MRZ_VERIFIED_SCORE) break;
+  }
+
+  if (scoreMrzOcrText(best.versoText) < MRZ_VERIFIED_SCORE) {
+    const swept = await sweepMrzOnImage(dataUrl);
+    if (swept.score > scoreMrzOcrText(best.versoText)) {
+      return {
+        rectoText: best.rectoText,
+        versoText: swept.text,
+        layout: bestMeta.layout,
+        documentKind: documentKindFromMrzText(swept.text, bestMeta.kind),
+      };
+    }
   }
 
   return { ...best, layout: bestMeta.layout, documentKind: bestMeta.kind };
@@ -397,7 +452,8 @@ export async function extractIdentityTextFromFile(
   const pageCount = await getPdfPageCount(filePath);
 
   if (documentKind === "passport") {
-    const { rectoText, versoText, layout } = await ocrPassportPdf(filePath, pageCount);
+    const { rectoText, versoText: plannedMrz, layout } = await ocrPassportPdf(filePath, pageCount);
+    const versoText = (await improveMrzWithPdfSweep(filePath, pageCount, plannedMrz)) ?? plannedMrz;
     const ocrCombined = combineIdentityText(rectoText, versoText);
     return {
       rectoText,
@@ -409,7 +465,9 @@ export async function extractIdentityTextFromFile(
     };
   }
 
-  const { rectoText, versoText, layout } = await ocrCniPdf(filePath, pageCount);
+  const { rectoText, versoText: plannedMrz, layout } = await ocrCniPdf(filePath, pageCount);
+  const swept = await improveMrzWithPdfSweep(filePath, pageCount, plannedMrz);
+  const versoText = swept ?? plannedMrz;
   const ocrCombined = combineIdentityText(rectoText, versoText);
 
   return {
@@ -418,7 +476,7 @@ export async function extractIdentityTextFromFile(
     text: ocrCombined.length > nativeText.length ? ocrCombined : nativeText,
     usedOcr: true,
     layout,
-    documentKind: "cni",
+    documentKind: swept ? documentKindFromMrzText(swept, "cni") : "cni",
   };
 }
 

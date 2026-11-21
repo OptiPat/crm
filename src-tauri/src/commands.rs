@@ -34,6 +34,25 @@ use tauri::{AppHandle, Manager, State};
 
 pub type DbState = Mutex<Option<Database>>;
 
+/// Exécute `f` hors du fil de la fenêtre (tâche de fond), avec la base verrouillée.
+/// À utiliser pour les commandes longues (réseau, disque) afin que l'interface ne gèle pas.
+async fn run_with_db_blocking<T, F>(app: tauri::AppHandle, f: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce(&tauri::AppHandle, &Database) -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app.state::<DbState>();
+        let guard = db.inner().lock().map_err(|e| e.to_string())?;
+        let database = guard
+            .as_ref()
+            .ok_or_else(|| "Database not initialized".to_string())?;
+        f(&app, database)
+    })
+    .await
+    .map_err(|e| format!("Tâche interrompue: {}", e))?
+}
+
 #[tauri::command]
 pub async fn get_all_contacts(app: AppHandle) -> Result<Vec<Contact>, String> {
     // Hors du fil principal : avec des milliers de fiches, la lecture jointe
@@ -2353,18 +2372,27 @@ pub fn reporter_alerte_arbitrage(
 // ========== PDF ==========
 
 #[tauri::command]
-pub fn read_pdf_file(
+pub async fn read_pdf_file(
     app: AppHandle,
-    db: State<'_, DbState>,
-    session: State<'_, UiSessionState>,
     file_path: String,
-) -> Result<Vec<u8>, String> {
+) -> Result<tauri::ipc::Response, String> {
+    // Hors du fil de la fenêtre (disque, éventuel téléchargement SharePoint), et
+    // octets bruts au lieu d'un tableau JSON de nombres (≈ 4× plus lourd à décoder).
+    let bytes = tauri::async_runtime::spawn_blocking(move || read_document_bytes(&app, &file_path))
+        .await
+        .map_err(|e| format!("Lecture interrompue: {}", e))??;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+fn read_document_bytes(app: &AppHandle, file_path: &str) -> Result<Vec<u8>, String> {
     use std::fs;
 
+    let db = app.state::<DbState>();
+    let session = app.state::<UiSessionState>();
     require_ui_session(&session)?;
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let app_cache_dir = app.path().app_cache_dir().map_err(|e| e.to_string())?;
-    let requested_path = std::path::Path::new(&file_path);
+    let requested_path = std::path::Path::new(file_path);
     let managed = crate::documents_storage::validate_document_or_compta_cache_file(
         &app_data_dir,
         &app_cache_dir,
@@ -2376,18 +2404,18 @@ pub fn read_pdf_file(
     })
     .or_else(|initial_error| {
         let document_id =
-            crate::workspace::documents::logical_document_id(&file_path).or_else(|| {
+            crate::workspace::documents::logical_document_id(file_path).or_else(|| {
                 db.lock().ok().and_then(|guard| {
                     guard
                         .as_ref()?
-                        .get_document_id_by_path(&file_path)
+                        .get_document_id_by_path(file_path)
                         .ok()
                         .flatten()
                 })
             });
         document_id
             .ok_or(initial_error)
-            .and_then(|id| crate::workspace::documents::ensure_local_document(&app, &db, id))
+            .and_then(|id| crate::workspace::documents::ensure_local_document(app, db.inner(), id))
     })?;
     crate::secure_files::ensure_file_size(&managed, crate::secure_files::MAX_DOCUMENT_BYTES)?;
     fs::read(managed).map_err(|e| format!("Lecture du document impossible : {e}"))
@@ -2973,9 +3001,8 @@ pub fn set_contact_pipeline_status(
 }
 
 #[tauri::command]
-pub fn create_calendar_rdv(
+pub async fn create_calendar_rdv(
     app_handle: tauri::AppHandle,
-    db: State<'_, DbState>,
     contact_id: i64,
     alerte_id: Option<i64>,
     tache_id: Option<i64>,
@@ -2988,11 +3015,10 @@ pub fn create_calendar_rdv(
     event_location: Option<String>,
     additional_attendee_contact_ids: Option<Vec<i64>>,
 ) -> Result<CalendarEventEntry, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
     let extra = additional_attendee_contact_ids.unwrap_or_default();
+    run_with_db_blocking(app_handle, move |app, database| {
     crate::email::calendar_ops::create_google_calendar_rdv(
-        &app_handle,
+        app,
         database,
         contact_id,
         alerte_id,
@@ -3006,12 +3032,13 @@ pub fn create_calendar_rdv(
         event_location.as_deref(),
         &extra,
     )
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn update_calendar_rdv(
+pub async fn update_calendar_rdv(
     app_handle: tauri::AppHandle,
-    db: State<'_, DbState>,
     google_event_id: String,
     title: String,
     start_at: i64,
@@ -3023,11 +3050,10 @@ pub fn update_calendar_rdv(
     clear_visio: Option<bool>,
     additional_attendee_contact_ids: Option<Vec<i64>>,
 ) -> Result<crate::database::models::CalendarRdvSyncDetails, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
     let extra = additional_attendee_contact_ids.unwrap_or_default();
+    run_with_db_blocking(app_handle, move |app, database| {
     crate::email::calendar_ops::update_google_calendar_rdv(
-        &app_handle,
+        app,
         database,
         &google_event_id,
         &title,
@@ -3040,17 +3066,19 @@ pub fn update_calendar_rdv(
         clear_visio.unwrap_or(false),
         &extra,
     )
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn cancel_calendar_rdv(
+pub async fn cancel_calendar_rdv(
     app_handle: tauri::AppHandle,
-    db: State<'_, DbState>,
     google_event_id: String,
 ) -> Result<(), String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    crate::email::calendar_ops::cancel_google_calendar_rdv(&app_handle, database, &google_event_id)
+    run_with_db_blocking(app_handle, move |app, database| {
+        crate::email::calendar_ops::cancel_google_calendar_rdv(app, database, &google_event_id)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -3078,30 +3106,38 @@ pub fn get_calendar_events_today(
 }
 
 #[tauri::command]
-pub fn list_google_calendar_week(
+pub async fn list_google_calendar_week(
     app_handle: tauri::AppHandle,
-    db: State<'_, DbState>,
     week_start_at: i64,
     sync_pipe: Option<bool>,
 ) -> Result<crate::database::models::AgendaWeekListResult, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    crate::email::calendar_ops::list_google_calendar_week_with_pipe_sync(
-        &app_handle,
-        database,
-        week_start_at,
-        sync_pipe.unwrap_or(true),
-    )
+    let app = app_handle.clone();
+    // Appel Google sans verrou de la base : les autres écrans restent utilisables.
+    let events = tauri::async_runtime::spawn_blocking(move || {
+        crate::email::calendar_ops::list_google_calendar_week_events(&app, week_start_at)
+    })
+    .await
+    .map_err(|e| format!("Tâche interrompue: {}", e))??;
+    run_with_db_blocking(app_handle, move |app, database| {
+        crate::email::calendar_ops::finish_google_calendar_week(
+            app,
+            database,
+            week_start_at,
+            sync_pipe.unwrap_or(true),
+            events,
+        )
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn sync_pipe_google_rdvs(
+pub async fn sync_pipe_google_rdvs(
     app_handle: tauri::AppHandle,
-    db: State<'_, DbState>,
 ) -> Result<crate::database::models::AgendaGooglePipeSyncResult, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    crate::email::calendar_ops::sync_all_pipe_linked_google_rdvs(&app_handle, database)
+    run_with_db_blocking(app_handle, |app, database| {
+        crate::email::calendar_ops::sync_all_pipe_linked_google_rdvs(app, database)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -4191,16 +4227,17 @@ pub fn get_exchange_history_timeline(
 }
 
 #[tauri::command]
-pub fn get_exchange_history_timeline_for_contact(
-    db: State<'_, DbState>,
+pub async fn get_exchange_history_timeline_for_contact(
+    app_handle: tauri::AppHandle,
     contact_id: i64,
     max_entries: Option<u32>,
 ) -> Result<Vec<ExchangeHistoryEntry>, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    database
-        .get_exchange_history_timeline_for_contact(contact_id, max_entries.map(|n| n as usize))
-        .map_err(|e| format!("Failed to get exchange history: {}", e))
+    run_with_db_blocking(app_handle, move |_, database| {
+        database
+            .get_exchange_history_timeline_for_contact(contact_id, max_entries.map(|n| n as usize))
+            .map_err(|e| format!("Failed to get exchange history: {}", e))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -4303,16 +4340,17 @@ pub async fn sync_contact_gmail_messages(
 }
 
 #[tauri::command]
-pub fn get_contact_gmail_messages(
-    db: State<'_, DbState>,
+pub async fn get_contact_gmail_messages(
+    app_handle: tauri::AppHandle,
     contact_id: i64,
     exclude_campaign_duplicates: Option<bool>,
 ) -> Result<Vec<crate::database::models::ContactGmailMessage>, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    database
-        .list_contact_gmail_messages(contact_id, exclude_campaign_duplicates.unwrap_or(true))
-        .map_err(|e| format!("Failed to list Gmail messages: {}", e))
+    run_with_db_blocking(app_handle, move |_, database| {
+        database
+            .list_contact_gmail_messages(contact_id, exclude_campaign_duplicates.unwrap_or(true))
+            .map_err(|e| format!("Failed to list Gmail messages: {}", e))
+    })
+    .await
 }
 
 #[tauri::command]

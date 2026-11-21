@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ContactNotesLog } from "@/components/contacts/ContactNotesLog";
 import { ArrowLeft, ChevronDown, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DictationTextarea } from "@/components/ui/dictation-textarea";
 import {
   Select,
   SelectContent,
@@ -357,7 +357,12 @@ export function ParrainagePipeDetailPanel({
   const notesField = (
     <div className="space-y-2">
       <Label>Notes</Label>
-      <DictationTextarea value={notes} onChange={setNotes} rows={4} disabled={saving} />
+      <ContactNotesLog
+        notes={notes}
+        onChange={setNotes}
+        busy={saving}
+        emptyLabel="Aucune note pour ce parrainage"
+      />
     </div>
   );
 

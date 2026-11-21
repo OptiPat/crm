@@ -35,16 +35,13 @@ export function resolveIdentityUserMessage(
   > | null
 ): string {
   if (!extracted) {
-    return "Aucune donnée extraite — saisissez date et lieu depuis la pièce.";
+    return "Aucune donnée extraite — saisissez les champs depuis la pièce.";
   }
 
   const prefix = layoutHint(extracted.layout, extracted.documentKind);
 
   if (extracted.mrzVerified) {
-    if (extracted.documentKind === "passport") {
-      return `${prefix}Date lue depuis la MRZ (contrôles ICAO). Vérifiez le lieu de naissance sur la page données du passeport.`;
-    }
-    return `${prefix}Date lue depuis la MRZ (contrôles ICAO). Vérifiez le lieu de naissance sur le recto de la CNI.`;
+    return `${prefix}Données lues depuis la MRZ (contrôles ICAO).`;
   }
 
   if (extracted.userMessage === "mrz_detected_unverified" || (extracted.mrz && !extracted.mrzVerified)) {
@@ -59,12 +56,12 @@ export function resolveIdentityUserMessage(
     return `${prefix}Lecture partielle — vérifiez chaque champ avant d'appliquer.`;
   }
 
-  return `${prefix}Saisissez date et lieu depuis la pièce d'identité.`;
+  return `${prefix}Saisissez les champs depuis la pièce d'identité.`;
 }
 
 export function resolveIdentityToastMessage(extracted: IdentityExtractResult | null): string | undefined {
   if (!extracted) return undefined;
-  if (extracted.mrzVerified) return "MRZ vérifiée — contrôlez le lieu de naissance.";
+  if (extracted.mrzVerified) return "MRZ vérifiée — vérifiez les champs avant d'appliquer.";
   if (extracted.mrz && !extracted.mrzVerified) {
     return "MRZ illisible — reprenez la photo ou complétez manuellement.";
   }
