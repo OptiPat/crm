@@ -402,3 +402,12 @@ describe("placement-operation-board", () => {
     }
   });
 });
+
+describe("formatPlacementBoardDateCompact", () => {
+  it("omet l'année courante et l'ajoute sinon", async () => {
+    const { formatPlacementBoardDateCompact } = await import("./placement-operation-board");
+    const ts = Date.UTC(2026, 10, 21, 6, 31) / 1000; // 07:31 Paris
+    expect(formatPlacementBoardDateCompact(ts, new Date("2026-12-01"))).toBe("21/11 · 07:31");
+    expect(formatPlacementBoardDateCompact(ts, new Date("2027-01-05"))).toBe("21/11/2026 · 07:31");
+  });
+});

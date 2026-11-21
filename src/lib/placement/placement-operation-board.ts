@@ -286,12 +286,13 @@ export function formatPlacementBoardCardDate(
     | "status"
   >,
   column: PlacementBoardColumn
-): { prefix: string; formatted: string } | null {
+): { prefix: string; formatted: string; compact: string } | null {
   const ts = pickPlacementBoardCardTimestamp(operation, column);
   if (ts == null) return null;
   return {
     prefix: placementBoardCardDatePrefix(operation, column),
     formatted: formatPlacementBoardDateTime(ts),
+    compact: formatPlacementBoardDateCompact(ts),
   };
 }
 
@@ -367,6 +368,44 @@ function pickPlacementBoardCardTimestamp(
     default:
       return boardTimestamp(operation.updated_at);
   }
+}
+
+/** Date courte pour les cartes : « 21/11 · 07:31 » (année ajoutée si ce n’est pas l’année en cours). */
+export function formatPlacementBoardDateCompact(unix: number, now: Date = new Date()): string {
+  const d = new Date(unix * 1000);
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: PLACEMENT_BOARD_DATE_TZ,
+    })
+      .formatToParts(d)
+      .map((p) => [p.type, p.value])
+  ) as Record<string, string>;
+  const currentYear = new Intl.DateTimeFormat("fr-FR", { year: "numeric", timeZone: PLACEMENT_BOARD_DATE_TZ }).format(now);
+  const day = parts.year === currentYear ? `${parts.day}/${parts.month}` : `${parts.day}/${parts.month}/${parts.year}`;
+  return `${day} · ${parts.hour}:${parts.minute}`;
+}
+
+/** Acte et détail (produit · montant) séparés, pour une carte à deux niveaux. */
+export function formatPlacementBoardActeParts(
+  operation: Pick<
+    PlacementOperation,
+    "stellium_label" | "product_label" | "operation_type" | "montant_centimes"
+  >
+): { acte: string | null; detail: string } {
+  const acte = operation.stellium_label?.trim() || null;
+  const produit = formatStelliumProductForDisplay(operation.product_label?.trim() ?? "");
+  const montant =
+    operation.montant_centimes != null && operation.montant_centimes > 0
+      ? formatEuroCentimes(operation.montant_centimes)
+      : "";
+  const detail = [produit, montant].filter(Boolean).join(" · ");
+  if (detail) return { acte, detail };
+  return { acte: null, detail: acte ?? operation.operation_type };
 }
 
 export function formatPlacementBoardActeLabel(

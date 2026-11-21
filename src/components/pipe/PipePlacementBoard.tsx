@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import type { PlacementOperationWithContact } from "@/lib/api/tauri-box-placement";
 import {
   formatPlacementBoardActeLabel,
+  formatPlacementBoardActeParts,
   formatPlacementBoardCardDate,
   formatPlacementBoardCardSubtitle,
   groupPlacementOperationsByBoardColumn,
@@ -153,6 +154,7 @@ export function PipePlacementBoard({
     const nonConforme = !archivedCard && placementBoardRowShowsNonConformeAlert(operation);
     const rowBadge = archivedCard ? null : placementBoardRowBadge(operation);
     const cardDate = formatPlacementBoardCardDate(operation, column);
+    const acteParts = formatPlacementBoardActeParts(operation);
     const rowBusy = busyOperationId === operation.id;
     const archivable = !archivedCard && placementOperationIsArchivable(operation);
     return (
@@ -217,22 +219,35 @@ export function PipePlacementBoard({
             <Badge
               variant="outline"
               title={PLACEMENT_BOARD_BADGE_LABELS[rowBadge]}
-              className="h-4 max-w-full shrink truncate px-1 text-[11px] font-normal leading-none border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-300"
+              className="h-5 shrink-0 whitespace-nowrap px-1.5 text-[11px] font-normal leading-none border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-300"
             >
               {PLACEMENT_BOARD_BADGE_LABELS[rowBadge]}
             </Badge>
           ) : null}
         </div>
 
-        <p className="mt-1 text-[11px] font-medium leading-snug line-clamp-2 sm:text-xs">
-          {formatPlacementBoardActeLabel(operation)}
+        {acteParts.acte ? (
+          <p className="mt-1 truncate text-[11px] text-muted-foreground">{acteParts.acte}</p>
+        ) : null}
+        <p
+          className={cn(
+            "text-[11px] font-semibold leading-snug line-clamp-2 sm:text-xs",
+            acteParts.acte ? "mt-0.5" : "mt-1"
+          )}
+          title={formatPlacementBoardActeLabel(operation)}
+        >
+          {acteParts.detail}
         </p>
         <p className="mt-0.5 truncate text-[11px] text-muted-foreground sm:text-xs">
           {formatPlacementBoardCardSubtitle(row)}
         </p>
         {cardDate ? (
-          <p className="mt-1 text-[11px] text-muted-foreground/80 leading-snug">
-            {cardDate.prefix} {cardDate.formatted}
+          <p
+            className="mt-1 flex flex-wrap gap-x-1 text-[11px] tabular-nums text-muted-foreground/80"
+            title={`${cardDate.prefix} ${cardDate.formatted}`}
+          >
+            <span className="whitespace-nowrap">{cardDate.prefix.replace(/ le$/, "")}</span>
+            <span className="whitespace-nowrap">{cardDate.compact}</span>
           </p>
         ) : null}
         {archivedCard ? (
@@ -281,32 +296,32 @@ export function PipePlacementBoard({
             >
               <header
                 className={cn(
-                  "flex items-center justify-between gap-1 border-b px-1.5 py-1.5 sm:px-2 sm:py-2",
+                  "flex items-start justify-between gap-1 border-b px-1.5 py-1.5 sm:px-2 sm:py-2",
                   colors.header
                 )}
-                title={fullLabel}
               >
                 <h3
                   className={cn(
-                    "truncate text-[11px] font-medium leading-tight sm:text-xs",
+                    "min-w-0 line-clamp-2 text-[11px] font-medium leading-tight sm:text-xs",
                     colors.title
                   )}
+                  title={fullLabel}
                 >
-                  <span className="hidden min-[1280px]:inline">{fullLabel}</span>
-                  <span className="min-[1280px]:hidden">{shortLabel}</span>
+                  <span className="hidden min-[1100px]:inline">{fullLabel}</span>
+                  <span className="min-[1100px]:hidden">{shortLabel}</span>
                 </h3>
                 <div className="flex shrink-0 items-center gap-1">
                   {archivableList.length > 1 ? (
                     <Button
                       type="button"
                       variant="ghost"
-                      size="sm"
-                      className="h-6 px-1.5 text-[11px]"
+                      size="icon"
+                      className="h-6 w-6"
                       disabled={busy}
-                      title={`Archiver les ${archivableList.length} suivis dont le mail client a été envoyé`}
+                      aria-label={`Tout archiver (${archivableList.length} suivis dont le mail client a été envoyé)`}
                       onClick={() => setArchiveAllTargets(archivableList)}
                     >
-                      Tout archiver
+                      <Archive className="h-3.5 w-3.5" />
                     </Button>
                   ) : null}
                   <Badge
@@ -323,7 +338,7 @@ export function PipePlacementBoard({
 
               <div className="min-h-[80px] flex-1 space-y-1.5 overflow-y-auto p-1 sm:space-y-2 sm:p-1.5">
                 {list.length === 0 && archivedList.length === 0 ? (
-                  <p className="px-1 py-6 text-center text-xs text-muted-foreground">—</p>
+                  <p className="px-1 py-6 text-center text-[11px] text-muted-foreground/70">Aucun acte</p>
                 ) : (
                   <>
                     {list.map((row) => renderCard(row, column, false))}

@@ -45,6 +45,15 @@ interface PipeBoardProps {
   onToggleEtudeRealisee: (pipe: PipeRecord, checked: boolean) => void;
 }
 
+function normalizePipeLabel(value: string | null | undefined): string {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 export function PipeBoard({
   affaires,
   selectedId,
@@ -170,6 +179,7 @@ export function PipeBoard({
     const colors = PIPE_BOARD_COLUMN_COLORS[column];
     const isDragOver = dragOverColumn === column;
     const dropAllowed = isPipeBoardDropTargetColumn(column);
+    const isOutcome = (PIPE_BOARD_OUTCOME_COLUMNS as readonly PipeBoardColumn[]).includes(column);
 
     return (
       <section
@@ -208,7 +218,14 @@ export function PipeBoard({
           </Badge>
         </header>
 
-        <div className="min-h-[72px] flex-1 space-y-1.5 overflow-y-auto p-1 sm:space-y-2 sm:p-1.5">
+        <div
+          className={cn(
+            "min-h-[72px] flex-1 overflow-y-auto p-1 sm:p-1.5",
+            isOutcome && list.length > 0
+              ? "grid auto-rows-min grid-cols-2 gap-1.5 xl:grid-cols-3 sm:gap-2"
+              : "space-y-1.5 sm:space-y-2"
+          )}
+        >
           {list.length === 0 ? (
             <p className="px-0.5 py-4 text-center text-[11px] text-muted-foreground sm:text-xs">
               {dropAllowed
@@ -224,6 +241,10 @@ export function PipeBoard({
               const selected = pipe.id === selectedId;
               const dragging = pipe.id === draggingId;
               const showEtude = column === "R2_POSITIONNE";
+              const participants = formatPipeParticipantsLabel(pipe);
+              // Ligne masquée quand elle répète le titre (cas le plus fréquent).
+              const participantsLabel =
+                normalizePipeLabel(participants) === normalizePipeLabel(pipe.titre) ? null : participants;
               return (
                 <article
                   key={pipe.id}
@@ -249,9 +270,11 @@ export function PipeBoard({
                       <p className="text-[11px] font-medium leading-snug line-clamp-2 sm:text-xs">
                         {pipe.titre}
                       </p>
-                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground sm:text-[11px]">
-                        {formatPipeParticipantsLabel(pipe)}
-                      </p>
+                      {participantsLabel ? (
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                          {participantsLabel}
+                        </p>
+                      ) : null}
                       <p className="mt-0.5 text-[11px] text-muted-foreground/80 sm:text-[11px]">
                         {formatUpdatedAt(pipe.updated_at)}
                       </p>

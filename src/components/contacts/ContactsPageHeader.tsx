@@ -57,7 +57,7 @@ export function ContactsPageHeader({
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-56 p-2">
+          <PopoverContent align="end" className="w-auto min-w-56 p-2">
             <div className="flex flex-col gap-1">
               <Button type="button"
                 variant="ghost"
