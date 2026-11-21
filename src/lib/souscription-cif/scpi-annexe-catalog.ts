@@ -112,7 +112,7 @@ Principaux frais :
   {
     key: "osmo_energie",
     label: "Osmo Energie",
-    partPriceEur: 300,
+    partPriceEur: 306,
     description: `— OSMO ENERGIE —
 
 La SCPI Osmo Energie a pour objectif d'acheter des biens immobiliers en France et en Europe afin d'améliorer leur performance énergétique et financière. Grâce à des outils de mesure et une meilleure maîtrise des consommations, elle souhaite positionner le patrimoine immobilier sur une trajectoire de sobriété énergétique et de décarbonation.
