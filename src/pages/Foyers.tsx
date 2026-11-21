@@ -325,19 +325,13 @@ export function Foyers({ onNavigate }: FoyersProps) {
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border/60 pb-6">
         <div>
           <p className="text-xs font-medium text-muted-foreground capitalize">{today}</p>
-          <p className="text-muted-foreground mt-1 text-sm max-w-2xl">
-            Regrouper des personnes qui déclarent ensemble — noms de famille différents
-            possibles.
-          </p>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Patrimoine avec moi —{" "}
-            <span className="tabular-nums text-foreground/80">
-              {formatEuroCentimes(totalPatrimoineAvecMoi)}
+          <p className="mt-1 text-sm text-muted-foreground tabular-nums">
+            <span className="font-medium text-foreground">
+              {filteredRows.length !== foyers.length ? `${filteredRows.length} sur ` : ""}
+              {foyers.length} foyer{foyers.length !== 1 ? "s" : ""}
             </span>
             {" · "}
-            <span className="tabular-nums text-foreground/80">
-              {filteredRows.length} sur {foyers.length}
-            </span>
+            {formatEuroCentimes(totalPatrimoineAvecMoi)} avec moi
           </p>
         </div>
         <Button type="button" className="gap-2 shadow-sm" onClick={() => setShowForm(true)}>

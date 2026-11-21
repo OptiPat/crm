@@ -366,18 +366,13 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border/60 pb-6">
         <div>
           <p className="text-xs font-medium text-muted-foreground capitalize">{today}</p>
-          <p className="text-muted-foreground mt-1 text-sm max-w-2xl">
-            Assureurs, sociétés de gestion et promoteurs — référentiels des produits clients.
-          </p>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Encours avec moi —{" "}
-            <span className="tabular-nums text-foreground/80">
-              {formatEuroCentimes(encoursViaPartenaires)}
+          <p className="mt-1 text-sm text-muted-foreground tabular-nums">
+            <span className="font-medium text-foreground">
+              {filteredRows.length !== partenaires.length ? `${filteredRows.length} sur ` : ""}
+              {partenaires.length} partenaire{partenaires.length !== 1 ? "s" : ""}
             </span>
             {" · "}
-            <span className="tabular-nums text-foreground/80">
-              {filteredRows.length} sur {partenaires.length}
-            </span>
+            {formatEuroCentimes(encoursViaPartenaires)} d&apos;encours avec moi
           </p>
         </div>
         <Button type="button" className="gap-2 shadow-sm" onClick={openCreateForm}>

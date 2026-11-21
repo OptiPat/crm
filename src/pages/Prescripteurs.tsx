@@ -454,13 +454,11 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border/60 pb-6">
         <div>
           <p className="text-xs font-medium text-muted-foreground capitalize">{today}</p>
-          <p className="text-muted-foreground mt-1 text-sm max-w-xl">
-            Réseaux de recommandations —{" "}
-            <span className="tabular-nums text-foreground/80">
+          <p className="mt-1 text-sm text-muted-foreground tabular-nums">
+            <span className="font-medium text-foreground">
               {filteredPrescripteurs.length} prescripteur
               {filteredPrescripteurs.length !== 1 ? "s" : ""}
             </span>
-            {prefs.searchQuery.trim() ? " (recherche active)" : ""}
           </p>
         </div>
         <Button type="button" className="gap-2 shadow-sm" onClick={() => setShowPrescripteurForm(true)}>
