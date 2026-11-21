@@ -18,7 +18,7 @@ Les dispositions de la présente Lettre de Mission sont régies et soumises au d
 
 Tout litige relatif à l'exécution ou à l'interprétation de la présente Lettre de Mission pourra être soumis à médiation pour rechercher une solution amiable avant tout recours à une procédure judiciaire, dans les conditions fixées par l'article 15 de la présente Lettre de Mission.
 
-À défaut, ces litiges seront soumis aux tribunaux compétents dans le ressort duquel se situe le siège social du Conseiller.
+À défaut, ces litiges seront soumis à la juridiction compétente selon les règles de droit commun.
 `;
 
 /** Colonne gauche — bloc signatures (exemplaire Conseiller). */

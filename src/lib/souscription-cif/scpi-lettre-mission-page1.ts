@@ -1,6 +1,6 @@
 /** Page 1 — Lettre de mission CIF (corps après le titre + pied de page). */
 
-export const SCPI_LM_PAGE1_BODY_AFTER_TITLE = `Je vous ai transmis lors de notre premier entretien du {{date_der}} un document comportant les mentions prévues à l'article 325-3 du Règlement général de l'AMF dont vous avez pu prendre connaissance. Par ailleurs, vous avez bien voulu me communiquer un certain nombre d'informations dont la finalité était de me permettre :
+export const SCPI_LM_PAGE1_BODY_AFTER_TITLE = `Je vous ai transmis lors de notre premier entretien du {{date_der}} le document d'entrée en relation comportant les mentions prévues à l'article 325-5 du Règlement général de l'AMF, dont vous reconnaissez avoir pris connaissance. Par ailleurs, vous avez bien voulu me communiquer un certain nombre d'informations dont la finalité était de me permettre :
 - De procéder à l'analyse de votre situation financière et patrimoniale ;
 - D'appréhender vos connaissances et expériences des marchés financiers ;
 - De recueillir vos objectifs afin d'adapter ma mission de conseil à votre profil et à vos attentes.
@@ -19,8 +19,8 @@ Ci-après désigné comme « le Client »,
 
 ET
 
-{{cgp_nom_complet}}
-immatriculé au RCS de {{cgp_rcs_ville}} sous le numéro {{cgp_siren}}
+{{cgp_designation}}
+{{cgp_immatriculation}}
 dont le siège est situé {{cgp_adresse_ligne}} – {{cgp_cp_ville}}
 est titulaire du statut de Conseiller en Investissements Financiers
 {{cgp_association_adhesion}}
@@ -33,7 +33,7 @@ export const SCPI_LM_PAGE1_BODY = SCPI_LM_PAGE1_BODY_AFTER_TITLE;
 export const SCPI_LM_PAGE1_FOOTER_DEFAULT = `Conseiller en Investissements Financiers, {{cgp_association_membre}} - Association agréée par l'Autorité des Marchés Financiers-Mandataire d'intermédiaire en Assurance de Stellium Courtage - ORIAS n°{{cgp_orias}} www.orias.fr, sous le contrôle de l'Autorité de Contrôle Prudentiel et de Résolution (ACPR) 04 Place de Budapest – 75436 Paris Cedex 09
 Mandataire d'intermédiaire en Opérations de Banque et en Services de Paiement de Stellium Financement sous le contrôle de l'ACPR (Autorité de Contrôle Prudentiel et de Résolution), 4 Place de Budapest, CS 92459, 75436 Paris Cedex 09
 Attestation de collaborateur de Stellium Immobilier n° CPI 3101 2015 000 001 813 délivrée par la CCI de Toulouse
-Assurance Responsabilité Civile Professionnelle conforme au code des Assurances auprès de ZURICH INSURANCE PLC, 112 Avenue de Wagram, 75017 Paris-N° SIREN {{cgp_siren_compact}} RSAC {{cgp_rcs_ville}}- Siège social : {{cgp_adresse_ligne}}, {{cgp_cp_ville}}`;
+Assurance Responsabilité Civile Professionnelle conforme au code des Assurances auprès de ZURICH INSURANCE PLC, 112 Avenue de Wagram, 75017 Paris-N° SIREN {{cgp_siren_compact}} {{cgp_registre_pied}} - Siège social : {{cgp_adresse_ligne}}, {{cgp_cp_ville}}`;
 
 /** Libellés FR pour les champs manquants dans l'aperçu. */
 export const SOUSCRIPTION_VARIABLE_LABELS: Record<string, string> = {
@@ -73,6 +73,9 @@ export const SOUSCRIPTION_VARIABLE_LABELS: Record<string, string> = {
   cgp_cabinet: "Raison sociale du cabinet (ex. CABINET EXEMPLE)",
   cgp_representant_legal: "Représentant légal (gérant)",
   cgp_formule_politesse: "Formule conseiller (appel page 8)",
+  cgp_designation: "Forme d'exercice et nom du cabinet (Paramètres → Profil)",
+  cgp_immatriculation: "Immatriculation (registre, SIREN, ville du greffe)",
+  cgp_registre_pied: "Registre d'immatriculation (RNE ou RCS + ville)",
   cgp_rcs_ville: "Ville RCS",
   cgp_siren: "N° SIREN",
   cgp_siren_compact: "N° SIREN (sans espaces)",

@@ -41,6 +41,10 @@ export interface CgpConfig {
   cif_siren?: string | null;
   /** Ville du greffe RCS (ex. Montpellier). */
   cif_rcs_ville?: string | null;
+  /** Forme d'exercice : `societe` ou `nom_propre` (absente = société). */
+  cif_forme_exercice?: "societe" | "nom_propre" | null;
+  /** Registre d'immatriculation : `RCS`, `RSAC` (agents commerciaux) ou `RNE` (absent = RCS). */
+  cif_registre?: "RCS" | "RSAC" | "RNE" | null;
   /** Association professionnelle CIF (`anacofi`, `cncef`) — absente = Anacofi. */
   cif_association?: string | null;
   /** N° adhérent auprès de l'association CIF (ex. E011507). */

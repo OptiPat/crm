@@ -1334,6 +1334,12 @@ pub struct CgpConfig {
     /// Ville du greffe RCS.
     #[serde(default)]
     pub cif_rcs_ville: Option<String>,
+    /// Forme d'exercice : `societe` ou `nom_propre` (absente = société, ancien comportement).
+    #[serde(default)]
+    pub cif_forme_exercice: Option<String>,
+    /// Registre d'immatriculation : `RCS`, `RSAC` (agents commerciaux) ou `RNE` (absent = RCS).
+    #[serde(default)]
+    pub cif_registre: Option<String>,
     /// Association professionnelle CIF (`anacofi`, `cncef`) — absente = `anacofi`.
     #[serde(default)]
     pub cif_association: Option<String>,

@@ -170,6 +170,47 @@ export function ParametresProfileSection({
         description="Informations légales utilisées dans les lettres de mission, rapports d'adéquation et pieds de page."
       >
         <SettingsGroup>
+          <SettingsRow
+            label="Forme d'exercice"
+            hint="Présentation du conseiller en tête de la lettre de mission"
+            htmlFor="cif_forme_exercice"
+          >
+            <Select
+              value={cgpConfig.cif_forme_exercice || "societe"}
+              onValueChange={(v) =>
+                onConfigChange({ cif_forme_exercice: v as "societe" | "nom_propre" })
+              }
+            >
+              <SelectTrigger id="cif_forme_exercice">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="nom_propre">En nom propre (entrepreneur individuel)</SelectItem>
+                <SelectItem value="societe">En société</SelectItem>
+              </SelectContent>
+            </Select>
+          </SettingsRow>
+          <SettingsRow
+            label="Registre d'immatriculation"
+            hint="Indiqué sur votre justificatif d'immatriculation (extrait Kbis, RSAC ou RNE)"
+            htmlFor="cif_registre"
+          >
+            <Select
+              value={cgpConfig.cif_registre || "RCS"}
+              onValueChange={(v) =>
+                onConfigChange({ cif_registre: v as "RCS" | "RSAC" | "RNE" })
+              }
+            >
+              <SelectTrigger id="cif_registre">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="RSAC">RSAC (registre spécial des agents commerciaux)</SelectItem>
+                <SelectItem value="RCS">RCS (registre du commerce et des sociétés)</SelectItem>
+                <SelectItem value="RNE">RNE uniquement (Registre national des entreprises)</SelectItem>
+              </SelectContent>
+            </Select>
+          </SettingsRow>
           <SettingsRow label="N° SIREN" htmlFor="cif_siren">
             <Input
               id="cif_siren"
@@ -178,7 +219,7 @@ export function ParametresProfileSection({
               onChange={(e) => onConfigChange({ cif_siren: e.target.value })}
             />
           </SettingsRow>
-          <SettingsRow label="Ville RCS" htmlFor="cif_rcs_ville">
+          <SettingsRow label="Ville du greffe (RCS ou RSAC)" htmlFor="cif_rcs_ville">
             <Input
               id="cif_rcs_ville"
               placeholder="Montpellier"

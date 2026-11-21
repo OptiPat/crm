@@ -55,3 +55,44 @@ describe("buildSouscriptionVariables — association CIF", () => {
     expect(segments.map((s) => (s.kind === "text" ? s.value : "")).join("")).toBe("Membre n° E011507");
   });
 });
+
+describe("buildSouscriptionVariables — forme d'exercice et immatriculation", () => {
+  const base = { prenom: "Nicolas", nom: "PLAZA", cif_siren: "843 139 148", cif_rcs_ville: "Montpellier" };
+  const vars = (patch: Partial<CgpConfig>) =>
+    buildSouscriptionVariables(null, cgp({ ...base, ...patch }), defaultSouscriptionDossierFields());
+
+  it("entrepreneur individuel au RSAC, avec nom commercial", () => {
+    const v = vars({ cif_forme_exercice: "nom_propre", cif_registre: "RSAC", cabinet: "Fundly" });
+    expect(v.cgp_designation).toBe(
+      "Nicolas PLAZA, entrepreneur individuel, exerçant sous le nom commercial Fundly"
+    );
+    expect(v.cgp_immatriculation).toBe(
+      "immatriculé au RSAC de Montpellier sous le numéro 843 139 148"
+    );
+    expect(v.cgp_registre_pied).toBe("RSAC Montpellier");
+  });
+
+  it("entrepreneur individuel au RNE seul : pas de ville de greffe", () => {
+    const v = vars({ cif_forme_exercice: "nom_propre", cif_registre: "RNE", cif_rcs_ville: null });
+    expect(v.cgp_designation).toBe("Nicolas PLAZA, entrepreneur individuel");
+    expect(v.cgp_immatriculation).toBe(
+      "immatriculé au Registre national des entreprises sous le numéro 843 139 148"
+    );
+    expect(v.cgp_registre_pied).toBe("RNE");
+  });
+
+  it("société au RCS (défaut des profils existants)", () => {
+    const v = vars({ cabinet: "CABINET EXEMPLE" });
+    expect(v.cgp_designation).toBe(
+      "La société CABINET EXEMPLE, représentée par Nicolas PLAZA en qualité de gérant"
+    );
+    expect(v.cgp_immatriculation).toBe(
+      "immatriculée au RCS de Montpellier sous le numéro 843 139 148"
+    );
+  });
+
+  it("champs à compléter : société sans raison sociale, RCS sans ville", () => {
+    expect(vars({}).cgp_designation).toBeNull();
+    expect(vars({ cif_rcs_ville: null }).cgp_immatriculation).toBeNull();
+  });
+});

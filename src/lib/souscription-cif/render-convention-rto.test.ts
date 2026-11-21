@@ -16,6 +16,7 @@ describe("buildConventionRtoPreview", () => {
     cgp_adresse_ligne: "4 impasse des arbousiers",
     cgp_cp_ville: "34660 Cournonsec",
     cgp_rcs_ville: "Montpellier",
+    cgp_registre_pied: "RSAC Montpellier",
     cgp_siren: "843 139 148",
     cgp_siren_compact: "843139148",
     cgp_orias: "19000736",

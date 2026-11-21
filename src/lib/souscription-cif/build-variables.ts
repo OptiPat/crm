@@ -32,6 +32,55 @@ function cgpCabinet(cgp: CgpConfig | null): string | null {
   return cgp?.cabinet?.trim() || null;
 }
 
+function cgpRegistre(cgp: CgpConfig | null): "RCS" | "RSAC" | "RNE" {
+  const r = cgp?.cif_registre;
+  return r === "RNE" || r === "RSAC" ? r : "RCS";
+}
+
+function cgpExerceEnNomPropre(cgp: CgpConfig | null): boolean {
+  return cgp?.cif_forme_exercice === "nom_propre";
+}
+
+/**
+ * En-tête « le Conseiller » : entrepreneur individuel (mention « entrepreneur individuel »
+ * obligatoire, C. com. L. 526-22) ou société représentée par son gérant.
+ */
+function cgpDesignation(cgp: CgpConfig | null): string | null {
+  const nom = cgpNomComplet(cgp);
+  const cabinet = cgpCabinet(cgp);
+  if (cgpExerceEnNomPropre(cgp)) {
+    if (!nom) return null;
+    return cabinet
+      ? `${nom}, entrepreneur individuel, exerçant sous le nom commercial ${cabinet}`
+      : `${nom}, entrepreneur individuel`;
+  }
+  if (!cabinet || !nom) return null;
+  return `La société ${cabinet}, représentée par ${nom} en qualité de gérant`;
+}
+
+/**
+ * Ligne d'immatriculation : « immatriculé au Registre national des entreprises sous le
+ * numéro … » (RNE, sans greffe) ou « immatriculé(e) au RCS / RSAC de <ville> sous le
+ * numéro … ». `null` (champ à compléter) si le SIREN, ou la ville du greffe, manque.
+ */
+function cgpImmatriculation(cgp: CgpConfig | null): string | null {
+  const siren = cgp?.cif_siren?.trim();
+  if (!siren) return null;
+  const accord = cgpExerceEnNomPropre(cgp) ? "immatriculé" : "immatriculée";
+  if (cgpRegistre(cgp) === "RNE") {
+    return `${accord} au Registre national des entreprises sous le numéro ${siren}`;
+  }
+  const ville = cgp?.cif_rcs_ville?.trim();
+  return ville ? `${accord} au ${cgpRegistre(cgp)} de ${ville} sous le numéro ${siren}` : null;
+}
+
+/** Pied de page : « RNE », « RCS <ville> » ou « RSAC <ville> ». */
+function cgpRegistrePied(cgp: CgpConfig | null): string | null {
+  if (cgpRegistre(cgp) === "RNE") return "RNE";
+  const ville = cgp?.cif_rcs_ville?.trim();
+  return ville ? `${cgpRegistre(cgp)} ${ville}` : null;
+}
+
 function cgpRepresentantLegal(cgp: CgpConfig | null): string | null {
   const nom = cgpNomComplet(cgp);
   return nom ? `${nom} en qualité de gérant` : null;
@@ -96,6 +145,9 @@ export function buildSouscriptionVariables(
     cgp_cabinet: cgpCabinet(cgp),
     cgp_representant_legal: cgpRepresentantLegal(cgp),
     cgp_formule_politesse: cgpFormulePolitesse(cgp),
+    cgp_designation: cgpDesignation(cgp),
+    cgp_immatriculation: cgpImmatriculation(cgp),
+    cgp_registre_pied: cgpRegistrePied(cgp),
     cgp_rcs_ville: cgp?.cif_rcs_ville?.trim() || null,
     cgp_siren: sirenRaw,
     cgp_siren_compact: sirenCompact,

@@ -20,7 +20,7 @@ La Prestation convenue entre les Parties au titre de la présente Lettre de Miss
 
 Au titre de la présente mission, aucun honoraire de prestation de conseil ne sera facturé (soit 0 € HT).
 
-Au titre des commissions perçues, le Conseiller est ainsi rémunéré par la totalité des frais d'entrée, déduction faite de la part acquise à l'entité qui l'autorise à distribuer le produit.
+Au titre des commissions perçues, le Conseiller est ainsi rémunéré par une quote-part des frais d'entrée, déduction faite de la part acquise à l'entité qui l'autorise à distribuer le produit. Le montant exact de ces rémunérations ou, à défaut, leur mode de calcul est communiqué au Client avant la fourniture de la Prestation, dans la déclaration d'adéquation. Ces rémunérations ont pour objet d'améliorer la qualité de la Prestation et ne nuisent pas à l'obligation du Conseiller d'agir au mieux des intérêts du Client.
 
 [u]9. Obligations à la charge des Parties[/u]
 
