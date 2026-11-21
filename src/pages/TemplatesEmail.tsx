@@ -41,7 +41,6 @@ import {
   TemplatesEmailHelp,
   TemplatesEmailMailboxStatus,
 } from "@/components/emails/templates-email-ui";
-import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import {
   EMAIL_TEMPLATE_CATEGORIES,
   resolveTemplateEmailCategory,
@@ -488,27 +487,7 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-muted-foreground max-w-xl text-sm">
-            Bibliothèque de messages — déclencheur auto, campagnes étiquette ou relance, envoi
-            depuis{" "}
-            {onNavigate ? (
-              <button
-                type="button"
-                className="text-foreground/80 underline decoration-muted-foreground/40 underline-offset-2 hover:text-primary hover:decoration-primary/50"
-                onClick={() =>
-                  navigateToSuivi(onNavigate, "envois", "ready", undefined, "templates-email")
-                }
-              >
-                Suivi → Envois
-              </button>
-            ) : (
-              "Suivi → Envois"
-            )}
-            .
-          </p>
-        </div>
+      <div className="flex flex-wrap items-start justify-end gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <TemplatesEmailMailboxStatus
             emailStatus={emailStatus}
@@ -565,9 +544,6 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
       />
 
       <section className="space-y-2" aria-label="Synthèse des modèles">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Synthèse — cliquer pour filtrer
-        </p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Déclencheur actif"

@@ -553,9 +553,6 @@ export function Etiquettes({ onNavigate }: { onNavigate?: (page: string) => void
 
         <TabsContent value="etiquettes" className="mt-0 space-y-6">
       <section className="space-y-2" aria-label="Synthèse des étiquettes">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Synthèse — cliquer pour filtrer
-        </p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Contacts tagués"
