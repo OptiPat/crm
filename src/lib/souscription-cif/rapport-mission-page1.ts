@@ -11,8 +11,8 @@ Ci-après désigné comme « le Client »,
 
 ET
 
-{{cgp_nom_complet}}
-immatriculé au RCS de {{cgp_rcs_ville}} sous le numéro {{cgp_siren}}
+{{cgp_designation}}
+{{cgp_immatriculation}}
 dont le siège est situé {{cgp_adresse_ligne}} – {{cgp_cp_ville}}
 est titulaire du statut de Conseiller en Investissements Financiers
 {{cgp_association_adhesion}}

@@ -16,6 +16,9 @@ describe("buildConventionRtoPreview", () => {
     cgp_adresse_ligne: "4 impasse des arbousiers",
     cgp_cp_ville: "34660 Cournonsec",
     cgp_rcs_ville: "Montpellier",
+    cgp_designation: "Jean DUPONT, entrepreneur individuel",
+    cgp_immatriculation: "immatriculé au RSAC de Montpellier sous le numéro 843 139 148",
+    cgp_immatricule: "immatriculé",
     cgp_registre_pied: "RSAC Montpellier",
     cgp_siren: "843 139 148",
     cgp_siren_compact: "843139148",
@@ -52,11 +55,13 @@ describe("buildConventionRtoPreview", () => {
 
     const body = pageText(page);
     expect(body).toContain("Identification des intervenants");
-    expect(body).toContain("La société Jean DUPONT");
+    expect(body).toContain("Jean DUPONT, entrepreneur individuel");
+    expect(body).not.toContain("La société");
     expect(body).toContain("ayant son siège social au 4 impasse des arbousiers");
-    expect(body).toContain("immatriculée au Registre du Commerce");
+    expect(body).toContain("immatriculé au RSAC de Montpellier sous le numéro 843 139 148");
     expect(body).toContain("ORIAS sous le n°19000736");
-    expect(body).toContain("Jean DUPONT en qualité de gérant.");
+    expect(body).toContain("immatriculé sur le registre unique tenu par l'ORIAS");
+    expect(body).not.toContain("en qualité de gérant");
     expect(body).toContain("Ci-après désigné « le Conseiller ».");
     expect(body).toContain("Ensemble, « les Parties ».");
     expect(body).not.toContain("PRÉAMBULE");
@@ -128,19 +133,23 @@ describe("buildConventionRtoPreview", () => {
     expect(body).toContain("Article 7 – Enregistrement et traçabilité");
     expect(body).toContain("Article 8 – Entrée en vigueur");
     expect(body).toContain("8.4 En outre");
-    expect(body).toContain("Article 9 – Traitement des réclamations");
-    expect(body).toContain("9.2 Le Conseiller s'engage");
+    expect(body).toContain("Article 9 – Traitement des réclamations – Médiation");
+    expect(body).toContain("médiateur compétent");
+    expect(body).toContain("radiation du registre de l'ORIAS");
+    expect(body).not.toContain("agrément du Conseiller");
   });
 
-  it("construit la page 6 avec articles 10 à 12 et signatures", () => {
+  it("construit la page 6 avec articles 10 et 11 et signatures", () => {
     const preview = buildConventionRtoPreview(baseVariables);
     const page6 = preview.pages[5];
     expect(page6.pageNumber).toBe(6);
 
     const body = pageText(page6);
     expect(body).toContain("Article 10 – Traitement des données personnelles");
-    expect(body).toContain("Article 11 – Réclamations Client");
-    expect(body).toContain("Article 12 – Droit applicable");
+    expect(body).toContain("Article 11 – Droit applicable");
+    expect(body).not.toContain("Article 12");
+    expect(body).toContain("conditions fixées par l'article 9");
+    expect(body).toContain("juridiction compétente selon les règles de droit commun");
 
     const faitA = (page6.bodySegmentsAfterTable ?? [])
       .map((s) =>

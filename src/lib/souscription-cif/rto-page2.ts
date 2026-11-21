@@ -13,7 +13,7 @@ ${def("Opération", "désigne toute opération d'achat, de vente ou de souscript
 
 ${def("Ordre", "désigne l'instruction du Client transmise par l'intermédiaire du Conseiller, aux fins de son exécution par un intermédiaire habilité ou par les dépositaires concernés.")}
 
-${def("OPC", "désigne de façon limitative les OPCVM, fonds d'investissement à vocation générale, fonds professionnels à vocation générale, fonds de capital investissement, fonds professionnels de capital investissement, fonds de fonds alternatifs, fonds professionnels spécialisés, fonds d'épargne salariale, organismes de titrisation, SCPI, SEF, OPCI, organismes professionnels de placement collectif immobilier et SICAF.")}
+${def("OPC", "désigne de façon limitative les OPCVM, fonds d'investissement à vocation générale, fonds professionnels à vocation générale, fonds de capital investissement, fonds professionnels de capital investissement, fonds de fonds alternatifs, fonds professionnels spécialisés, fonds d'épargne salariale, organismes de titrisation ou de financement spécialisé, SCPI, SEF, OPCI, organismes professionnels de placement collectif immobilier et SICAF.")}
 
 ${def("RTO", "désigne le service de réception-transmission d'Ordres, consistant à recevoir et à transmettre à une autre personne ou entité, pour le compte d'un tiers, en vue de la réalisation de transactions portant sur des parts ou actions d'OPC.")}
 
@@ -29,4 +29,4 @@ Le Client demeure libre et autonome dans la gestion de son portefeuille d'instru
 
 3.1 Modalités de transmission des Ordres
 
-Le Client adresse ses Ordres au Conseiller par écrit, en utilisant exclusivement l'un des moyens suivants : remise en mains propres, courrier postal ou courrier électronique ; dans tous les cas, l'Ordre est joint au format PDF.`;
+Le Client adresse ses Ordres au Conseiller par écrit, en utilisant exclusivement l'un des moyens suivants : remise en mains propres, courrier postal ou courrier électronique ; en cas d'envoi électronique, l'Ordre signé est joint au format PDF.`;

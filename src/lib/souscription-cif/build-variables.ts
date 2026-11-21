@@ -147,6 +147,8 @@ export function buildSouscriptionVariables(
     cgp_formule_politesse: cgpFormulePolitesse(cgp),
     cgp_designation: cgpDesignation(cgp),
     cgp_immatriculation: cgpImmatriculation(cgp),
+    /** Accord pour les autres mentions (ORIAS) : « immatriculé » / « immatriculée ». */
+    cgp_immatricule: cgpExerceEnNomPropre(cgp) ? "immatriculé" : "immatriculée",
     cgp_registre_pied: cgpRegistrePied(cgp),
     cgp_rcs_ville: cgp?.cif_rcs_ville?.trim() || null,
     cgp_siren: sirenRaw,

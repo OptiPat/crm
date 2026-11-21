@@ -11,14 +11,14 @@ export const RM_PAGE2_ROW_MISSIONS_CONTENT = `Le Conseiller recueille auprès du
 Le Client est informé que toute modification des informations pouvant affecter significativement la nature ou l'orientation de la mission de conseil devra être portée à la connaissance du Conseiller.
 Le Client est informé que le Conseiller délivrera un conseil défini comme non indépendant au sens de l'article 325-5 du Règlement général de l'AMF, dans le respect de l'obligation d'agir au mieux des intérêts du client. Ce conseil se limite à la gamme de produits sélectionnés et référencés par Stellium Invest auprès de sociétés de gestion et d'émetteurs de titres avec lesquels Stellium Invest est lié contractuellement.
 Stellium Invest peut percevoir et conserver des rémunérations, commissions ou avantages monétaires ou non monétaires en rapport avec la fourniture de la prestation de conseil, versés ou fournis par un tiers (notamment les sociétés de gestion et les émetteurs des titres) ou par une personne agissant pour le compte d'un tiers, sous réserve du respect des règles sur les avantages et rémunérations imposant l'information du client, l'obligation d'amélioration du service et le respect de l'obligation d'agir au mieux des intérêts du client.
-Stellium Invest rétrocède au Conseiller une partie des commissions ou avantages non monétaires en rapport avec la fourniture de la prestation de conseil.`;
+Stellium Invest rétrocède au Conseiller une partie des commissions perçues en rapport avec la fourniture de la prestation de conseil.`;
 
 export const RM_PAGE2_ROW_OBJECTIFS_TITLE = "RAPPEL DES OBJECTIFS";
 
 export const RM_PAGE2_ROW_ANALYSE_TITLE = "ANALYSE DE LA SITUATION";
 
 export const RM_PAGE2_ROW_ANALYSE_INTRO =
-  "L'étude patrimoniale qui vous a été remise le {{date_rio}} reprend l'ensemble de votre situation, profil et objectifs.";
+  "Le Recueil d'informations signé le {{date_rio}} reprend l'ensemble de votre situation, profil et objectifs.";
 
 export const RM_PAGE2_ROW_ANALYSE_CONTENT = `${RM_PAGE2_ROW_ANALYSE_INTRO}\n\n{{analyse_situation_client}}`;
 
@@ -33,7 +33,7 @@ export const RM_PAGE2_ROW_DURABILITE_CONTENT =
 export const RM_PAGE2_ROW_PRECONISATION_TITLE = "PRÉCONISATION";
 
 export const RM_PAGE2_ROW_PRECONISATION_CONTENT =
-  "Vous trouverez en annexe l'ensemble de mes préconisations.";
+  "Vous trouverez en annexe l'ensemble de mes préconisations, ainsi que les raisons pour lesquelles elles sont adaptées à vos objectifs, à votre horizon d'investissement, à vos connaissances et expérience, à votre tolérance au risque, à votre capacité à supporter des pertes et à vos préférences en matière de durabilité. Conformément à la lettre de mission, leur adéquation sera réévaluée au moins une fois par an.";
 
 export const RM_PAGE2_ROW_COUTS_TITLE = "INFORMATIONS SUR LES COÛTS ET FRAIS";
 
@@ -76,8 +76,6 @@ export const RM_PAGE2_FAIT_A = RM_PAGE3_FAIT_A;
 
 /** Colonne gauche — signature conseiller (l'espace manuscrit est ajouté en CSS). */
 export const RM_PAGE2_SIGNATURE_LEFT = `Signature du conseiller :
-
-« Lu et Approuvé »
 
 {{cgp_nom_complet}}`;
 

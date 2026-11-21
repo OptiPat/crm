@@ -21,6 +21,8 @@ const baseVariables = {
   date_document: "14/06/2026",
   cgp_nom_complet: "Jean DUPONT",
   cgp_rcs_ville: "Montpellier",
+  cgp_designation: "Jean DUPONT, entrepreneur individuel",
+  cgp_immatriculation: "immatriculé au RSAC de Montpellier sous le numéro 843 139 148",
   cgp_siren: "843 139 148",
   cgp_adresse_ligne: "4 impasse des arbousiers",
   cgp_cp_ville: "34660 Cournonsec",
@@ -114,7 +116,7 @@ describe("buildRapportMissionPreview", () => {
       page3.rapportRecapRows?.find((r) => r.title === "ANALYSE DE LA SITUATION")?.contentSegments
     );
     expect(analyseText).toContain("01/03/2026");
-    expect(analyseText).toContain("étude patrimoniale");
+    expect(analyseText).toContain("Recueil d'informations signé le");
     expect(analyseText).toContain(
       "Vous souhaitez vous reconvertir professionnellement dans les trois prochaines années"
     );
@@ -138,7 +140,7 @@ describe("buildRapportMissionPreview", () => {
       .map((line) => segmentText(line))
       .join("\n");
     expect(sigLeft).toContain("Signature du conseiller");
-    expect(sigLeft).toContain("Lu et Approuvé");
+    expect(sigLeft).not.toContain("Lu et Approuvé");
     expect(sigLeft).toContain("Jean DUPONT");
     expect(sigRight).toContain("Signature du client");
     expect(sigRight).toContain("rapport de mission et déclaration d'adéquation");

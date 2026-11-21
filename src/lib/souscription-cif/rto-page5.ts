@@ -18,12 +18,10 @@ Le Conseiller enregistre et assure la traçabilité de la réception et de la tr
 
 8.2 La Convention peut être résiliée à tout moment par le Client ou par le Conseiller par lettre recommandée avec accusé de réception sous réserve du respect d'un préavis de cinq (5) jours calendaires.
 
-8.3 La présente Convention prend également fin de plein droit en cas de liquidation judiciaire ou de retrait d'agrément du Conseiller. Par ailleurs, le décès du Client ou son incapacité juridique entraîne également la résiliation de la présente Convention.
+8.3 La présente Convention prend également fin de plein droit en cas de liquidation judiciaire du Conseiller, de sa radiation du registre de l'ORIAS ou de la perte de sa qualité de membre d'une association professionnelle de CIF agréée par l'AMF. Par ailleurs, le décès du Client ou son incapacité juridique entraîne également la résiliation de la présente Convention.
 
 8.4 En outre, sans préjudice des droits et recours dont le Conseiller peut disposer à l'encontre du Client, le Conseiller peut mettre fin à la présente Convention sans préavis ni indemnité dès lors que le Conseiller estime, à sa seule discrétion, que le Client n'est plus en mesure de faire face à ses engagements.
 
-[u]Article 9 – Traitement des réclamations[/u]
+[u]Article 9 – Traitement des réclamations – Médiation[/u]
 
-9.1 Le Conseiller s'engage à traiter toute déclaration actant du mécontentement du Client conformément à sa politique de traitement des réclamations.
-
-9.2 Le Conseiller s'engage à ce que sa politique de réclamations soit conforme à la réglementation.`;
+Pour toute réclamation concernant la présente Convention, le Client s'adresse préalablement et sur support durable au Conseiller. Le Conseiller traite la réclamation conformément à sa politique de traitement des réclamations, établie conformément à la réglementation, dans les conditions détaillées dans le document d'entrée en relation (DER). Le DER comporte également toutes les informations relatives au médiateur compétent si le Client souhaite y avoir recours en vue de la résolution amiable du litige qui l'oppose au Conseiller.`;
