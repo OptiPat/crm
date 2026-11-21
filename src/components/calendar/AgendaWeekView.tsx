@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { GoogleCalendarWeekEvent } from "@/lib/api/tauri-calendar";
 import { openExternalUrl } from "@/lib/api/tauri-system";
 import {
@@ -82,6 +82,16 @@ export function AgendaWeekView({
     [timedEvents, weekStartAt]
   );
 
+  // Ligne « maintenant » : rafraîchie chaque minute.
+  const [nowUnix, setNowUnix] = useState(() => Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    const id = window.setInterval(() => setNowUnix(Math.floor(Date.now() / 1000)), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const nowDayIndex = DAY_INDEXES.find((d) => isTodayInWeek(weekStartAt, d)) ?? null;
+  const nowTop =
+    nowDayIndex != null ? eventLayoutTopPx(nowUnix, weekStartAt, nowDayIndex, range) : null;
+
   const highlightDayIndex =
     highlightStartAt != null ? eventDayIndex(highlightStartAt, weekStartAt) : null;
 
@@ -89,7 +99,7 @@ export function AgendaWeekView({
     <div className="rounded-xl border bg-card overflow-hidden">
       <div className="overflow-x-auto">
         <div className="min-w-[880px]">
-          <div className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] border-b bg-muted/30">
+          <div className="grid grid-cols-[56px_repeat(5,minmax(0,1fr))_repeat(2,minmax(0,0.6fr))] border-b bg-muted/30">
             <div />
             {days.map((dayIndex) => (
               <div
@@ -105,7 +115,7 @@ export function AgendaWeekView({
           </div>
 
           {allDayEvents.length > 0 && (
-            <div className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))] border-b bg-muted/10">
+            <div className="grid grid-cols-[56px_repeat(5,minmax(0,1fr))_repeat(2,minmax(0,0.6fr))] border-b bg-muted/10">
               <div className="px-2 py-1 text-[11px] text-muted-foreground">Journée</div>
               {days.map((dayIndex) => {
                 const dayAllDay = allDayEvents.filter(
@@ -118,10 +128,10 @@ export function AgendaWeekView({
                         key={ev.google_event_id}
                         type="button"
                         className={cn(
-                          "w-full truncate rounded px-1.5 py-0.5 text-left text-[11px]",
+                          "w-full line-clamp-2 break-words rounded px-1.5 py-0.5 text-left text-[11px] leading-tight",
                           isPipeLinkedEvent(ev)
-                            ? "bg-emerald-200/80 hover:bg-emerald-300/80 border border-emerald-400/50"
-                            : "bg-slate-200/80 hover:bg-slate-300/80"
+                            ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                            : "bg-slate-100 hover:bg-slate-200 border border-slate-200"
                         )}
                         title={ev.title}
                         onClick={(e) => {
@@ -142,7 +152,7 @@ export function AgendaWeekView({
             </div>
           )}
 
-          <div className="grid grid-cols-[56px_repeat(7,minmax(0,1fr))]">
+          <div className="grid grid-cols-[56px_repeat(5,minmax(0,1fr))_repeat(2,minmax(0,0.6fr))]">
             <div className="relative border-r" style={{ height: gridHeight }}>
               {hours.map((label, index) => (
                 <div
@@ -199,6 +209,16 @@ export function AgendaWeekView({
                   </div>
                 ))}
 
+                {nowDayIndex === dayIndex && nowTop != null && nowTop >= 0 && nowTop <= gridHeight && (
+                  <div
+                    className="pointer-events-none absolute left-0 right-0 z-30 border-t-2 border-red-500"
+                    style={{ top: nowTop }}
+                    aria-hidden
+                  >
+                    <span className="absolute -left-1 -top-[5px] h-2 w-2 rounded-full bg-red-500" />
+                  </div>
+                )}
+
                 {highlightDayIndex === dayIndex &&
                   highlightStartAt != null &&
                   highlightEndAt != null && (
@@ -220,6 +240,7 @@ export function AgendaWeekView({
                   );
                   const timeLabel = formatEventTime(ev.start_at, ev.end_at, ev.all_day);
                   const twoLines = height >= EVENT_TWO_LINES_MIN_HEIGHT_PX;
+                  const timeClass = isPipeLinkedEvent(ev) ? "text-white/85" : "text-muted-foreground";
                   return (
                     <button
                       key={ev.google_event_id}
@@ -227,8 +248,8 @@ export function AgendaWeekView({
                       className={cn(
                         "absolute z-20 m-0 overflow-hidden rounded-sm border px-1 py-0.5 text-left text-[11px] leading-tight box-border",
                         isPipeLinkedEvent(ev)
-                          ? "border-emerald-400/80 bg-emerald-100/90 hover:bg-emerald-200/90"
-                          : "border-blue-200/80 bg-blue-100/90 hover:bg-blue-200/90"
+                          ? "border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700"
+                          : "border-slate-200 bg-slate-100 hover:bg-slate-200"
                       )}
                       style={{
                         top,
@@ -251,13 +272,13 @@ export function AgendaWeekView({
                       {twoLines ? (
                         <>
                           <span className="block font-medium truncate">{ev.title}</span>
-                          <span className="block text-muted-foreground tabular-nums">
+                          <span className={cn("block tabular-nums", timeClass)}>
                             {timeLabel}
                           </span>
                         </>
                       ) : (
                         <span className="block truncate">
-                          <span className="tabular-nums text-muted-foreground">
+                          <span className={cn("tabular-nums", timeClass)}>
                             {TIME_FMT.format(new Date(ev.start_at * 1000))}
                           </span>{" "}
                           <span className="font-medium">{ev.title}</span>
@@ -281,7 +302,7 @@ export function AgendaWeekView({
       <p className="px-4 py-2 text-[11px] text-muted-foreground border-t">
         Affichage {range.startHour}h–{range.endHour}h
         {onSlotClick ? " · clic créneau libre = planifier" : ""}
-        {onPipeEventClick ? " · vert = RDV Pipe (décaler / annuler)" : ""}
+        {onPipeEventClick ? " · vert = RDV du Pipe (clic pour décaler / annuler)" : ""}
         {!onPipeEventClick && !onSlotClick ? " · clic = ouvrir dans Google Agenda" : ""}
       </p>
     </div>

@@ -15,7 +15,7 @@ interface HeaderProps {
 }
 
 export function Header({ onLogout, currentPage, onPageChange, onBack }: HeaderProps) {
-  const { title, subtitle } = getPageHeader(currentPage);
+  const { title } = getPageHeader(currentPage);
   const [advisorName, setAdvisorName] = useState("");
 
   // Relu à chaque page et après l'enregistrement du profil dans Paramètres.
@@ -55,14 +55,7 @@ export function Header({ onLogout, currentPage, onPageChange, onBack }: HeaderPr
               <ArrowLeft className="h-5 w-5" />
             </Button>
           )}
-          <div className="min-w-0">
-            <h1 className="text-2xl font-serif font-bold text-primary">
-              {title}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {subtitle}
-            </p>
-          </div>
+          <h1 className="min-w-0 text-2xl font-serif font-bold text-primary">{title}</h1>
         </div>
 
         <div className="flex items-center gap-4">

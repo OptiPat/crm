@@ -21,7 +21,6 @@ import {
   googleCalendarDayUrl,
   isCurrentWeek,
   nextFullHourUnix,
-  startOfWeekMonday,
 } from "@/lib/calendar/agenda-week";
 import { DEFAULT_RDV_DURATION_MINUTES } from "@/lib/calendar/rdv-duration";
 import type { GoogleCalendarWeekEvent } from "@/lib/api/tauri-calendar";
@@ -178,12 +177,7 @@ export function Agenda({ onNavigate }: AgendaProps) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">{formatAgendaWeekRange(weekStartAt)}</h2>
-          <p className="text-sm text-muted-foreground">
-            Semaine du {startOfWeekMonday(new Date(weekStartAt * 1000)).toLocaleDateString("fr-FR")}
-          </p>
-        </div>
+        <h2 className="text-lg font-semibold">{formatAgendaWeekRange(weekStartAt)}</h2>
 
         <div className="flex flex-wrap items-center gap-2">
           <Button
