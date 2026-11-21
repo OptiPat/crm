@@ -184,7 +184,7 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
         <DashboardPageHeader />
 
         <section className="space-y-3">
-          <DashboardSectionTitle subtitle="Chiffres consolidés du portefeuille">
+          <DashboardSectionTitle>
             Vue d&apos;ensemble
           </DashboardSectionTitle>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -297,7 +297,6 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
       <DashboardCollapsibleSection
         sectionId="activite"
         title="Activité"
-        subtitle="Souscriptions et funnel commercial"
       >
         <DashboardPeriodFilterBar value={dateRange} onChange={handleDateRangeChange} />
         <YearlyActivityChart
@@ -331,7 +330,6 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
       <DashboardCollapsibleSection
         sectionId="repartition"
         title="Répartition"
-        subtitle="Pipeline et encours actuels du portefeuille"
       >
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
           <CategoryPieChart

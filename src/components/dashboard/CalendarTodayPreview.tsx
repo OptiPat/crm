@@ -217,20 +217,20 @@ export function CalendarTodayPreview({
                     {rowLabel(row)}
                   </button>
                   {row.kind === "crm_only" ? (
-                    <Badge variant="outline" className="text-[10px] shrink-0">
+                    <Badge variant="outline" className="text-[11px] shrink-0">
                       CRM
                     </Badge>
                   ) : null}
                   {pipe ? (
-                    <Badge variant="outline" className="text-[10px] shrink-0 border-emerald-400/60">
+                    <Badge variant="outline" className="text-[11px] shrink-0 border-emerald-400/60">
                       Pipe
                     </Badge>
                   ) : null}
                   {crm?.attendee_status === "accepted" && (
-                    <span className="text-xs text-green-700 shrink-0">Confirmé</span>
+                    <span className="text-xs text-emerald-700 shrink-0">Confirmé</span>
                   )}
                   {crm ? (
-                    <Button
+                    <Button type="button"
                       size="icon"
                       variant="ghost"
                       className="h-7 w-7 shrink-0"

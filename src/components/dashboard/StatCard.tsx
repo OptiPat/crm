@@ -73,7 +73,7 @@ export function StatCard({
             <p className="text-[clamp(0.6875rem,9cqi,1.5rem)] font-serif font-bold text-primary mt-0.5 leading-tight tabular-nums tracking-tight whitespace-nowrap">
               {value}
             </p>
-            <p className="text-[10px] @min-[11rem]:text-xs text-muted-foreground mt-0.5 @min-[11rem]:mt-1 line-clamp-1">
+            <p className="text-[11px] @min-[11rem]:text-xs text-muted-foreground mt-0.5 @min-[11rem]:mt-1 line-clamp-1">
               {description}
             </p>
           </div>

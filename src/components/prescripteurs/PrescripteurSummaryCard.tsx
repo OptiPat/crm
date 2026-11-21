@@ -88,7 +88,7 @@ export function PrescripteurSummaryCard({
             <p className="text-sm font-semibold text-emerald-700 tabular-nums">
               {formatEuroCentimes(stats.patrimoineApporteTotal)}
             </p>
-            <p className="text-[10px] text-muted-foreground tabular-nums mt-0.5">
+            <p className="text-[11px] text-muted-foreground tabular-nums mt-0.5">
               perso {formatEuroCentimes(stats.patrimoinePersonnel)}
             </p>
           </div>

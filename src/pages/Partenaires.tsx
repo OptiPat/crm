@@ -380,7 +380,7 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
             </span>
           </p>
         </div>
-        <Button className="gap-2 shadow-sm" onClick={openCreateForm}>
+        <Button type="button" className="gap-2 shadow-sm" onClick={openCreateForm}>
           <Plus className="h-4 w-4" />
           Nouveau partenaire
         </Button>
@@ -451,12 +451,12 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
                   : "Ajoutez assureurs, gestionnaires SCPI/FIP ou promoteurs."}
               </p>
               {!prefs.searchQuery.trim() && !prefs.statFilter && prefs.typeFilter === "ALL" ? (
-                <Button onClick={openCreateForm} className="gap-2">
+                <Button type="button" onClick={openCreateForm} className="gap-2">
                   <Plus className="h-4 w-4" />
                   Ajouter un partenaire
                 </Button>
               ) : (
-                <Button
+                <Button type="button"
                   variant="outline"
                   onClick={() =>
                     updatePrefs({ searchQuery: "", statFilter: null, typeFilter: "ALL" })

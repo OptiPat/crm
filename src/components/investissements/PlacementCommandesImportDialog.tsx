@@ -357,10 +357,10 @@ export function PlacementCommandesImportDialog({
         <DialogFooter className={IMPORT_DIALOG_FOOTER_CLASS}>
           {step === "preview" && (
             <>
-              <Button variant="outline" onClick={() => reset()} disabled={busy}>
+              <Button type="button" variant="outline" onClick={() => reset()} disabled={busy}>
                 Changer de fichier
               </Button>
-              <Button onClick={() => void handleApply()} disabled={busy}>
+              <Button type="button" onClick={() => void handleApply()} disabled={busy}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 Importer ({selected.size})
               </Button>

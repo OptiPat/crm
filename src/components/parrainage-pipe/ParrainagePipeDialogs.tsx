@@ -115,10 +115,10 @@ export function ParrainagePipeCreateDialog({
           </p>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Annuler
           </Button>
-          <Button onClick={() => void handleCreate()} disabled={saving}>
+          <Button type="button" onClick={() => void handleCreate()} disabled={saving}>
             Ajouter
           </Button>
         </DialogFooter>
@@ -177,10 +177,10 @@ export function ParrainagePipeStageDialog({
           </Select>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Annuler
           </Button>
-          <Button onClick={() => onConfirm(invitationType)}>Confirmer</Button>
+          <Button type="button" onClick={() => onConfirm(invitationType)}>Confirmer</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

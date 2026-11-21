@@ -237,7 +237,7 @@ function CollapsedBranchChip({
 
       }}
 
-      className="mb-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/10 transition-colors"
+      className="mb-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/10 transition-colors"
 
       title={expanded ? "Replier cette branche" : "Afficher les filleuls de cette branche"}
 
@@ -718,7 +718,7 @@ function OrganisationNodeCard({
 
               nom={contact.nom}
 
-              className={cn(compact ? "h-6 w-6 text-[9px]" : "h-8 w-8 text-xs")}
+              className={cn(compact ? "h-6 w-6 text-[11px]" : "h-8 w-8 text-xs")}
 
             />
 
@@ -744,7 +744,7 @@ function OrganisationNodeCard({
 
             {subtitle && (
 
-              <p className="text-[10px] text-muted-foreground/80 truncate">{subtitle}</p>
+              <p className="text-[11px] text-muted-foreground/80 truncate">{subtitle}</p>
 
             )}
 
@@ -944,7 +944,7 @@ function DesinscritsPanel({
 
                 <div className="min-w-0 flex-1">
 
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
 
                     Parrain
 
@@ -974,7 +974,7 @@ function DesinscritsPanel({
 
                 </div>
 
-                <span className="text-[10px] tabular-nums text-muted-foreground shrink-0 rounded-full bg-background border px-2 py-0.5">
+                <span className="text-[11px] tabular-nums text-muted-foreground shrink-0 rounded-full bg-background border px-2 py-0.5">
 
                   {group.entries.length} désinscrit{group.entries.length > 1 ? "s" : ""}
 

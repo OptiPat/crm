@@ -441,7 +441,7 @@ function VolumeKpiPanel({
                     </>
                   ) : null}
                 </p>
-                <p className="text-[10px] text-muted-foreground/80 mt-0.5">
+                <p className="text-[11px] text-muted-foreground/80 mt-0.5">
                   Volume org. ÷ consultant net
                 </p>
               </div>

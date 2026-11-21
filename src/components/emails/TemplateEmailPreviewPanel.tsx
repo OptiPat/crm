@@ -221,7 +221,7 @@ export function TemplateEmailPreviewPanel({
           </div>
         )}
         {preview.body_html && (
-          <p className="text-[10px] text-muted-foreground border-t pt-2">
+          <p className="text-[11px] text-muted-foreground border-t pt-2">
             Rendu HTML (gras, listes, liens) — identique à l&apos;envoi si vous n&apos;éditez
             pas le texte au moment de l&apos;envoi.
           </p>

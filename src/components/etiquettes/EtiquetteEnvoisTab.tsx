@@ -954,7 +954,7 @@ export function EtiquetteEnvoisTab({
                       {messagingRelancePending.channel === "sms" ? "SMS" : "WhatsApp"} préparé —
                       confirmez après envoi depuis votre téléphone.
                     </p>
-                    <Button
+                    <Button type="button"
                       size="sm"
                       variant="secondary"
                       className="h-7 text-xs"
@@ -968,7 +968,7 @@ export function EtiquetteEnvoisTab({
                     >
                       J&apos;ai envoyé
                     </Button>
-                    <Button
+                    <Button type="button"
                       size="sm"
                       variant="ghost"
                       className="h-7 text-xs"
@@ -1047,7 +1047,7 @@ export function EtiquetteEnvoisTab({
               <div className="flex flex-wrap gap-2 max-w-full">
                 {options.mode === "ready" && (
                   <>
-                    <Button
+                    <Button type="button"
                       size="sm"
                       disabled={batchLocked || scpiSendBlockReason != null}
                       title={scpiSendBlockReason ?? undefined}
@@ -1056,7 +1056,7 @@ export function EtiquetteEnvoisTab({
                       <Send className="h-4 w-4 mr-1" />
                       Confirmer et envoyer
                     </Button>
-                    <Button
+                    <Button type="button"
                       size="sm"
                       variant="ghost"
                       disabled={batchLocked}
@@ -1075,7 +1075,7 @@ export function EtiquetteEnvoisTab({
                       !item.relance_email_skipped_at &&
                       Boolean(item.template_sujet?.trim()) &&
                       isTemplateEmailRelanceEnabledForQueue(item.template_variables) && (
-                        <Button
+                        <Button type="button"
                           size="sm"
                           variant="outline"
                           disabled={relancing}
@@ -1099,7 +1099,7 @@ export function EtiquetteEnvoisTab({
                         </span>
                       ) : item.template_sujet?.trim() &&
                         isTemplateEmailRelanceEnabledForQueue(item.template_variables) ? (
-                        <Button
+                        <Button type="button"
                           size="sm"
                           disabled={relancing}
                           onClick={() => void handlePrepareRelance([item])}
@@ -1114,7 +1114,7 @@ export function EtiquetteEnvoisTab({
                       ))}
                     {options.mode === "followup" && canOfferMessagingRelance && (
                       <>
-                        <Button
+                        <Button type="button"
                           size="sm"
                           variant="outline"
                           disabled={!hasMessagingPhone(item.contact_telephone)}
@@ -1128,7 +1128,7 @@ export function EtiquetteEnvoisTab({
                           <SmsBrandIcon className="h-4 w-4 mr-1" />
                           SMS
                         </Button>
-                        <Button
+                        <Button type="button"
                           size="sm"
                           variant="outline"
                           disabled={!hasMessagingPhone(item.contact_telephone)}
@@ -1144,7 +1144,7 @@ export function EtiquetteEnvoisTab({
                         </Button>
                       </>
                     )}
-                    <Button
+                    <Button type="button"
                       size="sm"
                       disabled={!item.contact_email?.trim()}
                       title={
@@ -1157,7 +1157,7 @@ export function EtiquetteEnvoisTab({
                       <MessageSquareReply className="h-4 w-4 mr-1" />
                       Répondre
                     </Button>
-                    <Button
+                    <Button type="button"
                       size="sm"
                       variant="outline"
                       title="Le client a déjà répondu par email (sans rédiger ici)"
@@ -1166,7 +1166,7 @@ export function EtiquetteEnvoisTab({
                       <MailCheck className="h-4 w-4 mr-1" />
                       Réponse reçue
                     </Button>
-                    <Button
+                    <Button type="button"
                       size="sm"
                       variant="outline"
                       title="RDV pris (Agenda)"
@@ -1175,7 +1175,7 @@ export function EtiquetteEnvoisTab({
                       <CalendarCheck className="h-4 w-4 mr-1" />
                       RDV
                     </Button>
-                    <Button
+                    <Button type="button"
                       size="sm"
                       variant="ghost"
                       title="Retirer du suivi"
@@ -1189,7 +1189,7 @@ export function EtiquetteEnvoisTab({
                 {options.mode === "incomplete" && (
                   <>
                     {(item.queue_issue === "NO_EMAIL" || item.queue_issue === "OTHER") && (
-                      <Button
+                      <Button type="button"
                         size="sm"
                         variant="outline"
                         onClick={() => {
@@ -1206,7 +1206,7 @@ export function EtiquetteEnvoisTab({
                         Compléter la fiche
                       </Button>
                     )}
-                    <Button
+                    <Button type="button"
                       size="sm"
                       variant="ghost"
                       title="Retirer de la file"
@@ -1218,11 +1218,11 @@ export function EtiquetteEnvoisTab({
                 )}
                 {options.mode === "cancelled" && (
                   <>
-                    <Button size="sm" onClick={() => void handleRestorePending(item)}>
+                    <Button type="button" size="sm" onClick={() => void handleRestorePending(item)}>
                       <RotateCcw className="h-4 w-4 mr-1" />
                       Remettre en file
                     </Button>
-                    <Button
+                    <Button type="button"
                       size="sm"
                       variant="ghost"
                       title="Ne plus proposer cet envoi"
@@ -1295,14 +1295,14 @@ export function EtiquetteEnvoisTab({
             téléphone.
           </p>
           <div className="flex flex-wrap gap-2 shrink-0">
-            <Button
+            <Button type="button"
               size="sm"
               variant="outline"
               onClick={() => setSubTab("followup")}
             >
               Voir dans À relancer
             </Button>
-            <Button
+            <Button type="button"
               size="sm"
               variant="secondary"
               onClick={() =>
@@ -1315,7 +1315,7 @@ export function EtiquetteEnvoisTab({
             >
               J&apos;ai envoyé
             </Button>
-            <Button
+            <Button type="button"
               size="sm"
               variant="ghost"
               onClick={() => setMessagingRelancePending(null)}
@@ -1337,7 +1337,7 @@ export function EtiquetteEnvoisTab({
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button
+            <Button type="button"
               variant="outline"
               size="sm"
               disabled={loading || syncing}
@@ -1478,7 +1478,7 @@ export function EtiquetteEnvoisTab({
                   removeLabel={getEnvoisBulkRemoveLabel("cancel")}
                   onRemoveSelection={() => openBulkRemove("cancel", ready)}
                   trailing={
-                    <Button
+                    <Button type="button"
                       size="sm"
                       disabled={
                         selectedReadyItems.length === 0 ||
@@ -1583,7 +1583,7 @@ export function EtiquetteEnvoisTab({
                   removeLabel={getEnvoisBulkRemoveLabel("dismissFollowup")}
                   onRemoveSelection={() => openBulkRemove("dismissFollowup", followup)}
                   trailing={
-                    <Button
+                    <Button type="button"
                       size="sm"
                       disabled={
                         selectedFollowupRelanceItems.length === 0 || loading || relancing

@@ -44,7 +44,7 @@ export function Header({ onLogout, currentPage, onPageChange, onBack }: HeaderPr
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           {onBack && (
-            <Button
+            <Button type="button"
               variant="ghost"
               size="icon"
               onClick={onBack}
@@ -73,7 +73,7 @@ export function Header({ onLogout, currentPage, onPageChange, onBack }: HeaderPr
             <span className="text-sm font-medium">{advisorName || "Conseiller"}</span>
           </div>
 
-          <Button
+          <Button type="button"
             variant="outline"
             size="sm"
             onClick={onLogout}

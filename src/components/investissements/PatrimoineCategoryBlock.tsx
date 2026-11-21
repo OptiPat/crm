@@ -30,7 +30,7 @@ export function PatrimoineCategoryBlock({
           <Icon className="h-4 w-4" aria-hidden />
         </span>
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        <Badge variant="secondary" className="text-[10px] h-5">
+        <Badge variant="secondary" className="text-[11px] h-5">
           {count}
         </Badge>
       </div>

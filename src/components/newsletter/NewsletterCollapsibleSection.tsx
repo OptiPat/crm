@@ -35,7 +35,7 @@ export function NewsletterCollapsibleSection({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {badge ?
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
               {badge}
             </span>
           : null}

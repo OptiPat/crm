@@ -199,7 +199,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
             {status?.provider === "google" && (
-              <Button
+              <Button type="button"
                 variant="outline"
                 size="sm"
                 disabled={!!connecting}
@@ -214,12 +214,12 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
               </Button>
             )}
             {imapConnected && !showImapForm && (
-              <Button variant="outline" size="sm" onClick={() => setShowImapForm(true)}>
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowImapForm(true)}>
                 <KeyRound className="h-4 w-4 mr-1" />
                 Changer le mot de passe
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={() => void handleTest()} disabled={testing}>
+            <Button type="button" variant="outline" size="sm" onClick={() => void handleTest()} disabled={testing}>
               {testing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -227,7 +227,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
               )}
               Tester
             </Button>
-            <Button variant="outline" size="sm" onClick={() => void handleDisconnect()}>
+            <Button type="button" variant="outline" size="sm" onClick={() => void handleDisconnect()}>
               <Unplug className="h-4 w-4 mr-1" />
               Déconnecter
             </Button>
@@ -251,7 +251,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
           <div className="flex flex-wrap gap-2 shrink-0">
             {status.google_calendar_connected ? (
               <>
-                <Button
+                <Button type="button"
                   variant="outline"
                   size="sm"
                   disabled={!!connecting}
@@ -259,7 +259,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
                 >
                   Reconnecter Agenda
                 </Button>
-                <Button
+                <Button type="button"
                   variant="outline"
                   size="sm"
                   onClick={async () => {
@@ -276,7 +276,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
                 </Button>
               </>
             ) : (
-              <Button
+              <Button type="button"
                 variant="outline"
                 size="sm"
                 disabled={
@@ -438,7 +438,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
               autoComplete="off"
             />
           </div>
-          <Button variant="secondary" size="sm" onClick={() => void handleSaveIds()}>
+          <Button type="button" variant="secondary" size="sm" onClick={() => void handleSaveIds()}>
             Enregistrer les identifiants
           </Button>
           <p className="text-xs text-muted-foreground">
@@ -451,7 +451,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
 
       {!oauthConnected && !showImapForm && variant === "card" && (
         <div className="flex flex-wrap gap-2">
-          <Button
+          <Button type="button"
             onClick={() => void handleConnect("google")}
             disabled={
               !!connecting ||
@@ -466,7 +466,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
             )}
             Connecter Google
           </Button>
-          <Button
+          <Button type="button"
             variant="secondary"
             onClick={() => void handleConnect("microsoft")}
             disabled={!!connecting || !microsoftClientId.trim()}

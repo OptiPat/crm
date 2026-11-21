@@ -310,7 +310,7 @@ export function FoyerGroupingModal({
                           <SelectItem value="AUTRE">Autre membre</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Button
+                      <Button type="button"
                         variant="ghost"
                         size="icon"
                         onClick={() => handleRemoveMember(groupIndex, memberIndex)}
@@ -333,14 +333,14 @@ export function FoyerGroupingModal({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button
+          <Button type="button"
             variant="outline"
             onClick={handleIgnoreAll}
             disabled={loading}
           >
             Ignorer tout
           </Button>
-          <Button
+          <Button type="button"
             onClick={handleValidate}
             disabled={loading}
           >

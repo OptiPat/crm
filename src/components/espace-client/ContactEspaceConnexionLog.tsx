@@ -108,7 +108,7 @@ export function ContactEspaceConnexionLog({
               </span>
               <span>{formatEspaceTimestamp(entry.created_at)}</span>
               {entry.ip ? (
-                <span className="font-mono text-[10px]">{entry.ip}</span>
+                <span className="font-mono text-[11px]">{entry.ip}</span>
               ) : null}
             </li>
           ))}

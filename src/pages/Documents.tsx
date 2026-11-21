@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ListSkeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -857,7 +858,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
             Gérez les documents de vos clients
           </p>
         </div>
-        <Button
+        <Button type="button"
           className="gap-2"
           disabled={dropBusy}
           title="Sélectionnez un ou plusieurs fichiers"
@@ -1096,9 +1097,7 @@ export function Documents({ onNavigate }: DocumentsProps) {
           </div>
           <div className={cn(librarySource !== "crm" && "hidden")}>
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Chargement...
-            </div>
+            <ListSkeleton rows={6} rowClassName="h-14" />
           ) : loadError && documents.length === 0 ? (
             <div className="py-10 text-center space-y-3">
               <p className="text-sm text-destructive">Impossible de charger les documents.</p>

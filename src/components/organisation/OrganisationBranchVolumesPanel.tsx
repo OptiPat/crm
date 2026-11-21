@@ -235,17 +235,17 @@ export function OrganisationBranchVolumesPanel({
               <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Filleul</th>
               <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right w-36">
                 Objectif Manager
-                <span className="block font-normal normal-case text-[10px]">cumul</span>
+                <span className="block font-normal normal-case text-[11px]">cumul</span>
               </th>
               <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right w-28">
                 Volume
-                <span className="block font-normal normal-case text-[10px]">perso</span>
-                <span className="block font-normal normal-case text-[10px]">exercice</span>
+                <span className="block font-normal normal-case text-[11px]">perso</span>
+                <span className="block font-normal normal-case text-[11px]">exercice</span>
               </th>
               <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right w-32">
                 Volume
-                <span className="block font-normal normal-case text-[10px]">organisation</span>
-                <span className="block font-normal normal-case text-[10px]">exercice</span>
+                <span className="block font-normal normal-case text-[11px]">organisation</span>
+                <span className="block font-normal normal-case text-[11px]">exercice</span>
               </th>
             </tr>
           </thead>

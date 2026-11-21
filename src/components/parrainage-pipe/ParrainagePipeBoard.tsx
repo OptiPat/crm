@@ -174,7 +174,7 @@ export function ParrainagePipeBoard({
             >
               <h3
                 className={cn(
-                  "truncate text-[10px] font-medium leading-tight sm:text-xs",
+                  "truncate text-[11px] font-medium leading-tight sm:text-xs",
                   colors.title
                 )}
               >
@@ -186,7 +186,7 @@ export function ParrainagePipeBoard({
               <Badge
                 variant="secondary"
                 className={cn(
-                  "h-5 min-w-5 shrink-0 justify-center px-1 font-normal tabular-nums text-[10px]",
+                  "h-5 min-w-5 shrink-0 justify-center px-1 font-normal tabular-nums text-[11px]",
                   colors.badge
                 )}
               >
@@ -196,7 +196,7 @@ export function ParrainagePipeBoard({
 
             <div className="min-h-[80px] flex-1 space-y-1.5 overflow-y-auto p-1 sm:space-y-2 sm:p-1.5">
               {list.length === 0 ? (
-                <p className="px-0.5 py-4 text-center text-[10px] text-muted-foreground sm:text-xs">
+                <p className="px-0.5 py-4 text-center text-[11px] text-muted-foreground sm:text-xs">
                   Déposer ici
                 </p>
               ) : (
@@ -230,7 +230,7 @@ export function ParrainagePipeBoard({
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1">
                             {outcomePending ? (
-                              <Badge className="h-4 shrink-0 px-1 text-[9px] font-medium leading-none bg-red-600 text-white hover:bg-red-600">
+                              <Badge className="h-4 shrink-0 px-1 text-[11px] font-medium leading-none bg-red-600 text-white hover:bg-red-600">
                                 JD/PO
                               </Badge>
                             ) : null}
@@ -238,12 +238,12 @@ export function ParrainagePipeBoard({
                               {formatParrainageContactLabel(pipe)}
                             </p>
                             {pipe.invitation_type && (
-                              <Badge variant="outline" className="h-4 px-1 text-[9px]">
+                              <Badge variant="outline" className="h-4 px-1 text-[11px]">
                                 {pipe.invitation_type}
                               </Badge>
                             )}
                           </div>
-                          <p className="mt-0.5 text-[9px] text-muted-foreground/80 sm:text-[10px]">
+                          <p className="mt-0.5 text-[11px] text-muted-foreground/80 sm:text-[11px]">
                             {formatUpdatedAt(pipe.updated_at)}
                           </p>
                         </div>

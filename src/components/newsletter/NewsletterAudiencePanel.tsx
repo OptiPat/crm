@@ -359,22 +359,22 @@ export function NewsletterAudiencePanel({
                               </span>
                             : null}
                             {member.unsubscribed ?
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
+                              <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-5">
                                 Désinscrit
                               </Badge>
                             : null}
                             {isNewsletterArchivedMember(member) ?
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
+                              <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-5">
                                 Archivé
                               </Badge>
                             : null}
                             {isNewsletterSuspectMember(member) ?
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
+                              <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-5">
                                 Suspect
                               </Badge>
                             : null}
                             {!isSettingsMode && settingsExcluded ?
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
+                              <Badge variant="outline" className="text-[11px] px-1.5 py-0 h-5">
                                 Exclu (paramètres)
                               </Badge>
                             : null}

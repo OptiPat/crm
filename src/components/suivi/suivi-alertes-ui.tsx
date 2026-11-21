@@ -341,7 +341,7 @@ export function SuiviAlertesSectionHeader({ label, count }: { label: string; cou
   return (
     <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2 pt-2">
       {label}
-      <Badge variant="outline" className="text-[10px] h-5 tabular-nums">
+      <Badge variant="outline" className="text-[11px] h-5 tabular-nums">
         {count}
       </Badge>
     </h3>

@@ -125,21 +125,21 @@ export function SuiviAlerteCard({
             <h3 className="font-semibold text-foreground truncate">{name}</h3>
             <Badge
               variant="outline"
-              className={`text-[10px] px-1.5 py-0 h-5 shrink-0 ${getDisplayCategorieBadgeClass(alerte.contact_categorie)}`}
+              className={`text-[11px] px-1.5 py-0 h-5 shrink-0 ${getDisplayCategorieBadgeClass(alerte.contact_categorie)}`}
             >
               {CONTACT_DISPLAY_CATEGORY_LABELS[alerte.contact_categorie] ||
                 alerte.contact_categorie}
             </Badge>
             <Badge
               variant="outline"
-              className={`text-[10px] px-1.5 py-0 h-5 shrink-0 ${getTypeAlerteBadgeClass(alerte.type_alerte)}`}
+              className={`text-[11px] px-1.5 py-0 h-5 shrink-0 ${getTypeAlerteBadgeClass(alerte.type_alerte)}`}
             >
               {typeLabel}
             </Badge>
             {trace.daysOpen != null && trace.daysOpen > 0 && (
               <Badge
                 variant="outline"
-                className="text-[10px] px-1.5 py-0 h-5 shrink-0 border-amber-300 text-amber-900 bg-amber-50"
+                className="text-[11px] px-1.5 py-0 h-5 shrink-0 border-amber-300 text-amber-900 bg-amber-50"
               >
                 +{trace.daysOpen} j
               </Badge>
@@ -147,7 +147,7 @@ export function SuiviAlerteCard({
             {hasLinkedTache && (
               <Badge
                 variant="outline"
-                className="text-[10px] px-1.5 py-0 h-5 shrink-0 border-blue-200 text-blue-800 bg-blue-50 gap-0.5"
+                className="text-[11px] px-1.5 py-0 h-5 shrink-0 border-blue-200 text-blue-800 bg-blue-50 gap-0.5"
               >
                 <ListTodo className="h-3 w-3" />
                 Tâche
@@ -169,7 +169,7 @@ export function SuiviAlerteCard({
                 {trace.rule}
               </p>
               <p>{trace.detail}</p>
-              <p className="text-[10px] opacity-80">Source : {trace.source}</p>
+              <p className="text-[11px] opacity-80">Source : {trace.source}</p>
             </div>
           )}
 

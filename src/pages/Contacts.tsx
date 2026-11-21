@@ -879,7 +879,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
           onDeleteAll={() => setShowDeleteAllDialog(true)}
         />
         {canExport && filteredContacts.length > 0 && (
-          <Button
+          <Button type="button"
             variant="outline"
             className="gap-2 shrink-0"
             onClick={handleExportCsv}
@@ -1089,7 +1089,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
                   </Select>
                 )}
 
-                <Button
+                <Button type="button"
                   variant={groupByFoyer ? "default" : "outline"}
                   onClick={() => setGroupByFoyer(!groupByFoyer)}
                   className="gap-2 whitespace-nowrap"
@@ -1145,7 +1145,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
           ) : loadError && contacts.length === 0 ? (
             <div className="py-10 text-center space-y-3">
               <p className="text-sm text-destructive">Impossible de charger les contacts.</p>
-              <Button variant="outline" onClick={retryLoadContacts}>
+              <Button type="button" variant="outline" onClick={retryLoadContacts}>
                 Réessayer
               </Button>
             </div>

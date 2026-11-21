@@ -74,7 +74,7 @@ function StelliumReleveContent({ releve }: { releve: InvestissementValorisation 
           {formatCalendarDateFr(releve.date_valorisation)}
         </time>
         <div className="text-right min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             Encours
           </p>
           <p className="text-sm font-semibold text-foreground tabular-nums leading-tight">
@@ -84,19 +84,19 @@ function StelliumReleveContent({ releve }: { releve: InvestissementValorisation 
       </div>
       <div className="grid grid-cols-3 gap-2 px-3 py-2.5">
         <div className="min-w-0">
-          <p className="text-[10px] font-medium text-muted-foreground mb-1">Nets versés</p>
+          <p className="text-[11px] font-medium text-muted-foreground mb-1">Nets versés</p>
           <p className="text-xs font-medium text-foreground tabular-nums leading-snug">
             {formatEuroCentimes(releve.stellium_versements_nets_centimes ?? undefined)}
           </p>
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] font-medium text-muted-foreground mb-1">Performance</p>
+          <p className="text-[11px] font-medium text-muted-foreground mb-1">Performance</p>
           <p className={cn("text-xs font-medium tabular-nums leading-snug", perfTone)}>
             {formatEuroCentimes(releve.stellium_perf_euro_centimes ?? undefined)}
           </p>
         </div>
         <div className="min-w-0 text-right">
-          <p className="text-[10px] font-medium text-muted-foreground mb-1">Perf %</p>
+          <p className="text-[11px] font-medium text-muted-foreground mb-1">Perf %</p>
           <p className={cn("text-xs font-medium tabular-nums leading-snug", perfTone)}>
             {perfPct ?? "—"}
           </p>
@@ -308,7 +308,7 @@ export function InvestissementEncoursPanel({
       ) : (
         <div className="space-y-1">
           {hasComplements && (
-            <div className="flex justify-center gap-3 text-[10px] text-muted-foreground">
+            <div className="flex justify-center gap-3 text-[11px] text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <span
                   className="inline-block h-px w-3 rounded-full"

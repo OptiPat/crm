@@ -63,7 +63,7 @@ export function VolumeProgressGauge({ current, target }: { current: number | nul
           style={{ width: `${Math.min(100, percent ?? 0)}%` }}
         />
       </div>
-      <span className={cn("text-[10px] font-medium tabular-nums shrink-0 w-7 text-right", colors.text)}>
+      <span className={cn("text-[11px] font-medium tabular-nums shrink-0 w-7 text-right", colors.text)}>
         {isComplete ? "🎉" : percent != null ? `${Math.round(percent)}%` : "—"}
       </span>
     </div>
@@ -114,13 +114,13 @@ export function AssumptionField({
   const isModified = value !== referenceValue;
   return (
     <div
-      className="flex flex-col gap-1 rounded-lg border border-border/50 bg-muted/20 px-2.5 py-2"
+      className="flex min-w-0 flex-col gap-1 rounded-lg border border-border/50 bg-muted/20 px-2.5 py-2"
       title={groupTitle}
     >
       <label htmlFor={id} className="text-[11px] font-medium text-muted-foreground leading-tight">
         {label}
       </label>
-      <div className="flex items-center gap-1">
+      <div className="flex min-w-0 items-center gap-1">
         {mode === "money" ? (
           <input
             id={id}
@@ -132,7 +132,7 @@ export function AssumptionField({
               onChange(digits === "" || digits === "-" ? 0 : Number(digits));
             }}
             className={cn(
-              "rounded-md border border-border/70 bg-background px-2 py-1 text-right text-sm tabular-nums",
+              "min-w-0 shrink rounded-md border border-border/70 bg-background px-2 py-1 text-right text-sm tabular-nums",
               width
             )}
           />
@@ -144,12 +144,12 @@ export function AssumptionField({
             value={value}
             onChange={(e) => onChange(Number(e.target.value))}
             className={cn(
-              "rounded-md border border-border/70 bg-background px-2 py-1 text-right text-sm tabular-nums",
+              "min-w-0 shrink rounded-md border border-border/70 bg-background px-2 py-1 text-right text-sm tabular-nums",
               width
             )}
           />
         )}
-        <span className="text-muted-foreground text-xs">{suffix}</span>
+        <span className="shrink-0 text-muted-foreground text-xs">{suffix}</span>
         {isModified && (
           <button
             type="button"
@@ -161,11 +161,11 @@ export function AssumptionField({
           </button>
         )}
       </div>
-      <div className="h-3.5 text-[10px] text-muted-foreground/70 leading-tight">
+      <div className="min-h-3.5 text-[11px] text-muted-foreground/70 leading-tight">
         {isModified
           ? hasObservedValue
-            ? `obs.${observedExerciceLabel != null ? ` (${observedExerciceLabel})` : ""} ${referenceValue.toLocaleString("fr-FR")} ${suffix}`
-            : `obs. ${referenceValue.toLocaleString("fr-FR")} ${suffix}`
+            ? `obs.${observedExerciceLabel != null ? ` (${observedExerciceLabel})` : ""} ${referenceValue.toLocaleString("fr-FR")} ${suffix}`
+            : `obs. ${referenceValue.toLocaleString("fr-FR")} ${suffix}`
           : "\u00A0"}
       </div>
     </div>

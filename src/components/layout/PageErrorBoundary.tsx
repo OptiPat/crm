@@ -43,7 +43,7 @@ export class PageErrorBoundary extends Component<PageErrorBoundaryProps, PageErr
             <p className="text-sm text-muted-foreground">
               Vos données enregistrées ne sont pas touchées. Rechargez l'application pour continuer.
             </p>
-            <Button onClick={() => window.location.reload()}>Recharger</Button>
+            <Button type="button" onClick={() => window.location.reload()}>Recharger</Button>
             <p className="break-words text-xs text-muted-foreground">{errorMessage}</p>
           </div>
         </div>
@@ -62,11 +62,11 @@ export class PageErrorBoundary extends Component<PageErrorBoundaryProps, PageErr
               Vous pouvez réessayer ou passer à une autre page.
             </p>
             <div className="flex flex-wrap gap-2 pt-2">
-              <Button size="sm" onClick={() => this.setState({ error: null, hasError: false })}>
+              <Button type="button" size="sm" onClick={() => this.setState({ error: null, hasError: false })}>
                 Réessayer
               </Button>
               {onGoHome && (
-                <Button size="sm" variant="outline" onClick={onGoHome}>
+                <Button type="button" size="sm" variant="outline" onClick={onGoHome}>
                   Revenir au tableau de bord
                 </Button>
               )}

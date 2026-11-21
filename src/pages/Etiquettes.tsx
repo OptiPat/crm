@@ -112,7 +112,7 @@ function FilterPill({
       {count > 0 && (
         <span
           className={cn(
-            "tabular-nums rounded-full px-1.5 py-0.5 text-[10px]",
+            "tabular-nums rounded-full px-1.5 py-0.5 text-[11px]",
             active ? "bg-primary/15" : "bg-muted"
           )}
         >
@@ -527,7 +527,7 @@ export function Etiquettes({ onNavigate }: { onNavigate?: (page: string) => void
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-end gap-4">
         <div className="flex flex-wrap gap-2 shrink-0">
-          <Button
+          <Button type="button"
             variant="outline"
             className="gap-2"
             onClick={() => void handleSync()}

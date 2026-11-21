@@ -282,11 +282,11 @@ export function NotesSharedPanel({ isActive = true }: { isActive?: boolean }) {
     <>
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" disabled={syncing} onClick={() => void syncRemote(true)}>
+          <Button type="button" size="sm" variant="outline" disabled={syncing} onClick={() => void syncRemote(true)}>
             <RefreshCw className={cn("h-4 w-4 mr-1.5", syncing && "animate-spin")} />
             Actualiser
           </Button>
-          <Button size="sm" onClick={startCreate}>
+          <Button type="button" size="sm" onClick={startCreate}>
             <Plus className="h-4 w-4 mr-1.5" />
             Publier une note
           </Button>
@@ -377,10 +377,10 @@ export function NotesSharedPanel({ isActive = true }: { isActive?: boolean }) {
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  <Button disabled={saving} onClick={() => void handleSave()}>
+                  <Button type="button" disabled={saving} onClick={() => void handleSave()}>
                     {editMode === "contribute" ? "Publier le complément" : "Enregistrer"}
                   </Button>
-                  <Button variant="outline" disabled={saving} onClick={requestCancelEdit}>
+                  <Button type="button" variant="outline" disabled={saving} onClick={requestCancelEdit}>
                     Annuler
                   </Button>
                 </div>
@@ -408,7 +408,7 @@ export function NotesSharedPanel({ isActive = true }: { isActive?: boolean }) {
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2 border-t pt-4">
-                  <Button
+                  <Button type="button"
                     size="sm"
                     variant="outline"
                     disabled={isPrinting}
@@ -417,18 +417,18 @@ export function NotesSharedPanel({ isActive = true }: { isActive?: boolean }) {
                     <FileDown className="h-4 w-4 mr-1.5" />
                     PDF
                   </Button>
-                  <Button size="sm" variant="outline" onClick={startContribute}>
+                  <Button type="button" size="sm" variant="outline" onClick={startContribute}>
                     <MessageSquarePlus className="h-4 w-4 mr-1.5" />
                     Enrichir
                   </Button>
                   {selected.can_edit && (
-                    <Button size="sm" variant="outline" onClick={startEdit}>
+                    <Button type="button" size="sm" variant="outline" onClick={startEdit}>
                       <Pencil className="h-4 w-4 mr-1.5" />
                       Modifier
                     </Button>
                   )}
                   {selected.can_delete && (
-                    <Button
+                    <Button type="button"
                       size="sm"
                       variant="outline"
                       disabled={saving}

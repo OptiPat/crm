@@ -111,7 +111,7 @@ function HierarchyRow({
         <ContactInitialsAvatar
           prenom={node.contact.prenom}
           nom={node.contact.nom}
-          className="h-7 w-7 shrink-0 text-[10px]"
+          className="h-7 w-7 shrink-0 text-[11px]"
         />
 
         <span className="min-w-0 flex-1 truncate font-medium">{node.label}</span>
@@ -123,13 +123,13 @@ function HierarchyRow({
         />
 
         {levelLabel ? (
-          <span className="hidden md:inline text-[10px] text-muted-foreground shrink-0 tabular-nums">
+          <span className="hidden md:inline text-[11px] text-muted-foreground shrink-0 tabular-nums">
             {levelLabel}
           </span>
         ) : null}
 
         {node.status === "desinscrit" ? (
-          <span className="text-[10px] rounded-full border border-muted-foreground/30 px-1.5 py-0.5 text-muted-foreground shrink-0">
+          <span className="text-[11px] rounded-full border border-muted-foreground/30 px-1.5 py-0.5 text-muted-foreground shrink-0">
             {desinscriptionLabel ? `Sorti ${desinscriptionLabel}` : "Désinscrit"}
           </span>
         ) : null}
@@ -142,7 +142,7 @@ function HierarchyRow({
         </span>
 
         {node.descendantCount > 0 ? (
-          <span className="text-[10px] tabular-nums text-muted-foreground shrink-0 w-6 text-right">
+          <span className="text-[11px] tabular-nums text-muted-foreground shrink-0 w-6 text-right">
             {node.descendantCount}
           </span>
         ) : (
@@ -202,10 +202,10 @@ function UplineRow({
       <ContactInitialsAvatar
         prenom={node.contact.prenom}
         nom={node.contact.nom}
-        className="h-7 w-7 shrink-0 text-[10px]"
+        className="h-7 w-7 shrink-0 text-[11px]"
       />
       <span className="truncate font-medium">{node.label}</span>
-      <span className="text-[10px] text-muted-foreground ml-auto">Parrain</span>
+      <span className="text-[11px] text-muted-foreground ml-auto">Parrain</span>
     </button>
   );
 }
@@ -296,16 +296,16 @@ function DesinscritRow({
       <ContactInitialsAvatar
         prenom={node.contact.prenom}
         nom={node.contact.nom}
-        className="h-7 w-7 shrink-0 text-[10px] opacity-80"
+        className="h-7 w-7 shrink-0 text-[11px] opacity-80"
       />
       <span className="min-w-0 flex-1 truncate font-medium">{node.label}</span>
       {desinscriptionLabel ? (
-        <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+        <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
           {desinscriptionLabel}
         </span>
       ) : null}
       {organisationMemberLevelLabel(node.generation) ? (
-        <span className="text-[10px] text-muted-foreground shrink-0">
+        <span className="text-[11px] text-muted-foreground shrink-0">
           {organisationMemberLevelLabel(node.generation)}
         </span>
       ) : null}
@@ -487,7 +487,7 @@ export function OrganisationHierarchyList({
           onHideDesinscritsChange={onHideDesinscritsChange}
         />
 
-        <div className="ml-auto hidden lg:flex items-center gap-4 pr-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <div className="ml-auto hidden lg:flex items-center gap-4 pr-2 text-[11px] uppercase tracking-wide text-muted-foreground">
           <span className="w-[4.5rem] text-right">Perso</span>
           <span className="w-[5rem] text-right">Organisation</span>
           <span className="w-6 text-right" title="Descendants actifs">

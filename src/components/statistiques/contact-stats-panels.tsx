@@ -211,7 +211,7 @@ function AttributionDistributionRows<
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {!interactive ? (
-                    <span className="text-[10px] uppercase tracking-wide font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                    <span className="text-[11px] uppercase tracking-wide font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                       Aucun
                     </span>
                   ) : null}

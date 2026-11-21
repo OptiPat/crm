@@ -547,7 +547,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
           style={readableColumnStyle(column)}
           className={cn("overflow-hidden px-0 py-1.5", alignClass)}
         >
-          <Button
+          <Button type="button"
             variant="ghost"
             size="icon"
             className="h-7 w-7 shrink-0"
@@ -763,7 +763,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
       <div className="space-y-6 p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <Button variant="ghost" size="sm" className="mb-2 -ml-2" onClick={() => setView("table")}>
+            <Button type="button" variant="ghost" size="sm" className="mb-2 -ml-2" onClick={() => setView("table")}>
               <ArrowLeft className="h-4 w-4 mr-1" />
               Retour au tableau
             </Button>
@@ -785,7 +785,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
+            <Button type="button"
               variant="outline"
               onClick={() => void runCompare()}
               disabled={selectedCompareCount < 2 || compareLoading}
@@ -794,12 +794,12 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
               Recalculer
             </Button>
             {selectedCompareCount > 0 && (
-              <Button variant="ghost" onClick={clearCompareSelection}>
+              <Button type="button" variant="ghost" onClick={clearCompareSelection}>
                 Tout décocher
               </Button>
             )}
             {compareResponse && (
-              <Button
+              <Button type="button"
                 variant="outline"
                 onClick={() => void printComparison(compareResponse)}
                 disabled={compareLoading || comparePrinting}
@@ -855,7 +855,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
-            <Button
+            <Button type="button"
               variant="secondary"
               onClick={() => {
                 if (coachReport && !coachGenerating) {
@@ -870,7 +870,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
               {coachButtonLabel}
             </Button>
             {!coachGenerating && coachReport && (
-              <Button variant="outline" onClick={() => void startCoachReport()} disabled={stats.favorites === 0}>
+              <Button type="button" variant="outline" onClick={() => void startCoachReport()} disabled={stats.favorites === 0}>
                 Mettre à jour le rapport
               </Button>
             )}
@@ -982,14 +982,14 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                 </CardDescription>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Button
+                <Button type="button"
                   size="sm"
                   variant={filter === "all" ? "secondary" : "outline"}
                   onClick={() => setFilter("all")}
                 >
                   Tous
                 </Button>
-                <Button
+                <Button type="button"
                   size="sm"
                   variant={filter === "favorites" ? "secondary" : "outline"}
                   onClick={() => setFilter("favorites")}
@@ -997,7 +997,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                   Favoris
                 </Button>
                 {!isDefaultTableView && (
-                  <Button size="sm" variant="ghost" onClick={clearTableFilters}>
+                  <Button type="button" size="sm" variant="ghost" onClick={clearTableFilters}>
                     <X className="h-4 w-4 mr-1" />
                     Réinitialiser
                   </Button>
@@ -1011,7 +1011,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                     {selectedCompareCount} fonds sélectionné{selectedCompareCount > 1 ? "s" : ""} (max.{" "}
                     {MAX_UC_COMPARE})
                   </span>
-                  <Button
+                  <Button type="button"
                     size="sm"
                     variant="outline"
                     onClick={() => void runCompare()}
@@ -1020,7 +1020,7 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
                     <Scale className="h-4 w-4 mr-2" />
                     Comparer
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={clearCompareSelection}>
+                  <Button type="button" size="sm" variant="ghost" onClick={clearCompareSelection}>
                     Tout décocher
                   </Button>
                 </>
@@ -1051,14 +1051,14 @@ export function VeilleFonds({ onNavigate: _onNavigate }: VeilleFondsProps) {
           ) : entries.length === 0 && loadError ? (
             <div className="p-8 text-center space-y-3">
               <p className="text-sm text-destructive">Impossible de charger la liste des fonds.</p>
-              <Button variant="outline" onClick={() => void load()}>
+              <Button type="button" variant="outline" onClick={() => void load()}>
                 Réessayer
               </Button>
             </div>
           ) : entries.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
               <p>Aucun fonds importé.</p>
-              <Button className="mt-4" onClick={() => setImportOpen(true)}>
+              <Button type="button" className="mt-4" onClick={() => setImportOpen(true)}>
                 <FileUp className="h-4 w-4 mr-2" />
                 Importer votre fichier Cristalliance
               </Button>

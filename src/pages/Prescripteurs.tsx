@@ -463,7 +463,7 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
             {prefs.searchQuery.trim() ? " (recherche active)" : ""}
           </p>
         </div>
-        <Button className="gap-2 shadow-sm" onClick={() => setShowPrescripteurForm(true)}>
+        <Button type="button" className="gap-2 shadow-sm" onClick={() => setShowPrescripteurForm(true)}>
           <Plus className="h-4 w-4" />
           Nouveau prescripteur
         </Button>
@@ -521,7 +521,7 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
           {loadError && contacts.length === 0 ? (
             <div className="py-14 text-center space-y-3 rounded-xl border border-dashed border-border/80">
               <p className="text-sm text-destructive">Impossible de charger les prescripteurs.</p>
-              <Button
+              <Button type="button"
                 variant="outline"
                 onClick={() => {
                   setLoading(true);
@@ -540,14 +540,14 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
                   : "Créez un prescripteur ou assignez-en un depuis la fiche d'un client."}
               </p>
               {prefs.searchQuery.trim() || prefs.statFilter ? (
-                <Button
+                <Button type="button"
                   variant="outline"
                   onClick={() => updatePrefs({ searchQuery: "", statFilter: null })}
                 >
                   Effacer la recherche et les filtres
                 </Button>
               ) : (
-                <Button className="gap-2" onClick={() => setShowPrescripteurForm(true)}>
+                <Button type="button" className="gap-2" onClick={() => setShowPrescripteurForm(true)}>
                   <Plus className="h-4 w-4" />
                   Nouveau prescripteur
                 </Button>

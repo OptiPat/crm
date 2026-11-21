@@ -62,11 +62,11 @@ function PipeTimelineEntryCard({
                 {Icon && <Icon className="h-3 w-3" />}
                 {labels.badge}
               </Badge>
-              <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal">
+              <Badge variant="outline" className="text-[11px] h-5 px-1.5 font-normal">
                 {pipeRelationTypeLabel(entry.pipe_type)}
               </Badge>
               {archived && (
-                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                <Badge variant="secondary" className="text-[11px] h-5 px-1.5">
                   Archivé
                 </Badge>
               )}

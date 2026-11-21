@@ -70,7 +70,7 @@ export function PipePlacementStepper({ operation, hideTitle = false }: PipePlace
                     {step.label}
                   </span>
                   {step.sublabel ? (
-                    <span className="text-[10px] text-muted-foreground text-center leading-tight max-w-[4.5rem] line-clamp-2">
+                    <span className="text-[11px] text-muted-foreground text-center leading-tight max-w-[4.5rem] line-clamp-2">
                       {step.sublabel}
                     </span>
                   ) : null}

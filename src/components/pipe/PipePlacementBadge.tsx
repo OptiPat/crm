@@ -25,7 +25,7 @@ export function PipePlacementBadge({
       <span
         key="nc"
         className={cn(
-          "inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+          "inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[11px] font-medium",
           "bg-red-100 text-red-800 border-red-200",
           className
         )}
@@ -42,7 +42,7 @@ export function PipePlacementBadge({
       <span
         key="unsent"
         className={cn(
-          "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+          "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[11px] font-medium",
           "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-700",
           className
         )}
@@ -63,7 +63,7 @@ export function PipePlacementBadge({
       <span
         key="pending"
         className={cn(
-          "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+          "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[11px] font-medium",
           "bg-amber-100 text-amber-900 border-amber-200",
           className
         )}

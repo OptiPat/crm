@@ -66,7 +66,7 @@ function FilterPill({
       {count != null && count > 0 && (
         <span
           className={cn(
-            "tabular-nums rounded-full px-1.5 py-0.5 text-[10px]",
+            "tabular-nums rounded-full px-1.5 py-0.5 text-[11px]",
             active ? "bg-primary/15" : "bg-muted"
           )}
         >

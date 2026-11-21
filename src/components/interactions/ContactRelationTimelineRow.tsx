@@ -414,7 +414,7 @@ export function ContactRelationTimelineRow({
               {entry.email_reponse_at && (
                 <Badge
                   variant="outline"
-                  className="text-[10px] h-5 px-1.5 border-emerald-200 text-emerald-800"
+                  className="text-[11px] h-5 px-1.5 border-emerald-200 text-emerald-800"
                 >
                   Répondu
                 </Badge>
@@ -550,7 +550,7 @@ export function ContactRelationTimelineRow({
             </Badge>
             <Badge
               variant="outline"
-              className={`text-[10px] h-5 px-1.5 ${
+              className={`text-[11px] h-5 px-1.5 ${
                 done
                   ? "border-emerald-200 text-emerald-800"
                   : "border-amber-200 text-amber-800"
@@ -606,7 +606,7 @@ export function ContactRelationTimelineRow({
       </div>
       <div className="flex shrink-0 gap-0.5">
         {onEdit && (
-          <Button
+          <Button type="button"
             variant="ghost"
             size="icon"
             className="h-8 w-8"
@@ -618,7 +618,7 @@ export function ContactRelationTimelineRow({
           </Button>
         )}
         {onDelete && (
-          <Button
+          <Button type="button"
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-destructive"

@@ -186,7 +186,7 @@ export function FoyerAddMemberModal({
                     </p>
                   )}
                   {contact.categorie && contact.categorie !== "AUCUN" && (
-                    <Badge variant="outline" className="text-[10px] mt-1.5">
+                    <Badge variant="outline" className="text-[11px] mt-1.5">
                       {contact.categorie}
                     </Badge>
                   )}

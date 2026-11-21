@@ -1,3 +1,4 @@
+import { ListSkeleton } from "@/components/ui/skeleton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -535,7 +536,7 @@ export function Suivi({ currentPage, onNavigate }: SuiviProps) {
                 ) : (
                   <div className="space-y-2">
                     {etiquettes.filter(e => e.contact_count > 0 && e.actif !== false).map((etiquette) => (
-                      <button
+                      <button type="button"
                         key={etiquette.id}
                         onClick={() => handleSelectEtiquette(etiquette)}
                         className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all text-left ${
@@ -613,9 +614,7 @@ export function Suivi({ currentPage, onNavigate }: SuiviProps) {
                     </p>
                   </div>
                 ) : loadingContacts ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    Chargement...
-                  </div>
+                  <ListSkeleton rows={4} rowClassName="h-12" />
                 ) : etiquetteContacts.length === 0 ? (
                   <div className="text-center py-8">
                     <Check className="h-12 w-12 mx-auto mb-4 text-green-600" />

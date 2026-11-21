@@ -108,7 +108,7 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
       description={description}
       action={
         onNavigate ? (
-          <Button
+          <Button type="button"
             variant="outline"
             size="sm"
             className="shrink-0 gap-1"

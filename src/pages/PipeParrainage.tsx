@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ParrainagePipeBoard } from "@/components/parrainage-pipe/ParrainagePipeBoard";
 import { ParrainagePipeDetailPanel } from "@/components/parrainage-pipe/ParrainagePipeDetailPanel";
 import {
@@ -170,7 +171,7 @@ export function PipeParrainage() {
             ))}
           </div>
         </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
+        <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
           <Plus className="size-4 mr-1.5" />
           Ajouter un contact
         </Button>
@@ -193,9 +194,7 @@ export function PipeParrainage() {
         ) : (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
             {loading && !loaded ? (
-              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                Chargement…
-              </div>
+              <div className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4" role="status" aria-label="Chargement">{Array.from({ length: 4 }, (_, i) => (<div key={i} className="space-y-2"><Skeleton className="h-6 w-2/3" /><Skeleton className="h-24 w-full rounded-xl" /><Skeleton className="h-24 w-full rounded-xl" /></div>))}</div>
             ) : (
               <>
                 <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-4 py-2">

@@ -188,15 +188,15 @@ function TreeNode({
                   {displayName}
                 </span>
                 {node.contact.categorie === "CLIENT" && (
-                  <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">Client</Badge>
+                  <Badge className="bg-emerald-100 text-emerald-800 text-[11px]">Client</Badge>
                 )}
                 {node.contact.categorie === "PRESCRIPTEUR" && (
-                  <Badge className="bg-violet-100 text-violet-800 text-[10px]">
+                  <Badge className="bg-violet-100 text-violet-800 text-[11px]">
                     Prescripteur
                   </Badge>
                 )}
                 {node.contact.filleul_categorie && (
-                  <Badge className="bg-amber-100 text-amber-800 text-[10px]">
+                  <Badge className="bg-amber-100 text-amber-800 text-[11px]">
                     {formatFilleulCategorie(node.contact.filleul_categorie)}
                   </Badge>
                 )}
@@ -205,7 +205,7 @@ function TreeNode({
                 {formatEuroCentimes(node.patrimoine)} avec moi
               </p>
               {hasChildren && (
-                <p className="text-[10px] text-muted-foreground mt-0.5">
+                <p className="text-[11px] text-muted-foreground mt-0.5">
                   {isExpanded ? "Replier la branche" : "Déplier la branche"}
                 </p>
               )}
@@ -216,7 +216,7 @@ function TreeNode({
             className="flex flex-row items-center gap-0.5 shrink-0"
             onClick={(e) => e.stopPropagation()}
           >
-            <Button
+            <Button type="button"
               variant="outline"
               size="sm"
               className="h-7 px-2 text-xs gap-1 shrink-0"
@@ -227,7 +227,7 @@ function TreeNode({
               <span className="hidden sm:inline">Fiche</span>
             </Button>
             {onAddClientRecommande && (
-              <Button
+              <Button type="button"
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 text-primary hover:text-primary"
@@ -238,7 +238,7 @@ function TreeNode({
               </Button>
             )}
             {onLinkClient && (
-              <Button
+              <Button type="button"
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 text-primary hover:text-primary"
@@ -249,7 +249,7 @@ function TreeNode({
               </Button>
             )}
             {node.investissements.length > 0 && (
-              <Button
+              <Button type="button"
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 text-xs"
@@ -264,7 +264,7 @@ function TreeNode({
               </Button>
             )}
             {canUnlink && (
-              <Button
+              <Button type="button"
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 text-amber-700 hover:text-amber-800 hover:bg-amber-50"
@@ -276,7 +276,7 @@ function TreeNode({
               </Button>
             )}
             {!isRoot && (
-              <Button
+              <Button type="button"
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
@@ -300,7 +300,7 @@ function TreeNode({
 
         {showInvestissements && node.investissements.length > 0 && (
           <div className="px-3 pb-3 pt-1 border-t border-dashed border-border/40 space-y-1.5 bg-background/30">
-            <p className="text-[10px] font-medium text-muted-foreground flex items-center gap-1">
+            <p className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
               <Wallet className="h-3 w-3" />
               Investissements
             </p>
@@ -314,7 +314,7 @@ function TreeNode({
               >
                 <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                   <Badge
-                    className="text-[10px] text-white px-1.5"
+                    className="text-[11px] text-white px-1.5"
                     style={{
                       backgroundColor: getTypeProduitBgColor(inv.type_produit, inv.origine),
                     }}
@@ -322,13 +322,13 @@ function TreeNode({
                     {inv.type_produit.replace(/_/g, " ")}
                   </Badge>
                   {inv.isCommun && (
-                    <span className="text-[10px] text-sky-700 font-medium">Commun</span>
+                    <span className="text-[11px] text-sky-700 font-medium">Commun</span>
                   )}
                   {inv.ownerName && !inv.isCommun && (
-                    <span className="text-[10px] text-muted-foreground">{inv.ownerName}</span>
+                    <span className="text-[11px] text-muted-foreground">{inv.ownerName}</span>
                   )}
                   {inv.date_souscription && (
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-[11px] text-muted-foreground">
                       {formatDate(inv.date_souscription)}
                     </span>
                   )}

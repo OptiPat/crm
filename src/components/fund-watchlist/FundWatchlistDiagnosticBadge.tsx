@@ -47,7 +47,7 @@ export function FundWatchlistDiagnosticBadge({ diagnostic, className, compact }:
         title={title}
         className={cn(
           "font-normal whitespace-nowrap",
-          compact ? "text-[10px] px-1.5 py-0" : "text-[11px]",
+          compact ? "text-[11px] px-1.5 py-0" : "text-[11px]",
           statusClass(diagnostic.status)
         )}
       >
@@ -64,7 +64,7 @@ export function FundWatchlistDiagnosticBadge({ diagnostic, className, compact }:
           title="Score court terme négatif — respiration de marché, sans alerte fondamentale"
           className={cn(
             "font-normal whitespace-nowrap border-sky-500/40 bg-sky-500/10 text-sky-900 dark:text-sky-200",
-            compact ? "text-[10px] px-1.5 py-0" : "text-[11px]"
+            compact ? "text-[11px] px-1.5 py-0" : "text-[11px]"
           )}
         >
           Respiration CT

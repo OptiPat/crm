@@ -214,7 +214,7 @@ export function ContactFilleulOrganisationExerciceSummaryPanel({
                   className="px-3 py-2 text-xs font-medium text-foreground text-right whitespace-nowrap border-l border-border/50 bg-muted/40"
                 >
                   Total
-                  <span className="block text-[10px] font-normal text-muted-foreground/80">
+                  <span className="block text-[11px] font-normal text-muted-foreground/80">
                     tous ex.
                   </span>
                 </th>

@@ -68,13 +68,13 @@ export function ExchangeHistoryListRow({
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             <span className="font-medium text-sm truncate">{name}</span>
-            <Badge variant="outline" className="text-[10px] h-5 px-1.5 shrink-0">
+            <Badge variant="outline" className="text-[11px] h-5 px-1.5 shrink-0">
               {typeLabel}
             </Badge>
             {isEmail && entry.email_reponse_at && (
               <Badge
                 variant="outline"
-                className="text-[10px] h-5 px-1.5 shrink-0 border-emerald-200 text-emerald-800"
+                className="text-[11px] h-5 px-1.5 shrink-0 border-emerald-200 text-emerald-800"
               >
                 Répondu
               </Badge>

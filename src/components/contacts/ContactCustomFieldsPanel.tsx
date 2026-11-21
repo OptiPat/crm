@@ -160,7 +160,7 @@ export function ContactCustomFieldsPanel({ contactId }: ContactCustomFieldsPanel
 
       {isDirty && (
         <div className="flex justify-end gap-2">
-          <Button
+          <Button type="button"
             variant="ghost"
             size="sm"
             onClick={() => setValues(initial)}
@@ -168,7 +168,7 @@ export function ContactCustomFieldsPanel({ contactId }: ContactCustomFieldsPanel
           >
             Annuler
           </Button>
-          <Button size="sm" onClick={() => void handleSave()} disabled={saving}>
+          <Button type="button" size="sm" onClick={() => void handleSave()} disabled={saving}>
             {saving ? "Enregistrement..." : "Enregistrer"}
           </Button>
         </div>

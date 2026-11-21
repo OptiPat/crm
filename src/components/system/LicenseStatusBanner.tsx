@@ -48,7 +48,7 @@ export function LicenseStatusBanner({ onOpenSettings }: LicenseStatusBannerProps
           <span>Licence expirée — l&apos;application est en lecture seule jusqu&apos;au renouvellement.</span>
         </div>
         {onOpenSettings && (
-          <Button size="sm" variant="outline" onClick={onOpenSettings}>
+          <Button type="button" size="sm" variant="outline" onClick={onOpenSettings}>
             Renouveler
           </Button>
         )}
@@ -67,7 +67,7 @@ export function LicenseStatusBanner({ onOpenSettings }: LicenseStatusBannerProps
           </span>
         </div>
         {onOpenSettings && (
-          <Button size="sm" variant="outline" onClick={onOpenSettings}>
+          <Button type="button" size="sm" variant="outline" onClick={onOpenSettings}>
             Voir la licence
           </Button>
         )}
@@ -83,7 +83,7 @@ export function LicenseStatusBanner({ onOpenSettings }: LicenseStatusBannerProps
           <span>Votre licence expire dans {status.days_remaining} jours.</span>
         </div>
         {onOpenSettings && (
-          <Button size="sm" variant="outline" onClick={onOpenSettings}>
+          <Button type="button" size="sm" variant="outline" onClick={onOpenSettings}>
             Voir la licence
           </Button>
         )}

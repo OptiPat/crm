@@ -179,7 +179,7 @@ export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
           ) : null}
         </CardContent>
         <CardFooter className="flex justify-end">
-          <Button onClick={() => void handleFinish()} disabled={loading} className="gap-2">
+          <Button type="button" onClick={() => void handleFinish()} disabled={loading} className="gap-2">
             {loading ? (
               "Enregistrement..."
             ) : (

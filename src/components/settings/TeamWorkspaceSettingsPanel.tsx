@@ -907,7 +907,7 @@ export function TeamWorkspaceSettingsPanel() {
                   <dt className="text-muted-foreground">Enregistrements</dt>
                   <dd className="font-mono">{migrationPreview.totalRecords}</dd>
                   <dt className="text-muted-foreground">
-                    Empreinte de contrôle <span className="text-[10px]">(checksum SHA-256)</span>
+                    Empreinte de contrôle <span className="text-[11px]">(checksum SHA-256)</span>
                   </dt>
                   <dd className="font-mono break-all col-span-1">{migrationPreview.checksumSha256}</dd>
                 </dl>

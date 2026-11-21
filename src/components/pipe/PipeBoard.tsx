@@ -200,7 +200,7 @@ export function PipeBoard({
           <Badge
             variant="secondary"
             className={cn(
-              "h-5 min-w-5 shrink-0 justify-center px-1 font-normal tabular-nums text-[10px]",
+              "h-5 min-w-5 shrink-0 justify-center px-1 font-normal tabular-nums text-[11px]",
               colors.badge
             )}
           >
@@ -210,7 +210,7 @@ export function PipeBoard({
 
         <div className="min-h-[72px] flex-1 space-y-1.5 overflow-y-auto p-1 sm:space-y-2 sm:p-1.5">
           {list.length === 0 ? (
-            <p className="px-0.5 py-4 text-center text-[10px] text-muted-foreground sm:text-xs">
+            <p className="px-0.5 py-4 text-center text-[11px] text-muted-foreground sm:text-xs">
               {dropAllowed
                 ? isPipeBoardRdvDropTargetColumn(column)
                   ? "RDV ici"
@@ -249,15 +249,15 @@ export function PipeBoard({
                       <p className="text-[11px] font-medium leading-snug line-clamp-2 sm:text-xs">
                         {pipe.titre}
                       </p>
-                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground sm:text-[11px]">
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground sm:text-[11px]">
                         {formatPipeParticipantsLabel(pipe)}
                       </p>
-                      <p className="mt-0.5 text-[9px] text-muted-foreground/80 sm:text-[10px]">
+                      <p className="mt-0.5 text-[11px] text-muted-foreground/80 sm:text-[11px]">
                         {formatUpdatedAt(pipe.updated_at)}
                       </p>
                       {showEtude ? (
                         <div
-                          className="mt-1.5 flex items-center gap-1.5 overflow-visible text-[10px] leading-normal text-muted-foreground"
+                          className="mt-1.5 flex items-center gap-1.5 overflow-visible text-[11px] leading-normal text-muted-foreground"
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => event.stopPropagation()}
                         >

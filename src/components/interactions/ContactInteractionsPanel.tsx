@@ -585,7 +585,7 @@ export function ContactInteractionsPanel({
               </CardDescription>
             </div>
             <div className="flex flex-col items-end gap-2 shrink-0">
-              <Button
+              <Button type="button"
                 size="sm"
                 variant="outline"
                 className="gap-1"
@@ -606,7 +606,7 @@ export function ContactInteractionsPanel({
                 )}
                 Sync boîte mail
               </Button>
-              <Button
+              <Button type="button"
                 size="sm"
                 className="gap-1"
                 onClick={() => {
@@ -742,7 +742,7 @@ export function ContactInteractionsPanel({
                     : "Les envois campagne apparaissent après envoi ; cliquez sur « Sync boîte mail » pour voir les emails."}
               </p>
               {(filter !== "all" || searchQuery.trim()) && timeline.length > 0 && (
-                <Button
+                <Button type="button"
                   size="sm"
                   variant="outline"
                   className="mb-2"
@@ -755,7 +755,7 @@ export function ContactInteractionsPanel({
                 </Button>
               )}
               <div className="flex flex-wrap justify-center gap-2">
-                <Button
+                <Button type="button"
                   size="sm"
                   variant="outline"
                   onClick={() => {
@@ -767,7 +767,7 @@ export function ContactInteractionsPanel({
                   Premier échange
                 </Button>
                 {onNavigate && relationStatus && relationStatus.open_alertes.length > 0 && (
-                  <Button size="sm" variant="ghost" onClick={goToSuiviAlertes}>
+                  <Button type="button" size="sm" variant="ghost" onClick={goToSuiviAlertes}>
                     Voir l&apos;alerte
                     <ArrowRight className="h-4 w-4 ml-1" />
                   </Button>

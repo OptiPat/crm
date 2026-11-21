@@ -133,14 +133,14 @@ export function DocumentEditDialog({
         </div>
 
         <DialogFooter>
-          <Button
+          <Button type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={saving}
           >
             Annuler
           </Button>
-          <Button onClick={() => void handleSave()} disabled={saving || !doc}>
+          <Button type="button" onClick={() => void handleSave()} disabled={saving || !doc}>
             {saving ? "Enregistrement…" : "Enregistrer"}
           </Button>
         </DialogFooter>

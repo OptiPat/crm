@@ -116,7 +116,7 @@ function R3ImmoChecklistItemRow({
             <p className="text-xs text-muted-foreground leading-snug">{def.hint}</p>
           ) : null}
           {visibilityReason ? (
-            <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0 h-5">
+            <Badge variant="outline" className="text-[11px] font-normal px-1.5 py-0 h-5">
               {visibilityReason}
             </Badge>
           ) : null}
@@ -459,7 +459,7 @@ export function PipeR3ImmoDocumentChecklist({
                     <span className="text-xs font-semibold text-foreground/90 flex-1 min-w-0 truncate">
                       {section}
                     </span>
-                    <Badge variant="outline" className="tabular-nums text-[10px] shrink-0">
+                    <Badge variant="outline" className="tabular-nums text-[11px] shrink-0">
                       {sectionProgress.received}/{sectionProgress.total}
                     </Badge>
                   </button>

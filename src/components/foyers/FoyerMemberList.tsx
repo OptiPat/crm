@@ -46,7 +46,7 @@ function MemberInvestments({ membre }: { membre: MemberWithInvestments }) {
         >
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
             <Badge
-              className="text-[10px] text-white px-1.5 py-0 shrink-0"
+              className="text-[11px] text-white px-1.5 py-0 shrink-0"
               style={{
                 backgroundColor: getTypeProduitBgColor(inv.type_produit, inv.origine),
               }}
@@ -60,10 +60,10 @@ function MemberInvestments({ membre }: { membre: MemberWithInvestments }) {
                 <span className="font-medium truncate text-xs">{inv.nom_produit}</span>
               )}
             {inv.isCommun && (
-              <span className="text-[10px] text-sky-700 font-medium">Commun</span>
+              <span className="text-[11px] text-sky-700 font-medium">Commun</span>
             )}
             {inv.date_souscription && (
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[11px] text-muted-foreground">
                 {formatDate(inv.date_souscription)}
               </span>
             )}
@@ -118,7 +118,7 @@ function MemberCard({
             </div>
             <p className="text-sm font-medium text-primary tabular-nums mt-1.5">
               {formatEuroCentimes(membre.avecMoiTotal)}
-              <span className="text-[10px] font-normal text-muted-foreground ml-1">
+              <span className="text-[11px] font-normal text-muted-foreground ml-1">
                 avec moi
               </span>
               {membre.patrimoine > membre.avecMoiTotal && (

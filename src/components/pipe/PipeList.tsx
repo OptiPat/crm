@@ -81,7 +81,7 @@ export function PipeList({
             <div className="flex flex-wrap items-center gap-1.5 mb-1">
               <PipeTypeBadge pipeType={pipe.pipe_type} />
               {isPipeArchived(pipe) ? (
-                <Badge variant="secondary" className="text-[10px] font-normal">
+                <Badge variant="secondary" className="text-[11px] font-normal">
                   Archivé
                 </Badge>
               ) : null}

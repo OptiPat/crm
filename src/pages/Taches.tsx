@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, ListTodo } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ListSkeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -426,7 +427,7 @@ export function Taches({ onNavigate }: TachesProps) {
       />
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Chargement…</p>
+        <ListSkeleton rows={5} rowClassName="h-14" />
       ) : loadError && taches.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-10 text-center space-y-3">
           <p className="text-sm text-destructive">Impossible de charger les tâches.</p>

@@ -228,7 +228,7 @@ export function ExceltisEtiquetteCreateDialog({
                     {opt.label}
                     <span className="text-muted-foreground ml-1">(M+{opt.offset})</span>
                     {exists && (
-                      <span className="block text-[10px] text-muted-foreground">Existe</span>
+                      <span className="block text-[11px] text-muted-foreground">Existe</span>
                     )}
                   </button>
                 );

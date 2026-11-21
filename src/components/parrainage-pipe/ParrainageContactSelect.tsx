@@ -122,7 +122,7 @@ export function ParrainageContactSelect({
                     <span>
                       {c.prenom} {c.nom}
                       {c.filleul_categorie ? (
-                        <span className="ml-1.5 text-[10px] text-muted-foreground">
+                        <span className="ml-1.5 text-[11px] text-muted-foreground">
                           ({c.filleul_categorie.replace(/_/g, " ").toLowerCase()})
                         </span>
                       ) : null}

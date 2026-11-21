@@ -258,11 +258,11 @@ export function InteractionsEmptyState({
       <p className="text-muted-foreground mb-4">{message}</p>
       <div className="flex flex-wrap justify-center gap-2">
         {variant === "filtered" && onClearFilters && (
-          <Button variant="outline" onClick={onClearFilters}>
+          <Button type="button" variant="outline" onClick={onClearFilters}>
             Réinitialiser les filtres
           </Button>
         )}
-        <Button onClick={onNewInteraction}>
+        <Button type="button" onClick={onNewInteraction}>
           Nouvelle interaction
         </Button>
       </div>

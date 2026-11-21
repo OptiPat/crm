@@ -204,7 +204,7 @@ export function ExtractedDataPreviewAdvanced({
     }
     if (status === "warn") {
       return (
-        <span className="ml-1.5 inline-flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-amber-100 text-[10px] font-semibold text-amber-800">
+        <span className="ml-1.5 inline-flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-amber-100 text-[11px] font-semibold text-amber-800">
           !
         </span>
       );

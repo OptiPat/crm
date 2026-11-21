@@ -495,7 +495,7 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
             currentPage={currentPage}
           />
           <span className="hidden sm:block h-4 w-px bg-border/80" aria-hidden />
-          <Button
+          <Button type="button"
             variant="outline"
             size="sm"
             className="gap-2"
@@ -515,14 +515,14 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
             </PopoverTrigger>
             <PopoverContent align="end" className="w-64 p-2">
               <div className="flex flex-col gap-1">
-                <Button
+                <Button type="button"
                   variant="ghost"
                   className="justify-start"
                   onClick={() => openCreateForm("permanent")}
                 >
                   Nouveau modèle permanent
                 </Button>
-                <Button
+                <Button type="button"
                   variant="ghost"
                   className="justify-start"
                   onClick={() => openCreateForm("ephemeral")}
@@ -636,7 +636,7 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
             ) : templates.length === 0 ? (
               <div className="text-center py-10 space-y-3">
                 <p className="text-sm text-muted-foreground">Aucun modèle pour le moment.</p>
-                <Button
+                <Button type="button"
                   variant="outline"
                   size="sm"
                   disabled={seeding}

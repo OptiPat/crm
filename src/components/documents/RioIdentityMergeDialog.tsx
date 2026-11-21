@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 
@@ -19,6 +20,23 @@ export function RioIdentityMergeDialog({
   onConfirm,
   onCancel,
 }: RioIdentityMergeDialogProps) {
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const visible = open && message != null;
+
+  useEffect(() => {
+    if (!visible) return;
+    confirmRef.current?.focus();
+    // Capture : Échap ferme ce calque sans fermer le Dialog parent (wizard RIO).
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      onCancel();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [visible, onCancel]);
+
   if (!open || message == null || typeof document === "undefined") {
     return null;
   }
@@ -49,7 +67,7 @@ export function RioIdentityMergeDialog({
           <Button type="button" variant="outline" onClick={onCancel}>
             Créer une nouvelle fiche
           </Button>
-          <Button type="button" onClick={onConfirm}>
+          <Button ref={confirmRef} type="button" onClick={onConfirm}>
             Fusionner
           </Button>
         </div>

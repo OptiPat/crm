@@ -133,7 +133,7 @@ export function ContactListRow({
           </p>
           {showPrioriteLabel && (
             <span
-              className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground"
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground"
               title={priorite.label}
             >
               <span className={cn("h-2 w-2 rounded-full shrink-0", priorite.dotClass)} />

@@ -23,7 +23,7 @@ export function InteractionsPageHeader({
           <span className="tabular-nums">{filteredCount} dans la vue actuelle</span>
         </p>
       </div>
-      <Button className="gap-2 shrink-0" onClick={onNewInteraction}>
+      <Button type="button" className="gap-2 shrink-0" onClick={onNewInteraction}>
         <Plus className="h-4 w-4" />
         Nouvelle interaction
       </Button>

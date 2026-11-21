@@ -166,10 +166,10 @@ export function EtiquetteBatchSendDialog({
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Annuler
           </Button>
-          <Button
+          <Button type="button"
             disabled={running || sendCount === 0 || isEtiquetteEmailSendActive()}
             onClick={() => void start()}
           >

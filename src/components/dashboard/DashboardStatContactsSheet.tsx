@@ -155,7 +155,7 @@ export function DashboardStatContactsSheet({
                         ) : null}
                         <span
                           className={cn(
-                            "inline-flex mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded",
+                            "inline-flex mt-1 text-[11px] font-medium px-1.5 py-0.5 rounded",
                             getDisplayCategorieBadgeClass(
                               contact.filleul_categorie ?? contact.categorie
                             )

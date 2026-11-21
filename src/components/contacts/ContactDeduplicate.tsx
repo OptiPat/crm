@@ -269,25 +269,25 @@ export function ContactDeduplicate({ open, onOpenChange, onSuccess }: ContactDed
         <DialogFooter>
           {phase === "intro" && (
             <>
-              <Button variant="outline" onClick={handleClose}>
+              <Button type="button" variant="outline" onClick={handleClose}>
                 Annuler
               </Button>
-              <Button onClick={handleStart} disabled={working}>
+              <Button type="button" onClick={handleStart} disabled={working}>
                 {working ? "Analyse…" : "Analyser et fusionner les doublons"}
               </Button>
             </>
           )}
           {phase === "review" && currentReview && (
             <>
-              <Button variant="outline" onClick={handleReviewSkip} disabled={working}>
+              <Button type="button" variant="outline" onClick={handleReviewSkip} disabled={working}>
                 Non, homonymes distincts
               </Button>
-              <Button onClick={handleReviewMerge} disabled={working}>
+              <Button type="button" onClick={handleReviewMerge} disabled={working}>
                 {working ? "Fusion..." : "Oui, fusionner"}
               </Button>
             </>
           )}
-          {phase === "done" && <Button onClick={handleClose}>Fermer et actualiser</Button>}
+          {phase === "done" && <Button type="button" onClick={handleClose}>Fermer et actualiser</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

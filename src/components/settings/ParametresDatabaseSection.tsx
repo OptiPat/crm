@@ -377,7 +377,7 @@ export function ParametresDatabaseSection({
                 {dbPath || "Chargement…"}
               </p>
             </div>
-            <Button
+            <Button type="button"
               variant="outline"
               size="sm"
               className="gap-2"
@@ -411,7 +411,7 @@ export function ParametresDatabaseSection({
                 mais la connexion à votre messagerie et les clés API doivent être refaites.
               </Explainer>
             </div>
-            <Button
+            <Button type="button"
               variant="default"
               size="sm"
               className="gap-2"
@@ -578,14 +578,14 @@ export function ParametresDatabaseSection({
               />
             </div>
             <div className="flex gap-2">
-              <Button
+              <Button type="button"
                 onClick={() => void handleSearchContacts()}
                 disabled={searching || !searchQuery.trim()}
               >
                 {searching ? "Recherche…" : "Rechercher"}
               </Button>
               {searchResults.length > 0 && (
-                <Button
+                <Button type="button"
                   variant="ghost"
                   size="icon"
                   onClick={() => {
@@ -617,7 +617,7 @@ export function ParametresDatabaseSection({
                       {contact.email ? ` · ${contact.email}` : ""}
                     </p>
                   </div>
-                  <Button
+                  <Button type="button"
                     variant="ghost"
                     size="sm"
                     className="text-destructive hover:bg-destructive/10 shrink-0"
@@ -653,7 +653,7 @@ export function ParametresDatabaseSection({
             <li>Utile après des imports ratés ou des tests</li>
             <li>Action irréversible sur ces lignes fantômes uniquement</li>
           </ul>
-          <Button
+          <Button type="button"
             variant="outline"
             size="sm"
             className="border-amber-300"

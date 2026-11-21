@@ -402,7 +402,7 @@ export function Interactions({ onNavigate }: InteractionsProps) {
           {loadError ? (
             <div className="text-center py-8 space-y-3">
               <p className="text-destructive text-sm">{loadError}</p>
-              <Button variant="outline" onClick={() => void load()}>
+              <Button type="button" variant="outline" onClick={() => void load()}>
                 Réessayer
               </Button>
             </div>

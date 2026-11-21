@@ -339,7 +339,7 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
         >
           <Underline className="h-4 w-4" />
         </Button>
-        <span className="mx-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <span className="mx-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
           px
         </span>
         {FONT_SIZE_OPTIONS.map((opt) => (
@@ -414,7 +414,7 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
           <>
             <span className="mx-0.5 h-5 w-px bg-border" />
             <span
-              className="px-0.5 text-[10px] font-semibold text-muted-foreground"
+              className="px-0.5 text-[11px] font-semibold text-muted-foreground"
               title="Couleur du texte (sélectionnez du texte d'abord)"
             >
               A
@@ -442,7 +442,7 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
               <Eraser className="h-3 w-3" />
             </button>
             <span
-              className="px-0.5 text-[10px] font-semibold text-muted-foreground"
+              className="px-0.5 text-[11px] font-semibold text-muted-foreground"
               title="Surlignage (sélectionnez du texte d'abord)"
             >
               ▮

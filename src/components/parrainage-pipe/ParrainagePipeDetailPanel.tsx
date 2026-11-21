@@ -61,7 +61,7 @@ function ParrainagePipeTimelineEntryItem({ entry }: { entry: ParrainagePipeTimel
             : entry.contenu}
         </p>
       )}
-      <p className="text-[10px] text-muted-foreground mt-1">
+      <p className="text-[11px] text-muted-foreground mt-1">
         {new Date(entry.occurred_at * 1000).toLocaleString("fr-FR")}
       </p>
     </li>
@@ -437,7 +437,7 @@ export function ParrainagePipeDetailPanel({
       </div>
 
       <div className="border-t border-border/60 p-3">
-        <Button variant="destructive" size="sm" onClick={() => void handleDelete()} disabled={saving}>
+        <Button type="button" variant="destructive" size="sm" onClick={() => void handleDelete()} disabled={saving}>
           <Trash2 className="size-4 mr-2" />
           Retirer du pipe
         </Button>

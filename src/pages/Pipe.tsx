@@ -1,3 +1,4 @@
+import { ListSkeleton, Skeleton } from "@/components/ui/skeleton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Briefcase, ClipboardList } from "lucide-react";
 import { listPipes, getPipeById, setPipeEtudeRealisee, type PipeRecord } from "@/lib/api/tauri-pipe";
@@ -975,7 +976,7 @@ export function Pipe() {
             )}
           >
             {loading || (section === "suivi_stellium" && placementBoardLoading) ? (
-              <p className="px-4 py-6 text-sm text-muted-foreground">Chargement…</p>
+              <div className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4" role="status" aria-label="Chargement">{Array.from({ length: 4 }, (_, i) => (<div key={i} className="space-y-2"><Skeleton className="h-6 w-2/3" /><Skeleton className="h-24 w-full rounded-xl" /><Skeleton className="h-24 w-full rounded-xl" /></div>))}</div>
             ) : section === "suivi_stellium" ? (
               <PipePlacementBoard
                 rows={placementBoardRows}
@@ -1054,7 +1055,7 @@ export function Pipe() {
 
             <div className="flex-1 overflow-y-auto min-h-0">
               {loading ? (
-                <p className="px-4 py-6 text-sm text-muted-foreground">Chargement…</p>
+                <ListSkeleton className="px-4" rows={6} rowClassName="h-14" />
               ) : (
                 <PipeList
                   pipes={filteredListPipes}

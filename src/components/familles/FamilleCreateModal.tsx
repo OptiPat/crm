@@ -153,10 +153,10 @@ export function FamilleCreateModal({
         </div>
 
         <DialogFooter className="shrink-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Annuler
           </Button>
-          <Button onClick={() => void handleCreate()} disabled={saving}>
+          <Button type="button" onClick={() => void handleCreate()} disabled={saving}>
             Créer
           </Button>
         </DialogFooter>

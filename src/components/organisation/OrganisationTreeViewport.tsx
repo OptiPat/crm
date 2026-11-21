@@ -316,7 +316,7 @@ export const OrganisationTreeViewport = forwardRef<
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 px-1.5 text-[10px] tabular-nums text-muted-foreground min-w-[2.25rem]"
+          className="h-7 px-1.5 text-[11px] tabular-nums text-muted-foreground min-w-[2.25rem]"
           title="Taille réelle (100 %)"
           onClick={applyZoom100}
         >

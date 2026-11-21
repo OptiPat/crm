@@ -52,7 +52,7 @@ export function DocumentRowActions({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
+        <Button type="button"
           variant="outline"
           size="icon"
           title="Actions"

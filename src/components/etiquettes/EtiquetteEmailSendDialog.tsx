@@ -295,7 +295,7 @@ export function EtiquetteEmailSendDialog({
           <Button type="button" variant="outline" onClick={closeGuard.requestClose}>
             Annuler
           </Button>
-          <Button
+          <Button type="button"
             onClick={handleSend}
             onMouseDown={(e) => e.preventDefault()}
             disabled={sendBlocked || !subject.trim() || !messageReady || !item?.contact_email}

@@ -76,7 +76,7 @@ function VariableChip({
     onInsert(variable.token, field);
   };
   const code = (
-    <span className="ml-1 shrink-0 font-mono text-[9px] font-normal text-muted-foreground group-hover:text-primary-foreground/80">
+    <span className="ml-1 shrink-0 font-mono text-[11px] font-normal text-muted-foreground group-hover:text-primary-foreground/80">
       {variable.token}
     </span>
   );
@@ -85,7 +85,7 @@ function VariableChip({
     return (
       <button
         type="button"
-        className={`group inline-flex h-5 max-w-[22rem] shrink-0 cursor-pointer items-center rounded border bg-background px-1.5 text-[10px] font-medium leading-none hover:bg-primary hover:text-primary-foreground ${accent}`}
+        className={`group inline-flex h-5 max-w-[22rem] shrink-0 cursor-pointer items-center rounded border bg-background px-1.5 text-[11px] font-medium leading-none hover:bg-primary hover:text-primary-foreground ${accent}`}
         title={`${tooltip}\n→ message (HTML, corps uniquement)`}
         onMouseDown={(event) => {
           event.preventDefault();
@@ -95,7 +95,7 @@ function VariableChip({
       >
         <span className="min-w-0 truncate">{variable.label}</span>
         {code}
-        <span className="ml-1 shrink-0 rounded bg-muted px-1 text-[9px] font-normal text-muted-foreground">
+        <span className="ml-1 shrink-0 rounded bg-muted px-1 text-[11px] font-normal text-muted-foreground">
           HTML
         </span>
       </button>
@@ -106,7 +106,7 @@ function VariableChip({
     <span className="inline-flex shrink-0">
       <button
         type="button"
-        className={`group inline-flex h-5 max-w-[22rem] cursor-pointer items-center rounded-l border border-r-0 bg-background px-1.5 text-[10px] font-medium leading-none hover:bg-primary hover:text-primary-foreground ${accent}`}
+        className={`group inline-flex h-5 max-w-[22rem] cursor-pointer items-center rounded-l border border-r-0 bg-background px-1.5 text-[11px] font-medium leading-none hover:bg-primary hover:text-primary-foreground ${accent}`}
         title={`${tooltip}\n→ message`}
         onMouseDown={(event) => {
           event.preventDefault();
@@ -119,7 +119,7 @@ function VariableChip({
       </button>
       <button
         type="button"
-        className="inline-flex h-5 cursor-pointer items-center rounded-r border bg-muted/60 px-1 text-[9px] leading-none text-muted-foreground hover:bg-muted"
+        className="inline-flex h-5 cursor-pointer items-center rounded-r border bg-muted/60 px-1 text-[11px] leading-none text-muted-foreground hover:bg-muted"
         title={`${variable.token} → objet`}
         onMouseDown={(event) => {
           event.preventDefault();
@@ -177,7 +177,7 @@ function VariableGroupRow({
   return (
     <div className="flex gap-2">
       <span
-        className={`w-[7.5rem] shrink-0 pt-0.5 text-[10px] font-medium leading-tight ${
+        className={`w-[7.5rem] shrink-0 pt-0.5 text-[11px] font-medium leading-tight ${
           section.muted ? "text-muted-foreground/70" : "text-muted-foreground"
         }`}
         title={section.hint}
@@ -269,7 +269,7 @@ export function TemplateEmailVariablePicker({
       {searchResults != null ? (
         <div className="flex flex-wrap gap-1">
           {searchResults.length === 0 ? (
-            <p className="text-[10px] text-muted-foreground">Aucune variable.</p>
+            <p className="text-[11px] text-muted-foreground">Aucune variable.</p>
           ) : (
             searchResults.map((v) => (
               <VariableChip key={v.token} variable={v} groupId={v.group} onInsert={onInsert} />
@@ -284,7 +284,7 @@ export function TemplateEmailVariablePicker({
 
           {otherDisplay.length > 0 && (
             <>
-              <p className="pt-0.5 text-[10px] font-medium text-muted-foreground/80">
+              <p className="pt-0.5 text-[11px] font-medium text-muted-foreground/80">
                 Autres (hors contexte du modèle)
               </p>
               {otherDisplay.map((section) => (
@@ -295,7 +295,7 @@ export function TemplateEmailVariablePicker({
         </div>
       )}
 
-      <p className="text-[10px] leading-tight text-muted-foreground">
+      <p className="text-[11px] leading-tight text-muted-foreground">
         Clic → message · « + objet » → objet
         {showStelliumHint ? " · Stellium : chiffres à la préparation" : ""}
       </p>

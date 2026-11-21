@@ -105,7 +105,7 @@ export function EtiquettePipelineBoard({
                       {c.contact_prenom} {c.contact_nom}
                     </button>
                     {status !== "TERMINE" && (
-                      <Button
+                      <Button type="button"
                         size="icon"
                         variant="ghost"
                         className="h-7 w-7 shrink-0"

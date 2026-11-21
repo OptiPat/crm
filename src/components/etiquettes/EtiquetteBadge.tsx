@@ -68,7 +68,7 @@ export function EtiquetteBadge({
       <span className="min-w-0 whitespace-normal break-words text-left leading-snug">
         {nom}
         {attribuePar && (
-          <span className="opacity-75 font-normal text-[10px] ml-1">
+          <span className="opacity-75 font-normal text-[11px] ml-1">
             {attribuePar === "AUTO" ? "· auto" : "· manuel"}
           </span>
         )}

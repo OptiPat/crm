@@ -305,7 +305,7 @@ export function OrganisationObjectifTablePanel({
               </label>
             </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
             <AssumptionField
               id="objectif-croissance-input"
               label="Croissance visée"

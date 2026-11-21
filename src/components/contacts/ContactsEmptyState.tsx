@@ -49,7 +49,7 @@ export function ContactsEmptyState({
           Modifiez la recherche ou retirez un filtre.
         </p>
         {onClearFilters ? (
-          <Button variant="outline" className="mt-4" onClick={onClearFilters}>
+          <Button type="button" variant="outline" className="mt-4" onClick={onClearFilters}>
             Effacer la recherche et les filtres
           </Button>
         ) : null}
@@ -69,11 +69,11 @@ export function ContactsEmptyState({
         Créez un contact ou importez une liste pour commencer.
       </p>
       <div className="flex flex-wrap justify-center gap-2">
-        <Button className="gap-2" onClick={onCreate}>
+        <Button type="button" className="gap-2" onClick={onCreate}>
           <Plus className="h-4 w-4" />
           Nouveau contact
         </Button>
-        <Button variant="outline" className="gap-2" onClick={onImport}>
+        <Button type="button" variant="outline" className="gap-2" onClick={onImport}>
           <FileUp className="h-4 w-4" />
           Importer
         </Button>

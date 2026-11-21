@@ -83,7 +83,7 @@ export function FamilleSummaryCard({
                   prenom={m.contact.prenom}
                   nom={m.contact.nom}
                   className={cn(
-                    "h-7 w-7 text-[10px] ring-2 ring-card",
+                    "h-7 w-7 text-[11px] ring-2 ring-card",
                     compact && "h-6 w-6"
                   )}
                 />
@@ -115,11 +115,11 @@ export function FamilleSummaryCard({
             <p className="text-sm font-semibold text-primary tabular-nums leading-tight">
               {formatEuroCentimes(famille.patrimoineAvecMoi)}
             </p>
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mt-0.5">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground mt-0.5">
               avec moi
             </p>
             {famille.patrimoineTotal > famille.patrimoineAvecMoi && (
-              <p className="text-[10px] text-muted-foreground/80 tabular-nums mt-0.5">
+              <p className="text-[11px] text-muted-foreground/80 tabular-nums mt-0.5">
                 {formatEuroCentimes(famille.patrimoineTotal)} total
               </p>
             )}

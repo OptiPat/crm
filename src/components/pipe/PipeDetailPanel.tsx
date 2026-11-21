@@ -481,7 +481,7 @@ export function PipeDetailPanel({
               {timeline.entries.length > 0 && (
                 <Badge
                   variant="secondary"
-                  className="h-5 min-w-5 px-1.5 font-normal tabular-nums text-[10px]"
+                  className="h-5 min-w-5 px-1.5 font-normal tabular-nums text-[11px]"
                 >
                   {timeline.entries.length}
                 </Badge>

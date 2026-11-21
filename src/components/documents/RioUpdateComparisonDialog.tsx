@@ -1651,18 +1651,18 @@ export function RioUpdateComparisonDialog({
 
       <div className={`flex flex-wrap items-center justify-between gap-2 shrink-0 ${embedded ? "pt-4 border-t mt-4" : "border-t pt-4"}`}>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={handleSelectAll} disabled={loading}>
+          <Button type="button" variant="outline" size="sm" onClick={handleSelectAll} disabled={loading}>
             Tout sélectionner
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleDeselectAll} disabled={loading}>
+          <Button type="button" variant="ghost" size="sm" onClick={handleDeselectAll} disabled={loading}>
             Tout désélectionner
           </Button>
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={onCancel} disabled={saving}>
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={saving}>
             {embedded ? "Retour" : "Annuler"}
           </Button>
-          <Button onClick={handleApply} disabled={loading || saving}>
+          <Button type="button" onClick={handleApply} disabled={loading || saving}>
             {saving ? (
               <>
                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" />

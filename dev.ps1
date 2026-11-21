@@ -28,13 +28,13 @@ if ($licenseEnvLoaded) {
 
 Write-Host '=== Patrimoine CRM - mode dev ===' -ForegroundColor Cyan
 
-$proc = netstat -ano 2>$null | Select-String ':1420\s' | ForEach-Object {
+$proc = netstat -ano 2>$null | Select-String ':1420\s.*LISTENING' | ForEach-Object {
     ($_ -split '\s+')[-1]
 } | Where-Object { $_ -match '^\d+$' -and $_ -ne '0' } | Select-Object -First 1
 
 if ($proc) {
     Write-Host "Port 1420 occupe (PID $proc) -> arret..." -ForegroundColor Yellow
-    taskkill /F /PID $proc 2>$null | Out-Null
+    try { taskkill /F /PID $proc 2>$null | Out-Null } catch { }
     Start-Sleep -Seconds 1
 }
 

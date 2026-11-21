@@ -42,7 +42,7 @@ export function SuiviAlertesFilters({
             <Badge
               variant={selected ? "secondary" : "outline"}
               className={cn(
-                "h-5 min-w-[1.25rem] px-1.5 text-[10px] tabular-nums",
+                "h-5 min-w-[1.25rem] px-1.5 text-[11px] tabular-nums",
                 selected && "bg-primary-foreground/20 text-primary-foreground border-0"
               )}
             >

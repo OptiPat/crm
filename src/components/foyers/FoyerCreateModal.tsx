@@ -247,7 +247,7 @@ export function FoyerCreateModal({
                     </Select>
 
                     {member.contact.id !== currentContact.id && (
-                      <Button
+                      <Button type="button"
                         variant="ghost"
                         size="icon"
                         aria-label="Retirer ce membre du foyer"
@@ -309,10 +309,10 @@ export function FoyerCreateModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Annuler
           </Button>
-          <Button onClick={handleSubmit} disabled={loading}>
+          <Button type="button" onClick={handleSubmit} disabled={loading}>
             {loading ? "Création..." : "Créer le foyer"}
           </Button>
         </DialogFooter>

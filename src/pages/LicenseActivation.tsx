@@ -153,7 +153,7 @@ export function LicenseActivation({ onComplete }: LicenseActivationProps) {
                     sera demandée lorsque la facturation sera en place.
                   </p>
                 </div>
-                <Button
+                <Button type="button"
                   className="w-full"
                   size="lg"
                   disabled={loading || !emailValid}
@@ -172,7 +172,7 @@ export function LicenseActivation({ onComplete }: LicenseActivationProps) {
                     placeholder="ANNU-2706-XXXX-XXXX"
                   />
                 </div>
-                <Button
+                <Button type="button"
                   className="w-full"
                   size="lg"
                   disabled={loading || !emailValid || licenseKey.trim().length < 10}

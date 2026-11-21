@@ -202,7 +202,7 @@ function TemplateActivationBadge({
     <span
       title={title}
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
         className
       )}
     >
@@ -322,7 +322,7 @@ export function TemplatePreviewActivationStatus({
         <div className="flex flex-wrap gap-1.5">
           {linkedEtiquettes.map((e) => {
             const chipClassName =
-              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border transition-colors";
+              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium border transition-colors";
             const chipStyle = {
               borderColor: `${e.couleur}55`,
               backgroundColor: `${e.couleur}18`,
@@ -572,7 +572,7 @@ export function TemplateListRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <span className="font-medium truncate">{template.nom}</span>
-            <Badge className={cn("text-[10px]", meta.badgeClass)}>{meta.label}</Badge>
+            <Badge className={cn("text-[11px]", meta.badgeClass)}>{meta.label}</Badge>
           </div>
           <p className="text-xs text-muted-foreground line-clamp-1 mb-1.5">
             {template.sujet || "—"}

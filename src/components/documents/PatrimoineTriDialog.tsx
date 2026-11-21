@@ -391,7 +391,7 @@ export function PatrimoineTriDialog({
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-lg font-bold text-primary">{formatEuro(item.montant)}</p>
               {hasPatrimoineCredit(item) && (
-                <Badge variant="outline" className="border-orange-300 bg-orange-50 text-orange-900 text-[10px]">
+                <Badge variant="outline" className="border-orange-300 bg-orange-50 text-orange-900 text-[11px]">
                   Crédit
                 </Badge>
               )}
@@ -401,7 +401,7 @@ export function PatrimoineTriDialog({
       </div>
 
       <div className="flex gap-2">
-        <Button
+        <Button type="button"
           variant={item.origine === "MON_CONSEIL" ? "default" : "outline"}
           size="sm"
           className={`flex-1 ${item.origine === "MON_CONSEIL" ? "bg-green-600 hover:bg-green-700" : ""}`}
@@ -410,7 +410,7 @@ export function PatrimoineTriDialog({
           <CheckCircle2 className="h-4 w-4 mr-2" />
           Avec moi
         </Button>
-        <Button
+        <Button type="button"
           variant={item.origine === "EXISTANT_CLIENT" ? "default" : "outline"}
           size="sm"
           className={`flex-1 ${item.origine === "EXISTANT_CLIENT" ? "bg-gray-600 hover:bg-gray-700" : ""}`}
@@ -671,10 +671,10 @@ export function PatrimoineTriDialog({
         </div>
 
       <div className={`flex justify-end gap-2 ${embedded ? "pt-4 border-t mt-4" : ""}`}>
-        <Button variant="outline" onClick={handleCancel}>
+        <Button type="button" variant="outline" onClick={handleCancel}>
           {embedded ? "Retour" : "Annuler"}
         </Button>
-        <Button onClick={handleValidate} disabled={!canValidate}>
+        <Button type="button" onClick={handleValidate} disabled={!canValidate}>
           {canValidate
             ? "Valider l'import"
             : !allOwnersAssigned

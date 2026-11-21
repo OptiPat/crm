@@ -178,7 +178,7 @@ export function FoyerDetail({
         </div>
       </div>
       <div className="flex shrink-0 gap-1">
-        <Button
+        <Button type="button"
           variant="outline"
           size="icon"
           onClick={() => setShowEditForm(true)}
@@ -187,7 +187,7 @@ export function FoyerDetail({
         >
           <Edit className="h-4 w-4" />
         </Button>
-        <Button
+        <Button type="button"
           variant="outline"
           size="icon"
           onClick={() => {
@@ -211,7 +211,7 @@ export function FoyerDetail({
           <Trash2 className="h-4 w-4" />
         </Button>
         {embedded && (
-          <Button
+          <Button type="button"
             variant="ghost"
             size="icon"
             onClick={() => onOpenChange(false)}
@@ -392,7 +392,7 @@ export function FoyerDetail({
                       {formatEuroCentimes(totalPatrimoineFoyer)}
                     </div>
                   </div>
-                  <Button
+                  <Button type="button"
                     size="sm"
                     onClick={() => setShowInvestissementForm(true)}
                   >
@@ -426,7 +426,7 @@ export function FoyerDetail({
                         actions={
                           isInvestissementActifEncours(inv) &&
                           isPlacementValorisationUpdateEligible(inv.type_produit) ? (
-                            <Button
+                            <Button type="button"
                               variant="outline"
                               size="sm"
                               className="text-amber-700 hover:text-amber-800"

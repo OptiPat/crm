@@ -34,7 +34,7 @@ function DiagnosticChecklist({ diagnostic }: { diagnostic: FundDiagnostic }) {
       <li>Vérifier style / exposition (matrice Boursorama)</li>
       <li>Contrôler horizons 1 mois, 3 mois, YTD, 3 ans et 5 ans</li>
       <li>Relier la baisse au Top 10 (rapport Coach)</li>
-      <li className="list-none pl-0 text-[10px] italic">
+      <li className="list-none pl-0 text-[11px] italic">
         Renforcer ou arbitrer : décision dossier client (SRI, trésorerie, pondération).
       </li>
     </ul>

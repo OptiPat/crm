@@ -325,7 +325,7 @@ export function OrganisationMemberDossierPanel({
                               <td className="py-1.5 pr-2 tabular-nums">
                                 {row.exerciceLabel}
                                 {row.isCurrent ? (
-                                  <span className="text-[10px] text-muted-foreground ml-1">
+                                  <span className="text-[11px] text-muted-foreground ml-1">
                                     (courant)
                                   </span>
                                 ) : null}

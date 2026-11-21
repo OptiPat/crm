@@ -96,7 +96,7 @@ export function AlertsPreview({ currentPage, onNavigate, onOpenContact }: Alerts
       className="h-full"
       action={
         onNavigate && alertes.length > 0 ? (
-          <Button
+          <Button type="button"
             variant="outline"
             size="sm"
             className="shrink-0 gap-1"
@@ -149,14 +149,14 @@ export function AlertsPreview({ currentPage, onNavigate, onOpenContact }: Alerts
                       </p>
                       <Badge
                         variant="outline"
-                        className={`text-[10px] px-1.5 py-0 h-5 shrink-0 ${getDisplayCategorieBadgeClass(alerte.contact_categorie)}`}
+                        className={`text-[11px] px-1.5 py-0 h-5 shrink-0 ${getDisplayCategorieBadgeClass(alerte.contact_categorie)}`}
                       >
                         {CONTACT_DISPLAY_CATEGORY_LABELS[alerte.contact_categorie] ||
                           alerte.contact_categorie}
                       </Badge>
                       <Badge
                         variant="outline"
-                        className={`text-[10px] px-1.5 py-0 h-5 shrink-0 ${getTypeAlerteBadgeClass(alerte.type_alerte)}`}
+                        className={`text-[11px] px-1.5 py-0 h-5 shrink-0 ${getTypeAlerteBadgeClass(alerte.type_alerte)}`}
                       >
                         {typeLabel}
                       </Badge>

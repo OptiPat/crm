@@ -77,7 +77,7 @@ export function SmtpSendLimitSetting() {
             onChange={(e) => setValue(e.target.value)}
           />
         </div>
-        <Button
+        <Button type="button"
           variant="secondary"
           size="sm"
           disabled={saving || !valid || parsed === quota.hourly_limit}

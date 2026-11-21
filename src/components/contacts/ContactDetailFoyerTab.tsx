@@ -95,7 +95,7 @@ function FoyerMemberRow({
             {member.prenom} {member.nom}
           </p>
           {isSelf && (
-            <Badge variant="outline" className="text-[10px] h-5">
+            <Badge variant="outline" className="text-[11px] h-5">
               Ce contact
             </Badge>
           )}
@@ -238,7 +238,7 @@ export function ContactDetailFoyerTab({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" className="gap-1.5" onClick={onAddFoyerMember}>
+                <Button type="button" size="sm" className="gap-1.5" onClick={onAddFoyerMember}>
                   <UserPlus className="h-4 w-4" />
                   Ajouter un membre
                 </Button>
@@ -289,7 +289,7 @@ export function ContactDetailFoyerTab({
                 </strong>
                 . Distinct de la page «&nbsp;Familles&nbsp;» (classement automatique par nom).
               </p>
-              <Button className="gap-2 w-full sm:w-auto" onClick={onCreateFoyer}>
+              <Button type="button" className="gap-2 w-full sm:w-auto" onClick={onCreateFoyer}>
                 <Home className="h-4 w-4" />
                 Constituer un foyer
               </Button>

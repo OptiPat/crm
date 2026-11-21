@@ -38,7 +38,7 @@ export function NewsletterComposerStepper({ steps, className = "" }: NewsletterC
                 : <Icon className="h-4 w-4" aria-hidden />}
               </div>
               <span
-                className={`text-[10px] sm:text-[11px] font-medium text-center leading-tight ${
+                className={`text-[11px] sm:text-[11px] font-medium text-center leading-tight ${
                   active ? "text-primary" : "text-muted-foreground"
                 }`}
               >

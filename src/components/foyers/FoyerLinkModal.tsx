@@ -234,7 +234,7 @@ export function FoyerLinkModal({
                     </div>
 
                     {contact.foyer_id ? (
-                      <Button
+                      <Button type="button"
                         className="w-full gap-2"
                         onClick={() => handleJoinFoyer(contact)}
                         disabled={loading}
@@ -243,7 +243,7 @@ export function FoyerLinkModal({
                         Rejoindre le foyer de {contact.prenom} {contact.nom}
                       </Button>
                     ) : (
-                      <Button
+                      <Button type="button"
                         className="w-full gap-2"
                         variant="outline"
                         onClick={() => handleCreateFoyerTogether(contact)}
@@ -262,7 +262,7 @@ export function FoyerLinkModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Annuler
           </Button>
         </DialogFooter>

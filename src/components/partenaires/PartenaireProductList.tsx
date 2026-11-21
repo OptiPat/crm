@@ -96,7 +96,7 @@ export function PartenaireProductList({
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge
-                      className="text-[10px] text-white px-1.5 py-0 shrink-0"
+                      className="text-[11px] text-white px-1.5 py-0 shrink-0"
                       style={{
                         backgroundColor: getTypeProduitBgColor(
                           inv.type_produit,
@@ -110,14 +110,14 @@ export function PartenaireProductList({
                       <span className="font-medium text-sm truncate">{inv.nom_produit}</span>
                     )}
                     {inv.origine === "MON_CONSEIL" && (
-                      <Badge variant="outline" className="text-[10px] font-normal">
+                      <Badge variant="outline" className="text-[11px] font-normal">
                         Avec moi
                       </Badge>
                     )}
                     {owner.kind === "orphan" && (
                       <Badge
                         variant="outline"
-                        className="text-[10px] font-normal border-amber-300 text-amber-800 bg-amber-50"
+                        className="text-[11px] font-normal border-amber-300 text-amber-800 bg-amber-50"
                       >
                         Orphelin
                       </Badge>

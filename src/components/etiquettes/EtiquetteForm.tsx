@@ -1006,19 +1006,19 @@ export function EtiquetteForm({
               <TabsTrigger value="rule" className="py-2.5 text-sm">
                 Règle auto
                 {isAuto && (
-                  <span className="ml-1.5 hidden sm:inline text-[10px] text-primary">●</span>
+                  <span className="ml-1.5 hidden sm:inline text-[11px] text-primary">●</span>
                 )}
               </TabsTrigger>
               <TabsTrigger value="email" className="py-2.5 text-sm">
                 Campagne email
                 {emailActif && (
-                  <span className="ml-1.5 hidden sm:inline text-[10px] text-primary">●</span>
+                  <span className="ml-1.5 hidden sm:inline text-[11px] text-primary">●</span>
                 )}
               </TabsTrigger>
               <TabsTrigger value="action" className="py-2.5 text-sm">
                 Action
                 {tacheActif && (
-                  <span className="ml-1.5 hidden sm:inline text-[10px] text-primary">●</span>
+                  <span className="ml-1.5 hidden sm:inline text-[11px] text-primary">●</span>
                 )}
               </TabsTrigger>
             </TabsList>

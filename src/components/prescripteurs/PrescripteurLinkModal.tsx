@@ -175,16 +175,16 @@ export function PrescripteurLinkModal({
                     )}
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
                       {contact.categorie && contact.categorie !== "AUCUN" && (
-                        <Badge variant="outline" className="text-[10px]">
+                        <Badge variant="outline" className="text-[11px]">
                           {contact.categorie}
                         </Badge>
                       )}
                       {alreadyLinked ? (
-                        <Badge className="text-[10px] bg-violet-50 text-violet-700 border-violet-200">
+                        <Badge className="text-[11px] bg-violet-50 text-violet-700 border-violet-200">
                           Déjà recommandé ici
                         </Badge>
                       ) : currentPrescripteur ? (
-                        <Badge variant="secondary" className="text-[10px]">
+                        <Badge variant="secondary" className="text-[11px]">
                           Prescripteur : {currentPrescripteur.prenom}{" "}
                           {currentPrescripteur.nom}
                         </Badge>

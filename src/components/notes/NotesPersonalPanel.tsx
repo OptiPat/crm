@@ -254,7 +254,7 @@ export function NotesPersonalPanel() {
               </SelectContent>
             </Select>
           )}
-          <Button size="sm" className="w-full" onClick={() => requestAction({ type: "new" })}>
+          <Button type="button" size="sm" className="w-full" onClick={() => requestAction({ type: "new" })}>
             <Plus className="h-4 w-4 mr-1.5" />
             Nouvelle note
           </Button>
@@ -343,15 +343,15 @@ export function NotesPersonalPanel() {
               </span>
             )}
             {isDirty && (
-              <Button variant="ghost" size="sm" disabled={saving} onClick={handleRevert}>
+              <Button type="button" variant="ghost" size="sm" disabled={saving} onClick={handleRevert}>
                 Annuler
               </Button>
             )}
-            <Button disabled={saving || !isDirty} onClick={() => void handleSave()}>
+            <Button type="button" disabled={saving || !isDirty} onClick={() => void handleSave()}>
               <Save className="h-4 w-4 mr-1.5" />
               {saving ? "Enregistrement…" : "Enregistrer"}
             </Button>
-            <Button
+            <Button type="button"
               variant="outline"
               disabled={saving || isPrinting || !draft.title.trim()}
               onClick={handlePrintPdf}
@@ -360,7 +360,7 @@ export function NotesPersonalPanel() {
               PDF
             </Button>
             {selectedId != null && (
-              <Button
+              <Button type="button"
                 variant="outline"
                 disabled={saving}
                 onClick={() => setShowDeleteDialog(true)}

@@ -58,12 +58,12 @@ function FundBondProfile({ fund }: { fund: UcFundResultScore }) {
   return (
     <div className="mt-1.5 flex flex-wrap gap-1.5">
       {fund.bond_strategy && (
-        <Badge variant="secondary" className="text-[10px] font-normal">
+        <Badge variant="secondary" className="text-[11px] font-normal">
           {fund.bond_strategy}
         </Badge>
       )}
       {fund.bond_credit_quality && (
-        <Badge variant="outline" className="text-[10px] font-normal">
+        <Badge variant="outline" className="text-[11px] font-normal">
           {fund.bond_credit_quality}
         </Badge>
       )}
@@ -124,7 +124,7 @@ export function UcComparatorResults({
             <span className="text-xs text-muted-foreground">{response.category}</span>
           )}
           {response.scoring_profile && (
-            <Badge variant="outline" className="text-[10px] font-normal">
+            <Badge variant="outline" className="text-[11px] font-normal">
               Barème {ucScoringProfileLabel(response.scoring_profile)}
             </Badge>
           )}

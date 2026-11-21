@@ -261,14 +261,14 @@ export function EmailImapConnectForm({
       </details>
 
       <div className="flex flex-wrap gap-2">
-        <Button
+        <Button type="button"
           onClick={() => void handleConnect()}
           disabled={connecting || !email.trim() || !password}
         >
           {connecting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
           {connecting ? "Vérification…" : "Connecter"}
         </Button>
-        <Button variant="ghost" onClick={onCancel} disabled={connecting}>
+        <Button type="button" variant="ghost" onClick={onCancel} disabled={connecting}>
           Annuler
         </Button>
       </div>

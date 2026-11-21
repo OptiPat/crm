@@ -185,7 +185,7 @@ export function ParametresIntegrationsSection() {
           </p>
 
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => void handleSaveBirthday()} disabled={savingBirthday}>
+            <Button type="button" onClick={() => void handleSaveBirthday()} disabled={savingBirthday}>
               Enregistrer
             </Button>
             <Button

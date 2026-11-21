@@ -213,7 +213,7 @@ export function BirthdaysTodayPreview({
                   </Button>
                   <Badge
                     variant="secondary"
-                    className={`shrink-0 text-[10px] ${getDisplayCategorieBadgeClass(c.categorie)}`}
+                    className={`shrink-0 text-[11px] ${getDisplayCategorieBadgeClass(c.categorie)}`}
                   >
                     {CONTACT_DISPLAY_CATEGORY_LABELS[c.categorie] ?? c.categorie}
                   </Badge>

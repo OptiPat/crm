@@ -784,10 +784,10 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setStep("upload")}>
+              <Button type="button" variant="outline" onClick={() => setStep("upload")}>
                 Retour
               </Button>
-              <Button onClick={handleNextToPreview}>
+              <Button type="button" onClick={handleNextToPreview}>
                 Suivant : Prévisualisation
               </Button>
             </DialogFooter>
@@ -880,10 +880,10 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setStep("mapping")}>
+              <Button type="button" variant="outline" onClick={() => setStep("mapping")}>
                 Retour
               </Button>
-              <Button onClick={handleImport} disabled={importing}>
+              <Button type="button" onClick={handleImport} disabled={importing}>
                 <Upload className="h-4 w-4 mr-2" />
                 Importer {pendingCount} filleul{pendingCount > 1 ? "s" : ""}
               </Button>
@@ -922,7 +922,7 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
 
             {!importing && (
               <DialogFooter>
-                <Button onClick={handleFinishImport}>Fermer</Button>
+                <Button type="button" onClick={handleFinishImport}>Fermer</Button>
               </DialogFooter>
             )}
           </div>

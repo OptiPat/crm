@@ -120,7 +120,7 @@ export function FamilleAddMemberModal({
                 <span className="text-sm font-medium">
                   {contact.prenom} {contact.nom}
                 </span>
-                <Button
+                <Button type="button"
                   size="sm"
                   variant="outline"
                   disabled={linkingId != null}
@@ -134,7 +134,7 @@ export function FamilleAddMemberModal({
         </div>
 
         <DialogFooter className="shrink-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Fermer
           </Button>
         </DialogFooter>

@@ -145,7 +145,7 @@ export function SegmentsSection({ etiquettes = [] }: SegmentsSectionProps) {
                     {s.nom}
                     {s.is_system && (
                       <span
-                        className="text-[10px] font-normal text-muted-foreground"
+                        className="text-[11px] font-normal text-muted-foreground"
                         title="Modifiable, non supprimable"
                       >
                         (système)

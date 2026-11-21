@@ -17,7 +17,7 @@ export function AppUpdateBanner() {
         Nouvelle version <strong>{pendingUpdate.version}</strong> disponible — mise à jour en un clic
         (vos données restent sur cet ordinateur).
       </p>
-      <Button size="sm" className="gap-2 shrink-0" onClick={openInstallDialog}>
+      <Button type="button" size="sm" className="gap-2 shrink-0" onClick={openInstallDialog}>
         <Download className="h-4 w-4" />
         Mettre à jour
       </Button>

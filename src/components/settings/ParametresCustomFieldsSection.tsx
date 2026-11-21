@@ -69,7 +69,7 @@ export function ParametresCustomFieldsSection() {
       title="Champs personnalisés"
       description="Ajoutez vos propres champs aux fiches contact (numéro client, RIB, centres d'intérêt…)."
       action={
-        <Button
+        <Button type="button"
           size="sm"
           onClick={() => {
             setEditing(null);
@@ -107,7 +107,7 @@ export function ParametresCustomFieldsSection() {
                   {CUSTOM_FIELD_TYPE_LABELS[def.field_type]} · clé {def.field_key}
                 </p>
               </div>
-              <Button
+              <Button type="button"
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
@@ -119,7 +119,7 @@ export function ParametresCustomFieldsSection() {
               >
                 <Pencil className="h-4 w-4" />
               </Button>
-              <Button
+              <Button type="button"
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-destructive hover:text-destructive"

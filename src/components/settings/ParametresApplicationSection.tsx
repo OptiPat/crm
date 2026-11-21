@@ -58,7 +58,7 @@ export function ParametresApplicationSection() {
                 L'accès à l'application est protégé par un mot de passe sur ce poste.
                 Vos données restent stockées localement sur cet ordinateur.
               </p>
-              <Button
+              <Button type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => setChangePasswordOpen(true)}

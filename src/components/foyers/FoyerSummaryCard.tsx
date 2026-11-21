@@ -83,7 +83,7 @@ export function FoyerSummaryCard({
                     prenom={m.prenom}
                     nom={m.nom}
                     className={cn(
-                      "h-7 w-7 text-[10px] ring-2 ring-card",
+                      "h-7 w-7 text-[11px] ring-2 ring-card",
                       compact && "h-6 w-6"
                     )}
                   />
@@ -140,7 +140,7 @@ export function FoyerSummaryCard({
               <p className="text-sm font-semibold text-primary tabular-nums leading-tight">
                 {formatEuroCentimes(patrimoineAvecMoi)}
               </p>
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
                 avec moi
               </p>
             </div>

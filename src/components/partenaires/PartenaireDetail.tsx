@@ -156,7 +156,7 @@ export function PartenaireDetail({
         </div>
       </div>
       <div className="flex shrink-0 gap-1">
-        <Button
+        <Button type="button"
           variant="outline"
           size="icon"
           onClick={() => setShowEditForm(true)}
@@ -165,7 +165,7 @@ export function PartenaireDetail({
         >
           <Edit className="h-4 w-4" />
         </Button>
-        <Button
+        <Button type="button"
           variant="outline"
           size="icon"
           onClick={() => setShowDeleteDialog(true)}
@@ -176,7 +176,7 @@ export function PartenaireDetail({
           <Trash2 className="h-4 w-4" />
         </Button>
         {embedded && (
-          <Button
+          <Button type="button"
             variant="ghost"
             size="icon"
             onClick={() => onOpenChange(false)}

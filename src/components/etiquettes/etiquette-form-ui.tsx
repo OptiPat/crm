@@ -59,23 +59,23 @@ export function EtiquetteFormStatusBadges({
 }) {
   return (
     <div className="flex flex-wrap gap-1.5 justify-center">
-      <Badge variant={actif ? "default" : "secondary"} className="text-[10px]">
+      <Badge variant={actif ? "default" : "secondary"} className="text-[11px]">
         {actif ? "Active" : "Désactivée"}
       </Badge>
       {isAuto && (
-        <Badge variant="outline" className="text-[10px] gap-1">
+        <Badge variant="outline" className="text-[11px] gap-1">
           <Zap className="h-3 w-3" />
           Auto
         </Badge>
       )}
       {emailActif && (
-        <Badge variant="outline" className="text-[10px] gap-1 border-blue-200 text-blue-800">
+        <Badge variant="outline" className="text-[11px] gap-1 border-blue-200 text-blue-800">
           <Mail className="h-3 w-3" />
           Email
         </Badge>
       )}
       {isSystem && (
-        <Badge variant="outline" className="text-[10px] gap-1 border-amber-200 text-amber-800">
+        <Badge variant="outline" className="text-[11px] gap-1 border-amber-200 text-amber-800">
           <Tag className="h-3 w-3" />
           Préinstallée
         </Badge>

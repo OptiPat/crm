@@ -133,7 +133,7 @@ export function ParametresLicenseSection() {
       title="Licence"
       description="Statut de cette installation sur ce poste."
       action={
-        <Button variant="ghost" size="sm" onClick={() => void load()}>
+        <Button type="button" variant="ghost" size="sm" onClick={() => void load()}>
           <RefreshCw className="h-4 w-4 mr-1.5" />
           Actualiser
         </Button>
@@ -222,11 +222,11 @@ export function ParametresLicenseSection() {
               />
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button disabled={activating || licenseKey.trim().length < 10} onClick={() => void handleActivate()}>
+              <Button type="button" disabled={activating || licenseKey.trim().length < 10} onClick={() => void handleActivate()}>
                 <KeyRound className="h-4 w-4 mr-1.5" />
                 Activer une clé
               </Button>
-              <Button variant="outline" disabled={activating || !status.can_restart_trial} onClick={() => void handleRestartTrial()}>
+              <Button type="button" variant="outline" disabled={activating || !status.can_restart_trial} onClick={() => void handleRestartTrial()}>
                 Relancer un essai
               </Button>
             </div>

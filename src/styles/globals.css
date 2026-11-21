@@ -75,6 +75,13 @@
     @apply bg-background text-foreground font-sans;
   }
 
+  /* Focus clavier visible par défaut (boutons natifs, liens, éléments cliquables).
+     Les composants qui posent leur propre anneau (utilitaires) restent prioritaires. */
+  :where(button, a[href], summary, [role="button"], [role="tab"], [role="menuitem"]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
   h1,
   h2,
   h3,

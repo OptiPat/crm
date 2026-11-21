@@ -120,7 +120,7 @@ export function JdFunnelCounterCell({
       </div>
       <div
         className={cn(
-          "text-[10px] font-medium transition-transform duration-200",
+          "text-[11px] font-medium transition-transform duration-200",
           colors.text,
           bump && "scale-125"
         )}

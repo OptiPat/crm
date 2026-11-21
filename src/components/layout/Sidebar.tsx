@@ -212,7 +212,7 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
     const Icon = item.icon;
     const isActive = currentPage === item.id;
     return (
-      <Button
+      <Button type="button"
         key={item.id}
         variant={isActive ? "secondary" : "ghost"}
         className={navButtonClass(isActive, indented ? "h-9 text-sm" : undefined)}
@@ -259,7 +259,7 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
               const Icon = item.icon;
               const isActive = currentPage === item.id;
               return (
-                <Button
+                <Button type="button"
                   key={item.id}
                   variant={isActive ? "secondary" : "ghost"}
                   size="sm"
@@ -287,7 +287,7 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
     return (
       <div key={group.id} className="space-y-0.5">
         <div className="flex items-center gap-0.5">
-          <Button
+          <Button type="button"
             variant={active ? "secondary" : "ghost"}
             className="flex-1 justify-start min-w-0"
             onClick={() => onPageChange(group.landingPage)}
@@ -301,7 +301,7 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
             <GroupIcon className="h-5 w-5 mr-3 shrink-0" />
             <span className="truncate">{group.label}</span>
           </Button>
-          <Button
+          <Button type="button"
             variant="ghost"
             size="icon"
             className="h-9 w-9 shrink-0"
@@ -368,7 +368,7 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
             </h2>
           )}
         </div>
-        <Button
+        <Button type="button"
           variant="ghost"
           size="icon"
           onClick={toggleCollapsed}

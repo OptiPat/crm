@@ -64,7 +64,7 @@ export function DocumentsClientFolderList({
               </p>
 
               <div className="flex flex-wrap gap-1 min-h-[1.25rem]">
-                <span className="sm:hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground w-full">
+                <span className="sm:hidden text-[11px] font-medium uppercase tracking-wide text-muted-foreground w-full">
                   Pièces
                 </span>
                 {folder.typeBadges.length === 0 ? (
@@ -74,7 +74,7 @@ export function DocumentsClientFolderList({
                     <Badge
                       key={badge}
                       variant="secondary"
-                      className="text-[10px] px-1.5 py-0 font-medium"
+                      className="text-[11px] px-1.5 py-0 font-medium"
                     >
                       {TYPE_BADGE_LABEL[badge]}
                     </Badge>
@@ -83,7 +83,7 @@ export function DocumentsClientFolderList({
               </div>
 
               <div className="flex flex-wrap gap-1 min-h-[1.25rem]">
-                <span className="sm:hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground w-full">
+                <span className="sm:hidden text-[11px] font-medium uppercase tracking-wide text-muted-foreground w-full">
                   À vérifier
                 </span>
                 {folder.alerts.length === 0 ? (
@@ -108,7 +108,7 @@ export function DocumentsClientFolderList({
               </div>
 
               <div className="flex items-center justify-between gap-2 sm:contents">
-                <span className="sm:hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                <span className="sm:hidden text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                   Dernier
                 </span>
                 <p className="text-xs text-muted-foreground sm:text-right tabular-nums">
@@ -117,7 +117,7 @@ export function DocumentsClientFolderList({
               </div>
 
               <div className="flex items-center justify-between gap-2 sm:contents">
-                <span className="sm:hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                <span className="sm:hidden text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                   Nb
                 </span>
                 <p className="text-xs text-muted-foreground sm:text-right tabular-nums">

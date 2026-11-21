@@ -34,7 +34,7 @@ export function FilleulRankBadges({
           title={`Titre : ${titreMeta.label}`}
           className={cn(
             "inline-flex items-center gap-1 rounded-md border border-emerald-200/60 bg-white/80 px-1.5 py-0.5",
-            compact ? "text-[9px]" : "text-[10px]"
+            compact ? "text-[11px]" : "text-[11px]"
           )}
         >
           <RankIcon kind={titreMeta.icon} />
@@ -46,7 +46,7 @@ export function FilleulRankBadges({
           title={`Qualification : ${qualMeta.label}`}
           className={cn(
             "inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/30 px-1.5 py-0.5",
-            compact ? "text-[9px]" : "text-[10px]"
+            compact ? "text-[11px]" : "text-[11px]"
           )}
         >
           <RankIcon kind={qualMeta.icon} />

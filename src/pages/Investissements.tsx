@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ListSkeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
@@ -147,7 +148,7 @@ function OrigineFilterPill({
       {count != null && count > 0 && (
         <span
           className={cn(
-            "tabular-nums rounded-full px-1.5 py-0.5 text-[10px]",
+            "tabular-nums rounded-full px-1.5 py-0.5 text-[11px]",
             active ? "bg-primary/15" : "bg-muted"
           )}
         >
@@ -747,7 +748,7 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
-          <Button
+          <Button type="button"
             variant="outline"
             className="gap-2"
             onClick={() => setShowStelliumImport(true)}
@@ -756,12 +757,12 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
             Import Stellium
           </Button>
           {canExport && filteredInvestissements.length > 0 && (
-            <Button variant="outline" className="gap-2" onClick={handleExportCsv}>
+            <Button type="button" variant="outline" className="gap-2" onClick={handleExportCsv}>
               <Download className="h-4 w-4" />
               Exporter CSV
             </Button>
           )}
-          <Button className="gap-2" onClick={handleStartCreate}>
+          <Button type="button" className="gap-2" onClick={handleStartCreate}>
             <Plus className="h-4 w-4" />
             Nouvel investissement
           </Button>
@@ -1050,15 +1051,13 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
             </div>
           )}
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Chargement...
-            </div>
+            <ListSkeleton rows={6} rowClassName="h-20" />
           ) : loadError && investissements.length === 0 ? (
             <div className="py-10 text-center space-y-3">
               <p className="text-sm text-destructive">
                 Impossible de charger les investissements.
               </p>
-              <Button
+              <Button type="button"
                 variant="outline"
                 onClick={() => {
                   setLoading(true);

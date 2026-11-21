@@ -2339,20 +2339,20 @@ export function TemplateEmailForm({
                   <TabsTrigger value="tutoiement">
                     Tutoiement
                     {tutoiementDraft.enabled && (
-                      <span className="ml-1.5 text-[10px] text-indigo-700" title="Activé">✓</span>
+                      <span className="ml-1.5 text-[11px] text-indigo-700" title="Activé">✓</span>
                     )}
                   </TabsTrigger>
                   <TabsTrigger value="relance">
                     Relance
                     {relanceDraft.enabled && (
-                      <span className="ml-1.5 text-[10px] text-orange-700" title="Activé">✓</span>
+                      <span className="ml-1.5 text-[11px] text-orange-700" title="Activé">✓</span>
                     )}
                   </TabsTrigger>
                   {!isEphemeralMode && showOptionTab("pipe-rdv", pipeRdvDraft.trigger.enabled) && (
                     <TabsTrigger value="pipe-rdv">
                       Pipe RDV
                       {pipeRdvDraft.trigger.enabled && (
-                        <span className="ml-1.5 text-[10px] text-emerald-700" title="Activé">✓</span>
+                        <span className="ml-1.5 text-[11px] text-emerald-700" title="Activé">✓</span>
                       )}
                     </TabsTrigger>
                   )}
@@ -2361,7 +2361,7 @@ export function TemplateEmailForm({
                       <TabsTrigger value="placement-conforme">
                         Box Placement
                         {placementConformeDraft.trigger.enabled && (
-                          <span className="ml-1.5 text-[10px] text-teal-700" title="Activé">✓</span>
+                          <span className="ml-1.5 text-[11px] text-teal-700" title="Activé">✓</span>
                         )}
                       </TabsTrigger>
                     )}
@@ -2381,7 +2381,7 @@ export function TemplateEmailForm({
                         <TabsTrigger value="declencheur">
                           Déclencheur
                           {emailTrigger.enabled && (
-                            <span className="ml-1.5 text-[10px] text-primary" title="Activé">✓</span>
+                            <span className="ml-1.5 text-[11px] text-primary" title="Activé">✓</span>
                           )}
                         </TabsTrigger>
                       )}
@@ -2389,7 +2389,7 @@ export function TemplateEmailForm({
                         <TabsTrigger value="liaisons">
                           Étiquettes
                           {linkedEtiquetteIds.length > 0 && (
-                            <span className="ml-1.5 text-[10px] text-primary">
+                            <span className="ml-1.5 text-[11px] text-primary">
                               ({linkedEtiquetteIds.length})
                             </span>
                           )}
@@ -2400,7 +2400,7 @@ export function TemplateEmailForm({
                   {(isEphemeralMode || showOptionTab("action", tacheActif)) && (
                     <TabsTrigger value="action">
                       Action
-                      {tacheActif && <span className="ml-1.5 text-[10px] text-sky-700" title="Activé">✓</span>}
+                      {tacheActif && <span className="ml-1.5 text-[11px] text-sky-700" title="Activé">✓</span>}
                     </TabsTrigger>
                   )}
                 </TabsList>

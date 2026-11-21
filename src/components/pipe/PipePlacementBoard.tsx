@@ -203,13 +203,13 @@ export function PipePlacementBoard({
           {archivedCard ? (
             <Badge
               variant="outline"
-              className="h-4 max-w-full shrink truncate px-1 text-[9px] font-normal leading-none"
+              className="h-4 max-w-full shrink truncate px-1 text-[11px] font-normal leading-none"
             >
               Archivé
             </Badge>
           ) : null}
           {nonConforme ? (
-            <Badge className="h-4 max-w-full shrink truncate px-1 text-[9px] font-medium leading-none bg-red-600 text-white hover:bg-red-600">
+            <Badge className="h-4 max-w-full shrink truncate px-1 text-[11px] font-medium leading-none bg-red-600 text-white hover:bg-red-600">
               NC
             </Badge>
           ) : null}
@@ -217,7 +217,7 @@ export function PipePlacementBoard({
             <Badge
               variant="outline"
               title={PLACEMENT_BOARD_BADGE_LABELS[rowBadge]}
-              className="h-4 max-w-full shrink truncate px-1 text-[9px] font-normal leading-none border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-300"
+              className="h-4 max-w-full shrink truncate px-1 text-[11px] font-normal leading-none border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-300"
             >
               {PLACEMENT_BOARD_BADGE_LABELS[rowBadge]}
             </Badge>
@@ -231,7 +231,7 @@ export function PipePlacementBoard({
           {formatPlacementBoardCardSubtitle(row)}
         </p>
         {cardDate ? (
-          <p className="mt-1 text-[10px] text-muted-foreground/80 leading-snug">
+          <p className="mt-1 text-[11px] text-muted-foreground/80 leading-snug">
             {cardDate.prefix} {cardDate.formatted}
           </p>
         ) : null}
@@ -288,7 +288,7 @@ export function PipePlacementBoard({
               >
                 <h3
                   className={cn(
-                    "truncate text-[10px] font-medium leading-tight sm:text-xs",
+                    "truncate text-[11px] font-medium leading-tight sm:text-xs",
                     colors.title
                   )}
                 >
@@ -312,7 +312,7 @@ export function PipePlacementBoard({
                   <Badge
                     variant="secondary"
                     className={cn(
-                      "h-5 min-w-5 shrink-0 justify-center px-1 font-normal tabular-nums text-[10px]",
+                      "h-5 min-w-5 shrink-0 justify-center px-1 font-normal tabular-nums text-[11px]",
                       colors.badge
                     )}
                   >

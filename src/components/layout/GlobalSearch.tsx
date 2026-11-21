@@ -306,7 +306,7 @@ export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
       >
         <Search className="h-4 w-4 shrink-0" />
         <span className="flex-1 text-left">Rechercher…</span>
-        <kbd className="pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium sm:inline-flex">
+        <kbd className="pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[11px] font-medium sm:inline-flex">
           Ctrl K
         </kbd>
       </button>

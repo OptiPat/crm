@@ -46,7 +46,7 @@ export function EtiquetteEnvoisSelectionBar({
       />
       <span className="text-sm text-muted-foreground">{selectAllLabel}</span>
       {trailing}
-      <Button
+      <Button type="button"
         size="sm"
         variant="outline"
         className="ml-auto"

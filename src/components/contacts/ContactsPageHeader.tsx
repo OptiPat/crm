@@ -47,7 +47,7 @@ export function ContactsPageHeader({
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button className="gap-2" onClick={onNewContact}>
+        <Button type="button" className="gap-2" onClick={onNewContact}>
           <Plus className="h-4 w-4" />
           Nouveau contact
         </Button>
@@ -59,7 +59,7 @@ export function ContactsPageHeader({
           </PopoverTrigger>
           <PopoverContent align="end" className="w-56 p-2">
             <div className="flex flex-col gap-1">
-              <Button
+              <Button type="button"
                 variant="ghost"
                 className="justify-start gap-2 h-9"
                 onClick={() => {
@@ -71,7 +71,7 @@ export function ContactsPageHeader({
                 Importer {mainTab === "filleuls" ? "filleuls" : "clients"}
               </Button>
               {mainTab === "clients" && onImportImmo && (
-                <Button
+                <Button type="button"
                   variant="ghost"
                   className="justify-start gap-2 h-9"
                   onClick={() => {
@@ -84,7 +84,7 @@ export function ContactsPageHeader({
                 </Button>
               )}
               {mainTab === "clients" && onImportPlacement && (
-                <Button
+                <Button type="button"
                   variant="ghost"
                   className="justify-start gap-2 h-9"
                   onClick={() => {
@@ -96,7 +96,7 @@ export function ContactsPageHeader({
                   Importer placements
                 </Button>
               )}
-              <Button
+              <Button type="button"
                 variant="ghost"
                 className="justify-start gap-2 h-9"
                 onClick={() => {
@@ -108,7 +108,7 @@ export function ContactsPageHeader({
                 Fusionner les doublons
               </Button>
               {filteredCount > 0 && (
-                <Button
+                <Button type="button"
                   variant="ghost"
                   className="justify-start gap-2 h-9 text-destructive hover:text-destructive hover:bg-destructive/10"
                   onClick={() => {

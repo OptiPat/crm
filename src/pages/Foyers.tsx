@@ -340,7 +340,7 @@ export function Foyers({ onNavigate }: FoyersProps) {
             </span>
           </p>
         </div>
-        <Button className="gap-2 shadow-sm" onClick={() => setShowForm(true)}>
+        <Button type="button" className="gap-2 shadow-sm" onClick={() => setShowForm(true)}>
           <Plus className="h-4 w-4" />
           Nouveau foyer
         </Button>
@@ -423,12 +423,12 @@ export function Foyers({ onNavigate }: FoyersProps) {
                   : "Créez un foyer fiscal pour regrouper contacts et patrimoine commun."}
               </p>
               {!prefs.searchQuery.trim() && !prefs.statFilter && prefs.typeFilter === "ALL" ? (
-                <Button onClick={() => setShowForm(true)} className="gap-2">
+                <Button type="button" onClick={() => setShowForm(true)} className="gap-2">
                   <Plus className="h-4 w-4" />
                   Créer un foyer
                 </Button>
               ) : (
-                <Button
+                <Button type="button"
                   variant="outline"
                   onClick={() =>
                     updatePrefs({ searchQuery: "", statFilter: null, typeFilter: "ALL" })

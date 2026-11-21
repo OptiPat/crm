@@ -1014,7 +1014,7 @@ export function ContactDetail({
                 {investissements.length > 0 && (
                   <Badge
                     variant="secondary"
-                    className="h-4 min-w-4 shrink-0 px-1 text-[10px] font-semibold tabular-nums"
+                    className="h-4 min-w-4 shrink-0 px-1 text-[11px] font-semibold tabular-nums"
                   >
                     {investissements.length}
                   </Badge>

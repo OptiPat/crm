@@ -38,7 +38,7 @@ export function InvestissementPatrimoineActions({
       {onEncours &&
         isActif &&
         isPlacementValorisationUpdateEligible(inv.type_produit) && (
-          <Button
+          <Button type="button"
             variant={compact ? "ghost" : "outline"}
             size={compact ? "icon" : "sm"}
             className={
@@ -71,7 +71,7 @@ export function InvestissementPatrimoineActions({
           "Modifier"
         )}
       </Button>
-      <Button
+      <Button type="button"
         variant={compact ? "ghost" : "outline"}
         size={compact ? "icon" : "sm"}
         className={

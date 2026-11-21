@@ -678,10 +678,10 @@ export function RdvPlanifierDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
             Annuler
           </Button>
-          <Button
+          <Button type="button"
             disabled={
               submitting ||
               (showR1DocumentsFields && !r1ProfileReady) ||

@@ -191,7 +191,7 @@ export function ParametresAppBrandingSection() {
       description="Nom et logo affichés à la connexion, dans le menu, sur le bureau, dans le tiroir et dans le titre de la fenêtre."
       action={
         isDirty ? (
-          <Button size="sm" disabled={saving} onClick={() => void handleSave()}>
+          <Button type="button" size="sm" disabled={saving} onClick={() => void handleSave()}>
             {saving ? (
               <>
                 <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />

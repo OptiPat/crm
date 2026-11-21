@@ -219,10 +219,10 @@ export function ContratSupportsImportDialog({
         <DialogFooter>
           {step === "preview" && (
             <>
-              <Button variant="outline" onClick={() => setStep("pick")} disabled={busy}>
+              <Button type="button" variant="outline" onClick={() => setStep("pick")} disabled={busy}>
                 Choisir un autre fichier
               </Button>
-              <Button onClick={() => void handleImport()} disabled={busy}>
+              <Button type="button" onClick={() => void handleImport()} disabled={busy}>
                 {busy ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
@@ -232,7 +232,7 @@ export function ContratSupportsImportDialog({
               </Button>
             </>
           )}
-          {step === "done" && <Button onClick={() => handleOpenChange(false)}>Fermer</Button>}
+          {step === "done" && <Button type="button" onClick={() => handleOpenChange(false)}>Fermer</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

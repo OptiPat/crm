@@ -80,7 +80,7 @@ export function EmailSendLogTab({
             </Button>
           )}
           {scpiPeriod ? (
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-[11px]">
               Période {scpiPeriod}
             </Badge>
           ) : null}

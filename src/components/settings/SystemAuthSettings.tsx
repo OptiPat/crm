@@ -98,11 +98,11 @@ export function SystemAuthSettings() {
           {error && !dialogOpen && <p className="text-xs text-red-700">{error}</p>}
 
           {status?.enabled ? (
-            <Button variant="outline" size="sm" onClick={() => openConfiguration(false)}>
+            <Button type="button" variant="outline" size="sm" onClick={() => openConfiguration(false)}>
               Désactiver
             </Button>
           ) : (
-            <Button
+            <Button type="button"
               variant="outline"
               size="sm"
               onClick={() => openConfiguration(true)}

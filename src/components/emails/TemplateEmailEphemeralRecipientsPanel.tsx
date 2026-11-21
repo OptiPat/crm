@@ -259,7 +259,7 @@ export function TemplateEmailEphemeralRecipientsPanel({
                     {m.prenom} {m.nom}
                   </span>
                   {!m.has_email && (
-                    <Badge variant="outline" className="ml-2 text-[10px] text-amber-800">
+                    <Badge variant="outline" className="ml-2 text-[11px] text-amber-800">
                       sans email
                     </Badge>
                   )}
