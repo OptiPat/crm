@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
-import { writeDownloadsFileBytes } from "@/lib/api/tauri-arbitrage-fiche";
+import {
+  printWindowToDownloadsPdf,
+  writeDownloadsFileBytes,
+} from "@/lib/api/tauri-arbitrage-fiche";
 import { openDocumentFile } from "@/lib/api/tauri-system";
 import {
   buildCifPdfFilename,
@@ -107,7 +110,11 @@ export function useCifPrintExport() {
   }, []);
 
   const runPrintJob = useCallback(
-    async (documents: CifPrintDocument[], clientName: string, filename: string) => {
+    async (
+      documents: CifPrintDocument[],
+      clientName: string,
+      filename: string
+    ): Promise<"saved" | "printed" | false> => {
       const previousTitle = document.title;
       const printTitle = documents[0]
         ? buildCifPdfFilenameStem(documents[0].label, clientName)
@@ -133,12 +140,32 @@ export function useCifPrintExport() {
           } catch {
             /* le PDF est déjà dans Téléchargements */
           }
-          return true;
+          return "saved";
         } finally {
           document.title = previousTitle;
           clearPrintState(setPrintBundle);
           await waitForNextFrame();
         }
+      }
+
+      // Windows : export PDF direct (même rendu que « Enregistrer en PDF »), sans boîte.
+      // En cas d'échec (WebView2 trop ancien…), on retombe sur la boîte d'impression.
+      try {
+        const savedPath = await printWindowToDownloadsPdf(filename);
+        document.title = previousTitle;
+        clearPrintState(setPrintBundle);
+        await waitForNextFrame();
+        try {
+          await openDocumentFile(savedPath);
+        } catch {
+          /* le PDF est déjà dans Téléchargements */
+        }
+        return "saved";
+      } catch (error) {
+        console.warn("Export PDF direct indisponible, boîte d'impression :", error);
+        showPrintHint(
+          `Choisissez « Enregistrer au format PDF » — nom proposé : ${filename}. Annuler arrête l'export.`
+        );
       }
 
       let completed = false;
@@ -149,7 +176,7 @@ export function useCifPrintExport() {
         clearPrintState(setPrintBundle);
         await waitForNextFrame();
       }
-      return completed;
+      return completed ? "printed" : false;
     },
     []
   );
@@ -161,42 +188,26 @@ export function useCifPrintExport() {
       printingRef.current = true;
       setIsPrinting(true);
       const clientName = clientDisplayName.trim() || "Client";
-      const macPrint = isMacPrintPlatform(navigator);
 
       try {
-        if (documents.length === 1) {
-          const doc = documents[0]!;
-          const filename = buildCifPdfFilename(doc.label, clientName);
-          if (!macPrint) {
-            showPrintHint(
-              `Choisissez « Enregistrer au format PDF » — nom proposé : ${filename}. Annuler ferme la fenêtre.`
-            );
-          }
-          await runPrintJob(documents, clientName, filename);
-          if (macPrint) toast.success(`${filename} enregistré dans Téléchargements.`);
-          return;
-        }
-
-        if (!macPrint) {
-          showPrintHint(
-            `${documents.length} fenêtres à la suite — annuler une fenêtre arrête tout l'export.`
-          );
-        }
-
         for (let i = 0; i < documents.length; i++) {
           const doc = documents[i]!;
           const filename = buildCifPdfFilename(doc.label, clientName);
-          if (!macPrint) {
-            showPrintHint(
-              `Document ${i + 1}/${documents.length} — enregistrez : ${filename} (Annuler = tout arrêter)`
-            );
-          }
-          const completed = await runPrintJob([doc], clientName, filename);
-          if (!completed) {
-            toast.info("Export interrompu — les documents suivants ne seront pas proposés.");
+          showPrintHint(
+            documents.length > 1
+              ? `Téléchargement ${i + 1}/${documents.length} : ${filename}…`
+              : `Téléchargement de ${filename}…`
+          );
+          const outcome = await runPrintJob([doc], clientName, filename);
+          if (!outcome) {
+            if (documents.length > 1) {
+              toast.info("Export interrompu — les documents suivants ne seront pas proposés.");
+            }
             break;
           }
-          if (macPrint) toast.success(`${filename} enregistré dans Téléchargements.`);
+          if (outcome === "saved") {
+            toast.success(`${filename} enregistré dans Téléchargements.`);
+          }
         }
       } catch (error) {
         console.error("Erreur export PDF CIF:", error);

@@ -202,6 +202,14 @@ pub fn write_downloads_file_bytes(
     Ok(dest)
 }
 
+/// Chemin de destination libre dans Téléchargements (nom nettoyé, suffixe « (2) » si besoin).
+pub fn prepare_downloads_dest(download_dir: &Path, file_name: &str) -> Result<PathBuf, String> {
+    let safe_name = sanitize_document_file_name(file_name)?;
+    fs::create_dir_all(download_dir)
+        .map_err(|e| format!("Création du dossier Téléchargements impossible : {e}"))?;
+    Ok(downloads_dest_path(download_dir, &safe_name))
+}
+
 pub fn validate_downloads_file(download_dir: &Path, file_path: &Path) -> Result<PathBuf, String> {
     if !file_path.is_file() {
         return Err("Fichier introuvable.".into());

@@ -78,6 +78,11 @@ export async function getArbitrageFicheTemplatePath(
   });
 }
 
+/** Windows : imprime la fenêtre en PDF (WebView2, texte vectoriel) dans Téléchargements, sans boîte. */
+export async function printWindowToDownloadsPdf(fileName: string): Promise<string> {
+  return invoke<string>("print_window_to_downloads_pdf", { fileName });
+}
+
 export async function writeDownloadsFileBytes(
   fileName: string,
   bytes: Uint8Array

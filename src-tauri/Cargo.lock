@@ -3221,6 +3221,8 @@ dependencies = [
  "url",
  "walkdir",
  "webpki-roots",
+ "webview2-com",
+ "windows-core 0.62.2",
  "windows-dpapi",
  "x25519-dalek",
  "zip",

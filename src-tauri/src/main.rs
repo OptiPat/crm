@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod arbitrage_fiche_templates;
+mod cif_print_pdf;
 mod app_branding;
 mod app_runtime;
 mod auth;
@@ -333,6 +334,7 @@ fn main() {
             complete_arbitrage_tache,
             reporter_alerte_arbitrage,
             read_pdf_file,
+            cif_print_pdf::print_window_to_downloads_pdf,
             // Etiquettes
             get_all_etiquettes,
             get_all_etiquettes_with_count,

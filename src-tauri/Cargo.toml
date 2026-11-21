@@ -86,6 +86,9 @@ opt-level = "s"
 strip = true
 
 [target.'cfg(windows)'.dependencies]
+# Export PDF silencieux (souscription CIF) — versions alignées sur celles de Tauri/wry.
+webview2-com = "0.39"
+windows-core = "0.62"
 tauri-winrt-notification = "0.8"
 windows-dpapi = "0.2.0"
 
