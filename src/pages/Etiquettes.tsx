@@ -525,18 +525,7 @@ export function Etiquettes({ onNavigate }: { onNavigate?: (page: string) => void
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-muted-foreground max-w-2xl">
-            Règles automatiques, tags manuels et campagnes email. Les attributions se
-            mettent à jour à chaque modification ; recalcul complet après import massif.
-          </p>
-          <p className="text-sm text-foreground/85 border-l-2 border-primary/35 pl-3 mt-3 max-w-2xl leading-snug">
-            <span className="font-medium">Groupe de contacts</span> = liste filtrée réutilisable
-            {" · "}
-            <span className="font-medium">Étiquette</span> = badge sur la fiche (+ email optionnel)
-          </p>
-        </div>
+      <div className="flex flex-wrap items-end justify-end gap-4">
         <div className="flex flex-wrap gap-2 shrink-0">
           <Button
             variant="outline"
