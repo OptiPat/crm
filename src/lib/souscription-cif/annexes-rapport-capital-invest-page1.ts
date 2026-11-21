@@ -10,7 +10,7 @@ export const ANNEXES_CAPITAL_INVEST_PAGE1_BODY_BEFORE_SECTION = `{{conseil}}`;
 export const ANNEXES_CAPITAL_INVEST_PAGE1_BODY_AFTER_SECTION = `[u]1. Principe[/u]
 
 Le Capital Investissement (ou Private Equity) est un investissement citoyen et contributif qui se positionne au cœur du financement de l'économie réelle, de l'innovation et de la croissance des PME principalement non cotées : jeunes entreprises innovantes et PME ultramarines.
-Pour l'investisseur, cette solution vise notamment l'obtention d'une réduction d'impôt et une plus-value potentielle importante à terme. Ces perspectives de rendement sont la contrepartie d'une durée de blocage de l'épargne (10 ans) et de risques de perte en capital inhérents à l'activité non garantie.
+Pour l'investisseur, cette solution vise notamment l'obtention d'une réduction d'impôt et une éventuelle plus-value à terme, non garantie. Ces perspectives de rendement sont la contrepartie d'une durée de blocage de l'épargne (10 ans) et de risques de perte en capital inhérents à l'activité non garantie.
 L'investissement s'effectue au travers d'un fonds géré par une société de gestion spécialisée, permettant d'accéder à un portefeuille diversifié de PME. Cette diversification sectorielle contribue à la mutualisation des risques.
 Les professionnels de chaque fonds assurent la sélection, l'accompagnement stratégique et la sortie des entreprises dans l'optique de créer de la valeur. Il s'agit d'une solution pour financer le développement économique de nos territoires tout en étant faiblement corrélée à l'évolution des marchés financiers traditionnels puisque les entreprises qui constituent les fonds sont principalement non cotées en bourse.
 
@@ -30,11 +30,11 @@ Le fonds se déboucle sans intervention de l'investisseur, et le gestionnaire se
 Le fonds entre dans la masse successorale de l'investisseur et sera transmis aux héritiers selon la dévolution légale ou testamentaire.
 
 Ce placement est :
-• spécialisé : il a en effet été conçu pour investir dans des entreprises majoritairement non cotées tout en faisant en sorte d'apporter un maximum de sécurité aux investisseurs.
+• spécialisé : il a été conçu pour investir dans des entreprises majoritairement non cotées ; il présente un risque élevé de perte en capital, partielle ou totale.
 • diversifié : il permet d'accéder à un portefeuille d'investissement diversifié avec un positionnement sur différentes entreprises.
 • clé en main : la gestion est déléguée à une société de gestion experte qui se chargera de définir la politique d'investissement, de cibler et de sélectionner des entreprises tout en accompagnant les investissements dans la durée.
 
-En contrepartie des avantages fiscaux, il faut aussi prendre en compte le risque inhérent à cet investissement. Certes, le potentiel de plus-values à long terme est élevé ; cependant, il n'y a aucune garantie en capital. L'investissement dans des FCPI JEI et FIP Outre-Mer est donc réservé aux épargnants avertis des risques propres à ces produits et prêts à assumer, le cas échéant, une perte en capital ainsi qu'à immobiliser une partie de leur patrimoine dans des supports à risque et très peu liquides. En outre, la majorité des sociétés de gestion fixe une période d'engagement de 10 ans pour sortir de leurs participations dans les meilleures conditions. En conséquence, avant de souscrire, l'investisseur doit s'assurer de ne pas avoir besoin des sommes investies avant la clôture du fonds choisi.`;
+En contrepartie des avantages fiscaux, il faut aussi prendre en compte le risque inhérent à cet investissement. Les perspectives de plus-values ne sont pas garanties, et il n'y a aucune garantie en capital. L'investissement dans des FCPI JEI et FIP Outre-Mer est donc réservé aux épargnants avertis des risques propres à ces produits et prêts à assumer, le cas échéant, une perte en capital ainsi qu'à immobiliser une partie de leur patrimoine dans des supports à risque et très peu liquides. En outre, la majorité des sociétés de gestion fixe une période d'engagement de 10 ans pour sortir de leurs participations dans les meilleures conditions. En conséquence, avant de souscrire, l'investisseur doit s'assurer de ne pas avoir besoin des sommes investies avant la clôture du fonds choisi.`;
 
 /** Après la frise cycle de vie (§ 3 Fiscalité). */
 export const ANNEXES_CAPITAL_INVEST_BODY_AFTER_DIAGRAM = `[u]3. Fiscalité[/u]

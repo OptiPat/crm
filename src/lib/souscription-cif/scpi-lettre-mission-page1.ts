@@ -30,7 +30,7 @@ Ci-après désigné « le Conseiller ».`;
 
 /** @deprecated Corps complet — préférer SCPI_LM_PAGE1_BODY_AFTER_TITLE + en-tête structuré. */
 export const SCPI_LM_PAGE1_BODY = SCPI_LM_PAGE1_BODY_AFTER_TITLE;
-export const SCPI_LM_PAGE1_FOOTER_DEFAULT = `Conseiller en Investissements Financiers, {{cgp_association_membre}} - Association agréée par l'Autorité des Marchés Financiers-Mandataire d'intermédiaire en Assurance de Stellium Courtage - ORIAS n°{{cgp_orias}} www.orias.fr, sous le contrôle de l'Autorité de Contrôle Prudentiel et de Résolution (ACPR) 04 Place de Budapest – 75436 Paris Cedex 09
+export const SCPI_LM_PAGE1_FOOTER_DEFAULT = `Conseiller en Investissements Financiers, {{cgp_association_membre}} - Association agréée par l'Autorité des Marchés Financiers-Mandataire d'intermédiaire en Assurance de Stellium Courtage - ORIAS n°{{cgp_orias}} www.orias.fr, sous le contrôle de l'Autorité de Contrôle Prudentiel et de Résolution (ACPR) 4 Place de Budapest, CS 92459, 75436 Paris Cedex 09
 Mandataire d'intermédiaire en Opérations de Banque et en Services de Paiement de Stellium Financement sous le contrôle de l'ACPR (Autorité de Contrôle Prudentiel et de Résolution), 4 Place de Budapest, CS 92459, 75436 Paris Cedex 09
 Attestation de collaborateur de Stellium Immobilier n° CPI 3101 2015 000 001 813 délivrée par la CCI de Toulouse
 Assurance Responsabilité Civile Professionnelle conforme au code des Assurances auprès de ZURICH INSURANCE PLC, 112 Avenue de Wagram, 75017 Paris-N° SIREN {{cgp_siren_compact}} {{cgp_registre_pied}} - Siège social : {{cgp_adresse_ligne}}, {{cgp_cp_ville}}`;

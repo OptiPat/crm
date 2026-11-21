@@ -20,7 +20,7 @@ export const ANNEXES_CAPITAL_INVEST_COSTS_ROWS: ReadonlyArray<AnnexesCapitalInve
     percent: "0 %",
   },
   {
-    label: "Paiement reçu de tiers par le CIF\nAu cumul de tous les Fonds",
+    label: "Paiement reçu de tiers par le Conseiller\nAu cumul de tous les Fonds",
     amount: "€",
     percent: "%",
   },

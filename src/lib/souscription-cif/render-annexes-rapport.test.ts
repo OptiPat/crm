@@ -330,7 +330,7 @@ describe("buildAnnexesRapportPreview", () => {
 
     expect(
       page9.bodySegmentsSection7?.some(
-        (s) => s.kind === "bold" && s.value.includes("Le CIF déclare")
+        (s) => s.kind === "bold" && s.value.includes("Le Conseiller déclare")
       )
     ).toBe(true);
     const section7 = page9.bodySegmentsSection7
@@ -886,7 +886,7 @@ describe("buildAnnexesRapportPreview", () => {
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
       .join("");
     expect(section7).toContain("7. Notes importantes");
-    expect(section7).not.toContain("Le CIF déclare");
+    expect(section7).not.toContain("Le Conseiller déclare");
     const faitA = (pageSuite.bodySegmentsAfterSection7 ?? [])
       .map((s) => (s.kind === "text" ? s.value : ""))
       .join("");

@@ -17,5 +17,5 @@ La préconisation est effectuée ce jour sur la base des informations fournies p
 Cependant, la situation familiale et/ou professionnelle du client peut évoluer : il lui est vivement recommandé d'informer son Conseiller de toute modification afin de pouvoir actualiser si nécessaire son allocation d'actifs.
 Toutes les hypothèses juridiques émises par le conseiller devront être validées in fine par un spécialiste du droit.
 
-[b]Le CIF déclare que les préconisations sont en adéquation avec la situation et les objectifs du client :[/b]
+[b]Le Conseiller déclare que les préconisations sont en adéquation avec la situation et les objectifs du client :[/b]
 ☒ Je déclare que les préconisations sont en adéquation avec la situation et les objectifs de {{client_nom_prenom}}`;

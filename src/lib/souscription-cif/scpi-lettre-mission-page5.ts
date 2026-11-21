@@ -10,7 +10,7 @@ Le Conseiller traitera de manière strictement confidentielle tous les documents
 
 [u]7. Engagements du Client[/u]
 
-Les Clients s'engagent à communiquer au Conseiller et à lui fournir dans la plus grande transparence toute information et tout document nécessaires à la bonne connaissance des conditions d'exécution de la Prestation. Le Client doit faire connaître ses décisions, ses choix, et, d'une manière générale, toutes ses observations, de toute nature, au Conseiller.
+Le Client s'engage à communiquer au Conseiller et à lui fournir dans la plus grande transparence toute information et tout document nécessaires à la bonne connaissance des conditions d'exécution de la Prestation. Le Client doit faire connaître ses décisions, ses choix, et, d'une manière générale, toutes ses observations, de toute nature, au Conseiller.
 
 Le Client s'engage à communiquer sans délai au Conseiller toute modification des informations pouvant affecter la Prestation. Le Client a conscience que le Conseiller ne pourra réaliser la Prestation en l'absence de ces informations et documents, ou en présence d'informations erronées.
 

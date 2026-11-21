@@ -20,7 +20,7 @@ export const ANNEXES_SCPI_COSTS_ROWS: ReadonlyArray<AnnexesScpiCostsRow> = [
     percent: "0 %",
   },
   {
-    label: "Paiement reçu de tiers par le CIF\nAu cumul de toutes les SCPI",
+    label: "Paiement reçu de tiers par le Conseiller\nAu cumul de toutes les SCPI",
     amount: "€",
     percent: "%",
   },

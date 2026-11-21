@@ -9,7 +9,7 @@ import { sumProductCostsFromSouscriptions, computeProductCostsPercentRatio } fro
 import type { SouscriptionDossierFields } from "@/lib/souscription-cif/dossier-fields";
 
 const ROW_CIF_TIERS_LABEL =
-  "Paiement reçu de tiers par le CIF\nAu cumul de toutes les SCPI";
+  "Paiement reçu de tiers par le Conseiller\nAu cumul de toutes les SCPI";
 const ROW_PRODUCTS_LABEL = "Coûts liés aux produits";
 const ROW_TOTAL_LABEL = "TOTAL COÛTS ET FRAIS";
 

@@ -14,8 +14,8 @@ export const SCPI_LM_INSTRUMENTS_TABLE_HEADERS = [
   "Risques\nSur une échelle de 1 à 7",
   "Mises en garde",
   "Niveaux de frais",
-  "Mode de règlement",
-  "Critères de durabilité pris en compte *",
+  "Rémunération du Conseiller",
+  "Critères de durabilité pris en compte",
 ] as const;
 
 export const SCPI_LM_INSTRUMENTS_TABLE_ROWS: ScpiLmInstrumentsTableRow[] = [

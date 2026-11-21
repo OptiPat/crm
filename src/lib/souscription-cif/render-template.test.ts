@@ -96,7 +96,7 @@ describe("buildScpiLettreMissionPreview", () => {
     );
     expect(sigLeft.join("\n")).toContain("Fait le 13/06/2026");
     expect(sigLeft.join("\n")).toContain("Un exemplaire original pour le Conseiller");
-    expect(sigLeft.join("\n")).toContain("Le CIF : Jean DUPONT");
+    expect(sigLeft.join("\n")).toContain("Le Conseiller : Jean DUPONT");
     expect(sigRight.join("\n")).toContain("Un exemplaire original pour le Client");
     expect(sigRight.join("\n")).toContain("Par Jean Dupont");
     expect(sigRight.join("\n")).toContain("Signature(s)");

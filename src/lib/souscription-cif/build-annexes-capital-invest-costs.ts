@@ -13,7 +13,7 @@ import {
 import type { SouscriptionDossierFields } from "@/lib/souscription-cif/dossier-fields";
 
 const ROW_CIF_TIERS_LABEL =
-  "Paiement reçu de tiers par le CIF\nAu cumul de tous les Fonds";
+  "Paiement reçu de tiers par le Conseiller\nAu cumul de tous les Fonds";
 const ROW_PRODUCTS_LABEL = "Coûts liés aux produits";
 const ROW_TOTAL_LABEL = "TOTAL COÛTS ET FRAIS";
 
