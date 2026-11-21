@@ -30,7 +30,7 @@ export const SCPI_ANNEXE_PRODUCT_FICHES: ReadonlyArray<ScpiAnnexeProductFiche> =
     partPriceEur: 250,
     description: `— COMÈTE —
 
-La SCPI Comète vise à se constituer un patrimoine diversifié dans l'immobilier tertiaire (bureaux commerces, hôtellerie, santé, éducation, logistique et locaux d'activité). La stratégie géographique est d'investir au sein de l'Union Européenne (seule la logistique sera exclue de l'UE) et pourra également se positionner en Amérique du Nord, en Australie et en Nouvelle Zélande en cas d'opportunités.
+La SCPI Comète a pour objectif de constituer un patrimoine immobilier locatif diversifié dans l'immobilier tertiaire (bureaux, entrepôts logistiques, locaux d'activités, commerces, hôtellerie, santé, éducation, entre autres). Elle exclut l'acquisition de bâtiments d'activités et de logistiques en zone euro. Elle peut investir au sein de l'Union européenne (hors France métropolitaine) prioritairement, et/ou en Amérique du Nord et/ou dans les pays suivants : Andorre, Islande, Monaco, Norvège, Royaume-Uni, Serbie, Suisse, Australie et Nouvelle-Zélande.
 
 Données au 30/09/2026
 Capitalisation : 902,9 M€ ; Actifs : 44 ; Baux : 137 ; Taux de distribution : 9 % brut de fiscalité ; TOF : 99,5 % ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
@@ -49,7 +49,7 @@ Principaux frais :
     partPriceEur: 204,
     description: `— TRANSITIONS EUROPE —
 
-Arkea Transition Europe accompagne les transitions du marché de l'immobilier en investissant dans un portefeuille d'actifs diversifiés. Elle investit en Europe ( Espagne, Pays-Bas, République d'Irlande…) pour bénéficier des opportunités des différents cycles immobilier, très majoritairement dans des actifs d'immobilier d'entreprise (bureaux, santé, éducation, logistique, activités, hébergement géré…).
+La SCPI Transitions Europe investit principalement dans des biens immobiliers professionnels (tels que des espaces de santé, éducatifs, de logistique, de travail, commerciaux, et plus) et, occasionnellement, dans des biens résidentiels. Ses acquisitions, neuves ou anciennes, pourront se situer partout dans l'Union européenne et être financées jusqu'à 40 % par emprunt.
 
 Données au 30/09/2026
 Capitalisation : 1,48 Md€ ; Actifs : 65 ; Locataires : 379 ; Taux de distribution 2025 : 7,60 % ; TOF : 97,9 % ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
@@ -68,7 +68,7 @@ Principaux frais :
     partPriceEur: 20,
     description: `— ÉPARGNE PIERRE EUROPE —
 
-Epargne Pierre Europe accompagne les projets d'avenir de la 3ème puissance mondiale. Elle vous permet d'accéder à un patrimoine immobilier diversifié tant sur le plan sectoriel (bureaux, commerces, ou locaux d'activité) que géographique, en bénéficiant des différences de cycles économique entre les pays de la zone euro.
+La SCPI Épargne Pierre Europe a pour objectif la constitution d'un patrimoine immobilier diversifié tant sur le plan géographique que locatif permettant de distribuer un revenu et de valoriser le prix de la part. Ses investissements immobiliers porteront sur des actifs immobiliers de toute nature en Europe (zone euro). Sa stratégie d'investissement porte sur des actifs d'immobilier d'entreprise (notamment bureaux, commerces, locaux d'activités, entrepôts), ainsi que sur tous types d'actifs immobiliers professionnels dans le secteur de la santé, de tourisme et loisirs, de l'éducation et dans des résidences gérées.
 
 Données au 30/09/2026
 Capitalisation : 763 M€ ; Actifs : près de 40 ; Locataires : 73 ; Taux de distribution 2025 : 6,75 % brut de fiscalité étrangère ; TOF : 99,77 % ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
@@ -87,7 +87,7 @@ Principaux frais :
     partPriceEur: 20.8,
     description: `— ÉPARGNE PIERRE —
 
-Épargne Pierre déploie une stratégie recherchant le rendement en se positionnant sur toutes les typologies d'actifs : bureaux, commerces et locaux d'activités pour profiter des opportunités de marché. La stratégie privilégie les grandes métropoles régionales afin de bénéficier d'un bon mix géographique sur le territoire et cible des actifs d'une valeur unitaire entre 1 et 50 M€. Epargne Pierre bénéficie du label ISR et prend en compte les critères environnementaux, sociétaux et de gouvernance (ESG) dans le cadre de la mise en œuvre de sa stratégie d'investissement et dans sa gestion des actifs. La capitalisation importante permet une large diversification et mutualisation du risque immobilier grâce à la variété d'actifs et des locataires (principalement grands utilisateurs publics ou privés).
+La SCPI Épargne Pierre déploie une stratégie recherchant le rendement en se positionnant sur toutes les typologies d'actifs : bureaux, commerces et locaux d'activités pour profiter des opportunités de marché. La stratégie privilégie les grandes métropoles régionales afin de bénéficier d'un bon mix géographique sur le territoire et cible des actifs d'une valeur unitaire entre 1 et 50 M€. Epargne Pierre bénéficie du label ISR et prend en compte les critères environnementaux, sociétaux et de gouvernance (ESG) dans le cadre de la mise en œuvre de sa stratégie d'investissement et dans sa gestion des actifs. La capitalisation importante permet une large diversification et mutualisation du risque immobilier grâce à la variété d'actifs et des locataires (principalement grands utilisateurs publics ou privés).
 
 Données au 30/09/2026
 Capitalisation : 2 811 M€ ; Actifs : 417 ; Locataires : 762 ; Taux de distribution 2025 : 5,28 % ; TOF : 94,05 % ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
@@ -106,7 +106,7 @@ Principaux frais :
     partPriceEur: 308,
     description: `— ALTA CONVICTIONS —
 
-Alta Convictions est une SCPI agile et conçue pour s'adapter au nouveau cycle immobilier, tant d'un point de vue sectoriel, privilégiant au lancement des commerces, des écoles et de la logistique principalement ; que géographique, avec des investissements dans les métropoles françaises et jusqu'à 20% du portefeuille immobilier en Europe.
+La SCPI Alta Convictions investira, directement ou indirectement, sur l'ensemble des classes d'actifs (résidentiels, commerces, équipements publics, hôtels, résidences services, bureaux régions, bureaux Île-de-France, logistiques et locaux d'activités, etc.) et aucune classe d'actif ne représentera plus de 50 % de la valeur totale du patrimoine à partir de la 3e année suivant sa constitution. En termes géographiques, elle investit majoritairement dans des métropoles françaises. Une partie des investissements pourra également être réalisée au sein de pays membres ou anciens membres de l'Union européenne dans une limite de 20 % maximum de son actif.
 
 Données au 30/09/2026
 Capitalisation : 142,1 M€ ; Actifs : 20 ; Baux : 40 ; Taux de distribution 2025 : 6,57 % brut de fiscalité ; TOF : 97 % ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
@@ -144,7 +144,7 @@ Principaux frais :
     partPriceEur: 682,
     description: `— NCAP RÉGIONS —
 
-Une SCPI diversifiée déployant une stratégie dynamique et opportuniste privilégiant la recherche de rendement en contrepartie d'un risque plus élevé. La politique d'investissement vise principalement l'acquisition d'actifs de petites tailles en régions afin de sortir des zones de marché les plus tendues et privilégier les zones moins concurrentielles. La SCPI bénéficie d'un patrimoine diversifié sur les bureaux, commerces et locaux d'activités afin de tirer profit des opportunités sur tous les segments. La capitalisation de la SCPI offre une mutualisation plus limitée avec un portefeuille d'actifs plus concentré.
+La SCPI NCap Régions est une SCPI diversifiée déployant une stratégie dynamique et opportuniste privilégiant la recherche de rendement en contrepartie d'un risque plus élevé. La politique d'investissement vise principalement l'acquisition d'actifs de petites tailles en régions afin de sortir des zones de marché les plus tendues et privilégier les zones moins concurrentielles. La SCPI bénéficie d'un patrimoine diversifié sur les bureaux, commerces et locaux d'activités afin de tirer profit des opportunités sur tous les segments. La capitalisation de la SCPI offre une mutualisation plus limitée avec un portefeuille d'actifs plus concentré.
 
 Données au 30/09/2026
 Capitalisation : 1 115,7 M€ ; Actifs : 187 ; Baux : 435 ; Taux de distribution 2025 : 5,72 % ; TOF : 91,1 % ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
@@ -201,7 +201,7 @@ Principaux frais :
     partPriceEur: 340,
     description: `— IMMORENTE —
 
-Immorente a pour objet l'acquisition d'un parc immobilier locatif, situé principalement dans les grandes métropoles françaises, de l'Espace Economique Européen, du Royaume-Uni et de la Suisse, et à titre accessoire dans les autres villes de la même zone. Elle investit de manière diversifiée dans les principales typologies d'actifs immobiliers : bureaux, murs de commerces, hôtellerie et loisirs, logistique et activités, santé et résidentiel. Cette SCPI attache une importance à la diversification et mutualisation du risque, notamment en diversifiant le secteur géographique (25% à l'étranger), la typologie d'actifs, les secteurs d'activité et la qualité des locataires.
+La SCPI Immorente a pour objet l'acquisition et la gestion d'un parc immobilier locatif. Son univers d'investissement couvre de manière diversifiée les principales typologies d'immobilier locatif (murs de commerces, de bureaux, d'hôtellerie et de loisirs, de logistique et d'activités, de santé et résidentiel). Elle investit prioritairement en centre-ville, dans les grandes zones commerciales périphériques et dans les pôles tertiaires pour les bureaux. Les zones géographiques privilégiées sont principalement les grandes métropoles françaises et de l'Espace économique européen, du Royaume-Uni et de la Suisse, des États-Unis d'Amérique et du Canada et à titre accessoire les autres villes de la même zone.
 
 Données au 30/09/2026
 Capitalisation : 4 391 M€ ; Actifs : 976 ; Unités locatives : 3 266 ; Taux de distribution 2025 : 5,00 % brut de fiscalité ; TOF : 91,18 % ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
@@ -220,7 +220,7 @@ Principaux frais :
     partPriceEur: 613.5,
     description: `— ACTIVIMMO —
 
-Activimmo est une SCPI spécialisée ciblant les actifs à usage de locaux d'activités, d'entrepôts et de logistique urbaine ou du « dernier kilomètre », situés en périphéries des villes, à proximité des axes routiers ou au sein même des bassins d'emploi et de consommation. Les locaux pourront abriter diverses activités permettant de répondre aux besoins immobiliers : des PME / PMI et ETI, jusqu'aux filiales de grands groupes, ou encore des entreprises à la recherche de bâtiments pour assurer leur service de logistique notamment du dernier kilomètre, dernier ou avant-dernier maillon précédant la livraison au consommateur final. A titre de diversification, la SCPI pourra investir en bureaux et commerces.
+La SCPI ActivImmo a pour objectif de constituer, par des investissements majoritaires, un patrimoine immobilier locatif spécialisé dans l'immobilier tertiaire à dominante de locaux d'activités, d'entrepôts, de messagerie et de logistique, et accessoirement bureaux ou commerces ne dépassant pas trente pour cent (30 %) de la valeur vénale du patrimoine ; patrimoine situé en France, dans les grandes métropoles de l'Union européenne ou en périphérie de ces métropoles. Sous réserve des conditions de marché et en fonction des opportunités, elle privilégie les actifs qui, de par leur emplacement et leurs caractéristiques techniques, sont ou peuvent potentiellement devenir des bâtiments de logistique urbaine.
 
 Données au 30/09/2026
 Capitalisation : 1,42 Md€ ; Actifs : 182 ; Baux : 452 ; Taux de distribution : 5,50 % ; TOF : 91,5 % ; Durée de placement recommandée : 10 ans minimum ; Risque : 3/7
