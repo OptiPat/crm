@@ -769,7 +769,9 @@ describe("buildAnnexesRapportPreview", () => {
     expect(section5).toContain("Calcul du montant d'apport nécessaire");
     expect(section5).toContain("Recalcul du plafond");
     expect(section5).toContain("opérations en LODEOM");
-    expect(section5).toContain("créance sur l'État");
+    expect(section5).toContain("il ne donne lieu à aucun remboursement");
+    expect(section5).not.toContain("créance sur l'État");
+    expect(section5).toContain("compte tenu des autres avantages fiscaux");
     expect(section5).not.toContain("opération opérations");
     expect(section5).not.toContain("Loi Lodeom");
 

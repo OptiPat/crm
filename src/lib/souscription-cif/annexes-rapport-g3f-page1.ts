@@ -12,11 +12,11 @@ Ce type d'investissement, destiné à soutenir l'activité économique en Outre-
 
 [u]2. Mécanisme de la réduction d'impôt[/u]
 
-Ce sont des opérations dites « one shot », ce qui signifie que l'avantage fiscal s'impute sur l'impôt de l'année suivant la souscription.
-L'excédent de réduction d'impôt peut être imputé l'année d'après. L'effet défiscalisant s'arrête là. En revanche, toute réduction qui dépasserait le plafond serait définitivement perdue.
-Cet avantage fiscal entre dans le cadre du plafonnement des niches fiscales (qui est de 10 000 € pour la plupart des opérations) et bénéficie d'un plafond spécifique de 18 000 €.
+Ce sont des opérations dites « one shot » : la réduction d'impôt est accordée au titre de l'année au cours de laquelle les investissements sont mis en service (en principe l'année de souscription) et s'impute sur l'impôt de cette année, acquitté l'année suivante.
+Si le montant de la réduction d'impôt excède l'impôt dû, le solde peut être reporté sur l'impôt sur le revenu des années suivantes jusqu'à la cinquième inclusivement. En revanche, la fraction de réduction qui excède le plafonnement global des niches fiscales est définitivement perdue.
+Cet avantage fiscal relève du plafonnement global majoré : l'ensemble des avantages fiscaux du foyer ne peut réduire l'impôt de plus de 18 000 € par an, ce montant incluant le plafond général de 10 000 € (les deux ne se cumulent pas).
 
-La réduction d'impôt acquise par un contribuable au titre de son investissement en Loi Girardin industriel de plein droit (participation au financement d'un projet industriel en Outre-Mer dont le montant est inférieur à 250 000 €) selon l'article 199 undecies B du CGI est limitée à 40 909 € (correspondant à 18 000 € net de rétrocession locataire), et retenue pour 44 % dans le plafond global des avantages fiscaux de la niche fiscale.
+La réduction d'impôt acquise par un contribuable au titre de son investissement en Loi Girardin industriel de plein droit (participation au financement d'un projet industriel en Outre-Mer dont le montant est inférieur à 250 000 €) selon l'article 199 undecies B du CGI est retenue pour 44 % de son montant dans ce plafond global. En l'absence de toute autre niche fiscale, la réduction maximale est donc d'environ 40 909 € (40 909 € × 44 % = 18 000 €).
 À l'issue de la période de cinq années de location du matériel et donc de conservation des parts par l'investisseur, la société commercialisant le portefeuille rachète les parts des investisseurs pour le centime d'euro symbolique et liquide l'opération.
 
 [u]3. La rentabilité[/u]
