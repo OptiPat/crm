@@ -21,7 +21,7 @@ export const ANNEXES_SCPI_RECAP_ROW_CONNAISSANCES_TITLE =
   "La recommandation est adaptée aux connaissances et à l'expérience du client ?";
 
 export const ANNEXES_SCPI_RECAP_ROW_CONNAISSANCES_CONTENT = `Le Client a un niveau « {{niveau_experience_qpi}} ».
-Pour autant, il a eu l'ensemble des informations précontractuelles obligatoires au travers de la remise des documents : DIC, Statuts, Notice d'Information, BTI.`;
+Pour autant, il a eu l'ensemble des informations précontractuelles obligatoires au travers de la remise des documents : DIC, Statuts, Note d'information, BTI.`;
 
 export const ANNEXES_SCPI_RECAP_ROW_RISQUE_TITLE =
   "La recommandation est adaptée au client vis-à-vis de son attitude à l'égard du risque et de sa capacité à subir des pertes ?";

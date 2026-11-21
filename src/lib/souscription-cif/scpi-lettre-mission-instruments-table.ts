@@ -26,9 +26,9 @@ export const SCPI_LM_INSTRUMENTS_TABLE_ROWS: ScpiLmInstrumentsTableRow[] = [
 Risque de liquidité
 Risque de variation des revenus
 Risque immobilier`,
-    fees: `Frais d'entrée entre 8,5 % et 12 %
+    fees: `Frais d'entrée entre 8,45 % et 12 %
 
-Frais de gestion entre 10 % et 12 % des produits locatifs HT et des produits financiers nets encaissés.`,
+Frais de gestion entre 9 % et 12,4 % des produits locatifs HT et des produits financiers nets encaissés (selon la SCPI).`,
     paymentMode:
       "Rétrocession de commissions sur une quote-part des droits d'entrée comprises entre 3 et 4 %",
     sustainability: `- Règlement Taxonomie
@@ -43,9 +43,9 @@ Risque de liquidité
 Risque immobilier
 Risque de variation des revenus
 Risque fiscal`,
-    fees: `Frais d'entrée entre 8,5 % et 12 %
+    fees: `Frais d'entrée entre 8,45 % et 12 %
 
-Frais de gestion entre 10 % et 12 % des produits locatifs HT et des produits financiers nets encaissés.`,
+Frais de gestion entre 9 % et 12,4 % des produits locatifs HT et des produits financiers nets encaissés (selon la SCPI).`,
     paymentMode:
       "Rétrocession de commissions sur une quote-part des droits d'entrée comprises entre 3 et 4 %",
     sustainability: `- Règlement Taxonomie

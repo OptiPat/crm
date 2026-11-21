@@ -26,7 +26,7 @@ Le nu-propriétaire est ainsi généralement un contribuable disposant de revenu
 À ce titre, une souscription de parts de SCPI en nue-propriété peut notamment présenter les intérêts suivants :
 - se constituer un patrimoine (en fonds propres ou par endettement) en ne payant qu'une quote-part du prix de la pleine propriété ;
 - ne pas être taxé à l'extinction du démembrement au moment de la reconstitution de la pleine propriété ;
-- ne pas être assujetti à l'IFI au titre de cet investissement pendant la durée du démembrement.
+- ne pas être assujetti à l'IFI au titre de cet investissement pendant la durée du démembrement, l'usufruitier déclarant en principe la valeur en pleine propriété (CGI art. 968).
 
 À contrario, l'usufruitier est généralement un contribuable souhaitant percevoir des revenus complémentaires avec un investissement de départ réduit, ou un investisseur institutionnel souhaitant effectuer un placement de trésorerie. À ce titre, une souscription de parts de SCPI en usufruit peut notamment présenter les intérêts suivants :
 - percevoir des revenus réguliers sur une période fixée ;

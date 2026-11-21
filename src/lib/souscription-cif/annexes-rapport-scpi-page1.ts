@@ -14,10 +14,10 @@ Les SCPI (Société Civile de Placement Immobilier) sont des sociétés d'invest
 
 Elles collectent des fonds auprès d'investisseurs particuliers en vue d'acquérir un patrimoine immobilier locatif qui sera géré par une société de gestion.
 
-Devenu associé, vous percevez des revenus réguliers sous forme de loyers qui sont nets de charges et de frais de gestion.
+Devenu associé, vous pouvez percevoir des revenus potentiels, issus des loyers nets de charges et de frais de gestion, dont le montant n'est pas garanti.
 
 Il s'agit d'un placement de long terme, le sous-jacent étant la détention d'un patrimoine immobilier.
 
 Les SCPI dites « SCPI de rendement » détiennent un patrimoine essentiellement composé d'immeubles à usage commercial (bureaux, entrepôts, boutiques, etc.).
 
-Ce type d'actif génère des revenus supérieurs à ceux de l'immobilier d'habitation et les sociétés de gestion ont pour objectif principal la distribution des revenus.`;
+Ce type d'actif peut générer des revenus supérieurs à ceux de l'immobilier d'habitation, sans garantie ; les sociétés de gestion ont pour objectif principal la distribution des revenus.`;

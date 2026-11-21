@@ -11,7 +11,7 @@ export const ANNEXES_SCPI_PROS_CONS_ROWS: ReadonlyArray<AnnexesScpiProsConsRow> 
     disadvantages: "Aucune garantie en capital ni en rendement.",
   },
   {
-    advantages: "Perception de revenus réguliers sans souci de gestion.",
+    advantages: "Perception de revenus potentiels, non garantis, sans souci de gestion.",
     disadvantages:
       "Placement de long terme soumis aux fluctuations du marché immobilier.",
   },
@@ -22,7 +22,7 @@ export const ANNEXES_SCPI_PROS_CONS_ROWS: ReadonlyArray<AnnexesScpiProsConsRow> 
   },
   {
     advantages:
-      "Permet d'accéder au marché de l'immobilier d'entreprise qui offre des rendements supérieurs à ceux de l'habitation.",
+      "Permet d'accéder au marché de l'immobilier d'entreprise, historiquement plus rémunérateur que l'habitation, sans garantie de rendement.",
     disadvantages: "Faible liquidité des parts.",
   },
   {
@@ -31,7 +31,7 @@ export const ANNEXES_SCPI_PROS_CONS_ROWS: ReadonlyArray<AnnexesScpiProsConsRow> 
   },
   {
     advantages:
-      "Transmission du patrimoine facilité car la valeur unitaire des parts est faible.",
+      "Transmission du patrimoine facilitée car la valeur unitaire des parts est faible.",
     disadvantages: "",
   },
 ];
@@ -52,7 +52,7 @@ export const ANNEXES_SCPI_PROS_CONS_FISCAL_ROWS: ReadonlyArray<AnnexesScpiProsCo
   },
   {
     advantages:
-      "Possibilité de bénéficier du régime micro-foncier si détention d'un immeuble loué par ailleurs.",
-    disadvantages: "Valeur vénale soumise à l'IFI.",
+      "Possibilité de bénéficier du régime micro-foncier (abattement de 30 %) si les revenus fonciers bruts n'excèdent pas 15 000 € par an et si le contribuable détient aussi directement au moins un immeuble donné en location nue. La déduction des intérêts d'emprunt suppose le régime réel.",
+    disadvantages: "Valeur des parts, pour leur fraction représentative d'actifs immobiliers, incluse dans l'assiette de l'IFI.",
   },
 ];
