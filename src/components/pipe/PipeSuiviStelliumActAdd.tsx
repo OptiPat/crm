@@ -41,6 +41,7 @@ import {
   vpFrequenceFromStelliumAct,
 } from "@/lib/placement/placement-contract-link";
 import { PlacementMontantField } from "@/components/pipe/PlacementMontantField";
+import { stelliumJournalTitre } from "@/lib/placement/stellium-journal-titre";
 import { toast } from "sonner";
 import {
   parseMontantEurosToCentimes,
@@ -380,8 +381,13 @@ export function PipeSuiviStelliumActAdd({
     setSavingId(operation.id);
     try {
       const occurredAtUnix = datetimeLocalToUnix(options?.occurredAt ?? unixToDatetimeLocalInput());
-      const journalTitre =
-        versementComplementaire && !product ? label : `${label} — ${product}`;
+      const journalTitre = stelliumJournalTitre({
+        label,
+        product,
+        versementComplementaire,
+        operationType: operation.operation_type,
+        montantCentimes: operation.montant_centimes,
+      });
       if (versementFromSuivi) {
         await timeline.addEntry({
           entry_type: "NOTE",
