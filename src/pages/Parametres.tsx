@@ -474,7 +474,7 @@ export function Parametres({ currentPage, onNavigate }: ParametresProps) {
     <SettingsShell
       header={
         <SettingsPageHeader
-          description="Configurez votre espace conseiller : profil, envois email, automatisations et données locales."
+          description="Configurez votre espace conseiller."
           badge={
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline" className="font-normal tabular-nums">
