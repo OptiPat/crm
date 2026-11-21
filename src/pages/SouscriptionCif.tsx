@@ -106,6 +106,11 @@ const DOCUMENT_LABELS: Record<SouscriptionCifDocumentId, string> = {
 const CGP_PROFILE_KEYS = new Set([
   "cgp_nom_complet",
   "cgp_representant_legal",
+  "cgp_designation",
+  "cgp_immatriculation",
+  "cgp_registre_pied",
+  "cgp_signataire",
+  "cgp_signataire_titre",
   "cgp_rcs_ville",
   "cgp_siren",
   "cgp_siren_compact",

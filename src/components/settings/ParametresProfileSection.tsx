@@ -172,17 +172,17 @@ export function ParametresProfileSection({
         <SettingsGroup>
           <SettingsRow
             label="Forme d'exercice"
-            hint="Présentation du conseiller en tête de la lettre de mission"
+            hint="Présentation du conseiller dans la lettre de mission, la convention RTO et le rapport"
             htmlFor="cif_forme_exercice"
           >
             <Select
-              value={cgpConfig.cif_forme_exercice || "societe"}
+              value={cgpConfig.cif_forme_exercice ?? undefined}
               onValueChange={(v) =>
                 onConfigChange({ cif_forme_exercice: v as "societe" | "nom_propre" })
               }
             >
               <SelectTrigger id="cif_forme_exercice">
-                <SelectValue />
+                <SelectValue placeholder="À choisir…" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="nom_propre">En nom propre (entrepreneur individuel)</SelectItem>
@@ -196,13 +196,13 @@ export function ParametresProfileSection({
             htmlFor="cif_registre"
           >
             <Select
-              value={cgpConfig.cif_registre || "RCS"}
+              value={cgpConfig.cif_registre ?? undefined}
               onValueChange={(v) =>
                 onConfigChange({ cif_registre: v as "RCS" | "RSAC" | "RNE" })
               }
             >
               <SelectTrigger id="cif_registre">
-                <SelectValue />
+                <SelectValue placeholder="À choisir…" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="RSAC">RSAC (registre spécial des agents commerciaux)</SelectItem>

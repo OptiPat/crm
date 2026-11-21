@@ -32,22 +32,34 @@ function cgpCabinet(cgp: CgpConfig | null): string | null {
   return cgp?.cabinet?.trim() || null;
 }
 
-function cgpRegistre(cgp: CgpConfig | null): "RCS" | "RSAC" | "RNE" {
+/**
+ * Registre choisi dans le profil. `null` tant qu'il n'est pas réglé : les mentions qui en
+ * dépendent restent « à compléter » plutôt que d'afficher un registre peut-être faux.
+ */
+function cgpRegistre(cgp: CgpConfig | null): "RCS" | "RSAC" | "RNE" | null {
   const r = cgp?.cif_registre;
-  return r === "RNE" || r === "RSAC" ? r : "RCS";
+  return r === "RCS" || r === "RNE" || r === "RSAC" ? r : null;
+}
+
+/** Forme d'exercice choisie dans le profil ; `null` tant qu'elle n'est pas réglée. */
+function cgpFormeExercice(cgp: CgpConfig | null): "nom_propre" | "societe" | null {
+  const f = cgp?.cif_forme_exercice;
+  return f === "nom_propre" || f === "societe" ? f : null;
 }
 
 function cgpExerceEnNomPropre(cgp: CgpConfig | null): boolean {
-  return cgp?.cif_forme_exercice === "nom_propre";
+  return cgpFormeExercice(cgp) === "nom_propre";
 }
 
 /**
  * En-tête « le Conseiller » : entrepreneur individuel (mention « entrepreneur individuel »
  * obligatoire, C. com. L. 526-22) ou société représentée par son gérant.
+ * `null` (champ à compléter) si la forme d'exercice n'est pas réglée.
  */
 function cgpDesignation(cgp: CgpConfig | null): string | null {
   const nom = cgpNomComplet(cgp);
   const cabinet = cgpCabinet(cgp);
+  if (cgpFormeExercice(cgp) == null) return null;
   if (cgpExerceEnNomPropre(cgp)) {
     if (!nom) return null;
     return cabinet
@@ -65,20 +77,45 @@ function cgpDesignation(cgp: CgpConfig | null): string | null {
  */
 function cgpImmatriculation(cgp: CgpConfig | null): string | null {
   const siren = cgp?.cif_siren?.trim();
-  if (!siren) return null;
-  const accord = cgpExerceEnNomPropre(cgp) ? "immatriculé" : "immatriculée";
-  if (cgpRegistre(cgp) === "RNE") {
+  const registre = cgpRegistre(cgp);
+  if (!siren || !registre || cgpFormeExercice(cgp) == null) return null;
+  const accord = cgpImmatriculeAccord(cgp);
+  if (registre === "RNE") {
     return `${accord} au Registre national des entreprises sous le numéro ${siren}`;
   }
   const ville = cgp?.cif_rcs_ville?.trim();
-  return ville ? `${accord} au ${cgpRegistre(cgp)} de ${ville} sous le numéro ${siren}` : null;
+  return ville ? `${accord} au ${registre} de ${ville} sous le numéro ${siren}` : null;
 }
 
-/** Pied de page : « RNE », « RCS <ville> » ou « RSAC <ville> ». */
+function cgpImmatriculeAccord(cgp: CgpConfig | null): string {
+  const forme = cgpFormeExercice(cgp);
+  if (forme === "nom_propre") return "immatriculé";
+  if (forme === "societe") return "immatriculée";
+  return "immatriculé(e)";
+}
+
+/** Pied de page : « RNE », « RCS <ville> » ou « RSAC <ville> » (`null` si non réglé). */
 function cgpRegistrePied(cgp: CgpConfig | null): string | null {
-  if (cgpRegistre(cgp) === "RNE") return "RNE";
+  const registre = cgpRegistre(cgp);
+  if (!registre) return null;
+  if (registre === "RNE") return "RNE";
   const ville = cgp?.cif_rcs_ville?.trim();
-  return ville ? `${cgpRegistre(cgp)} ${ville}` : null;
+  return ville ? `${registre} ${ville}` : null;
+}
+
+/** Signature RTO : le cabinet (société) ou le conseiller en nom propre. */
+function cgpSignataire(cgp: CgpConfig | null): string | null {
+  const forme = cgpFormeExercice(cgp);
+  if (forme === "nom_propre") return cgpNomComplet(cgp);
+  if (forme === "societe") return cgpCabinet(cgp);
+  return null;
+}
+
+function cgpSignataireTitre(cgp: CgpConfig | null): string | null {
+  const forme = cgpFormeExercice(cgp);
+  if (forme === "nom_propre") return "Entrepreneur individuel";
+  if (forme === "societe") return "Gérant";
+  return null;
 }
 
 function cgpRepresentantLegal(cgp: CgpConfig | null): string | null {
@@ -148,7 +185,9 @@ export function buildSouscriptionVariables(
     cgp_designation: cgpDesignation(cgp),
     cgp_immatriculation: cgpImmatriculation(cgp),
     /** Accord pour les autres mentions (ORIAS) : « immatriculé » / « immatriculée ». */
-    cgp_immatricule: cgpExerceEnNomPropre(cgp) ? "immatriculé" : "immatriculée",
+    cgp_immatricule: cgpImmatriculeAccord(cgp),
+    cgp_signataire: cgpSignataire(cgp),
+    cgp_signataire_titre: cgpSignataireTitre(cgp),
     cgp_registre_pied: cgpRegistrePied(cgp),
     cgp_rcs_ville: cgp?.cif_rcs_ville?.trim() || null,
     cgp_siren: sirenRaw,

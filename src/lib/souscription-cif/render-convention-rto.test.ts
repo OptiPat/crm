@@ -19,6 +19,8 @@ describe("buildConventionRtoPreview", () => {
     cgp_designation: "Jean DUPONT, entrepreneur individuel",
     cgp_immatriculation: "immatriculé au RSAC de Montpellier sous le numéro 843 139 148",
     cgp_immatricule: "immatriculé",
+    cgp_signataire: "Jean DUPONT",
+    cgp_signataire_titre: "Entrepreneur individuel",
     cgp_registre_pied: "RSAC Montpellier",
     cgp_siren: "843 139 148",
     cgp_siren_compact: "843139148",
@@ -166,7 +168,7 @@ describe("buildConventionRtoPreview", () => {
       .map((line) => line.map((s) => (s.kind === "text" ? s.value : "")).join(""))
       .join("\n");
     expect(sigLeft).toContain("Le Conseiller Jean DUPONT");
-    expect(sigLeft).toContain("Titre : Gérant");
+    expect(sigLeft).toContain("Titre : Entrepreneur individuel");
     expect(sigRight).toContain("Le Client Luc BERNARD");
     expect(sigRight).toContain("Titre : Client");
   });

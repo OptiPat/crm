@@ -14,10 +14,10 @@ Tout litige relatif à l'exécution ou à l'interprétation de la présente Conv
 
 export const RTO_PAGE6_FAIT_A = `Fait à {{client_ville}}, le {{date_document}}, en deux exemplaires originaux, dont un pour le Client et un pour le Conseiller.`;
 
-export const RTO_PAGE6_SIGNATURE_LEFT = `Le Conseiller {{cgp_nom_complet}}
+export const RTO_PAGE6_SIGNATURE_LEFT = `Le Conseiller {{cgp_signataire}}
 
 Par : {{cgp_nom_complet}}
-Titre : Gérant`;
+Titre : {{cgp_signataire_titre}}`;
 
 export const RTO_PAGE6_SIGNATURE_RIGHT = `Le Client {{client_nom_prenom}}
 

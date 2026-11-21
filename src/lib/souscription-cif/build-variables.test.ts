@@ -81,8 +81,8 @@ describe("buildSouscriptionVariables — forme d'exercice et immatriculation", (
     expect(v.cgp_registre_pied).toBe("RNE");
   });
 
-  it("société au RCS (défaut des profils existants)", () => {
-    const v = vars({ cabinet: "CABINET EXEMPLE" });
+  it("société au RCS", () => {
+    const v = vars({ cabinet: "CABINET EXEMPLE", cif_forme_exercice: "societe", cif_registre: "RCS" });
     expect(v.cgp_designation).toBe(
       "La société CABINET EXEMPLE, représentée par Nicolas PLAZA en qualité de gérant"
     );
@@ -92,7 +92,27 @@ describe("buildSouscriptionVariables — forme d'exercice et immatriculation", (
   });
 
   it("champs à compléter : société sans raison sociale, RCS sans ville", () => {
-    expect(vars({}).cgp_designation).toBeNull();
-    expect(vars({ cif_rcs_ville: null }).cgp_immatriculation).toBeNull();
+    expect(vars({ cif_forme_exercice: "societe" }).cgp_designation).toBeNull();
+    expect(
+      vars({ cif_forme_exercice: "societe", cif_registre: "RCS", cif_rcs_ville: null }).cgp_immatriculation
+    ).toBeNull();
+  });
+
+  it("profil non réglé (forme d'exercice et registre absents) : mentions à compléter, pas de valeur par défaut", () => {
+    const v = vars({ cabinet: "CABINET EXEMPLE" });
+    expect(v.cgp_designation).toBeNull();
+    expect(v.cgp_immatriculation).toBeNull();
+    expect(v.cgp_registre_pied).toBeNull();
+    expect(v.cgp_signataire).toBeNull();
+    expect(v.cgp_signataire_titre).toBeNull();
+  });
+
+  it("signature RTO selon la forme d'exercice", () => {
+    const ei = vars({ cif_forme_exercice: "nom_propre", cif_registre: "RSAC" });
+    expect(ei.cgp_signataire).toBe("Nicolas PLAZA");
+    expect(ei.cgp_signataire_titre).toBe("Entrepreneur individuel");
+    const societe = vars({ cif_forme_exercice: "societe", cabinet: "CABINET EXEMPLE" });
+    expect(societe.cgp_signataire).toBe("CABINET EXEMPLE");
+    expect(societe.cgp_signataire_titre).toBe("Gérant");
   });
 });
