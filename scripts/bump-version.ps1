@@ -13,6 +13,27 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
 
+# Lance un programme externe (cargo, git) : PowerShell 5.1 + ErrorActionPreference=Stop
+# transforme sa sortie d'erreur (messages de progression) en erreur bloquante.
+# On affiche tout tel quel et on juge le succes sur le seul code de retour.
+function Invoke-Native {
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][scriptblock]$Command
+    )
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $Command 2>&1 | ForEach-Object { Write-Host "$_" }
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+    if ($code -ne 0) {
+        throw "$Label a echoue (code $code)"
+    }
+}
+
 function Write-Utf8NoBom {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -61,10 +82,7 @@ if (-not $SkipCargoCheck) {
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     Push-Location (Join-Path $Root "src-tauri")
     try {
-        & cargo check
-        if ($LASTEXITCODE -ne 0) {
-            throw "cargo check a echoue (code $LASTEXITCODE)"
-        }
+        Invoke-Native -Label "cargo check" -Command { cargo check }
     } finally {
         Pop-Location
     }
