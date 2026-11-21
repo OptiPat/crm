@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -846,28 +846,20 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
       <Card>
         <CardHeader>
           <div className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <CardTitle>Liste des investissements</CardTitle>
-                <CardDescription>
-                  Cliquez sur une ligne pour ouvrir la fiche du client (onglet Patrimoine).
-                  Un placement au nom du couple permet de choisir le membre ou le foyer.
-                </CardDescription>
-              </div>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <CardTitle>Liste des investissements</CardTitle>
               {!loading && investissements.length > 0 && (
-                <div className="text-sm font-medium text-foreground tabular-nums shrink-0 text-right">
-                  <p>
+                <p className="text-sm tabular-nums text-muted-foreground">
+                  <span className="font-medium text-foreground">
                     {filteredInvestissements.length} / {investissements.length}
-                  </p>
-                  <p className="text-muted-foreground font-normal">
-                    souscrit {formatEuroCentimes(filteredSouscritTotal)}
-                  </p>
-                  {filteredEncoursTotal > 0 && (
-                    <p className="text-xs text-muted-foreground font-normal">
-                      encours {formatEuroCentimes(filteredEncoursTotal)}
-                    </p>
-                  )}
-                </div>
+                  </span>
+                  {" · "}Souscrit {formatEuroCentimes(filteredSouscritTotal)}
+                  {filteredEncoursTotal > 0 ? (
+                    <>
+                      {" · "}Encours {formatEuroCentimes(filteredEncoursTotal)}
+                    </>
+                  ) : null}
+                </p>
               )}
             </div>
 
