@@ -732,19 +732,19 @@ export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProp
               onValueChange={(v) => setActiveDocument(v as SouscriptionCifDocumentId)}
             >
               <div className="flex flex-wrap items-start justify-between gap-2 gap-y-2">
-              <TabsList className="h-auto w-full flex-wrap justify-start gap-1 sm:w-auto">
-                <TabsTrigger value="lettre-mission" className="text-xs sm:text-sm">
+              <TabsList className="h-auto w-full flex-nowrap justify-start gap-1 overflow-x-auto">
+                <TabsTrigger value="lettre-mission" className="shrink-0 whitespace-nowrap px-2.5 text-xs 2xl:text-sm">
                   Lettre de mission
                 </TabsTrigger>
                 {cifProductHasConventionRto(productType) && (
-                  <TabsTrigger value="convention-rto" className="text-xs sm:text-sm">
+                  <TabsTrigger value="convention-rto" className="shrink-0 whitespace-nowrap px-2.5 text-xs 2xl:text-sm">
                     Convention RTO
                   </TabsTrigger>
                 )}
-                <TabsTrigger value="rapport-mission" className="text-xs sm:text-sm">
+                <TabsTrigger value="rapport-mission" className="shrink-0 whitespace-nowrap px-2.5 text-xs 2xl:text-sm">
                   {RAPPORT_MISSION_UI_LABEL}
                 </TabsTrigger>
-                <TabsTrigger value="annexes-rapport" className="text-xs sm:text-sm">
+                <TabsTrigger value="annexes-rapport" className="shrink-0 whitespace-nowrap px-2.5 text-xs 2xl:text-sm">
                   Annexes
                 </TabsTrigger>
               </TabsList>
