@@ -769,9 +769,6 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
       </div>
 
       <section className="space-y-2" aria-label="Synthèse du portefeuille">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Synthèse — cliquer sur Couverture versements programmés, Encours ou Réinvestissement des dividendes pour filtrer la liste
-        </p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <StatCard
             title="Avec moi"
