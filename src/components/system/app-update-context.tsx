@@ -60,6 +60,8 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
   const [progress, setProgress] = useState(0);
   const [currentVersion, setCurrentVersion] = useState("…");
   const startupCheckedRef = useRef(false);
+  const notifiedVersionRef = useRef<string | null>(null);
+  const lastAutoCheckRef = useRef(0);
 
   useEffect(() => {
     getVersion().then(setCurrentVersion).catch(() => setCurrentVersion("?"));
@@ -67,6 +69,9 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
 
   const notifyUpdateAvailable = useCallback((found: Update, silent: boolean) => {
     setPendingUpdate(found);
+    // Contrôles automatiques : la fenêtre ne s'ouvre qu'une fois par version (le bandeau reste).
+    if (silent && notifiedVersionRef.current === found.version) return;
+    notifiedVersionRef.current = found.version;
     setDialogOpen(true);
     if (!silent) {
       toast.info(`Nouvelle version ${found.version} disponible`);
@@ -138,12 +143,35 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
     if (pendingUpdate) setDialogOpen(true);
   }, [pendingUpdate]);
 
+  // Référence stable : la planification ne doit pas être annulée quand `checkForUpdates`
+  // change (ex. numéro de version lu juste après le montage — c'était la cause du bug :
+  // le contrôle au démarrage était annulé puis jamais reprogrammé).
+  const checkForUpdatesRef = useRef(checkForUpdates);
+  useEffect(() => {
+    checkForUpdatesRef.current = checkForUpdates;
+  }, [checkForUpdates]);
+
   useEffect(() => {
     if (startupCheckedRef.current || import.meta.env.DEV) return;
     startupCheckedRef.current = true;
-    const timer = setTimeout(() => checkForUpdates({ silent: true }), 3000);
-    return () => clearTimeout(timer);
-  }, [checkForUpdates]);
+    const autoCheck = () => {
+      lastAutoCheckRef.current = Date.now();
+      void checkForUpdatesRef.current({ silent: true });
+    };
+    const timer = setTimeout(autoCheck, 3000);
+    // L'app reste souvent ouverte plusieurs jours : nouveau contrôle toutes les 6 h,
+    // et au retour sur la fenêtre si le dernier date de plus d'une heure.
+    const interval = setInterval(autoCheck, 6 * 60 * 60 * 1000);
+    const onFocus = () => {
+      if (Date.now() - lastAutoCheckRef.current > 60 * 60 * 1000) autoCheck();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
 
   const value: AppUpdateContextValue = {
     pendingUpdate,
