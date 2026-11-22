@@ -389,7 +389,10 @@ export function ComptaDepensesTab({ year, month, depenses, onChanged }: ComptaDe
 
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">Aucune dépense pour ce mois</p>
+          <div className="flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-border/80 bg-muted/20 px-6 py-10 text-center">
+            <p className="text-sm font-medium">Aucune dépense pour ce mois</p>
+            <p className="max-w-md text-xs text-muted-foreground">Ajoutez-en une, ou importez les justificatifs du mois depuis le Drive (Importer).</p>
+          </div>
         ) : (
           filtered.map((d) => (
             <Card key={d.id} className={cn(comptaTypeListCardClass("depense"))}>

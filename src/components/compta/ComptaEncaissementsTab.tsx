@@ -311,7 +311,10 @@ export function ComptaEncaissementsTab({
 
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">Aucun encaissement pour ce mois</p>
+          <div className="flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-border/80 bg-muted/20 px-6 py-10 text-center">
+            <p className="text-sm font-medium">Aucun encaissement pour ce mois</p>
+            <p className="max-w-md text-xs text-muted-foreground">Ajoutez-en un, ou importez les justificatifs du mois depuis le Drive (Importer).</p>
+          </div>
         ) : (
           filtered.map((e) => (
             <Card key={e.id} className={cn(comptaTypeListCardClass("encaissement"))}>

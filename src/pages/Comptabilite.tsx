@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   CircleCheck,
   Loader2,
+  Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,6 +52,8 @@ export function Comptabilite() {
   const [driveSyncOpen, setDriveSyncOpen] = useState(false);
   const [calendarSyncOpen, setCalendarSyncOpen] = useState(false);
   const [importMenuOpen, setImportMenuOpen] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
   const [monthClosed, setMonthClosed] = useState(false);
   const [closingBusy, setClosingBusy] = useState(false);
 
@@ -101,6 +104,10 @@ export function Comptabilite() {
 
   const monthLabel = useMemo(() => formatComptaMonthLabel(year, month), [year, month]);
   const driveConfigured = isComptaDriveConfigured(config);
+  // Réglage ponctuel : replié derrière l'icône Réglages une fois complet.
+  const configComplete = Boolean(
+    config?.adresseDepart.trim() && config?.driveRootFolderId.trim()
+  );
   const isCurrentMonth =
     year === now.getFullYear() && month === now.getMonth() + 1;
 
@@ -172,42 +179,47 @@ export function Comptabilite() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Navigation : mois + statut */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center rounded-md border bg-background">
+          <div className="flex items-center rounded-md border bg-card">
             <Button
               type="button"
               variant="ghost"
-              size="icon"
+              size="icon-sm"
               aria-label="Mois précédent"
-              title="Mois précédent"
               onClick={() => shiftMonth(-1)}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="min-w-[140px] px-1 text-center font-medium capitalize">
+            <span className="min-w-[140px] px-1 text-center font-semibold capitalize">
               {monthLabel}
             </span>
             <Button
               type="button"
               variant="ghost"
-              size="icon"
+              size="icon-sm"
               aria-label="Mois suivant"
-              title="Mois suivant"
               onClick={() => shiftMonth(1)}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={isCurrentMonth}
-            onClick={goToToday}
-          >
-            Aujourd&apos;hui
-          </Button>
+          {!isCurrentMonth ? (
+            <Button type="button" variant="ghost" size="sm" onClick={goToToday}>
+              Aujourd&apos;hui
+            </Button>
+          ) : null}
+          {driveConfigured && monthClosed ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
+              <CircleCheck className="h-3.5 w-3.5" aria-hidden />
+              Mois terminé
+            </span>
+          ) : null}
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-wrap items-center gap-2">
           <Popover open={importMenuOpen} onOpenChange={setImportMenuOpen}>
             <PopoverTrigger asChild>
               <Button type="button" variant="outline" size="sm" disabled={loading}>
@@ -244,52 +256,75 @@ export function Comptabilite() {
               ) : null}
             </PopoverContent>
           </Popover>
-          {canExport && (
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={exportBusy || loading}
-                onClick={handleExportCsv}
-              >
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                CSV
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={exportBusy || loading}
-                onClick={() => void handleExportPdf()}
-              >
-                {exportBusy ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
+          {canExport ? (
+            <Popover open={exportMenuOpen} onOpenChange={setExportMenuOpen}>
+              <PopoverTrigger asChild>
+                <Button type="button" variant="outline" size="sm" disabled={exportBusy || loading}>
+                  {exportBusy ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileDown className="mr-2 h-4 w-4" />
+                  )}
+                  Exporter
+                  <ChevronDown className="ml-1 h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-48 p-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    void handleExportPdf();
+                  }}
+                >
                   <FileDown className="mr-2 h-4 w-4" />
-                )}
-                PDF
-              </Button>
-            </>
-          )}
+                  PDF
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    handleExportCsv();
+                  }}
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  CSV (tableur)
+                </Button>
+              </PopoverContent>
+            </Popover>
+          ) : null}
           {driveConfigured ? (
             <Button
               type="button"
-              variant={monthClosed ? "secondary" : "outline"}
+              variant={monthClosed ? "ghost" : "outline"}
               size="sm"
               disabled={closingBusy || loading}
               aria-pressed={monthClosed}
               title={
                 monthClosed
-                  ? "Mois marqué terminé (simple repère, les saisies restent modifiables). Cliquer pour le remettre en cours."
-                  : "Repère personnel : indique que le mois est fini (Drive synchronisé). Rien n'est verrouillé, vous pourrez toujours modifier."
+                  ? "Remettre le mois en cours (les saisies restent modifiables dans tous les cas)."
+                  : "Repère personnel : indique que le mois est fini. Rien n'est verrouillé."
               }
               onClick={() => void toggleMonthClosed()}
             >
-              <CircleCheck
-                className={monthClosed ? "mr-2 h-4 w-4 text-emerald-600" : "mr-2 h-4 w-4"}
-              />
-              {monthClosed ? "Terminé" : "Marquer terminé"}
+              <CircleCheck className="mr-2 h-4 w-4" />
+              {monthClosed ? "Rouvrir le mois" : "Marquer terminé"}
+            </Button>
+          ) : null}
+          {config && configComplete ? (
+            <Button
+              type="button"
+              variant={configOpen ? "secondary" : "ghost"}
+              size="icon-sm"
+              aria-label="Réglages comptabilité"
+              aria-pressed={configOpen}
+              onClick={() => setConfigOpen((v) => !v)}
+            >
+              <Settings2 className="h-4 w-4" />
             </Button>
           ) : null}
         </div>
@@ -298,11 +333,12 @@ export function Comptabilite() {
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {bilanError ? <p className="text-sm text-destructive">{bilanError}</p> : null}
 
-      {config ? (
+      {config && (!configComplete || configOpen) ? (
         <ComptaConfigPanel
           config={config}
           year={year}
           month={month}
+          defaultOpen={configComplete}
           onSaved={(saved) => setConfig(saved)}
         />
       ) : null}
@@ -315,25 +351,25 @@ export function Comptabilite() {
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex flex-wrap h-auto">
-          <TabsTrigger value="journal">Journal</TabsTrigger>
-          <TabsTrigger value="depenses">
+        <TabsList className="h-auto w-auto flex-wrap justify-start gap-6 rounded-none border-b border-border/70 bg-transparent p-0">
+          <TabsTrigger value="journal" className="gap-2 rounded-none border-b-2 border-transparent px-1 pb-2.5 pt-0 text-sm font-semibold data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none">Journal</TabsTrigger>
+          <TabsTrigger value="depenses" className="gap-2 rounded-none border-b-2 border-transparent px-1 pb-2.5 pt-0 text-sm font-semibold data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none">
             Dépenses
-            <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs">{depenses.length}</span>
+            <span className="tabular-nums font-normal text-muted-foreground">{depenses.length}</span>
           </TabsTrigger>
-          <TabsTrigger value="encaissements">
+          <TabsTrigger value="encaissements" className="gap-2 rounded-none border-b-2 border-transparent px-1 pb-2.5 pt-0 text-sm font-semibold data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none">
             Encaissements
-            <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs">
+            <span className="tabular-nums font-normal text-muted-foreground">
               {encaissements.length}
             </span>
           </TabsTrigger>
-          <TabsTrigger value="deplacements">
+          <TabsTrigger value="deplacements" className="gap-2 rounded-none border-b-2 border-transparent px-1 pb-2.5 pt-0 text-sm font-semibold data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none">
             Déplacements
-            <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs">
+            <span className="tabular-nums font-normal text-muted-foreground">
               {deplacements.length}
             </span>
           </TabsTrigger>
-          <TabsTrigger value="bilan">Bilan</TabsTrigger>
+          <TabsTrigger value="bilan" className="gap-2 rounded-none border-b-2 border-transparent px-1 pb-2.5 pt-0 text-sm font-semibold data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none">Bilan</TabsTrigger>
         </TabsList>
 
         <TabsContent value="journal" className="mt-4">

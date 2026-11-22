@@ -302,7 +302,10 @@ export function ComptaDeplacementsTab({
 
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">Aucun déplacement pour ce mois</p>
+          <div className="flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-border/80 bg-muted/20 px-6 py-10 text-center">
+            <p className="text-sm font-medium">Aucun déplacement pour ce mois</p>
+            <p className="max-w-md text-xs text-muted-foreground">Ajoutez-en un, ou récupérez vos rendez-vous du mois avec Importer → Synchroniser l&apos;agenda.</p>
+          </div>
         ) : (
           filtered.map((d) => (
             <Card key={d.id} className={cn(comptaTypeListCardClass("deplacement"))}>
