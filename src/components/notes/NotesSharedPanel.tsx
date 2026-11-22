@@ -83,8 +83,9 @@ export function NotesSharedPanel({ isActive = true }: { isActive?: boolean }) {
   const isDirty = isEditing && !draftsEqual(draft, baseline);
   usePageLeaveGuard(isDirty);
 
-  const loadLocal = useCallback(async () => {
-    setLoading(true);
+  // `silent` : rechargement après une sync, sans réafficher « Chargement… ».
+  const loadLocal = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const rows = await getSharedNotes();
       setNotes(rows);
@@ -92,7 +93,7 @@ export function NotesSharedPanel({ isActive = true }: { isActive?: boolean }) {
     } catch (error) {
       toast.error(userErrorMessage(error, "Impossible de charger les notes partagées"));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -126,7 +127,7 @@ export function NotesSharedPanel({ isActive = true }: { isActive?: boolean }) {
 
   useEffect(() => {
     return subscribeNotesChanged(() => {
-      void loadLocal();
+      void loadLocal(true);
     });
   }, [loadLocal]);
 
