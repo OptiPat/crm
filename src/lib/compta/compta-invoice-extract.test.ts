@@ -153,3 +153,57 @@ Pack CIF 17/06/2026 € 450
     expect(result.ttc).toBe(450);
   });
 });
+
+/** Formats rencontrés en 2026 — données fictives (dépôt public). */
+describe("extractComptaInvoiceFromText — formats 2026", () => {
+  it("facture de commission : Montant / Base de TVA / Montant TVA + don", () => {
+    const text = `Programme FinzzAct
+FACTURE N° 999 du 23-07-2026
+Commission immobilière TVA 20%\t1000,00
+TVA : 20,00\tEUR
+Montant\t1000,00\t1000,00
+Base de TVA\t1000,00\t1000,00
+Montant TVA\t200,00\t200,00
+Total TTC\t1200,00\t1200,00
+Don à un organisme d'intérêt général
+Article 200, 238 bis et 978 du code général des impôts (CGI)\t- 10,00
+TOTAL REGLE PAR STELLIUM 1190,00`;
+    const r = extractComptaInvoiceFromText(text, "Facture 999 - DUPONT Jean.pdf");
+    expect(r.ht).toBe(1000);
+    expect(r.tva).toBe(200);
+    expect(r.don).toBe(10);
+    expect(r.total).toBe(1190);
+  });
+
+  it("relevé partenaire : montants sans centimes (exonéré, HT, TVA, don)", () => {
+    const text = `Programme FinzzAct
+* Les commissions de ventes sont exonérées de TVA, article 261C du Code Général des Impôts
+TOTAL EXONERE * : 1050 €
+TOTAL HT : 132.5 €
+TOTAL TVA : 26.5 €
+TOTAL TTC : 159 €
+Don à un organisme d'intérêt général
+- 13 €
+TOTAL REGLE PAR STELLIUM 1196 €`;
+    const r = extractComptaInvoiceFromText(text, "Commissions - LEGRAND Paul.pdf");
+    expect(r.exonere).toBe(1050);
+    expect(r.ht).toBe(132.5);
+    expect(r.tva).toBe(26.5);
+    expect(r.don).toBe(13);
+    expect(r.total).toBe(1196);
+  });
+
+  it("relevé partenaire sans récapitulatif : ligne TOTAL HT/TVA/TTC", () => {
+    const text = `Programme FinzzAct
+Comm\tTVA\tComm
+HT €\t20%\tTTC €
+28/09/2026\t10€\t2€\t12€
+TOTAL 178.3€ 35.66€ 213.96€
+* Les commissions de ventes sont exonérées de TVA, article 261C du Code Général des Impôts
+TOTAL EXONERE * : €`;
+    const r = extractComptaInvoiceFromText(text, "Commissions - BERNARD Luc.pdf");
+    expect(r.ht).toBe(178.3);
+    expect(r.tva).toBe(35.66);
+    expect(r.exonere).toBe(0);
+  });
+});

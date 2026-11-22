@@ -19,6 +19,9 @@ export interface ComptaInvoiceExtraction {
 }
 
 const normalizeText = normalizeComptaPdfText;
+
+/** Montant avec centimes facultatifs : « 1 050 », « 132.5 », « 6240,00 ». */
+const FLEX_AMOUNT = "(\\d[\\d ]*(?:[,.]\\d{1,2})?)";
 const extractDateFromText = extractComptaDateFromText;
 
 function extractClientFromFileName(fileName: string): string {
@@ -164,7 +167,7 @@ function extractFinzzActDon(
       const next = lines[j]!.trim();
       if (!next || next === "€") continue;
 
-      const sameLine = next.match(/^([\d\s]+[,.]\d{2})\s*€?$/);
+      const sameLine = next.match(/^(\d[\d\s]*(?:[,.]\d{1,2})?)\s*€?$/);
       if (sameLine?.[1]) {
         const value = parseFrenchAmount(sameLine[1]);
         if (value != null && isPlausibleDonAmount(value, ht, tva, exonere)) {
@@ -185,7 +188,7 @@ function extractFinzzActDon(
   }
 
   for (const line of lines) {
-    const inline = line.trim().match(/^[-–—−]\s*([\d\s]+[,.]\d{2})\s*€?$/);
+    const inline = line.trim().match(/^[-–—−]\s*(\d[\d\s]*(?:[,.]\d{1,2})?)\s*€?$/);
     if (inline?.[1]) {
       const value = parseFrenchAmount(inline[1]);
       if (value != null && isPlausibleDonAmount(value, ht, tva, exonere)) {
@@ -249,21 +252,34 @@ function extractFinzzActInvoice(
 
   const exonere =
     findLabeledAmount(text, [
-      /TOTAL\s+EXON[EÉ]R[EÉ]\s*\*?\s*:\s*([\d\s]+[,.]\d{2})/i,
-      /(?:montant\s*)?total\s*exon[ée]r[ée]?\s*\*?\s*[:\s]+([\d\s]+[,.]\d{2})/i,
+      new RegExp(`TOTAL\\s+EXON[EÉ]R[EÉ]\\s*\\*?\\s*:\\s*${FLEX_AMOUNT}`, "i"),
+      new RegExp(`(?:montant\\s*)?total\\s*exon[ée]r[ée]?\\s*\\*?\\s*[:\\s]+${FLEX_AMOUNT}`, "i"),
     ]) ?? 0;
+
+  // Relevé partenaire sans récapitulatif : ligne « TOTAL 178.3€ 35.66€ 213.96€ » (HT, TVA, TTC).
+  const tripleTotal = text.match(
+    new RegExp(`TOTAL\\s+${FLEX_AMOUNT}\\s*€\\s+${FLEX_AMOUNT}\\s*€\\s+${FLEX_AMOUNT}\\s*€`, "i")
+  );
 
   const ht =
     findLabeledAmount(text, [
-      /TOTAL\s+HT\s*:\s*([\d\s]+[,.]\d{2})/i,
-      /(?:montant\s*)?total\s*h\.?\s*t\.?\s*[:\s]+([\d\s]+[,.]\d{2})/i,
-    ]) ?? 0;
+      new RegExp(`TOTAL\\s+HT\\s*:\\s*${FLEX_AMOUNT}`, "i"),
+      new RegExp(`(?:montant\\s*)?total\\s*h\\.?\\s*t\\.?\\s*[:\\s]+${FLEX_AMOUNT}`, "i"),
+      // Facture de commission : « Base de TVA 5200,00 » / « Montant 5200,00 ».
+      /Base\s+de\s+TVA\s+([\d\s]+[,.]\d{2})/i,
+      /^Montant\s+([\d\s]+[,.]\d{2})/im,
+    ]) ??
+    (tripleTotal ? parseFrenchAmount(tripleTotal[1]!) : null) ??
+    0;
 
   const tva =
     findLabeledAmount(text, [
-      /TOTAL\s+TVA\s*:\s*([\d\s]+[,.]\d{2})/i,
-      /(?:montant\s*)?total\s*t\.?\s*v\.?\s*a\.?\s*[:\s]+([\d\s]+[,.]\d{2})/i,
-    ]) ?? 0;
+      new RegExp(`TOTAL\\s+TVA\\s*:\\s*${FLEX_AMOUNT}`, "i"),
+      new RegExp(`(?:montant\\s*)?total\\s*t\\.?\\s*v\\.?\\s*a\\.?\\s*[:\\s]+${FLEX_AMOUNT}`, "i"),
+      /Montant\s+TVA\s+([\d\s]+[,.]\d{2})/i,
+    ]) ??
+    (tripleTotal ? parseFrenchAmount(tripleTotal[2]!) : null) ??
+    0;
 
   const don = extractFinzzActDon(text, ht, tva, exonere) ?? 0;
   const { ttc, total } = computeEncaissementTotals(exonere, ht, tva, don);
