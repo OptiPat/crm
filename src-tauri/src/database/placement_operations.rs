@@ -1706,16 +1706,8 @@ impl super::Database {
             return None;
         }
         let mut pool = candidates;
-        if let Some(hint) = pipe_id_hint.filter(|id| *id > 0) {
-            let on_hint: Vec<_> = pool
-                .iter()
-                .filter(|op| op.pipe_id == Some(hint))
-                .cloned()
-                .collect();
-            if !on_hint.is_empty() {
-                pool = on_hint;
-            }
-        }
+        // Produit avant affaire : l'affaire « indice » (la plus récente du contact) peut porter
+        // un autre produit — ex. Cristalliance sur une affaire, SCPI sur une autre.
         if let Some(product) = product_label.filter(|s| !s.trim().is_empty()) {
             let with_product: Vec<_> = pool
                 .iter()
@@ -1727,11 +1719,18 @@ impl super::Database {
                 })
                 .cloned()
                 .collect();
-            if with_product.len() == 1 {
-                return Some(with_product[0].clone());
-            }
             if !with_product.is_empty() {
                 pool = with_product;
+            }
+        }
+        if let Some(hint) = pipe_id_hint.filter(|id| *id > 0) {
+            let on_hint: Vec<_> = pool
+                .iter()
+                .filter(|op| op.pipe_id == Some(hint))
+                .cloned()
+                .collect();
+            if !on_hint.is_empty() {
+                pool = on_hint;
             }
         }
         if pool.len() == 1 {
@@ -1774,7 +1773,6 @@ impl super::Database {
                 stellium_label,
                 new_status,
                 email_received_at,
-                None,
             )?
             .len(),
         )
@@ -1786,7 +1784,6 @@ impl super::Database {
         stellium_label: &str,
         new_status: &str,
         email_received_at: i64,
-        pipe_id_hint: Option<i64>,
     ) -> Result<Vec<super::models::PlacementOperation>> {
         let mut candidates = Vec::new();
         self.extend_placement_candidates_for_contact_status(
@@ -1810,20 +1807,11 @@ impl super::Database {
             )?;
         }
         let candidates = Self::dedupe_placement_operations_by_id(candidates);
-        let mut candidates = pool_candidates_for_stellium_label(candidates, stellium_label);
-        candidates =
-            Self::filter_placement_candidates_by_email_date(candidates, email_received_at);
-        if let Some(hint) = pipe_id_hint.filter(|id| *id > 0) {
-            let on_hint: Vec<_> = candidates
-                .iter()
-                .filter(|op| op.pipe_id == Some(hint))
-                .cloned()
-                .collect();
-            if !on_hint.is_empty() {
-                candidates = on_hint;
-            }
-        }
-        Ok(candidates)
+        let candidates = pool_candidates_for_stellium_label(candidates, stellium_label);
+        Ok(Self::filter_placement_candidates_by_email_date(
+            candidates,
+            email_received_at,
+        ))
     }
 
     pub fn find_placement_for_email_match(
@@ -1876,7 +1864,6 @@ impl super::Database {
             stellium_label,
             new_status,
             email_received_at,
-            pipe_id_hint,
         )?;
         Ok(Self::pick_unique_placement_candidate(
             candidates,
@@ -3359,6 +3346,64 @@ mod tests {
             .find_affaire_pipe_hint_for_box_placement_participant(co_id)
             .unwrap();
         assert_eq!(hint, Some(affaire.id));
+    }
+
+    /// Contact avec deux affaires : assurance vie sur l'une, SCPI sur l'autre (plus récente).
+    /// L'affaire « indice » ne doit pas masquer la souscription du bon produit.
+    #[test]
+    fn find_email_match_prefers_product_over_most_recent_affaire_hint() {
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        db.migrate_placement_operations_table().unwrap();
+        db.migrate_pipes_table().unwrap();
+        let contact_id = db
+            .create_contact(sample_contact("DUPONT", "Marie"))
+            .unwrap()
+            .id
+            .unwrap();
+        let new_affaire = |titre: &str| {
+            db.create_pipe(super::super::models::NewPipe {
+                contact_id,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: titre.into(),
+                stage: Some("R3".into()),
+                notes: None,
+            })
+            .unwrap()
+        };
+        let souscription = |pipe_id: i64, product: &str| {
+            db.create_placement_operation(super::super::models::NewPlacementOperation {
+                contact_id,
+                pipe_id: Some(pipe_id),
+                pipe_timeline_entry_id: None,
+                operation_type: OP_SOUSCRIPTION.into(),
+                product_label: Some(product.into()),
+                stellium_label: Some("Souscription".into()),
+                montant_centimes: Some(500_000),
+                ..Default::default()
+            })
+            .unwrap()
+        };
+
+        let av_pipe = new_affaire("Assurance vie");
+        let av_op = souscription(av_pipe.id, "Cristalliance Avenir");
+        let scpi_pipe = new_affaire("SCPI");
+        souscription(scpi_pipe.id, "Epargne Pierre Europe");
+        souscription(scpi_pipe.id, "Comète");
+
+        let matched = db
+            .find_placement_for_email_match(
+                contact_id,
+                "Souscription",
+                STATUS_CONFORME,
+                Some("Cristalliance Avenir"),
+                email_received_after_operation(&av_op),
+                Some(scpi_pipe.id),
+            )
+            .unwrap()
+            .expect("la souscription Cristalliance doit être trouvée malgré l'affaire SCPI en indice");
+        assert_eq!(matched.id, av_op.id);
     }
 
     #[test]
