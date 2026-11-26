@@ -5,12 +5,14 @@ import type {
 } from "@/lib/souscription-cif/annexes-scpi-origine-fonds";
 import type { CapitalInvestAnnexeSouscription } from "@/lib/souscription-cif/capital-invest-annexe-souscriptions";
 import type { ScpiAnnexeSouscription } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
+import type { DossierAutoValues } from "@/lib/souscription-cif/sync-dossier-auto-fields";
 import {
   buildMesPreconisationsFromSouscriptions,
   defaultScpiAnnexeSouscriptions,
 } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
 
 export type { CapitalInvestAnnexeSouscription, ScpiAnnexeSouscription };
+export type { DossierAutoValues };
 export type { OrigineFondsKey, ProvenanceFonds };
 
 export type SouscriptionDossierFields = {
@@ -24,6 +26,11 @@ export type SouscriptionDossierFields = {
   rappelDemande: string;
   /** Rapport de mission — puces situation client (Recueil / QPI). */
   rappelSituationClient: string;
+  /**
+   * Dernière valeur écrite automatiquement par puce du rappel de situation : une puce encore
+   * égale à cette valeur suit la fiche contact, une puce retouchée à la main est conservée.
+   */
+  rappelSituationAutoLines: Record<string, string>;
   /** Rapport de mission — analyse personnalisée (R1, projet, lien avec la préconisation). */
   analyseSituationClient: string;
   /** Annexes — paragraphe de conseil (préconisation SCPI). */
@@ -64,6 +71,10 @@ export type SouscriptionDossierFields = {
   origineFondsSelected: OrigineFondsKey[];
   /** Précision si « Autre » origine des fonds. */
   origineFondsAutrePrecision: string;
+  /** Annexes — niveau connaissances / expérience (prérempli depuis le dernier QPI importé). */
+  niveauExperience: string;
+  /** Dernières valeurs préremplies automatiquement (champ égal = non retouché, suit la fiche). */
+  autoValues: DossierAutoValues;
 };
 
 export function todayDateInputValue(): string {
@@ -82,6 +93,7 @@ export function defaultSouscriptionDossierFields(): SouscriptionDossierFields {
     objectifsClient: "",
     rappelDemande: "",
     rappelSituationClient: "",
+    rappelSituationAutoLines: {},
     analyseSituationClient: "",
     conseil: "",
     mesPreconisations: "",
@@ -102,6 +114,8 @@ export function defaultSouscriptionDossierFields(): SouscriptionDossierFields {
     provenanceFonds: "",
     origineFondsSelected: [],
     origineFondsAutrePrecision: "",
+    niveauExperience: "",
+    autoValues: {},
   };
 }
 

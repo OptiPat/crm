@@ -368,6 +368,23 @@ export function SouscriptionCifDossierForm({
               )}
             </div>
 
+            {(productType === "scpi" || productType === "capital-investissement") && (
+              <div className="space-y-2">
+                <Label htmlFor="cif-niveau-experience">
+                  Niveau de connaissances / expérience
+                </Label>
+                <Input
+                  id="cif-niveau-experience"
+                  value={value.niveauExperience}
+                  onChange={(e) => onChange({ niveauExperience: e.target.value })}
+                  placeholder="Ex. Informé"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Repris du dernier QPI importé — à saisir ici si le QPI n&apos;est pas importé.
+                </p>
+              </div>
+            )}
+
             {productType === "g3f" && (
               <>
                 <div className="space-y-2">

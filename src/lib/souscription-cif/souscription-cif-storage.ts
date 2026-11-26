@@ -53,6 +53,15 @@ function writeStorage(value: string): void {
   localStorage.setItem(STORAGE_KEY, value);
 }
 
+function parseStringRecord(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "string") out[key] = value;
+  }
+  return out;
+}
+
 function parseDossierFields(raw: unknown): SouscriptionDossierFields | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -67,6 +76,7 @@ function parseDossierFields(raw: unknown): SouscriptionDossierFields | null {
     rappelDemande: typeof o.rappelDemande === "string" ? o.rappelDemande : "",
     rappelSituationClient:
       typeof o.rappelSituationClient === "string" ? o.rappelSituationClient : "",
+    rappelSituationAutoLines: parseStringRecord(o.rappelSituationAutoLines),
     analyseSituationClient:
       typeof o.analyseSituationClient === "string" ? o.analyseSituationClient : "",
     conseil: typeof o.conseil === "string" ? o.conseil : "",
@@ -103,6 +113,8 @@ function parseDossierFields(raw: unknown): SouscriptionDossierFields | null {
     origineFondsSelected: normalizeOrigineFondsSelected(o.origineFondsSelected),
     origineFondsAutrePrecision:
       typeof o.origineFondsAutrePrecision === "string" ? o.origineFondsAutrePrecision : "",
+    niveauExperience: typeof o.niveauExperience === "string" ? o.niveauExperience : "",
+    autoValues: parseStringRecord(o.autoValues),
   };
 }
 

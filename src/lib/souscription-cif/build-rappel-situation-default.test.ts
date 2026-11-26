@@ -6,6 +6,7 @@ import {
   migrateRappelSituationPanelLabels,
   normalizeRappelSituationClient,
   syncRappelSituationFromContact,
+  syncRappelSituationWithAutoLines,
 } from "@/lib/souscription-cif/build-rappel-situation-default";
 import {
   RM_HINT_IMMOBILIER_BULLET_LABEL,
@@ -291,6 +292,116 @@ describe("buildDefaultRappelSituation", () => {
     expect(synced).toContain("PEA long terme");
     expect(synced).not.toContain("Pinel");
     expect(synced).not.toContain("PER");
+  });
+
+  describe("syncRappelSituationWithAutoLines", () => {
+    const av = (montant: number) =>
+      baseInvestissement({ id: 2, type_produit: "ASSURANCE_VIE", montant_initial: montant });
+
+    it("met à jour valeurs mobilières quand le patrimoine change (puce non retouchée)", () => {
+      const first = syncRappelSituationWithAutoLines("", {}, baseContact, null, {
+        investissements: [av(50_000_00)],
+      });
+      expect(first.text).toMatch(/Assurance Vie 50\s000/);
+
+      const second = syncRappelSituationWithAutoLines(
+        first.text,
+        first.autoLines,
+        baseContact,
+        null,
+        { investissements: [av(65_000_00)] }
+      );
+      expect(second.text).toMatch(/Assurance Vie 65\s000/);
+      expect(second.text).not.toMatch(/50\s000/);
+    });
+
+    it("garde valeurs mobilières retouchée à la main malgré un changement de patrimoine", () => {
+      const first = syncRappelSituationWithAutoLines("", {}, baseContact, null, {
+        investissements: [av(50_000_00)],
+      });
+      const edited = first.text.replace(
+        /^➞ Valeurs mobilières :.*$/m,
+        "➞ Valeurs mobilières : AV 70 000 € (après R3)"
+      );
+      const synced = syncRappelSituationWithAutoLines(edited, first.autoLines, baseContact, null, {
+        investissements: [av(65_000_00)],
+      });
+      expect(synced.text).toContain("➞ Valeurs mobilières : AV 70 000 € (après R3)");
+    });
+
+    it("garde une puce contact retouchée à la main (revenus) mais suit l'âge", () => {
+      const contact: Contact = { ...baseContact, revenus_annuels: 35_000 };
+      const first = syncRappelSituationWithAutoLines("", {}, contact, null);
+      const edited = first.text
+        .replace(/^➞ Revenus :.*$/m, "➞ Revenus : 38 000 € (prime incluse)")
+        .replace(/^➞ Âge :.*$/m, "➞ Âge : 99 ans");
+      const synced = syncRappelSituationWithAutoLines(
+        edited,
+        first.autoLines,
+        { ...contact, revenus_annuels: 36_000 },
+        null
+      );
+      expect(synced.text).toContain("➞ Revenus : 38 000 € (prime incluse)");
+      expect(synced.text).toContain("➞ Âge : 99 ans");
+    });
+
+    it("n'efface pas valeurs mobilières quand le dernier placement est supprimé", () => {
+      const first = syncRappelSituationWithAutoLines("", {}, baseContact, null, {
+        investissements: [av(50_000_00)],
+      });
+      const synced = syncRappelSituationWithAutoLines(
+        first.text,
+        first.autoLines,
+        baseContact,
+        null,
+        { investissements: [] }
+      );
+      expect(synced.text).toMatch(/Assurance Vie 50\s000/);
+    });
+
+    it("ancien dossier : valeurs mobilières identique au généré se met ensuite à jour", () => {
+      const legacy = syncRappelSituationFromContact("", baseContact, null, {
+        investissements: [av(50_000_00)],
+      });
+      const adopted = syncRappelSituationWithAutoLines(legacy, {}, baseContact, null, {
+        investissements: [av(50_000_00)],
+      });
+      const synced = syncRappelSituationWithAutoLines(
+        adopted.text,
+        adopted.autoLines,
+        baseContact,
+        null,
+        { investissements: [av(65_000_00)] }
+      );
+      expect(synced.text).toMatch(/Assurance Vie 65\s000/);
+    });
+
+    it("garde une puce complétée par des lignes ajoutées à la main", () => {
+      const first = syncRappelSituationWithAutoLines("", {}, baseContact, null, {
+        investissements: [av(50_000_00)],
+      });
+      const edited = first.text.replace(
+        /^(➞ Valeurs mobilières :.*)$/m,
+        "$1\n  - détail contrat Generali"
+      );
+      const synced = syncRappelSituationWithAutoLines(edited, first.autoLines, baseContact, null, {
+        investissements: [av(65_000_00)],
+      });
+      expect(synced.text).toMatch(/Assurance Vie 50\s000/);
+      expect(synced.text).toContain("détail contrat Generali");
+    });
+
+    it("suit la fiche contact quand la puce n'a pas été retouchée", () => {
+      const contact: Contact = { ...baseContact, revenus_annuels: 35_000 };
+      const first = syncRappelSituationWithAutoLines("", {}, contact, null);
+      const synced = syncRappelSituationWithAutoLines(
+        first.text,
+        first.autoLines,
+        { ...contact, revenus_annuels: 36_000 },
+        null
+      );
+      expect(synced.text).toMatch(/➞ Revenus : 36\s000/);
+    });
   });
 
   it("migrateRappelSituationPanelLabels raccourcit les anciens libellés longs", () => {

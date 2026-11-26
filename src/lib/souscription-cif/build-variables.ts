@@ -160,7 +160,8 @@ export function buildSouscriptionVariables(
     date_der: formatDateInputFr(dossier.dateDer),
     date_rio: formatDateInputFr(dossier.dateRio),
     date_qpi: formatDateInputFr(dossier.dateQpi),
-    niveau_experience_qpi: latestQpiExperienceInvestissement(documents),
+    niveau_experience_qpi:
+      dossier.niveauExperience.trim() || latestQpiExperienceInvestissement(documents),
     objectifs_client: dossier.objectifsClient.trim() || null,
     rappel_demande: dossier.rappelDemande.trim() || null,
     rappel_situation_client:

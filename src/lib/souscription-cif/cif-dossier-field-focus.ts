@@ -17,6 +17,7 @@ export const CIF_DOSSIER_VARIABLE_FIELD: Readonly<Record<string, CifDossierField
   rappel_situation_client: { fieldId: "cif-rappel-situation", document: "rapport-mission" },
   analyse_situation_client: { fieldId: "cif-analyse-situation", document: "rapport-mission" },
   conseil: { fieldId: "cif-conseil", document: "annexes-rapport" },
+  niveau_experience_qpi: { fieldId: "cif-niveau-experience", document: "annexes-rapport" },
   g3f_rendement: { fieldId: "cif-g3f-rendement", document: "annexes-rapport" },
   g3f_annee_impot: { fieldId: "cif-g3f-annee-impot", document: "annexes-rapport" },
   g3f_montant_impot: { fieldId: "cif-g3f-montant-impot", document: "annexes-rapport" },

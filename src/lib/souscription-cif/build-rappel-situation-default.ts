@@ -225,27 +225,20 @@ function findRappelBulletLine(
   return null;
 }
 
+/** La puce est suivie de lignes ajoutées à la main (texte hors puce « ➞ »). */
+function rappelBulletHasContinuation(text: string, label: string): boolean {
+  const found = findRappelBulletLine(text, label);
+  if (!found) return false;
+  const next = text.slice(found.end + 1).split("\n", 1)[0] ?? "";
+  return found.end < text.length && next.trim() !== "" && !next.startsWith("➞");
+}
+
 function isRappelBulletEmpty(text: string, label: string): boolean {
   const found = findRappelBulletLine(text, label);
   if (!found) return true;
   if (found.line === `➞ ${label}`) return true;
   const value = found.line.slice(`➞ ${label} :`.length).trim();
   return !value;
-}
-
-function syncRappelLabels(
-  result: string,
-  freshByLabel: Map<string, string>,
-  labels: readonly string[],
-  options?: { emptyOnly?: boolean }
-): string {
-  let updated = result;
-  for (const label of labels) {
-    if (options?.emptyOnly && !isRappelBulletEmpty(updated, label)) continue;
-    const line = freshByLabel.get(label);
-    if (line) updated = replaceOrInsertBulletLine(updated, label, line);
-  }
-  return updated;
 }
 
 /** Indexe les puces par libellé court (accepte les anciens libellés longs). */
@@ -284,18 +277,64 @@ export function syncRappelSituationFromContact(
   foyer: Foyer | null,
   supplement: RappelSituationSupplement = {}
 ): string {
+  return syncRappelSituationWithAutoLines(existing, {}, contact, foyer, supplement).text;
+}
+
+/** Dernière valeur écrite automatiquement pour chaque puce synchronisée (clé = libellé court). */
+export type RappelSituationAutoLines = Record<string, string>;
+
+const SYNCED_RAPPEL_LABELS: readonly string[] = [
+  ...CONTACT_SYNC_RAPPEL_LABELS,
+  ...EMPTY_ONLY_SYNC_RAPPEL_LABELS,
+];
+
+/**
+ * Synchro fiche contact / patrimoine → puces, en respectant les retouches manuelles :
+ * une puce est mise à jour si elle est vide ou toujours égale à la dernière valeur auto
+ * (`previousAuto`). Sans valeur auto connue (ancien dossier), on garde l'ancien comportement :
+ * puces contact écrasées, immobilier / valeurs mobilières complétés seulement si vides.
+ */
+export function syncRappelSituationWithAutoLines(
+  existing: string,
+  previousAuto: RappelSituationAutoLines,
+  contact: Contact | null,
+  foyer: Foyer | null,
+  supplement: RappelSituationSupplement = {}
+): { text: string; autoLines: RappelSituationAutoLines } {
   const fresh = buildDefaultRappelSituation(contact, foyer, supplement);
-  if (!existing.trim()) return fresh;
-
-  const migrated = migrateRappelSituationPanelLabels(existing);
   const freshByLabel = indexRappelSituationLines(fresh);
+  const freshAuto = (): RappelSituationAutoLines => {
+    const auto: RappelSituationAutoLines = {};
+    for (const label of SYNCED_RAPPEL_LABELS) {
+      const line = freshByLabel.get(label);
+      if (line) auto[label] = line;
+    }
+    return auto;
+  };
+  if (!existing.trim()) return { text: fresh, autoLines: freshAuto() };
 
-  let result = migrated;
-  result = syncRappelLabels(result, freshByLabel, CONTACT_SYNC_RAPPEL_LABELS);
-  result = syncRappelLabels(result, freshByLabel, EMPTY_ONLY_SYNC_RAPPEL_LABELS, {
-    emptyOnly: true,
-  });
-  return migrateRappelSituationPanelLabels(result);
+  let result = migrateRappelSituationPanelLabels(existing);
+  const autoLines: RappelSituationAutoLines = { ...previousAuto };
+  const emptyOnly = new Set<string>(EMPTY_ONLY_SYNC_RAPPEL_LABELS);
+
+  for (const label of SYNCED_RAPPEL_LABELS) {
+    const freshLine = freshByLabel.get(label);
+    // Source vide (fiche vidée, dernier placement supprimé…) : on n'efface rien.
+    if (!freshLine || isRappelBulletEmpty(fresh, label)) continue;
+    // Puce complétée sur plusieurs lignes : traitée comme une saisie manuelle.
+    if (rappelBulletHasContinuation(result, label)) continue;
+    const current = indexRappelSituationLines(result).get(label);
+    const lastAuto = previousAuto[label];
+    const untouched =
+      isRappelBulletEmpty(result, label) ||
+      current === freshLine ||
+      (lastAuto !== undefined ? current === lastAuto : !emptyOnly.has(label));
+    if (!untouched) continue;
+    result = replaceOrInsertBulletLine(result, label, freshLine);
+    autoLines[label] = freshLine;
+  }
+
+  return { text: migrateRappelSituationPanelLabels(result), autoLines };
 }
 
 /** Rappel de situation — brouillon depuis contact + foyer (Recueil / QPI à compléter). */

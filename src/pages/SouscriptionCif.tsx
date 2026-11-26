@@ -26,18 +26,30 @@ import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { buildDefaultConseil } from "@/lib/souscription-cif/build-default-annexes-fields";
 import { buildMesPreconisationsFromCapitalInvestSouscriptions } from "@/lib/souscription-cif/capital-invest-annexe-souscriptions";
 import { buildMesPreconisationsFromSouscriptions } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
-import { buildDefaultObjectifsClient } from "@/lib/souscription-cif/build-default-objectifs-client";
-import { buildDefaultRappelDemande } from "@/lib/souscription-cif/build-default-rappel-demande";
 import {
-  buildDefaultRappelSituation,
+  buildDefaultObjectifsClient,
+  DEFAULT_OBJECTIFS_CLIENT_TEXT,
+} from "@/lib/souscription-cif/build-default-objectifs-client";
+import {
+  buildDefaultRappelDemande,
+  DEFAULT_RAPPEL_DEMANDE_TEXT,
+} from "@/lib/souscription-cif/build-default-rappel-demande";
+import { latestQpiExperienceInvestissement } from "@/lib/documents/qpi-document-utils";
+import { syncDossierAutoFields } from "@/lib/souscription-cif/sync-dossier-auto-fields";
+import {
   buildRappelSituationSupplement,
-  syncRappelSituationFromContact,
+  syncRappelSituationWithAutoLines,
 } from "@/lib/souscription-cif/build-rappel-situation-default";
+
+function sameStringRecord(a: Record<string, string>, b: Record<string, string>): boolean {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
+}
 import {
   getReadyContactSelection,
   lieuNaissanceFromContact,
 } from "@/lib/souscription-cif/sync-dossier-contact-fields";
-import { dossierDatePatchFromDocuments } from "@/lib/souscription-cif/sync-dossier-document-dates";
+import { latestDocumentDateIso } from "@/lib/souscription-cif/sync-dossier-document-dates";
 import { buildSouscriptionVariables } from "@/lib/souscription-cif/build-variables";
 import {
   defaultSouscriptionDossierFields,
@@ -328,39 +340,47 @@ export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProp
         const existing = getDossierForContact(prev, contactId, productType);
         const patch: Partial<SouscriptionDossierFields> = {};
 
-        const contactLieu = lieuNaissanceFromContact(contact);
-        if (existing.lieuNaissance !== contactLieu) {
-          patch.lieuNaissance = contactLieu;
-        }
+        Object.assign(
+          patch,
+          syncDossierAutoFields(existing, [
+            {
+              key: "lieuNaissance",
+              fresh: lieuNaissanceFromContact(contact),
+              // Avant : toujours recopié depuis la fiche, donc jamais une saisie manuelle.
+              legacyAlwaysAuto: true,
+            },
+            { key: "dateRio", fresh: latestDocumentDateIso(documents, "PATRIMOINE") },
+            { key: "dateQpi", fresh: latestDocumentDateIso(documents, "QPI") },
+            {
+              key: "objectifsClient",
+              fresh: buildDefaultObjectifsClient(contact, foyer),
+              legacyAutoValues: [DEFAULT_OBJECTIFS_CLIENT_TEXT],
+            },
+            {
+              key: "rappelDemande",
+              fresh: buildDefaultRappelDemande(contact, foyer),
+              legacyAutoValues: [DEFAULT_RAPPEL_DEMANDE_TEXT],
+            },
+            { key: "niveauExperience", fresh: latestQpiExperienceInvestissement(documents) },
+          ])
+        );
 
-        Object.assign(patch, dossierDatePatchFromDocuments(existing, documents));
-
-        if (!existing.objectifsClient?.trim()) {
-          patch.objectifsClient = buildDefaultObjectifsClient(contact, foyer);
-        }
-        if (!existing.rappelDemande?.trim()) {
-          patch.rappelDemande = buildDefaultRappelDemande(contact, foyer);
-        }
         if (!existing.conseil?.trim()) {
           patch.conseil = buildDefaultConseil(productType);
         }
 
-        if (!existing.rappelSituationClient?.trim()) {
-          patch.rappelSituationClient = buildDefaultRappelSituation(
-            contact,
-            foyer,
-            rappelSupplement
-          );
-        } else {
-          const syncedRappel = syncRappelSituationFromContact(
-            existing.rappelSituationClient,
-            contact,
-            foyer,
-            rappelSupplement
-          );
-          if (syncedRappel !== existing.rappelSituationClient) {
-            patch.rappelSituationClient = syncedRappel;
-          }
+        const syncedRappel = syncRappelSituationWithAutoLines(
+          existing.rappelSituationClient ?? "",
+          existing.rappelSituationAutoLines ?? {},
+          contact,
+          foyer,
+          rappelSupplement
+        );
+        if (syncedRappel.text !== existing.rappelSituationClient) {
+          patch.rappelSituationClient = syncedRappel.text;
+        }
+        if (!sameStringRecord(syncedRappel.autoLines, existing.rappelSituationAutoLines ?? {})) {
+          patch.rappelSituationAutoLines = syncedRappel.autoLines;
         }
 
         if (
