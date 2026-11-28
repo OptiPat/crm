@@ -51,6 +51,7 @@ import {
 } from "@/lib/souscription-cif/sync-dossier-contact-fields";
 import { latestDocumentDateIso } from "@/lib/souscription-cif/sync-dossier-document-dates";
 import { buildSouscriptionVariables } from "@/lib/souscription-cif/build-variables";
+import { CifDossierSourceUpdatesCard } from "@/components/souscription-cif/CifDossierSourceUpdatesCard";
 import {
   defaultSouscriptionDossierFields,
   type SouscriptionDossierFields,
@@ -382,6 +383,11 @@ export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProp
         if (!sameStringRecord(syncedRappel.autoLines, existing.rappelSituationAutoLines ?? {})) {
           patch.rappelSituationAutoLines = syncedRappel.autoLines;
         }
+        if (
+          !sameStringRecord(syncedRappel.sourceLines, existing.rappelSituationSourceLines ?? {})
+        ) {
+          patch.rappelSituationSourceLines = syncedRappel.sourceLines;
+        }
 
         if (
           productType === "scpi" &&
@@ -591,6 +597,19 @@ export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProp
     [activeDocument, currentPage, onNavigate, openContactSheet, selectedContactId]
   );
 
+  const focusDossierField = useCallback(
+    (fieldId: string, document: SouscriptionCifDocumentId) => {
+      pendingFocusFieldIdRef.current = fieldId;
+      if (activeDocument === document) {
+        focusCifDossierFieldElement(fieldId);
+        pendingFocusFieldIdRef.current = null;
+        return;
+      }
+      setActiveDocument(document);
+    },
+    [activeDocument]
+  );
+
   useEffect(() => {
     const fieldId = pendingFocusFieldIdRef.current;
     if (!fieldId) return;
@@ -695,6 +714,13 @@ export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProp
       {selectedContact && isCifProductTypeAvailable(productType) && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] lg:items-start">
           <div className="space-y-4">
+            <CifDossierSourceUpdatesCard
+              dossier={dossier}
+              productType={productType}
+              onChange={patchDossier}
+              onShowField={focusDossierField}
+            />
+
             <SouscriptionCifDossierForm
               key={`${selectedContactId}-${productType}`}
               activeDocument={activeDocument}

@@ -31,6 +31,8 @@ export type SouscriptionDossierFields = {
    * égale à cette valeur suit la fiche contact, une puce retouchée à la main est conservée.
    */
   rappelSituationAutoLines: Record<string, string>;
+  /** Dernière valeur lue dans la fiche par puce synchronisée (alerte si une puce retouchée diverge). */
+  rappelSituationSourceLines: Record<string, string>;
   /** Rapport de mission — analyse personnalisée (R1, projet, lien avec la préconisation). */
   analyseSituationClient: string;
   /** Annexes — paragraphe de conseil (préconisation SCPI). */
@@ -75,6 +77,8 @@ export type SouscriptionDossierFields = {
   niveauExperience: string;
   /** Dernières valeurs préremplies automatiquement (champ égal = non retouché, suit la fiche). */
   autoValues: DossierAutoValues;
+  /** Dernières valeurs lues dans la fiche / les documents (alerte si un champ retouché diverge). */
+  sourceValues: DossierAutoValues;
 };
 
 export function todayDateInputValue(): string {
@@ -94,6 +98,7 @@ export function defaultSouscriptionDossierFields(): SouscriptionDossierFields {
     rappelDemande: "",
     rappelSituationClient: "",
     rappelSituationAutoLines: {},
+    rappelSituationSourceLines: {},
     analyseSituationClient: "",
     conseil: "",
     mesPreconisations: "",
@@ -116,6 +121,7 @@ export function defaultSouscriptionDossierFields(): SouscriptionDossierFields {
     origineFondsAutrePrecision: "",
     niveauExperience: "",
     autoValues: {},
+    sourceValues: {},
   };
 }
 

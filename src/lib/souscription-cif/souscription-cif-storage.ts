@@ -77,6 +77,7 @@ function parseDossierFields(raw: unknown): SouscriptionDossierFields | null {
     rappelSituationClient:
       typeof o.rappelSituationClient === "string" ? o.rappelSituationClient : "",
     rappelSituationAutoLines: parseStringRecord(o.rappelSituationAutoLines),
+    rappelSituationSourceLines: parseStringRecord(o.rappelSituationSourceLines),
     analyseSituationClient:
       typeof o.analyseSituationClient === "string" ? o.analyseSituationClient : "",
     conseil: typeof o.conseil === "string" ? o.conseil : "",
@@ -115,6 +116,7 @@ function parseDossierFields(raw: unknown): SouscriptionDossierFields | null {
       typeof o.origineFondsAutrePrecision === "string" ? o.origineFondsAutrePrecision : "",
     niveauExperience: typeof o.niveauExperience === "string" ? o.niveauExperience : "",
     autoValues: parseStringRecord(o.autoValues),
+    sourceValues: parseStringRecord(o.sourceValues),
   };
 }
 

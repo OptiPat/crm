@@ -23,23 +23,51 @@ export type DossierAutoFieldSource = {
   legacyAlwaysAuto?: boolean;
 };
 
+type AutoFieldsState = Pick<
+  SouscriptionDossierFields,
+  DossierAutoFieldKey | "autoValues" | "sourceValues"
+>;
+
 /**
  * Met à jour un champ prérempli tant que l'utilisateur ne l'a pas retouché :
  * vide, ou encore égal à la dernière valeur écrite automatiquement.
  * Une saisie manuelle n'est jamais écrasée ; une source vide n'efface rien.
+ * La valeur lue dans la fiche est mémorisée (`sourceValues`) pour signaler ensuite
+ * un champ retouché dont la source a changé (voir `listDossierSourceUpdates`).
  */
 export function syncDossierAutoFields(
-  existing: Pick<SouscriptionDossierFields, DossierAutoFieldKey | "autoValues">,
+  existing: Pick<SouscriptionDossierFields, DossierAutoFieldKey | "autoValues"> &
+    Partial<Pick<SouscriptionDossierFields, "sourceValues">>,
   sources: readonly DossierAutoFieldSource[]
-): Partial<Pick<SouscriptionDossierFields, DossierAutoFieldKey | "autoValues">> {
+): Partial<AutoFieldsState> {
   const patch: Partial<Pick<SouscriptionDossierFields, DossierAutoFieldKey>> = {};
   const previousAuto = existing.autoValues ?? {};
+  const previousSource = existing.sourceValues ?? {};
   const autoValues: DossierAutoValues = { ...previousAuto };
+  const sourceValues: DossierAutoValues = { ...previousSource };
   let autoChanged = false;
+  let sourceChanged = false;
 
   for (const { key, fresh, legacyAutoValues, legacyAlwaysAuto } of sources) {
     const freshValue = fresh?.trim() ?? "";
-    if (!freshValue) continue;
+    if (!freshValue) {
+      // Plus de source (document supprimé…) : rien à proposer, l'alerte éventuelle disparaît.
+      if (sourceValues[key] !== undefined) {
+        delete sourceValues[key];
+        sourceChanged = true;
+      }
+      // Source vide connue : une saisie faite ensuite sera signalée au premier import
+      // (au lieu d'être prise pour un ancien dossier).
+      if (previousAuto[key] === undefined) {
+        autoValues[key] = "";
+        autoChanged = true;
+      }
+      continue;
+    }
+    if (sourceValues[key] !== freshValue) {
+      sourceValues[key] = freshValue;
+      sourceChanged = true;
+    }
     const current = existing[key] ?? "";
     const lastAuto = previousAuto[key];
     const untouched =
@@ -48,7 +76,14 @@ export function syncDossierAutoFields(
       (lastAuto !== undefined
         ? current === lastAuto
         : legacyAlwaysAuto === true || (legacyAutoValues ?? []).includes(current));
-    if (!untouched) continue;
+    if (!untouched) {
+      // Ancien dossier retouché : la fiche actuelle sert de référence, sans alerte immédiate.
+      if (lastAuto === undefined) {
+        autoValues[key] = freshValue;
+        autoChanged = true;
+      }
+      continue;
+    }
     if (current !== freshValue) patch[key] = freshValue;
     if (autoValues[key] !== freshValue) {
       autoValues[key] = freshValue;
@@ -56,5 +91,9 @@ export function syncDossierAutoFields(
     }
   }
 
-  return autoChanged ? { ...patch, autoValues } : patch;
+  return {
+    ...patch,
+    ...(autoChanged ? { autoValues } : {}),
+    ...(sourceChanged ? { sourceValues } : {}),
+  };
 }

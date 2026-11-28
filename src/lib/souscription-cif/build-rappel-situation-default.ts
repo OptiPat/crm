@@ -183,7 +183,7 @@ function bulletLinePattern(label: string): string {
   return escapeRegExp(label);
 }
 
-function replaceOrInsertBulletLine(text: string, label: string, line: string): string {
+export function replaceOrInsertBulletLine(text: string, label: string, line: string): string {
   const found = findRappelBulletLine(text, label);
   if (found) {
     return `${text.slice(0, found.start)}${line}${text.slice(found.end)}`;
@@ -300,41 +300,57 @@ export function syncRappelSituationWithAutoLines(
   contact: Contact | null,
   foyer: Foyer | null,
   supplement: RappelSituationSupplement = {}
-): { text: string; autoLines: RappelSituationAutoLines } {
+): {
+  text: string;
+  autoLines: RappelSituationAutoLines;
+  /** Puces telles que la fiche les donne (référence pour signaler une puce retouchée). */
+  sourceLines: RappelSituationAutoLines;
+} {
   const fresh = buildDefaultRappelSituation(contact, foyer, supplement);
   const freshByLabel = indexRappelSituationLines(fresh);
-  const freshAuto = (): RappelSituationAutoLines => {
+  const sourceLines: RappelSituationAutoLines = {};
+  for (const label of SYNCED_RAPPEL_LABELS) {
+    const line = freshByLabel.get(label);
+    if (line && !isRappelBulletEmpty(fresh, label)) sourceLines[label] = line;
+  }
+  if (!existing.trim()) {
     const auto: RappelSituationAutoLines = {};
     for (const label of SYNCED_RAPPEL_LABELS) {
       const line = freshByLabel.get(label);
       if (line) auto[label] = line;
     }
-    return auto;
-  };
-  if (!existing.trim()) return { text: fresh, autoLines: freshAuto() };
+    return { text: fresh, autoLines: auto, sourceLines };
+  }
 
   let result = migrateRappelSituationPanelLabels(existing);
   const autoLines: RappelSituationAutoLines = { ...previousAuto };
   const emptyOnly = new Set<string>(EMPTY_ONLY_SYNC_RAPPEL_LABELS);
 
   for (const label of SYNCED_RAPPEL_LABELS) {
-    const freshLine = freshByLabel.get(label);
     // Source vide (fiche vidée, dernier placement supprimé…) : on n'efface rien.
-    if (!freshLine || isRappelBulletEmpty(fresh, label)) continue;
-    // Puce complétée sur plusieurs lignes : traitée comme une saisie manuelle.
-    if (rappelBulletHasContinuation(result, label)) continue;
-    const current = indexRappelSituationLines(result).get(label);
+    const freshLine = sourceLines[label];
+    if (!freshLine) continue;
     const lastAuto = previousAuto[label];
+    // Puce complétée sur plusieurs lignes : traitée comme une saisie manuelle.
+    if (rappelBulletHasContinuation(result, label)) {
+      if (lastAuto === undefined) autoLines[label] = freshLine;
+      continue;
+    }
+    const current = indexRappelSituationLines(result).get(label);
     const untouched =
       isRappelBulletEmpty(result, label) ||
       current === freshLine ||
       (lastAuto !== undefined ? current === lastAuto : !emptyOnly.has(label));
-    if (!untouched) continue;
+    if (!untouched) {
+      // Ancien dossier retouché : la fiche actuelle sert de référence, sans alerte immédiate.
+      if (lastAuto === undefined) autoLines[label] = freshLine;
+      continue;
+    }
     result = replaceOrInsertBulletLine(result, label, freshLine);
     autoLines[label] = freshLine;
   }
 
-  return { text: migrateRappelSituationPanelLabels(result), autoLines };
+  return { text: migrateRappelSituationPanelLabels(result), autoLines, sourceLines };
 }
 
 /** Rappel de situation — brouillon depuis contact + foyer (Recueil / QPI à compléter). */

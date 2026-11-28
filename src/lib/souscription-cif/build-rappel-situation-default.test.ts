@@ -20,6 +20,12 @@ import type { Document } from "@/lib/api/tauri-documents";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { Foyer } from "@/lib/api/tauri-foyers";
 import { countEnfantsFoyer } from "@/lib/foyers/foyer-utils";
+import { defaultSouscriptionDossierFields } from "@/lib/souscription-cif/dossier-fields";
+import {
+  acceptDossierSourceUpdate,
+  dismissDossierSourceUpdate,
+  listDossierSourceUpdates,
+} from "@/lib/souscription-cif/dossier-source-updates";
 
 const baseInvestissement = (overrides: Partial<Investissement>): Investissement =>
   ({
@@ -389,6 +395,75 @@ describe("buildDefaultRappelSituation", () => {
       });
       expect(synced.text).toMatch(/Assurance Vie 50\s000/);
       expect(synced.text).toContain("détail contrat Generali");
+    });
+
+    it("signale une puce retouchée quand le patrimoine change, puis la reprend", () => {
+      const first = syncRappelSituationWithAutoLines("", {}, baseContact, null, {
+        investissements: [av(50_000_00)],
+      });
+      const edited = first.text.replace(
+        /^➞ Valeurs mobilières :.*$/m,
+        "➞ Valeurs mobilières : AV 52 000 € (corrigé)"
+      );
+      const base = {
+        ...defaultSouscriptionDossierFields(),
+        rappelSituationClient: edited,
+        rappelSituationAutoLines: first.autoLines,
+        rappelSituationSourceLines: first.sourceLines,
+      };
+      // Correction à la main, fiche inchangée : pas d'alerte.
+      expect(listDossierSourceUpdates(base)).toEqual([]);
+
+      const resynced = syncRappelSituationWithAutoLines(edited, first.autoLines, baseContact, null, {
+        investissements: [av(65_000_00)],
+      });
+      const dossier = {
+        ...base,
+        rappelSituationClient: resynced.text,
+        rappelSituationAutoLines: resynced.autoLines,
+        rappelSituationSourceLines: resynced.sourceLines,
+      };
+      const updates = listDossierSourceUpdates(dossier);
+      expect(updates).toHaveLength(1);
+      expect(updates[0]!.current).toBe("AV 52 000 € (corrigé)");
+      expect(updates[0]!.fresh).toMatch(/Assurance Vie 65\s000/);
+
+      const accepted = { ...dossier, ...acceptDossierSourceUpdate(dossier, updates[0]!) };
+      expect(accepted.rappelSituationClient).toMatch(/Assurance Vie 65\s000/);
+      expect(accepted.rappelSituationClient).not.toContain("corrigé");
+      expect(listDossierSourceUpdates(accepted)).toEqual([]);
+
+      const kept = { ...dossier, ...dismissDossierSourceUpdate(dossier, updates[0]!) };
+      expect(kept.rappelSituationClient).toContain("AV 52 000 € (corrigé)");
+      expect(listDossierSourceUpdates(kept)).toEqual([]);
+    });
+
+    it("ancien dossier retouché : pas d'alerte au premier passage, alerte au changement suivant", () => {
+      const legacy = syncRappelSituationFromContact("", baseContact, null, {
+        investissements: [av(50_000_00)],
+      }).replace(/^➞ Valeurs mobilières :.*$/m, "➞ Valeurs mobilières : saisie libre");
+      const adopted = syncRappelSituationWithAutoLines(legacy, {}, baseContact, null, {
+        investissements: [av(50_000_00)],
+      });
+      const asDossier = (r: typeof adopted) => ({
+        ...defaultSouscriptionDossierFields(),
+        rappelSituationClient: r.text,
+        rappelSituationAutoLines: r.autoLines,
+        rappelSituationSourceLines: r.sourceLines,
+      });
+      expect(listDossierSourceUpdates(asDossier(adopted))).toEqual([]);
+
+      const changed = syncRappelSituationWithAutoLines(
+        adopted.text,
+        adopted.autoLines,
+        baseContact,
+        null,
+        { investissements: [av(65_000_00)] }
+      );
+      expect(changed.text).toContain("saisie libre");
+      expect(listDossierSourceUpdates(asDossier(changed)).map((u) => u.id)).toEqual([
+        "rappel:Valeurs mobilières",
+      ]);
     });
 
     it("suit la fiche contact quand la puce n'a pas été retouchée", () => {

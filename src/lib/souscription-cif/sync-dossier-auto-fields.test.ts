@@ -34,7 +34,17 @@ describe("syncDossierAutoFields", () => {
     const patch = syncDossierAutoFields(dossier({ lieuNaissance: "Montpellier" }), [
       { key: "lieuNaissance", fresh: "" },
     ]);
-    expect(patch).toEqual({});
+    expect(patch.lieuNaissance).toBeUndefined();
+  });
+
+  it("saisie faite quand la fiche était vide : conservée quand la fiche se remplit", () => {
+    const empty = dossier({});
+    const synced = { ...empty, ...syncDossierAutoFields(empty, [{ key: "lieuNaissance", fresh: "" }]) };
+    const typed = { ...synced, lieuNaissance: "Montpellier" };
+    const patch = syncDossierAutoFields(typed, [
+      { key: "lieuNaissance", fresh: "Lyon", legacyAlwaysAuto: true },
+    ]);
+    expect(patch.lieuNaissance).toBeUndefined();
   });
 
   it("ancien dossier : le lieu de naissance suit la fiche (toujours recopié avant)", () => {
